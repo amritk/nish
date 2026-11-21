@@ -58,11 +58,20 @@ pixels, rounded to whole ones, once at start and whenever the size or the
 display's pixel ratio changes, for a game that fits its framebuffer to the
 window (with `gameSetSize`, in framebuffer pixels).
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/host/game`,
+`nish/raster`, `nish/synth` and the other standard modules they call keep panic
+sites no proof removes yet, so a call to them is refused by default until the
+standard library is made panic-free, and the indexes and sums in the game's own
+code build under the default once a guard proves each, such as `i < xs.length`
+before an index.
+
 The game's state lives in module storage: typed arrays declared at the top of
 the module, which keep their values from call to call. This game moves a
 square with the arrow keys and beeps when space is pressed:
 
-<!-- nish:ok --target wasm32 -->
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/host/game.ts`, `std/host/ring.ts`, `std/math.ts`, `std/raster.ts`, `std/synth.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth, gameWriteSamples } from "nish/host/game"
 import { StepInput } from "nish/input"
@@ -124,7 +133,8 @@ module storage of a class or `null` is
 the world in it, with every array and object it reaches, lasts from `init`
 through every `step` and `draw` while memory stays bounded:
 
-<!-- nish:ok --target wasm32 -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 class Ball {
   x: f64 = 0.0
@@ -252,10 +262,11 @@ command in `node_modules/.bin`; `--nish <path>` names another compiler,
 `--out <dir>` another directory and `--memory <MiB>` the memory size. The
 build empties its output directory first, so `--out` must name a new or empty
 directory, or one an earlier build wrote; any other flag is refused. It runs two commands, which a build of
-your own can run instead (`$NISH` is `node_modules/nish`):
+your own can run instead (`$NISH` is `node_modules/nish`; the starter's
+`game.ts` keeps panic sites, so it is built with `--allow-panics`):
 
 ```console
-$ nish game.ts --target wasm32 --emit-dts out/game.d.ts -o ll/
+$ nish game.ts --allow-panics --target wasm32 --emit-dts out/game.d.ts -o ll/
 $ $NISH/scripts/build.sh ll/*.ll $NISH/runtime/runtime-wasm.c -o out/game.wasm \
     --profile wasm-host --memory 16
 ```

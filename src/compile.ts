@@ -1042,12 +1042,18 @@ const commandMain = (): number => {
       }
       opts.emitPanics = process.argv[arg]
     } else if (value === "--deny-panics") {
+      // The default spelled out, kept for the scripts that pass it.
       opts.denyPanics = true
+      opts.denyPanicsFlag = true
     } else if (value === ALLOW_PANICS_FLAG) {
       // The opposite of `--deny-panics`, and the last of the two wins: neither
       // moves a byte of the IR, so either reading builds the same binary,
       // unlike two `--sandbox` modes. A `noPanic` list still holds under it.
+      // Nothing else relaxes the default: `nish run`, `--emit-ts` and
+      // `--compat` refuse what a plain compile refuses, since each is a way
+      // to run the same program.
       opts.denyPanics = false
+      opts.denyPanicsFlag = false
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {
@@ -1465,12 +1471,16 @@ const commandMain = (): number => {
   }
   // The panic sites are settled after the whole-program proofs, so they are a
   // fact about a checked program too, and the file would never be written,
-  // nor a site refused.
-  if (emitAst && (opts.emitPanics.length > 0 || opts.denyPanics)) {
+  // nor a site refused. Only a scope the line asked for is refused: the
+  // default one is skipped without a word, as every other check is.
+  if (emitAst && (opts.emitPanics.length > 0 || opts.denyPanicsFlag)) {
     console.error(
-      `compile: \`${opts.denyPanics ? "--deny-panics" : "--emit-panics"}\` reports on a checked program, and --emit-ast stops before the check`
+      `compile: \`${opts.denyPanicsFlag ? "--deny-panics" : "--emit-panics"}\` reports on a checked program, and --emit-ast stops before the check`
     )
     return 2
+  }
+  if (emitAst) {
+    opts.denyPanics = false
   }
   // The retention warnings and the arena placements come from the body checks
   // and the whole-program facts, which `--emit-ast` never reaches, so there
@@ -2727,6 +2737,10 @@ const cachedTool = (
   opts.packageRoot = pkg.library
   opts.link = `${CLI} run`
   opts.profile = "debug"
+  // The compiler's own program, not the user's: like `src/`, which the
+  // repository builds with the flag that relaxes the scope, it is not held to
+  // no panic, and a user could not change it if it were refused.
+  opts.denyPanics = false
   const compilation = new Compilation(opts)
   if (!loadRoots(compilation, [file], false) || !compilation.check()) {
     report(compilation, json)

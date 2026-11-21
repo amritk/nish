@@ -354,8 +354,11 @@ fs.rmSync(out, { recursive: true, force: true })
 fs.mkdirSync(ll, { recursive: true })
 fs.mkdirSync(path.join(out, "nish"))
 
+// --allow-panics: game.ts opts out of the no-panic default (the reason is its
+// header).
 run(nish, [
   "game.ts",
+  "--allow-panics",
   "--target",
   "wasm32",
   "--deterministic",

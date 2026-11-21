@@ -1,7 +1,8 @@
-// Opt-out from `--deny-panics`: calls into `std/bytes`, `std/net/prefork`,
+// Opt-out (`--allow-panics`): calls into `std/bytes`, `std/net/prefork`,
 // `std/sync/ring` and `std/sync/shm` reach their panic sites; this file keeps
 // none of its own. Follow-up: make those modules panic-free, then build this
-// file with `--deny-panics`.
+// file without `--allow-panics`.
+// smoke: args --allow-panics
 //
 // Work handed across cores without a socket: `nish/net/prefork` starts five
 // worker processes, worker 0 owns a table of counters, and workers 1 to 4
@@ -11,7 +12,7 @@
 // it starts the workers, which open it by name; when they have all exited the
 // supervisor reads the totals out of the region and unlinks it.
 //
-//     build/nish examples/prefork-jobs.ts --link build/prefork-jobs
+//     build/nish --allow-panics examples/prefork-jobs.ts --link build/prefork-jobs
 //     build/prefork-jobs           # 4 workers sent 40000 jobs, ...
 //     build/prefork-jobs my-name   # the region is /dev/shm/my-name
 //

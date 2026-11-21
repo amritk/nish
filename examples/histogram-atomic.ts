@@ -1,7 +1,8 @@
-// Opt-out from `--deny-panics`: `ThreadScope.spawn` reaches the `panic` in
+// Opt-out (`--allow-panics`): `ThreadScope.spawn` reaches the `panic` in
 // `slotOutOfRange` (std/threads.ts); this file keeps no site of its own.
 // Follow-up: make `spawn`'s slot store in `std/threads.ts` panic-free, then
-// build this file with `--deny-panics`.
+// build this file without `--allow-panics`.
+// smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
 // bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task
@@ -15,7 +16,7 @@
 // compiler's: an update that does not commute (a `store`, an `exchange`) would
 // leave an answer that depends on the schedule.
 //
-//   nish examples/histogram-atomic.ts --link build/histogram-atomic
+//   nish --allow-panics examples/histogram-atomic.ts --link build/histogram-atomic
 //   ./build/histogram-atomic              four tasks, local counts, one add per bin
 //   ./build/histogram-atomic --per-value  four tasks, one atomic add per value
 //   ./build/histogram-atomic --lock       four tasks, one Mutex taken per value

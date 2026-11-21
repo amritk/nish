@@ -228,7 +228,18 @@ code. A function cannot be a value in Nish, so there is no
 `test("name", () => ...)`: you call one assertion per check, and each answers
 whether it passed.
 
-<!-- nish:ok -->
+Most examples from here on build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do). Most of the library
+keeps panic sites no proof removes yet, so a call into it is refused by
+default until the library is made panic-free. Many examples also index
+arrays, add numbers or size new arrays without a guard the compiler reads,
+which a test such as `i < xs.length` before an index, or a bound on a sum or
+a length, proves in your own code; a few copy a range of bytes (`set`,
+`String.fromBytes`), which no proof covers yet, or call `panic`, which no
+proof removes.
+
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/testing.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Suite } from "nish/testing";
 
@@ -267,7 +278,8 @@ arrays of lines, and `skip(name, reason)`. Because an assertion returns a
 
 The string operations a program would otherwise write by hand.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/text.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { contains, replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
 
@@ -309,7 +321,8 @@ exact value the `f64` holds. That is why `toFixed(1.005, 2)` is `"1.00"`:
 1.005 is stored a little below itself. A tie rounds away from zero, so
 `toFixed(2.5, 0)` is `"3"` and `toFixed(-2.5, 0)` is `"-3"`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/text.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { toFixed } from "nish/text";
 
@@ -357,7 +370,8 @@ Together with `nish/regex` they turn a snake_case or kebab-case name into a
 camelCase identifier. A regex template cannot change case, so the regex only
 makes every separator an underscore, and the case helpers do the rest:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/regex.ts`, `std/text.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { asciiLower, asciiUpper, split } from "nish/text";
 import { Regex, regexCompile } from "nish/regex";
@@ -416,7 +430,8 @@ such a string counts its UTF-8 bytes there.
 Regular expressions in JavaScript's syntax. `regexCompile(pattern, flags)`
 answers a `Result`: the `Regex`, or the reason the pattern is refused.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/regex.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Regex, RegexMatch, regexCompile } from "nish/regex";
 
@@ -523,7 +538,8 @@ it does not validate, and a nested value is stepped over rather than searched.
 It reads exactly the shape `nish --json` prints, which is what it was written
 for ([The CLI](cli.md#--json-for-tools)).
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { jsonField } from "nish/json";
 
@@ -552,7 +568,8 @@ one pass.
 own, placing every comma and colon itself, byte for byte what
 `JSON.stringify` writes. You say only what the value is:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 
@@ -599,7 +616,8 @@ it once, and it stays until you set it again.
   `null` as `JSON.stringify` does. A misuse before it, such as a value where a
   key is due, keeps its own code.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";
 
@@ -650,7 +668,8 @@ number, `true`, `false` or `null`. It reads a window of a `u8[]` and
 allocates nothing per token, so one tokenizer, `reset` for each new body,
 serves a whole connection.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; slices with bounds it does not test -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JSON_TOK_END, JSON_TOK_KEY, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 
@@ -728,7 +747,8 @@ a `Map` with `string` keys whose values are any of those, or a `string`, a
 class, an array or a map with `| null`; and a `JsonNumber`, which keeps a
 number's text exactly.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -802,7 +822,8 @@ field keeps the member it held. That makes a string enum field the way to take
 one of a fixed set of strings from input: the decoder checks it for you, and
 allocates nothing to do it.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -855,7 +876,8 @@ can't be keyed by an enum; an array of one, `Role[]`, is fine. A
 decoding empties the map and fills it in the order the keys arrive, a key given
 twice is an error, and encoding writes the entries in the map's order.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/collections.ts`, `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -923,7 +945,8 @@ wider than a `u64` or with more digits than an `f64` comes back byte for byte.
 Read it with `text()`, `isI64()` and `i64()`, `isU64()` and `u64()`, or
 `f64()`, and set it with `setText`.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -985,7 +1008,8 @@ replaces the whole target in RFC 7396; here it fails the decode with
 patch object: a decode refills arrays and maps in place, so a reused one
 shares them with the target. `examples/merge-patch.ts` is the whole recipe.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_DECODE_OK, JsonDecoder, jsonDecode } from "nish/json-typed";
@@ -1056,7 +1080,8 @@ variant, half read, so check `d.failed` before using anything it decoded. The ta
 when it is not the first key the decoder reads ahead to find it. A tag that is
 missing, not a string or no variant's is `JSON_DECODE_TAG`.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1124,7 +1149,8 @@ do not know — a configuration file, a body you pass on after changing one
 field, a tool that prints whatever it is given — parse the document into a
 `JsonDocument` and walk it.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_VALUE_NUMBER, JsonDocument } from "nish/json-value";
@@ -1224,7 +1250,8 @@ The offsets are into the array you gave `parseRanged`, or into the string
 UTF-16 code unit, its offsets count code units, so past the first non-ASCII
 character they differ from a native build's, which count UTF-8 bytes.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1273,7 +1300,8 @@ compare values, not doubles, and `0.3` is a multiple of `0.1` though
 `0.3 / 0.1` is `2.9999999999999996`. This module reads the decimal digits
 themselves and never makes an `f64`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JSON_NUMBER_ERR_GAP, jsonNumberCanonical, jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number";
 
@@ -1321,7 +1349,8 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; pops an array it does not test for empty; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1365,7 +1394,8 @@ first element of the member `tags`. A token is a member's key, with `~1` for a
 `/` in it and `~0` for a `~`, or an array index written without a leading
 zero.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; slices with bounds it does not test -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JSON_POINTER_NONE, isRelativeJsonPointer, jsonPointerEscape, jsonPointerParse, jsonPointerResolve } from "nish/json-pointer";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1404,7 +1434,8 @@ A JSON Schema names a string's shape with `format`: `"date-time"`, `"email"`,
 `"ipv6"`, `"uri"`. `nish/json-format` checks the formats of draft 2020-12, one
 predicate each, and a dispatcher for a format named in a schema.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JSON_FORMAT_UNKNOWN, JSON_FORMAT_VALID, isEmail, isIpv6, jsonFormatCheck, jsonFormatId, jsonFormatValidate } from "nish/json-format";
 
@@ -1457,7 +1488,8 @@ is about. A parse never fails and never panics on its input; a stream that is
 not valid YAML still answers its nodes, as the parser's best reading of it,
 beside the errors that say why.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
@@ -1537,7 +1569,8 @@ line that set it. A recursive alias ends the search. A `<<` whose value names
 no map is an error, `BAD_MERGE`. The nodes themselves are not changed: a map
 still holds the pairs it was written with.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parseYaml, pathNode, pathPair } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
@@ -1600,7 +1633,8 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; builds an array whose length it does not bound; calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1648,7 +1682,8 @@ and `false` plain, a number as its JSON text, and a trailing newline. It
 answers `""` for a handle that names no value and for a tree deeper than
 `JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1701,7 +1736,8 @@ A key longer than 1024 bytes as written is an explicit key, `? key` and then
 nothing else. It is how a function answers two values: you return an object
 literal and the annotation gives it its type.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Pair } from "nish/pair";
 
@@ -1737,7 +1773,8 @@ value at `key`, first storing `value` there if the key was missing, in one
 lookup. `reserve(m, n)` makes room for `n` entries up front, so filling the
 map never has to grow it.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
 
@@ -1777,7 +1814,8 @@ unrelated sequences, so a task or a parallel body can seed its own from its
 index. It is not for keys or passwords: those come from
 `crypto.getRandomValues`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/random.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Rng } from "nish/random";
 
@@ -1825,7 +1863,8 @@ in the reference.
 sections of flags with their placeholders and descriptions lined up in
 columns, and notes. It is what `nish --help` itself is built with.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HelpMenu, agentDriven, styleFor } from "nish/cli";
 
@@ -1926,7 +1965,8 @@ two SGR lists, one for the theme and one for the failsafe:
 Set a pair before you build the menu; an empty list leaves that role plain.
 The defaults are the ones described above.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
 
@@ -1947,7 +1987,8 @@ export const main = (): i32 => {
 `nish/cli-flags` reads a command line against a table of flags you declare
 once. The same table writes the help rows, so the two cannot drift apart.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HelpMenu, Style } from "nish/cli";
 import { FlagTable } from "nish/cli-flags";
@@ -2060,7 +2101,8 @@ walks the arguments, and the answer is the id of the command they reached
 and every flag's value with where it came from. `finish` then prints the
 help, the version or an error, the way [`nish/cli`](#nishcli) lays help out.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Cli, ROOT, finish } from "nish/cli-args";
 import { agentDriven, styleFor } from "nish/cli";
@@ -2236,7 +2278,8 @@ and slowing the frame rate when the link cannot keep up — use
 walks through. This section is the layer underneath, for a program that
 wants its own loop.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";
 import { write } from "nish:io";
@@ -2311,7 +2354,8 @@ the timeout you gave the constructor passes. While `waiting()` is true, call
 followed by more than 32 parameter bytes is no key, so the decoder gives the
 ESC up as `KEY_ESCAPE` at once rather than holding what follows.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { KEY_LEFT, KeyDecoder } from "nish/term";
 
@@ -2363,7 +2407,8 @@ time, so `delivered(sentAtMs)` tells it that the answer to a query sent at
 `releaseGapMs` after its last repeat is in, since a key still held would have
 repeated ahead of it.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { EVENT_KEY, EVENT_REPLY, KeyDecoder } from "nish/term";
 
@@ -2397,7 +2442,8 @@ behind, after a stall, drops the backlog instead of trying to catch up. The
 same clock with `maxSteps` 1 paces the drawing: it answers 1 when a frame is
 due. The first `advance` only starts the clock, and answers 0.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { COLOR_DEFAULT, Canvas, FixedStep, Screen, rgb } from "nish/term";
 import { write } from "nish:io";
@@ -2473,7 +2519,8 @@ grown once to the largest frame, so a program that keeps one encodes frame
 after frame without allocating. `out.text()` is the bytes to write and
 `out.reset()` empties it for the next frame.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; does integer arithmetic nothing bounds; builds an array whose length it does not bound -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { GRAPHICS_KITTY, Framebuffer, PixelBytes, fitFramebuffer, kittyFrame } from "nish/term-pixels";
 
@@ -2534,7 +2581,8 @@ The same draw fills either kind of frame, with no copy:
 - module storage, `const FRAME = new Int32Array(...)`, which is how a `wasm32`
   module shares a frame with its page ([`nish/host/game`](#nishhostgame)).
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/raster.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { RASTER_SOLID, rasterDisc, rasterFrame, rasterGradient, rasterRect, rasterText } from "nish/raster";
 
@@ -2570,7 +2618,8 @@ or noise wave whose pitch slides from `f0` to `f1` Hz and whose loudness falls
 away by `decay` a second. The sample rate is passed to every call, so one
 program can make sounds at whatever rate its player wants.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/synth.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { SYNTH_SQUARE, SYNTH_TRIANGLE, synthSemitone, synthSilence, synthTone } from "nish/synth";
 
@@ -2627,7 +2676,8 @@ When two modules declare storage of one name, the later one's is keyed by its
 symbol instead, and a program's own `GAME_FRAME` could move this module's off
 its key.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/host/game.ts`, `std/host/ring.ts`, `std/raster.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth } from "nish/host/game";
 import { RASTER_SOLID, rasterRect } from "nish/raster";
@@ -2666,7 +2716,8 @@ many characters `n` bytes take, so the buffer can be sized first. A range
 outside its array panics before anything is written. The module only encodes;
 the URL-safe, unpadded decoder for tokens and keys is `nish/crypto/base64url`.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/base64.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64";
 
@@ -2700,7 +2751,8 @@ significant.
 A signed width is the same bytes read as two's complement, and an `f64` is
 its IEEE 754 bits. There is no `f32`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
 
@@ -2714,11 +2766,12 @@ export const main = (): i32 => {
 };
 ```
 
-Every access is an ordinary index. An offset whose bytes do not all lie in the
-array panics with `index out of range`, naming the first byte that is not
-there. A guard in your own loop, such as `off + 3 < b.length`, does not yet
-remove these checks, so a hot loop that needs them gone indexes the bytes
-itself.
+Every access is an ordinary index, checked inside the module, so a call
+builds only with `--allow-panics` for now. There, an offset whose bytes do
+not all lie in the array panics with `index out of range`, naming the first
+byte that is not there. A guard in your own loop, such as
+`off + 3 < b.length`, does not yet remove these checks, so a hot loop that
+needs them gone indexes the bytes itself.
 
 Natively every function answers for every value. Under Node the `u16` and
 `u32` functions are expected to answer the same, but the 64-bit ones, the
@@ -2743,7 +2796,8 @@ run ends — the first index in `[from, to)` whose byte is not in the class, or
 `from` into `dst` at `at`. The two arrays may be the same one, and the ranges
 may overlap.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { copyBytes, skipBlank, skipDigits } from "nish/bytes";
 
@@ -2808,7 +2862,8 @@ compiler refuses every road out of it but one: `expose(s, f)` or
 `exposeWith(s, arg, f)` hands the value to a function. `wipe(s)` zeroes it
 with a store the optimiser may not remove.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/crypto/hmac.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Secret, exposeWith, secret, wipe } from "nish:secret";
 import { hmacSha256 } from "nish/crypto/hmac";
@@ -2868,7 +2923,8 @@ Storing the array in a field or an element, pushing it, or handing it to a
 function that keeps it is a second name too. To keep the plain bytes as well,
 copy them first, and move the copy in:
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; slices with bounds it does not test; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Secret, secret, wipe } from "nish:secret";
 
@@ -3004,7 +3060,8 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/pki` | `pkiVerifyServer(chain, hostname, nowMs, store)`, whether a TLS server's chain leads to a root of `pkiTrustStore(roots)` and names the host, as a `PkiResult` of a `code` (`PKI_OK` or a `PKI_ERR_` reason, `pkiReason(code)` its sentence) and the `path`. Checks signatures, validity, CA and path-length rules, key usages, name constraints and the hostname, never the common name; revocation is not checked. [Verifying TLS certificates](./tls-certificates.md) |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/crypto/base64url.ts`, `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { base64urlEncode } from "nish/crypto/base64url";
 import { sha256 } from "nish/crypto/sha256";
@@ -3046,7 +3103,8 @@ WebAssembly build always takes the portable code.
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
 the program wipes both:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
 import { Secret, secret, wipe } from "nish:secret";
@@ -3330,7 +3388,8 @@ if ((wants & TLS_RECORD_TICKET) !== 0) {
 }
 ```
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1-codec";
 
@@ -3382,7 +3441,8 @@ your array. `percentDecode` and `percentDecodePathSegment` decode one window
 into a buffer you own and answer how many bytes they wrote. An iterator is made
 once and `reset` for each request.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; slices with bounds it does not test; calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import {
   URL_DECODE_FORM,
@@ -3487,7 +3547,9 @@ does for valid UTF-8; where it replaces an invalid sequence with U+FFFD,
 A buffer as long as the input is always big enough; one shorter than the
 decoded result answers `URL_DECODE_ERR_SPACE`, with the bytes before it
 written. Test every answer before you read `out`: a peer's `%zz` makes it
-negative, and `String.fromBytes(out, 0, n)` with a negative `n` panics.
+negative, and `String.fromBytes(out, 0, n)` checks its range while the
+program runs (no proof covers it yet, so it needs `--allow-panics`) and
+panics on a negative `n`.
 `percentDecodeErrorAt`, called with the same arguments, answers the offset of
 the byte an error is at, or -1.
 
@@ -3524,7 +3586,8 @@ written, so `http://a.com./` (a trailing dot) and `http://[0::1]/` are
 different origins from `http://a.com/` and `http://[::1]/`: an equal string is
 the same origin, and a split errs toward "different".
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
 
@@ -3608,7 +3671,8 @@ waiting. On `DNS_NOERROR`, `reply.count` addresses are in `reply.addresses`,
 most `DNS_MAX_ANSWERS` (8) are kept and `reply.dropped` counts the rest. When
 `reply.truncated` is set, nothing was read: ask again over TCP.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import {
   DNS_ERR_NOT_REPLY,
@@ -3655,7 +3719,8 @@ with no usable `nameserver` gives 127.0.0.1 and ::1, as glibc does.
 `dnsHostsFind(hosts, name, qtype, port, out, max)` writes the addresses it
 gives `name`, without case, in file order, and answers how many.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DnsHosts, dnsHostsFind, dnsParseHosts } from "nish/net/dns-config";
 import { DNS_TYPE_A } from "nish/net/dns-message";
@@ -3724,7 +3789,8 @@ number that is not a lookup.
 `localhost`, an address literal and a name your hosts table has answer at once,
 with no packet sent:
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DnsResolver } from "nish/net/dns-resolver";
 import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
@@ -3775,7 +3841,8 @@ until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
 with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
 datagrams, so a flood on the port cannot keep your loop inside the client.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";
 import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";
@@ -3831,7 +3898,8 @@ returned on its own, and only a lookup with none yet is
 negative errno is the answer; a name `start` refuses answers `start`'s code.
 `dnsLookupWith` is the same with a configuration you give it.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { resolveHost } from "nish/net/dns";
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";

@@ -2,18 +2,18 @@
 // `Float64Array` and `BigInt64Array` are the Nish spellings of i32[],
 // f64[] and i64[]: one layout, and the name a Node host sees in the typings.
 //
-//   nish examples/arrays.ts -o build/arrays.ll \
+//   nish --allow-panics examples/arrays.ts -o build/arrays.ll \
 //     --emit-header build/arrays.h --emit-dts build/arrays.d.ts --emit-napi build/arrays_napi.c
 //   scripts/build.sh build/arrays.ll runtime/runtime-wasm.c -o build/arrays.wasm --profile wasm
 //   node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(...) = 2, 4, 6
 //   scripts/build.sh build/arrays.ll runtime/runtime.c build/arrays_napi.c -o build/arrays.node --profile napi
 //   node examples/node-addon.mjs build/arrays.node
 //
-// Opt-out from `--deny-panics`: the host passes any length and any i32, so
+// Opt-out (`--allow-panics`): the host passes any length and any i32, so
 // `sumI32`'s and `sumI64`'s `+=` and `squares`' `i * i` may overflow, `squares(-1)`
 // traps on purpose (a pinned test), and `new Float64Array(xs.length)` checks a
 // length typed `i32`. Follow-up: a length type the array constructors need not
-// check (in `src/`), then build this file with `--deny-panics`.
+// check (in `src/`), then build this file without `--allow-panics`.
 //
 // The types are spelled explicitly (i32 / f64) so the module means the same
 // thing in both number modes.
@@ -86,3 +86,5 @@ export const sumI64 = (xs: BigInt64Array): i64 => {
   }
   return total
 }
+
+// smoke: args --allow-panics

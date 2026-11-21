@@ -14,6 +14,7 @@ import isNetExport from "./nish-modules" -> function @isNetExport
 import isTermExport from "./nish-modules" -> function @isTermExport
 import netRangeBuffer from "./nish-modules" -> function @netRangeBuffer
 import Node from "./nodes" -> struct Node
+import ALLOW_PANICS_FLAG from "./options" -> const ALLOW_PANICS_FLAG
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
 import isSimdAccess from "./simd" -> function @isSimdAccess
@@ -39,6 +40,7 @@ const PANIC_FFI_NUL: i32 = 14 [exported]
 const PANIC_FFI_NULL: i32 = 15 [exported]
 const PANIC_FFI_LENGTH: i32 = 16 [exported]
 const PANIC_REGION: i32 = 17 [exported]
+const OUT_OF_SCOPE: string = "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
 struct PanicSite (class) size=56 align=8 exported
   field node: Node index=0 offset=0
   field source: SourceFile index=1 offset=8
@@ -336,33 +338,38 @@ function siteReportEntry(site: PanicSite, path: string, facts: FactsTable): stri
   callee +18:26 panicKindName -> @panicKindName
   callee +20:3 StringBuilder.add -> @StringBuilder.add
   callee +21:10 StringBuilder.toText -> @StringBuilder.toText
-function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], facts: FactsTable, table: TypeTable, sink: DiagnosticSink): PanicSite[] -> @reportDeniedPanics [exported]
+function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], listed: boolean[], facts: FactsTable, table: TypeTable, sink: DiagnosticSink): PanicSite[] -> @reportDeniedPanics [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseSite
   calls: StringSet.add StringSet.constructor listedFacts nish_array_grow nish_panic_overflow refuseSite
   pointer units: size=0 writesThrough=false captured=false
   pointer inScope: size=0 writesThrough=false captured=false
-  pointer facts: size=24 writesThrough=false captured=false passedTo=listedFacts#1 refuseSite#1
-  pointer table: size=168 writesThrough=false captured=false passedTo=refuseSite#2
-  pointer sink: size=48 writesThrough=false captured=false passedTo=refuseSite#5
-  stackSites=2 stackLocals=2
+  pointer listed: size=0 writesThrough=false captured=false
+  pointer facts: size=24 writesThrough=false captured=false passedTo=listedFacts#1 refuseSite#2
+  pointer table: size=168 writesThrough=false captured=false passedTo=refuseSite#3
+  pointer sink: size=48 writesThrough=false captured=false passedTo=refuseSite#6
+  stackSites=3 stackLocals=3
   local +0:9 refused: PanicSite[] (const)
   local +1:9 scoped: StringSet (const)
   callee +1:18 new StringSet -> @StringSet.constructor
   local +3:9 programs: CheckedProgram[] (const)
-  local +4:7 k: i32 (let)
-  local +5:14 unit: AnalysisUnit (const)
-  local +11:14 program: CheckedProgram (const)
-  local +12:16 sig: FunctionSig (const)
-  callee +13:11 listedFacts -> @listedFacts
-  callee +14:9 StringSet.add -> @StringSet.add
-  local +18:14 program: CheckedProgram (const)
-  local +19:16 site: PanicSite (const)
-  callee +20:11 refuseSite -> @refuseSite
-function refuseSite(program: CheckedProgram, facts: FactsTable, table: TypeTable, scoped: StringSet, site: PanicSite, sink: DiagnosticSink): boolean -> @refuseSite
+  local +4:9 programListed: boolean[] (const)
+  local +5:7 k: i32 (let)
+  local +6:14 unit: AnalysisUnit (const)
+  local +13:14 program: CheckedProgram (const)
+  local +14:16 sig: FunctionSig (const)
+  callee +15:11 listedFacts -> @listedFacts
+  callee +16:9 StringSet.add -> @StringSet.add
+  local +20:7 p: i32 (let)
+  local +22:11 program: CheckedProgram (const)
+  local +23:11 isListed: boolean (const)
+  local +24:16 site: PanicSite (const)
+  callee +25:11 refuseSite -> @refuseSite
+function refuseSite(program: CheckedProgram, listed: boolean, facts: FactsTable, table: TypeTable, scoped: StringSet, site: PanicSite, sink: DiagnosticSink): boolean -> @refuseSite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
-  calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has isAllowed nish_str_concat nish_str_from_i32 panicKindName siteAdvice
+  escaping: listed
+  calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has isAllowed nish_str_concat nish_str_from_i32 panicKindName scopeReason siteAdvice
   pointer program: size=928 writesThrough=true captured=false passedTo=siteAdvice#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer table: size=168 writesThrough=false captured=false passedTo=siteAdvice#1
@@ -382,9 +389,14 @@ function refuseSite(program: CheckedProgram, facts: FactsTable, table: TypeTable
   callee +11:87 SourceFile.columnOf -> @SourceFile.columnOf
   callee +12:5 DiagnosticSink.report -> @DiagnosticSink.report
   callee +16:63 panicKindName -> @panicKindName
-  callee +26:3 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +30:10 panicKindName -> @panicKindName
-  callee +31:65 siteAdvice -> @siteAdvice
+  callee +29:3 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +33:10 panicKindName -> @panicKindName
+  callee +33:60 scopeReason -> @scopeReason
+  callee +34:25 siteAdvice -> @siteAdvice
+function scopeReason(listed: boolean): string -> @scopeReason
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function siteLocalName(program: CheckedProgram, expr: Node): string -> @siteLocalName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapBoundsParens

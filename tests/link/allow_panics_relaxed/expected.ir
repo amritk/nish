@@ -1,0 +1,2 @@
+icmp ult i64
+call void @nish_panic_index(

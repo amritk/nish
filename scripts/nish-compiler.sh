@@ -32,7 +32,7 @@ nish_compiler() {
 # probe, not "the seed never gets it": a released compiler older than the flag
 # exits 2 on it, and a `NISH_BOOTSTRAP` seed can be any release. Once every
 # supported seed accepts the flag, this function can go and its callers pass
-# the flag directly. The help is read whole before it is searched, so the
+# the flag directly, as can the POSIX copy in scripts/fetch-vector.sh. The help is read whole before it is searched, so the
 # compiler never meets a closed pipe.
 # shellcheck disable=SC2034 # `allow_panics` is the answer, read by the script that sourced this
 nish_allow_panics() {

@@ -117,9 +117,10 @@ translate, is written as a stub that throws, with a `portability:` warning
 The output is faithful: it means what the native build means, helpers
 included. `i32` arithmetic that can overflow is `checkedAdd` and its
 siblings, an index the compiler could not prove is `idx` or `setIdx`, and
-each panics where the native build does. A team leaving for good then removes
-the helpers one at a time, each a place where it picks JavaScript's meaning
-over Nish's; the runtime imports left are the measure of how far it has gone.
+each panics where a native build made with `--allow-panics` does. A team
+leaving for good then removes the helpers one at a time, each a place where it
+picks JavaScript's meaning over Nish's; the runtime imports left are the
+measure of how far it has gone.
 There is no flag that drops them all, since that would change what the
 program means without saying where.
 

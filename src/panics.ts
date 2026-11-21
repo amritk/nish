@@ -37,6 +37,7 @@ import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
 import { Node, NodeKind } from "./nodes"
+import { ALLOW_PANICS_FLAG } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
@@ -644,11 +645,12 @@ export const siteReportEntry = (site: PanicSite, path: string, facts: FactsTable
   return out.toText()
 }
 
-// ---- The no-panic scope (`--deny-panics`, `"nish".noPanic`) --------------------------
+// ---- The no-panic scope (the default, `"nish".noPanic`) --------------------------
 
 /**
  * Refuse every site that can still panic in a module of the no-panic scope:
- * `inScope[k]` says whether `units[k]` is in it. A site of the module's own is
+ * `inScope[k]` says whether `units[k]` is in it, and `listed[k]` whether
+ * `"nish".noPanic` names it, which only changes the way out each error words. A site of the module's own is
  * NL2457, naming its kind and, where a proof the checker makes would remove
  * it, the guard that gives the proof. A call is refused only when its callee
  * is outside the scope (NL2458), because a callee inside it has its own sites
@@ -663,6 +665,7 @@ export const siteReportEntry = (site: PanicSite, path: string, facts: FactsTable
 export const reportDeniedPanics = (
   units: AnalysisUnit[],
   inScope: boolean[],
+  listed: boolean[],
   facts: FactsTable,
   table: TypeTable,
   sink: DiagnosticSink
@@ -671,10 +674,12 @@ export const reportDeniedPanics = (
   const scoped = new StringSet()
   // The programs in scope, read once: `inScope` is in step with `units`.
   const programs: CheckedProgram[] = []
+  const programListed: boolean[] = []
   let k = 0
   for (const unit of units) {
     if (k < inScope.length && inScope[k]) {
       programs.push(unit.program)
+      programListed.push(k < listed.length && listed[k])
     }
     k = k + 1
   }
@@ -685,12 +690,16 @@ export const reportDeniedPanics = (
       }
     }
   }
-  for (const program of programs) {
+  let p = 0
+  while (p < programs.length) {
+    const program = programs[p]
+    const isListed = p < programListed.length && programListed[p]
     for (const site of program.panicSites) {
-      if (refuseSite(program, facts, table, scoped, site, sink)) {
+      if (refuseSite(program, isListed, facts, table, scoped, site, sink)) {
         refused.push(site)
       }
     }
+    p = p + 1
   }
   return refused
 }
@@ -698,6 +707,7 @@ export const reportDeniedPanics = (
 /** Report `site` when it can panic in the scope; whether it did. */
 const refuseSite = (
   program: CheckedProgram,
+  listed: boolean,
   facts: FactsTable,
   table: TypeTable,
   scoped: StringSet,
@@ -722,7 +732,10 @@ const refuseSite = (
       node.end,
       `This call to \`${name}\` may panic: it reaches the \`${panicKindName(reaches.kind)}\` site at ${at}, ` +
         "outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a " +
-        "function that cannot panic, or make the call from a module outside the scope"
+        "function that cannot panic, or make the call from a module outside the scope" +
+        (listed
+          ? `: \`noPanic\` lists this one, which keeps it in under \`${ALLOW_PANICS_FLAG}\``
+          : `: every module of this package is in it by default, and \`${ALLOW_PANICS_FLAG}\` takes out the ones \`noPanic\` does not list`)
     )
     return true
   }
@@ -734,11 +747,20 @@ const refuseSite = (
     program.source,
     node.start,
     node.end,
-    `\`${panicKindName(site.kind)}\` may panic here, and a module in the no-panic scope (\`--deny-panics\` or ` +
-      `\`noPanic\`) may keep no panic site but out of memory: ${siteAdvice(program, table, site)}`
+    `\`${panicKindName(site.kind)}\` may panic here, and ${scopeReason(listed)} may keep no panic site but ` +
+      `out of memory: ${siteAdvice(program, table, site)}`
   )
   return true
 }
+
+/**
+ * Why a module is held to no panic, worded as the subject of NL2457: a module
+ * `noPanic` lists stays held under the flag, any other only by default.
+ */
+const scopeReason = (listed: boolean): string =>
+  listed
+    ? `a module \`noPanic\` lists, which \`${ALLOW_PANICS_FLAG}\` does not relax,`
+    : `a module of this package, held to no panic by default (\`${ALLOW_PANICS_FLAG}\` relaxes the modules \`noPanic\` does not list),`
 
 /** The source name of the local a bare identifier binds, or `""`. */
 const siteLocalName = (program: CheckedProgram, expr: Node): string => {
@@ -762,6 +784,14 @@ const calledName = (program: CheckedProgram, call: Node): string => {
   const callee = unwrapBoundsParens(call.children[0])
   return callee.kind === NodeKind.Member || callee.kind === NodeKind.Ident ? callee.text : ""
 }
+
+/**
+ * The way out for a site no proof removes: the scope's edge. With no flag
+ * every module of the package is inside it, so the advice names the flag that
+ * moves a module out.
+ */
+const OUT_OF_SCOPE: string =
+  "make the call from a module `noPanic` does not list, and build with `" + ALLOW_PANICS_FLAG + "`"
 
 /**
  * What fails at `site`, and what removes it. The index, range and divisor
@@ -802,8 +832,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return ioExitAdvice(program, node)
     case PANIC_PARALLEL_LENGTH:
       return (
-        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: make " +
-        "the call from a module outside the scope"
+        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: " +
+        OUT_OF_SCOPE
       )
     case PANIC_OVERFLOW:
       return overflowAdvice(program, table, node)
@@ -815,10 +845,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_FFI_NULL: {
       const reader = calledName(program, node)
       if (reader === "readStruct" || reader === "readCString") {
-        return (
-          `\`${reader}\` panics on a NULL pointer, and no proof removes that check: ` +
-          "make the call from a module outside the scope"
-        )
+        return `\`${reader}\` panics on a NULL pointer, and no proof removes that check: ` + OUT_OF_SCOPE
       }
       return (
         "a C function's `const char *` result may be NULL, which a `string` cannot hold: " +
@@ -834,7 +861,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
-        "already or another thread's, and no proof removes that check: make the call from a module outside the scope"
+        "already or another thread's, and no proof removes that check: " +
+        OUT_OF_SCOPE
       )
     default:
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.
@@ -908,9 +936,12 @@ const sliceAdvice = (program: CheckedProgram, node: Node): string => {
   }
   // A user method cannot be a slice site, so the member name alone is `String.fromBytes`.
   if (name === "fromBytes") {
-    return "`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: make the call from a module outside the scope"
+    return (
+      "`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: " +
+      OUT_OF_SCOPE
+    )
   }
-  return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: make the call from a module outside the scope`
+  return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: ${OUT_OF_SCOPE}`
 }
 
 /**

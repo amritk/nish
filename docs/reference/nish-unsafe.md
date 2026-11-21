@@ -110,7 +110,7 @@ cannot call.
 
 <scalar-detail title="The no-panic scope">
 
-Under `--deny-panics` or `"nish".noPanic`,
+In the scope, every module of the package by default,
 `uncheckedGet` and `uncheckedSet` are allowed `unchecked` sites, because
 the import has already said that an index out of range is the author's to
 rule out. `readCString` and `readStruct` are not: each tests its pointer and

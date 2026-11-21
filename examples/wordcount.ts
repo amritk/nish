@@ -1,6 +1,7 @@
-// Opt-out from `--deny-panics`: the `Map` calls reach panic sites in
+// Opt-out (`--allow-panics`): the `Map` calls reach panic sites in
 // `std/collections`; this file keeps none of its own. Follow-up: make
-// `std/collections` panic-free, then build this file with `--deny-panics`.
+// `std/collections` panic-free, then build this file without `--allow-panics`.
+// smoke: args --allow-panics
 //
 // Word count on the global `Map`, and the two calls `nish/map` adds to it
 // (docs/wp32-map.md §9). Each count below is one hash and one probe of the
@@ -8,7 +9,7 @@
 // twice, and the compiler keeps the first probe's answer and writes through
 // it; `getOrInsert` is one probe by construction; and `reserve` sizes the
 // table once, so counting never has to grow it.
-//   nish examples/wordcount.ts --link build/wordcount && ./build/wordcount
+//   nish --allow-panics examples/wordcount.ts --link build/wordcount && ./build/wordcount
 // Under Node the same file runs on Node's own `Map`, where `reserve` does
 // nothing and `getOrInsert` is a `get` and a `set`, and prints the same lines:
 //   node --experimental-strip-types --import ./runtime/nish.mjs \

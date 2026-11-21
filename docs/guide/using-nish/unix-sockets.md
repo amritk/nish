@@ -32,7 +32,15 @@ and it goes away with the last socket bound to it. Any other path makes a
 socket file. The client connects with the same name, and the listener takes
 the connection once the loop says it is readable.
 
-<!-- nish:ok -->
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): the range of a
+`u8[]` that `netRead` and `netWrite` take is checked while the program
+runs, a check no proof removes yet, and the later ones also index arrays
+without a guard; a test such as `i < xs.length` before each index proves
+those.
+
+<!-- allow-panics: slices with bounds it does not test -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import {
   netClose,
@@ -136,7 +144,8 @@ hand one end to a thread and keep the other. `fds` is an
 arrive as one read. `NET_UNIX_SEQPACKET` keeps each write one message, so each
 read answers exactly one; it is Linux only and answers `-95` on macOS.
 
-<!-- nish:ok -->
+<!-- allow-panics: slices with bounds it does not test; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { NET_UNIX_SEQPACKET, netClose, netRead, netWrite, unixSocketPair } from "nish:net";
 
@@ -168,7 +177,8 @@ carried none. The two descriptors, the sender's and the receiver's, are one
 open file: they share its offset and its flags, as a `dup` would. The sender's
 stays open until it closes it.
 
-<!-- nish:ok -->
+<!-- allow-panics: slices with bounds it does not test; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { NET_UNIX_STREAM, netClose, recvFd, sendFd, unixSocketPair } from "nish:net";
 
@@ -223,7 +233,8 @@ answers `0`. `out` is an `i32[]` of at least three; a shorter one answers
 `-22`. A server uses it to decide what a client may do before it reads a byte
 of what the client sent.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { NET_UNIX_STREAM, netClose, peerCredentials, unixSocketPair } from "nish:net";
 

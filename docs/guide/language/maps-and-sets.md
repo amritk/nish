@@ -3,12 +3,16 @@
 `Map<K, V>` stores a value under each key and `Set<T>` keeps each value once.
 They behave as JavaScript's do: entries come back in the order they were
 inserted, and keys are compared as `===` compares them, except that every
-`NaN` is the same key. Both are always available, with no import. The full
-rules are in the reference under [`Map` and `Set`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#map-and-set).
+`NaN` is the same key. Both are always available, with no import. Their code
+in `std/collections.ts` keeps checks no proof removes yet, so a program that
+uses either builds with [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do),
+as every program on this page that compiles does; it will build under the
+default once that code is made panic-free. The full rules are in the reference under [`Map` and `Set`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#map-and-set).
 
 ## Making and filling one
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
@@ -64,7 +68,8 @@ into the high half and the second taken unsigned (`toU32`) into the low half. Wr
 operand as an `i64`, because under Node an `i64` is a `BigInt`, which will not
 mix with a plain number:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const cell = (row: i32, col: i32): i64 => (toI64(row) << toI64(32)) | toI64(toU32(col));
 
@@ -91,7 +96,8 @@ string on every lookup.
 may not be there. Nish lets you use that answer in three ways, the three a
 program checked by `tsc --strict` would use:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const counts = new Map<string, i32>();
@@ -153,7 +159,8 @@ run.
 `for...of` walks a map's `keys()` or `values()`, or a set directly, in
 insertion order:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
@@ -212,7 +219,8 @@ or the value and the key, and for a `Set` the element alone. Like an array
 callback, it may not assign a local of the function around it: walk with
 `for...of` to add up.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
@@ -234,7 +242,8 @@ for `n` entries up front, so filling the map never has to grow it.
 `value` first if the key is missing, with one lookup. Under Node they are
 ordinary functions with the same results, so the program still runs there.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
 

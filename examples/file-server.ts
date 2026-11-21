@@ -1,8 +1,8 @@
-// Opt-out from `--deny-panics`: the HTTP calls reach panic sites in
+// Opt-out (`--allow-panics`): the HTTP calls reach panic sites in
 // `std/net/http1-codec` and `std/net/http1-server`, and the slice of
 // `fileReadAt`'s window keeps a range check the checker cannot yet discharge.
 // Follow-up: make those modules panic-free and teach the prover `fileReadAt`'s
-// bound, then build this file with `--deny-panics`.
+// bound, then build this file without `--allow-panics`.
 //
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each
@@ -10,7 +10,7 @@
 // connection reads through the same 64 KiB window. So memory follows the
 // window and not the file: a 4 GiB video costs what a 64 KiB one does.
 //
-//     build/nish examples/file-server.ts --link build/file-server
+//     build/nish --allow-panics examples/file-server.ts --link build/file-server
 //     build/file-server big.mp4 8080 &
 //     curl -s http://127.0.0.1:8080/ | cmp - big.mp4
 //     kill %1
@@ -19,6 +19,7 @@
 // response carries a Content-Length, which `respond` takes as an i32, so a
 // file past 2^31 - 1 bytes is refused at start-up. Without a path and a port
 // it prints how to run it and exits 2.
+// smoke: args --allow-panics
 // smoke: exit 2
 import { fileOpen, fileReadAt, fileSize } from "nish:fs"
 import { netLocalPort, pollAdd, pollCreate, pollModify, pollWait, tcpListen } from "nish:net"

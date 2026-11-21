@@ -126,7 +126,15 @@ who write programs in Nish. A page there follows these rules:
   or `<!-- nish:err-body CODE -->` (must be rejected with that code), with
   any CLI flags after them — and `node tests/run.js guide` compiles it. The
   marker is a comment because the site shows a word after a fence's language
-  as the block's title; a marker in the fence's own line is refused. Every
+  as the block's title; a marker in the fence's own line is refused. A program
+  builds strict, as a reader's would: one that keeps a panic site passes
+  `--allow-panics` and says why on the line above its marker,
+  `<!-- allow-panics: divides by a value it does not test -->`. That
+  comment is hidden on the site, so the page also tells the reader, in one
+  visible sentence before its first such example, why it builds with
+  `--allow-panics` and what fixes it: the guard that proves the site, or
+  that the standard-library code it calls keeps panic sites no proof
+  removes yet. Every
   page but `installation.md` carries at least one once it is more than a stub
   (its title and one paragraph). A fragment that cannot compile on its own is
   a plain ` ```ts ` block, and short. An example of several files puts each

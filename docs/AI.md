@@ -130,12 +130,18 @@ are one node per line, which is to say diffable.
 
 ## A whole program
 
-<!-- nish:ok -->
+This program divides by a value it does not test, so it builds with
+`--allow-panics` ([Proving it cannot panic](#proving-it-cannot-panic)); a
+guard that the divisor is not zero would let it build under the default. Other
+examples below that do integer arithmetic nothing bounds build the same way.
+
+<!-- allow-panics: divides by a value it does not test -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const gcd = (a: i32, b: i32): i32 => {
   let x = a;
   let y = b;
-  while (y !== 0) {
+  while (y > 0) {
     const t = y;
     y = x % y;
     x = t;
@@ -259,7 +265,8 @@ only once the program has no other error, so they show up last.
 | `if (c) … else if (c) …`, the same condition again | NL2716 | the condition you meant for the second branch |
 | `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2717 | test before the subtraction that would wrap, or use a signed type |
 
-<!-- nish:err-body NL2712 -->
+<!-- allow-panics: it shows NL2712, not a panic site; does integer arithmetic nothing bounds -->
+<!-- nish:err-body NL2712 --allow-panics -->
 ```ts
 const xs = [3, 4];
 let total = 0;
@@ -270,7 +277,8 @@ const average = total / 2;
 console.log(`${total}`);
 ```
 
-<!-- nish:ok-body -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const xs = [3, 4];
 let total = 0;
@@ -290,7 +298,7 @@ compatible only when their types are identical.
 | Type | Is | Notes |
 | --- | --- | --- |
 | `number` | `i32`, or `f64` under `--number-mode f64` | the mode's default width |
-| `i32`, `i64` | signed integers | overflow **panics** (exit 1) unless proven to fit; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
+| `i32`, `i64` | signed integers | overflow not proven to fit is a compile error by default, and **panics** (exit 1) under `--allow-panics`; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
 | `u8`, `u16`, `u32`, `u64` | unsigned integers | arithmetic **always** wraps; `>>` is logical |
 | `f32`, `f64` | IEEE-754 | `f32` is never the lowering of `number` |
 | `boolean` | `i1` | no truthiness anywhere |
@@ -333,7 +341,9 @@ export const hash = (bytes: u8[]): i32 => {
 `u32 + i32` (same LLVM type, different signedness) are rejected. Convert
 explicitly: `toI32` `toI64` `toU8` `toU16` `toU32` `toU64` `toF32` `toF64`.
 
-**Signed overflow panics.** `+ - *`, unary `-`, `++`, `--` and `op=` on an
+**Signed overflow panics.** By default an operation the compiler cannot
+prove fits is a compile error (NL2457). Under `--allow-panics`, `+ - *`,
+unary `-`, `++`, `--` and `op=` on an
 `i32` or `i64` stop the program with `attempt to add with overflow` (or
 `subtract`, `multiply`, `negate`) and exit 1 when the result leaves the type;
 it is never a silent wrap and never undefined. The compiler drops the check
@@ -362,7 +372,8 @@ const bad = (a: i32, b: i64): i64 => {
 };
 ```
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const good = (a: i32, b: i64): i64 => {
   return toI64(a) + b;
@@ -372,8 +383,9 @@ const good = (a: i32, b: i64): i64 => {
 **`integer<Lo, Hi>` is an `i32` that stays in `[Lo, Hi]`.** The bounds are two
 integer literals (a sign allowed) inside `i32`, and it is an `i32` everywhere
 the machine can see. Putting a value *into* one is checked: an `i32` or
-another range is compared once and the program panics (exit 1) outside the
-range, a literal outside it is a compile error, and a literal inside it or a
+another range is compared once (a check the default refuses unless it is
+proven; under `--allow-panics` the program panics, exit 1, outside the
+range), a literal outside it is a compile error, and a literal inside it or a
 narrower range costs nothing. So does a value a loop condition or a guard
 already bounds (`b` below), and `toI32` of a `u8`; a check left inside a loop
 is a performance warning (NL9013) naming the guard that removes it. A range
@@ -384,7 +396,8 @@ not an `integer<0, 255>` (convert with `toI32`), and a `declare function` may
 not mention a range. Put the range on the value you use, not on a loop
 counter, which has to leave the range to end the loop.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i];
 
@@ -536,7 +549,8 @@ reference — never a scalar, which has no null value. It is the same pointer
 (or, for a function reference, the same tag) with `null` as one more value, so
 nothing is boxed.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Node {
   value: i32;
@@ -646,7 +660,8 @@ const n = s?.length;
 
 ### Functions
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const add = (a: i32, b: i32): i32 => {
   return a + b;
@@ -748,7 +763,8 @@ export const main = (): i32 => {
   same fields, so implementing your own is refused the same way; import the
   template's `Shape` instead.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Shape { area: i32; }
 
@@ -865,7 +881,8 @@ They are inferred from the arguments like a generic function's, and each
 (receiver, method type arguments) pair is its own `define`:
 `@Chooser.pick$i32`, `@Box$i32.keep$str`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Chooser {
   flip: boolean = false;
@@ -915,7 +932,8 @@ is a top-level function named at the call, or an arrow written right there, and
 each one is compiled into its **own copy** of the function, with a direct call
 where the parameter is called — there is no function pointer at run time.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
   const out: U[] = [];
@@ -1096,7 +1114,8 @@ else to switch on and no thread count to choose. `parallelMap(src, f)` and
 `parallelFrom(n, f)` answer a new array instead (`f(src[i])`, `f(i)`), under
 the same rules for `f`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `parallelMapInto`, whose length check no proof removes yet; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
@@ -1111,7 +1130,8 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
 
@@ -1170,7 +1190,8 @@ Different functions at once, one thread each: open a scope with `using`, give
 it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
 `entry(arg)` into `dst[at]` when the block ends.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { scope } from "nish/threads";
 
@@ -1241,7 +1262,8 @@ export const main = (): i32 => {
 When tasks must update one value, put it in a `Mutex` and reach it only through
 `using g = m.lock()`: the lock is held until that block ends, on every exit.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
@@ -1332,7 +1354,8 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Mutex, MutexGuard } from "nish/threads";
 
@@ -1358,7 +1381,8 @@ A shared counter, minimum, maximum or flag is an atomic: `new AtomicI32(0)`,
 `new AtomicI64(toI64(0))`, updated from any task or parallel `f` by one
 indivisible method call.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `parallelMapInto`, whose length check no proof removes yet; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { AtomicI32, parallelMapInto } from "nish/threads";
 
@@ -1418,7 +1442,8 @@ When one task produces values and another consumes them, give both a
 `for...of`, which waits for values and ends once every producer has returned.
 Nobody closes a channel.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Channel, scope } from "nish/threads";
 
@@ -1666,7 +1691,8 @@ export const main = (): i32 => {
   `NULL` panics (`ffi-null`). The copy never frees: a result the caller must
   `free` (`strdup`) is declared `CPtr | null` instead.
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function strerror(errnum: i32): string;
 declare function getenv(name: string): string | null;
@@ -1684,13 +1710,13 @@ export const main = (): i32 => {
   `p` into a new string; a dangling or unterminated `p` is undefined
   behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
   `CPtr | null` with `!== null` first. A `NULL` `p` panics (`ffi-null`) before
-  the copy, so `--deny-panics` refuses the call.
+  the copy, so the no-panic default refuses the call.
 - **A struct C owns is copied out with `readStruct` from `nish:unsafe`.**
   `const lc: Lconv = readStruct(p)` copies the bytes at `p` into a new
   instance of the `declare class` the context names; write the annotation,
   since `readStruct<Lconv>(p)` is refused (NL2763) and a call with no context
   is NL2764. A `NULL` `p` panics (`ffi-null`) before the copy, so
-  `--deny-panics` refuses the call; a dangling `p`, or a class that does not
+  the no-panic default refuses the call; a dangling `p`, or a class that does not
   match C's fields, is undefined behaviour.
 - **errno is read with `cErrno()` from `nish:unsafe`.** It answers the errno
   the most recent `declare function` call on this thread left; naming it makes
@@ -1701,7 +1727,8 @@ export const main = (): i32 => {
   `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
   is NL2539, so C is never handed a `NULL` by accident.
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
 
@@ -1770,7 +1797,8 @@ emitted and no initialiser runs** — every use lowers to the value itself.
 
 ### Module storage
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const SCORES = new Int32Array(4);
 
@@ -1810,7 +1838,8 @@ state a module keeps (there is no top-level `let`).
 
 ### Classes and interfaces
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Shape { width: i32; height: i32; }
 
@@ -1881,7 +1910,8 @@ export const main = (): i32 => {
 
 Index again after the `push` instead of holding the element across it:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Point { x: i32; }
 
@@ -1902,7 +1932,8 @@ grows, and the blocks it outgrows stay in the arena; a walk over `kids`
 follows two pointers per child where the links follow one. On a 4M-node
 tree the links took 0.52x the memory and 0.68x the time of `kids`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Node {
   kind: i32;
@@ -1958,7 +1989,8 @@ export const main = (): i32 => {
 - `uncheckedGet` / `uncheckedSet` belong in that table's code only: an index
   out of range there is undefined behaviour, not a panic.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
@@ -2186,7 +2218,8 @@ export const main = (): i32 => (pick(Kind.Array) === Kind.Array ? 0 : 1);
 
 ### Discriminated unions
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 enum Kind {
   Circle,
@@ -2435,7 +2468,8 @@ export const main = (): i32 => {
   `break`, `continue`, `process.exit`, an `if` whose branches all return, or an
   infinite loop.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const firstPair = (limit: i32, target: i32): i32 => {
   outer: for (let i: i32 = 0; i < limit; i++) {
@@ -2870,7 +2904,8 @@ was there) and `clear()`, and `keys()` / `values()` as the iterable of a
 and `s.forEach((x) => ...)` compile to that `for...of` walk with `f` inlined,
 and answer `void`. `entries` is refused by name.
 
-<!-- nish:ok-body -->
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const seen = new Set<string>();
 const counts: Map<string, i32> = new Map();
@@ -2897,7 +2932,8 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
 three ways: a default with `??`, a `const` tested with `!== undefined` (or
 `=== undefined` and an early `return`), or a bare test. Each is one probe.
 
-<!-- nish:ok-body -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const counts = new Map<string, i32>();
 for (const w of ["a", "b", "a"]) {
@@ -2930,7 +2966,8 @@ may `set`, `delete` or `clear` the table inside the walk and get exactly what
 JavaScript gives (a new key is visited later in the same walk; a key deleted
 before it is reached is not).
 
-<!-- nish:ok-body -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const ages = new Map<string, i32>();
 ages.set("ada", 36).set("alan", 41);
@@ -2970,7 +3007,8 @@ string `+`) or assign. Anything else still compiles, as one probe per call.
 inserting it — and `reserve(m, n)`, which sizes the table for `n` entries; both
 are one module with the program and run unchanged under Node.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
 
@@ -3034,7 +3072,8 @@ tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
 no union holds does nothing, and a JSON call on that class refuses its
 enum-member field.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -3075,7 +3114,8 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -3154,7 +3194,8 @@ outlive it — so allocate what must outlive the block before it, and let only
 numbers, booleans and enums out. `arena()` is only ever a `using` initialiser,
 and `a` is never read.
 
-<!-- nish:ok-body -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const rows: string[] = ["a", "bb"];
 let total = 0;
@@ -3195,7 +3236,8 @@ entry — use a region.** `region(f)` / `regionWith(arg, f)` make one and run
 gives all of it back. `f` is a named function or an arrow that captures
 nothing. `Region<T>` is a number, not a pointer.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enter, free, region } from "nish:region";
 
@@ -3231,7 +3273,8 @@ the module (NL4015).
 
 **Iterate and accumulate** — there is no `reduce` (`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, but a callback may not assign a local of its caller); fold in a loop:
 
-<!-- nish:ok-body -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const xs: i32[] = [1, 2, 3];
 const doubled = xs.map((x) => x * 2);
@@ -3447,7 +3490,8 @@ guide's [terminal page](guide/using-nish/terminal.md) its walk-through.)
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Sized { width: i32; height: i32; }
 
@@ -3482,10 +3526,16 @@ emitting code that cannot compile.
 
 ### Proving it cannot panic
 
-Under `--deny-panics`, or for a module the root `package.json` lists in
-`"nish": { "noPanic": [...] }`, every place the program could stop with a panic
-is an error (NL2457) until a proof removes it; out of memory is the one kind
-allowed. Each error names its fix, and there are five:
+Every module of the program's own package is held to no panic by default:
+every place it could stop with a panic is an error (NL2457) until a proof
+removes it; out of memory is the one kind allowed. `--allow-panics` relaxes
+that to the modules the root `package.json` lists in
+`"nish": { "noPanic": [...] }`, and `--deny-panics` spells the default out.
+**Fix a refusal; do not relax it.** Keep the default, add the guard the error
+names, and never reach for `--allow-panics`, a `nish:unsafe` import or a guard
+that proves nothing (one whose `else` branch returns a made-up value the
+caller cannot tell from a real one) to make an error go away. Each error names
+its fix, and there are five:
 
 - **Guard** what the checker cannot prove: `if (i >= 0 && i < xs.length)` before
   `xs[i]` (`if (toU32(i) < toU32(xs.length))` for a `u8`, `u16` or `u32` index,
@@ -3503,9 +3553,10 @@ allowed. Each error names its fix, and there are five:
   supply a value instead of stopping.
 - **Swap `readFileSync` for `readFileSyncOrNull`**, which answers `null` where
   the other exits.
-- **Read the list**: `nish file.ts --emit-panics panics.json` writes every site
-  per function, proven or not, and the `"panics"` of `--emit-capabilities` the
-  same.
+- **Read the list**: `nish file.ts --allow-panics --emit-panics panics.json`
+  writes every site per function, proven or not, and the `"panics"` of
+  `--emit-capabilities` the same. Pass `--allow-panics` to get it: a build the
+  default refuses writes neither file.
 
 <!-- nish:ok --deny-panics -->
 ```ts
@@ -3550,7 +3601,10 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
-that cannot panic, or make the call from a module outside the scope.
+that cannot panic. The standard library is not yet panic-free, so `Map`,
+`Set`, `split` and the `JSON` reads are refused in the scope for now;
+a program that needs them builds with `--allow-panics`, and says why where it
+is built.
 `uncheckedGet` and `uncheckedSet` are not proofs, but
 they cannot panic, and their `nish:unsafe` import is the module's visible
 opt-in to an index out of range being undefined behaviour, so the scope allows
@@ -3584,7 +3638,8 @@ that keeps to it ([LANGUAGE.md](LANGUAGE.md#the-capability-policy)). Under an
 allowlist `exit` is a capability like the others, and `unsafe` can be denied
 but never allowed: importing `nish:unsafe` is the opt-in.
 
-<!-- nish:err NL2459 --deny fs.read -->
+<!-- allow-panics: it shows NL2459, not a panic site; calls a file or entropy builtin that exits on failure -->
+<!-- nish:err NL2459 --deny fs.read --allow-panics -->
 ```ts
 const settings = (): string => readFileSync("settings.txt");
 
@@ -3632,8 +3687,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
    A package that must not touch the network says so in `package.json`
    ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
-11. Must it never panic? Compile with `--deny-panics` (or list the module in
-   `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
+11. Must it never panic? It is held to that by default: every index, division,
    signed `+ - *`, `pop`, range entry, `expect` and exiting call it cannot
    prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an

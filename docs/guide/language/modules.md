@@ -27,10 +27,17 @@ export const distance2 = (a: Point, b: Point): i32 => {
 };
 ```
 
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): most do `i32` arithmetic
+nothing bounds, which bounding the operands would fix, and the `nish/text` one
+calls standard-library code that keeps panic sites no proof removes yet, which
+will build under the default once that code is made panic-free.
+
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts main.ts
 // main.ts
 import { distance2, Point } from "./geometry";
@@ -125,7 +132,8 @@ const add = (a: i32, b: i32): i32 => a + b;
 export const sum3 = (a: i32, b: i32, c: i32): i32 => add(add(a, b), c);
 ```
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts main.ts
 // main.ts
 import { sum3 } from "./helper";
@@ -161,7 +169,8 @@ local name:
 | `nish:simd` | sixteen-byte vectors and the calls that make, load and store them ([Vectors](simd.md)), available only through the import |
 | `nish:async` | `spawn` and `awaitAll` for `async` functions ([Async functions](async.md)), available only through the import |
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { argv } from "nish:process";
 import { write } from "nish:io";
@@ -190,7 +199,8 @@ and you import it as `nish/` followed by the module's name: `nish/text`,
 and so on. It is compiled into your program like your own code, so a module
 you import but never call costs nothing.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/text.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { splitWhitespace, trim } from "nish/text";
 

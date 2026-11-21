@@ -48,7 +48,17 @@ To wait, make a loop with `pollCreate()`, watch each socket with
 `pollWait(loop, ready, timeoutMs)`. It fills `ready` with pairs, a token and
 its events, and answers how many, `0` when the timeout passed.
 
-<!-- nish:ok -->
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do). The range of a
+`u8[]` that `netRead` and `netWrite` take is checked while the program runs,
+a check no proof removes yet; the servers built on `nish/net/prefork`, the
+HTTP handlers and `nish/net/dns` call standard-library code that keeps
+panic sites until the standard library is made panic-free;
+and some examples index arrays or add numbers without a guard, which a test
+such as `i < xs.length` before an index, or a bound on a sum, proves.
+
+<!-- allow-panics: slices with bounds it does not test -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollWait, tcpAccept, tcpListen } from "nish:net";
 
@@ -337,7 +347,8 @@ for descriptors, until a connection closes or 100 ms pass, so a full server
 waits rather than spin. `h.resting()` is true while it does, for a server
 that wants to log or count the times it is full:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
 import { Router, RouterLimits } from "nish/net/router";
@@ -434,7 +445,8 @@ and a `NET_LISTEN_RING` slot handle.
 `-1` is not an error code, so check for a positive answer and fall back to a
 size of your own:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { netMss } from "nish:net";
 
@@ -460,7 +472,8 @@ each with its own `SO_REUSEPORT` listener on the same port: that is what
 `nish/net/prefork` does. Call `preforkWorkers(process.argv)` at the top of
 `main`, before you open a listener:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { netClose, tcpListenFlags } from "nish:net";
 import { PREFORK_STOPPED, preforkWorkers } from "nish/net/prefork";
@@ -543,7 +556,8 @@ Add `pin = true` and worker `k` also pins itself to CPU `k`
 worker on the CPU that received it, so a connection's packets and the worker
 that answers it share a core's caches:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { PREFORK_STOPPED, PreforkConfig, preforkListener, preforkWith } from "nish/net/prefork";
 
@@ -592,7 +606,8 @@ a datagram whose destination connection ID starts with byte `k` goes to worker
 the group's size with `preforkUdpCount(process.argv)`, and puts both in its
 `QuicServerConfig`, so every connection ID it hands out starts with `k`:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { PREFORK_STOPPED, PreforkConfig, preforkUdpCount, preforkUdpListener, preforkWith } from "nish/net/prefork";
 import { QuicServerConfig } from "nish/net/quic";
@@ -742,7 +757,8 @@ never block, so wait for one in the readiness loop alongside the listener.
 Where they are rides in one more argument, `--nish-prefork-channels=`, just
 before the worker's index; `preforkArgs` drops it with the index.
 
-<!-- nish:ok -->
+<!-- allow-panics: slices with bounds it does not test; does integer arithmetic nothing bounds; calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { NET_UNIX_STREAM, netRead } from "nish:net";
 import {
@@ -881,7 +897,8 @@ it opens, and answers each lookup with the 18-byte addresses `tcpConnect` and
 tokens it owns and the time; it never waits and never reads the clock itself,
 so a slow lookup costs your other sockets nothing.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";
 import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";

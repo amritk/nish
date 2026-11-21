@@ -560,16 +560,17 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
   rather than the source (`tests/self/goldens/checked/`, one file per module).
-- **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
-  or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
+- **The import is the opt-in the no-panic scope takes.** In the scope — every
+  module of the package by default, the `"nish".noPanic` list under
+  `--allow-panics` — `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](semantics-decisions.md#the-no-panic-scope),
   `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
   its pointer for `NULL`, an `ffi-null` site no proof removes
   (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
-  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
-  refuses a call to either in its scope. The
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so the scope
+  refuses a call to either. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -1616,7 +1617,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   panic and never a double free. A child's handle is dead once its parent is
   freed (`tests/link/region_child_stale`), and `child` with no region entered
   stops the program. Each call
-  is a `region` site under [`--deny-panics`](semantics-decisions.md#panic-sites)
+  is a `region` site the [no-panic scope](semantics-decisions.md#the-no-panic-scope) refuses
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
 - A program run under Node as it is written (`runtime/nish.mjs`) gets a
@@ -3885,7 +3886,7 @@ default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
 message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
 `slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
-proof at the call removes, and `--deny-panics` refuses it
+proof at the call removes, and the no-panic scope refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,

@@ -712,8 +712,8 @@ declare function isExecutableSync(path: string): boolean;
 // refusal reads `` `uncheckedGet` is a `nish:unsafe` function and is called only
 // through an import of it `` (NL2456). An import may rename (`as`) and cannot be
 // shadowed; a user function of the same name, with no import, is the user's.
-// Every import and call is a recorded fact in `--emit-checked`. Under
-// `--deny-panics` or `"nish".noPanic` the import is the opt-in the scope takes.
+// Every import and call is a recorded fact in `--emit-checked`. In
+// the no-panic scope, the default, the import is the opt-in the scope takes.
 
 /**
  * `xs[i]` with no bounds check: undefined behaviour when `i` is out of range,
@@ -726,7 +726,7 @@ declare function isExecutableSync(path: string): boolean;
  *
  * To the bounds proof it is the load `xs[i]` is, less the check: it moves no
  * length, and it records no passed check, so a checked `xs[i]` after it keeps
- * its check. Under `--deny-panics` it is an allowed `unchecked` site. Under
+ * its check. In the no-panic scope it is an allowed `unchecked` site. Under
  * Node the runtime shim reads `xs[i]`. Capability: unsafe.
  *
  * @param xs the array of numbers to read.
@@ -746,7 +746,7 @@ declare function uncheckedGet<T extends number>(xs: readonly T[], i: i32): T;
  * The store is a write of the array for every rule that asks, the rule for a
  * parallel body included. To the bounds proof it is the store `xs[i] = v` is,
  * less the check, and a resize in the value stored still takes the length away.
- * Under `--deny-panics` it is an allowed `unchecked` site. Under Node the
+ * In the no-panic scope it is an allowed `unchecked` site. Under Node the
  * runtime shim stores `xs[i] = v`. Capability: unsafe.
  *
  * @param xs the array of numbers to write.
@@ -766,7 +766,7 @@ declare function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): void;
  *
  * In a module constant's initialiser the call folds, wrapping, where
  * `2147483647 + 1` is refused; it is the one call such an initialiser may make.
- * It is not a site under `--deny-panics`, as it cannot panic. Under Node the
+ * It is not a site in the no-panic scope, as it cannot panic. Under Node the
  * runtime shim computes `(a + b) | 0` on an `i32` and `BigInt.asIntN(64, ...)`
  * on the BigInt an `i64` is there. Capability: unsafe.
  *
@@ -813,7 +813,7 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  * The copy is new on every call and is the calling function's allocation, and
  * it is refused inside a `using a = arena()` block that would release one held
  * outside it (`` `readCString(p)` may be allocated inside the `using arena()`
- * block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+ * block ``). In the no-panic scope its `NULL` test is an `ffi-null` site no
  * proof removes, so the scope refuses the call (the copy's `oom` beside it is
  * allowed), and the pointer it reads is `ffi`. It lowers the same
  * on wasm32, where whether the program links is the `declare function`'s
@@ -842,7 +842,7 @@ declare function readCString(p: CPtr): string;
  *
  * A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
  * naming the layout, since a `declare function` declared to answer `CPtr` may
- * still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+ * still answer `NULL`. No proof removes that test, so the no-panic scope refuses
  * the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
  * `oom` beside it.
  *
@@ -3652,7 +3652,7 @@ declare module "nish:net" {
  * `(a - b) | 0` and `Math.imul` on an `i32` and `BigInt.asIntN(64, …)` on an
  * `i64`. A program that stays in range prints the same as natively.
  *
- * **The no-panic scope.** Under `--deny-panics` or `"nish".noPanic`,
+ * **The no-panic scope.** In the scope, every module of the package by default,
  * `uncheckedGet` and `uncheckedSet` are allowed `unchecked` sites, because
  * the import has already said that an index out of range is the author's to
  * rule out. `readCString` and `readStruct` are not: each tests its pointer and

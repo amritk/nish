@@ -68,7 +68,7 @@ import { ALLOW_PANICS, listsAllowPanics, withAllowPanics } from "./allow-panics.
 import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
-import { programs as corpusPrograms } from "./self/corpus.js"
+import { programs as corpusPrograms, extraArgs as corpusArgs } from "./self/corpus.js"
 import * as ciScope from "../scripts/ci-scope.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
@@ -132,6 +132,12 @@ const NISH = path.join(root, "build", "nish-test")
  * (`tests/allow-panics.js`): a case, a fixture, never an example.
  */
 const spawnNish = (args, options) => spawnSync(NISH, withAllowPanics(NISH, args), options)
+/**
+ * `[--allow-panics]` for an example whose `// smoke: args` line names it (an
+ * opt-out, its header says why), else `[]`: a check that walks examples
+ * builds each as that line does. `file` is relative to the root.
+ */
+const optOutArgs = (file) => corpusArgs(path.join(root, file)).filter((arg) => arg === ALLOW_PANICS)
 const casesDir = path.join(root, "tests", "cases")
 const buildDir = path.join(root, "build", "test")
 fs.mkdirSync(buildDir, { recursive: true })
@@ -2552,14 +2558,18 @@ if (dealtHere("termIo")) {
     fs.mkdirSync(ioDir, { recursive: true })
     const { relay, KITTY_REPLY } = await import("./term-io/relay.mjs")
     const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
-    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/^<!-- nish:ok -->\n```ts\n([\s\S]*?)```/gm)]
-      .map((m) => m[1])
-      .find((block) => block.includes("runTerminal"))
-    const build = (name, src) => {
+    // The fence's marker may carry flags (`<!-- nish:ok --allow-panics -->`),
+    // which the build passes as the docs harness does.
+    const guideFence = [
+      ...fs.readFileSync(guidePage, "utf8").matchAll(/^<!-- nish:ok((?: --?[\w-]+)*) -->\n```ts\n([\s\S]*?)```/gm),
+    ].find((m) => m[2].includes("runTerminal"))
+    const guideSrc = guideFence?.[2]
+    const guideFlags = guideFence === undefined ? [] : guideFence[1].trim().split(/\s+/).filter(Boolean)
+    const build = (name, src, extra = []) => {
       const dir = path.join(ioDir, name)
       fs.mkdirSync(dir, { recursive: true })
       const exe = path.join(dir, "app")
-      const r = spawnNish([src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+      const r = spawnNish([src, ...extra, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
       return check(`term-io: ${name} links`, r.status === 0, shown(r)) ? exe : null
     }
     const guideTs = path.join(ioDir, "guide.ts")
@@ -2568,9 +2578,9 @@ if (dealtHere("termIo")) {
     } else {
       fs.writeFileSync(guideTs, guideSrc)
     }
-    const guideExe = guideSrc === undefined ? null : build("guide", guideTs)
+    const guideExe = guideSrc === undefined ? null : build("guide", guideTs, guideFlags)
     const loopExe = build("loop", path.join(root, "tests", "link", "std_term_io_relay", "loop.ts"))
-    const probeExe = build("term-probe", path.join(root, "examples", "term-probe.ts"))
+    const probeExe = build("term-probe", path.join(root, "examples", "term-probe.ts"), [ALLOW_PANICS])
     const at = (name) => path.join(ioDir, "runs", name)
     const said = (r) =>
       `exit ${r.status}${r.timedOut ? " (timed out)" : ""}, frames ${r.frames}, same stty ${r.sameStty}\n` +
@@ -6506,11 +6516,14 @@ if (dealtHere("performance")) {
       .filter((file) => file.startsWith("examples/")),
   ].sort()
   const gateRuns = gateSources.flatMap((source) => ["i32", "f64"].map((mode) => ({ source, mode })))
+  // An opt-out example names `--allow-panics` on its `// smoke: args` line;
+  // the gate builds it as that line does, and every other one strict.
   const gateResults = await pool(gateRuns, defaultJobs(), ({ source, mode }) =>
     spawnAsync(
       NISH,
       withAllowPanics(NISH, [
         source,
+        ...optOutArgs(source),
         "-o",
         `${path.join(buildDir, "perf_gate", mode, source.replace(/[/.]/g, "_"))}/`,
         "--number-mode",
@@ -7770,6 +7783,9 @@ const runLinkProgram = async (name) => {
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
+  // A `strict` file beside `main.ts` builds the program as a user would, with
+  // no flag the harness adds: the no-panic default itself is what it tests.
+  const panicScope = fs.existsSync(side("strict")) ? (a) => a : (a) => withAllowPanics(NISH, a)
   // A program that runs but whose `args` name a wasm32 target is linked and run
   // as a native build of the same flags: a wasm32 module lays a class's pointer
   // field out in 4 bytes (WP48 stage 6), and build.sh's clang replaces the
@@ -7800,7 +7816,7 @@ const runLinkProgram = async (name) => {
   // safely (CLI-5; see above).
   const r = await spawnAsync(
     NISH,
-    withAllowPanics(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs]),
+    panicScope([side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs]),
     { cwd: root }
   )
   const stderr = String(r.stderr)
@@ -7813,7 +7829,7 @@ const runLinkProgram = async (name) => {
       stderr || "(compiled successfully)"
     )
     if (fs.existsSync(side("expected.json"))) {
-      const json = await spawnAsync(NISH, withAllowPanics(NISH, [side("main.ts"), "-o", outDir, "--json", ...args]), {
+      const json = await spawnAsync(NISH, panicScope([side("main.ts"), "-o", outDir, "--json", ...args]), {
         cwd: root,
         encoding: "utf8",
       })
@@ -7835,7 +7851,7 @@ const runLinkProgram = async (name) => {
     const wasmDir = path.join(buildDir, "link", `${name}.wasm32`) + path.sep
     // Named after the program, like `outDir`.
     fs.rmSync(wasmDir, { recursive: true, force: true })
-    const w = await spawnAsync(NISH, withAllowPanics(NISH, [side("main.ts"), "-o", wasmDir, ...args]), { cwd: root, encoding: "utf8" })
+    const w = await spawnAsync(NISH, panicScope([side("main.ts"), "-o", wasmDir, ...args]), { cwd: root, encoding: "utf8" })
     const wasmModules = w.status === 0 ? fs.readdirSync(wasmDir).filter((f) => f.endsWith(".ll")) : []
     const rejected = []
     for (const f of HAS_LLVM_AS ? wasmModules : []) {
@@ -7870,7 +7886,7 @@ const runLinkProgram = async (name) => {
     // compile (a function reference crosses an exported signature, which an
     // open build hands a host: WP51 §5.2), so its listing links too.
     const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
-    const listing = spawnAsync(NISH, withAllowPanics(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile]), {
+    const listing = spawnAsync(NISH, panicScope([side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -7917,7 +7933,7 @@ const runLinkProgram = async (name) => {
       fs.rmSync(warnedDir, { recursive: true, force: true })
       const warned = await spawnAsync(
         NISH,
-        withAllowPanics(NISH, [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"]),
+        panicScope([side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"]),
         {
           cwd: root,
           encoding: "utf8",
@@ -9188,7 +9204,7 @@ if (dealtHere("selfHosting")) {
     // Two modules: the compiler makes the `<exe>.modules/` directory itself
     // now, and `main()` returns the exit code.
     const multi = path.join(shipDir, "multi")
-    const many = spawnSync(compiler, withAllowPanics(compiler, ["examples/multi/main.ts", "--link", multi, "--profile", "debug"]), {
+    const many = spawnSync(compiler, withAllowPanics(compiler, ["examples/multi/main.ts", ALLOW_PANICS, "--link", multi, "--profile", "debug"]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -9488,7 +9504,7 @@ if (dealtHere("selfHosting")) {
     // both, and the entry's is the one the goldens hold. A whole program is
     // dumped module by module, the entry named as one.
     const dumpCase = path.join("examples", "multi", "main.ts")
-    const ourDump = spawnSync(compiler, withAllowPanics(compiler, [dumpCase, "--emit-checked"]), { cwd: root, encoding: "utf8" })
+    const ourDump = spawnSync(compiler, withAllowPanics(compiler, [dumpCase, ALLOW_PANICS, "--emit-checked"]), { cwd: root, encoding: "utf8" })
     const dumpEntry = path.join(shipDir, "dump_checked")
     const dumpBuilt = spawnSync(
       compiler,
@@ -9558,6 +9574,7 @@ if (dealtHere("selfHosting")) {
       compiler,
       withAllowPanics(compiler, [
         "examples/add.ts",
+        ALLOW_PANICS,
         "-o",
         path.join(shipDir, "add.ll"),
         "--emit-header",
@@ -9600,7 +9617,7 @@ if (dealtHere("selfHosting")) {
     // Every positional is a root, as it is for stage0. Before this the last
     // one won and the others were compiled into nothing.
     const rootsDir = path.join(shipDir, "roots")
-    const roots = spawnSync(compiler, withAllowPanics(compiler, ["examples/hello.ts", "examples/add.ts", "-o", `${rootsDir}/`]), {
+    const roots = spawnSync(compiler, withAllowPanics(compiler, ["examples/hello.ts", "examples/add.ts", ALLOW_PANICS, "-o", `${rootsDir}/`]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -11196,7 +11213,7 @@ if (dealtHere("runtimeCache")) {
     )
 
     fs.rmSync(ccLog, { force: true })
-    const second = link("examples/multi/main.ts", "multi")
+    const second = link("examples/multi/main.ts", "multi", ["--profile", "debug", ALLOW_PANICS])
     check(
       "runtime cache: a second link, of a different program, compiles no runtime source and links",
       second.status === 0 &&
@@ -11488,16 +11505,16 @@ if (dealtHere("runtimeCache")) {
     const programs = [
       ["examples/hello.ts", []],
       ["examples/argv.ts", ["7", "x"]],
-      ["examples/sets.ts", []],
-      ["examples/wordcount.ts", []],
-      ["examples/multi/main.ts", []],
+      ["examples/sets.ts", [], [ALLOW_PANICS]],
+      ["examples/wordcount.ts", [], [ALLOW_PANICS]],
+      ["examples/multi/main.ts", [], [ALLOW_PANICS]],
     ]
     for (const profile of ["speed", "size"]) {
-      for (const [source, args] of programs) {
+      for (const [source, args, flags = []] of programs) {
         const name = `${profile}-${path.basename(path.dirname(source))}-${path.basename(source, ".ts")}`
-        const cached = link(source, `${name}-cached`, ["--profile", profile])
+        const cached = link(source, `${name}-cached`, ["--profile", profile, ...flags])
         const irDir = path.join(rcDir, `${name}-ir`)
-        const ir = spawnNish([source, "-o", `${irDir}/`], { cwd: root, encoding: "utf8" })
+        const ir = spawnNish([source, ...flags, "-o", `${irDir}/`], { cwd: root, encoding: "utf8" })
         const lls = fs.existsSync(irDir)
           ? fs
               .readdirSync(irDir)
@@ -12383,7 +12400,7 @@ if (dealtHere("fileServer")) {
     fs.mkdirSync(fsDir, { recursive: true })
     const exe = path.join(fsDir, "file-server")
     const built = spawnNish(
-      [path.join(root, "examples", "file-server.ts"), "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
+      [path.join(root, "examples", "file-server.ts"), ALLOW_PANICS, "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
       { cwd: root, encoding: "utf8", timeout: 300_000, killSignal: "SIGKILL" }
     )
     // One fetch from a fresh server: the response head, the body's length and
@@ -12741,7 +12758,7 @@ if (dealtHere("unboundedPass")) {
       calleeHits[2].includes("(the string built on line 72, in `Handler.constructor`) piles up"),
     shown(callees)
   )
-  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
+  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [ALLOW_PANICS])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
     fileServer.status === 0 && nl9018Lines(fileServer.stderr).length === 0,
@@ -19019,8 +19036,11 @@ if (dealtHere("runtimeChecks")) {
       )
       if (linked.status === 0) {
         const referenceLl = path.join(buildDir, "web_add.ll")
-        execFileSync(NISH, withAllowPanics(NISH, ["examples/add.ts", "-o", referenceLl]), { cwd: root, stdio: "pipe" })
-        const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], { cwd: root })
+        // add.ts keeps a panic site on purpose (its header), so both builds pass --allow-panics.
+        execFileSync(NISH, withAllowPanics(NISH, ["examples/add.ts", ALLOW_PANICS, "-o", referenceLl]), { cwd: root, stdio: "pipe" })
+        const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts", "--allow-panics"], {
+          cwd: root,
+        })
         check(
           "web: nish.wasm in a worker emits the native compiler's IR for examples/add.ts, byte for byte",
           worker.status === 0 && String(worker.stdout) === fs.readFileSync(referenceLl, "utf8"),
@@ -19790,7 +19810,7 @@ if (dealtHere("simd")) {
           `${linked.why}objects defining nish_bytes_skip_blank: ${linked.definitions}\ngot  ${linked.got}\nwant 3,6,8,100`
         )
       }
-      const plain = linkFree(irOf(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), []), [], "plain")
+      const plain = linkFree(irOf(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), [ALLOW_PANICS]), [], "plain")
       const named = linkFree(hostRuns, ["runtime/runtime-bytes.c"], "named")
       check(
         "simd: the freestanding --profile wasm link adds runtime-bytes.c to no module that calls no run, and not again when the inputs name it",
@@ -20396,8 +20416,8 @@ if (dealtHere("simd")) {
         ].join("\n")
       )
       /** `file` compiled for the host into `dir`, and its `.ll` files. */
-      const hostIr = (file, dir) => {
-        const r = spawnNish([file, "-o", `${dir}${path.sep}`], { cwd: root, encoding: "utf8" })
+      const hostIr = (file, dir, flags = []) => {
+        const r = spawnNish([file, ...flags, "-o", `${dir}${path.sep}`], { cwd: root, encoding: "utf8" })
         const lls =
           r.status === 0
             ? fs
@@ -20455,7 +20475,7 @@ if (dealtHere("simd")) {
       )
 
       // The two arms around it: no AES, no runtime-aes.c; runtime-aes.c named, not added again.
-      const plainIr = hostIr(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"))
+      const plainIr = hostIr(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), [ALLOW_PANICS])
       const plain =
         plainIr.lls.length > 0
           ? freestanding([...plainIr.lls, "runtime/runtime-wasm.c"], path.join(freeDir, "plain.wasm"))
@@ -22017,6 +22037,7 @@ if (dealtHere("cliChecks")) {
 
     // Headers.
     const add = emit("examples/add.ts", [
+      ALLOW_PANICS,
       "--emit-header",
       sidecar("add", "h"),
       "--emit-dts",
@@ -22061,6 +22082,7 @@ if (dealtHere("cliChecks")) {
     // exists. Emitted late, `arrays.napi.c` was silently skipped on a clean
     // build/ and compiled the *previous* run's copy on a dirty one.
     const arrays = emit("examples/arrays.ts", [
+      ALLOW_PANICS,
       "--emit-header",
       sidecar("arrays", "h"),
       "--emit-dts",
@@ -22275,7 +22297,7 @@ if (dealtHere("cliChecks")) {
       looseHeader || loose.stderr
     )
 
-    const entry = emit("examples/multi/main.ts", ["--emit-header", sidecar("multi", "h")], "multi", true)
+    const entry = emit("examples/multi/main.ts", [ALLOW_PANICS, "--emit-header", sidecar("multi", "h")], "multi", true)
     const entryHeader = entry.status === 0 ? fs.readFileSync(sidecar("multi", "h"), "utf8") : ""
     check(
       "the entry `export function main` is omitted; imported modules are listed",
@@ -25602,16 +25624,18 @@ if (dealtHere("cliChecks")) {
       cookbookText
     )
     const cookbookJson = path.join(capsDir, "cookbook.json")
-    // strict: a docs/cookbook program builds as a user who copies it would.
+    // The snippet exits and adds on purpose, so it builds as regen.sh builds
+    // it: with `--allow-panics`, named here because docs/ is strict otherwise.
     const cookbookRun = spawnSync(
       NISH,
-      [
+      withAllowPanics(NISH, [
         path.join(root, "docs", "cookbook", "builtin-capabilities.ts"),
+        ALLOW_PANICS,
         "-o",
         path.join(capsDir, "cookbook") + path.sep,
         "--emit-capabilities",
         cookbookJson,
-      ],
+      ]),
       { cwd: root, encoding: "utf8" }
     )
     check(
@@ -25629,10 +25653,11 @@ if (dealtHere("cliChecks")) {
       cookbookText
     )
     const cookbookSource = path.join(root, "docs", "cookbook", "builtin-capabilities.ts")
-    // strict: a docs/cookbook program builds as a user who copies it would.
+    // The snippet exits and adds on purpose, so it builds as regen.sh builds
+    // it: with `--allow-panics`, named here because docs/ is strict otherwise.
     const refusedRun = spawnSync(
       NISH,
-      [cookbookSource, "-o", path.join(capsDir, "refused") + path.sep, "--deny", "fs.read"],
+      withAllowPanics(NISH, [cookbookSource, ALLOW_PANICS, "-o", path.join(capsDir, "refused") + path.sep, "--deny", "fs.read"]),
       {
         cwd: root,
         encoding: "utf8",
@@ -25680,10 +25705,11 @@ if (dealtHere("cliChecks")) {
       shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
     )
     const grantedDir = path.join(capsDir, "granted") + path.sep
-    // strict: a docs/cookbook program builds as a user who copies it would.
+    // The snippet exits and adds on purpose, so it builds as regen.sh builds
+    // it: with `--allow-panics`, named here because docs/ is strict otherwise.
     const grantedRun = spawnSync(
       NISH,
-      [cookbookSource, "-o", grantedDir, "--allow", "fs.read", "--deny", "net"],
+      withAllowPanics(NISH, [cookbookSource, ALLOW_PANICS, "-o", grantedDir, "--allow", "fs.read", "--deny", "net"]),
       {
         cwd: root,
         encoding: "utf8",
@@ -28195,9 +28221,10 @@ if (dealtHere("releaseChecks")) {
     }
   }
 
-  // ---- `--allow-panics`: a no-op today, and only where a compiler lists it ----------------
-  // The flag undoes an earlier `--deny-panics` (the last of the two wins) and
-  // moves no IR; a `noPanic` list holds under it. The suite passes it through
+  // ---- `--allow-panics`: the way out of the default, where a compiler lists it -------------
+  // Every module of the root package is held to no panic by default; the flag
+  // relaxes that to the `noPanic` list, undoes an earlier `--deny-panics` (the
+  // last of the two wins) and moves no IR. The suite passes it through
   // `tests/allow-panics.js` and the shell scripts through `nish_allow_panics`
   // (`scripts/nish-compiler.sh`), and both ask the compiler's `--help` first,
   // because the seed and any older release exit 2 on it. Each build below that
@@ -28254,15 +28281,23 @@ if (dealtHere("releaseChecks")) {
     // has a directory of that name is a case, not an example.
     const copied = [path.join(buildDir, "examples", "x.ts"), "-o", "x.ll"]
     const added = withAllowPanics(listing, ["run", "tests/cases/panics_index.ts", "--deny-panics"])
+    // An opt-out example's build names the flag itself, as its recipe and its
+    // `// smoke: args` do; a compiler that does not list it is not passed it.
+    const optOut = ["examples/add.ts", ALLOW_PANICS, "-o", "x.ll"]
+    const optOutRun = ["run", ALLOW_PANICS, "examples/term-probe.ts", ALLOW_PANICS]
     check(
-      "allow-panics: the helper leaves a line that decides the scope, an example, a docs program or no compile alone, and puts the flag after `run`",
+      "allow-panics: the helper leaves a line that decides the scope, an example, a docs program or no compile alone, puts the flag after `run`, and drops a literal flag a compiler does not list",
       unchanged.every((args) => withAllowPanics(listing, args) === args) &&
         JSON.stringify(withAllowPanics(listing, copied)) === JSON.stringify([ALLOW_PANICS, ...copied]) &&
-        JSON.stringify(added) === JSON.stringify(["run", ALLOW_PANICS, "tests/cases/panics_index.ts", "--deny-panics"]),
+        JSON.stringify(added) === JSON.stringify(["run", ALLOW_PANICS, "tests/cases/panics_index.ts", "--deny-panics"]) &&
+        withAllowPanics(listing, optOut) === optOut &&
+        JSON.stringify(withAllowPanics(without, optOut)) === JSON.stringify(["examples/add.ts", "-o", "x.ll"]) &&
+        JSON.stringify(withAllowPanics(without, optOutRun)) === JSON.stringify(["run", "examples/term-probe.ts", ALLOW_PANICS]),
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
     )
-    // Every compile in this file goes through the helper, or says on the line
-    // directly above why it stays strict: a raw compile of a case would build
+    // Every compile in this file goes through the helper (or `panicScope`, the
+    // link harness's wrapper that keeps a `strict` program strict), or says on
+    // the line directly above why it stays strict: a raw compile of a case would build
     // it strict the day the default flips. A call counts as a compile when it
     // names the compiler under test (`NISH`), a binary built from it
     // (`compiler`) or `"nish"` on PATH, whatever its arguments, or when it runs
@@ -28307,7 +28342,7 @@ if (dealtHere("releaseChecks")) {
     for (const m of self.matchAll(anyCall)) {
       const [first = "", second = ""] = callArgs(m.index + m[0].length)
       const compiles = isCompiler.test(first) || (!notACompiler.test(first) && compileShape.test(second))
-      if (!compiles || second.startsWith("withAllowPanics(")) {
+      if (!compiles || second.startsWith("withAllowPanics(") || second.startsWith("panicScope(")) {
         continue
       }
       const before = self.slice(0, m.index).split("\n")
@@ -28416,7 +28451,7 @@ if (dealtHere("releaseChecks")) {
       "allow-panics: with --deny-panics on the same line the last of the two wins",
       denyThenAllow.r.status === 0 &&
         allowThenDeny.r.status === 1 &&
-        allowThenDeny.r.stderr.includes("may panic here, and a module in the no-panic scope"),
+        allowThenDeny.r.stderr.includes("may panic here, and a module of this package, held to no panic by default"),
       shown(denyThenAllow.r) + shown(allowThenDeny.r)
     )
 
@@ -28439,29 +28474,40 @@ if (dealtHere("releaseChecks")) {
       shown(astAllowed) + shown(astUndone) + shown(astDenied)
     )
 
-    // A `noPanic` list is the package's own word: the flag does not lift it.
+    // A `noPanic` list is the package's own word: the flag does not lift it,
+    // and it relaxes only the modules the list leaves out. By default every
+    // module is refused; under the flag only the listed one, in its own words.
     const listed = path.join(linkDir, "no_panic_module", "main.ts")
     const listedBare = strict([listed, "-o", path.join(work, "listed.ll")])
     const listedAllowed = strict([listed, ALLOW_PANICS, "-o", path.join(work, "listed.ll")])
+    const listedSite = "parse.ts:2:60: error: `index` may panic here, and a module `noPanic` lists, which `--allow-panics` does not relax,"
     check(
-      "allow-panics: a root package's noPanic list holds under it, refused in the same words",
+      "allow-panics: a root package's noPanic list holds under it, and the modules it leaves out are relaxed",
       listedBare.status === 1 &&
+        listedBare.stderr.includes(listedSite) &&
+        listedBare.stderr.includes("util.ts:2:50: error: `index` may panic here, and a module of this package, held to no panic by default") &&
         listedAllowed.status === 1 &&
-        listedAllowed.stderr === listedBare.stderr &&
-        listedAllowed.stderr.includes("parse.ts:2:60: error: `index` may panic here"),
+        listedAllowed.stderr.includes(listedSite) &&
+        !listedAllowed.stderr.includes("util.ts") &&
+        !listedAllowed.stderr.includes("main.ts"),
       shown(listedBare) + shown(listedAllowed)
     )
 
-    // The IR is the same bytes with no flag, with it, and with --deny-panics.
+    // The IR is the same bytes with no flag, with it, and with --deny-panics;
+    // a program with panic sites builds only under the flag, and the default
+    // refuses it rather than compiling it differently.
     const clean = "tests/cases/deny_panics_clean.ts"
     const cleanIr = ["", ALLOW_PANICS, "--deny-panics"].map((flag, i) => irOf(`clean${i}`, clean, flag === "" ? [] : [flag]))
-    const panickyIr = ["", ALLOW_PANICS].map((flag, i) => irOf(`panicky${i}`, panicky, flag === "" ? [] : [flag]))
+    const panickyBare = irOf("panicky0", panicky, [])
+    const panickyAllowed = irOf("panicky1", panicky, [ALLOW_PANICS])
     check(
-      "allow-panics: the IR is byte-identical with no flag, --allow-panics and --deny-panics",
+      "allow-panics: the IR is byte-identical with no flag, --allow-panics and --deny-panics, and the default refuses what the flag builds",
       cleanIr.every(({ r, ir }) => r.status === 0 && ir.length > 0 && ir === cleanIr[0].ir) &&
-        panickyIr.every(({ r, ir }) => r.status === 0 && ir.length > 0 && ir === panickyIr[0].ir) &&
-        denyThenAllow.ir === panickyIr[0].ir,
-      [...cleanIr, ...panickyIr].map(({ r }) => shown(r)).join("")
+        panickyBare.r.status === 1 &&
+        panickyAllowed.r.status === 0 &&
+        panickyAllowed.ir.length > 0 &&
+        denyThenAllow.ir === panickyAllowed.ir,
+      [...cleanIr, { r: panickyBare.r }, panickyAllowed].map(({ r }) => shown(r)).join("")
     )
   }
 
@@ -28483,6 +28529,9 @@ if (dealtHere("releaseChecks")) {
   //   <!-- nish:err-body NL2188 --> the same, wrapped in a `main` body
   //
   // Anything after the code is passed to the CLI as flags (`--number-mode f64`).
+  // A page is held to no panic like any program: a snippet that keeps a panic
+  // site passes `--allow-panics`, and the line above its marker says why,
+  // `<!-- allow-panics: does integer arithmetic nothing bounds -->`.
   // A marked fence with a path after its language (```ts geometry.ts) is one file
   // of a program of several, and the site shows the path as its title: a run of
   // them in one section (no heading between them) is written out as one
@@ -28521,6 +28570,21 @@ if (dealtHere("releaseChecks")) {
     fs.mkdirSync(snippetDir, { recursive: true })
 
     const MARKER = /^<!-- nish:(ok|err)(-body)?((?:\s+\S+)*?)\s*-->$/
+
+    /**
+     * Lines of the markers that pass `--allow-panics` without the comment above
+     * them that says why. A page is strict like any program, so a snippet that
+     * keeps a panic site opts out where a reader of the source can see it, and
+     * names the reason: `<!-- allow-panics: indexes an array it does not guard -->`.
+     */
+    const unexplainedOptOuts = (text) => {
+      const lines = text.split("\n")
+      return lines.flatMap((line, i) => {
+        const m = MARKER.exec(line)
+        const optsOut = m !== null && m[3].split(/\s+/).includes(ALLOW_PANICS)
+        return optsOut && !/^<!-- allow-panics: \S.* -->$/.test(lines[i - 1] ?? "") ? [i + 1] : []
+      })
+    }
     const MARKED_FENCE = /^```(ts|json)(?:\s+(\S+))?\s*$/
 
     /**
@@ -28788,8 +28852,11 @@ if (dealtHere("releaseChecks")) {
           const target = path.resolve(dir, f.file)
           if (f.lang === "ts" && !misplaced.includes(f.line)) {
             const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
-            // strict: a docs snippet is a program a user copies, so it builds as they would.
-            const alone = spawnSync(NISH, [target, "-o", out], { encoding: "utf8" })
+            const optOut = s.args.includes(ALLOW_PANICS) ? [ALLOW_PANICS] : []
+            // A file of a docs program builds as its entry does, unless the entry's
+            // marker opts the whole program out.
+            // strict: built with its entry's own panic scope
+            const alone = spawnSync(NISH, [target, ...optOut, "-o", out], { encoding: "utf8" })
             if (alone.status !== 0) {
               misplaced.push(f.line)
             }
@@ -28801,6 +28868,7 @@ if (dealtHere("releaseChecks")) {
       }
       // A directory, because a snippet that imports `nish/threads` writes one module per file.
       const out = `${path.join(snippetDir, stem)}${path.sep}`
+      // A snippet that keeps a panic site on purpose says so with `--allow-panics` in its marker.
       // strict: a docs snippet is a program a user copies, so it builds as they would.
       const run = spawnSync(NISH, [file, "--json", "-o", out, ...s.args], { encoding: "utf8" })
       const errors = run.stdout
@@ -28912,6 +28980,10 @@ if (dealtHere("releaseChecks")) {
         strayLines.join(",") === "1,4",
         JSON.stringify(strayLines)
       )
+      const optOuts = unexplainedOptOuts(
+        ["<!-- nish:ok --allow-panics -->", "<!-- allow-panics: it indexes -->", "<!-- nish:ok --allow-panics -->"].join("\n")
+      )
+      check("docs: an --allow-panics marker with no reason above it is reported", optOuts.join(",") === "1", JSON.stringify(optOuts))
     }
 
     for (const page of docPages) {
@@ -28923,6 +28995,11 @@ if (dealtHere("releaseChecks")) {
         `${rel}: every nish: marker is a comment just above its fence`,
         stray.length === 0,
         `line ${stray.join(", ")}`
+      )
+      check(
+        `${rel}: every --allow-panics marker says why on the line above`,
+        unexplainedOptOuts(text).length === 0,
+        `line ${unexplainedOptOuts(text).join(", ")}`
       )
       if (rel === "docs/AI.md") {
         // A doc whose markers all got renamed would otherwise pass by checking nothing.
@@ -29798,10 +29875,11 @@ if (dealtHere("releaseChecks")) {
                 hello.stdout + hello.stderr
               )
             }
-            // strict: a user's own first program, built the way a user builds it
+            // add.ts keeps its checked `a + b` on purpose (its header), so the
+            // helper passes --allow-panics, as its header says a user builds it
             const ir = spawnSync(
               bin,
-              [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")],
+              withAllowPanics(bin, [path.join(root, "examples", "add.ts"), ALLOW_PANICS, "-o", path.join(work, "add.ll")]),
               { cwd: work, encoding: "utf8" }
             )
             check(
@@ -29837,8 +29915,11 @@ if (dealtHere("releaseChecks")) {
                 '  console.log(trim("  ok  "));\n' +
                 "  return 0;\n};\n"
             )
-            // strict: a user's own first program, built the way a user builds it
-            const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" })
+            // `trim` reaches a std/ panic site, so the program builds relaxed.
+            const stdLink = spawnSync(bin, withAllowPanics(bin, ["std.ts", "--link", "stdhello"]), {
+              cwd: work,
+              encoding: "utf8",
+            })
             const stdRan =
               stdLink.status === 0
                 ? spawnSync(path.join(work, "stdhello"), [], { cwd: work, encoding: "utf8" })
@@ -31172,7 +31253,7 @@ if (dealtHere("releaseChecks")) {
      */
     const resolveTarget = (spec) => {
       const out = path.join(buildDir, "seed-target-probe.ll")
-      const r = spawnNish([path.join(root, "examples", "add.ts"), "--target", spec, "-o", out], {
+      const r = spawnNish([path.join(root, "examples", "add.ts"), ALLOW_PANICS, "--target", spec, "-o", out], {
         cwd: root,
         encoding: "utf8",
       })
@@ -31301,8 +31382,8 @@ if (dealtHere("releaseChecks")) {
           'import { trim } from "nish/text";\n\nexport const main = (): number => {\n  write(`[${trim("  padded  ")}]\\n`);\n  return 0;\n};\n'
         )
         const onPath = (args) =>
-          // strict: a user's own first program, built the way a user builds it
-          spawnSync("nish", args, {
+          // `trim` reaches a std/ panic site, so the program builds relaxed.
+          spawnSync("nish", withAllowPanics(NISH, args), {
             cwd: work,
             encoding: "utf8",
             env: { ...process.env, PATH: `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}` },
@@ -31347,8 +31428,8 @@ if (dealtHere("releaseChecks")) {
           const headers = spellings.map(([label, cmd, Path]) => {
             const out = path.join(work, `out-${label.split(",")[0]}`)
             fs.rmSync(out, { recursive: true, force: true })
-            // strict: a user's own first program, built the way a user builds it
-            const r = spawnSync(cmd, ["prog.ts", "-o", `${out}${path.sep}`], {
+            // `trim` reaches a std/ panic site, so the program builds relaxed.
+            const r = spawnSync(cmd, withAllowPanics(NISH, ["prog.ts", "-o", `${out}${path.sep}`]), {
               cwd: work,
               encoding: "utf8",
               env: Path === undefined ? process.env : { ...process.env, PATH: Path },
@@ -31428,8 +31509,8 @@ if (dealtHere("releaseChecks")) {
 
         // An admin's link: absolute, and invoked by its own absolute path.
         const absLink = symlinkInstall(path.join(buildDir, "argv0-symlink-abs"), binary)
-        // strict: a user's own first program, built the way a user builds it
-        const viaAbsLink = spawnSync(absLink, ["prog.ts", "--link", "prog-abs-link"], {
+        // `trim` reaches a std/ panic site, so the program builds relaxed.
+        const viaAbsLink = spawnSync(absLink, withAllowPanics(NISH, ["prog.ts", "--link", "prog-abs-link"]), {
           cwd: work,
           encoding: "utf8",
         })
@@ -31452,8 +31533,8 @@ if (dealtHere("releaseChecks")) {
         // resolved.
         const binDir = path.join(buildDir, "argv0-symlink-bin")
         symlinkInstall(binDir, path.relative(binDir, binary))
-        // strict: a user's own first program, built the way a user builds it
-        const viaBinLink = spawnSync("nish", ["prog.ts", "--link", "prog-bin-link"], {
+        // `trim` reaches a std/ panic site, so the program builds relaxed.
+        const viaBinLink = spawnSync("nish", withAllowPanics(NISH, ["prog.ts", "--link", "prog-bin-link"]), {
           cwd: work,
           encoding: "utf8",
           env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
@@ -36402,7 +36483,7 @@ const wasmHostCompile = (dir, stem) => {
   fs.mkdirSync(dir, { recursive: true })
   const ll = path.join(dir, `${stem}.ll`)
   const r = spawnNish(
-    [`examples/${stem}.ts`, "--target", "wasm32", "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", ll],
+    [`examples/${stem}.ts`, ...optOutArgs(`examples/${stem}.ts`), "--target", "wasm32", "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", ll],
     { cwd: root, encoding: "utf8" }
   )
   return r.status === 0 ? ll : null
@@ -36652,13 +36733,29 @@ if (!only || "vite".includes(only)) {
     const app = path.join(buildDir, "vite-app")
     fs.rmSync(app, { recursive: true, force: true })
     fs.mkdirSync(path.join(app, "src"), { recursive: true })
+    // The plugin builds as a user's `nish` does, strict. The copied examples keep
+    // their panic sites on purpose (their headers build them with
+    // `--allow-panics`), and the plugin has no flags option, so its compiler here
+    // is one that adds the flag.
+    const relaxed = path.join(app, "nish-relaxed")
+    const relax = listsAllowPanics(NISH) ? ` ${ALLOW_PANICS}` : ""
+    fs.writeFileSync(
+      relaxed,
+      [
+        "#!/usr/bin/env bash",
+        `if [ "$1" = --version ]; then exec ${JSON.stringify(NISH)} "$@"; fi`,
+        `exec ${JSON.stringify(NISH)}${relax} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
     fs.copyFileSync(path.join(root, "examples", "arrays.ts"), path.join(app, "src", "arrays.ts"))
     fs.writeFileSync(
       path.join(app, "src", "clash.ts"),
       "export const bytes = (n: number): number => n + 1\nexport const loadSync = (n: number): number => n * 2\n"
     )
     const main = path.join(app, "src", "main.ts")
-    const plugin = nish({ compiler: NISH, entries: ["src/arrays.ts", "src/clash.ts"] })
+    const plugin = nish({ compiler: relaxed, entries: ["src/arrays.ts", "src/clash.ts"] })
     check(
       "vite: nish/vite's default export is the plugin, enforced before Vite's own",
       typeof nish === "function" && plugin.name === "nish" && plugin.enforce === "pre"
@@ -36740,7 +36837,7 @@ if (!only || "vite".includes(only)) {
     // Vite tries `.js` before `.ts`: `../ent/both` is the sibling `both.js`, not the entry.
     fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "both.ts"))
     fs.writeFileSync(path.join(app, "ent", "both.js"), "export const add = (a, b) => a + b\n")
-    const spelled = nish({ compiler: NISH, entries: ["ent/add.ts", "ent/sum/index.ts", "ent/both.ts"] })
+    const spelled = nish({ compiler: relaxed, entries: ["ent/add.ts", "ent/sum/index.ts", "ent/both.ts"] })
     spelled.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
     const forms = {}
     const spellings = [
@@ -36793,7 +36890,7 @@ if (!only || "vite".includes(only)) {
       [
         "#!/usr/bin/env bash",
         'if [ "$1" = --version ]; then echo "nish 0.34.1"; exit 0; fi',
-        `${JSON.stringify(NISH)} "$@" || exit`,
+        `${JSON.stringify(relaxed)} "$@" || exit`,
         'dts=; prev=; for a in "$@"; do [ "$prev" = --emit-dts ] && dts=$a; prev=$a; done',
         `${JSON.stringify(process.execPath)} -e 'const fs = require("fs"); const f = process.argv[1]; fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/^export function loadSync\\(/m, "function loadSync("))' "\${dts%.d.ts}.mjs"`,
         "",
@@ -37723,7 +37820,7 @@ if (!only || "host-import".includes(only)) {
       const stem = path.basename(src, ".ts")
       const got = [[], ["--target", "wasm32"]].map((flags, i) => {
         const out = path.join(scratch, `${stem}.${i === 0 ? "native" : "wasm32"}.ll`)
-        const r = spawnNish([src, ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+        const r = spawnNish([src, ...optOutArgs(src), ...flags, "-o", out], { cwd: root, encoding: "utf8" })
         return r.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(r)
       })
       check(
@@ -39581,7 +39678,7 @@ if (!only || "wasm-arena".includes(only)) {
           `want ${want}${shown(native)}`
         )
         const emitted = path.join(out, "ts")
-        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", "--emit-ts", emitted], {
+        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", ALLOW_PANICS, "--emit-ts", emitted], {
           cwd: root,
           encoding: "utf8",
         })
@@ -39728,7 +39825,7 @@ if (!only || "wasm-size".includes(only)) {
         lls === null
           ? null
           : spawnNish(
-              [src, "--target", "wasm32", "--host", hostModule, "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", `${lls}/`],
+              [src, ...optOutArgs(src), "--target", "wasm32", "--host", hostModule, "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", `${lls}/`],
               { cwd: root, encoding: "utf8" }
             )
       const ll = lls === null ? wasmHostCompile(dir, stem) : compiled.status === 0 ? lls : null
@@ -44724,7 +44821,7 @@ if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
 // natively and under Node, which runs each task at its `spawn`.
 if (!only || "histogram-atomic".includes(only)) {
   const exe = path.join(buildDir, "histogram-atomic")
-  const linked = spawnNish(["examples/histogram-atomic.ts", "--link", exe], {
+  const linked = spawnNish(["examples/histogram-atomic.ts", ALLOW_PANICS, "--link", exe], {
     cwd: root,
     encoding: "utf8",
   })

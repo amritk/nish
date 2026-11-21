@@ -9,7 +9,7 @@ upstream socket per session, and sends the game server's datagrams back the
 same way. It knows nothing about the game.
 
 ```bash
-nish examples/relay/main.ts --link build/relay
+nish examples/relay/main.ts --allow-panics --link build/relay
 build/relay --help
 build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/relay/relay.json
 ```

@@ -529,10 +529,16 @@ export class Compilation {
   rootPackageDir: string
   /**
    * Per module, in `modules` order: whether it is in the no-panic scope, by
-   * `--deny-panics` (every module of the root package) or by the root
-   * package's `"nish".noPanic` (`readNoPanic`).
+   * default (every module of the root package, unless `--allow-panics`) or
+   * by the root package's `"nish".noPanic` (`readNoPanic`).
    */
   panicScope: boolean[]
+  /**
+   * Per module, in `modules` order: whether the root package's
+   * `"nish".noPanic` names it, which keeps it in the scope under
+   * `--allow-panics`. The refusals word the way out from it (`src/panics.ts`).
+   */
+  panicListed: boolean[]
   /**
    * WP36: the root package's `"nish".capabilities` policy as masks, read by
    * `readCapabilityPolicy`: what its `allow` grants (every bit when it has no
@@ -591,6 +597,7 @@ export class Compilation {
     this.analysisUnits = []
     this.rootPackageDir = ""
     this.panicScope = []
+    this.panicListed = []
     this.manifestAllow = -1
     this.manifestDeny = 0
     this.netRings = 1
@@ -1694,17 +1701,19 @@ export class Compilation {
   }
 
   /**
-   * Settle the no-panic scope: every module of the root package under
-   * `--deny-panics`, and each module the root package's `"nish".noPanic`
-   * names. The manifest is the `package.json` nearest above the entry, and an
+   * Settle the no-panic scope: every module of the root package unless
+   * `--allow-panics` relaxes it, and each module the root package's
+   * `"nish".noPanic` names, which the flag does not relax. The manifest is the `package.json` nearest above the entry, and an
    * entry is a path relative to it. One that names no module of the program is
    * refused where it is written (NL3031): a typo would otherwise leave the
    * module it meant outside the scope, and the build would say nothing.
    */
   readNoPanic(source: SourceFile | null, nish: NishManifest | null): void {
     this.panicScope = []
+    this.panicListed = []
     for (const unit of this.modules) {
       this.panicScope.push(this.opts.denyPanics && unit.packageName === ROOT_PACKAGE)
+      this.panicListed.push(false)
     }
     if (source === null || nish === null) {
       return
@@ -1717,6 +1726,7 @@ export class Compilation {
       const at = this.byPath.get(this.identityOf(joinPath([dir, entry])), -1)
       if (at >= 0 && at < this.panicScope.length) {
         this.panicScope[at] = true
+        this.panicListed[at] = true
         this.opts.noPanicListed = true
       } else {
         this.sink.report(
@@ -2821,7 +2831,14 @@ export class Compilation {
     if (!any) {
       return
     }
-    const refused = reportDeniedPanics(this.analysisUnits, this.panicScope, facts, this.table, this.sink)
+    const refused = reportDeniedPanics(
+      this.analysisUnits,
+      this.panicScope,
+      this.panicListed,
+      facts,
+      this.table,
+      this.sink
+    )
     if (refused.length === 0) {
       return
     }

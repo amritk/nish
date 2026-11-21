@@ -277,7 +277,13 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-<!-- nish:ok -->
+This example builds with [`--allow-panics`](#asking-what-a-program-can-do): a
+`string` result from C is tested for `NULL` as the program runs, a check no
+proof removes. Declare the result `string | null` and test it for `null` to
+build it under the default.
+
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function sqlite3_libversion(): string;
 
@@ -288,7 +294,7 @@ export const main = (): i32 => {
 ```
 
 ```console
-$ nish run version.ts
+$ nish run --allow-panics version.ts
 3.54.1
 ```
 
@@ -728,7 +734,8 @@ must be freed), and `--target <triple>` writes the module for another target.
 
 `nish run` answers these codes until the program starts, and the program's own
 exit status after that — the value `main` returns, `1` for a panic such as an
-index out of range, or `128 + n` for a signal.
+index out of range in a program built with `--allow-panics`, or `128 + n` for a
+signal.
 
 ## Asking what a program can do
 
@@ -808,20 +815,23 @@ leaves the IR unchanged.
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too
   ([The compatibility dialect](compat.md)).
-- **`--deny-panics`** turns every panic the compiler cannot prove away into an
-  error, and `--emit-panics <file.json>` lists them all. The proof reads a
-  test that reaches the site, a `const` bound to an integer literal (never a
+- **Every module of your package is held to no panic by default.** A panic
+  the compiler cannot prove away is an error that names the guard which
+  proves it, and `--emit-panics <file.json>` lists every site. The proof reads
+  a test that reaches the site, a `const` bound to an integer literal (never a
   `let`), a mask `x & 255` or shift `x >>> 8`, the byte `charCodeAt`
   answers, and a loop counting down from `s.length` under `end > 0`. A call to
   `readCString` or `readStruct` from `nish:unsafe` is refused there: each
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
-  removes
+  removes. The standard library is not yet panic-free, so a call to `Map`,
+  `Set`, `split` or a `JSON` read is refused too, for now
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
-- **`--allow-panics`** undoes a `--deny-panics` earlier on the same line:
-  of the two, the last one written wins, and neither changes the program
-  the compiler builds. A `"noPanic"` list in your `package.json`'s `"nish"`
-  field still holds under it, so the scope is that list, or nothing, as
-  with neither flag. `--emit-ast` takes it.
+- **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
+  list in your `package.json`'s `"nish"` field names are still held to no
+  panic, and with no list, none is. **`--deny-panics`** spells the default
+  out; of the two, the last one written wins, and neither changes the
+  program the compiler builds. `--emit-ast`, which stops before the check,
+  holds nothing to it and takes `--allow-panics` but not `--deny-panics`.
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`

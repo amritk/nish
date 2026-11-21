@@ -44,9 +44,10 @@ That prints `30` and `0.5`.
 elements must be the lane type: an `i32x4` comes from an `i32[]`, a `u8x16`
 from a `u8[]`.
 
-The index is checked once for the whole vector, and if any of
-its lanes would fall outside the array the program stops with the
-`index out of range: … >= len` message an `xs[i]` gives. It names `i` when
+The index is checked once for the whole vector. By default the compiler must
+prove every lane in range, as below; under `--allow-panics` the check is built
+in, and if any of its lanes would fall outside the array the program stops
+with the `index out of range: … >= len` message an `xs[i]` gives. It names `i` when
 `i` itself is out of range, and otherwise the last lane, `i + N - 1`, where
 `N` is the lane count: `loadI32x4(xs, 2)` on a five-element array stops with
 `index out of range: 5 >= 5`.
@@ -57,13 +58,19 @@ does for `xs[i]`: under `while (i <= n - 4)`, with `n` the array's length and
 guard one lane short, `i <= n - 3`, proves nothing, so that load keeps its
 check.
 
-The same guard is what lets a `--deny-panics` build use a vector access. A
+The same guard is what lets a module held to no panic, as every module of
+your package is by default, use a vector access. A
 load or store whose check the guard removes is a proven panic site, so a
-program built with `--deny-panics` may call a function that uses one. One that
+module held to no panic may call a function that uses one. One that
 keeps its check is refused, with advice that names the guard to add:
-`if (i >= 0 && i <= xs.length - 16)` for a `u8x16` read of `xs`.
+`if (i >= 0 && i <= xs.length - 16)` for a `u8x16` read of `xs`. The example
+below adds and indexes with nothing bounding them, so it builds with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); the guards the compile
+errors name, such as `31 < dst.length` before `dst[31]`, build it under the
+default.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { loadU8x16, store } from "nish:simd";
 

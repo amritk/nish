@@ -14,14 +14,14 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=1 stackLocals=1
   local +0:9 opts: Options (const)
   callee +0:16 new Options -> @Options.constructor
-  local +1:7 path: string (let)
-  local +2:7 arg: i32 (let)
-  local +4:11 value: string (const)
-  local +30:9 compilation: Compilation (const)
-  callee +30:23 new Compilation -> @Compilation.constructor
-  callee +34:8 Compilation.load -> @Compilation.load
-  callee +35:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +36:21 DiagnosticSink.format -> @DiagnosticSink.format
-  callee +40:8 Compilation.check -> @Compilation.check
-  callee +41:19 DiagnosticSink.format -> @DiagnosticSink.format
-  callee +45:9 checkedText -> @checkedText
+  local +5:7 path: string (let)
+  local +6:7 arg: i32 (let)
+  local +8:11 value: string (const)
+  local +34:9 compilation: Compilation (const)
+  callee +34:23 new Compilation -> @Compilation.constructor
+  callee +38:8 Compilation.load -> @Compilation.load
+  callee +39:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +40:21 DiagnosticSink.format -> @DiagnosticSink.format
+  callee +44:8 Compilation.check -> @Compilation.check
+  callee +45:19 DiagnosticSink.format -> @DiagnosticSink.format
+  callee +49:9 checkedText -> @checkedText

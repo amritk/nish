@@ -5427,8 +5427,8 @@ ffi.copy:
   (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
   `declare function` declared to answer `CPtr` may still answer `NULL`, so
   the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
-  above. No proof removes the test, so `--deny-panics` refuses a call in its
-  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  above. No proof removes the test, so the no-panic scope refuses a call in
+  it; the copy's `oom` beside it is allowed. Declare a result that may be
   `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
@@ -5566,9 +5566,9 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
 - **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
   is a `const` local or a parameter named alone and no later argument may
   resize an array. Such a call carries no check and is not a panic site, so
-  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  `read(fd, buf, toU64(buf.length))` compiles in the no-panic scope. A field
   path, an alias of the buffer, another array's length and a literal are
-  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  checked (`tests/cases/ffi_buffer_count_proved`). The scope refuses
   any other count and names the one it accepts: `` pass `toU64(buf.length)`
   of the buffer itself, which needs no check ``.
 - **C borrows the bytes for the call, and writes through a `u8[]`.** As with
@@ -6081,7 +6081,7 @@ ffi.null:
 - **A `Name` result is checked for `NULL`.** A `declare function` that returns
   `Name` promises a pointer, so a `NULL` from C stops the program with
   `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
-  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  on stderr and exit status 1, the `ffi-null` panic the no-panic scope refuses.
   A `Name | null` result is narrowed with `!== null` before it goes back to C:
   passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
   Db, got Db | null `` (`ffi_opaque_nullable`).
@@ -6159,7 +6159,7 @@ ffi.copy:
   `reject_unsafe_read_struct_null`), but a `declare function` declared to
   answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
   `icmp eq` and the branch to `ffi.null` above.
-  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+  No proof removes the test, so the no-panic scope refuses a call in it.
 - **The rest of the pointer is not checked**: not that it is live, not the
   size it covers. The layout must be C's struct or a prefix of it. That is why
   it is in [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping):

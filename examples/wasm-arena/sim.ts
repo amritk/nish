@@ -1,3 +1,7 @@
+// Opt-out (`--allow-panics`): it indexes the `BODIES` and `SHOTS` records in
+// module storage, which the checker cannot yet prove in range (client.ts's
+// header has the follow-up).
+//
 // The simulation of examples/wasm-arena (docs/wp50-wasm-host.md §10, W9): a
 // fixed-step arena of bodies, a ship the input steers, and its shots. Every
 // pool is module storage sized from the caps below, so a tick allocates
@@ -330,3 +334,5 @@ export const simHashLo = (): u32 => {
   const low: u64 = 4294967295
   return toU32(simHash() & low)
 }
+
+// smoke: args --allow-panics

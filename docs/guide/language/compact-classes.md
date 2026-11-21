@@ -11,10 +11,16 @@ built-in module `nish:compact`. The rules are in the reference under
 
 ## Marking a class
 
+Several examples on this page do `i32` arithmetic nothing bounds, so the
+compiler cannot prove it fits and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
+as the compile error suggests, builds them under the default.
+
 Import `Compact` and add it to the class's `implements` clause. Nothing else
 in the program changes:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Compact } from "nish:compact";
 
@@ -150,7 +156,8 @@ itself, a class with a field of it, and an instantiation such as `Box<Cell>`.
 C holds an instance as a handle, passes it back to an exported function, and
 never reads its fields:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Compact } from "nish:compact";
 

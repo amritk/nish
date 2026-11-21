@@ -248,13 +248,13 @@ refuse a program that reaches these
 
 <scalar-field name="--deny-panics">
 
-refuse an unproven panic in your package
+refuse an unproven panic site (the default)
 
 </scalar-field>
 
 <scalar-field name="--allow-panics">
 
-undo an earlier --deny-panics
+hold only the noPanic list to no panic
 
 </scalar-field>
 
@@ -293,6 +293,10 @@ record what each dependency reaches
 before writing Nish, read the language as rules, traps first:
 
 [`docs/AI.md`](https://github.com/amritk/nish/blob/main/docs/AI.md), at the path the install put it.
+
+a panic refused (NL2457, NL2458): add the guard it names; never
+
+--allow-panics, nish:unsafe or a guard that proves nothing
 
 <scalar-field name="--json">
 

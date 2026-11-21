@@ -5,13 +5,14 @@
  *   import { withAllowPanics } from "./allow-panics.js"
  *   spawnSync(NISH, withAllowPanics(NISH, ["case.ts", "-o", out]))
  *
- * Today the flag changes nothing a test sees: it only undoes an earlier
- * `--deny-panics` (`ALLOW_PANICS_FLAG` in `src/options.ts`). It is passed now
- * so that the day the compiler refuses an unproven panic by default, the suite
- * keeps building its cases, fixtures and fuzz targets, which panic on purpose,
- * without another pass over every call site. An example or a docs program a
- * user would copy is the exception: its build stays strict, so they prove the
- * default.
+ * The compiler holds every module of the root package to no panic by
+ * default, and the flag (`ALLOW_PANICS_FLAG` in `src/options.ts`) relaxes that
+ * to the `noPanic` list, so the suite's cases, fixtures and fuzz targets, which
+ * panic on purpose, keep building. An example or a docs program a user would
+ * copy is the exception: the helper leaves it strict, so it proves the
+ * default. One that keeps a panic site on purpose says so where it is built:
+ * the call passes `--allow-panics` itself, as its header's recipe or its docs
+ * marker does, and the helper probes that literal flag like its own.
  *
  * It is a probe, not "the seed never gets it": the last release exits 2 on a
  * flag it does not know, and `NISH_BOOTSTRAP` or `--seed` can name any release
@@ -79,8 +80,11 @@ const listsAllowPanics = (compiler) => {
  * file outside the repository's `examples/` and `docs/`, is not `upgrade`, `c-import` or `break`, and passes none of
  * `--deny-panics`, `--allow-panics`, `--help` or `--version` before the
  * program. The flag goes first, or right after `run`, where the compiler's
- * flags are; a `run`'s program arguments are never read. Otherwise `args`
- * itself is returned.
+ * flags are; a `run`'s program arguments are never read. A literal
+ * `--allow-panics` among the compiler's own flags (a program's `.args` or
+ * `// smoke: args`, an opt-out example's recipe) is kept for a compiler that
+ * lists it and dropped for one that does not, which has no default to relax.
+ * Otherwise `args` itself is returned.
  */
 const withAllowPanics = (compiler, args) => {
   if (args.length === 0 || NOT_A_COMPILE.has(args[0])) {
@@ -88,11 +92,15 @@ const withAllowPanics = (compiler, args) => {
   }
   const run = args[0] === "run" ? 1 : 0
   const program = args.findIndex((arg, i) => i >= run && arg.endsWith(".ts"))
+  // A `run`'s own flags end at its program; a compile's run the whole line.
+  const own = (i) => i >= run && (run === 0 || program < 0 || i < program)
+  if (args.some((arg, i) => arg === ALLOW_PANICS && own(i))) {
+    return listsAllowPanics(compiler) ? args : args.filter((arg, i) => arg !== ALLOW_PANICS || !own(i))
+  }
   if (program < 0 || isExample(args[program])) {
     return args
   }
-  const ownFlags = run === 1 ? args.slice(1, program) : args
-  if (ownFlags.some((arg) => DECIDES.has(arg)) || !listsAllowPanics(compiler)) {
+  if (args.some((arg, i) => own(i) && DECIDES.has(arg)) || !listsAllowPanics(compiler)) {
     return args
   }
   return [...args.slice(0, run), ALLOW_PANICS, ...args.slice(run)]

@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-empty-list",
+  "private": true,
+  "nish": {
+    "noPanic": []
+  }
+}
