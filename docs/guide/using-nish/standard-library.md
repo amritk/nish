@@ -221,6 +221,7 @@ shown).
 | [`nish/net/dns-resolver`](#nishnetdns-resolver) | `DnsResolver`: a DNS stub resolver with no I/O of its own, which says what to send and reads what came back; it builds for `wasm32` |
 | [`nish/net/dns`](#nishnetdns) | `DnsClient`, the resolver on your own `pollWait` loop, and `resolveHost`, a blocking lookup for a CLI or start-up |
 | [`nish/net/protobuf`](#nishnetprotobuf) | `ProtoWriter` and `ProtoReader`: protobuf's wire format without a schema, every malformed message a `PROTO_ERR_*` code, never a panic |
+| [`nish/net/grpc`](grpc.md) | `GrpcServer`: unary gRPC calls on the HTTP/2 listeners of `nish/net/http-server`, each malformed call answered with its gRPC status before your program sees it |
 
 ## `nish/testing`
 

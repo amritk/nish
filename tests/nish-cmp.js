@@ -1342,6 +1342,10 @@ const protobufModule = () =>
     why: "the program tests nish/net/protobuf, which is new in this release, so the seed's standard library has no such module and refuses it",
   }))
 
+/** The changelog words of the stage that adds nish/net/grpc. */
+const GRPC_MODULE =
+  "Add nish/net/grpc, unary gRPC calls on the HTTP/2 listeners, with its security record (WP72 S3)"
+
 /** The changelog line of the stage that adds nish/crypto/scram. */
 const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
 // nish/net/postgres reaches its SCRAM arithmetic through the new
@@ -10233,6 +10237,12 @@ const DECLARED = [
   ),
   ...scramModule(),
   ...protobufModule(),
+  {
+    program: "tests/link/net_grpc/main.ts",
+    file: "exit",
+    changelog: GRPC_MODULE,
+    why: "the program tests nish/net/grpc, which is new in this release, so the seed's standard library has no such module and refuses it",
+  },
   {
     program: "tests/cases/cls_field_init.ts",
     file: "exit",
