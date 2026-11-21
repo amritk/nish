@@ -144,7 +144,7 @@ row, and with a guide page under `docs/guide/` and its route.
   - Denied ends PERMISSION_DENIED with the message `no 100% é`, decoded from
     its percent-encoding;
   - Missing ends NOT_FOUND with no message;
-  - Slow, called with a 10 s timeout, ends DEADLINE_EXCEEDED with no message,
+  - Slow, called with a 10 s deadline (`-max-time 10`), ends DEADLINE_EXCEEDED with no message,
     in under 5 s, so it is the server's capped deadline that answered, not
     grpc-go's own timeout;
   - ghz makes 2000 GetSum calls, 10 at a time, and every one is OK. It is a

@@ -85,8 +85,9 @@ for listener in "TLS -insecure --skipTLS $tls_port" "h2c -plaintext --insecure $
   expect_sum "$name" -5 3 -2
   expect_status "$name" Denied 71 PermissionDenied "no 100% é"
   expect_status "$name" Missing 69 NotFound ""
-  # grpc-go sends grpc-timeout 10S; the server holds the call and answers
-  # DEADLINE_EXCEEDED with no message once its capped deadline has passed.
+  # grpcurl calls with a 10 s deadline (-max-time 10); the server holds the
+  # call and answers DEADLINE_EXCEEDED with no message once its capped
+  # deadline has passed.
   # grpc-go's own timeout would say "context deadline exceeded", and come
   # only after 10 s.
   expect_status "$name" Slow 68 DeadlineExceeded "" -max-time "$slow_max_s"

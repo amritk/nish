@@ -1,4 +1,4 @@
-PASS  serve's server listens: HTTP/2 over TLS and h2c
+PASS  a rig like serve's listens: HTTP/2 over TLS and h2c
 PASS  an h2c connection
 PASS  GetSum 2 + 3: SumReply { result: 5 }, then grpc-status 0
 PASS  Slow: held, unanswered before its deadline

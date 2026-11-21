@@ -20,6 +20,7 @@ const SIGNAL: i32 = 0
 /**
  * Answers `/Slow`'s held calls once every one is past its deadline, which
  * `reply` then turns into DEADLINE_EXCEEDED; how many it answered.
+ * It answers none while any held call has not yet expired.
  */
 export const release = (rig: GrpcRig): i32 => {
   if (rig.held.length === 0) {

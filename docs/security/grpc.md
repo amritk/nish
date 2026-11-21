@@ -160,15 +160,16 @@ server built from `tests/link/net_grpc_interop` on the same test service, with
 every deadline capped at 1 s, and calls it with grpcurl 1.9.3 and ghz 0.120.0,
 each fetched by release and checked against its SHA-256 before it runs.
 `tests/interop/grpc/check.sh` runs seven checks on the TLS listener and seven
-on the h2c one, and fails the job on any one. grpcurl verifies no certificate
-(`-insecure`), since the server signs with a test leaf.
+on the h2c one, and fails the job on any one. Neither tool verifies the
+certificate (grpcurl's `-insecure`, ghz's `--skipTLS`), since the server signs
+with a test leaf.
 
 - GetSum 2 + 3 answers 5, and -5 + 3 answers -2.
 - Denied's message reaches grpc-go as `no 100% é`, so its percent-encoding
   decodes there, with `PermissionDenied`.
 - Missing ends `NotFound` with no message: grpc-go reads the Trailers-Only
   form.
-- Slow, sent with a 10 s `grpc-timeout`, ends `DeadlineExceeded` with no
+- Slow, called with a 10 s deadline (`-max-time 10`), ends `DeadlineExceeded` with no
   message in under 5 s, so the server's cap answered, not grpc-go's timeout.
 - ghz's 2000 GetSum calls, 10 at a time, are all OK. The job records no
   throughput.

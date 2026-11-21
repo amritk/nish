@@ -190,9 +190,11 @@ the lanes the `test` job delegates to.
 only when a changed file matches its `pull_request.paths`. Those paths are its
 read set, so the same rule applies to them. `ci-scope.mjs`'s `workflowPaths`
 reads the list, and `node tests/run.js ci-scope` fails when a file the `grpc`
-job opens is not on it (WP72 S4). That covers the workflow, the files
-`server.dockerfile` copies in for the gRPC server, `tests/interop/grpc/`, and
-the server's sources, followed through every relative and `nish/` import.
+job opens is not on it (WP72 S4). That covers the workflow,
+`server.dockerfile` itself, `run-endpoint.sh`, `tests/interop/grpc/`, and the
+server's sources, followed through every relative and `nish/` import. The
+`build` job's own reads (`scripts/`, `src/`, `runtime/`, `install.sh`,
+`package.json`) are shared with every interop job and are not checked.
 
 ### Shards and time limits
 
