@@ -1651,19 +1651,23 @@ const linkTests = fs.existsSync(linkDir)
       .sort()
   : []
 
-/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
-const INDEX_OF_ANY_REFUSALS = [
-  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
+/** `indexOfAny`'s edge sets (empty, over 16 bytes, non-ASCII), each a link program run under Node after the loop. */
+const INDEX_OF_ANY_EDGES = [
+  "std_text_index_of_any_empty_set",
+  "std_text_index_of_any_long_set",
+  "std_text_index_of_any_non_ascii_set",
 ]
 
-/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
+/** `split`'s empty separator and the pads' non-ASCII fill, each a link program run under Node after the loop. */
+const TEXT_EDGES = [
+  "std_text_split_empty_separator",
+  "std_text_pad_non_ascii_fill",
+  "std_text_pad_start_non_ascii_fill",
+  "std_text_split_limit_empty_separator",
+]
+
+/** `toFixed`'s refused digit counts, each a link program and its panic (read after the loop). */
 const TEXT_REFUSALS = [
-  ["std_text_split_empty_separator", "split: an empty separator"],
-  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
-  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
-  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
   ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
   ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
 ]
@@ -1689,7 +1693,8 @@ const LINK_READ_LATER = [
   "range_export_napi",
   "range_export_napi_async",
   "range_export_unproven",
-  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  ...INDEX_OF_ANY_EDGES,
+  ...TEXT_EDGES,
   ...TEXT_REFUSALS.map(([name]) => name),
   "std_compress_node",
   "std_json_conformance",
@@ -45342,15 +45347,14 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
 
 // WP38 S1: `indexOfAny` from `nish/text` is the runtime kernel natively and
 // the walker `std/text.ts` writes under Node, so the four programs that call it
-// print the same and exit the same both ways: the edges, and the three sets it
-// refuses. A refusal is a panic, whose message the link loop does not read, so
-// it is held here on both sides, from the binary the loop built.
+// print the same and exit the same both ways: the edges, and the empty, long
+// and non-ASCII sets.
 //
 // And the recognition is the package's, not the path's: `std/text.ts` compiled
 // as a root -- what the performance gate does -- is an ordinary module, so its
 // walker is called as written and the kernel is never declared.
 if (!only || "std_text_index_of_any".includes(only)) {
-  for (const [name, message] of [["std_text_index_of_any", ""], ...INDEX_OF_ANY_REFUSALS]) {
+  for (const name of ["std_text_index_of_any", ...INDEX_OF_ANY_EDGES]) {
     const entry = path.join(linkDir, name, "main.ts")
     if (!fs.existsSync(entry)) {
       check(`link/${name}: indexOfAny-under-node`, false, `no such fixture: tests/link/${name}`)
@@ -45360,21 +45364,10 @@ if (!only || "std_text_index_of_any".includes(only)) {
     const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
     const code = Number(fs.readFileSync(path.join(linkDir, name, "expected.code"), "utf8").trim())
     check(
-      `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints${message ? `, "${message}"` : ""}`,
-      run.status === code && run.stdout === want && run.stderr.includes(message),
+      `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints`,
+      run.status === code && run.stdout === want,
       `--- native (expected.out)\n${want}--- node\n${shown(run)}`
     )
-    const exe = path.join(buildDir, "link", name, "app")
-    if (message && !HAS_CLANG) {
-      skip(`skipped: link/${name}: no clang, so there is no native binary to read the panic of`)
-    } else if (message) {
-      const native = spawnSync(exe, [], { encoding: "utf8" })
-      check(
-        `link/${name}: the native binary panics with "${message}"`,
-        native.status === 1 && native.stderr.includes(message),
-        fs.existsSync(exe) ? shown(native) : `no binary at ${exe}`
-      )
-    }
   }
   // `--profile wasi` links runtime-simd.c's scalar path (scripts/build.sh), so
   // the same programs run under Node's WASI print the same lines. The second is
@@ -45499,9 +45492,21 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
     pads.status === 0 && pads.stdout === "start: [  \u00e9]\nend: [\u00e9  ]\nemoji: [..\u{1F600}]\nmixed: [00\u00dfx]\n",
     shown(pads)
   )
-  // An empty separator and a non-ASCII fill are refused the same way on both
-  // sides: a panic, whose message the link loop does not read, so it is held
-  // here from the binary the loop built and from the Node run.
+  // An empty separator and a non-ASCII fill answer the same on both sides: the
+  // link loop holds the native run to expected.out, and this the Node run.
+  for (const name of TEXT_EDGES) {
+    const dir = path.join(linkDir, name)
+    const want = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    check(
+      `link/${name}: under the Node prelude it prints expected.out and exits 0`,
+      run.status === 0 && run.stdout === want,
+      `--- native (expected.out)\n${want}--- node\n${shown(run)}`
+    )
+  }
+  // A digit count outside 0 to 100 is refused the same way on both sides: a
+  // panic, whose message the link loop does not read, so it is held here from
+  // the binary the loop built and from the Node run.
   for (const [name, message] of TEXT_REFUSALS) {
     const dir = path.join(linkDir, name)
     const want = fs.readFileSync(path.join(dir, "expected.out"), "utf8")

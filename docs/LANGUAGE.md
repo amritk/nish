@@ -6430,14 +6430,14 @@ export const main = (): i32 => {
 };
 ```
 
-- **The set is 1 to 16 ASCII bytes, or the call panics.** An empty set
-  (`indexOfAny: the set must hold 1 to 16 bytes`) matches nothing and is a
-  mistake rather than a search; seventeen bytes is more than one vector of the
-  kernel compares; and a byte of 128 or more
-  (`indexOfAny: every byte of the set must be ASCII`) would be one byte of a
-  multi-byte sequence natively and a UTF-16 unit under Node, which find
-  different things (`tests/link/std_text_index_of_any_empty_set`,
-  `_long_set`, `_non_ascii_set`).
+- **Any set is searched, and an ASCII one answers the same on both hosts.**
+  An empty set matches nothing and answers -1; a set of 1 to 16 bytes is the
+  kernel's, one vector of them, and a longer one is a plain loop that tests
+  each byte against each member. A character of 128 or more is read unit by
+  unit, as `text` is: natively each of its bytes is a member, so `"é"` also
+  finds the first byte of `"è"`, and under Node its UTF-16 unit is
+  (`tests/link/std_text_index_of_any_empty_set`, `_long_set`,
+  `_non_ascii_set`).
 - **`from` is clamped to `[0, text.length]`**, as `substring` clamps: a
   negative `from` searches from the start, and one at or past the length
   answers -1. The answer is a byte offset, like `s.length`; an ASCII byte
@@ -6500,8 +6500,8 @@ export const main = (): i32 => {
   last; a limit of 0 gives `[]`. A negative limit keeps every piece, because
   JavaScript reads the limit through `ToUint32` and -1 becomes 4294967295;
   that makes `splitLimit(text, sep, -1)` the same as `split(text, sep)`. An
-  empty separator panics (`splitLimit: an empty separator`) whatever the
-  limit, as `split`'s does, even where JavaScript would answer `[]`.
+  empty separator keeps the first `limit` code points, as `split`'s gives
+  them (`tests/link/std_text_split_limit_empty_separator`).
 
 ### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 

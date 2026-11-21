@@ -3325,8 +3325,8 @@ you need to walk them, since there is no iteration yet.
 **Find the next byte of a few** — `indexOfAny(text, bytes, from)` from
 `nish/text` answers the first index at or after `from` whose byte is one of
 `bytes`, or -1: the scan for the next `"` or `\\` in a JSON string, the next
-delimiter in a line. `bytes` holds 1 to 16 ASCII bytes and anything else
-panics; `from` is clamped to `[0, text.length]`. Natively it reads 16 or 32
+delimiter in a line. `bytes` is any set, and an ASCII one answers the same
+natively and under Node; `from` is clamped to `[0, text.length]`. Natively it reads 16 or 32
 bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
@@ -3338,7 +3338,8 @@ methods on a number and no optional parameters, so `x.toFixed(n)` is
 both from `nish/text` and both answering what JavaScript does. `toFixed`
 rounds the exact binary value (`toFixed(1.005, 2)` is `"1.00"`) and panics
 outside 0 to 100 digits; `splitLimit` keeps the first `limit` pieces, a
-negative limit keeps all of them, and an empty separator panics.
+negative limit keeps all of them, and an empty separator splits into code
+points.
 (No block, as for `nish/text`; `tests/link/std_text_to_fixed` and
 `tests/link/std_text_split_limit` are its programs.)
 

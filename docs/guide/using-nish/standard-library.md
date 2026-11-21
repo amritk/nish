@@ -303,17 +303,18 @@ true
 
 `split(text, sep)` is JavaScript's `text.split(sep)`: a separator at either
 end or two in a row give empty strings, `""` splits to `[""]`, and a
-separator that never occurs gives `[text]`. An empty separator panics
-(`split: an empty separator`) rather than splitting into units, which are
-bytes in a compiled program and UTF-16 units under Node. The answers are the
-same both ways for any text and any non-empty separator.
+separator that never occurs gives `[text]`. An empty separator splits `text`
+into its code points, one character each, rather than into units, which are
+bytes in a compiled program and UTF-16 units under Node: `split("aé", "")` is
+`["a", "é"]` both ways. Only a character past U+FFFF, an emoji say, differs
+from JavaScript, which splits it into two halves; here it stays whole.
 
 `splitLimit(text, sep, limit)` is JavaScript's `text.split(sep, limit)`: it
 keeps the first `limit` pieces and drops the rest, so
 `splitLimit("a,b,c", ",", 2)` is `["a", "b"]` and a limit of 0 gives `[]`. A
 negative limit keeps every piece, as JavaScript's does, so
-`splitLimit(text, sep, -1)` is `split(text, sep)`. An empty separator panics
-here too (`splitLimit: an empty separator`).
+`splitLimit(text, sep, -1)` is `split(text, sep)`. An empty separator keeps
+the first `limit` code points.
 
 `toFixed(x, digits)` is JavaScript's `x.toFixed(digits)`, which Nish cannot
 write as a method: `x` with `digits` digits after the point, rounded on the
@@ -363,8 +364,8 @@ Node. `--warn-portability` does not flag a pad call, because the length it
 reads is read inside the library and the result is a string
 ([portability warnings](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#diagnostics-and-debugging-flags)),
 so pad only ASCII text, or work out the width with `codePointLength`. A
-`fill` that is not ASCII panics, because a cut at a byte width could split a
-character in two.
+`fill` that is not ASCII is cut only where a character starts, so the result
+can fall short of `width` rather than end in half a character.
 
 Together with `nish/regex` they turn a snake_case or kebab-case name into a
 camelCase identifier. A regex template cannot change case, so the regex only
