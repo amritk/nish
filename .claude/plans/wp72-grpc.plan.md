@@ -127,6 +127,7 @@ stages:
     goal: A route the program marks as streaming is handed over at its HEADERS frame, and its body arrives as DATA in pieces the program consumes, with the stream's receive window credited only as it consumes them, so a body of any length runs in bounded memory; every other route, and every route on HTTP/1.1 and HTTP/3, keeps today's whole body up to maxBody.
     verification: node tests/run.js net_http_server && node tests/run.js net_http2 && node tests/run.js grpc && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node scripts/security-scope.mjs
     status: pending
+    issue: 2124
     todos:
       - id: s6a-design
         content: Write the design in docs/http-one-handler.md before any code, replacing the "streaming request bodies" non-goal — how a route opts in, how the program reads a piece and says it consumed it, end of body, the per-stream buffer cap, RST_STREAM and connection loss while held, and what h1 and h3 do with the flag — see WP72 S6a
