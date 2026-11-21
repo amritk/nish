@@ -65,6 +65,13 @@ export const pbkdf2HmacSha256 = (password: Secret<u8[]>, salt: u8[], iterations:
 > {{Section 11 of RFC7914}}
 {: #R-ASCII gi="blockquote"}
 
+## A refused input {#refused-input}
+
+PBKDF2 takes at least one round and gives at least one byte.
+pbkdf2HmacSha256 MUST return null when the iteration count or the
+derived-key length is less than 1.
+{: #R-REFUSE}
+
 # Laws
 
 PBKDF2 computes its output block by block, each block from the password,
@@ -79,6 +86,14 @@ forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* 1..3 */, a: i32 
   const k = pbkdf2HmacSha256(pw, salt, n, a + b);
   return k !== null && unwrap(k).length === a + b && unwrap(pbkdf2HmacSha256(pw, salt, n, a)) === unwrap(k).slice(0, a);
 }
+~~~
+
+~~~ ts-property
+// P-REFUSE covers R-REFUSE — a count or a length below 1 is null
+// samples: 48
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* -2..2 */, len: i32 /* -2..2 */) =>
+  implies(n < 1 || len < 1, pbkdf2HmacSha256(pw, salt, n, len) === null) &&
+  implies(n >= 1 && len >= 1, pbkdf2HmacSha256(pw, salt, n, len) !== null)
 ~~~
 
 # Test Vectors

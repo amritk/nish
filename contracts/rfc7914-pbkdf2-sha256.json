@@ -4,7 +4,7 @@
   "source": {
     "title": "PBKDF2-HMAC-SHA-256",
     "main": "rfc7914-pbkdf2-sha256",
-    "sha256": "d567272d9e86ea1e2af5090849728d01ee45a631f931412620b3d1f1ed79679d"
+    "sha256": "bfbd227e5103f502498cd8c070ef8fb2e587fa53dc2000850d1403eed7ecb9d4"
   },
   "sources": [
     {
@@ -36,6 +36,12 @@
       "section": "11",
       "level": "DEFINITION",
       "quote": "The password and salt strings are passed as sequences of ASCII [RFC20] octets."
+    },
+    {
+      "id": "R-REFUSE",
+      "section": "3.1",
+      "level": "MUST",
+      "quote": "pbkdf2HmacSha256 MUST return null when the iteration count or the derived-key length is less than 1."
     }
   ],
   "exclusions": [],
@@ -278,6 +284,152 @@
         }
       },
       "samples": 32
+    },
+    {
+      "kind": "property",
+      "id": "P-REFUSE",
+      "title": "a count or a length below 1 is null",
+      "covers": ["R-REFUSE"],
+      "forall": [
+        {
+          "name": "pw",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 24
+        },
+        {
+          "name": "salt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 24
+        },
+        {
+          "name": "n",
+          "type": "i32",
+          "min": -2,
+          "max": 2
+        },
+        {
+          "name": "len",
+          "type": "i32",
+          "min": -2,
+          "max": 2
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "<",
+                    "args": [
+                      {
+                        "var": "n"
+                      },
+                      {
+                        "int": 1
+                      }
+                    ]
+                  },
+                  {
+                    "op": "<",
+                    "args": [
+                      {
+                        "var": "len"
+                      },
+                      {
+                        "int": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "isNull",
+                "args": [
+                  {
+                    "call": "pbkdf2HmacSha256",
+                    "args": [
+                      {
+                        "var": "pw"
+                      },
+                      {
+                        "var": "salt"
+                      },
+                      {
+                        "var": "n"
+                      },
+                      {
+                        "var": "len"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": ">=",
+                    "args": [
+                      {
+                        "var": "n"
+                      },
+                      {
+                        "int": 1
+                      }
+                    ]
+                  },
+                  {
+                    "op": ">=",
+                    "args": [
+                      {
+                        "var": "len"
+                      },
+                      {
+                        "int": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "notNull",
+                "args": [
+                  {
+                    "call": "pbkdf2HmacSha256",
+                    "args": [
+                      {
+                        "var": "pw"
+                      },
+                      {
+                        "var": "salt"
+                      },
+                      {
+                        "var": "n"
+                      },
+                      {
+                        "var": "len"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 48
     }
   ]
 }
