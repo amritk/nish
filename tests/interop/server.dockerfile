@@ -5,8 +5,9 @@
 # The context is the repository. The first stage builds Nish from the
 # checkout: the last release (the seed, which `scripts/fetch-seed.sh` checks
 # against its published SHA-256) builds the compiler in `src/` with LLVM 18,
-# and that compiler builds the server, `tests/link/net_interop_server`, with
-# this checkout's `std/`. The second stage is the runner's endpoint image,
+# and that compiler builds the server, `tests/link/net_interop_server`, and
+# the gRPC server, `tests/link/net_grpc_interop` (`/grpc-server`), with this
+# checkout's `std/`. The second stage is the runner's endpoint image,
 # whose `setup.sh` routes through the network simulator, with the server and
 # `run-endpoint.sh` added. Every base image is pinned by digest.
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 AS build
@@ -58,10 +59,12 @@ RUN . scripts/nish-compiler.sh \
 COPY tests/link/ tests/link/
 RUN . scripts/nish-compiler.sh \
  && nish_allow_panics build/nish \
- && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_interop_server/main.ts -o build/interop/ --link build/interop-server
+ && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_interop_server/main.ts -o build/interop/ --link build/interop-server \
+ && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_grpc_interop/main.ts -o build/grpc/ --link build/grpc-server
 
 FROM martenseemann/quic-network-simulator-endpoint@sha256:3b2b9e6fa317da238c8140a7b6d2bf8d4d45a8464b873eecac3ff2a32520b71a
 COPY --from=build /nish/build/interop-server /interop-server
+COPY --from=build /nish/build/grpc-server /grpc-server
 COPY tests/interop/run-endpoint.sh /run_endpoint.sh
 RUN chmod +x /run_endpoint.sh
 ENTRYPOINT ["/run_endpoint.sh"]

@@ -88,7 +88,11 @@ export const main = (): i32 => {
 A gRPC client that speaks cleartext HTTP/2 reaches it: with
 [grpcurl](https://github.com/fullstorydev/grpcurl) and the `.proto` file,
 `grpcurl -plaintext -proto calc.proto -d '{"a": 2, "b": 3}' localhost:50051
-calc.Calculator/GetSum` answers `{"result": 5}`. Serve real traffic over TLS
+calc.Calculator/GetSum` answers `{"result": 5}`. Nish's own CI calls a
+`nish/net/grpc` server this way with grpcurl and [ghz](https://ghz.sh), over
+TLS and cleartext, and checks its replies, its error statuses and its
+deadlines ([the record](https://github.com/amritk/nish/blob/main/docs/security/grpc.md#checked-against-a-stock-client)
+lists the checks). Serve real traffic over TLS
 with `listenHttp2Tls`, as [One server for HTTP/1.1, 2 and 3](http-server.md#adding-http2-and-http3)
 shows. The loop then calls `server.waitSigned(1000, key)` in place of
 `server.wait(1000)`, with the certificate's private key as a

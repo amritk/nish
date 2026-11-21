@@ -10244,6 +10244,12 @@ const DECLARED = [
     why: "the program tests nish/net/grpc, which is new in this release, so the seed's standard library has no such module and refuses it",
   },
   {
+    program: "tests/link/net_grpc_interop/main.ts",
+    file: "exit",
+    changelog: "Call the gRPC server with pinned grpcurl and ghz over TLS and h2c (WP72 S4)",
+    why: "the interop job's gRPC server is built on nish/net/grpc, which is new in this release, so the seed's standard library has no such module and refuses it",
+  },
+  {
     program: "tests/cases/cls_field_init.ts",
     file: "exit",
     changelog: "[] and new expressions as class field initializers",
