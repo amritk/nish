@@ -664,13 +664,13 @@ export class GrpcServer {
     const i: i32 = r.index
     while (toI32(this.states.length) <= i) {
       this.states.push(GRPC_IDLE)
-      this.readAt.push(0)
-      this.want.push(-1)
-      this.have.push(0)
+      this.readAt.push(toI32(0))
+      this.want.push(toI32(-1))
+      this.have.push(toI32(0))
       this.bufs.push(new Array<u8>(0))
       this.inBuf.push(false)
-      this.starts.push(0)
-      this.ends.push(0)
+      this.starts.push(toI32(0))
+      this.ends.push(toI32(0))
       this.sinces.push(toI64(0))
       this.streams.push(toI64(0))
     }
