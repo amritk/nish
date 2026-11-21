@@ -739,6 +739,34 @@ export const main = (): number => {
     t.ok("h1 deflate refused: 100 bytes sent as they are", s.head.indexOf("content-encoding") < 0 && s.has("content-length: 100") && q.decision === HTTP_COMPRESS_TOO_SMALL)
     const forced: i32 = q.compressAnyway(HTTP_CODING_DEFLATE, body, 0, 100)
     t.ok("h1 deflate refused: compressAnyway sends deflate", forced > 0 && inflate.decompress(q.output, 0, forced, back, 0, 70000) === 100)
+    // Every other way to identity stays open to deflate with identity;q=0,
+    // and the ones gzip's forcing closes are closed only for gzip.
+    const deflateRefused = "accept-encoding: deflate, identity;q=0\r\n"
+    const gzipRefused = "accept-encoding: gzip, identity;q=0\r\n"
+    const rng = new Rng(17)
+    const noise: u8[] = new Array<u8>(1000)
+    for (let i: i32 = 0; i < 1000; i += 1) {
+      noise[i] = toU8(rng.nextInt(0, 255))
+    }
+    const lost = request(t, "h1 deflate refused noise", config, "GET", deflateRefused)
+    t.eqI32("h1 deflate refused noise: respondEncoded", lost.respondEncoded(200, names, values, noise, 0, 1000, q, HTTP_CODING_DEFLATE), 0)
+    t.ok("h1 deflate refused noise: too little saved, sent as it is", queued(lost).head.indexOf("content-encoding") < 0 && q.decision === HTTP_COMPRESS_TOO_LITTLE_SAVED)
+    q.segmentMode = true
+    const runs: i32 = q.encoderRuns
+    const seg = request(t, "h1 deflate refused segment", config, "GET", deflateRefused)
+    t.eqI32("h1 deflate refused segment: respondEncoded", seg.respondEncoded(200, names, values, body, 0, 1000, q, HTTP_CODING_DEFLATE), 0)
+    t.ok("h1 deflate refused segment: one segment, sent as it is", queued(seg).head.indexOf("content-encoding") < 0 && q.decision === HTTP_COMPRESS_NO_FEWER_SEGMENTS && q.encoderRuns === runs)
+    const gseg = request(t, "h1 gzip refused segment", config, "GET", gzipRefused)
+    t.eqI32("h1 gzip refused segment: respondEncoded", gseg.respondEncoded(200, names, values, body, 0, 1000, q, HTTP_CODING_GZIP), 0)
+    t.ok("h1 gzip refused segment: gzipped all the same", queued(gseg).has("content-encoding: gzip") && q.decision === HTTP_COMPRESS_SENT)
+    q.segmentMode = false
+    const short = new HttpCompressor(DEFLATE_FAST, 256, 4096)
+    const long = request(t, "h1 deflate refused long", config, "GET", deflateRefused)
+    t.eqI32("h1 deflate refused long: respondEncoded", long.respondEncoded(200, names, values, body, 0, 5221, short, HTTP_CODING_DEFLATE), 0)
+    t.ok("h1 deflate refused long: over maxLength, sent as it is", queued(long).has("content-length: 5221") && short.decision === HTTP_COMPRESS_TOO_LARGE)
+    const glong = request(t, "h1 gzip refused long", config, "GET", gzipRefused)
+    t.eqI32("h1 gzip refused long: respondEncoded", glong.respondEncoded(200, names, values, body, 0, 5221, short, HTTP_CODING_GZIP), 0)
+    t.ok("h1 gzip refused long: over maxLength, gzip too is sent as it is", queued(glong).has("content-length: 5221") && queued(glong).head.indexOf("content-encoding") < 0 && short.decision === HTTP_COMPRESS_TOO_LARGE)
   }
   {
     // More negotiation: deflate's q against gzip's, aliases and `*`.

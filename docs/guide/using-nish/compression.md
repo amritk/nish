@@ -334,8 +334,8 @@ export const main = (): number => {
 `Vary: Accept-Encoding` goes on a response that was compressed, and on one
 sent as it is because the request did not accept the coding offered. A body
 that is too small, too large or did not pay is sent the same to every client,
-so it carries no `Vary`. A request that refuses identity (`identity;q=0`) but
-accepts gzip is sent gzip whatever the policy says.
+so it carries no `Vary`. A request that refuses identity (`identity;q=0`) and
+is answered gzip is sent gzip whatever the policy says, up to `maxLength`.
 
 The negotiation follows RFC 9110: q-values (`gzip;q=0` refuses gzip), `*`,
 `x-gzip`, and `identity`, which is acceptable unless the field gives it q=0. A

@@ -167,8 +167,8 @@ both runs.
 - **Stage 4, compression:** `nish/net/compress`. Built for responses as
   `nish/net/http-compress` (`HttpCompressor`, `httpAcceptEncoding`, on
   `nish/compress/deflate`), pinned by `tests/link/std_http_compress`;
-  `deflate` as a coding and request bodies with a decompression-bomb limit
-  are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
+  `deflate` as a response coding is too ([below](#deflate-as-a-response-coding));
+  request bodies with a decompression-bomb limit are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
 - **Stage 5, middleware** *(open question)*: steps a program registers to run
   before and after its route bodies (a request id, a check on a header, a
   field added to every answer). Nothing in `std/net` has one today. HttpArena

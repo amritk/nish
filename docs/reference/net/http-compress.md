@@ -142,9 +142,9 @@ cost of a CRC-32 it computes and drops on each deflate body.
 response whose coding depended on the request: one sent compressed, and
 one sent as it is because the request did not accept the coding offered. A
 body that is too small, too large or did not pay is sent the same to every
-client, so it carries no `Vary`. A request that refuses identity
-(`identity;q=0`) and accepts gzip or deflate is sent it whatever the policy
-(`compressAnyway`).
+client, so it carries no `Vary`. `respondEncoded` sends gzip to a request
+refusing identity whatever the policy (`compressAnyway`), up to `maxLength`;
+deflate it holds to the policy, so such a caller calls `compressAnyway`.
 
 </scalar-detail>
 
