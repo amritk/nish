@@ -249,12 +249,23 @@ const m: i32 = enc.compress(coding, body, 0, n); // gzip or deflate, or -1
 
 A tie goes to gzip, so `gzip, deflate` gets gzip; deflate goes to a client
 that gives it a higher q-value or does not take gzip. On HTTP/1.1,
-`conn.acceptEncoding()` offers gzip alone: to offer deflate, read the field
-with `conn.parser.header("accept-encoding")` and pass it to
-`httpAcceptEncoding`. `respondEncoded` sends a request that refuses identity
-a compressed body below every threshold only when the coding is gzip; with
-deflate it holds the request to the policy, so call `compressAnyway` yourself
-to compress regardless.
+`conn.acceptEncoding()` offers gzip alone. To offer deflate, pass
+`httpAcceptEncoding` the field's value where it lies in the request head:
+`parser.headerIndex` finds the field, and `parser.spans` holds each field's
+name and value offsets into `parser.head`, four per field:
+
+```ts
+const parser: Http1Parser = conn.parser;
+const i: i32 = parser.headerIndex("accept-encoding");
+const coding: i32 = i < 0
+  ? HTTP_CODING_IDENTITY
+  : httpAcceptEncoding(parser.head, parser.spans[4 * i + 2], parser.spans[4 * i + 3], HTTP_OFFER_GZIP | HTTP_OFFER_DEFLATE);
+```
+
+`respondEncoded` sends a request that refuses identity a compressed body
+below every threshold only when the coding is gzip; with deflate it holds the
+request to the policy, so call `compressAnyway` yourself to compress
+regardless.
 
 ### Compressing only when it pays
 

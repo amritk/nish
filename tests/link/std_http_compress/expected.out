@@ -241,6 +241,7 @@ PASS  deflate level 6: ZlibCompressor's stream, FLEVEL and all
 PASS  deflate level 7: ZlibCompressor's stream, FLEVEL and all
 PASS  deflate level 8: ZlibCompressor's stream, FLEVEL and all
 PASS  deflate level 9: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 9: compress writes ZlibCompressor's stream, FLEVEL and all
 PASS  deflate window: 300 bytes inflate back
 PASS  deflate window: 1000 bytes inflate back
 PASS  deflate window: 4000 bytes inflate back
@@ -306,10 +307,10 @@ PASS  accept: deflate;q=1 over gzip;q=0.9
 PASS  accept: deflate;q=0.001 over gzip;q=0
 PASS  accept: x-gzip;q=0 leaves deflate
 PASS  accept: *;q=0.5 and deflate;q=0 give gzip
-PASS  accept: * alone is a tie, so gzip
+PASS  accept: * above a listed gzip gives deflate
 PASS  accept: gzip, deflate is a tie, so gzip
 PASS  accept: DEFLATE in capitals
 PASS  accept: deflate offered alone takes *
 PASS  accept: deflate offered alone, gzip asked, is identity
 PASS  accept: deflate;q=0 and identity;q=0 is none
-http-compress: 314 passed, 0 failed, 0 skipped
+http-compress: 315 passed, 0 failed, 0 skipped

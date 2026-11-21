@@ -639,6 +639,12 @@ export const main = (): number => {
       const want: i32 = new ZlibCompressor(level).compress(body, 0, 5221, z, 0)
       t.ok(`deflate level ${level}: ZlibCompressor's stream, FLEVEL and all`, m === want && same(z, e.output, 0, m))
     }
+    // compress, not only compressAnyway, at a level other than DEFLATE_FAST.
+    const best = new HttpCompressor(9, 256, 65536)
+    best.encoder = HTTP_ENCODER_LEVEL
+    const b9: i32 = best.compress(HTTP_CODING_DEFLATE, body, 0, 5221)
+    const w9: i32 = new ZlibCompressor(9).compress(body, 0, 5221, z, 0)
+    t.ok("deflate level 9: compress writes ZlibCompressor's stream, FLEVEL and all", b9 > 0 && b9 === w9 && same(z, best.output, 0, b9) && best.decision === HTTP_COMPRESS_SENT)
     // A random-JSON window inside a larger buffer, every size class, both encoders.
     const rng = new Rng(43)
     const sizes: i32[] = [300, 1000, 4000, 16384, 16385, 30000]
@@ -685,6 +691,8 @@ export const main = (): number => {
     t.ok("deflate segments: identity is not", !d.oneSegment(HTTP_CODING_IDENTITY, 1000, 0))
     // At maxLength: a gzip member 12 bytes over keep is room enough for deflate.
     const edge = new HttpCompressor(DEFLATE_FAST, 0, 5221)
+    // `output` holds compressBound(maxLength) and keep < len <= maxLength, so keep + 12
+    // always lies inside it: the room clamp's `output.length` arm is not reachable.
     t.ok("deflate edge: keep + 12 lies inside output", 5221 + 12 < toI32(edge.output.length))
     const ge: i32 = edge.compress(HTTP_CODING_GZIP, body, 0, 5221)
     edge.minSaving = 5221 - (ge - 12)
@@ -763,7 +771,7 @@ export const main = (): number => {
     const short = new HttpCompressor(DEFLATE_FAST, 256, 4096)
     const long = request(t, "h1 deflate refused long", config, "GET", deflateRefused)
     t.eqI32("h1 deflate refused long: respondEncoded", long.respondEncoded(200, names, values, body, 0, 5221, short, HTTP_CODING_DEFLATE), 0)
-    t.ok("h1 deflate refused long: over maxLength, sent as it is", queued(long).has("content-length: 5221") && short.decision === HTTP_COMPRESS_TOO_LARGE)
+    t.ok("h1 deflate refused long: over maxLength, sent as it is", queued(long).has("content-length: 5221") && queued(long).head.indexOf("content-encoding") < 0 && short.decision === HTTP_COMPRESS_TOO_LARGE)
     const glong = request(t, "h1 gzip refused long", config, "GET", gzipRefused)
     t.eqI32("h1 gzip refused long: respondEncoded", glong.respondEncoded(200, names, values, body, 0, 5221, short, HTTP_CODING_GZIP), 0)
     t.ok("h1 gzip refused long: over maxLength, gzip too is sent as it is", queued(glong).has("content-length: 5221") && queued(glong).head.indexOf("content-encoding") < 0 && short.decision === HTTP_COMPRESS_TOO_LARGE)
@@ -774,7 +782,7 @@ export const main = (): number => {
     t.eqI32("accept: deflate;q=0.001 over gzip;q=0", pick("gzip;q=0, deflate;q=0.001"), HTTP_CODING_DEFLATE)
     t.eqI32("accept: x-gzip;q=0 leaves deflate", pick("x-gzip;q=0, deflate"), HTTP_CODING_DEFLATE)
     t.eqI32("accept: *;q=0.5 and deflate;q=0 give gzip", pick("*;q=0.5, deflate;q=0"), HTTP_CODING_GZIP)
-    t.eqI32("accept: * alone is a tie, so gzip", pick("*"), HTTP_CODING_GZIP)
+    t.eqI32("accept: * above a listed gzip gives deflate", pick("gzip;q=0.4, *;q=0.5"), HTTP_CODING_DEFLATE)
     t.eqI32("accept: gzip, deflate is a tie, so gzip", pick("gzip, deflate"), HTTP_CODING_GZIP)
     t.eqI32("accept: DEFLATE in capitals", pick("DEFLATE"), HTTP_CODING_DEFLATE)
     t.eqI32("accept: deflate offered alone takes *", httpAcceptEncoding(ascii("*"), 0, 1, HTTP_OFFER_DEFLATE), HTTP_CODING_DEFLATE)
