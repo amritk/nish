@@ -132,17 +132,29 @@ Issue #485 is the umbrella request for the application layer (handler interface,
 
 Likely files: `std/net/static.ts`, `std/net/http-server.ts`, `tests/link/`, `docs/security/`, `docs/guide/`, `examples/http-app/`.
 
+**Owns:** `std/net/static.ts`, `tests/link/net_static*/**`, `tests/link/net_http_app/**`, `examples/http-app/**`, `src/std-modules.ts`, `docs/security/static.md`, `docs/guide/using-nish/static-files.md`, `docs/guide/using-nish/standard-library.md`, `scalar.config.json`, `tests/run.js`¹, `tests/nish-cmp.js`¹, `docs/security/README.md`¹, `docs/wp43-http-app-layer.md`¹
+
+The module serves through the public `start`/`write`/`end`/`sendFields` of `HttpServer` and `HttpHandler`, so this stage does not own `std/net/handler.ts` or `std/net/http-server.ts` (s5-middleware does). If static files cannot be served without changing either, the worker opens its PR as a draft and says what it needs; the lead adds a merge-order edge behind s5-middleware.
+
 ## WP43 S4 — deflate as a response coding
 Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485). Gzip is built as `nish/net/http-compress` (`HttpCompressor`, `httpAcceptEncoding`) on `nish/compress/deflate`, pinned by `tests/link/std_http_compress`; this adds `deflate` as a coding.
 Likely files: `std/net/http-compress.ts`, `tests/link/std_http_compress/`.
+
+**Owns:** `std/net/http-compress.ts`, `tests/link/std_http_compress*/**`, `docs/guide/using-nish/compression.md`, `docs/security/compress.md`, `tests/nish-cmp.js`¹, `docs/security/README.md`¹, `docs/wp43-http-app-layer.md`¹
 
 ## WP43 S4 — a request body decoded under a decompression-bomb limit
 Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485). Issue #485 names a decompression-bomb limit on request bodies. Not built today. Reads attacker-controlled network input, so the security record moves with it.
 Likely files: `std/net/handler.ts`, `std/net/http-compress.ts`, `docs/security/compress.md`.
 
+**Owns:** `std/net/http-compress.ts`, `std/net/handler.ts`, `std/net/http-server.ts`, `tests/link/std_http_compress*/**`, `tests/link/net_handler*/**`, `tests/link/net_http_server*/**`, `docs/security/compress.md`, `docs/security/handler.md`, `docs/security/http-server.md`, `docs/guide/using-nish/compression.md`, `docs/guide/using-nish/http-server.md`, `tests/run.js`¹, `tests/nish-cmp.js`¹, `docs/security/README.md`¹, `docs/wp43-http-app-layer.md`¹
+
+**Depends on:** s4-deflate and s5-middleware. It edits the files both of them own, so it is spawned only after both have merged, not merely merged after them.
+
 ## WP43 S4 — br as a response coding, on WP73's encoder
 Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485), [WP73](../../docs/wp73-brotli.md) §3. Waits on WP73 S2, the encoder `nish/compress/brotli`, which itself waits on WP73 S1's measurement saying go; if S1 says no, this stage is retired with `not_planned`. WP73's S3 ([plan](wp73-brotli.plan.md)) is this same deliverable and points at this issue; its section lists the negotiation cases and the `docs/security/compress.md` scope change this PR also owes. Adds `br` to `HttpCompressor` and `httpAcceptEncoding` beside gzip and deflate, at the quality WP73 S1 picked; the test decodes each body with an independent decoder (Node's `zlib.brotliDecompressSync`) since nish has none (WP73 S4 is deferred). Feeds [WP71](../../docs/wp71-httparena.md)'s `json-comp` profile.
 Likely files: `std/net/http-compress.ts`, `tests/link/std_http_compress/`, `docs/guide/`.
+
+**Not in this run:** blocked on WP73 S2 (#2036); `std/compress/` has no Brotli encoder yet.
 
 ## WP43 S5 — middleware, steps that run before and after route bodies
 Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485). A step is code a program registers once to run before and after its route bodies: a request id, a check on a header that refuses the request, a field added to every answer. Nothing in `std/net` has one today. HttpArena scores a framework entry's completeness on routing, middleware, request and response, and takes 2.5% off a family's score for each one the entry declares missing ([composite score](https://www.http-arena.com/docs/scoring/composite-score/)); [WP71](../../docs/wp71-httparena.md) D5 declares middleware missing until this lands. Nish has no function values, so a step cannot be a callback; the shape follows the pull loop the handler already has.
@@ -154,3 +166,9 @@ Settled by the owner on [#2007](https://github.com/amritk/nish/issues/2007) (202
 
 Applies to `HttpHandler` and `HttpServer` alike, so one rule serves every version. Measured on `bench/http1-server.ts` against `main`, interleaved, before it lands.
 Likely files: `std/net/handler.ts`, `std/net/http-server.ts`, `std/net/router.ts`, `tests/link/`, `docs/guide/`, `docs/security/handler.md`.
+
+**Owns:** `std/net/handler.ts`, `std/net/http-server.ts`, `std/net/router.ts`, `tests/link/net_handler*/**`, `tests/link/net_http_server*/**`, `tests/link/net_router*/**`, `bench/http1-server.ts`, `docs/guide/using-nish/http-server.md`, `docs/guide/using-nish/http-router.md`, `docs/guide/using-nish/api-server.md`, `docs/security/handler.md`, `docs/security/http-server.md`, `docs/security/router.md`, `docs/BENCHMARKS.md`, `tests/run.js`¹, `tests/nish-cmp.js`¹, `docs/security/README.md`¹, `docs/wp43-http-app-layer.md`¹
+
+`tests/run.js` pins `std/net/http-server.ts:219:14` in the compact-layout check, so a line move above it updates that string here.
+
+¹ Shared by concurrent stages. Each stage only appends its own section, entry or row (or, in `tests/run.js`, the one line its source moves); a conflict there is resolved by merging `main`, never by editing another stage's lines. Generated files (`docs/reference/**`, `tests/self/goldens/checked/**`, `tests/link/*/expected.caps.json`, the `/reference` routes in `scalar.config.json`) are regenerated, never owned.
