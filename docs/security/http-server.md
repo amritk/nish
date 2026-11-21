@@ -10,7 +10,7 @@ stream, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the HTTP application layer
 starts from evidence.
 
-Anchors are function names in `std/net/http-server.ts` at `beda3eaa`, the
+Anchors are function names in `std/net/http-server.ts` at `24468382`, the
 last commit to change it on the head that merges this record.
 
 **Result.** The façade parses nothing itself. A request's bytes are read by
@@ -70,7 +70,7 @@ cannot cause it.
 
 ## Findings
 
-Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7 and HTTPSRV-10 are the shapes an
+Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7, HTTPSRV-10 and HTTPSRV-13 are the shapes an
 attacker's traffic can take, each checked and found to hold. HTTPSRV-6 is
 open. HTTPSRV-8, HTTPSRV-9 and HTTPSRV-11 are accepted. HTTPSRV-12 was
 fixed in review, with a test that failed before the fix.
@@ -89,6 +89,7 @@ fixed in review, with a test that failed before the fix.
 | HTTPSRV-10 | High if it failed | `h2Grow`, `h2Holds`, `h2Conn`, `h2Event`, `live` | HTTP/2 over TLS and h2c share one table of slots, generations and stream entries; an answer or a request must not cross from a connection of one into a slot of the other, and growing the table for the second listener must not move a request already taken. | **Holds.** Each listener owns a fixed range of virtual slots, given when it is configured (`h2TlsBase`, `h2cBase`), and every per-slot call goes to the carrier that owns the range (`h2Clear` says which), so a slot index means one connection of one carrier. `h2Grow` widens the per-slot stream table to the larger of the two listeners' caps and remaps the entry of each HTTP/2 request already in the pool, so `live`'s slot and generation check (HTTPSRV-3) still names the same connection. `r.secure` is set from the owning carrier, false on h2c. |
 | HTTPSRV-11 | Medium | `listenH2c` | An h2c connection is neither encrypted nor authenticated: anyone on the path reads and rewrites every request and answer. | **Accepted.** That is what h2c is; the guide page says to serve it only behind a proxy that ends TLS, or on a trusted network. The façade adds nothing on top that would claim otherwise: `r.secure` is false and no Alt-Svc is sent (HTTPSRV-7). |
 | HTTPSRV-12 | Medium | `h2Close`, `h3Clear`, `release`, `drop` | A stream reset while its answer was still flushing left its request outside the pool for good, so a client that reset enough streams emptied the pool and every later stream was refused. | **Fixed.** A reset now hands back a request in any state the program no longer holds (commit `2fa11bf`). `link/net_http_server_carriers` pins it with a pool of one: "the reset handed the request back: the next stream is answered, not refused", which failed before the fix. |
+| HTTPSRV-13 | Medium if it failed | `trailers`, `push`, `carryTrailers` | A trailer section the program ends an HTTP/2 answer with must not split the answer or smuggle a field the head could not carry, must not grow past `maxResponseFields` or the connection's output, and must not be sent on a carrier that has no trailers in the façade (HTTP/1.1, HTTP/3). | **Holds.** `trailers` runs the same `httpFieldsCheckOutgoing` as a head, so a name that is not a lowercase token (a pseudo-field included), a connection-specific field, or a value with CR, LF or NUL panics before anything is written. More fields than `maxResponseFields` reset the stream and answer `HANDLER_DROPPED`; a section larger than the connection's output buffer is `H2_INVALID` from `Http2Connection.writeTrailers`, and `carryTrailers` resets the stream. On HTTP/1.1 and HTTP/3 the call panics. The section goes only after the body's last byte, as one HEADERS frame with END_STREAM, and a HEAD, 204 or 304 answer, whose head ended the stream, sends none. |
 
 ## Properties verified
 
@@ -147,6 +148,23 @@ fields is served", ":authority and 99 others is served", ":authority and 100
 others is 431", on each, and on h2c ":authority, host and 99 others is
 served", the `host` field giving way to `:authority` (it was 431 before
 `screen` counted the fields `fromFields` lays out).
+
+Trailers (HTTPSRV-13) are pinned by
+`link/net_http_server_carriers: exits with 0 and stdout matches expected.out`,
+on HTTP/2 over TLS and on h2c, by the frames a scripted client reads back:
+"HTTP/2: then the trailer section, a HEADERS frame with END_STREAM",
+"HTTP/2: /trailers-bare: the head, then the trailer section, and no DATA",
+"HTTP/2: more trailer fields than maxResponseFields reset the stream",
+"HTTP/2: a trailer section too large for the output resets the stream",
+"HTTP/2: a HEAD of /trailers: the head ends the stream, and no trailer
+section follows", each again for h2c; behind a body that waits for window,
+"then the trailer section with END_STREAM"; and on a stream the client
+reset, "and trailers answers HANDLER_DROPPED". The panics each exit 1 with
+their message: `link/net_http_server_trailers_h1`,
+`net_http_server_trailers_h3`, `net_http_server_trailers_fields` (an
+uppercase name), `net_http_server_trailers_unstarted`,
+`net_http_server_trailers_ended` (a head that declared a length of 0) and
+`net_http_server_trailers_short` (a body short of its declared length).
 
 A pipeline of HTTP/1.1 requests behind a held one must not grow the stack
 per request. `tests/run.js` runs `tests/link/net_http_server/deep.ts` under

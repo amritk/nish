@@ -250,6 +250,7 @@ return codes as `HttpHandler`, with `HttpServerRequest` in place of
   sendJson(r, status: i32): i32;          // sends what json() was filled with
   problem(r, status: i32, title: string, detail: string): i32;
   refuse(r): i32;
+  trailers(r, names: u8[][], values: u8[][]): i32;   // HTTP/2 only (WP72 S2)
 ```
 
 Each returns `HANDLER_SENT` or `HANDLER_DROPPED`, as `HttpHandler` does.
@@ -259,6 +260,15 @@ Each returns `HANDLER_SENT` or `HANDLER_DROPPED`, as `HttpHandler` does.
 - On h2 and h3, an unknown length means the response has no
   `content-length` field, and `end` closes the stream.
 - No chunked framing is written on h2 or h3.
+- `trailers` ends a started HTTP/2 answer (TLS or h2c) in place of `end`:
+  after the body's last byte, `Http2Connection.writeTrailers` sends the
+  section as one HEADERS frame with END_STREAM. The fields pass the same
+  `httpFieldsCheckOutgoing` as a head. More than `maxResponseFields` resets
+  the stream and answers `HANDLER_DROPPED`; so does a section larger than
+  the connection's output, when it is sent. A HEAD, 204 or 304 answer sends
+  none. On an HTTP/1.1 or HTTP/3 request it panics: the HTTP/1.1 carrier's
+  chunked trailers and HTTP/3's trailing HEADERS are not wired through the
+  façade.
 
 ### 2.5 The request view
 
@@ -668,10 +678,10 @@ a warmed run. For HTTP/3 that pin is new. Today `net_http3_server` pins only
 | Version | Not offered by G7 |
 | --- | --- |
 | HTTP/1.1 | TLS (F2); `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
-| HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; response trailers; RFC 9218 priorities |
+| HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; RFC 9218 priorities |
 | h2c | `Upgrade: h2c` and 101; HTTP/1.1 or sniffing on the port; any response to a bad preface; confidentiality of any kind |
 | HTTP/3 | WebTransport, datagrams and extended CONNECT; any ALPN but `h3` |
-| all | 1xx and 103 Early Hints; streaming request bodies (held whole up to `maxBody`, 413 above); async `serve` over the façade (follow-up, §2.5) |
+| all | response trailers on HTTP/1.1 and HTTP/3 (`trailers` panics there; HTTP/2 has them since WP72 S2); 1xx and 103 Early Hints; streaming request bodies (held whole up to `maxBody`, 413 above); async `serve` over the façade (follow-up, §2.5) |
 
 ### 7.1 Cross-version equivalence
 

@@ -189,6 +189,34 @@ is true once the client's side of the connection has ended, which includes a
 client that half-closed TCP after sending its request and may still read
 the answer; `send`'s result says whether it did.
 
+### Trailers on HTTP/2
+
+An HTTP/2 answer you started with `server.start` can end with a trailer
+section instead of `server.end`. A gRPC-style service does this to send its
+status after the body:
+
+```ts
+const names: u8[][] = [ascii("grpc-status"), ascii("grpc-message")]
+const values: u8[][] = [ascii("0"), ascii("ok")]
+server.start(r, 200, contentNames, contentValues, HTTP1_CHUNKED)
+server.write(r, body, 0, toI32(body.length))
+server.trailers(r, names, values)
+```
+
+`server.trailers(r, names, values)` sends the fields as one HEADERS frame
+that ends the stream, after the last byte of the body, on HTTP/2 over TLS
+and on h2c alike. It returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the
+client has gone or when there are more fields than `maxResponseFields`,
+which resets the stream. So does a section too large for the connection's
+output buffer, once the server comes to send it.
+
+Start with `HTTP1_CHUNKED` or a length you then write in full: a head that
+declared a length of 0 has already ended the stream, and calling
+`trailers` on it panics. An answer to a HEAD request, or a 204 or 304, ends
+with its head and sends no trailers. Trailers are only for HTTP/2: on a
+request taken from an HTTP/1.1 or HTTP/3 listener (`r.version` is not 2),
+end with `server.end`: calling `trailers` there panics.
+
 On HTTP/2 and HTTP/3, field names are lowercase. The server writes the
 length and connection fields itself. A status outside 200 to 599, more or
 less body than the length said, a request answered twice, or one answered
