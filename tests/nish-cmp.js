@@ -571,6 +571,12 @@ const staticRoutes = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: STATIC_ROUTES, why }))
   )
+/** The changelog words of WP43 stage 5, which adds steps to Router, HttpHandler and HttpServer. */
+const ROUTE_STEPS = "steps that run before and after route bodies"
+const routeSteps = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: ROUTE_STEPS, why }))
+  )
 const PIPELINED_WRITE = "answers pipelined requests in one write"
 const pipelinedWrite = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -15208,6 +15214,24 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/tfb_db/main.ts": ["websocket.ll"],
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
+    }
+  ),
+  // WP43 stage 5: `Router` gains its step tables (`routeSteps`,
+  // `missSteps` and `refusedSteps`), so the benchmark that lays the
+  // struct out moves, and the serve test whose module names Router and
+  // HttpRequest lays both out again. The step tests call `step`, `use`,
+  // `before`, `after` and `field`, which the release does not have.
+  ...routeSteps(
+    "Router gains step tables and the request objects gain a step's added fields, so a module or header naming those structs moves, and the release has no step, use, before, after or field for the step tests to call",
+    {
+      "bench/router.ts": ["router.h", "router.ll"],
+      "tests/link/net_serve_lent_window/main.ts": ["main.ll"],
+      "tests/link/net_handler_steps/main.ts": ["exit"],
+      "tests/link/net_handler_steps_split/main.ts": ["exit"],
+      "tests/link/net_http_server_steps/main.ts": ["exit"],
+      "tests/link/net_http_server_steps_full/main.ts": ["exit"],
+      "tests/link/net_http_server_steps_split/main.ts": ["exit"],
+      "tests/link/net_router_use_unknown/main.ts": ["exit"],
     }
   ),
   // WP49 stage 6: `Router` files a route with no parameter in an exact-path
