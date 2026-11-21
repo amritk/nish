@@ -9,7 +9,7 @@ test that pins each property. It is written with the code rather than after
 an audit, so that the audit of the HTTP application layer starts from
 evidence.
 
-Anchors are function names in `std/net/static.ts` at `ebd602f0`, the last
+Anchors are function names in `std/net/static.ts` at `db7d9d13`, the last
 commit to change it on the head that merges this record.
 
 **Result.** A request path is served only when it decodes cleanly, has no
@@ -33,7 +33,7 @@ panics (STATIC-12).
 
 | File | Functions |
 | --- | --- |
-| `std/net/static.ts` | `StaticLimits`; `StaticFiles` (`serve`, `serveHandler`, `staticPlan`, `staticResolve`, `staticAccept`, `staticSecond`, `staticTag`, `staticSameTag`, `staticNoneMatch`, `staticIfRange`, `staticRange`, `staticLoad`, `staticFill`, `staticClose`, `staticBodyLength`, `staticFields`); `staticContentType`; the helpers `staticLower`, `staticIs`, `staticSpace`, `staticHex`, `staticDecimal`, `staticTwo`, `staticDate`, `staticNumber`, `staticQ`, `staticCut` |
+| `std/net/static.ts` | `StaticLimits`; `StaticFiles` (`serve`, `serveHandler`, `staticPlan`, `staticResolve`, `staticAccept`, `staticSecond`, `staticTag`, `staticSameTag`, `staticNoneMatch`, `staticIfRange`, `staticRange`, `staticLoad`, `staticFill`, `staticClose`, `staticBodyLength`, `staticFields`); `staticContentType`; the helpers `staticLower`, `staticIs`, `staticSpace`, `staticDigits`, `staticTwo`, `staticDate`, `staticNumber`, `staticQ`, `staticCut` |
 
 Out of scope: the carriers that parse the request and frame the answer
 (`docs/security/http-server.md`, `handler.md`, `http1-codec.md`, `http2.md`,
