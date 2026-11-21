@@ -342,7 +342,10 @@ export class GrpcServer {
         return GRPC_ANSWERED
       }
       const length: i64 =
-        (toI64(body[at + 1]) << 24) | (toI64(body[at + 2]) << 16) | (toI64(body[at + 3]) << 8) | toI64(body[at + 4])
+        (toI64(body[at + 1]) << 24) |
+        (toI64(body[at + 2]) << 16) |
+        (toI64(body[at + 3]) << 8) |
+        toI64(body[at + 4])
       if (length > toI64(this.maxMessage)) {
         this.close(r, GRPC_RESOURCE_EXHAUSTED, "")
         return GRPC_ANSWERED
