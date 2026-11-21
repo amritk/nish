@@ -1,0 +1,1 @@
+main.ts:15:7: error: This reads `dst`, a destination of a task of `s`, before the scope joins

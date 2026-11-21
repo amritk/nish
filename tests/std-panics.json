@@ -6,8 +6,8 @@
   ],
   "total": 9796,
   "explicit": {
-    "kept": 364,
-    "toFix": 112
+    "kept": 342,
+    "toFix": 134
   },
   "modules": {
     "std/base64.ts": {
@@ -795,16 +795,6 @@
     },
     {
       "module": "std/compress/deflate.ts",
-      "function": "deflateCanonical",
-      "reason": "scratch tables must be at least as large as the symbol count; sizes are fixed by the compressor's own allocation"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "deflateLengths",
-      "reason": "alphabet size and scratch arrays must meet fixed minimums; sizes are set statically by the compressor"
-    },
-    {
-      "module": "std/compress/deflate.ts",
       "function": "Deflater.constructor",
       "reason": "level must be 0 to 9; the doc forbids others and the caller picks the level statically"
     },
@@ -925,11 +915,6 @@
     },
     {
       "module": "std/crypto/hkdf.ts",
-      "function": "hkdfExtractInto",
-      "reason": "hash length 32/48 and output window must be valid; the ikm over 2^31-1 bytes case cannot occur for an array"
-    },
-    {
-      "module": "std/crypto/hkdf.ts",
       "function": "hkdfHeldDerive",
       "reason": "hash length must be 32/48 and the held secret at least that long; both fixed by the caller's algorithm choice"
     },
@@ -937,11 +922,6 @@
       "module": "std/crypto/hkdf.ts",
       "function": "hkdfLabel",
       "reason": "length 0..255, label 1..249 bytes, context at most 255 bytes per the module docs; all fixed by the caller's protocol constants"
-    },
-    {
-      "module": "std/crypto/hmac.ts",
-      "function": "hmacCheckKey",
-      "reason": "Key longer than 2^31-1 bytes cannot be a real array on a correct program; guard against length saturation, not input data"
     },
     {
       "module": "std/crypto/hmac.ts",
@@ -960,11 +940,6 @@
     },
     {
       "module": "std/crypto/hmac.ts",
-      "function": "hmacSha256",
-      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
-    },
-    {
-      "module": "std/crypto/hmac.ts",
       "function": "HmacSha256.digestInto",
       "reason": "Tag window must lie inside out; the 32-byte output size is fixed by the algorithm"
     },
@@ -980,11 +955,6 @@
     },
     {
       "module": "std/crypto/hmac.ts",
-      "function": "hmacSha384",
-      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
-    },
-    {
-      "module": "std/crypto/hmac.ts",
       "function": "HmacSha384Scratch.begin",
       "reason": "Key window must lie inside the key array; caller-controlled bounds contract"
     },
@@ -992,11 +962,6 @@
       "module": "std/crypto/hmac.ts",
       "function": "HmacSha384Scratch.finishInto",
       "reason": "48-byte tag window must lie inside out; size fixed by the algorithm"
-    },
-    {
-      "module": "std/crypto/hmac.ts",
-      "function": "hmacSha512",
-      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
     },
     {
       "module": "std/crypto/jwt.ts",
@@ -1007,21 +972,6 @@
       "module": "std/crypto/p256.ts",
       "function": "p256SignSha256Into",
       "reason": "Message window and the fixed 64-byte signature window must lie inside their arrays; caller bounds contract"
-    },
-    {
-      "module": "std/crypto/sha1.ts",
-      "function": "sha1",
-      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
-    },
-    {
-      "module": "std/crypto/sha1.ts",
-      "function": "Sha1.digestInto",
-      "reason": "Message and 20-byte digest windows must lie inside their arrays and buffers be at most 2^31-1 bytes; caller bounds contract"
-    },
-    {
-      "module": "std/crypto/sha256.ts",
-      "function": "Sha256.digestInto",
-      "reason": "digest at most once, and the 32-byte window must lie inside out; caller-controlled preconditions"
     },
     {
       "module": "std/crypto/sha256.ts",
@@ -1057,11 +1007,6 @@
       "module": "std/net/dns-config.ts",
       "function": "dnsConfigCheckWindow",
       "reason": "bytes[off, off+len) must lie inside bytes; the caller computes the window"
-    },
-    {
-      "module": "std/net/dns-config.ts",
-      "function": "dnsFallbackServers",
-      "reason": "servers must hold two 18-byte addresses; the array is allocated by the config's own constructor"
     },
     {
       "module": "std/net/dns-config.ts",
@@ -1519,11 +1464,6 @@
       "reason": "config caps, QUIC stream limits, connection window and datagram setting must be mutually consistent; all the program's static configuration"
     },
     {
-      "module": "std/net/http3.ts",
-      "function": "Http3Connection.share",
-      "reason": "shared pool buffer sizes must equal bodyChunk and maxFieldSectionSize; set up by the server at build time"
-    },
-    {
       "module": "std/net/outbound.ts",
       "function": "outboundAddressPublic",
       "reason": "sixteen address bytes must fit at off in addr; the caller controls the offset"
@@ -1626,7 +1566,7 @@
     {
       "module": "std/net/postgres.ts",
       "function": "PgBatcher.run",
-      "reason": "Internal: the run handle must be one take gave; documented as a panic on a handle take cannot give"
+      "reason": "the run handle must be one take gave; the doc states the panic on a handle take cannot give"
     },
     {
       "module": "std/net/postgres.ts",
@@ -1840,18 +1780,8 @@
     },
     {
       "module": "std/net/websocket.ts",
-      "function": "websocketFrame",
-      "reason": "the window must lie inside payload, and the payload is under 2^31-1 bytes; caller-controlled preconditions"
-    },
-    {
-      "module": "std/net/websocket.ts",
       "function": "websocketIsUtf8",
       "reason": "the window must lie inside buf; the caller controls off and len"
-    },
-    {
-      "module": "std/net/websocket.ts",
-      "function": "websocketWriteFrame",
-      "reason": "the window must lie inside payload, and the payload is under 2^31-1 bytes; caller-controlled preconditions"
     },
     {
       "module": "std/net/websocket.ts",

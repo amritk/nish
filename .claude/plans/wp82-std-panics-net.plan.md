@@ -185,6 +185,8 @@ DNS config, message, resolver and client sites are removed or proved; the bench 
 
 Sites as of 071ed014 (484): net/dns-config 117, net/dns-message 80, net/dns-resolver 232, net/dns 55. Kinds: index 228, overflow 187, panic 32, array-length 30, slice 4, divide 2, io-exit 1.
 
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `dnsFallbackServers`.
+
 ### S2 — TLS codec, record, schedule, ticket and verify
 
 The TLS handshake codec and record layer are cleared, which clears tls/codec.ts:1093 (relay) and tls/record-client.ts:802 (http-get-json).
@@ -217,6 +219,8 @@ HTTP/3 and QPACK sites are cleared; malformed frames become a Result that maps t
 
 Sites as of 071ed014 (460): net/http3 248, net/http3-frame 21, net/qpack 38, net/http3-server 153. Kinds: index 221, overflow 182, array-length 32, panic 12, divide 7, slice 4, io-exit 2.
 
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `Http3Connection.share`.
+
 ### S7 — HTTP/2, its frames, cleartext and TLS entry points, and HPACK
 
 HTTP/2 and HPACK sites are cleared.
@@ -228,3 +232,5 @@ Sites as of 071ed014 (348): net/http2 92, net/http2-frame 81, net/http2-cleartex
 WebTransport, WebSocket, gRPC and OIDC sites are cleared.
 
 Sites as of 071ed014 (427): net/webtransport 214, net/websocket 165, net/grpc 30, net/oidc 18. Kinds: index 196, overflow 162, array-length 45, panic 13, slice 7, divide 3, io-exit 1.
+
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `websocketFrame`, `websocketWriteFrame`.

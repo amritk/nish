@@ -107,7 +107,7 @@ sha1, sha256, sha512, hmac, hkdf, ct, base64url and scram are cleared; the missi
 
 Sites as of 071ed014 (266): crypto/sha1 31, crypto/sha256 43, crypto/sha512 40, crypto/hmac 51, crypto/hkdf 60, crypto/ct 2, crypto/base64url 38, crypto/scram 1. Kinds: overflow 105, index 75, panic 59, range 15, array-length 12.
 
-Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `sha1Compress`, `sha256`, `Sha256.copy`, `sha256Compress`, `sha384`, `sha512`, `scramClientProofExposed`.
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `sha1Compress`, `sha256`, `Sha256.copy`, `sha256Compress`, `sha384`, `sha512`, `scramClientProofExposed`, `sha1`, `hmacSha256`, `hmacSha384`, `hmacSha512`, `hmacCheckKey`, `hkdfExtractInto`, `Sha256.digestInto`, `Sha1.digestInto`.
 
 ### S2 — ciphers, curves, signatures and password hashing
 
