@@ -91,13 +91,22 @@ export const isJsonPointer = (s: string): boolean => jsonPointerWellFormed(s, 0)
  * `0`, or past a digit run led by `1`-`9`. `-1` when no digit is there.
  */
 const jsonPointerIntegerEnd = (s: string, from: i32): i32 => {
+  const n: i32 = toI32(s.length)
+  // Past either end there is no byte, so no digit: the same `-1` the digit test below gives.
+  if (from < 0 || from >= n) {
+    return -1
+  }
   const first: i32 = jsonPointerByte(s, from)
   if (first < JSON_POINTER_DIGIT_0 || first > JSON_POINTER_DIGIT_9) {
     return -1
   }
   let i: i32 = from + 1
   if (first !== JSON_POINTER_DIGIT_0) {
-    while (jsonPointerByte(s, i) >= JSON_POINTER_DIGIT_0 && jsonPointerByte(s, i) <= JSON_POINTER_DIGIT_9) {
+    while (
+      i < n &&
+      jsonPointerByte(s, i) >= JSON_POINTER_DIGIT_0 &&
+      jsonPointerByte(s, i) <= JSON_POINTER_DIGIT_9
+    ) {
       i += 1
     }
   }
@@ -114,13 +123,18 @@ const jsonPointerIntegerEnd = (s: string, from: i32): i32 => {
  * @returns true when `s` is a relative JSON Pointer.
  */
 export const isRelativeJsonPointer = (s: string): boolean => {
+  const n: i32 = toI32(s.length)
   let i: i32 = jsonPointerIntegerEnd(s, 0)
   if (i < 0) {
     return false
   }
+  // The integer ends at the end of `s` or before a byte that is no `#`, `+` or `-`: the rest is the pointer.
+  if (i >= n) {
+    return jsonPointerWellFormed(s, i)
+  }
   const next: i32 = jsonPointerByte(s, i)
   if (next === JSON_POINTER_HASH) {
-    return i + 1 === toI32(s.length)
+    return i + 1 === n
   }
   if (next === JSON_POINTER_PLUS || next === JSON_POINTER_MINUS) {
     i = jsonPointerIntegerEnd(s, i + 1)
@@ -132,6 +146,13 @@ export const isRelativeJsonPointer = (s: string): boolean => {
 }
 
 /**
+ * `s[from, to)`. Every caller's range lies inside `s`, so `substring`'s clamp
+ * never moves it; it runs once per piece copied, beside that piece's
+ * allocation, where `slice` would add a panic path no input reaches.
+ */
+const jsonPointerPiece = (s: string, from: i32, to: i32): string => s.substring(from, to)
+
+/**
  * The token of well-formed pointer `p` that starts at `from` and ends before
  * `end`, with `~1` and `~0` decoded. The runs between escapes are copied
  * whole, so no byte (no code unit under Node) is narrowed.
@@ -141,16 +162,18 @@ const jsonPointerToken = (p: string, from: i32, end: i32): string => {
   let run: i32 = from
   let i: i32 = from
   while (i < end) {
-    if (jsonPointerByte(p, i) === JSON_POINTER_TILDE) {
-      parts.push(p.slice(run, i))
-      parts.push(jsonPointerByte(p, i + 1) === JSON_POINTER_DIGIT_1 ? "/" : "~")
-      i += 2
+    const next: i32 = i + 1
+    // Well-formed, every `~` has its digit before `end`; a `~` with none would be copied as itself.
+    if (next < end && jsonPointerByte(p, i) === JSON_POINTER_TILDE) {
+      parts.push(jsonPointerPiece(p, run, i))
+      parts.push(jsonPointerByte(p, next) === JSON_POINTER_DIGIT_1 ? "/" : "~")
+      i = next + 1
       run = i
     } else {
-      i += 1
+      i = next
     }
   }
-  parts.push(p.slice(run, end))
+  parts.push(jsonPointerPiece(p, run, end))
   return parts.join("")
 }
 
@@ -198,12 +221,12 @@ export const jsonPointerEscape = (token: string): string => {
   for (let i: i32 = 0; i < toI32(token.length); i++) {
     const c: i32 = jsonPointerByte(token, i)
     if (c === JSON_POINTER_TILDE || c === JSON_POINTER_SLASH) {
-      parts.push(token.slice(run, i))
+      parts.push(jsonPointerPiece(token, run, i))
       parts.push(c === JSON_POINTER_TILDE ? "~0" : "~1")
       run = i + 1
     }
   }
-  parts.push(token.slice(run))
+  parts.push(jsonPointerPiece(token, run, toI32(token.length)))
   return parts.join("")
 }
 
@@ -214,7 +237,7 @@ export const jsonPointerEscape = (token: string): string => {
  * of any length is read without overflow.
  */
 const jsonPointerIndex = (p: string, from: i32, end: i32, length: i32): i32 => {
-  if (from === end || (end - from > 1 && jsonPointerByte(p, from) === JSON_POINTER_DIGIT_0)) {
+  if (from === end) {
     return -1
   }
   let value: i32 = 0
@@ -223,10 +246,16 @@ const jsonPointerIndex = (p: string, from: i32, end: i32, length: i32): i32 => {
     if (c < JSON_POINTER_DIGIT_0 || c > JSON_POINTER_DIGIT_9) {
       return -1
     }
-    value = value * 10 + (c - JSON_POINTER_DIGIT_0)
-    if (value >= length) {
+    // Past the first digit, a value still 0 means the token led with a zero.
+    if (i > from && value === 0) {
       return -1
     }
+    // Widened, ten times anything below `length` plus a digit cannot wrap; below `length` it narrows back whole.
+    const next: i64 = toI64(value) * 10 + (toI64(c) - toI64(JSON_POINTER_DIGIT_0))
+    if (next >= toI64(length)) {
+      return -1
+    }
+    value = toI32(next)
   }
   return value
 }

@@ -1,0 +1,1 @@
+usage: relay [--port N] [--bind ADDR] [--path /P] [--secret S] [--cert-out FILE] [--cert PEM --key PEM] [--san NAME]... [--offload]

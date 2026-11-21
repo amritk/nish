@@ -32,11 +32,21 @@ and a derived-key length. SCRAM-SHA-256's `Hi` is this function with a
 
 RFC 7914 has no binding sentence in the sense of BCP 14 for PBKDF2, so the
 profile does not claim it as its main source: there is no completeness to
-check. Section 11 prints each call across two lines, the strings on the first
-and `c` and `dkLen` on the second, and vector pairs a printed string only with
-values on its own line. Each vector therefore takes its expected value from
-Python's hashlib, as a command `spec check --run-sources` runs; the bytes it
-prints are the ones Section 11 prints, byte for byte.
+check.
+
+Section 11 prints both vectors, and vector 0.6.0 cannot cite either, so each
+takes its expected value from Python's hashlib, as a command
+`spec check --run-sources` runs; the bytes it prints are the ones Section 11
+prints, byte for byte. Section 11 prints each value under the label
+`PBKDF2-HMAC-SHA-256 (P="passwd", S="salt", c=1, dkLen=64) =`, split across
+two lines. vector asks for that label on the Expected value, and its
+Markdown literal grammar refuses one with a `"`, an `=` or a comma inside its
+parentheses ("Expected: not a literal"). The labels `c` and `dkLen` on the
+integer arguments are refused as well: vector reads them back from this
+profile's own Test Vectors section, finds `c` and `dkLen` on both rows, and
+refuses ("nothing pairs a printed string with one of several labelled
+values"). The integers are left bare, and `spec check` warns that each has
+no label to find it by.
 
 # Interface
 
@@ -54,6 +64,37 @@ export const pbkdf2HmacSha256 = (password: Secret<u8[]>, salt: u8[], iterations:
 > The password and salt strings are passed as sequences of ASCII [RFC20] octets.
 > {{Section 11 of RFC7914}}
 {: #R-ASCII gi="blockquote"}
+
+## A refused input {#refused-input}
+
+PBKDF2 takes at least one round and gives at least one byte.
+pbkdf2HmacSha256 MUST return null when the iteration count or the
+derived-key length is less than 1.
+{: #R-REFUSE}
+
+# Laws
+
+PBKDF2 computes its output block by block, each block from the password,
+the salt, the count and the block's index alone, so a shorter key is a
+prefix of a longer one under the same inputs. The vectors hold 64-byte keys;
+the clause below holds the lengths around SHA-256's 32-byte block.
+
+~~~ ts-property
+// P-PREFIX covers R-PBKDF2 — dkLen bytes, a prefix of every longer key
+// samples: 32
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* 1..3 */, a: i32 /* 1..40 */, b: i32 /* 0..40 */) => {
+  const k = pbkdf2HmacSha256(pw, salt, n, a + b);
+  return k !== null && unwrap(k).length === a + b && unwrap(pbkdf2HmacSha256(pw, salt, n, a)) === unwrap(k).slice(0, a);
+}
+~~~
+
+~~~ ts-property
+// P-REFUSE covers R-REFUSE — a count or a length below 1 is null
+// samples: 48
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* -2..2 */, len: i32 /* -2..2 */) =>
+  implies(n < 1 || len < 1, pbkdf2HmacSha256(pw, salt, n, len) === null) &&
+  implies(n >= 1 && len >= 1, pbkdf2HmacSha256(pw, salt, n, len) !== null)
+~~~
 
 # Test Vectors
 

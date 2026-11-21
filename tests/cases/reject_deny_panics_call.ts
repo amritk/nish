@@ -1,5 +1,5 @@
 // --deny-panics refuses a call into the standard library that may panic
 // (NL2458): the callee is outside the scope, so the call is where it is refused.
-import { split } from "nish/text";
+import { toFixed } from "nish/text";
 
-export const fields = (s: string, sep: string): string[] => split(s, sep);
+export const money = (x: f64, digits: i32): string => toFixed(x, digits);

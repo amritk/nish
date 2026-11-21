@@ -112,7 +112,7 @@
  * (`docs/wp26-stdlib.md` §4).
  */
 
-import { copyBytes, skipJsonPlain } from "nish/bytes"
+import { skipJsonPlain, tryCopyBytes } from "nish/bytes"
 
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9
@@ -148,8 +148,6 @@ const JSON_UTF8_LOW_SIX: i32 = 63
 /** The first code point that needs two UTF-8 bytes, and the first that needs three. */
 const JSON_UTF8_TWO_BYTE_FLOOR: i32 = 128
 const JSON_UTF8_THREE_BYTE_FLOOR: i32 = 2048
-/** The base `jsonHex4` accumulates in. */
-const JSON_HEX_BASE: i32 = 16
 
 /** The four bytes JSON allows between tokens. */
 const jsonIsBlankByte = (code: i32): boolean =>
@@ -206,8 +204,9 @@ const jsonClosingQuote = (text: string, start: i32): i32 => {
     return -1
   }
   let quote: i32 = toI32(text.indexOf('"', start))
-  // `quote >= start` is false for the `-1` of a miss.
-  while (quote >= start && quote < length) {
+  // `quote >= start` is false for the `-1` of a miss, and implies `quote >= 0`,
+  // which is spelled out because the bounds proof does not chain the two.
+  while (quote >= 0 && quote >= start && quote < length) {
     // The count stops at the opening quote at the latest, so `j >= 0` always
     // holds, and `j < length` does because `j` starts below `quote`; both are
     // spelled out because the bounds proof reads neither from a decrement of a
@@ -216,7 +215,9 @@ const jsonClosingQuote = (text: string, start: i32): i32 => {
     while (j >= 0 && j < length && toI32(text.charCodeAt(j)) === JSON_BACKSLASH) {
       j -= 1
     }
-    if (((quote - 1 - j) & 1) === 0) {
+    // The run of backslashes is `quote - 1 - j` long, which is even exactly
+    // when `quote` and `j` differ in their lowest bit.
+    if (((quote ^ j) & 1) === 1) {
       return quote
     }
     quote = toI32(text.indexOf('"', quote + 1))
@@ -235,15 +236,20 @@ const jsonClosingQuote = (text: string, start: i32): i32 => {
  */
 const jsonEndOfString = (text: string, at: i32): i32 => {
   const length: i32 = toI32(text.length)
-  if (at < 0) {
+  if (at < 0 || at >= length) {
     return -1
   }
-  const stop: i32 = at + 1 + JSON_INLINE_SCAN < length ? at + 1 + JSON_INLINE_SCAN : length
   let i: i32 = at + 1
+  // The sum is below `length` where it is taken, so it cannot wrap.
+  const stop: i32 = i < length - JSON_INLINE_SCAN ? toI32(toU32(i) + toU32(JSON_INLINE_SCAN)) : length
   // `i < length` follows from `i < stop`, and is there for the bounds proof.
   while (i < stop && i < length) {
     const code: i32 = toI32(text.charCodeAt(i))
     if (code === JSON_BACKSLASH) {
+      // A backslash in the last two bytes leaves no byte for a closing quote.
+      if (i >= length - 2) {
+        return -1
+      }
       i += 2
       continue
     }
@@ -256,7 +262,8 @@ const jsonEndOfString = (text: string, at: i32): i32 => {
     return -1
   }
   const quote: i32 = jsonClosingQuote(text, i)
-  return quote < 0 ? -1 : quote + 1
+  // An index of `text`, so one past it cannot wrap.
+  return quote < 0 ? -1 : toI32(toU32(quote) + 1)
 }
 
 /**
@@ -284,7 +291,11 @@ const jsonEndOfValue = (text: string, at: i32): i32 => {
   }
   const first: i32 = toI32(text.charCodeAt(at))
   if (first === JSON_QUOTE || first === JSON_OPEN_BRACE || first === JSON_OPEN_BRACKET) {
-    let depth: i32 = 0
+    // Unsigned, because it cannot wrap either way: each opener is a byte of
+    // `text`, so the count stays below `length`, and a closer is only ever met
+    // at depth 1 or more, since the value's first byte is the only one read at
+    // depth 0 and is an opener or a quote.
+    let depth: u32 = 0
     let i: i32 = at
     // `i >= 0` always holds — `i` starts at `at` and only moves forward — and
     // is in the test because a long string moves `i` to where
@@ -293,12 +304,17 @@ const jsonEndOfValue = (text: string, at: i32): i32 => {
     while (i >= 0 && i < length) {
       const code: i32 = toI32(text.charCodeAt(i))
       if (code === JSON_QUOTE) {
-        const stop: i32 = i + 1 + JSON_INLINE_SCAN < length ? i + 1 + JSON_INLINE_SCAN : length
         let j: i32 = i + 1
+        // The sum is below `length` where it is taken, so it cannot wrap.
+        const stop: i32 = j < length - JSON_INLINE_SCAN ? toI32(toU32(j) + toU32(JSON_INLINE_SCAN)) : length
         let close: i32 = -1
         while (j < stop && j < length) {
           const inner: i32 = toI32(text.charCodeAt(j))
           if (inner === JSON_BACKSLASH) {
+            // A backslash in the last two bytes leaves no byte for a closing quote.
+            if (j >= length - 2) {
+              return -1
+            }
             j += 2
             continue
           }
@@ -317,10 +333,12 @@ const jsonEndOfValue = (text: string, at: i32): i32 => {
             return -1
           }
         }
+        // An index of `text`, so one past it cannot wrap.
+        const after: i32 = toI32(toU32(close) + 1)
         if (depth === 0) {
-          return close + 1
+          return after
         }
-        i = close + 1
+        i = after
         continue
       }
       if (code === JSON_OPEN_BRACE || code === JSON_OPEN_BRACKET) {
@@ -365,20 +383,22 @@ const jsonHexDigit = (code: i32): i32 => {
 
 /** The four hex digits at `at` as one code point, or `-1` when they are not four hex digits. */
 const jsonHex4 = (text: string, at: i32, end: i32): i32 => {
-  if (at + 4 > end) {
+  // Fewer than four bytes before `end`; with `at >= 0`, every `end` below 4 is.
+  // Both callers pass `at >= 0` and `end <= text.length`, and the guard says so
+  // because it is what proves the four reads below in range.
+  if (at < 0 || end < 4 || end > toI32(text.length) || at > end - 4) {
     return -1
   }
-  let value: i32 = 0
-  let i: i32 = 0
-  while (i < 4) {
-    const digit: i32 = jsonHexDigit(toI32(text.charCodeAt(at + i)))
-    if (digit < 0) {
-      return -1
-    }
-    value = value * JSON_HEX_BASE + digit
-    i += 1
+  const d0: i32 = jsonHexDigit(toI32(text.charCodeAt(at)))
+  const d1: i32 = jsonHexDigit(toI32(text.charCodeAt(at + 1)))
+  const d2: i32 = jsonHexDigit(toI32(text.charCodeAt(at + 2)))
+  const d3: i32 = jsonHexDigit(toI32(text.charCodeAt(at + 3)))
+  // A digit is 0 to 15 and a miss is `-1`, so the `or` is negative exactly
+  // when one of them missed, and the shifts place four nibbles without overlap.
+  if ((d0 | d1 | d2 | d3) < 0) {
+    return -1
   }
-  return value
+  return (d0 << 12) | (d1 << 8) | (d2 << 4) | d3
 }
 
 /**
@@ -420,7 +440,9 @@ const jsonUtf8Width = (code: i32): i32 => {
  * byte at a time, for a caller that compares the bytes rather than keeps them.
  */
 const jsonUtf8Byte = (code: i32, width: i32, k: i32): i32 => {
-  if (width === 1) {
+  // `width` is 1, 2 or 3; `<= 1` reads the same and keeps `width - 1` below
+  // from wrapping.
+  if (width <= 1) {
     return code
   }
   if (k === 0) {
@@ -448,9 +470,10 @@ const jsonUtf8Byte = (code: i32, width: i32, k: i32): i32 => {
  */
 const jsonUnescape = (text: string, at: i32, end: i32): string => {
   // Both callers pass the inside of a literal the scanners found, so
-  // `0 <= at` and `end <= text.length` always hold. Saying so here is what
-  // proves every read below in range and drops the `substring` clamps.
-  if (at < 0 || end > toI32(text.length)) {
+  // `0 <= at <= end <= text.length` always holds. Saying so here (the proof
+  // reads `end >= 0` from its own test, not from `at`) is what proves every
+  // read and step below in range and drops the `substring` clamps.
+  if (at < 0 || end < 0 || end > toI32(text.length)) {
     return ""
   }
   let i: i32 = at
@@ -475,9 +498,14 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
     if (start >= 0 && start < i) {
       parts.push(text.substring(start, i))
     }
-    // A trailing backslash has nothing after it: `0` is no escape letter, so it
-    // falls to the default below and stands for itself.
-    const letter: i32 = i + 1 < end ? toI32(text.charCodeAt(i + 1)) : 0
+    // A trailing backslash has nothing after it, and stands for itself.
+    if (i + 1 >= end) {
+      parts.push("\\")
+      i += 1
+      start = i
+      continue
+    }
+    const letter: i32 = toI32(text.charCodeAt(i + 1))
     if (letter === 110) {
       parts.push("\n")
       i += 2
@@ -494,17 +522,21 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
       parts.push(String.fromCharCode(12))
       i += 2
     } else if (letter === 117) {
-      const code: i32 = jsonHex4(text, i + 2, end)
-      if (code < 0) {
+      // `jsonHex4` answers `-1` for fewer than four bytes after the `u`; the
+      // room is tested here too because it is what proves the step past them.
+      const code: i32 = i < end - 5 ? jsonHex4(text, i + 2, end) : -1
+      if (code >= 0 && i < end - 5) {
+        parts.push(jsonUtf8(code))
+        i += 6
+      } else {
         // Not four hex digits after the `u`: the escape is broken, and copying it
         // through unchanged is the reading that loses nothing.
         parts.push("\\u")
         i += 2
-      } else {
-        parts.push(jsonUtf8(code))
-        i += 6
       }
     } else if (letter === 0) {
+      // A NUL after the backslash: the backslash stands for itself, as a
+      // trailing one does, and the NUL is read next as a byte of its own.
       parts.push("\\")
       i += 1
     } else {
@@ -537,12 +569,20 @@ const jsonNameHas = (name: string, j: i32, code: i32): boolean =>
 const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean => {
   // `jsonUnescape`'s guard, for the same reason: every caller passes the
   // inside of a key `jsonReadMember` found with `jsonEndOfString`.
-  if (at < 0 || end > toI32(text.length)) {
+  if (at < 0 || end < 0 || end > toI32(text.length)) {
     return false
   }
+  const nameLength: i32 = toI32(name.length)
   let i: i32 = at
   let j: i32 = 0
   while (i < end) {
+    // Every step below matches at least one more byte of `name`, so a `j`
+    // already at its end is a mismatch whatever comes next. `j >= 0` always
+    // holds and is spelled out for the bounds proof, as is the test, which
+    // the `jsonNameHas` below would answer the same way.
+    if (j < 0 || j >= nameLength) {
+      return false
+    }
     const code: i32 = toI32(text.charCodeAt(i))
     if (code !== JSON_BACKSLASH) {
       if (!jsonNameHas(name, j, code)) {
@@ -552,11 +592,26 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
       j += 1
       continue
     }
-    const letter: i32 = i + 1 < end ? toI32(text.charCodeAt(i + 1)) : 0
+    // A backslash with no letter after it is one byte of the literal, and
+    // stands for itself.
+    if (i + 1 >= end) {
+      if (!jsonNameHas(name, j, JSON_BACKSLASH)) {
+        return false
+      }
+      i += 1
+      j += 1
+      continue
+    }
+    const letter: i32 = toI32(text.charCodeAt(i + 1))
     if (letter === JSON_LETTER_U) {
-      const point: i32 = jsonHex4(text, i + 2, end)
-      if (point < 0) {
-        if (!jsonNameHas(name, j, JSON_BACKSLASH) || !jsonNameHas(name, j + 1, JSON_LETTER_U)) {
+      // `jsonUnescape`'s reading of a `\u`, and its test of the room.
+      const point: i32 = i < end - 5 ? jsonHex4(text, i + 2, end) : -1
+      if (point < 0 || i >= end - 5) {
+        if (
+          j >= nameLength - 1 ||
+          !jsonNameHas(name, j, JSON_BACKSLASH) ||
+          !jsonNameHas(name, j + 1, JSON_LETTER_U)
+        ) {
           return false
         }
         i += 2
@@ -564,15 +619,13 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
         continue
       }
       const width: i32 = jsonUtf8Width(point)
-      let k: i32 = 0
-      while (k < width) {
-        if (!jsonNameHas(name, j + k, jsonUtf8Byte(point, width, k))) {
+      for (let k: i32 = 0; k < width; k += 1) {
+        if (j >= nameLength || !jsonNameHas(name, j, jsonUtf8Byte(point, width, k))) {
           return false
         }
-        k += 1
+        j += 1
       }
       i += 6
-      j += width
       continue
     }
     // Every other escape decodes to one byte.
@@ -593,9 +646,11 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
     if (!jsonNameHas(name, j, decoded)) {
       return false
     }
-    // A backslash with no letter after it is one byte of the literal and every
-    // other escape two. The steps are constants rather than a variable because
-    // a cursor moved by a variable is one the bounds proof stops following.
+    // A NUL after the backslash leaves the backslash standing for itself and
+    // is read next as a byte of its own, so that step is one byte and every
+    // other escape's two. The steps are constants rather than a variable
+    // because a cursor moved by a variable is one the bounds proof stops
+    // following.
     if (letter === 0) {
       i += 1
     } else {
@@ -603,7 +658,7 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
     }
     j += 1
   }
-  return j === toI32(name.length)
+  return j === nameLength
 }
 
 /**
@@ -638,7 +693,9 @@ class JsonMember {
 const jsonFirstKey = (object: string): i32 => {
   const length: i32 = toI32(object.length)
   const i: i32 = jsonSkipBlank(object, 0)
-  if (i >= length || toI32(object.charCodeAt(i)) !== JSON_OPEN_BRACE) {
+  // `i < 0` never holds, and is tested for the bounds proof, which does not
+  // look inside `jsonSkipBlank`.
+  if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_OPEN_BRACE) {
     return -1
   }
   return jsonSkipBlank(object, i + 1)
@@ -699,12 +756,18 @@ const jsonValueText = (object: string, member: JsonMember): string => {
   const valueEnd: i32 = member.valueEnd
   // `jsonReadMember` only fills in a value `jsonEndOfValue` ended, which starts
   // inside the object and never ends past it, so this changes no answer: it is
-  // the range the value's first byte and its `substring` are proved in.
-  if (valueAt < 0 || valueAt >= valueEnd || valueEnd > toI32(object.length)) {
+  // the range the value's first byte and its `substring` are proved in. The
+  // proof reads `valueAt < valueEnd` against the length only once the length
+  // test has passed, hence the two `if`s.
+  if (valueAt < 0 || valueEnd > toI32(object.length)) {
+    return ""
+  }
+  if (valueAt >= valueEnd) {
     return ""
   }
   if (toI32(object.charCodeAt(valueAt)) === JSON_QUOTE) {
-    return jsonUnescape(object, valueAt + 1, valueEnd - 1)
+    // `valueEnd > valueAt >= 0`, so one before it cannot wrap.
+    return jsonUnescape(object, valueAt + 1, toI32(toU32(valueEnd) - 1))
   }
   return object.substring(valueAt, valueEnd)
 }
@@ -757,8 +820,8 @@ export const jsonField = (object: string, name: string): string | null => {
  *
  * The answer is a fresh array and the only allocation besides the values. Each
  * value is stored into it by a plain `values[k] = text` statement, and the
- * array is only stored into, tested and returned, so the values travel with the
- * array: the call lets nothing else out (LANGUAGE.md, "Memory model", a value
+ * array is only pushed and stored into, tested and returned, so the values
+ * travel with the array: the call lets nothing else out (LANGUAGE.md, "Memory model", a value
  * stored into an array that is returned with it). A loop calling this keeps its
  * per-pass release on a line older than the pass, as `jsonField`'s does, and a
  * `using a = arena()` block may hold the call.
@@ -774,10 +837,16 @@ export const jsonField = (object: string, name: string): string | null => {
  *   field is missing.
  */
 export const jsonFields = (object: string, names: string[]): (string | null)[] => {
-  const count: i32 = toI32(names.length)
-  const values: (string | null)[] = new Array<string | null>(count)
+  // Filled by `push` rather than sized by `new Array(n)`, whose `i32` length
+  // is checked for a negative count that `names.length` can never be.
+  const values: (string | null)[] = []
+  for (let k: i32 = 0; k < toI32(names.length); k += 1) {
+    values.push(null)
+  }
   const member: JsonMember = new JsonMember()
-  let missing: i32 = count
+  // Unsigned because it cannot wrap: it is counted down once per slot, when
+  // the slot goes from `null` to a value, which happens once at most.
+  let missing: u32 = toU32(names.length)
   let at: i32 = jsonFirstKey(object)
   while (missing > 0 && jsonReadMember(object, at, member)) {
     // A value is built once per member however many names it answers, and
@@ -890,17 +959,6 @@ const jsonHexByte = (nibble: i32): i32 =>
 /** Whether byte `code` of a string goes inside the quotes as itself: JSON escapes only `"`, `\` and the bytes below a space. */
 const jsonIsPlainByte = (code: i32): boolean =>
   code >= JSON_SPACE && code !== JSON_QUOTE && code !== JSON_BACKSLASH
-
-/**
- * How many bytes byte `code` of a string takes inside the quotes: itself, a
- * two-byte short escape, or the six bytes of `\u00xx`.
- */
-const jsonEscapedWidth = (code: i32): i32 => {
-  if (jsonIsPlainByte(code)) {
-    return 1
-  }
-  return jsonShortEscape(code) !== 0 ? 2 : 6
-}
 
 /**
  * A JSON text written into a byte buffer the caller owns: `buf[start ..)`,
@@ -1078,7 +1136,9 @@ export class JsonWriter {
    * @returns the byte count, `end - start`.
    */
   written(): i32 {
-    return this.end - this.start
+    // In u32: `end` never falls below `start`, so the difference is the
+    // count itself and fits an `i32`.
+    return toI32(toU32(this.end) - toU32(this.start))
   }
 
   /**
@@ -1202,15 +1262,19 @@ export class JsonWriter {
       this.afterKey ||
       !jsonWriterInObject(this) ||
       at < 0 ||
-      at > cap - sep - n
+      // In u32, which cannot wrap: `at` and `n` are at most `2^31 - 1` and
+      // `sep`, by the tests before it, at most 1.
+      toU32(at) + toU32(sep) + toU32(n) > toU32(cap)
     ) {
       this.key(name)
       return
     }
-    if (sep === JSON_WRITER_SEP_COMMA && at < cap) {
-      buf[at] = toU8(JSON_COMMA)
+    // The test above leaves `at` at most `cap - sep - n`, so the comma fits.
+    let j: i32 = at
+    if (sep === JSON_WRITER_SEP_COMMA && j < cap) {
+      buf[j] = toU8(JSON_COMMA)
+      j += 1
     }
-    let j: i32 = at + sep
     let k: i32 = 0
     while (k < n && j >= 0 && j < cap) {
       buf[j] = toU8(quoted.charCodeAt(k))
@@ -1392,7 +1456,7 @@ export class JsonWriter {
    * fragment the caller encoded already, such as a cached object. Nothing in
    * it is checked, so a fragment that is not one whole JSON value makes a
    * text that is not JSON either. The bytes are copied in one move
-   * (`copyBytes`), as if all were read before any was written, so a window
+   * (`tryCopyBytes`), as if all were read before any was written, so a window
    * of the writer's own buffer comes out as it was.
    * In an indented text the fragment goes in where a value would, after its
    * line break and indent, but its own bytes are not re-indented: an object
@@ -1419,8 +1483,14 @@ export class JsonWriter {
       this.failed = JSON_WRITE_FULL
       return
     }
-    copyBytes(buf, at, bytes, off, len)
-    this.end = at + len
+    // Both windows are checked above, so this copies; were one not, nothing
+    // is written and the writer stops as full.
+    if (!tryCopyBytes(buf, at, bytes, off, len)) {
+      this.failed = JSON_WRITE_FULL
+      return
+    }
+    // In u32, which cannot wrap: the test above keeps the sum within `buf`.
+    this.end = toI32(toU32(at) + toU32(len))
     jsonWriterValueDone(this)
   }
 }
@@ -1494,8 +1564,12 @@ const jsonWriterValueDone = (w: JsonWriter): void => {
 
 /** `beginObject` and `beginArray`: the opener, and a slot for the new container. */
 const jsonWriterOpen = (w: JsonWriter, object: boolean, opener: i32): void => {
-  if (w.failed === JSON_WRITE_OK && w.depth >= JSON_WRITER_MAX_DEPTH) {
-    w.failed = JSON_WRITE_TOO_DEEP
+  // A writer that has already failed writes nothing, deep or not.
+  const depth: i32 = w.depth
+  if (depth >= JSON_WRITER_MAX_DEPTH) {
+    if (w.failed === JSON_WRITE_OK) {
+      w.failed = JSON_WRITE_TOO_DEEP
+    }
     return
   }
   if (!jsonWriterValueDue(w) || !jsonWriterPutByte(w, opener)) {
@@ -1504,7 +1578,7 @@ const jsonWriterOpen = (w: JsonWriter, object: boolean, opener: i32): void => {
   const low: i32 = w.objectsLow
   w.objectsHigh = (w.objectsHigh << JSON_WRITER_BIT) | (low >>> JSON_WRITER_TOP_BIT)
   w.objectsLow = (low << JSON_WRITER_BIT) | (object ? JSON_WRITER_BIT : 0)
-  w.depth = w.depth + 1
+  w.depth = depth + 1
   w.sep = w.sep & JSON_WRITER_SEP_INDENTED
 }
 
@@ -1513,7 +1587,9 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
   if (w.failed !== JSON_WRITE_OK) {
     return
   }
-  if (w.depth === 0 || jsonWriterInObject(w) !== object) {
+  // `depth` is never negative; `<= 0` is `=== 0` in the form that bounds the step down.
+  const depth: i32 = w.depth
+  if (depth <= 0 || jsonWriterInObject(w) !== object) {
     w.failed = JSON_WRITE_UNBALANCED
     return
   }
@@ -1522,7 +1598,7 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
     return
   }
   if (jsonWriterPutByte(w, closer)) {
-    w.depth -= 1
+    w.depth = depth - 1
     const high: i32 = w.objectsHigh
     w.objectsLow = (w.objectsLow >>> JSON_WRITER_BIT) | ((high & JSON_WRITER_BIT) << JSON_WRITER_TOP_BIT)
     w.objectsHigh = high >>> JSON_WRITER_BIT
@@ -1539,12 +1615,13 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
  * stays `main`'s code and small enough for LLVM to inline into every `end*`.
  */
 const jsonWriterCloseIndented = (w: JsonWriter, object: boolean, closer: i32): void => {
+  const depth: i32 = w.depth
   if (
     w.failed === JSON_WRITE_OK &&
-    w.depth !== 0 &&
+    depth > 0 &&
     jsonWriterInObject(w) === object &&
     !w.afterKey &&
-    !jsonWriterIndented(w, w.depth - 1, "")
+    !jsonWriterIndented(w, depth - 1, "")
   ) {
     return
   }
@@ -1608,11 +1685,14 @@ const jsonWriterIndented = (w: JsonWriter, level: i32, name: string): boolean =>
   }
   const buf: u8[] = w.buf
   const at: i32 = w.end
-  const stop: i32 = at + 1 + w.indentWidth * level
-  if (at < 0 || stop > toI32(buf.length)) {
+  // In u32, which cannot wrap here: `at` is below the buffer's length, and
+  // `setIndent` and `JSON_WRITER_MAX_DEPTH` keep width and level small.
+  const end: u32 = toU32(at) + 1 + toU32(w.indentWidth) * toU32(level)
+  if (at < 0 || at >= toI32(buf.length) || end > toU32(buf.length)) {
     w.failed = JSON_WRITE_FULL
     return false
   }
+  const stop: i32 = toI32(end)
   buf[at] = toU8(JSON_NEWLINE)
   buf.fill(toU8(w.indentByte), at + 1, stop)
   w.end = stop
@@ -1650,11 +1730,14 @@ const jsonWriterBreakBeforeKey = (w: JsonWriter): boolean => {
   }
   const buf: u8[] = w.buf
   const at: i32 = w.end
-  const stop: i32 = at + 1 + w.indentWidth * w.depth
-  if (at < 0 || stop > toI32(buf.length)) {
+  // In u32, which cannot wrap here: `at` is below the buffer's length, and
+  // `setIndent` and `JSON_WRITER_MAX_DEPTH` keep width and level small.
+  const end: u32 = toU32(at) + 1 + toU32(w.indentWidth) * toU32(w.depth)
+  if (at < 0 || at >= toI32(buf.length) || end > toU32(buf.length)) {
     w.failed = JSON_WRITE_FULL
     return false
   }
+  const stop: i32 = toI32(end)
   buf[at] = toU8(JSON_NEWLINE)
   buf.fill(toU8(w.indentByte), at + 1, stop)
   w.end = stop
@@ -1673,12 +1756,13 @@ const jsonWriterPutText = (w: JsonWriter, text: string): boolean => {
     w.failed = JSON_WRITE_FULL
     return false
   }
-  for (let k: i32 = 0; k < n && at + k < toI32(buf.length); k += 1) {
-    if (at + k >= 0) {
-      buf[at + k] = toU8(text.charCodeAt(k))
-    }
+  // The test above leaves room for all `n` bytes, so `j` ends at `at + n`.
+  let j: i32 = at
+  for (let k: i32 = 0; k < n && j < toI32(buf.length); k += 1) {
+    buf[j] = toU8(text.charCodeAt(k))
+    j += 1
   }
-  w.end = at + n
+  w.end = j
   return true
 }
 
@@ -1720,7 +1804,7 @@ const jsonWriterPutString = (w: JsonWriter, s: string): boolean => {
     }
     const letter: i32 = jsonShortEscape(code)
     if (letter !== 0) {
-      if (at < 0 || at + 1 >= cap) {
+      if (at < 0 || at >= cap - 1) {
         w.failed = JSON_WRITE_FULL
         return false
       }
@@ -1729,7 +1813,7 @@ const jsonWriterPutString = (w: JsonWriter, s: string): boolean => {
       at += 2
       continue
     }
-    if (at < 0 || at + 5 >= cap) {
+    if (at < 0 || at >= cap - 5) {
       w.failed = JSON_WRITE_FULL
       return false
     }
@@ -1779,7 +1863,8 @@ const jsonWriterPutBytes = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boo
   }
   buf[at] = toU8(JSON_QUOTE)
   at += 1
-  const stop: i32 = off + len
+  // In u32, which cannot wrap: the caller checked the window lies inside `bytes`.
+  const stop: i32 = toI32(toU32(off) + toU32(len))
   for (let i: i32 = off; i >= 0 && i < stop && i < toI32(bytes.length); i += 1) {
     const code: i32 = toI32(bytes[i])
     if (jsonIsPlainByte(code)) {
@@ -1793,7 +1878,7 @@ const jsonWriterPutBytes = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boo
     }
     const letter: i32 = jsonShortEscape(code)
     if (letter !== 0) {
-      if (at < 0 || at + 1 >= cap) {
+      if (at < 0 || at >= cap - 1) {
         w.failed = JSON_WRITE_FULL
         return false
       }
@@ -1802,7 +1887,7 @@ const jsonWriterPutBytes = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boo
       at += 2
       continue
     }
-    if (at < 0 || at + 5 >= cap) {
+    if (at < 0 || at >= cap - 5) {
       w.failed = JSON_WRITE_FULL
       return false
     }
@@ -1840,18 +1925,25 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
   }
   buf[at] = toU8(JSON_QUOTE)
   at += 1
-  const stop: i32 = off + len
+  // In u32, which cannot wrap: the caller checked the window lies inside `bytes`.
+  const stop: i32 = toI32(toU32(off) + toU32(len))
   let i: i32 = off
   while (i >= 0 && i < stop && i < toI32(bytes.length)) {
     const run: i32 = skipJsonPlain(bytes, i, stop)
-    const count: i32 = run - i
+    // In u32, which cannot wrap: `skipJsonPlain` answers an index in
+    // `[i, stop]`, so the count is the run's length.
+    const count: i32 = toI32(toU32(run) - toU32(i))
     if (count > 0) {
       if (at > cap - count) {
         w.failed = JSON_WRITE_FULL
         return false
       }
-      copyBytes(buf, at, bytes, i, count)
-      at += count
+      if (!tryCopyBytes(buf, at, bytes, i, count)) {
+        w.failed = JSON_WRITE_FULL
+        return false
+      }
+      // In u32, which cannot wrap: the test above keeps the sum within `buf`.
+      at = toI32(toU32(at) + toU32(count))
       i = run
     }
     if (i < 0 || i >= stop || i >= toI32(bytes.length)) {
@@ -1861,7 +1953,7 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
     i += 1
     const letter: i32 = jsonShortEscape(code)
     if (letter !== 0) {
-      if (at < 0 || at + 1 >= cap) {
+      if (at < 0 || at >= cap - 1) {
         w.failed = JSON_WRITE_FULL
         return false
       }
@@ -1870,7 +1962,7 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
       at += 2
       continue
     }
-    if (at < 0 || at + 5 >= cap) {
+    if (at < 0 || at >= cap - 5) {
       w.failed = JSON_WRITE_FULL
       return false
     }
@@ -1882,7 +1974,10 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
     buf[at + 5] = toU8(jsonHexByte(code & 15))
     at += 6
   }
-  if (at >= cap) {
+  // `at < 0` never holds — the cursor only moves forward from `w.end` — and
+  // is tested because a cursor moved by a run's length is one the bounds
+  // proof stops following.
+  if (at < 0 || at >= cap) {
     w.failed = JSON_WRITE_FULL
     return false
   }
@@ -1896,81 +1991,96 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
  * negative, at the cursor; all of them or, with `JSON_WRITE_FULL`, none.
  *
  * The digits are counted first and then written right to left, straight into
- * the buffer. A negative `v` is never negated, so `-2147483648` needs no case
- * of its own: each step takes the remainder, which is zero or negative, and
- * divides what is left exactly. The exact division is also what keeps the
- * step the same under Node, where `/` does not truncate.
+ * the buffer, from `|v|` as a `u32`, which holds the magnitude of every `i32`:
+ * `-2147483648` needs no case of its own, and unsigned arithmetic cannot
+ * overflow. Each step divides exactly, after taking the remainder off, which
+ * keeps the step the same under Node, where `/` does not truncate.
  */
 const jsonWriterPutDigits = (w: JsonWriter, v: i32, suffix: i32): boolean => {
-  // Counted against powers of ten on `-|v|`, as `jsonWriterPutDigits64` counts.
-  const negative: i32 = v < 0 ? v : -v
+  const ten: u32 = 10
+  // `~v` is `-v - 1`, which is never negative for a negative `v`, so the
+  // magnitude is found without a wrap, the same natively and under Node.
+  let rest: u32 = v < 0 ? toU32(~v) + 1 : toU32(v)
   let digits: i32 = 1
-  let bound: i32 = -JSON_DECIMAL_BASE
-  while (digits < JSON_I32_DIGITS && negative <= bound) {
+  let bound: u32 = ten
+  while (digits < JSON_I32_DIGITS && rest >= bound) {
     digits += 1
     if (digits < JSON_I32_DIGITS) {
-      bound = bound * JSON_DECIMAL_BASE
+      bound = bound * ten
     }
   }
   const sign: i32 = v < 0 ? 1 : 0
-  let rest: i32 = v
   const extra: i32 = suffix >= 0 ? 1 : 0
   const buf: u8[] = w.buf
+  const cap: i32 = toI32(buf.length)
   const at: i32 = w.end
-  const width: i32 = sign + digits + extra
-  if (at < 0 || at > toI32(buf.length) - width) {
+  // In u32, as every sum with `width` below, which cannot wrap: `width` is
+  // at most 12 bytes and `at` below `2^31`.
+  const width: u32 = toU32(sign) + toU32(digits) + toU32(extra)
+  if (at < 0 || at >= cap || toU32(at) + width > toU32(cap)) {
     w.failed = JSON_WRITE_FULL
     return false
   }
   if (sign === 1) {
     buf[at] = toU8(JSON_MINUS)
   }
-  if (extra === 1 && at + width - 1 < toI32(buf.length) && at + width - 1 >= 0) {
-    buf[at + width - 1] = toU8(JSON_DIGIT_ZERO + suffix)
+  // The last byte of the number. The test above keeps every byte of it
+  // inside `buf`, so each `k` below is too, and the tests of `k` in the loop
+  // always hold.
+  let k: i32 = toI32(toU32(at) + width - 1)
+  if (extra === 1 && k >= 0 && k < toI32(buf.length)) {
+    buf[k] = toU8(toU32(JSON_DIGIT_ZERO) + toU32(suffix))
+    k -= 1
   }
-  for (let k: i32 = at + sign + digits - 1; k >= at + sign && k >= 0 && k < toI32(buf.length); k -= 1) {
-    const digit: i32 = rest % JSON_DECIMAL_BASE
-    buf[k] = toU8(JSON_DIGIT_ZERO + (digit < 0 ? -digit : digit))
-    rest = (rest - digit) / JSON_DECIMAL_BASE
+  for (let left: i32 = digits; left > 0 && k >= 0 && k < toI32(buf.length); left -= 1) {
+    const digit: u32 = rest % ten
+    buf[k] = toU8(toU32(JSON_DIGIT_ZERO) + digit)
+    rest = (rest - digit) / ten
+    k -= 1
   }
-  w.end = at + width
+  w.end = toI32(toU32(at) + width)
   return true
 }
 
-/** `jsonWriterPutDigits` in 64 bits, for `i64`, whose minimum likewise needs no case of its own. */
+/** `jsonWriterPutDigits` in 64 bits, for `i64`, from `|v|` as a `u64`, which likewise holds every magnitude. */
 const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
-  // Built with `toI64`: under Node an `i64` is a BigInt, and a bare `10` would
+  // Built with `toU64`: under Node a `u64` is a BigInt, and a bare `10` would
   // stay a number that `%` and `/` refuse to mix with one.
-  // The digits are counted against powers of ten on `-|v|`, which every `i64`
-  // has, so the count costs a compare and a multiply per digit, not a divide.
-  const ten: i64 = toI64(10)
-  const negative: i64 = v < 0 ? v : -v
+  // The digits are counted against powers of ten, so the count costs a
+  // compare and a multiply per digit, not a divide.
+  const ten: u64 = toU64(10)
+  // `~v` is `-v - 1`, never negative for a negative `v`: no wrap, as above.
+  let rest: u64 = v < 0 ? toU64(~v) + toU64(1) : toU64(v)
   let digits: i32 = 1
-  let bound: i64 = -ten
-  while (digits < JSON_I64_DIGITS && negative <= bound) {
+  let bound: u64 = ten
+  while (digits < JSON_I64_DIGITS && rest >= bound) {
     digits += 1
     if (digits < JSON_I64_DIGITS) {
       bound = bound * ten
     }
   }
   const sign: i32 = v < 0 ? 1 : 0
-  let rest: i64 = v
   const buf: u8[] = w.buf
+  const cap: i32 = toI32(buf.length)
   const at: i32 = w.end
-  const width: i32 = sign + digits
-  if (at < 0 || at > toI32(buf.length) - width) {
+  // In u32, as `jsonWriterPutDigits` sums it: at most 20 bytes.
+  const width: u32 = toU32(sign) + toU32(digits)
+  if (at < 0 || at >= cap || toU32(at) + width > toU32(cap)) {
     w.failed = JSON_WRITE_FULL
     return false
   }
   if (sign === 1) {
     buf[at] = toU8(JSON_MINUS)
   }
-  for (let k: i32 = at + width - 1; k >= at + sign && k >= 0 && k < toI32(buf.length); k -= 1) {
-    const digit: i32 = toI32(rest % ten)
-    buf[k] = toU8(JSON_DIGIT_ZERO + (digit < 0 ? -digit : digit))
-    rest = rest / ten
+  // The last byte of the number, as `jsonWriterPutDigits` finds it.
+  let k: i32 = toI32(toU32(at) + width - 1)
+  for (let left: i32 = digits; left > 0 && k >= 0 && k < toI32(buf.length); left -= 1) {
+    const digit: u64 = rest % ten
+    buf[k] = toU8(toU32(JSON_DIGIT_ZERO) + toU32(digit))
+    rest = (rest - digit) / ten
+    k -= 1
   }
-  w.end = at + width
+  w.end = toI32(toU32(at) + width)
   return true
 }
 
@@ -1998,10 +2108,13 @@ const jsonPutF64Walk = (buf: u8[], at: i32, v: f64): i32 => {
   if (at < 0 || at > toI32(buf.length) - n) {
     return -1
   }
-  for (let k: i32 = 0; k < n && at + k < toI32(buf.length); k += 1) {
-    buf[at + k] = toU8(text.charCodeAt(k))
+  // The test above leaves room for all `n` bytes, so `j` ends at `at + n`.
+  let j: i32 = at
+  for (let k: i32 = 0; k < n && j < toI32(buf.length); k += 1) {
+    buf[j] = toU8(text.charCodeAt(k))
+    j += 1
   }
-  return at + n
+  return j
 }
 
 /** The digits `${v}` spells for a finite `v`, at the cursor; all of them or, with `JSON_WRITE_FULL`, none. */
@@ -2017,23 +2130,45 @@ const jsonWriterPutF64 = (w: JsonWriter, v: f64): boolean => {
 
 /**
  * `s` as `JSON.stringify(s)` writes it — quoted, with the escapes
- * `JsonWriter.string` writes — as a string. A thin layer on the writer: it
- * sizes a buffer to fit exactly, writes into it and reads it back. A string
- * with nothing to escape skips the writer and is only quoted.
+ * `JsonWriter.string` writes — as a string. A string with nothing to escape
+ * is only quoted; otherwise the runs between escapes are copied out whole and
+ * joined with the escapes.
  *
  * @param s - the text to quote.
  * @returns the quoted, escaped text.
  */
 export const jsonStringifyString = (s: string): string => {
   const n: i32 = toI32(s.length)
-  let width: i32 = 2
+  const parts: string[] = ['"']
+  // The first byte of the plain run not yet copied into `parts`.
+  let run: i32 = 0
   for (let i: i32 = 0; i < n; i += 1) {
-    width += jsonEscapedWidth(toI32(s.charCodeAt(i)))
+    const code: i32 = toI32(s.charCodeAt(i))
+    if (jsonIsPlainByte(code)) {
+      continue
+    }
+    // `run === i` is an escape straight after another, and the empty run adds
+    // nothing. `run >= 0` always holds and is spelled out because `run` is
+    // reassigned in the loop, where the bounds proof stops following it.
+    if (run >= 0 && run < i) {
+      parts.push(s.substring(run, i))
+    }
+    const letter: i32 = jsonShortEscape(code)
+    if (letter !== 0) {
+      parts.push(`\\${String.fromCharCode(letter)}`)
+    } else {
+      const high: string = String.fromCharCode(jsonHexByte(code >> 4))
+      const low: string = String.fromCharCode(jsonHexByte(code & 15))
+      parts.push(`\\u00${high}${low}`)
+    }
+    run = i + 1
   }
-  if (width === n + 2) {
+  if (run === 0) {
     return `"${s}"`
   }
-  const w: JsonWriter = new JsonWriter(new Array<u8>(width), 0)
-  w.string(s)
-  return w.text()
+  if (run >= 0 && run < n) {
+    parts.push(s.substring(run, n))
+  }
+  parts.push('"')
+  return parts.join("")
 }

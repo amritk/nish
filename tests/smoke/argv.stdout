@@ -1,0 +1,5 @@
+program: named, 3 argument(s)
+  1: 3 -> 3
+  2: 4 -> 4
+  3: five -> not a number
+sum of the integers: 7

@@ -60,10 +60,22 @@ returns `u8[] | null`, except chacha20QuarterRound, which works on the
 `u32[]` ChaCha state and returns `u32[] | null`; the properties test null
 only where they say so.
 
-The quarter-round vectors of Sections 2.1.1 and 2.2.1 are vector rows over
-the `u32[]` state. Fidelity holds their state words to the RFC; their word
-positions (0, 1, 2, 3 and 2, 7, 8, 13) are printed only in prose, under no
-label, so `spec check` reports those as not checked against the RFC.
+Every test vector of Sections 2.1.1 to 2.8.2 and Appendix A.1 to A.5 is a
+row, and each A.1 to A.4 row cites its one `Test Vector #N`. The quarter-round
+rows of Sections 2.1.1 and 2.2.1 are over the `u32[]` state; fidelity holds
+their state words to the RFC, but not their four word positions, which
+`spec check` reports as not checked against the RFC:
+
+- Section 2.1.1 runs the quarter round on four numbers `a`, `b`, `c` and
+  `d` and prints no positions at all; 0, 1, 2 and 3 place those numbers in
+  the state chacha20QuarterRound takes, and the module exports no
+  quarter round on four bare words.
+- Section 2.2.1 prints 2, 7, 8 and 13 only in prose and in the line
+  `After applying QUARTERROUND(2, 7, 8, 13)` above the result. vector
+  0.6.0 cannot cite them: a label may hold a joined group with commas only
+  as an alias after `, `, so that line cannot be written as the result's
+  label, and a call label pairs an integer only by the name printed before
+  it (`c=1`), where these are printed bare.
 
 # Interface
 

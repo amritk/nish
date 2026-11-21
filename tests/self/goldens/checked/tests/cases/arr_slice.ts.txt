@@ -12,11 +12,12 @@ function map<i32, string, (x) => ...>(xs: readonly i32[], f: void): string[] -> 
   local +2:12 i: i32 (let)
   callee +3:14 (x) => ... -> @show$arrow0
 function sliceAll<i32>(xs: readonly i32[]): i32[] -> @nish.sliceAll$i32 [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.slice$i32
-  pointer xs: size=0 writesThrough=false captured=false passedTo=nish.slice$i32#0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:55 slice<i32> -> @nish.slice$i32
+  local +0:9 out: i32[] (const)
+  local +1:12 i: i32 (let)
 function sliceFrom<i32>(xs: readonly i32[], start: i32): i32[] -> @nish.sliceFrom$i32 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: start

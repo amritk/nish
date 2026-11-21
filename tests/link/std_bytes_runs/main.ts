@@ -1,8 +1,9 @@
 // `nish/bytes`'s runs and `copyBytes`: natively each run is a runtime kernel
 // and the copy one `llvm.memmove`, so every answer here is the kernel's, held
 // to the walk Node runs. Runs are long enough to cross the 16- and 32-byte
-// blocks, every clamp is taken, and both overlapping copies are made.
-import { copyBytes, skipBlank, skipDigits, skipJsonPlain, skipJsonText } from "nish/bytes"
+// blocks, every clamp is taken, and both overlapping copies are made, by
+// `copyBytes` and by `tryCopyBytes`, whose refused ranges write nothing.
+import { copyBytes, skipBlank, skipDigits, skipJsonPlain, skipJsonText, tryCopyBytes } from "nish/bytes"
 
 /** The bytes of `b` in decimal, a space between each. */
 const spaced = (b: u8[]): string => {
@@ -104,5 +105,22 @@ export const main = (): i32 => {
   console.log(`copy down: ${spaced(down)}`)
   copyBytes(down, 8, src, 8, 0)
   console.log(`copy none: ${spaced(down)}`)
+
+  // tryCopyBytes: the same copies answer true; each range copyBytes would
+  // panic on answers false and leaves `dst` as it was.
+  const t: u8[] = [toU8(1), toU8(2), toU8(3), toU8(4), toU8(5), toU8(6), toU8(7), toU8(8)]
+  const upOk: boolean = tryCopyBytes(t, 2, t, 0, 6)
+  console.log(`try up: ${upOk} ${spaced(t)}`)
+  const downOk: boolean = tryCopyBytes(t, 0, t, 2, 6)
+  console.log(`try down: ${downOk} ${spaced(t)}`)
+  const refused: boolean[] = [
+    tryCopyBytes(t, 3, src, 0, 6),
+    tryCopyBytes(t, 0, src, 4, 5),
+    tryCopyBytes(t, -1, src, 0, 1),
+    tryCopyBytes(t, 0, src, -1, 1),
+    tryCopyBytes(t, 0, src, 0, -1),
+    tryCopyBytes(t, 2147483647, src, 0, 2),
+  ]
+  console.log(`try refused: ${refused[0]} ${refused[1]} ${refused[2]} ${refused[3]} ${refused[4]} ${refused[5]} ${spaced(t)}`)
   return 0
 }

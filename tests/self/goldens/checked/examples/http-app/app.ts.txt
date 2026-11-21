@@ -55,7 +55,7 @@ function configure(args: string[]): Config -> @configure [exported]
   callee +16:55 decimal -> @decimal
   callee +17:21 decimal -> @decimal
 function writeNote(w: JsonWriter, id: i32, text: string): void -> @writeNote
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginObject
   escaping: id text
   calls: nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.string

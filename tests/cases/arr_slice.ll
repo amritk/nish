@@ -472,11 +472,77 @@ for.end:
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.sliceAll$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %2 = trunc i64 %1 to i32
-  %3 = call %struct.nish_array* @nish.slice$i32(%struct.nish_array* %xs, i32 0, i32 %2)
-  ret %struct.nish_array* %3
+  %out.addr = alloca %struct.nish_array*, align 8
+  %i.addr = alloca i32, align 4
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 0, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 0, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* null, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = icmp sge i32 %5, 0
+  br i1 %6, label %land.rhs, label %land.end
+
+land.rhs:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %9 = load i64, i64* %8, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %10 = trunc i64 %9 to i32
+  %11 = icmp slt i32 %7, %10
+  br label %land.end
+
+land.end:
+  %12 = phi i1 [ false, %for.cond ], [ %11, %land.rhs ]
+  br i1 %12, label %for.body, label %for.end
+
+for.body:
+  %13 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = sext i32 %14 to i64
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %18 = bitcast i8* %17 to i32*
+  %19 = getelementptr inbounds i32, i32* %18, i64 %15
+  %20 = load i32, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 0
+  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 1
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %25 = icmp eq i64 %22, %24
+  br i1 %25, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %13, i64 4)
+  br label %push.store
+
+push.store:
+  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2
+  %27 = load i8*, i8** %26, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %28 = bitcast i8* %27 to i32*
+  %29 = getelementptr inbounds i32, i32* %28, i64 %22
+  store i32 %20, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  %30 = add i64 %22, 1
+  store i64 %30, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %31 = trunc i64 %30 to i32
+  br label %for.inc
+
+for.inc:
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = add nsw i32 %32, 1
+  store i32 %33, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %34 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  ret %struct.nish_array* %34
 }
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.sliceFrom$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %start) #0 {

@@ -64,13 +64,7 @@ Out of scope: hmacSha384Verify, an API RFC 4231 does not specify, since it defin
 
 Out of scope: hmacSha512Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)
 
-Out of scope: hmacKeyedVerify, the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made")
-
-Out of scope: hmacSha256Secret, takes the key as a `Secret<u8[]>`, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's `nish:secret` tests
-
-Out of scope: hmacSha384Secret, takes the key as a `Secret<u8[]>`, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's `nish:secret` tests
-
-Out of scope: hmacSha512Secret, takes the key as a `Secret<u8[]>`, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's `nish:secret` tests
+Out of scope: hmacKeyedVerify, the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made"); its message is a (data, off, len) `/* window */`, but its first parameter is the class HmacKey, which vector 0.6.0 refuses in a ts-interface block ("`HmacKey` is not a ts-interface type; use u8[], string, boolean, i8, i16, i32, i64, u8, u16, u32, u64, f64, Secret<u8[]>, u16[], u32[], u64[], each optionally `| null`"), and its tag is a (tag, tagAt) pair read in place, which neither a window nor an `/* out CAP */` write declares
 
 Out of scope: pbkdf2HmacSha256, PBKDF2 (RFC 8018), which uses HMAC-SHA-256 as its PRF but is a different function, with its own vectors and none in RFC 4231
 
@@ -86,7 +80,7 @@ Out of scope: HmacSha384Scratch, a stateful, reusable form of the same functions
 
 Out of scope: HmacKey, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
 
-Out of scope: hmacKeyedInto, writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt
+Out of scope: hmacKeyedInto, writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt; its message is a `/* window */` and its (out, at) an `/* out CAP */` write, but its first parameter is the class HmacKey, which vector 0.6.0 refuses in a ts-interface block (as for hmacKeyedVerify), and it returns void where an `/* out CAP */` write returns the end offset
 
 Out of scope: hmacCopySha256, copies a hasher's state into another, a helper for the stateful classes that computes no HMAC
 
@@ -105,6 +99,9 @@ Out of scope: HMAC_SHA512, a constant that names a hash for HmacKey, not a funct
 export const hmacSha256 = (key: u8[], data: u8[]): u8[]
 export const hmacSha384 = (key: u8[], data: u8[]): u8[]
 export const hmacSha512 = (key: u8[], data: u8[]): u8[]
+export const hmacSha256Secret = (key: Secret<u8[]>, data: u8[]): u8[]
+export const hmacSha384Secret = (key: Secret<u8[]>, data: u8[]): u8[]
+export const hmacSha512Secret = (key: Secret<u8[]>, data: u8[]): u8[]
 // module: nish/crypto/sha256
 export const sha256 = (data: u8[]): u8[]
 // module: nish/crypto/sha512
@@ -132,6 +129,11 @@ forall (key: u8[] /* 0..64 */, text: u8[] /* 0..200 */) => hmacSha256(key, text)
 forall (key: u8[] /* 65..300 */, text: u8[] /* 0..100 */) => hmacSha256(key, text) === hmacSha256(sha256(key), text)
 ~~~
 
+~~~ ts-property
+// P-SECRET-256 covers R-HMAC-SHA256 — hmacSha256Secret, given the key as a Secret, gives the tag hmacSha256 gives
+forall (key: u8[] /* 0..300 */, text: u8[] /* 0..200 */) => hmacSha256Secret(key, text) === hmacSha256(key, text)
+~~~
+
 > HMAC-SHA-384 is the realization of the HMAC message authentication code using the SHA-384 hash function
 > {{Section 1 of RFC4231}}
 {: #R-HMAC-SHA384 gi="blockquote"}
@@ -149,6 +151,11 @@ forall (key: u8[] /* 0..128 */, text: u8[] /* 0..300 */) => hmacSha384(key, text
 forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha384(key, text) === hmacSha384(sha384(key), text)
 ~~~
 
+~~~ ts-property
+// P-SECRET-384 covers R-HMAC-SHA384 — hmacSha384Secret, given the key as a Secret, gives the tag hmacSha384 gives
+forall (key: u8[] /* 0..400 */, text: u8[] /* 0..200 */) => hmacSha384Secret(key, text) === hmacSha384(key, text)
+~~~
+
 > HMAC-SHA-512 is the realization of the HMAC message authentication code using the SHA-512 hash function
 > {{Section 1 of RFC4231}}
 {: #R-HMAC-SHA512 gi="blockquote"}
@@ -164,6 +171,11 @@ forall (key: u8[] /* 0..128 */, text: u8[] /* 0..300 */) => hmacSha512(key, text
 ~~~ ts-property
 // P-LONG-KEY-512 covers R-HMAC-SHA512 — a key longer than 128 bytes gives the tag of its SHA-512 hash
 forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha512(key, text) === hmacSha512(sha512(key), text)
+~~~
+
+~~~ ts-property
+// P-SECRET-512 covers R-HMAC-SHA512 — hmacSha512Secret, given the key as a Secret, gives the tag hmacSha512 gives
+forall (key: u8[] /* 0..400 */, text: u8[] /* 0..200 */) => hmacSha512Secret(key, text) === hmacSha512(key, text)
 ~~~
 
 ~~~ ts-property

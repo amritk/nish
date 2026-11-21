@@ -1,0 +1,7 @@
+start  {"name":"Ada","email":"ada@example.com","address":null,"tags":["math","engines"],"age":36}
+patch  {"age":37}  ->  {"name":"Ada","email":"ada@example.com","address":null,"tags":["math","engines"],"age":37}
+patch  {"email":null,"tags":["poetry"]}  ->  {"name":"Ada","email":null,"address":null,"tags":["poetry"],"age":37}
+patch  {"address":{"city":"London"}}  ->  {"name":"Ada","email":null,"address":{"street":"","city":"London"},"tags":["poetry"],"age":37}
+patch  {"address":{"street":"St James's Square"}}  ->  {"name":"Ada","email":null,"address":{"street":"St James's Square","city":"London"},"tags":["poetry"],"age":37}
+patch  {"address":null}  ->  {"name":"Ada","email":null,"address":null,"tags":["poetry"],"age":37}
+patch  {"name":null}  ->  refused (-20)

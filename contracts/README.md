@@ -58,8 +58,25 @@ section does not print cites it apart, `{{Section 7.1 of RFC8032}}; result
 marked `slow` is emitted skipped unless `spec emit` is given `--slow`, and the
 committed tests are emitted without it: run one by hand with `spec run --slow`;
 `node tests/run.js spec` prints a SKIP line for each clause a test skipped, and
-fails a test that passed no clause. The syntax: vector's
-`docs/guide/guides/writing-a-spec.md`, in `build/vector/`.
+fails a test that passed no clause. A vector whose `Source` cell is a single
+code span is a `command` source: `spec check --run-sources` runs it, with the
+table's section for the args, and compares its stdout with the expected value,
+which may be bytes, a string, an integer, a bool or `null`; otherwise it is
+reported as not run, never as passed. A `u8[]` parameter followed by a
+`/* window */` comment stands for a `(buf, off, len)` triple, and one followed
+by `/* out CAP */` for an `(out, at)` buffer whose `end` is the result, declared
+as bytes, where `CAP` is a capacity expression that may read `<param>.length`
+of a `u8[]` parameter; only the Nish emitter expands either, and the others
+refuse the function. In a property, `le16`, `le32`, `le64`, `be16`, `be32` and
+`be64` write an integer as 2, 4 or 8 bytes; `leU16`, `leU32`, `leU64`, `beU16`,
+`beU32`, `beU64`, `leI32`, `leI64`, `beI32` and `beI64` read exactly that many
+bytes back (there is no 16-bit signed read). `Secret<u8[]>` is not a `forall`
+type: a property passes `u8[]` to a `Secret<u8[]>` parameter, and the test wraps
+it in `secret()` and exposes a `Secret` result. A section that prints several
+cases under headings such as RFC 6979's `With SHA-256, message = "sample":`
+places each value by its heading, and a label that wraps across lines is read
+as one line. The
+syntax: vector's `docs/guide/guides/writing-a-spec.md`, in `build/vector/`.
 
 A spec that cites a reference not yet in `.refcache/` fails to build: run
 `bash scripts/build-spec.sh --fetch specs/<name>.md` once and commit the new

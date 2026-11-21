@@ -140,13 +140,12 @@ const remI32 = (a: i32, b: i32): i32 => {
   return a % b;
 };
 
-/** `n` as 8 little-endian bytes. */
-const le64 = (n: i32): u8[] => {
+/** The low `w` bytes of `n`'s bits, little-endian, or big-endian when `be`. */
+const intBytes = (n: u64, w: i32, be: boolean): u8[] => {
   const out: u8[] = [];
-  let v: i64 = toI64(n);
-  for (let i: i32 = 0; i < 8; i += 1) {
-    out.push(toU8(toI32(v & toI64(255))));
-    v = v >> toI64(8);
+  for (let i: i32 = 0; i < w; i += 1) {
+    const k: i32 = be ? w - 1 - i : i;
+    out.push(toU8(n >> toU64(k * 8)));
   }
   return out;
 };
@@ -1559,7 +1558,7 @@ const clause_P_TAG_IS_POLY1305 = (t: Suite): boolean => {
     const u: Unwrap = new Unwrap();
     const v_sealed: u8[] = u.get(chacha20Poly1305Seal(v_key, v_nonce, v_aad, v_pt));
     const v_ct: u8[] = sliceBytes(v_sealed, 0, toI32(v_pt.length));
-    const holds: boolean = bytesEq(sliceBytes(v_sealed, toI32(v_pt.length), wrappingAdd(toI32(v_pt.length), 16)), u.get(poly1305(u.get(poly1305KeyGen(v_key, v_nonce)), concatBytes(concatBytes(concatBytes(concatBytes(concatBytes(v_aad, fillBytes(0, remI32(wrappingSub(16, remI32(toI32(v_aad.length), 16)), 16))), v_ct), fillBytes(0, remI32(wrappingSub(16, remI32(toI32(v_ct.length), 16)), 16))), le64(toI32(v_aad.length))), le64(toI32(v_pt.length))))));
+    const holds: boolean = bytesEq(sliceBytes(v_sealed, toI32(v_pt.length), wrappingAdd(toI32(v_pt.length), 16)), u.get(poly1305(u.get(poly1305KeyGen(v_key, v_nonce)), concatBytes(concatBytes(concatBytes(concatBytes(concatBytes(v_aad, fillBytes(0, remI32(wrappingSub(16, remI32(toI32(v_aad.length), 16)), 16))), v_ct), fillBytes(0, remI32(wrappingSub(16, remI32(toI32(v_ct.length), 16)), 16))), intBytes(toU64(toI32(v_aad.length)), 8, false)), intBytes(toU64(toI32(v_pt.length)), 8, false)))));
     if (u.sawNull || !holds) {
       let why: string = "the assertion is false";
       if (u.sawNull) {
