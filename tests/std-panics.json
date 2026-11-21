@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9751,
+  "total": 9796,
   "explicit": {
-    "kept": 418,
-    "toFix": 51
+    "kept": 424,
+    "toFix": 52
   },
   "modules": {
     "std/base64.ts": {
@@ -265,9 +265,9 @@
     "std/net/handler.ts": {
       "array-length": 14,
       "divide": 4,
-      "index": 76,
-      "overflow": 66,
-      "panic": 18,
+      "index": 80,
+      "overflow": 70,
+      "panic": 19,
       "pop": 1,
       "slice": 1
     },
@@ -279,22 +279,22 @@
       "pop": 6
     },
     "std/net/http-compress.ts": {
-      "array-length": 2,
+      "array-length": 3,
       "index": 9,
-      "overflow": 13,
-      "panic": 6
+      "overflow": 15,
+      "panic": 10
     },
     "std/net/http-fields.ts": {
       "index": 17,
       "overflow": 28
     },
     "std/net/http-server.ts": {
-      "array-length": 21,
-      "divide": 5,
-      "index": 186,
+      "array-length": 22,
+      "divide": 8,
+      "index": 193,
       "io-exit": 2,
-      "overflow": 162,
-      "panic": 46,
+      "overflow": 175,
+      "panic": 48,
       "pop": 2,
       "slice": 1
     },
@@ -338,7 +338,7 @@
       "array-length": 2,
       "divide": 2,
       "index": 10,
-      "overflow": 74,
+      "overflow": 77,
       "panic": 4
     },
     "std/net/http3-frame.ts": {
@@ -1449,6 +1449,21 @@
       "reason": "segment size must be above 0, as documented; the caller picks it"
     },
     {
+      "module": "std/net/http-compress.ts",
+      "function": "HttpBodyDecoder.constructor",
+      "reason": "limit must be at least 1, as documented; static configuration"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "HttpBodyDecoder.decode",
+      "reason": "coding must be gzip or deflate, which the caller reads from httpContentEncoding first, and the off/len window must lie inside src; the caller owns both"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "httpContentEncoding",
+      "reason": "the start/end window must lie inside buf, as documented; the caller computes it from its own parse"
+    },
+    {
       "module": "std/net/http-server.ts",
       "function": "HttpServer.carry",
       "reason": "a carrier refusal of body bytes beyond the declared length is an internal invariant after the caller's length checks"
@@ -1547,6 +1562,11 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServerRequest.checkParam",
       "reason": "param index k must be below the route's parameter count; the route pattern is static, so the caller controls it"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.consume",
+      "reason": "the request must be the program's and n within its bodyLength; a caller sequencing contract and a window the caller owns"
     },
     {
       "module": "std/net/http1-client-codec.ts",

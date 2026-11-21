@@ -381,6 +381,10 @@ export class Http2Stream {
    * @internal Read by `Http2Connection` to answer H2_WINDOW; not for callers.
    */
   blocked: boolean = false
+  /** `hold` marked the stream: its window is credited by `consumeBody`, not as its DATA arrives. */
+  held: boolean = false
+  /** Body bytes of a held stream that arrived and that `consumeBody` has not credited yet. */
+  owed: i32 = 0
 }
 
 /** Whether `buf[off ..]` holds the preface. */
@@ -582,6 +586,8 @@ export class Http2Connection {
   resetByPeer: boolean = false
   /** The server's SETTINGS are not written yet: the first `holdOutput` writes them. */
   private prefaceOwed: boolean = false
+  /** A held stream's WINDOW_UPDATE did not fit in the output, so `next` or `settleCredit` sends it. */
+  private owing: boolean = false
 
   /**
    * A connection under `config`, owing its SETTINGS — and the WINDOW_UPDATE
@@ -1061,6 +1067,8 @@ export class Http2Connection {
         s.localEnded = false
         s.responded = false
         s.blocked = false
+        s.held = false
+        s.owed = 0
         this.active = this.active + 1
         return s
       }
@@ -1206,14 +1214,56 @@ export class Http2Connection {
       this.recvWindow = this.recvWindow + this.recvUnacked
       this.recvUnacked = 0
     }
-    if (s !== null && !s.remoteEnded) {
-      s.recvUnacked = s.recvUnacked + n
-      if (s.recvUnacked > 0 && s.recvUnacked >= this.config.initialWindowSize / 2) {
-        this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, s.id, s.recvUnacked))
-        s.recvWindow = s.recvWindow + toI64(s.recvUnacked)
-        s.recvUnacked = 0
+    if (s !== null) {
+      this.creditStream(s, n)
+    }
+  }
+
+  /**
+   * Hands `n` bytes back to `s`'s window when it is still open for
+   * receiving, with a WINDOW_UPDATE once half a window is owed. Answers
+   * false when that frame did not fit, and the bytes stay owed.
+   */
+  private creditStream(s: Http2Stream, n: i32): boolean {
+    if (s.remoteEnded) {
+      return true
+    }
+    s.recvUnacked = s.recvUnacked + n
+    if (s.recvUnacked > 0 && s.recvUnacked >= this.config.initialWindowSize / 2) {
+      if (!this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, s.id, s.recvUnacked))) {
+        this.owing = true
+        return false
+      }
+      s.recvWindow = s.recvWindow + toI64(s.recvUnacked)
+      s.recvUnacked = 0
+    }
+    return true
+  }
+
+  /** Sends the WINDOW_UPDATEs `consumeBody` owed when the output had no room for them. */
+  private settleOwed(): void {
+    this.owing = false
+    for (const s of this.streams) {
+      if (s.id !== 0 && s.held) {
+        this.creditStream(s, toI32(0))
       }
     }
+  }
+
+  /**
+   * Sends the WINDOW_UPDATEs `consumeBody` owed when the output had no room
+   * for them, for a caller that has just drained the output and may call
+   * `next` only once the peer sends more, which a peer at a closed window
+   * never does.
+   *
+   * @returns whether any were owed, so the output may have grown
+   */
+  settleCredit(): boolean {
+    if (!this.owing || this.state === H2_STATE_FAILED || this.room() < H2_CONTROL_RESERVE) {
+      return false
+    }
+    this.settleOwed()
+    return true
   }
 
   // ---- Reading ------------------------------------------------------------------
@@ -1233,6 +1283,9 @@ export class Http2Connection {
       }
       if (this.room() < H2_CONTROL_RESERVE) {
         return H2_NEED_MORE
+      }
+      if (this.owing) {
+        this.settleOwed()
       }
       const available: i32 = this.inputEnd - this.inputStart
       if (this.state === H2_STATE_PREFACE) {
@@ -1360,7 +1413,15 @@ export class Http2Connection {
     }
     s.recvWindow = s.recvWindow - toI64(size)
     s.received = received
-    this.credit(end ? null : s, size)
+    if (s.held && !end) {
+      // The connection takes the whole frame back on arrival, as for every
+      // stream; the stream only its padding, its body waiting for `consumeBody`.
+      this.credit(null, size)
+      this.creditStream(s, size - f.contentLength)
+      s.owed = s.owed + f.contentLength
+    } else {
+      this.credit(end ? null : s, size)
+    }
     this.stream = id
     this.endStream = end
     this.data = this.input
@@ -1921,6 +1982,57 @@ export class Http2Connection {
       this.localEnd(s)
     }
     return sent === 0 && len > 0 ? H2_AGAIN : sent
+  }
+
+  /**
+   * The window each stream this side opens advertises:
+   * `max(initialWindowSize, 65535)`, and so the most body a held stream can
+   * have unconsumed.
+   * @returns the stream receive window, in bytes
+   */
+  streamWindow(): i32 {
+    return toI32(this.localInitialWindow)
+  }
+
+  /**
+   * Holds back stream `id`'s window: from now on its DATA credits the
+   * connection's window on arrival, as every stream's does, but the
+   * stream's own only when `consumeBody` says the program read the bytes. A
+   * peer that sends past the window gets RST_STREAM FLOW_CONTROL_ERROR, so
+   * at most the stream's initial window is ever unconsumed.
+   *
+   * @param id the stream identifier
+   * @returns true, or false when no open stream has that identifier
+   */
+  hold(id: i32): boolean {
+    const s: Http2Stream | null = this.find(id)
+    if (s === null) {
+      return false
+    }
+    s.held = true
+    return true
+  }
+
+  /**
+   * Credits `n` bytes of held stream `id`'s body back to its window, with a
+   * WINDOW_UPDATE once half a window is owed. `n` is cut to what the stream
+   * owes, so a stream gets back no more than it was sent; nothing happens
+   * once the stream is closed, not held, or ended by the peer.
+   *
+   * @param id the stream identifier, held by `hold`
+   * @param n how many of its body bytes the program consumed
+   * @returns 0, or `H2_AGAIN` when the output has no room for the WINDOW_UPDATE yet; the connection sends it
+   *   from a later `next`
+   */
+  consumeBody(id: i32, n: i32): i32 {
+    const s: Http2Stream | null = this.find(id)
+    if (this.state === H2_STATE_FAILED || s === null || !s.held || n <= 0) {
+      return 0
+    }
+    const k: i32 = n < s.owed ? n : s.owed
+    s.owed = s.owed - k
+    this.room()
+    return this.creditStream(s, k) ? 0 : H2_AGAIN
   }
 
   /**

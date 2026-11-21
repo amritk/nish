@@ -361,6 +361,52 @@ a byte at a time (the BREACH attack). Compress responses that carry no secret,
 or none that sits beside attacker-controlled text; the record is
 [docs/security/compress.md](../../security/compress.md).
 
+## Compressed request bodies
+
+`HttpHandler` (`nish/net/handler`) decodes a request body sent with
+`Content-Encoding: gzip`, `x-gzip` or `deflate` before your program takes it.
+`req.body` then holds the decoded bytes, `req.bodyLength` their length, and
+`req.decodedFrom` the coding they came in (`HTTP_CODING_GZIP` or
+`HTTP_CODING_DEFLATE`; `HTTP_CODING_IDENTITY` for a body as it arrived).
+`deflate` is the zlib-wrapped stream RFC 9110 names; a raw deflate stream,
+with no zlib header, is answered `400 Bad Request`. The head is left as it
+came, so a decoded request still shows its `Content-Encoding` and its
+`Content-Length` (the encoded size): read `decodedFrom` and `bodyLength`, not
+the fields.
+
+The decoded body has a cap of its own, `HandlerLimits.maxDecoded`, one MiB by
+default, beside the cap on the bytes sent (`http.maxBody`). A few KB of gzip
+can inflate to gigabytes; a body that decodes past the cap is answered
+`413 Content Too Large` by the handler, and one that does not decode — a wrong
+CRC-32, a stream cut short, bytes that are not gzip at all — `400 Bad
+Request`. Your program never takes either, and the connection stays open for
+the next request.
+
+```ts
+const limits = new HandlerLimits();
+limits.maxDecoded = 262144; // 256 KiB decoded, at most
+// limits.maxDecoded = 0;   // or decode nothing: every body as it arrived
+```
+
+Any other coding (`br`, `zstd`), or two stacked (`gzip, gzip`), is not decoded:
+the body reaches your program as it arrived, with `decodedFrom`
+`HTTP_CODING_IDENTITY` and its `Content-Encoding` field in the head for you to
+read or refuse. Since a decoded request keeps that field too, a program that
+wants an unknown coding refused answers 415 itself when `decodedFrom` is
+`HTTP_CODING_IDENTITY` and `httpContentEncoding` on a `Content-Encoding`
+field gives anything but `HTTP_CODING_IDENTITY`. A field of only `identity`
+names no coding: that body is plain, so do not refuse it.
+
+Only `HttpHandler` decodes. `serve()` (`nish/net/serve`, HTTP/1.1) and
+`HttpServer` (`nish/net/http-server`, every version) hand a gzip body to your
+program compressed, as it arrived; their requests have no `decodedFrom`.
+
+To decode a body yourself, outside the handler, `HttpBodyDecoder` from
+`nish/net/http-compress` does what the handler does: `decode(coding, src, off,
+len)` writes into its `output` and answers the decoded length,
+`HTTP_DECODE_TOO_LARGE` past its limit or `HTTP_DECODE_MALFORMED`, and
+`httpContentEncoding` reads the coding from a field value.
+
 ## Checksums
 
 `nish/compress/checksum` gives CRC-32 (`Crc32`, whose eight lookup tables you
