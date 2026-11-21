@@ -198,6 +198,10 @@ while `server.pending(r)` is above a budget of its own and sends the rest on
 a later turn of its loop, so a slow client costs the server that budget, not
 the whole answer. Once the call is over, because the client hung up or the
 deadline passed, `send` returns `GRPC_ENDED` and `r` is the server's again.
+While a call is above its budget the program sends nothing, so it asks
+`server.hungUp(r)` and `grpc.expired(r)` itself on each turn and ends a call
+that answers yes with `finish`: past the deadline that answers
+`DEADLINE_EXCEEDED`, and for a client that hung up it gives `r` back.
 `finish(r, status, message)` ends a call with any status; `fail` on a call
 whose answer has begun does the same.
 
@@ -298,6 +302,12 @@ const pump = (grpc: GrpcServer, calls: Calls, k: i32): boolean => {
 // Sends `counts[k]` more replies while its queue is under `BUDGET`; true when its call is over.
 const feed = (grpc: GrpcServer, server: HttpServer, calls: Calls, k: i32): boolean => {
   const r = calls.counts[k];
+  // A client that stopped reading keeps the queue above `BUDGET`, so `send`
+  // would never be called to see it hang up or its deadline pass.
+  if (server.hungUp(r) || grpc.expired(r)) {
+    grpc.finish(r, GRPC_OK, "");
+    return true;
+  }
   while (calls.next[k] < calls.last[k] && server.pending(r) <= BUDGET) {
     calls.out.reset();
     calls.out.int32(1, calls.next[k]);

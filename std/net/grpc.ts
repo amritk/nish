@@ -196,6 +196,10 @@ export class GrpcServer {
   private starts: i32[]
   /** Per request index: where the last message ends. */
   private ends: i32[]
+  /** Per request index: the `since` of the request the call there was opened for. */
+  private sinces: i64[]
+  /** Per request index: the `stream` of the request the call there was opened for. */
+  private streams: i64[]
 
   /**
    * A gRPC reader and answerer over `server`. Panics on a limit outside its range.
@@ -238,6 +242,8 @@ export class GrpcServer {
     this.inBuf = []
     this.starts = []
     this.ends = []
+    this.sinces = []
+    this.streams = []
   }
 
   /**
@@ -630,6 +636,8 @@ export class GrpcServer {
       this.inBuf.push(false)
       this.starts.push(0)
       this.ends.push(0)
+      this.sinces.push(toI64(0))
+      this.streams.push(toI64(0))
     }
     this.states[i] = GRPC_OPEN
     this.readAt[i] = 0
@@ -638,13 +646,23 @@ export class GrpcServer {
     this.inBuf[i] = false
     this.starts[i] = 0
     this.ends[i] = 0
+    this.sinces[i] = r.since
+    this.streams[i] = r.stream
     return i
   }
 
-  /** `r`'s index when a call is open, begun or over there, or -1. */
+  /**
+   * `r`'s index when a call is open, begun or over there for this request, or -1.
+   * The façade reuses a request object and its index for a later request, so a
+   * call left there by an earlier one, told apart by its head's turn and its
+   * stream, is not `r`'s.
+   */
   private at(r: HttpServerRequest): i32 {
     const i: i32 = r.index
-    return i >= 0 && i < toI32(this.states.length) && this.states[i] !== GRPC_IDLE ? i : -1
+    if (i < 0 || i >= toI32(this.states.length) || this.states[i] === GRPC_IDLE) {
+      return -1
+    }
+    return this.sinces[i] === r.since && this.streams[i] === r.stream ? i : -1
   }
 
   /** `r`'s index once `call` or `open` read it; panics, naming `who`, on a request neither did. */
