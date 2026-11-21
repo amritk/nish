@@ -2727,15 +2727,18 @@ function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count:
   local +10:7 s: i32 (let)
   local +11:7 k: i32 (let)
 module std/net/http-compress.ts [package nish]
+import DEFLATE_ERR_OUTPUT_LIMIT from "nish/compress/deflate" -> const DEFLATE_ERR_OUTPUT_LIMIT
 import DEFLATE_FAST from "nish/compress/deflate" -> const DEFLATE_FAST
 import compressBound from "nish/compress/deflate" -> function @nish.compressBound
 import adler32 from "nish/compress/checksum" -> function @nish.adler32
 import GzipCompressor from "nish/compress/gzip" -> struct GzipCompressor
+import GzipDecompressor from "nish/compress/gzip" -> struct GzipDecompressor
 import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompressor
+import ZlibDecompressor from "nish/compress/zlib" -> struct ZlibDecompressor
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
-unsafe import 86:10 wrappingAdd from "nish:unsafe"
-unsafe call 599:26 wrappingAdd (node 2126)
-unsafe call 657:24 wrappingAdd (node 2387)
+unsafe import 87:10 wrappingAdd from "nish:unsafe"
+unsafe call 600:26 wrappingAdd (node 2134)
+unsafe call 658:24 wrappingAdd (node 2395)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]
@@ -2755,6 +2758,9 @@ const HTTP_DEFAULT_MSS: i32 = 1448 [exported]
 const HTTP1_GZIP_FIELD_BYTES: i32 = 24 [exported]
 const HTTP_ZLIB_SHORTER: i32 = 12
 const HTTP_Q_ONE: i32 = 1000
+const HTTP_DECODE_TOO_LARGE: i32 = -1 [exported]
+const HTTP_DECODE_MALFORMED: i32 = -2 [exported]
+const HTTP_DECODE_FIRST: i32 = 4096
 struct HttpCompressor (class) size=136 align=8 exported
   field gzip: GzipCompressor index=0 offset=0 readonly
   field fixed: GzipFixedCompressor index=1 offset=8 readonly
@@ -2792,6 +2798,13 @@ struct HttpCompressor (class) size=136 align=8 exported
   method addFields -> @nish.HttpCompressor.addFields
   method addVary -> @nish.HttpCompressor.addVary
   method identityFields -> @nish.HttpCompressor.identityFields
+struct HttpBodyDecoder (class) size=32 align=8 exported
+  field limit: i32 index=0 offset=0 readonly
+  field output: u8[] index=1 offset=8
+  field gunzip: GzipDecompressor index=2 offset=16 readonly
+  field unzlib: ZlibDecompressor index=3 offset=24 readonly
+  constructor -> @nish.HttpBodyDecoder.constructor
+  method decode -> @nish.HttpBodyDecoder.decode
 function httpSegments(bytes: i32, mss: i32): i32 -> @nish.httpSegments [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic nish_panic_overflow
@@ -3028,6 +3041,46 @@ function httpCompressorDefault(): HttpCompressor -> @nish.httpCompressorDefault 
   calls: nish.HttpCompressor.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
   callee +0:60 new HttpCompressor -> @nish.HttpCompressor.constructor
+function httpContentEncoding(buf: u8[], start: i32, end: i32): i32 -> @nish.httpContentEncoding [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: start
+  calls: nish.httpCodingChar nish.httpCodingIs nish.httpOws nish_panic
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.httpCodingIs#0 nish.httpCodingIs#0 nish.httpCodingIs#0 nish.httpCodingIs#0
+  stackSites=0 stackLocals=0
+  local +0:7 coding: i32 (let)
+  local +1:7 p: i32 (let)
+  callee +3:24 httpOws -> @nish.httpOws
+  local +9:11 codingStart: i32 (const)
+  callee +10:23 httpCodingChar -> @nish.httpCodingChar
+  local +13:11 codingEnd: i32 (const)
+  callee +14:23 httpOws -> @nish.httpOws
+  local +20:9 named: i32 (let)
+  callee +22:7 httpCodingIs -> @nish.httpCodingIs
+  callee +23:7 httpCodingIs -> @nish.httpCodingIs
+  callee +26:16 httpCodingIs -> @nish.httpCodingIs
+  callee +28:16 httpCodingIs -> @nish.httpCodingIs
+function HttpBodyDecoder.constructor(this: HttpBodyDecoder, limit: i32): void -> @nish.HttpBodyDecoder.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: limit
+  calls: nish.GzipDecompressor.constructor nish.ZlibDecompressor.constructor nish_alloc_struct nish_panic nish_str_concat nish_str_from_i32
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:19 new GzipDecompressor -> @nish.GzipDecompressor.constructor
+  callee +1:19 new ZlibDecompressor -> @nish.ZlibDecompressor.constructor
+function HttpBodyDecoder.decode(this: HttpBodyDecoder, coding: i32, src: u8[], off: i32, len: i32): i32 -> @nish.HttpBodyDecoder.decode [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: len off
+  calls: nish.GzipDecompressor.decompress nish.ZlibDecompressor.decompress nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=32 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.GzipDecompressor.decompress#1 nish.ZlibDecompressor.decompress#1
+  stackSites=0 stackLocals=0
+  local -8:11 limit: i32 (const)
+  local -6:9 size: i32 (let)
+  local +2:13 end: i32 (const)
+  callee +4:13 GzipDecompressor.decompress -> @nish.GzipDecompressor.decompress
+  callee +5:13 ZlibDecompressor.decompress -> @nish.ZlibDecompressor.decompress
+  local +12:13 have: i32 (const)
 module std/compress/deflate.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
@@ -5130,6 +5183,107 @@ function GzipReader.read(this: GzipReader, out: u8[], at: i32, max: i32): i32 ->
   local +4:11 n0: i32 (const)
   local +11:11 n: i32 (const)
   callee +12:5 copyBytes -> @nish.copyBytes
+module std/compress/zlib.ts [package nish]
+import adler32 from "nish/compress/checksum" -> function @nish.adler32
+import DEFLATE_ERR_OUTPUT_LIMIT from "nish/compress/deflate" -> const DEFLATE_ERR_OUTPUT_LIMIT
+import DEFLATE_ERR_TRAILING from "nish/compress/deflate" -> const DEFLATE_ERR_TRAILING
+import DEFLATE_ERR_TRUNCATED from "nish/compress/deflate" -> const DEFLATE_ERR_TRUNCATED
+import DEFLATE_NO_ROOM from "nish/compress/deflate" -> const DEFLATE_NO_ROOM
+import Deflater from "nish/compress/deflate" -> struct Deflater
+import INFLATE_DONE from "nish/compress/deflate" -> const INFLATE_DONE
+import INFLATE_NEED_OUTPUT from "nish/compress/deflate" -> const INFLATE_NEED_OUTPUT
+import Inflater from "nish/compress/deflate" -> struct Inflater
+const ZLIB_ERR_HEADER: i32 = -12 [exported]
+const ZLIB_ERR_ADLER: i32 = -13 [exported]
+const ZLIB_ERR_DICTIONARY: i32 = -14 [exported]
+struct ZlibCompressor (class) size=8 align=8 exported
+  field deflater: Deflater index=0 offset=0 readonly
+  constructor -> @nish.ZlibCompressor.constructor
+  method compress -> @nish.ZlibCompressor.compress
+struct ZlibDecompressor (class) size=8 align=8 exported
+  field inflater: Inflater index=0 offset=0 readonly
+  constructor -> @nish.ZlibDecompressor.constructor
+  method decompress -> @nish.ZlibDecompressor.decompress
+function zlibWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.zlibWindow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function ZlibCompressor.constructor(this: ZlibCompressor, level: i32): void -> @nish.ZlibCompressor.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: level
+  calls: nish.Deflater.constructor nish_alloc_struct
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:21 new Deflater -> @nish.Deflater.constructor
+function ZlibCompressor.compress(this: ZlibCompressor, src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 -> @nish.ZlibCompressor.compress [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at len off
+  calls: nish.Deflater.compress nish.adler32 nish.zlibWindow nish_panic_index nish_panic_overflow
+  pointer this: size=8 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.zlibWindow#1 nish.Deflater.compress#1 nish.adler32#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.zlibWindow#1 nish.Deflater.compress#4
+  stackSites=0 stackLocals=0
+  callee -18:5 zlibWindow -> @nish.zlibWindow
+  callee -17:5 zlibWindow -> @nish.zlibWindow
+  local -13:11 level: i32 (const)
+  local -11:9 flevel: i32 (let)
+  local -3:11 cmf: i32 (const)
+  local -2:9 flg: i32 (let)
+  local +2:11 end: i32 (const)
+  callee +2:22 Deflater.compress -> @nish.Deflater.compress
+  local +6:11 a: u32 (const)
+  callee +6:20 adler32 -> @nish.adler32
+function ZlibDecompressor.constructor(this: ZlibDecompressor): void -> @nish.ZlibDecompressor.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Inflater.constructor nish_alloc_struct
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:21 new Inflater -> @nish.Inflater.constructor
+function ZlibDecompressor.decompress(this: ZlibDecompressor, src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 -> @nish.ZlibDecompressor.decompress [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Inflater.reset
+  escaping: at len off
+  calls: nish.Inflater.inflate nish.Inflater.reset nish.adler32 nish.zlibWindow nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=8 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.zlibWindow#1 nish.Inflater.inflate#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.zlibWindow#1 nish.Inflater.inflate#5 nish.adler32#0
+  stackSites=0 stackLocals=0
+  callee +0:5 zlibWindow -> @nish.zlibWindow
+  callee +1:5 zlibWindow -> @nish.zlibWindow
+  local +8:11 cmf: i32 (const)
+  local +9:11 flg: i32 (const)
+  local +16:11 room: i32 (const)
+  local +17:11 outEnd: i32 (const)
+  local +18:11 inf: Inflater (const)
+  callee +19:5 Inflater.reset -> @nish.Inflater.reset
+  local +20:11 end: i32 (const)
+  local +21:11 r: i32 (const)
+  callee +21:20 Inflater.inflate -> @nish.Inflater.inflate
+  local +28:11 q: i32 (const)
+  local +32:11 want: u32 (const)
+  callee +34:9 adler32 -> @nish.adler32
+function zlibCompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 -> @nish.zlibCompress [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ZlibCompressor.compress
+  escaping: at len level off
+  calls: nish.ZlibCompressor.compress nish.ZlibCompressor.constructor
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.ZlibCompressor.compress#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.ZlibCompressor.compress#4
+  stackSites=1 stackLocals=0
+  callee +0:3 ZlibCompressor.compress -> @nish.ZlibCompressor.compress
+  callee +0:3 new ZlibCompressor -> @nish.ZlibCompressor.constructor
+function zlibDecompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 -> @nish.zlibDecompress [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ZlibDecompressor.decompress
+  escaping: at len limit off
+  calls: nish.ZlibDecompressor.constructor nish.ZlibDecompressor.decompress
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.ZlibDecompressor.decompress#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.ZlibDecompressor.decompress#4
+  stackSites=1 stackLocals=0
+  callee +0:3 ZlibDecompressor.decompress -> @nish.ZlibDecompressor.decompress
+  callee +0:3 new ZlibDecompressor -> @nish.ZlibDecompressor.constructor
 module std/net/http1-codec.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import urlIsHostPort from "nish/net/url" -> function @nish.urlIsHostPort
