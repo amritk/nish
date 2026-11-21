@@ -5,9 +5,11 @@ stage 2's HTTP/1.1 half, the handler (`std/net/handler.ts`) with the example
 server `examples/http-app`, are built. Stage 4's response half is built
 too, as `nish/net/http-compress` rather than `nish/net/compress`: `gzip` by
 `Accept-Encoding` for any of the three servers, opt-in, and
-`respondEncoded` on HTTP/1.1. The handler over HTTP/2 and HTTP/3, static
-files, `deflate` as a response coding, and decoding a request body under a
-decompression-bomb limit are planned and unbuilt (*2026-11-08*).
+`respondEncoded` on HTTP/1.1, with `deflate` as a response coding beside
+`gzip`; and its request half, the handler decoding a `gzip` or `deflate`
+request body under a decompression-bomb limit ([Stage 4](#stage-4-request-bodies-under-a-decompression-bomb-limit)).
+The handler over HTTP/2 and HTTP/3 and static files are planned and unbuilt
+(*2026-11-08*).
 
 Issue #485 asks for the pieces every HTTP server on `nish/net` would otherwise
 rebuild: one handler interface across HTTP/1.1, 2 and 3, routing, static
@@ -28,7 +30,7 @@ depend on how a program is laid out:
    h3, come after it.
 3. **Static files**, later. MIME types, `ETag` and `Last-Modified`, `Range`,
    and a path normalisation that refuses traversal, on WP36's `fs.read` policy.
-4. **Compression**, later. gzip and deflate for responses, and a
+4. **Compression**, built. gzip and deflate for responses, and a
    decompression-bomb limit for request bodies.
 
 A full application server, with logging, configuration and graceful shutdown,
@@ -168,7 +170,8 @@ both runs.
   `nish/net/http-compress` (`HttpCompressor`, `httpAcceptEncoding`, on
   `nish/compress/deflate`), pinned by `tests/link/std_http_compress`;
   `deflate` as a response coding is too ([below](#deflate-as-a-response-coding));
-  request bodies with a decompression-bomb limit are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
+  request bodies are decoded under a decompression-bomb limit by
+  `nish/net/handler` ([below](#stage-4-request-bodies-under-a-decompression-bomb-limit)). `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
 - **Stage 5, middleware:** steps a program registers to run before and
   after its route bodies (a request id, a check on a header, a field added to
   every answer). Built on `nish/net/router`, `nish/net/handler` and
@@ -322,8 +325,9 @@ slower; it is not claimed as faster.
 
 Stage 4's `deflate` is built: `HttpCompressor.compress`, `compressAnyway` and
 `Http1Connection.respondEncoded` send `HTTP_CODING_DEFLATE` as the zlib format
-(RFC 1950, RFC 9110 §8.4.1.2), so the "`deflate` as a coding ... not" in §4
-holds now only of request bodies. The compressor runs its two gzip encoders
+(RFC 1950, RFC 9110 §8.4.1.2), and `HttpHandler` decodes a zlib `deflate`
+request body under its limit, so `deflate` is built for response and request
+bodies alike. The compressor runs its two gzip encoders
 and reframes the member in place (a 2-byte header for the 10, an Adler-32 for
 the CRC-32 and length), so it holds no second set of tables, at the cost of a
 CRC-32 computed and dropped per deflate body; the result is 12 bytes shorter
@@ -394,3 +398,57 @@ on every request, on routes bound to no step. That pair costs 25.0 to 26.8
 instructions a request over the unpatched bench, about 0.4% of a
 `/plaintext` request and 0.3% of an `/id` one. `HttpServer`'s pair runs the same
 algorithm, with an `own` check in front; its cost was not measured.
+
+## Stage 4: request bodies under a decompression-bomb limit
+
+Stage 4 of §4's request-body half is built: `nish/net/handler` decodes a
+body sent with `Content-Encoding: gzip`, `x-gzip` or `deflate` before the
+program takes it, under `HandlerLimits.maxDecoded` (one MiB by default), and
+`nish/net/http-compress` gains the two pieces it uses, `httpContentEncoding`
+and `HttpBodyDecoder`. The guide section is "Compressed request bodies" in
+[Compression](guide/using-nish/compression.md); the security rows are
+COMP-18, HANDLER-16 and HANDLER-17.
+
+### Decisions
+
+- **The cap is on what a body decodes to, apart from `http.maxBody`.** The
+  carrier's cap bounds the bytes on the wire; a few KB of gzip can inflate
+  to gigabytes under it, so the decoded size has its own limit. Past it the
+  request is answered 413 Content Too Large; a stream that is not the coding
+  it names (a bad CRC or Adler-32, cut short, bytes after it) is answered 400.
+  Both are problem answers on a connection that stays open, and the program
+  never takes the request.
+- **The decoder grows its output by doubling and inflates again.** The
+  decompressors take one output window and answer
+  `DEFLATE_ERR_OUTPUT_LIMIT` when it fills, so `HttpBodyDecoder` starts at
+  four times the body (4 KB at least, the limit at most) and doubles on each
+  such answer until the window is the limit. The window before the last is
+  under the limit and each one before it half the next, so a bomb costs
+  fewer than three times the limit in bytes inflated, and an ordinary body
+  one pass. Inflating from the start again rather than resuming keeps the
+  decompressors' one-shot interface; resuming would save the passes before
+  the last, under twice the limit.
+- **The decoded body takes the decoder's array.** The request's buffer and
+  the decoder's output change hands, so no body is copied: the request
+  takes the decoded array and the decoder keeps the encoded one to write the
+  next body into. Growing holds the old window while the new one is made, so
+  a decode holds under twice the limit in windows at its peak.
+- **Only one coding is decoded.** One `gzip`, `x-gzip` or `deflate`, in one
+  `Content-Encoding` field, with `identity` and empty elements ignored. Any
+  other coding, two codings, or two fields pass the body through as it
+  arrived, with `decodedFrom` left `HTTP_CODING_IDENTITY` and the
+  `Content-Encoding` field still set; a program that will not take such a
+  body answers 415 when `decodedFrom` is identity and `httpContentEncoding`
+  on a `Content-Encoding` field gives anything but `HTTP_CODING_IDENTITY`
+  (HANDLER-17); a field of only `identity` is a plain body. `deflate` is the zlib-wrapped stream only; raw deflate is
+  answered 400.
+- **`HttpServer` and `serve()` do not decode yet.** `nish/net/serve`
+  (HTTP/1.1) and the façade (every version) hand a body over as sent; giving it the same decoder is later work.
+
+### Measured
+
+Not measured. A request with no body pays two compares in `decode`, and
+every request pays two stores in `begin` and one compare in `ready`; a body
+with no `Content-Encoding` field adds one name compare per field.
+`tests/link/net_handler_bomb` pins the behaviour, and its forty rounds of
+bodies and bombs on one warm connection leave `Arena.used()` unchanged.

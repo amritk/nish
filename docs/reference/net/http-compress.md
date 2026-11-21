@@ -17,15 +17,19 @@ import {
   HTTP_COMPRESS_TOO_LARGE,
   HTTP_COMPRESS_TOO_LITTLE_SAVED,
   HTTP_COMPRESS_TOO_SMALL,
+  HTTP_DECODE_MALFORMED,
+  HTTP_DECODE_TOO_LARGE,
   HTTP_DEFAULT_MSS,
   HTTP_ENCODER_AUTO,
   HTTP_ENCODER_FIXED,
   HTTP_ENCODER_LEVEL,
   HTTP_OFFER_DEFLATE,
   HTTP_OFFER_GZIP,
+  HttpBodyDecoder,
   HttpCompressor,
   httpAcceptEncoding,
   httpCompressorDefault,
+  httpContentEncoding,
   httpIdentityRefused,
   httpSegments,
 } from "nish/net/http-compress";
@@ -66,6 +70,12 @@ A compressor for the usual server: `DEFLATE_FAST`, bodies of 1 KB to 1 MB.
 
 </scalar-card>
 
+<scalar-card title="http​Content​Encoding" icon="phosphor/regular/function" href="#httpcontentencoding">
+
+The content coding a `Content-Encoding` value `buf[start .. end)` names (RFC 9110 §8.4): `HTTP_CODING_GZIP` for `gzip` or `x-gzip`, `HTTP_CODING_DEFLATE` for `deflate`, `HTTP_CODING_IDENTITY` for an empty value or `identity`, ignoring case, optional whitespace and empty list elements.
+
+</scalar-card>
+
 <scalar-card title="http​Identity​Refused" icon="phosphor/regular/function" href="#httpidentityrefused">
 
 Whether the `Accept-Encoding` value in `buf[start .. end)` refuses the body as it is: `identity;q=0`, or `*;q=0` with no `identity` listed.
@@ -75,6 +85,12 @@ Whether the `Accept-Encoding` value in `buf[start .. end)` refuses the body as i
 <scalar-card title="http​Segments" icon="phosphor/regular/function" href="#httpsegments">
 
 The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
+
+</scalar-card>
+
+<scalar-card title="Http​Body​Decoder" icon="phosphor/regular/cube" href="#httpbodydecoder">
+
+Decodes a request body sent with `Content-Encoding: gzip` or `deflate` under a limit on what it decodes to, so a small body that inflates to gigabytes (a decompression bomb) is refused once `limit` bytes are out, having inflated fewer than three times `limit` bytes to find that out.
 
 </scalar-card>
 
@@ -241,6 +257,48 @@ a new compressor the caller owns, one per thread, with every
 
 </scalar-field>
 
+### httpContentEncoding
+
+The content coding a `Content-Encoding` value `buf[start .. end)` names
+(RFC 9110 §8.4): `HTTP_CODING_GZIP` for `gzip` or `x-gzip`,
+`HTTP_CODING_DEFLATE` for `deflate`, `HTTP_CODING_IDENTITY` for an empty
+value or `identity`, ignoring case, optional whitespace and empty list
+elements. Anything else — an unknown coding, a byte no coding holds, or
+two codings applied one over the other — is `HTTP_CODING_NONE`, which a
+reader cannot undo in one step. A window outside `buf` panics.
+
+```ts
+const httpContentEncoding: (
+  buf: u8[],
+  start: i32,
+  end: i32,
+) => i32
+```
+
+<scalar-field name="buf" type="u8[]" required>
+
+the bytes that hold the field value
+
+</scalar-field>
+
+<scalar-field name="start" type="i32" required>
+
+where the value starts in `buf`
+
+</scalar-field>
+
+<scalar-field name="end" type="i32" required>
+
+where the value ends in `buf`, one past its last byte
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the one coding named, `HTTP_CODING_IDENTITY` for none, or `HTTP_CODING_NONE`
+
+</scalar-field>
+
 ### httpIdentityRefused
 
 Whether the `Accept-Encoding` value in `buf[start .. end)` refuses the
@@ -309,6 +367,35 @@ how many segments the bytes fill, the last one possibly partial;
 </scalar-field>
 
 ## Classes
+
+### HttpBodyDecoder
+
+Decodes a request body sent with `Content-Encoding: gzip` or `deflate`
+under a limit on what it decodes to, so a small body that inflates to
+gigabytes (a decompression bomb) is refused once `limit` bytes are out,
+having inflated fewer than three times `limit` bytes to find that out.
+The decompressors are built once; `output` grows, doubling, to the
+largest body decoded and is kept. Not shared between threads.
+
+<scalar-code-group>
+
+```ts example.ts
+const d = new HttpBodyDecoder(1 << 20)
+const n: i32 = d.decode(HTTP_CODING_GZIP, body, 0, bodyLength) // d.output[0 .. n), or < 0
+```
+
+</scalar-code-group>
+
+```ts
+class HttpBodyDecoder
+```
+
+| Member | |
+| --- | --- |
+| `new HttpBodyDecoder(limit: i32)` | A decoder that refuses a body decoding to more than `limit` bytes; a `limit` under 1 panics. |
+| `readonly limit: i32` | The most bytes a body may decode to; one more is `HTTP_DECODE_TOO_LARGE`. |
+| `output: u8[]` | Where `decode` writes, from index 0. A caller may take the array and leave another in its place, which `decode` then writes into, or grows past. |
+| `decode(coding: i32, src: u8[], off: i32, len: i32): i32` | Decodes `src[off .. off + len)`, one body in `coding`, into `output` from index 0. Another coding than `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE`, or a window outside `src`, panics. |
 
 ### HttpCompressor
 
@@ -452,6 +539,22 @@ or the saving asked for was the whole body, so no encoder ran.
 `HTTP_COMPRESS_TOO_SMALL: i32`
 
 The body was shorter than `minLength`, too small to be worth compressing.
+
+</scalar-card>
+
+<scalar-card title="-2" icon="phosphor/regular/hash">
+
+`HTTP_DECODE_MALFORMED: i32`
+
+`HttpBodyDecoder.decode`: the body is not a whole, well-formed stream of its coding.
+
+</scalar-card>
+
+<scalar-card title="-1" icon="phosphor/regular/hash">
+
+`HTTP_DECODE_TOO_LARGE: i32`
+
+`HttpBodyDecoder.decode`: the body decodes to more than `limit` bytes.
 
 </scalar-card>
 
