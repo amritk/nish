@@ -1078,20 +1078,25 @@ export class Http1Connection {
 
   /**
    * Ends `lendParsed`: the reader is done, and the parser's head and spans
-   * are its own again.
+   * are its own again. A connection resting meanwhile parks them now, as
+   * `park` gives no lent head to the pool.
    *
    * @returns false when the connection restarted meanwhile, so the reader keeps what it was lent and the parser has the buffers it gave
    */
   unlendParsed(): boolean {
     const held: boolean = this.lentParsed
     this.lentParsed = false
+    // `park` kept the head back while it was lent: a resting connection
+    // gives it to the pool now.
+    this.park()
     return held
   }
 
   /**
    * Gives the parser's input and head buffers to `inputs` and `heads` while
    * the connection rests between exchanges: speaking HTTP, no request open,
-   * nothing fed and unread. Does nothing without the pools or otherwise.
+   * nothing fed and unread. Does nothing without the pools or otherwise,
+   * and keeps a head lent by `lendParsed`.
    */
   park(): void {
     const inputs: Http1OutputPool | null = this.inputs
@@ -1110,7 +1115,9 @@ export class Http1Connection {
       p.lineStart = 0
       p.lineEnd = 0
     }
-    if (toI32(p.head.length) > 0) {
+    // A lent head is the reader's too: it goes to the pool only once
+    // `unlendParsed` ends the loan, or never, if a restart hands it over.
+    if (toI32(p.head.length) > 0 && !this.lentParsed) {
       heads.give(p.head)
       p.head = this.noOutput
     }

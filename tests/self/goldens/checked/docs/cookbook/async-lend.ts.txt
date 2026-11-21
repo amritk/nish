@@ -12,7 +12,7 @@ function tally(n: Note): i32 -> @tally
   pointer n: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function read(note: Note): void -> @read$
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: tally
   pointer note: size=16 writesThrough=true captured=false passedTo=tally#0

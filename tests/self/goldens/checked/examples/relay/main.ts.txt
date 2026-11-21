@@ -28027,11 +28027,13 @@ function Http1Connection.lendParsed(this: Http1Connection, head: u8[], spans: i3
   pointer spans: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Http1Connection.unlendParsed(this: Http1Connection): boolean -> @nish.Http1Connection.unlendParsed [exported method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=312 writesThrough=true captured=false
+  calls: nish.Http1Connection.park
+  pointer this: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.park#0
   stackSites=0 stackLocals=0
   local -1:11 held: boolean (const)
+  callee +3:5 Http1Connection.park -> @nish.Http1Connection.park
 function Http1Connection.park(this: Http1Connection): void -> @nish.Http1Connection.park [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -28043,7 +28045,7 @@ function Http1Connection.park(this: Http1Connection): void -> @nish.Http1Connect
   local -6:11 p: Http1Parser (const)
   callee -5:95 Http1Parser.resting -> @nish.Http1Parser.resting
   callee -1:7 Http1OutputPool.give -> @nish.Http1OutputPool.give
-  callee +9:7 Http1OutputPool.give -> @nish.Http1OutputPool.give
+  callee +11:7 Http1OutputPool.give -> @nish.Http1OutputPool.give
 function Http1Connection.unpark(this: Http1Connection): void -> @nish.Http1Connection.unpark [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
