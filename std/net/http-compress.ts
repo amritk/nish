@@ -1032,6 +1032,5 @@ export class HttpBodyDecoder {
       }
       size = have > (limit >> 1) ? limit : have * 2
     }
-    return HTTP_DECODE_MALFORMED
   }
 }

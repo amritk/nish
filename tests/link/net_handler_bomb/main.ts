@@ -286,16 +286,19 @@ export const main = (): i32 => {
   const request: u8[] = post("gzip", gzipped(hello))
   const bombRequest: u8[] = post("gzip", bomb)
   let good: i32 = 0
+  let before: i64 = 0
   for (let round: i32 = 0; round < 40; round++) {
     sendAll(app, c, request)
     good += response(app, c) && c.status === 200 ? 1 : 0
     sendAll(app, c, bombRequest)
     good += response(app, c) && c.status === 413 ? 1 : 0
     if (round === 9) {
-      app.length = toI32(Arena.used())
+      before = Arena.used()
     }
   }
+  const kept: i64 = Arena.used() - before
   t.eqI32("a warm connection answers forty bodies and forty bombs", good, toI32(80))
+  t.eqI64("and the arena stays flat", kept, toI64(0))
   netClose(c.fd)
   return t.done()
 }

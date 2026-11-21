@@ -1,0 +1,33 @@
+PASS  a gzip body is taken
+PASS  decoded
+PASS  with decodedFrom gzip and the data's first byte
+PASS  an x-gzip body in capitals is taken
+PASS  decoded as gzip
+PASS  a deflate body is taken
+PASS  decoded from the zlib format
+PASS  a plain body is taken
+PASS  as it arrived
+PASS  a body decoding to exactly the cap is taken
+PASS  whole
+PASS  one byte past the cap is answered 413
+PASS  and the program never takes it
+PASS  the bomb is a thousandth of what it inflates to
+PASS  the gzip bomb is answered 413
+PASS  untaken
+PASS  on a connection that stays open
+PASS  a deflate bomb is answered 413
+PASS  the connection serves the next request
+PASS  which the program takes
+PASS  a gzip body with a wrong CRC is answered 400
+PASS  a zlib body cut short is answered 400
+PASS  a plain body sent as gzip is answered 400
+PASS  none of them taken
+PASS  an unknown coding is taken
+PASS  as it arrived
+PASS  two codings in one field are taken
+PASS  as they arrived
+PASS  two codings in two fields are taken
+PASS  as they arrived
+PASS  a warm connection answers forty bodies and forty bombs
+PASS  and the arena stays flat
+handler bomb limit: 32 passed, 0 failed, 0 skipped

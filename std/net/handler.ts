@@ -232,7 +232,7 @@ export class HandlerLimits {
    * body reaches the program as it arrived. Each slot's body buffer may grow
    * to this as well as to `http.maxBody`.
    */
-  maxDecoded: i32 = HANDLER_ONE_MIB
+  maxDecoded: i32 = 1048576
 
   /**
    * The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30
