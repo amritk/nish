@@ -186,9 +186,9 @@ class ProtoWriter
 | `float(field: i32, v: f32): void` | Writes a float field. |
 | `int32(field: i32, v: i32): void` | Writes an int32 field, a negative value sign-extended to ten bytes as protobuf requires. |
 | `int64(field: i32, v: i64): void` | Writes an int64 field; a negative value takes ten bytes. |
-| `packedFixed32(v: u32): void` | Writes one element of an open packed field as four little-endian bytes: a fixed32, an sfixed32 or a float's bits. |
-| `packedFixed64(v: u64): void` | Writes one element of an open packed field as eight little-endian bytes: a fixed64, an sfixed64 or a double's bits. |
-| `packedVarint(v: u64): void` | Writes one element of an open packed field as a varint: a uint64, or an int64, int32 or bool converted to `u64` as `int64`, `int32` and `bool` do. |
+| `packedFixed32(v: u32): void` | Writes one element of the packed field the last `beginMessage` opened, as four little-endian bytes: a fixed32, an sfixed32 or a float's bits. Open spans are checked as `packedVarint` checks them. |
+| `packedFixed64(v: u64): void` | Writes one element of the packed field the last `beginMessage` opened, as eight little-endian bytes: a fixed64, an sfixed64 or a double's bits. Open spans are checked as `packedVarint` checks them. |
+| `packedVarint(v: u64): void` | Writes one element of the packed field the last `beginMessage` opened, as a varint: a uint64, or an int64, int32 or bool converted to `u64` as `int64`, `int32` and `bool` do. With no span open it sets `PROTO_ERR_UNBALANCED`; that the open span is a packed field, not an embedded message, is the caller's to guarantee. |
 | `reset(): void` | Starts a new message at offset 0 of the same buffer, clearing `failed`. |
 | `sfixed32(field: i32, v: i32): void` | Writes an sfixed32 field. |
 | `sfixed64(field: i32, v: i64): void` | Writes an sfixed64 field. |

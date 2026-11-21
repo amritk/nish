@@ -122,6 +122,11 @@ PASS  and the fault is sticky
 PASS  an inner length past the outer span
 PASS  an inner length past the outer span, entered
 PASS  a malformed rest is refused by leave
+PASS  an over-long varint for 0 reads as 0
+PASS  a tenth byte of 0x7e reads as 0
+PASS  a tenth byte of 0x7f reads as 2^63
+PASS  a tag of 2^32 + 8
+PASS  field 0 with wire type 3 is refused as a group
 PASS  a varint read as fixed32
 PASS  a value read twice
 PASS  a value read before next
@@ -153,4 +158,4 @@ PASS  bytes writes its window
 PASS  an empty string
 PASS  int32 and int64 negatives take ten bytes
 PASS  a warm writer allocates nothing per field
-protobuf: 155 passed, 0 failed, 0 skipped
+protobuf: 160 passed, 0 failed, 0 skipped

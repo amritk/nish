@@ -296,6 +296,17 @@ const refusalChecks = (s: Suite): void => {
   rest.next()
   rest.enter()
   s.ok("a malformed rest is refused by leave", !rest.leave() && rest.failed === PROTO_ERR_TRUNCATED)
+  // PB-1: an over-long varint is read as its value, and the tenth byte's
+  // bits past the 64th are dropped.
+  const long = over([8, 128, 0])
+  s.ok("an over-long varint for 0 reads as 0", long.next() && long.uint64() === toU64(0) && !long.next() && long.failed === PROTO_OK)
+  const tenthEven = over([8, 128, 128, 128, 128, 128, 128, 128, 128, 128, 126])
+  s.ok("a tenth byte of 0x7e reads as 0", tenthEven.next() && tenthEven.uint64() === toU64(0) && tenthEven.failed === PROTO_OK)
+  const tenthOdd = over([8, 128, 128, 128, 128, 128, 128, 128, 128, 128, 127])
+  s.ok("a tenth byte of 0x7f reads as 2^63", tenthOdd.next() && tenthOdd.uint64() === toU64(1) << toU64(63) && tenthOdd.failed === PROTO_OK)
+  // A tag whose low 32 bits name field 1 but whose high bits are set.
+  s.eqI32("a tag of 2^32 + 8", skipAll([136, 128, 128, 128, 16, 1]), PROTO_ERR_FIELD)
+  s.eqI32("field 0 with wire type 3 is refused as a group", skipAll([3]), PROTO_ERR_GROUP)
 }
 
 const misuseChecks = (s: Suite): void => {

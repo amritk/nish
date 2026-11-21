@@ -26,7 +26,7 @@ is counted; five properties are recorded as accepted (PB-1 to PB-5).
 
 | File | Functions |
 | --- | --- |
-| `std/net/protobuf.ts` | `ProtoReader` (`reset`, `next`, `uint64`, `int64`, `uint32`, `int32`, `bool`, `sint64`, `sint32`, `fixed32`, `sfixed32`, `float`, `fixed64`, `sfixed64`, `double`, `len`, `enter`, `enterPacked`, `more`, `leave`, and the internal `fail`, `varint`, `length`, `fixed`, `pass`, `skip`, `take`); `ProtoWriter` (`reset`, `uint64`, `int64`, `uint32`, `int32`, `bool`, `sint64`, `sint32`, `fixed32`, `sfixed32`, `float`, `fixed64`, `sfixed64`, `double`, `bytes`, `string`, `beginMessage`, `endMessage`, `packedVarint`, `packedFixed32`, `packedFixed64`, and the internal `put`, `poke`, `putVarint`, `putFixed`, `tag`); the helpers `varintSize`, `f32OfBits` |
+| `std/net/protobuf.ts` | `ProtoReader` (`reset`, `next`, `uint64`, `int64`, `uint32`, `int32`, `bool`, `sint64`, `sint32`, `fixed32`, `sfixed32`, `float`, `fixed64`, `sfixed64`, `double`, `len`, `enter`, `enterPacked`, `more`, `leave`, and the internal `fail`, `varint`, `length`, `fixed`, `pass`, `skip`, `take`); `ProtoWriter` (`reset`, `uint64`, `int64`, `uint32`, `int32`, `bool`, `sint64`, `sint32`, `fixed32`, `sfixed32`, `float`, `fixed64`, `sfixed64`, `double`, `bytes`, `string`, `beginMessage`, `endMessage`, `packedVarint`, `packedFixed32`, `packedFixed64`, and the internal `put`, `poke`, `putVarint`, `putFixed`, `tag`, `packed`); the helpers `varintSize`, `f32OfBits` |
 
 Out of scope: the transport that delivers a message's bytes (HTTP/2 and
 gRPC's length-prefixed framing have their own records). Also out of scope are
@@ -56,7 +56,7 @@ read, and its size is bounded by that message.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| PB-1 | None (a property) | `ProtoReader.varint` | A varint's bits past the 64th, the tenth byte's top six bits, are dropped. An over-long varint, such as `0x80 0x00` for 0, is read as its value. So two byte strings can decode to one value. | **Accepted, not counted.** The span bound holds either way: a varint is at most ten bytes, and the tenth byte must end it (`PROTO_ERR_VARINT` otherwise). A caller that compares messages compares decoded values, never bytes. Pinned by "negative int32 takes ten bytes" and the other ten-byte vectors, and by `net_protobuf_bad_varint`. |
+| PB-1 | None (a property) | `ProtoReader.varint` | A varint's bits past the 64th, the tenth byte's top six bits, are dropped. An over-long varint, such as `0x80 0x00` for 0, is read as its value. So two byte strings can decode to one value. | **Accepted, not counted.** The span bound holds either way: a varint is at most ten bytes, and the tenth byte must end it (`PROTO_ERR_VARINT` otherwise). A caller that compares messages compares decoded values, never bytes. Pinned by "an over-long varint for 0 reads as 0", "a tenth byte of 0x7e reads as 0" and "a tenth byte of 0x7f reads as 2^63"; the eleven-byte refusal by "a varint of eleven bytes" and `net_protobuf_bad_varint`. |
 | PB-2 | None (a property) | `ProtoReader.next`, `ProtoReader.length` | A length is checked against the span when its field is read or skipped, not when its tag is read. `next` answers `true` for the field whose length is past the span, and the read or the following `next` refuses it. | **Accepted, not counted.** The caller sees a field number only, never a byte outside the span. `len`, `enter` and the skip all check the length before they move. Pinned by "the bad one after it is refused when passed over" and `net_protobuf_bad_length`. |
 | PB-3 | Low | `ProtoWriter` | `end` and the field lengths are `i32`, so the writer refuses to grow a message past `PROTO_MAX_SIZE` (2^31 − 2) bytes with `PROTO_ERR_WINDOW`. `endMessage` moves an embedded message's contents right once per enclosing `endMessage` when its length needs more than one byte. Writing a message nested d deep therefore copies up to d times its size. | **Accepted, not counted.** gRPC's framing caps a message at 2^32 − 1 bytes, and a program that writes one of 2^31 − 1 bytes or more needs another writer. The copy cost is bounded by `PROTO_MAX_DEPTH` and is the program's own nesting, not a peer's. No test reaches `PROTO_MAX_SIZE`. "a nested message of 20000 bytes" pins the move. |
 | PB-4 | None (a property) | `ProtoReader.len` | A `string` field is a length-delimited span like `bytes`: the reader does not check that it is UTF-8. | **Accepted, not counted; documented.** proto3 requires valid UTF-8 in a `string`, but the check belongs to the code that turns the span into a string with a schema in hand. `len`'s doc comment says the bytes are not checked to be UTF-8. |
@@ -77,9 +77,13 @@ The skip check "a field of each wire type is skipped by it" fails on it.
 Each property below is pinned by a line of `tests/link/net_protobuf`'s
 `expected.out`, so the check that fails when one stops holding is
 `link/net_protobuf: exits with 0 and stdout matches expected.out`; the line
-names are quoted after each property. Each refusal code also has its own
-fixture, `tests/link/net_protobuf_bad_*`, whose `main.ts` header says what it
-sends and what it answers.
+names are quoted after each property. Six refusal codes also have a fixture
+of their own, `tests/link/net_protobuf_bad_*`, whose `main.ts` header says
+what it sends and what it answers: `PROTO_ERR_VARINT`, `PROTO_ERR_LENGTH`,
+`PROTO_ERR_FIELD`, `PROTO_ERR_GROUP`, `PROTO_ERR_DEPTH` and
+`PROTO_ERR_WINDOW` (one for the reader, one for the writer).
+`PROTO_ERR_TRUNCATED`, `PROTO_ERR_WIRE_TYPE`, `PROTO_ERR_MISMATCH` and
+`PROTO_ERR_UNBALANCED` are pinned by `net_protobuf`'s lines alone.
 
 **The reader agrees with the reference implementation.** `vectors.ts` holds
 19 messages encoded by Google's `protobuf` Python package (7.36.1), each with
@@ -174,7 +178,7 @@ one. Between them they call `next`, `len`, `enter`, `enterPacked`, `more`,
 ## Not pinned
 
 - The no-panic property of the methods neither guide example calls (the
-  reader's `reset`, `int64`, `uint32`,
+  reader's `int64`, `uint32`,
   `bool`, `sint64`, `sint32`, `sfixed32` and `sfixed64`, and the writer's
   above), was checked by a one-off strict build of a program calling every
   public method, not by a test.

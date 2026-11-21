@@ -669,7 +669,9 @@ export class ProtoWriter {
     const buf: u8[] = this.buf
     const e: i32 = this.end
     if (e < 0 || e >= PROTO_MAX_SIZE) {
-      this.failed = PROTO_ERR_WINDOW
+      if (this.failed === PROTO_OK) {
+        this.failed = PROTO_ERR_WINDOW
+      }
       return
     }
     if (e < toI32(buf.length)) {
@@ -959,7 +961,12 @@ export class ProtoWriter {
     }
   }
 
-  /** Whether an element may be written: no fault and a span open; with none open it sets `PROTO_ERR_UNBALANCED`. @internal */
+  /**
+   * Whether an element may be written: no fault and a span open; with none
+   * open it sets `PROTO_ERR_UNBALANCED`. The writer does not tell a packed
+   * field's span from an embedded message's: that the open span is a packed
+   * field is the caller's guarantee. @internal
+   */
   packed(): boolean {
     if (this.failed === PROTO_OK && this.depth <= 0) {
       this.failed = PROTO_ERR_UNBALANCED
@@ -968,8 +975,11 @@ export class ProtoWriter {
   }
 
   /**
-   * Writes one element of an open packed field as a varint: a uint64, or an
-   * int64, int32 or bool converted to `u64` as `int64`, `int32` and `bool` do.
+   * Writes one element of the packed field the last `beginMessage` opened,
+   * as a varint: a uint64, or an int64, int32 or bool converted to `u64` as
+   * `int64`, `int32` and `bool` do. With no span open it sets
+   * `PROTO_ERR_UNBALANCED`; that the open span is a packed field, not an
+   * embedded message, is the caller's to guarantee.
    *
    * @param v - The element.
    */
@@ -980,8 +990,9 @@ export class ProtoWriter {
   }
 
   /**
-   * Writes one element of an open packed field as four little-endian bytes:
-   * a fixed32, an sfixed32 or a float's bits.
+   * Writes one element of the packed field the last `beginMessage` opened,
+   * as four little-endian bytes: a fixed32, an sfixed32 or a float's bits.
+   * Open spans are checked as `packedVarint` checks them.
    *
    * @param v - The element.
    */
@@ -992,8 +1003,9 @@ export class ProtoWriter {
   }
 
   /**
-   * Writes one element of an open packed field as eight little-endian bytes:
-   * a fixed64, an sfixed64 or a double's bits.
+   * Writes one element of the packed field the last `beginMessage` opened,
+   * as eight little-endian bytes: a fixed64, an sfixed64 or a double's bits.
+   * Open spans are checked as `packedVarint` checks them.
    *
    * @param v - The element.
    */
