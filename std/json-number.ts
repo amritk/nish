@@ -115,9 +115,8 @@ class JsonNumberParts {
   /** Where the integer part's digits start, and how many there are. */
   private intStart: i32
   private intLen: i32
-  /** Where the fraction's digits start, after the point, and how many there are. */
+  /** Where the fraction's digits start, after the point. */
   private fracStart: i32
-  private fracLen: i32
   /** The first significant digit's place among the integer and fraction digits run together. */
   private first: i32
   /**
@@ -161,7 +160,6 @@ class JsonNumberParts {
     this.intStart = 0
     this.intLen = 0
     this.fracStart = 0
-    this.fracLen = 0
     this.first = 0
     this.count = 0
     this.lead = toI64(0)
@@ -229,7 +227,6 @@ class JsonNumberParts {
         i += 1
       }
       fracLen = i - fracStart
-      this.fracLen = fracLen
       if (fracLen === 0) {
         return JSON_NUMBER_ERR_SYNTAX
       }

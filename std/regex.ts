@@ -1979,8 +1979,6 @@ const CTX_LINE: i32 = 2
 const CTX_OTHER: i32 = 3
 const CTX_EOT: i32 = 4
 const CTX_KINDS: i32 = 5
-// The kinds, then the slot that says whether U+017F and U+212A are word characters.
-const CTX_MASK_LEN: i32 = 6
 const CTX_SLOTS: i32 = 4
 
 /**
@@ -2143,7 +2141,7 @@ const regexContextMask = (bits: i32): i32[] => {
 
 /**
  * Entry `kind` of a context mask. Every mask comes from `regexContextMask`
- * and every kind is a `CTX_` constant below `CTX_MASK_LEN`, so the
+ * and every kind is a `CTX_` constant the mask has a slot for, so the
  * `CTX_OTHER` fallback, the context that asserts nothing, is never taken.
  */
 const regexMaskOf = (mask: i32[], kind: i32): i32 => {

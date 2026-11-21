@@ -162,12 +162,14 @@ export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): b
   const left: i32[] = [a]
   const right: i32[] = [b]
   while (left.length > 0) {
-    const x: i32 = left.pop()
+    const x: i32 = left[left.length - 1]
+    left.pop()
     // Never taken: the two stacks are pushed in pairs, so they empty together.
     if (right.length < 1) {
       return false
     }
-    const y: i32 = right.pop()
+    const y: i32 = right[right.length - 1]
+    right.pop()
     const kind: i32 = da.kind(x)
     if (kind === JSON_VALUE_NONE || kind !== db.kind(y)) {
       return false
@@ -246,11 +248,13 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
   const tasks: i32[] = [v]
   const keyStack: string[] = []
   while (tasks.length > 0) {
-    const x: i32 = tasks.pop()
+    const x: i32 = tasks[tasks.length - 1]
+    tasks.pop()
     if (x === JSON_EQUAL_KEY_TASK) {
       // Each key task is pushed with its key, so the key stack holds one here.
       if (keyStack.length > 0) {
-        jsonEqualPutText(out, keyStack.pop())
+        jsonEqualPutText(out, keyStack[keyStack.length - 1])
+        keyStack.pop()
       }
       continue
     }
