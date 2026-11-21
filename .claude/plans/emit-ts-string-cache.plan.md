@@ -25,6 +25,9 @@ stages:
       - id: numbers
         content: Re-run the bench after the change and put the before/after table (YAML and JSON, ~100 KB and ~3 MB, emit-ts / wasm / native, median and noise band, the commit) in the PR body — see Stage S1
         status: pending
+      - id: squeeze
+        content: Once the target is met, run extra profile-guided performance passes on the emit-ts YAML and JSON workloads inside the stage's Owns, keep each change that beats the noise band with output unchanged, and record every pass (kept or dropped) in the PR body — see Stage S1
+        status: pending
 ---
 
 ## Context
@@ -77,9 +80,9 @@ the audit todo; line numbers approximate):
 
 ## Stage S1 — read emit-ts strings without re-encoding them per byte
 
-**Owns:** `runtime/core/strings.mjs`, `tests/run.js`, `tests/emit-ts/**`,
-`bench/emit-ts-strings/**`, `docs/guide/using-nish/to-typescript.md`,
-`docs/RUN_UNDER_NODE.md`
+**Owns:** `runtime/core/strings.mjs`, `runtime/core/checks.mjs`,
+`tests/run.js`, `tests/emit-ts/**`, `bench/emit-ts-strings/**`,
+`docs/guide/using-nish/to-typescript.md`, `docs/RUN_UNDER_NODE.md`
 
 ### Runtime
 
@@ -145,6 +148,28 @@ the audit todo; line numbers approximate):
 - The PR body carries the before/after table: YAML and JSON × 100 KB and 3 MB ×
   emit-ts / wasm / native, before (0.44.0 runtime) and after, with the commit
   and the node version. Nothing goes into `docs/BENCHMARKS.md` in this stage.
+
+### Squeeze passes (last)
+
+Asked for by the requester: after the 5x target is met and the numbers are
+recorded, do extra performance passes to take as much as the runtime allows.
+
+- Each pass follows `/perf` if the session has it (otherwise its rules by hand):
+  profile the emit-ts YAML and JSON workloads (`node --cpu-prof`), pick the top
+  remaining runtime cost in `runtime/core/strings.mjs` (or another
+  `runtime/core/*.mjs` helper the profile names, which then needs an `Owns`
+  amendment from the lead, asked for in the PR body rather than taken), change
+  one thing, and re-measure against an interleaved baseline.
+- Candidates: the cache's hit path (slot order, the `===` check, avoiding
+  array shuffles on a front hit), the ASCII test's cost and when it runs,
+  `indexOf`/`startsWith`/`endsWith` encoding their needle on every call, and
+  `substring`/`slice` on ASCII strings returning `s.substring` directly.
+- Keep a change only if it beats the noise band and every check still passes.
+  Drop it otherwise. Stop after three passes in a row that keep nothing, or
+  when the profile shows the remaining time outside the runtime (in std's own
+  logic, which is a follow-up).
+- The PR body lists each pass: what changed, the figure before and after, and
+  kept or dropped. The final before/after table is taken after the last pass.
 
 ### Audit
 
