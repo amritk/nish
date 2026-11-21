@@ -364,3 +364,50 @@ on every request, on routes bound to no step. That pair costs 25.0 to 26.8
 instructions a request over the unpatched bench, about 0.4% of a
 `/plaintext` request and 0.3% of an `/id` one. `HttpServer`'s pair runs the same
 algorithm, with an `own` check in front; its cost was not measured.
+
+## Stage 4: request bodies under a decompression-bomb limit
+
+Stage 4 of §4's request-body half is built: `nish/net/handler` decodes a
+body sent with `Content-Encoding: gzip`, `x-gzip` or `deflate` before the
+program takes it, under `HandlerLimits.maxDecoded` (one MiB by default), and
+`nish/net/http-compress` gains the two pieces it uses, `httpContentEncoding`
+and `HttpBodyDecoder`. The guide section is "Compressed request bodies" in
+[Compression](guide/using-nish/compression.md); the security rows are
+COMP-18, HANDLER-16 and HANDLER-17. The lines above that call the limit
+unbuilt predate this section.
+
+### Decisions
+
+- **The cap is on what a body decodes to, apart from `http.maxBody`.** The
+  carrier's cap bounds the bytes on the wire; a few KB of gzip can inflate
+  to gigabytes under it, so the decoded size has its own limit. Past it the
+  request is answered 413 Content Too Large; a stream that is not the coding
+  it names (a bad CRC or Adler-32, cut short, bytes after it) is answered 400.
+  Both are problem answers on a connection that stays open, and the program
+  never takes the request.
+- **The decoder grows its output by doubling and inflates again.** The
+  decompressors take one output window and answer
+  `DEFLATE_ERR_OUTPUT_LIMIT` when it fills, so `HttpBodyDecoder` starts at
+  four times the body (4 KB at least, the limit at most) and doubles on each
+  such answer until the window is the limit. A bomb costs at most twice the
+  limit in bytes inflated, and an ordinary body one pass. Inflating from the
+  start again rather than resuming keeps the decompressors' one-shot
+  interface; resuming would save at most the factor of two.
+- **The decoded body takes the decoder's array.** The request's buffer and
+  the decoder's output change hands, so no body is copied and each array
+  grows to its largest use once.
+- **Only one coding is decoded.** One `gzip`, `x-gzip` or `deflate`, in one
+  `Content-Encoding` field, with `identity` and empty elements ignored. Any
+  other coding, two codings, or two fields pass the body through as it
+  arrived, with `decodedFrom` left `HTTP_CODING_IDENTITY`; the program reads
+  the field and answers 415 if it will not take the body (HANDLER-17).
+- **`HttpServer` does not decode yet.** The façade over HTTP/1.1, 2 and 3
+  hands a body over as sent; giving it the same decoder is later work.
+
+### Measured
+
+Not measured. A request with no body pays two compares in `decode`, and
+every request pays two stores in `begin` and one compare in `ready`; a body
+with no `Content-Encoding` field adds one name compare per field.
+`tests/link/net_handler_bomb` pins the behaviour, and its forty rounds of
+bodies and bombs on one warm connection leave `Arena.used()` unchanged.

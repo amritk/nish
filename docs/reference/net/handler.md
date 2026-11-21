@@ -133,6 +133,19 @@ times the cap in bodies. `docs/security/handler.md` is the record.
 
 </scalar-callout>
 
+<scalar-callout type="warning">
+
+**A compressed body is decoded under its own cap.** A body sent with one
+`Content-Encoding` of `gzip`, `x-gzip` or `deflate` is decoded before the
+program takes it, into at most `HandlerLimits.maxDecoded` bytes (one MiB):
+`req.body` holds the decoded bytes and `req.decodedFrom` the coding they
+came in. A body that decodes past the cap — a decompression bomb — is
+answered 413 by the handler, and one that does not decode 400; the program
+never takes either. Any other coding, or two codings stacked, reaches the
+program as it arrived, with `decodedFrom` `HTTP_CODING_IDENTITY`.
+
+</scalar-callout>
+
 Misuse — a status outside 200 to 599, a reserved field (`Content-Length`,
 `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`), more body than
 the length said, a second `start` — panics: it is a bug in the program,
@@ -160,10 +173,11 @@ class HandlerLimits
 
 | Member | |
 | --- | --- |
-| `new HandlerLimits()` | The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30 second body timeout, and the carrier's own defaults with the body cap lowered to one MiB. Change a field after construction to tune one. |
+| `new HandlerLimits()` | The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30 second body timeout, a one MiB cap on a decoded body, and the carrier's own defaults with the body cap lowered to one MiB. Change a field after construction to tune one. |
 | `bodyTimeout: i32` | Milliseconds from a request's head to the end of its body. A request still reading its body past it has its connection closed: the carrier's `idleTimeout` is refreshed by every byte, so a body trickled a byte at a time would otherwise hold its slot for good (HANDLER-5). It is checked each `wait`, at most once a second, so a connection may outlive it by up to a second, or until `wait` returns. |
 | `http: Http1Config` | The carrier's caps and timeouts; `http.maxBody` is the body cap, past which a request is answered 413. |
 | `jsonBytes: i32` | Bytes in the JSON scratch buffer: the largest body `json` and `problem` can write. A value past it makes `sendJson` answer 500. At least 256. |
+| `maxDecoded: i32` | The most bytes a `gzip` or `deflate` request body may decode to; past it the request is answered 413 and never taken. 0 decodes nothing, so every body reaches the program as it arrived. Each slot's body buffer may grow to this as well as to `http.maxBody`. |
 | `maxEvents: i32` | The most readiness events one `wait` takes. |
 | `ring: boolean` | Whether `listen` opens its listener with `NET_LISTEN_RING`, so each connection is accepted into an io_uring slot rather than a descriptor. Off by default. Where the kernel refuses rings, the listener serves descriptors and `netRingState` says why. A connection is then a slot handle, which `sendFd` and a C library through `nish:ffi` cannot take. |
 | `slots: i32` | The most connections at once. It is the handler's own cap, not `RLIMIT_NOFILE`: with `ring` set the connections live in io_uring slots and may outnumber the descriptor limit. Past it a connection is accepted and closed at once. |
@@ -196,7 +210,7 @@ class HttpHandler
 | `json(): JsonWriter` | The JSON writer, reset onto the handler's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
 | `pooled(): i32` | How many requests the pool has made: the most ever in flight at once. |
 | `problem(r: HttpRequest, status: i32, title: string, detail: string): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |
-| `ready(): boolean` | Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here. |
+| `ready(): boolean` | Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here, and a body that decoded past `maxDecoded` (413) or did not decode (400) is answered here. |
 | `refuse(r: HttpRequest): i32` | Answers a request the router refused, by its `route`: 405 with an `Allow` field naming the methods the path has (RFC 9110 §15.5.6), and 404 for anything else. A parameter's malformed escape is the program's to refuse, when it decodes the parameter. |
 | `resting(): boolean` | Whether the listener is resting: an accept failed for want of a resource (EMFILE for descriptors, ENFILE for ring slots, ENOMEM), so the handler takes no connection until one closes or the 100 ms rest ends. During `drain()` a close does not end the rest, so it stays true until the 100 ms pass. |
 | `send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. |
@@ -224,6 +238,7 @@ class HttpRequest
 | `new HttpRequest(index: i32)` | An empty request for the handler's pool; its buffers grow to the first request it holds and are kept for the ones after. |
 | `body: u8[]` | The body, `body[0 .. bodyLength)`. |
 | `bodyLength: i32` | How many bytes of `body` are the request's body, 0 for none; read the body as `body[0 .. bodyLength)`. |
+| `decodedFrom: i32` | The content coding the handler decoded `body` from: `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE`, or `HTTP_CODING_IDENTITY` for a body that is as it arrived. Its `Content-Encoding` field is kept in `head` either way. |
 | `head: u8[]` | The method, the target and the header section, as the parser kept them (field names lowercased). |
 | `index: i32` | Its index in the handler's pool. |
 | `methodEnd: i32` | Where the method ends in `head`, one past its last byte. |

@@ -1324,7 +1324,12 @@ export class HttpHandler {
         if (r.refusal === 413) {
           this.problem(r, toI32(413), "Content Too Large", "the body decodes to more than this server takes")
         } else {
-          this.problem(r, toI32(400), "Bad Request", "the body is not in the coding its Content-Encoding names")
+          this.problem(
+            r,
+            toI32(400),
+            "Bad Request",
+            "the body is not in the coding its Content-Encoding names"
+          )
         }
       } else {
         this.release(r)

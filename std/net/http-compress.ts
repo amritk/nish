@@ -925,7 +925,10 @@ export const httpContentEncoding = (buf: u8[], start: i32, end: i32): i32 => {
       return HTTP_CODING_NONE
     }
     let named: i32 = HTTP_CODING_NONE
-    if (httpCodingIs(buf, codingStart, codingEnd, "gzip") || httpCodingIs(buf, codingStart, codingEnd, "x-gzip")) {
+    if (
+      httpCodingIs(buf, codingStart, codingEnd, "gzip") ||
+      httpCodingIs(buf, codingStart, codingEnd, "x-gzip")
+    ) {
       named = HTTP_CODING_GZIP
     } else if (httpCodingIs(buf, codingStart, codingEnd, "deflate")) {
       named = HTTP_CODING_DEFLATE
@@ -1008,7 +1011,7 @@ export class HttpBodyDecoder {
     }
     const limit: i32 = this.limit
     // A first guess of four times the input, so most bodies decode at once.
-    let size: i32 = len > (limit >> 2) ? limit : len * 4
+    let size: i32 = len > limit >> 2 ? limit : len * 4
     if (size < HTTP_DECODE_FIRST) {
       size = limit < HTTP_DECODE_FIRST ? limit : HTTP_DECODE_FIRST
     }
@@ -1030,7 +1033,7 @@ export class HttpBodyDecoder {
       if (have >= limit) {
         return HTTP_DECODE_TOO_LARGE
       }
-      size = have > (limit >> 1) ? limit : have * 2
+      size = have > limit >> 1 ? limit : have * 2
     }
   }
 }
