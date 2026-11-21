@@ -74,7 +74,8 @@ column is against OpenSSL's scalar assembly. Two things in
   462 MB/s against 242 to 266.
 - Poly1305 is five 26-bit limbs in `u64`, twenty-five products a block. A
   130-bit accumulator in 64-bit limbs needs a 64 × 64 → 128-bit product, which
-  Nish does not have. Poly1305 stays in Nish under the kernel too
+  Nish has had since the `mulHigh` builtin (WP41) but this module does not use
+  yet. Poly1305 stays in Nish under the kernel too
   ([wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md) §3.1 timed a C copy and found it within the
   noise), so it is a floor under both columns.
 
@@ -86,16 +87,16 @@ column is against OpenSSL's scalar assembly. Two things in
 `std/crypto/x25519.ts` keeps a field element as ten signed limbs of 26 and 25
 bits in `i64`: a multiply is a hundred `i64` products, "no wide arithmetic". A
 five-limb, 51-bit representation (OpenSSL's fe51, named in the table's notes)
-needs twenty-five products, but each is 64 × 64 → 128, which is the same missing
-product as Poly1305's. `f25519Mul` also allocates a ten-limb `doubled` array on
+needs twenty-five products, but each is 64 × 64 → 128: the `mulHigh` builtin
+(WP41) gives the high half, and this module does not use it yet. `f25519Mul` also allocates a ten-limb `doubled` array on
 every call, and a ladder makes about fourteen temporaries. `x25519Base` is the
 same 255-step ladder from u = 9, with no precomputed table, which is why it
 runs at the same rate as `x25519` (12,486 and 12,506 op/s) while Rust's table
 base multiply runs at 84,357.
 
-*Not built:* take the per-call allocations out of the field code. A 128-bit
-product, or a builtin for the high half of a 64-bit one, is the larger lever,
-and it is a language change.
+*Not built:* take the per-call allocations out of the field code, and move it
+to five 51-bit limbs on `mulHigh`, the larger lever; the builtin exists, and
+the port is not written.
 
 ## Ed25519
 
@@ -126,8 +127,8 @@ which the table's notes say no `OPENSSL_ia32cap` mask moves. Sign is mostly
 table reads and mixed additions from the 22 KiB comb; verify is mostly
 doublings and additions on a variable point. The operation both lean on is the
 field multiply, ported from fiat-crypto on four 64-bit limbs, whose high halves
-`p256FiatMulxU64Hi` builds from four 32 × 32 products, since Nish has no 128-bit
-product. Both inversions are already safegcd (#780, #1469).
+are the `mulHigh` builtin (WP41), one multiply on x86-64 and AArch64; before it
+they were four 32 × 32 products each. Both inversions are already safegcd (#780, #1469).
 
 ## TLS 1.3 handshake and x509-parse
 

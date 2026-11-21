@@ -168,6 +168,18 @@ One directory, not recursive, mode `0777 & ~umask`, exactly like Node's `fs.mkdi
 
 </scalar-card>
 
+<scalar-card title="mul​High" icon="phosphor/regular/function" href="#mulhigh">
+
+The high 64 bits of the 128-bit product of `a` and `b`, the half a `u64` `a * b` drops (WP41).
+
+</scalar-card>
+
+<scalar-card title="mul​High​Is​Native" icon="phosphor/regular/function" href="#mulhighisnative">
+
+Whether `mulHigh` is one instruction on the build's target (WP41): `true` on x86-64 and AArch64, and `false` on wasm32 and under Node.
+
+</scalar-card>
+
 <scalar-card title="net​Address" icon="phosphor/regular/function" href="#netaddress">
 
 Write the address form of a numeric `host` and `port` into `out`.
@@ -1614,6 +1626,62 @@ const monotonicNanos: () => i64
 <scalar-field name="returns" type="i64">
 
 nanoseconds since an arbitrary origin.
+
+</scalar-field>
+
+### mulHigh
+
+The high 64 bits of the 128-bit product of `a` and `b`, the half a `u64`
+`a * b` drops (WP41). Both operands are `u64`. Any other type is refused as
+`` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2823):
+`u32`, `i64`, `number` and a ranged integer included. A bare numeric
+literal is read as a `u64`, so `mulHigh(x, 3)` works, and one that does not
+fit is the literal's own refusal. The call takes exactly two arguments, and
+like every function it is not a value.
+
+On x86-64 and AArch64 it is one multiply (`mul`, `mulx` or `umulh`) and
+calls nothing. wasm32 has no wide multiply, so there it is four 32×32
+products and their carries, inline. Neither lowering branches on its
+operands. Under Node it is `(a * b) >> 64n` on BigInts, with the same
+answer. Capability: none.
+
+```ts
+const mulHigh: (a: u64, b: u64) => u64
+```
+
+<scalar-field name="a" type="u64" required>
+
+one factor.
+
+</scalar-field>
+
+<scalar-field name="b" type="u64" required>
+
+the other factor.
+
+</scalar-field>
+
+<scalar-field name="returns" type="u64">
+
+the top 64 bits of `a * b` computed in 128 bits.
+
+</scalar-field>
+
+### mulHighIsNative
+
+Whether `mulHigh` is one instruction on the build's target (WP41): `true` on
+x86-64 and AArch64, and `false` on wasm32 and under Node. It is a constant of
+the build, so a branch on it costs nothing and the path not taken is
+dropped. Code with a wide-limb algorithm and a narrow-limb one keeps both and
+picks with it. It takes no arguments. Capability: none.
+
+```ts
+const mulHighIsNative: () => boolean
+```
+
+<scalar-field name="returns" type="boolean">
+
+`true` where the 64×64→128 product is native.
 
 </scalar-field>
 

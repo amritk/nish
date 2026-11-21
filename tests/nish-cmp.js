@@ -9970,7 +9970,7 @@ const PROVER_READS_FILES = {
   "tests/link/std_dns_soak/main.ts": ["dns-config.ll", "dns-message.ll"],
   "tests/link/std_http1_end_head/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/std_http1_mss/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/std_http_compress/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_http_compress/main.ts": ["chacha20poly1305.ll", "gzip.ll", "zlib.ll"],
   "tests/link/std_json_equal/main.ts": ["json-number.ll"],
   "tests/link/std_json_number/main.ts": ["json-number.ll"],
   "tests/link/std_json_pointer/main.ts": ["json-number.ll"],
@@ -16911,6 +16911,26 @@ const DECLARED = [
     changelog: STRING_ENUMS,
     why: "the program declares an enum whose members are strings, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
+  // WP41 S1: the `mulHigh` builtin, which the seed does not have.
+  ...[
+    "tests/cases/mul_high_aarch64.ts",
+    "tests/cases/mul_high_basic.ts",
+    "tests/cases/mul_high_native.ts",
+    "tests/cases/mul_high_wasm32.ts",
+    "docs/cookbook/builtin-mul-high-wasm32.ts",
+    "docs/cookbook/builtin-mul-high.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "mulHigh builtin for the 64×64→128 high product",
+    why: "the program calls `mulHigh` or `mulHighIsNative`, which the seed refuses as an unknown function, so only the candidate compiles it",
+  })),
+  {
+    program: "tests/link/json_enum_string/main.ts",
+    file: "json-tokenizer.ll",
+    changelog: "mulHigh builtin for the 64×64→128 high product",
+    why: "nish/json-tokenizer's Eisel–Lemire path takes its high products from `mulHigh`, a widening i128 multiply, where the seed's std/ built each from four 32-bit products in `jsonTokMulHigh`, so the module loses that function and renumbers its values",
+  },
   ...[
     "tests/cases/destructure_array.ts",
     "tests/cases/destructure_empty.ts",
@@ -18189,6 +18209,15 @@ const DECLARED = [
     file: "exit",
     changelog: "caller-proven spawn slots",
     why: "the candidate proves the `parallelMapInto` call's `src.length <= dst.length` from the caller's guard and compiles the program under the default no-panic scope; the reference has no such proof and refuses it",
+  },
+  // WP43 S4: `HttpCompressor` gains the deflate value, the coding last sent
+  // and its level, so a program that names it in its C header sees the
+  // struct grow.
+  {
+    program: "tests/link/std_compress_f64/main.ts",
+    file: "main.h",
+    changelog: "Accept-Encoding: deflate",
+    why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
   },
 ]
 
