@@ -736,7 +736,9 @@ const refuseSite = (
   const node = site.node
   const reaches = site.reaches
   if (site.kind === PANIC_CALL) {
-    if (reaches === null || scoped.has(site.callee)) {
+    // A callee in the scope, or one whose first site is in a function of the
+    // scope (a callback the call instantiates), is refused at that site.
+    if (reaches === null || scoped.has(site.callee) || scoped.has(reaches.fn)) {
       return false
     }
     const callee = facts.get(site.callee)
