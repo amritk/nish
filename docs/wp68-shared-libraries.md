@@ -4,7 +4,7 @@
 `runtime/` changes here. Under `tests/`, only the generated goldens of the
 `bench/wp68-*` programs (`tests/self/goldens/checked/`) and their `DECLARED`
 entries in `tests/nish-cmp.js` change. The stages are in §11 and on
-[the roadmap page](roadmap/wp68-shared-libraries.md). Six decisions wait on
+[its open-work issue](https://github.com/amritk/nish/issues/1868). Six decisions wait on
 the owner (§9).
 
 Every claim about today's code is anchored at commit `0eefa5e9`, on `main`.

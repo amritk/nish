@@ -8,7 +8,7 @@ qualified by its module path (§4), as
 unique across their package, by decision (§6). Class and interface names are
 still unique across the program until S3d. Where this note and LANGUAGE.md
 disagree, LANGUAGE.md wins. The stages are in §8 and on
-[the roadmap page](roadmap/wp57-module-scoped-names.md).
+[its open-work issue](https://github.com/amritk/nish/issues/1871).
 
 §1 to §5 were written against commit `0bf1ddbb`, on `main`, and §4 is
 corrected to what S1 merged as (`936ba0b1`). §6 to §8 are anchored at

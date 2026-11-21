@@ -2,8 +2,8 @@
 
 What Nish is, what exists, what remains, and how the work is cut into
 packages. §5 lists the packages, each with the note that records it; each
-one's state, stage by stage, and the order of the open work are on the
-[roadmap](roadmap/index.md).
+package's open stages, and the order of the open work, are GitHub issues
+under the [Roadmap issue](https://github.com/amritk/nish/issues/1849).
 `docs/LANGUAGE.md` is normative for the language; where this plan or a
 `wp*.md` note disagrees with it, LANGUAGE.md wins.
 
@@ -223,8 +223,8 @@ profile on linux-x64.
 Sizes, where a package was given one: S = under a day of agent work, M = one
 to two days, L = several days. Each package has a note, `docs/wpN-*.md`; a
 landed package's note is a summary of what shipped and why, and an open one's
-is its plan. [README.md](README.md) indexes them, and each has a
-[roadmap](roadmap/index.md) page with its state, a box per stage.
+is its plan. [README.md](README.md) indexes them, and an open package's
+work is its parent issue under the [Roadmap issue](https://github.com/amritk/nish/issues/1849).
 
 | WP | Package | Note |
 | --- | --- | --- |
@@ -294,6 +294,9 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 65 | The surface a lexer port asked for: byte search through `memchr` and `memcmp`, allocation without the zero fill and a standard `grow`, non-literal field initializers, and whether a number gets `toString` | [wp65](wp65-lexer-surface.md) |
 | 66 | C libraries from their headers: `nish c-import` writes a header's functions, structs and constants as Nish declarations through clang, with the language stages that would bind the rest | [wp66](wp66-c-headers.md) |
 | 68 | Shared libraries layered like atomic design: the helpers std/ and src/ each write for themselves (character classes, digits, quoting, byte codecs, builders, hashing) measured, then extracted one cluster per stage into atoms, molecules and organisms, each the fastest existing copy or faster | [wp68](wp68-shared-libraries.md) |
+| 71 | An HttpArena entry, and what it asks of `std/net`: the entry, and each scored profile against the package it waits on | [wp71](wp71-httparena.md) |
+| 72 | gRPC over the HTTP/2 server: `nish/net/protobuf`, trailers on the façade, unary calls in `nish/net/grpc` | [wp72](wp72-grpc.md) |
+| 73 | Brotli, measured first, then an encoder and `br` responses | [wp73](wp73-brotli.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -396,7 +399,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M5 "Self-hosting" | WP14 | `src/` compiles `src/`, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). |
 | M6 "One compiler" | WP19 | stage0 deleted rather than frozen, after the six gates of [wp19 §3](wp19-stage0-retirement.md) closed: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. |
 
-Which milestones are met is on the [roadmap](roadmap/index.md#milestones).
+M1, M2, M3, M5 and M6 are met. M4 is open: Nish stays on 0.x, and a breaking change moves the minor, until the owner declares 1.0.
 
 ### What remains
 
@@ -438,10 +441,10 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next, and every package's state
 
-The order of the work, what each package has built and what it has left,
-and its open questions are on the [roadmap](roadmap/index.md), one
-page per package with a box per stage. A pull request that lands a stage
-ticks its box there.
+What each package has built is in its note. The order of the open work,
+what each package has left and its open questions are GitHub issues under the
+[Roadmap issue](https://github.com/amritk/nish/issues/1849), a sub-issue per stage. A pull request that lands a
+stage closes its issue with `Fixes`.
 
 #### Settled, with the note that settles it
 

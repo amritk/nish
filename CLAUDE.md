@@ -14,7 +14,8 @@ only the guide your task touches; the rules there are authoritative:
 | copy or port code in | [`.claude/licensing.md`](.claude/licensing.md) |
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
-| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package"; tick its box in the PR that lands the stage |
+| pick up a work package ("pick up WP50", `/feature --next`) | its parent issue under the [Roadmap issue](https://github.com/amritk/nish/issues/1849), its plan `.claude/plans/<slug>.plan.md`, [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package", and the `pickup` skill; the PR `Fixes` the stage's issue |
+| change a workflow skill or agent (`feature`, `plan-issues`, `pickup`, `decide`, the reviewers) | they are the `ai` plugin (`ai@amritk`, enabled in `.claude/settings.json`), from [`amritk/ai`](https://github.com/amritk/ai): change them there, not here |
 
 **An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
 types only through `walk.typeAt`, and treat a null binding table
@@ -65,6 +66,13 @@ was run. Every `docs/BENCHMARKS.md` table names the commit whose bench code
 produced it and claims only the fields that version prints. A per-second
 maximum is quoted as a maximum, never as a typical cost. Each "up to",
 "every" or "lower than" is checked against the table it summarises.
+
+**A bench side is the code it names.** A side called an existing copy calls
+the shipped function itself, with its callers' argument types and input
+shapes, and the native kernel where one replaces it; a loop the bench wrote
+says so. A claimed gain names its callers, found with `git grep` through
+every wrapper, and a stage's gate names a bench that reaches the changed
+function.
 
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
@@ -122,8 +130,7 @@ merges, regenerates the goldens and stages them without committing. Sync after
 any `src/` or `std/` change lands on `main`, even with no textual conflict.
 A sync can stale a fact the branch pins without a conflict: after it, run
 `node scripts/gen-diagnostic-codes.mjs --check` (a code the branch adds may now
-be taken) and recount any `**Done:** N of M` the branch ticks against its `[x]`
-boxes, on the work package's page and in `docs/roadmap/index.md`. A
+be taken). A
 new positive `tests/cases/*` is registered with
 `node tests/differential/goldens.js --update` in the same commit. Details:
 `.claude/selfhost.md` → "The goldens". `docs/reference/` (and its routes in

@@ -1,5 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "amritk": {
+      "source": {
+        "source": "github",
+        "repo": "amritk/ai"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ai@amritk": true
+  },
   "autoCompactWindow": 200000,
   "hooks": {
     "SessionStart": [

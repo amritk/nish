@@ -7648,7 +7648,7 @@ return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
 what it adds is a name, so one C pointer type is never passed where another is
 wanted** (`tests/cases/ffi_opaque_handle`,
 [cookbook](IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
-`docs/roadmap/wp66-c-headers.md` S3):
+`docs/wp66-c-headers.md` S3):
 
 ```ts
 declare class Db {}

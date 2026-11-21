@@ -25847,7 +25847,7 @@ if (dealtHere("cliChecks")) {
   }
 
   // ---- `--explain-layout`: which classes the compact-class rule picks ---------------
-  // The report runs the five tests of docs/roadmap/wp48-ref32-classes.md §3.1 over
+  // The report runs the five tests of docs/wp48-ref32-classes.md §3.1 over
   // every class and prints one line per class: `compact`, or the first test that
   // refuses it. Nothing in the build reads the verdict yet, so the flag changes no
   // byte of the IR. Each refusal has a program below that stops at that test and
@@ -42153,6 +42153,124 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
   )
+}
+// #1836: the stored console log of shard 8 has stopped partway through the
+// link programs in green runs, taking the summary line with it. The Test step
+// keeps the whole log in a file and the next step copies the results into the
+// step summary, which the runner uploads apart from the console. These checks
+// hold the two steps to that shape and prove the parts they lean on.
+if (selects("ci.yml", "ci-test-summary")) {
+  const steps = ciJob(ciYmlText, "test").split(/\n {6}- /).slice(1)
+  const testStep = steps.find((st) => /npm test -- /.test(st)) ?? ""
+  const summaryStep = steps.find((st) => /scripts\/ci-test-summary\.mjs/.test(st)) ?? ""
+  // The step's status is npm's alone: `set +e` lets the pipe finish so both
+  // statuses can be written down, and the step then exits with npm's. A
+  // `set -o pipefail` left in would fail the run for tee's warning.
+  check(
+    "ci.yml: the Test step tees with --output-error=warn, records npm's and tee's statuses and exits with npm's",
+    /^ {10}set \+e$/m.test(testStep) &&
+      /^ {10}npm test -- .*\| tee --output-error=warn "\$RUNNER_TEMP\/test\.log"$/m.test(testStep) &&
+      /^ {10}status=\("\$\{PIPESTATUS\[@\]\}"\)$/m.test(testStep) &&
+      /^ {10}echo "npm=\$\{status\[0\]\} tee=\$\{status\[1\]\}" > "\$RUNNER_TEMP\/test\.status"$/m.test(testStep) &&
+      /^ {10}exit "\$\{status\[0\]\}"$/m.test(testStep) &&
+      !/pipefail|\|\|\s*(true|:)(\s|$)/m.test(testStep),
+    `Test step:\n${testStep || "(not found)"}`
+  )
+  // After a failed Test step too, since that is when the FAIL lines matter,
+  // and in every shard; `continue-on-error` is not needed, since it exits 0.
+  check(
+    "ci.yml: the Test summary step follows the Test step in every shard, after a failure too",
+    steps.indexOf(summaryStep) === steps.indexOf(testStep) + 1 &&
+      /^ {8}if: \$\{\{ !cancelled\(\) \}\}$/m.test(summaryStep) &&
+      (summaryStep.match(/^ {8}if:/gm) ?? []).length === 1 &&
+      /^ {8}run: node scripts\/ci-test-summary\.mjs "\$RUNNER_TEMP\/test\.log" "\$RUNNER_TEMP\/test\.status"$/m.test(
+        summaryStep
+      ),
+    `Test summary step:\n${summaryStep || "(not found)"}`
+  )
+
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-test-summary-"))
+  try {
+    // What the step leans on in this machine's tee, uutils' on CI's runners:
+    // that it takes `--output-error=warn`, and that a reader which goes away
+    // makes it exit non-zero while the file still gets every byte. Read from
+    // tee's exit status and the file's size, never from its warning, whose
+    // wording differs between GNU and uutils.
+    const teed = path.join(work, "teed")
+    const tee = spawnSync(
+      "bash",
+      ["-c", 'head -c 300000 /dev/zero | tee --output-error=warn "$1" | true; exit "${PIPESTATUS[1]}"', "bash", teed],
+      { stdio: "ignore" }
+    )
+    const teedBytes = fs.existsSync(teed) ? fs.statSync(teed).size : -1
+    check(
+      "ci-test-summary: tee --output-error=warn exits non-zero on a closed reader and still writes the whole file",
+      tee.status !== 0 && tee.status !== null && teedBytes === 300000,
+      `tee exit status ${tee.status} (signal ${tee.signal}), ${teedBytes} byte(s) in the file`
+    )
+
+    // The script itself, over a log with a passing check, a failing one with
+    // detail (one of whose lines holds a fence), a skip and the summary.
+    const log = path.join(work, "test.log")
+    const statusFile = path.join(work, "test.status")
+    const out = path.join(work, "summary.md")
+    fs.writeFileSync(
+      log,
+      [
+        "PASS  quiet: passes",
+        "FAIL  loud: fails",
+        "      first detail",
+        "      ```not a fence",
+        "PASS  after: passes",
+        "SKIP  absent: no tool",
+        "",
+        "1 passed, 1 failed, 1 skipped.",
+        "",
+        "Note: 1 section(s) were skipped for reasons other than a missing LLVM toolchain.",
+        "",
+      ].join("\n")
+    )
+    fs.writeFileSync(statusFile, "npm=1 tee=1\n")
+    const run = (logPath) =>
+      spawnSync(process.execPath, [path.join(root, "scripts", "ci-test-summary.mjs"), logPath, statusFile], {
+        env: { ...process.env, GITHUB_STEP_SUMMARY: out, SHARD: "8" },
+        encoding: "utf8",
+      })
+    const whole = run(log)
+    const md = fs.existsSync(out) ? fs.readFileSync(out, "utf8") : ""
+    const fences = md.match(/^`{3,}(?:text)?$/gm) ?? []
+    check(
+      "ci-test-summary: the step summary carries the summary line, the Note, each FAIL line with its detail, each SKIP line and the statuses",
+      whole.status === 0 &&
+        md.includes("1 passed, 1 failed, 1 skipped.\n\nNote: 1 section(s)") &&
+        md.includes("FAIL  loud: fails\n      first detail\n      ```not a fence\n") &&
+        md.includes("SKIP  absent: no tool") &&
+        md.includes("`npm=1 tee=1`") &&
+        !md.includes("PASS  ") &&
+        fences.length % 2 === 0 &&
+        md.includes("````text\nFAIL  loud: fails\n"),
+      `exit status ${whole.status}\n${whole.stderr}\n${md}`
+    )
+
+    // A log cut before its summary still gives its tail, and a missing one
+    // (the Test step never ran) a line saying so: neither fails the step.
+    fs.writeFileSync(out, "")
+    fs.writeFileSync(log, "PASS  one\nPASS  two: the last line\n")
+    const cut = run(log)
+    const missing = run(path.join(work, "absent.log"))
+    const both = fs.readFileSync(out, "utf8")
+    check(
+      "ci-test-summary: a log with no summary line gives its tail, and a missing log a note, both exiting 0",
+      cut.status === 0 &&
+        missing.status === 0 &&
+        both.includes("no summary line") &&
+        both.includes("PASS  two: the last line") &&
+        both.includes("No test log"),
+      `exit statuses ${cut.status} and ${missing.status}\n${cut.stderr}${missing.stderr}\n${both}`
+    )
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true })
+  }
 }
 // A name in `LINK_READ_LATER` that is no longer a program would pin nothing,
 // and the checks that read its output skip a file that is not there.
