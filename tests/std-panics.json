@@ -1,0 +1,678 @@
+{
+  "note": [
+    "The panic sites std/ still holds, per module and per kind, counted by tests/run.js (the std-panics section) from each git-tracked std/ module's --emit-panics report: not proven, not allowed, not of kind call, oom or unchecked, deduped by module:line:col:kind.",
+    "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
+    "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics\"). explicit counts the panic sites of kept functions and the ones still to fix."
+  ],
+  "total": 9584,
+  "explicit": {
+    "kept": 0,
+    "toFix": 462
+  },
+  "modules": {
+    "std/base64.ts": {
+      "array-length": 1,
+      "index": 12,
+      "overflow": 5,
+      "panic": 6,
+      "slice": 1
+    },
+    "std/bytes.ts": {
+      "index": 28,
+      "overflow": 4,
+      "panic": 1
+    },
+    "std/cli-args.ts": {
+      "index": 114,
+      "overflow": 20,
+      "panic": 36
+    },
+    "std/cli-flags.ts": {
+      "index": 21,
+      "overflow": 5,
+      "panic": 9,
+      "slice": 1
+    },
+    "std/cli.ts": {
+      "overflow": 6
+    },
+    "std/compress/checksum.ts": {
+      "divide": 2,
+      "overflow": 23,
+      "panic": 2
+    },
+    "std/compress/deflate.ts": {
+      "array-length": 3,
+      "index": 35,
+      "overflow": 322,
+      "panic": 31,
+      "range": 7
+    },
+    "std/compress/gzip.ts": {
+      "array-length": 2,
+      "index": 24,
+      "overflow": 65,
+      "panic": 12
+    },
+    "std/compress/zlib.ts": {
+      "index": 12,
+      "overflow": 8,
+      "panic": 2
+    },
+    "std/crypto/aes.ts": {
+      "array-length": 4,
+      "divide": 1,
+      "index": 62,
+      "overflow": 27
+    },
+    "std/crypto/base64url.ts": {
+      "array-length": 2,
+      "index": 8,
+      "overflow": 21,
+      "panic": 7
+    },
+    "std/crypto/bcrypt-batch.ts": {
+      "array-length": 1,
+      "divide": 2,
+      "index": 13,
+      "overflow": 24,
+      "slice": 2
+    },
+    "std/crypto/bcrypt.ts": {
+      "array-length": 4,
+      "index": 52,
+      "overflow": 74,
+      "slice": 2
+    },
+    "std/crypto/chacha20poly1305.ts": {
+      "array-length": 4,
+      "index": 61,
+      "overflow": 22
+    },
+    "std/crypto/ct.ts": {
+      "index": 2
+    },
+    "std/crypto/ed25519.ts": {
+      "array-length": 1,
+      "index": 19,
+      "panic": 2
+    },
+    "std/crypto/hkdf.ts": {
+      "array-length": 4,
+      "index": 18,
+      "overflow": 22,
+      "panic": 16
+    },
+    "std/crypto/hmac.ts": {
+      "array-length": 4,
+      "index": 11,
+      "overflow": 22,
+      "panic": 14
+    },
+    "std/crypto/jwt.ts": {
+      "array-length": 7,
+      "index": 7,
+      "overflow": 74,
+      "panic": 1
+    },
+    "std/crypto/p256.ts": {
+      "array-length": 7,
+      "index": 22,
+      "overflow": 32,
+      "panic": 3
+    },
+    "std/crypto/p384.ts": {
+      "index": 4,
+      "overflow": 3
+    },
+    "std/crypto/pki-roots.ts": {
+      "index": 6,
+      "overflow": 14,
+      "slice": 4
+    },
+    "std/crypto/pki.ts": {
+      "array-length": 1,
+      "index": 21,
+      "overflow": 31,
+      "pop": 1,
+      "slice": 7
+    },
+    "std/crypto/rsa.ts": {
+      "array-length": 10,
+      "index": 23,
+      "overflow": 32
+    },
+    "std/crypto/scram.ts": {
+      "panic": 1
+    },
+    "std/crypto/sha1.ts": {
+      "array-length": 1,
+      "index": 11,
+      "overflow": 12,
+      "panic": 7
+    },
+    "std/crypto/sha256.ts": {
+      "index": 5,
+      "overflow": 14,
+      "panic": 9,
+      "range": 15
+    },
+    "std/crypto/sha512.ts": {
+      "array-length": 1,
+      "index": 20,
+      "overflow": 14,
+      "panic": 5
+    },
+    "std/crypto/x25519.ts": {
+      "overflow": 4
+    },
+    "std/crypto/x509-random.ts": {
+      "index": 1,
+      "io-exit": 2
+    },
+    "std/crypto/x509.ts": {
+      "array-length": 2,
+      "divide": 1,
+      "index": 34,
+      "overflow": 68,
+      "slice": 2
+    },
+    "std/host/game.ts": {
+      "index": 7
+    },
+    "std/host/ring.ts": {
+      "divide": 3,
+      "index": 6,
+      "overflow": 8
+    },
+    "std/host/text.ts": {
+      "index": 1,
+      "overflow": 2,
+      "slice": 1
+    },
+    "std/json-equal.ts": {
+      "index": 4,
+      "pop": 2
+    },
+    "std/json-number.ts": {
+      "slice": 1
+    },
+    "std/json-tokenizer.ts": {
+      "slice": 1
+    },
+    "std/json-typed.ts": {
+      "array-length": 2,
+      "overflow": 18,
+      "slice": 3
+    },
+    "std/json-value.ts": {
+      "array-length": 1,
+      "slice": 2
+    },
+    "std/math.ts": {
+      "index": 6,
+      "overflow": 42
+    },
+    "std/net/buffer-pool.ts": {
+      "array-length": 1,
+      "index": 1,
+      "overflow": 2,
+      "panic": 6
+    },
+    "std/net/dns-config.ts": {
+      "array-length": 2,
+      "index": 36,
+      "overflow": 65,
+      "panic": 14
+    },
+    "std/net/dns-message.ts": {
+      "array-length": 1,
+      "index": 26,
+      "overflow": 49,
+      "panic": 4
+    },
+    "std/net/dns-resolver.ts": {
+      "array-length": 23,
+      "divide": 2,
+      "index": 139,
+      "overflow": 57,
+      "panic": 11
+    },
+    "std/net/dns.ts": {
+      "array-length": 4,
+      "index": 27,
+      "io-exit": 1,
+      "overflow": 16,
+      "panic": 3,
+      "slice": 4
+    },
+    "std/net/fetch.ts": {
+      "array-length": 9,
+      "index": 20,
+      "io-exit": 3,
+      "overflow": 64,
+      "panic": 1,
+      "pop": 2,
+      "slice": 13
+    },
+    "std/net/grpc.ts": {
+      "divide": 1,
+      "index": 16,
+      "overflow": 9,
+      "panic": 4
+    },
+    "std/net/handler.ts": {
+      "array-length": 14,
+      "divide": 4,
+      "index": 72,
+      "overflow": 63,
+      "panic": 16,
+      "pop": 1,
+      "slice": 1
+    },
+    "std/net/hpack.ts": {
+      "array-length": 1,
+      "index": 33,
+      "overflow": 70,
+      "panic": 9,
+      "pop": 6
+    },
+    "std/net/http-compress.ts": {
+      "array-length": 2,
+      "index": 3,
+      "overflow": 10,
+      "panic": 5
+    },
+    "std/net/http-fields.ts": {
+      "index": 17,
+      "overflow": 28
+    },
+    "std/net/http-server.ts": {
+      "array-length": 21,
+      "divide": 5,
+      "index": 185,
+      "io-exit": 2,
+      "overflow": 160,
+      "panic": 44,
+      "pop": 2,
+      "slice": 1
+    },
+    "std/net/http1-client-codec.ts": {
+      "array-length": 4,
+      "index": 42,
+      "overflow": 108,
+      "panic": 3
+    },
+    "std/net/http1-codec.ts": {
+      "array-length": 6,
+      "index": 63,
+      "overflow": 224,
+      "panic": 5
+    },
+    "std/net/http1-server.ts": {
+      "array-length": 6,
+      "index": 51,
+      "overflow": 101,
+      "panic": 3,
+      "pop": 1,
+      "slice": 4
+    },
+    "std/net/http2-cleartext.ts": {
+      "array-length": 1,
+      "index": 28,
+      "overflow": 14,
+      "panic": 2,
+      "slice": 3
+    },
+    "std/net/http2-frame.ts": {
+      "index": 27,
+      "overflow": 41,
+      "panic": 13
+    },
+    "std/net/http2-tls.ts": {
+      "index": 5,
+      "overflow": 3
+    },
+    "std/net/http2.ts": {
+      "array-length": 2,
+      "divide": 2,
+      "index": 10,
+      "overflow": 74,
+      "panic": 4
+    },
+    "std/net/http3-frame.ts": {
+      "divide": 1,
+      "index": 4,
+      "overflow": 15,
+      "panic": 1
+    },
+    "std/net/http3-server.ts": {
+      "array-length": 15,
+      "divide": 3,
+      "index": 52,
+      "io-exit": 2,
+      "overflow": 74,
+      "panic": 3,
+      "slice": 4
+    },
+    "std/net/http3.ts": {
+      "array-length": 17,
+      "divide": 3,
+      "index": 159,
+      "overflow": 64,
+      "panic": 5
+    },
+    "std/net/oidc.ts": {
+      "array-length": 1,
+      "index": 4,
+      "overflow": 7,
+      "slice": 6
+    },
+    "std/net/outbound.ts": {
+      "array-length": 2,
+      "index": 25,
+      "overflow": 28,
+      "panic": 2,
+      "slice": 2
+    },
+    "std/net/postgres-async.ts": {
+      "array-length": 31,
+      "index": 213,
+      "io-exit": 1,
+      "overflow": 149,
+      "panic": 10,
+      "slice": 14
+    },
+    "std/net/postgres-carrier.ts": {
+      "array-length": 22,
+      "index": 87,
+      "io-exit": 4,
+      "overflow": 22,
+      "panic": 12,
+      "slice": 6
+    },
+    "std/net/postgres.ts": {
+      "array-length": 28,
+      "divide": 16,
+      "index": 139,
+      "overflow": 314,
+      "panic": 46,
+      "slice": 13
+    },
+    "std/net/prefork.ts": {
+      "array-length": 1,
+      "index": 30,
+      "overflow": 20,
+      "panic": 4,
+      "slice": 3
+    },
+    "std/net/qpack.ts": {
+      "index": 6,
+      "overflow": 29,
+      "panic": 3
+    },
+    "std/net/quic-conn-ack.ts": {
+      "array-length": 1,
+      "overflow": 19
+    },
+    "std/net/quic-conn-cid.ts": {
+      "array-length": 2,
+      "divide": 1,
+      "index": 2,
+      "overflow": 16
+    },
+    "std/net/quic-conn-params.ts": {
+      "index": 1,
+      "overflow": 8
+    },
+    "std/net/quic-datagram.ts": {
+      "array-length": 2,
+      "divide": 4,
+      "index": 3,
+      "overflow": 14
+    },
+    "std/net/quic-frame.ts": {
+      "array-length": 1,
+      "index": 2,
+      "overflow": 64
+    },
+    "std/net/quic-listener.ts": {
+      "array-length": 2,
+      "index": 18,
+      "overflow": 60,
+      "panic": 1,
+      "pop": 1
+    },
+    "std/net/quic-packet.ts": {
+      "array-length": 5,
+      "index": 18,
+      "overflow": 100,
+      "slice": 4
+    },
+    "std/net/quic-recovery.ts": {
+      "array-length": 7,
+      "divide": 11,
+      "index": 8,
+      "overflow": 98
+    },
+    "std/net/quic-stream.ts": {
+      "array-length": 3,
+      "divide": 2,
+      "index": 16,
+      "overflow": 106,
+      "panic": 4,
+      "pop": 1
+    },
+    "std/net/quic.ts": {
+      "array-length": 18,
+      "divide": 4,
+      "index": 11,
+      "overflow": 169,
+      "panic": 1
+    },
+    "std/net/router.ts": {
+      "array-length": 7,
+      "index": 70,
+      "overflow": 50,
+      "panic": 4
+    },
+    "std/net/serve.ts": {
+      "array-length": 19,
+      "index": 67,
+      "overflow": 41,
+      "panic": 5,
+      "slice": 8
+    },
+    "std/net/tls-tcp.ts": {
+      "index": 44,
+      "io-exit": 3,
+      "overflow": 12,
+      "slice": 5
+    },
+    "std/net/tls.ts": {
+      "array-length": 31,
+      "divide": 1,
+      "index": 23,
+      "io-exit": 1,
+      "overflow": 65
+    },
+    "std/net/tls/client.ts": {
+      "array-length": 3,
+      "index": 7,
+      "overflow": 26
+    },
+    "std/net/tls/codec.ts": {
+      "array-length": 11,
+      "index": 7,
+      "overflow": 131
+    },
+    "std/net/tls/record-client.ts": {
+      "index": 18,
+      "overflow": 45
+    },
+    "std/net/tls/record-server.ts": {
+      "index": 19,
+      "overflow": 44
+    },
+    "std/net/tls/record.ts": {
+      "array-length": 2,
+      "index": 26,
+      "overflow": 34
+    },
+    "std/net/tls/schedule.ts": {
+      "array-length": 18,
+      "index": 2,
+      "overflow": 4,
+      "panic": 2
+    },
+    "std/net/tls/ticket.ts": {
+      "array-length": 5,
+      "divide": 2,
+      "index": 25,
+      "io-exit": 3,
+      "overflow": 31,
+      "panic": 1,
+      "slice": 5
+    },
+    "std/net/tls/verify.ts": {
+      "index": 1
+    },
+    "std/net/upstream.ts": {
+      "array-length": 6,
+      "divide": 6,
+      "index": 21,
+      "overflow": 27,
+      "panic": 4,
+      "slice": 3
+    },
+    "std/net/url.ts": {
+      "array-length": 3,
+      "index": 24,
+      "overflow": 57,
+      "panic": 2,
+      "slice": 10
+    },
+    "std/net/websocket.ts": {
+      "array-length": 8,
+      "index": 55,
+      "overflow": 94,
+      "panic": 7,
+      "slice": 1
+    },
+    "std/net/webtransport.ts": {
+      "array-length": 36,
+      "divide": 2,
+      "index": 121,
+      "io-exit": 1,
+      "overflow": 52,
+      "panic": 2
+    },
+    "std/random.ts": {
+      "divide": 4,
+      "panic": 1
+    },
+    "std/raster.ts": {
+      "array-length": 12,
+      "divide": 1,
+      "index": 37,
+      "overflow": 36
+    },
+    "std/regex.ts": {
+      "array-length": 2
+    },
+    "std/release.ts": {
+      "index": 5,
+      "overflow": 5,
+      "slice": 10
+    },
+    "std/sqlite.ts": {
+      "ffi-nul": 7,
+      "ffi-null": 6,
+      "overflow": 9
+    },
+    "std/sync/ring.ts": {
+      "overflow": 123,
+      "panic": 16
+    },
+    "std/sync/shm.ts": {
+      "ffi-nul": 3,
+      "ffi-null": 1,
+      "overflow": 3
+    },
+    "std/synth.ts": {
+      "array-length": 1,
+      "index": 2,
+      "overflow": 3
+    },
+    "std/temporal.ts": {
+      "divide": 3,
+      "index": 9,
+      "overflow": 240,
+      "panic": 1,
+      "slice": 7
+    },
+    "std/term-io.ts": {
+      "divide": 2,
+      "index": 5,
+      "overflow": 14,
+      "slice": 3
+    },
+    "std/term-pixels.ts": {
+      "array-length": 6,
+      "divide": 2,
+      "index": 18,
+      "overflow": 69,
+      "panic": 4,
+      "slice": 2
+    },
+    "std/term-probe.ts": {
+      "divide": 2
+    },
+    "std/term-rate.ts": {
+      "index": 20,
+      "overflow": 22,
+      "pop": 2
+    },
+    "std/term.ts": {
+      "array-length": 11,
+      "divide": 4,
+      "index": 38,
+      "overflow": 105,
+      "panic": 5,
+      "pop": 5,
+      "slice": 3
+    },
+    "std/testing.ts": {
+      "overflow": 6
+    },
+    "std/text.ts": {
+      "panic": 1,
+      "slice": 2
+    },
+    "std/threads.ts": {
+      "array-length": 2,
+      "index": 32,
+      "overflow": 4,
+      "panic": 3
+    },
+    "std/yaml-json.ts": {
+      "index": 18,
+      "overflow": 39
+    },
+    "std/yaml-lines.ts": {
+      "overflow": 12
+    },
+    "std/yaml-write.ts": {
+      "overflow": 13,
+      "slice": 1
+    },
+    "std/yaml.ts": {
+      "array-length": 13,
+      "index": 12,
+      "overflow": 275,
+      "panic": 1,
+      "slice": 3
+    }
+  },
+  "kept": []
+}
