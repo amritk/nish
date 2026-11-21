@@ -1134,6 +1134,18 @@ region rules refuse `await handle(new Request(r), ctx)` with "may store
 memory outside the region into it" and "may grow it", whatever the handler's
 body. Lifting that needs facts per function value, in `src/region-rules.ts`.
 
+## Stage 6: a task reads its spawner's request in place (design B)
+
+Work in progress (#2104). The owner chose design B for the rest of stage 6
+(#1637): a spawned task reads its spawner's slot in place, through a borrowed
+view it may neither grow, write into, keep past its end nor hand to anything
+that does, so `serveTask` in `std/net/serve.ts` stops copying the request.
+The spike (#1595) measured that copy at about 370 instructions a request on
+`plaintext` and `json`, and showed the task-memory rules refuse the in-place
+read with no library-only route around them; the construct is the route.
+This section records the rule, the lowering, the measurement and the regate
+as they land.
+
 ## Not in this work package
 
 - Promises as values: arrays of them, `Promise.all` over an array, `.then`.
