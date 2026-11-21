@@ -1344,7 +1344,7 @@ const protobufModule = () =>
   }))
 
 /** The changelog words of the stage that adds `nish proto`. */
-const PROTO_CLASSES = "nish proto writes message classes from a .proto file"
+const PROTO_CLASSES = "proto writes message classes from a .proto file"
 const protoClasses = () =>
   ["net_proto_classes"].map((name) => ({
     program: `tests/link/${name}/main.ts`,
