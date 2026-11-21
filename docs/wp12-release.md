@@ -106,7 +106,9 @@ a size table. A program must exit 0 unless it carries `// smoke: exit <n>`;
 `// smoke: argv <args>` gives it a command line, `// smoke: args <flags>`
 extra compiler flags, and `// smoke: skip <reason>` leaves out a file that
 declares `main` but is not a native program (a browser page's entry).
-CI's `test` job runs it after `npm test` with `NISH=build/nish`.
+Each program's stdout must match its pin, `tests/smoke/<name>.stdout`, so an
+example whose output changes fails; `SMOKE_UPDATE=1 npm run smoke` rewrites
+the pins from the run. CI's `examples` job runs it with `NISH=build/nish`.
 `release.yml` separately smoke-tests each unpacked tarball: `--version`, then
 linking and running `hello.ts` and a program that imports `nish/text`, from a
 directory unrelated to both the checkout and the unpack.

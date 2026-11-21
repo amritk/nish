@@ -17,14 +17,23 @@
 # declares a `main` but is not a native program, such as a browser page's
 # entry (examples/wasm-arena/page.ts), and the reason is printed in the table.
 # Every program reads /dev/null for stdin, so a run is the
-# same from a terminal as in CI. The script exits non-zero if any program fails to compile,
-# link, or run with the expected status. Binaries and IR go to build/smoke/.
+# same from a terminal as in CI. A run of the default examples/ also compares
+# each program's stdout with its pin, tests/smoke/<name>.stdout, so an example
+# whose output changes fails here; `SMOKE_UPDATE=1 scripts/smoke.sh` rewrites
+# the pins from this run instead (read the diff). The script exits non-zero if
+# any program fails to compile, link, run with the expected status, or print
+# its pinned stdout. Binaries and IR go to build/smoke/.
 # Needs clang on PATH.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 
 examples=${1:-examples}
 out=build/smoke
+# Only the default corpus has pins: another directory's programs are not ours.
+pins=
+if [ "$examples" = examples ]; then
+  pins=tests/smoke
+fi
 mkdir -p "$out"
 
 # shellcheck source=scripts/nish-compiler.sh
@@ -86,12 +95,23 @@ for src in "${programs[@]}"; do
   # shellcheck disable=SC2086
   "$exe" $argv </dev/null >"$out/$name.out" 2>"$out/$name.err"
   got=$?
-  if [ "$got" -eq "$want" ]; then
-    status="ok (exit $got)"
-  else
+  pin="$pins/$name.stdout"
+  if [ "$got" -ne "$want" ]; then
     status="RUN FAIL (exit $got, expected $want)"
     failed=1
     sed 's/^/    /' "$out/$name.err" >&2
+  elif [ -n "$pins" ] && [ "${SMOKE_UPDATE:-}" = 1 ]; then
+    cp "$out/$name.out" "$pin"
+    status="ok (exit $got, stdout pinned)"
+  elif [ -n "$pins" ] && [ ! -f "$pin" ]; then
+    status="NO PIN ($pin; SMOKE_UPDATE=1 writes it)"
+    failed=1
+  elif [ -n "$pins" ] && ! cmp -s "$pin" "$out/$name.out"; then
+    status="STDOUT DIFFERS from $pin"
+    failed=1
+    diff "$pin" "$out/$name.out" | sed 's/^/    /' >&2
+  else
+    status="ok (exit $got)"
   fi
   rows+=("$(printf '%-24s %10s  %s' "$src" "$bytes" "$status")")
 done

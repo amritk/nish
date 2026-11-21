@@ -25,10 +25,12 @@
  * full 32-bit hash of each. The bucket table `slots` is open addressing with
  * linear probing, and a bucket is one `u32`:
  *
- *     bits 31..24   the top eight bits of the key's hash (the fingerprint)
- *     bits 23..0    the entry's index plus one
+ *     the high bits   the key's hash above the table's mask (the fingerprint)
+ *     the mask bits   the entry's index plus one
  *
- * An empty bucket is 0. A deleted entry's bucket is `0x01000000` (16777216),
+ * The index field is as wide as the mask, `slots.length - 1`: a table holds
+ * at most three entries per four buckets, so every index plus one fits. An
+ * empty bucket is 0. A deleted entry's bucket is the mask plus one,
  * fingerprint 1 and index field 0, which no live entry has; its stored hash is
  * set to 0, which is why a computed hash of 0 is moved to 1. A probe reads the
  * entry arrays only when a bucket's fingerprint matches, and compares the
@@ -52,16 +54,6 @@
  * `valueAt`, and `walkClose` (§6.2). The rest of this file is refused by name
  * outside it.
  */
-
-/**
- * The most entries a table holds, dead ones included until a rebuild: 2^24 - 1,
- * what the 24-bit index field holds as an index plus one. Node's own `Map` and
- * `Set` hold one more, 2^24, and throw on the next insert.
- */
-const INDEX_CAP: i32 = 16777215
-
-/** The first bucket count. A power of two, as every bucket count is. */
-const INITIAL_SLOTS: i32 = 8
 
 /**
  * The key's hash, never 0: SipHash-1-3 of a string's bytes under the process's
@@ -89,8 +81,19 @@ const sameKey = <K>(a: K, b: K): boolean => a === b
 /** The first bucket for `h`: its low bits, folded with the high half. */
 const homeBucket = (h: u32, mask: i32): i32 => toI32(h ^ (h >>> 16)) & mask
 
-/** The bucket word for entry `index` of hash `h`. */
-const slotWord = (h: u32, index: i32): u32 => ((h >>> 24) << 24) | toU32(index + 1)
+/**
+ * The bucket word for entry `index` of hash `h` in a table of `mask + 1`
+ * buckets: the index plus one in the bits the mask covers, and the hash's bits
+ * above them as a fingerprint. The load bound keeps every index below the
+ * bucket count, so the index never reaches the fingerprint.
+ */
+const slotWord = (h: u32, mask: i32, index: i32): u32 => (h & ~toU32(mask)) | (toU32(index) + 1)
+
+/**
+ * A deleted entry's bucket: a fingerprint bit set and an index field of 0, so
+ * a probe walks past it, its entry index being -1.
+ */
+const tombstone = (mask: i32): u32 => toU32(mask) + 1
 
 /** A probe that found entry `index`, pointed at by `bucket`. Never negative. */
 const foundAt = (bucket: i32, index: i32): i64 => (toI64(bucket) << 32) | toI64(index)
@@ -103,50 +106,61 @@ const absentAt = (bucket: i32, h: u32): i64 => toI64(-1) - ((toI64(bucket) << 32
  * the bucket pointing at `key`, or to the first empty one. A tombstone is
  * walked past — its index field is 0, so its entry index is -1 and the range
  * test turns it away — and the load bound keeps a quarter of the buckets
- * empty, so the walk ends.
+ * empty, so the walk ends. It takes at most one step per bucket: a table with
+ * no empty bucket answers absent at the bucket past its end, which
+ * `insertAt` answers with a rebuild, as it does a full table.
  */
 const probeTable = <K>(slots: u32[], mask: i32, hashes: u32[], keys: K[], key: K): i64 => {
   const h = hashKey(key)
-  const fingerprint = h >>> 24
-  let bucket = homeBucket(h, mask)
+  const low = toU32(mask)
+  const fingerprint = h & ~low
+  let bucket = toU32(homeBucket(h, mask))
   // The length is read in the condition rather than once: the key compare is
-  // a call, and a call ends every length fact the bounds proof holds.
-  while (bucket >= 0 && bucket < toI32(slots.length)) {
-    const word = slots[bucket]
-    if (word === 0) {
-      return absentAt(bucket, h)
-    }
-    if (word >>> 24 === fingerprint) {
-      const at = toI32(word & 16777215) - 1
-      if (
-        at >= 0 &&
-        at < toI32(hashes.length) &&
-        hashes[at] === h &&
-        at < toI32(keys.length) &&
-        sameKey(keys[at], key)
-      ) {
-        return foundAt(bucket, at)
+  // a call, and a call ends every length fact the bounds proof holds. The
+  // step and the bucket are `u32`s, whose `+` wraps, so the call leaves
+  // nothing they need proven.
+  for (let step: u32 = 0; step < toU32(slots.length); step = step + 1) {
+    const b = toI32(bucket)
+    if (b >= 0 && b < toI32(slots.length)) {
+      const word = slots[b]
+      if (word === 0) {
+        return absentAt(b, h)
+      }
+      if ((word & ~low) === fingerprint) {
+        const at = toI32((word & low) - 1)
+        if (
+          at >= 0 &&
+          at < toI32(hashes.length) &&
+          hashes[at] === h &&
+          at < toI32(keys.length) &&
+          sameKey(keys[at], key)
+        ) {
+          return foundAt(b, at)
+        }
       }
     }
-    bucket = (bucket + 1) & mask
+    bucket = (bucket + 1) & low
   }
-  panic("collections: a probe ran out of buckets")
+  return absentAt(toI32(slots.length), h)
 }
 
 /**
  * Point the first empty bucket from `h`'s home at entry `index`. A rebuild's
  * re-filing: every key is already known to be distinct, so no key is
- * compared, and the stored hash is all it needs.
+ * compared, and the stored hash is all it needs. The load bound leaves a
+ * quarter of the buckets empty, so one pass finds one.
  */
 const fileEntry = (slots: u32[], mask: i32, h: u32, index: i32): void => {
-  const word = slotWord(h, index)
-  let bucket = homeBucket(h, mask)
-  while (bucket >= 0 && bucket < toI32(slots.length)) {
-    if (slots[bucket] === 0) {
-      slots[bucket] = word
+  const word = slotWord(h, mask, index)
+  const low = toU32(mask)
+  let bucket = toU32(homeBucket(h, mask))
+  for (let step: u32 = 0; step < toU32(slots.length); step = step + 1) {
+    const b = toI32(bucket)
+    if (b >= 0 && b < toI32(slots.length) && slots[b] === 0) {
+      slots[b] = word
       return
     }
-    bucket = (bucket + 1) & mask
+    bucket = (bucket + 1) & low
   }
 }
 
@@ -160,7 +174,7 @@ const compactEntries = <T>(items: T[], hashes: u32[]): void => {
       to++
     }
   }
-  while (toI32(items.length) > to) {
+  while (toI32(items.length) > to && items.length > 0) {
     items.pop()
   }
 }
@@ -176,7 +190,7 @@ const compactHashes = (hashes: u32[]): void => {
       to++
     }
   }
-  while (toI32(hashes.length) > to) {
+  while (toI32(hashes.length) > to && hashes.length > 0) {
     hashes.pop()
   }
 }
@@ -189,12 +203,28 @@ const compactHashes = (hashes: u32[]): void => {
  * the table never shrinks.
  */
 const rebuiltSlots = (slots: u32[], live: i32, used: i32): u32[] => {
-  const n = toI32(slots.length)
-  if (live * 2 < used) {
+  if (toI64(live) * 2 < toI64(used)) {
     clearSlots(slots)
     return slots
   }
-  return new Array<u32>(n * 2)
+  return emptySlots(slots, 2)
+}
+
+/**
+ * A new bucket table of `times` empty buckets for each of `slots`'. It is
+ * built by `push`, so a table past the largest array, 2^31 - 1 elements, stops
+ * the program as out of memory, as any allocation that size does: that is a
+ * `Map` or `Set` of more than 2^29 entries. (Node's hold 2^24 and throw on
+ * the next insert.)
+ */
+const emptySlots = (slots: u32[], times: i32): u32[] => {
+  const out: u32[] = []
+  for (let i: i32 = 0; i < toI32(slots.length); i++) {
+    for (let j: i32 = 0; j < times; j++) {
+      out.push(0)
+    }
+  }
+  return out
 }
 
 /**
@@ -217,11 +247,11 @@ const refile = (slots: u32[], hashes: u32[]): void => {
  * tombstone and the entry's stored hash 0. The key and value stay in the entry
  * until a rebuild compacts them away (§6.1).
  */
-const killEntry = (slots: u32[], hashes: u32[], found: i64): void => {
+const killEntry = (slots: u32[], mask: i32, hashes: u32[], found: i64): void => {
   const at = toI32(found)
   const bucket = toI32(found >> 32)
   if (bucket >= 0 && bucket < toI32(slots.length)) {
-    slots[bucket] = 16777216
+    slots[bucket] = tombstone(mask)
   }
   if (at >= 0 && at < toI32(hashes.length)) {
     hashes[at] = 0
@@ -264,15 +294,20 @@ const truncate = <T>(items: T[]): void => {
 
 /**
  * Point bucket `bucket`, the empty one an absent probe stopped at, at the entry
- * just appended as index `used - 1`; or, when a rebuild made room first and
- * moved the buckets (`bucket` is -1), file it from its hash.
+ * just appended to `hashes`, and answer true; or answer false, and file
+ * nothing, when the entry needs a rebuild first: the bucket is past the end,
+ * or the entries, dead ones included, are past the load bound of three
+ * quarters of the buckets.
  */
-const fileAppended = (slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): void => {
-  if (bucket >= 0 && bucket < toI32(slots.length)) {
-    slots[bucket] = slotWord(h, used - 1)
-  } else {
-    fileEntry(slots, mask, h, used - 1)
+const fileAppended = (slots: u32[], mask: i32, bucket: i32, hashes: u32[]): boolean => {
+  const used = toI32(hashes.length)
+  if (toI64(used) * 4 > toI64(slots.length) * 3 || bucket < 0 || bucket >= toI32(slots.length)) {
+    return false
   }
+  if (used > 0) {
+    slots[bucket] = slotWord(hashes[used - 1], mask, used - 1)
+  }
+  return true
 }
 
 /**
@@ -299,11 +334,11 @@ export class Map<K, V> {
    * a rebuild doubles rather than compacts, and `clear` marks entries dead
    * rather than truncating, so no entry moves under a walk's cursor (§6.2).
    */
-  private walks: i32 = 0
+  private walks: u32 = 0
 
   /** An empty map. */
   constructor() {
-    this.slots = new Array<u32>(INITIAL_SLOTS)
+    this.slots = new Array<u32>(8)
     this.entryKeys = []
     this.entryValues = []
     this.entryHashes = []
@@ -360,9 +395,8 @@ export class Map<K, V> {
     if (found < 0) {
       return false
     }
-    killEntry(this.slots, this.entryHashes, found)
-    this.live = this.live - 1
-    this.size = this.size - 1
+    killEntry(this.slots, this.mask, this.entryHashes, found)
+    this.dropOne()
     return true
   }
 
@@ -394,7 +428,7 @@ export class Map<K, V> {
    *   src/emit-map.ts.
    */
   walkOpen(): void {
-    this.walks = this.walks + 1
+    this.walks = this.walks + 1 // a `u32`: no program nests 2^32 walks
   }
 
   /** @internal Called by name by the code the compiler writes for a `Map`, src/emit-map.ts. */
@@ -413,11 +447,11 @@ export class Map<K, V> {
    * @internal Called by name by the code the compiler writes for a `Map`,
    *   src/emit-map.ts.
    */
-  keyAt(index: i32): K {
-    if (index < 0 || index >= toI32(this.entryKeys.length)) {
-      panic("Map: no entry at this index")
+  keyAt(index: i32, none: K): K {
+    if (index >= 0 && index < toI32(this.entryKeys.length)) {
+      return this.entryKeys[index]
     }
-    return this.entryKeys[index]
+    return none
   }
 
   /**
@@ -426,11 +460,11 @@ export class Map<K, V> {
    * @internal Called by name by the code the compiler writes for a `Map`,
    *   src/emit-map.ts.
    */
-  valueAt(index: i32): V {
-    if (index < 0 || index >= toI32(this.entryValues.length)) {
-      panic("Map: no entry at this index")
+  valueAt(index: i32, none: V): V {
+    if (index >= 0 && index < toI32(this.entryValues.length)) {
+      return this.entryValues[index]
     }
-    return this.entryValues[index]
+    return none
   }
 
   /**
@@ -454,29 +488,42 @@ export class Map<K, V> {
    */
   insertAt(absent: i64, key: K, value: V): void {
     const packed = -1 - absent
-    let bucket = toI32(packed >> 32)
-    const h = toU32(packed)
-    if (toI32(this.entryKeys.length) >= INDEX_CAP) {
-      // Dead entries hold the cap: compact them away, then find the bucket
-      // again. A walk defers compaction, so under one the cap is full.
-      if (this.live >= INDEX_CAP || this.walks > 0) {
-        panic("Map maximum size exceeded")
-      }
-      this.rebuild()
-      bucket = -1
-    }
     this.entryKeys.push(storedKey(key))
     this.entryValues.push(value)
-    this.entryHashes.push(h)
-    this.live = this.live + 1
-    this.size = this.size + 1
+    this.entryHashes.push(toU32(packed))
+    this.addOne()
     // Every entry takes a bucket, live or dead, until a rebuild, which files
     // the new entry with the rest; otherwise it takes the bucket the probe found.
-    const used = toI32(this.entryKeys.length)
-    if (used * 4 > toI32(this.slots.length) * 3) {
+    if (!fileAppended(this.slots, this.mask, toI32(packed >> 32), this.entryHashes)) {
       this.rebuild()
-    } else {
-      fileAppended(this.slots, this.mask, bucket, h, used)
+    }
+  }
+
+  /**
+   * Count one more live entry. The entries, dead ones included, are fewer
+   * than 2^31 - 1, the most an array holds, so neither count is ever at the
+   * bound the test names.
+   */
+  private addOne(): void {
+    const live = this.live
+    if (live < 2147483647) {
+      this.live = live + 1
+    }
+    const size = this.size
+    if (size < 2147483647) {
+      this.size = size + 1
+    }
+  }
+
+  /** Count one live entry fewer: `delete`'s, which found one, so neither count is 0. */
+  private dropOne(): void {
+    const live = this.live
+    if (live > 0) {
+      this.live = live - 1
+    }
+    const size = this.size
+    if (size > 0) {
+      this.size = size - 1
     }
   }
 
@@ -506,27 +553,49 @@ export class Map<K, V> {
    * and re-files them from the stored hashes, so no entry moves and it is as
    * safe under a walk as the doubling a walk already allows (§6.2). A count
    * that is not positive, or not a number, does nothing, as `reserve` does
-   * under Node; one past the entry cap is the cap.
+   * under Node. The table grows to at most 2^30 buckets, the largest power of
+   * two an array holds; filling one that size runs out of memory first.
    *
    * @internal Called by name by the code the compiler writes for `reserve` from
    *   `nish/map`, src/emit-map.ts.
    */
   reserveSlots(n: number): void {
-    if (!(n > 0)) {
+    const want = toF64(n)
+    if (!(want > 0)) {
       return
     }
-    const want: i32 = n >= 16777215 ? INDEX_CAP : toI32(n)
-    const have = toI32(this.slots.length)
+    // In `f64`, which has no overflow to prove away.
+    const have = toF64(toI32(this.slots.length))
     let size = have
-    while (want * 4 > size * 3) {
+    while (want * 4 > size * 3 && size < 1073741824) {
       size = size * 2
     }
-    if (size > have) {
-      const slots = new Array<u32>(size)
+    if (size > have && have > 0) {
+      const slots = emptySlots(this.slots, toI32(size / have))
       this.slots = slots
-      this.mask = size - 1
+      this.mask = toI32(slots.length) - 1
       refile(slots, this.entryHashes)
     }
+  }
+
+  /**
+   * The entry keys, dead ones included, for `forEachEntry`'s walk to index
+   * with what `walkNext` found. Read again after every call it makes, since
+   * `clear` replaces them.
+   *
+   * @internal Called by `forEachEntry`, `forEachValue` and `forEachElement`.
+   */
+  walkKeys(): K[] {
+    return this.entryKeys
+  }
+
+  /**
+   * The entry values, as `walkKeys`.
+   *
+   * @internal Called by `forEachEntry` and `forEachValue`.
+   */
+  walkValues(): V[] {
+    return this.entryValues
   }
 }
 
@@ -541,11 +610,11 @@ export class Set<T> {
   private entryKeys: T[]
   private entryHashes: u32[]
   /** `Map`'s walk count: how many `for...of` loops are walking the table now. */
-  private walks: i32 = 0
+  private walks: u32 = 0
 
   /** An empty set. */
   constructor() {
-    this.slots = new Array<u32>(INITIAL_SLOTS)
+    this.slots = new Array<u32>(8)
     this.entryKeys = []
     this.entryHashes = []
   }
@@ -591,9 +660,8 @@ export class Set<T> {
     if (found < 0) {
       return false
     }
-    killEntry(this.slots, this.entryHashes, found)
-    this.live = this.live - 1
-    this.size = this.size - 1
+    killEntry(this.slots, this.mask, this.entryHashes, found)
+    this.dropOne()
     return true
   }
 
@@ -618,7 +686,7 @@ export class Set<T> {
    *   src/emit-map.ts.
    */
   walkOpen(): void {
-    this.walks = this.walks + 1
+    this.walks = this.walks + 1 // a `u32`: no program nests 2^32 walks
   }
 
   /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
@@ -632,36 +700,47 @@ export class Set<T> {
   }
 
   /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
-  keyAt(index: i32): T {
-    if (index < 0 || index >= toI32(this.entryKeys.length)) {
-      panic("Set: no entry at this index")
+  keyAt(index: i32, none: T): T {
+    if (index >= 0 && index < toI32(this.entryKeys.length)) {
+      return this.entryKeys[index]
     }
-    return this.entryKeys[index]
+    return none
   }
 
   /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
   insertAt(absent: i64, key: T): void {
     const packed = -1 - absent
-    let bucket = toI32(packed >> 32)
-    const h = toU32(packed)
-    if (toI32(this.entryKeys.length) >= INDEX_CAP) {
-      if (this.live >= INDEX_CAP || this.walks > 0) {
-        panic("Set maximum size exceeded")
-      }
-      this.rebuild()
-      bucket = -1
-    }
     this.entryKeys.push(storedKey(key))
-    this.entryHashes.push(h)
-    this.live = this.live + 1
-    this.size = this.size + 1
+    this.entryHashes.push(toU32(packed))
+    this.addOne()
     // Every entry takes a bucket, live or dead, until a rebuild, which files
     // the new entry with the rest; otherwise it takes the bucket the probe found.
-    const used = toI32(this.entryKeys.length)
-    if (used * 4 > toI32(this.slots.length) * 3) {
+    if (!fileAppended(this.slots, this.mask, toI32(packed >> 32), this.entryHashes)) {
       this.rebuild()
-    } else {
-      fileAppended(this.slots, this.mask, bucket, h, used)
+    }
+  }
+
+  /** `Map`'s count of one more live entry. */
+  private addOne(): void {
+    const live = this.live
+    if (live < 2147483647) {
+      this.live = live + 1
+    }
+    const size = this.size
+    if (size < 2147483647) {
+      this.size = size + 1
+    }
+  }
+
+  /** `Map`'s count of one live entry fewer. */
+  private dropOne(): void {
+    const live = this.live
+    if (live > 0) {
+      this.live = live - 1
+    }
+    const size = this.size
+    if (size > 0) {
+      this.size = size - 1
     }
   }
 
@@ -676,6 +755,15 @@ export class Set<T> {
     this.slots = slots
     this.mask = toI32(slots.length) - 1
     refile(slots, this.entryHashes)
+  }
+
+  /**
+   * The entry keys, dead ones included, as `Map.walkKeys`.
+   *
+   * @internal Called by `forEachElement`.
+   */
+  walkKeys(): T[] {
+    return this.entryKeys
   }
 }
 
@@ -702,8 +790,12 @@ const storedKey = <K>(key: K): K => key
  */
 export const forEachEntry = <K, V>(m: Map<K, V>, f: (value: V, key: K) => void): void => {
   m.walkOpen()
-  for (let i: i32 = m.walkNext(0); i >= 0; i = m.walkNext(i + 1)) {
-    f(m.valueAt(i), m.keyAt(i))
+  for (let i: i32 = m.walkNext(0); i >= 0; i = i < 2147483647 ? m.walkNext(i + 1) : -1) {
+    const keys = m.walkKeys()
+    const values = m.walkValues()
+    if (i < keys.length && i < values.length) {
+      f(values[i], keys[i])
+    }
   }
   m.walkClose()
 }
@@ -718,8 +810,11 @@ export const forEachEntry = <K, V>(m: Map<K, V>, f: (value: V, key: K) => void):
  */
 export const forEachValue = <K, V>(m: Map<K, V>, f: (value: V) => void): void => {
   m.walkOpen()
-  for (let i: i32 = m.walkNext(0); i >= 0; i = m.walkNext(i + 1)) {
-    f(m.valueAt(i))
+  for (let i: i32 = m.walkNext(0); i >= 0; i = i < 2147483647 ? m.walkNext(i + 1) : -1) {
+    const values = m.walkValues()
+    if (i < values.length) {
+      f(values[i])
+    }
   }
   m.walkClose()
 }
@@ -734,8 +829,11 @@ export const forEachValue = <K, V>(m: Map<K, V>, f: (value: V) => void): void =>
  */
 export const forEachElement = <T>(s: Set<T>, f: (value: T) => void): void => {
   s.walkOpen()
-  for (let i: i32 = s.walkNext(0); i >= 0; i = s.walkNext(i + 1)) {
-    f(s.keyAt(i))
+  for (let i: i32 = s.walkNext(0); i >= 0; i = i < 2147483647 ? s.walkNext(i + 1) : -1) {
+    const keys = s.walkKeys()
+    if (i < keys.length) {
+      f(keys[i])
+    }
   }
   s.walkClose()
 }

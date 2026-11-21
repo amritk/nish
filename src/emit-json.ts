@@ -78,7 +78,7 @@ import {
   storeField,
   structInfoOf,
 } from "./emit-classes"
-import { emitLibraryCopies, libraryReach, mapIntrinsicOf } from "./emit-map"
+import { emitLibraryCopies, libraryReach, mapIntrinsicOf, noEntryOperand } from "./emit-map"
 import { privateAbi } from "./emit-result"
 import { emitEnumStringOf } from "./emit-strings"
 import { internalErrorFor } from "./ice"
@@ -295,6 +295,12 @@ const jsonCallMethod = (
     operands.push(arg)
   }
   return jsonCallSig(emitter, sig, operands)
+}
+
+/** The `none` operand of `map`'s `keyAt` or `valueAt` (`noEntryOperand`). */
+const jsonNoEntry = (emitter: Emitter, map: StructInfo, name: string): string => {
+  const sig = map.method(name)
+  return sig === null ? "i32 0" : noEntryOperand(emitter, sig)
 }
 
 /** `call <ret> @sig(<operands>)`, answering its value or `"void"`. */
@@ -1892,9 +1898,9 @@ const emitJsonEncodeMapBody = (emitter: Emitter, part: JsonPart): void => {
   const live = fn.emitValue(`icmp sge i32 ${at}, 0`)
   jsonBranch(emitter, live, body.label, end.label)
   fn.placeBlock(body)
-  const key = jsonCallMethod(emitter, map, "keyAt", "%v", [`i32 ${at}`])
+  const key = jsonCallMethod(emitter, map, "keyAt", "%v", [`i32 ${at}`, jsonNoEntry(emitter, map, "keyAt")])
   jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${key}`])
-  emitJsonEncodeValue(emitter, part, value, jsonCallMethod(emitter, map, "valueAt", "%v", [`i32 ${at}`]))
+  emitJsonEncodeValue(emitter, part, value, jsonCallMethod(emitter, map, "valueAt", "%v", [`i32 ${at}`, jsonNoEntry(emitter, map, "valueAt")]))
   const after = fn.emitValue(`add i32 ${at}, 1`)
   const next = jsonCallMethod(emitter, map, "walkNext", "%v", [`i32 ${after}`])
   fn.emit(`store i32 ${next}, i32* ${cursor}, align 4`)

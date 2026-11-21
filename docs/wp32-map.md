@@ -21,7 +21,7 @@ the evidence behind each, and the trigger that would reopen §10.
 
 | # | Question | Decision | § | Rejected |
 | --- | --- | --- | --- | --- |
-| 1 | Layout | Insertion-ordered. A `u32` bucket holds eight fingerprint bits above a 24-bit entry index plus one; entries sit in parallel arrays with each entry's full 32-bit hash stored. Cap 2^24 − 1 entries, one fewer than Node's. | 2 | an `i64` slot; the old `StringMap` shape; an unordered table |
+| 1 | Layout | Insertion-ordered. A `u32` bucket holds the entry index plus one in the bits the table's mask covers and the hash's bits above them as a fingerprint; entries sit in parallel arrays with each entry's full 32-bit hash stored. No entry cap (§2.4). | 2 | an `i64` slot; the old `StringMap` shape; an unordered table |
 | 2 | Load factor | At most 3/4 of buckets taken, dead entries counted until a rebuild. | 2.4 | 7/8 |
 | 3 | `get`'s type | `V \| undefined`, narrowed by `!== undefined` / `=== undefined` or collapsed by `??`; bound only to a `const`; never crosses a call; lowered to two SSA values. | 3 | `has` + `get(k)!`; `get(k, default)` |
 | 4 | Output | `std/collections.ts` writes no `.ll`; every instance and helper is emitted `internal` into each module that uses it. | 4.1 | a separate module |
@@ -92,16 +92,18 @@ fingerprints buy only growth without rehashing.
 - **A packed `u32` slot.** Never slower than the `i64` slot beyond the noise,
   faster on string insert and integer churn at 2^20, and half the bucket memory
   (168 MB of peak RSS at 2^20), for 7.6% more instructions in cache.
-- **The cap is one entry short of Node's 2^24, deliberately.** An empty bucket
-  is 0 and a tombstone is `0x01000000` (fingerprint 1, index 0), so the 24-bit
-  field holds the index plus one and needs no reserved value; the 2^24-th entry
-  would cost an `i64` slot. Past the cap an insert panics in Node's words,
-  `Map maximum size exceeded`. While a loop walks the table nothing compacts
-  (§6.2), so an insert at the cap during a walk panics however few entries are
-  live.
-- **The fingerprint is the hash's top eight bits; the bucket is
+- **No entry cap, so no insert panics.** The index field was first a fixed
+  24 bits, which capped a table one entry short of Node's 2^24 and panicked
+  past it. It is now as wide as the table's mask: a table holds at most three
+  entries per four buckets, so every index plus one fits below the
+  fingerprint, and a tombstone is the mask plus one (fingerprint 1, index 0).
+  A table grows until its bucket array would pass the largest array, past
+  2^29 entries, and that allocation stops the program as out of memory, as
+  any does. This is what lets a module held to no panic use `Map` and `Set`.
+- **The fingerprint is the hash's bits above the mask; the bucket is
   `(h ^ (h >>> 16)) & mask`**, so neighbouring buckets keep independent
-  fingerprints.
+  fingerprints. (It was the top eight bits while the index field was a fixed
+  24.)
 - **The full hash lives in the entry** (`hashes: u32[]`); a stored 0 marks a
   deleted entry, which is why a computed 0 becomes 1.
 - **Load factor 3/4.** At 7/8, churn was 10–20% slower in both fingerprinted

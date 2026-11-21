@@ -6559,6 +6559,27 @@ if (dealtHere("performance")) {
     )
   }
 
+  // An opt-out is stale once its example builds strict: each example that
+  // names `--allow-panics` on its `// smoke: args` line is built without the
+  // flag, with that line's other arguments, and must still be refused, so a
+  // fix in `std/` that frees it fails here until its header drops the flag.
+  const optOuts = gateSources.filter((source) => source.startsWith("examples/") && optOutArgs(source).length > 0)
+  const strictResults = await pool(optOuts, defaultJobs(), (source) => {
+    const args = corpusArgs(path.join(root, source)).filter((arg) => arg !== ALLOW_PANICS)
+    // strict: proves the example's opt-out is still needed
+    return spawnAsync(NISH, [source, ...args, "-o", `${path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  })
+  for (const [at, source] of optOuts.entries()) {
+    check(
+      `performance gate: ${source}'s --allow-panics opt-out is still needed`,
+      strictResults[at].status !== 0,
+      "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+    )
+  }
+
   // What ships calls nothing deprecated either: a deprecation in `std/` would
   // reach every program that imports the module, and one in an example is
   // what a reader copies.
@@ -28509,6 +28530,52 @@ if (dealtHere("releaseChecks")) {
         denyThenAllow.ir === panickyAllowed.ir,
       [...cleanIr, { r: panickyBare.r }, panickyAllowed].map(({ r }) => shown(r)).join("")
     )
+
+    // `nish run`, `--emit-ts` and `--compat` hold the default as a plain
+    // compile does: each refuses a program that may panic and writes nothing,
+    // and `--allow-panics` builds it. `--compat` wants `main(): i32`, which
+    // `panicky` does not declare, so this program keeps one unproven index.
+    const compatSource = path.join(work, "compat_panicky.ts")
+    fs.writeFileSync(
+      compatSource,
+      [
+        "const at = (xs: i32[], i: i32): i32 => xs[i]",
+        "",
+        "export const main = (): i32 => {",
+        "  const xs: i32[] = [10, 20, 30]",
+        "  let i: i32 = 0",
+        "  for (const x of xs) i = i + x",
+        "  console.log(at(xs, i % 3))",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const byDefault = "may panic here, and a module of this package, held to no panic by default"
+    const tsDir = (name) => path.join(work, name)
+    const modes = [
+      { name: "run", bare: ["run", panicky], allowed: ["run", ALLOW_PANICS, panicky], wrote: null, out: "59\n30\n" },
+      { name: "--emit-ts", bare: [panicky, "--emit-ts", tsDir("ets0")], allowed: [panicky, "--emit-ts", tsDir("ets1"), ALLOW_PANICS], wrote: [tsDir("ets0"), tsDir("ets1")] },
+      {
+        name: "--compat",
+        bare: [compatSource, "--compat", "-o", path.join(work, "compat0.ll")],
+        allowed: [compatSource, "--compat", ALLOW_PANICS, "-o", path.join(work, "compat1.ll")],
+        wrote: [path.join(work, "compat0.ll"), path.join(work, "compat1.ll")],
+      },
+    ].map((mode) => ({ ...mode, rBare: strict(mode.bare), rAllowed: strict(mode.allowed) }))
+    check(
+      "allow-panics: nish run, --emit-ts and --compat refuse a program that may panic without the flag, write nothing, and build it with the flag",
+      modes.every(
+        (m) =>
+          m.rBare.status === 1 &&
+          m.rBare.stderr.includes(byDefault) &&
+          m.rAllowed.status === 0 &&
+          !m.rAllowed.stderr.includes(byDefault) &&
+          (m.out === undefined || m.rAllowed.stdout === m.out) &&
+          (m.wrote === null || (!fs.existsSync(m.wrote[0]) && fs.existsSync(m.wrote[1])))
+      ),
+      modes.map((m) => `${m.name}:\n${shown(m.rBare)}${shown(m.rAllowed)}`).join("")
+    )
   }
 
   // ---- docs/AI.md and docs/guide: the examples compile ------------------------------------
@@ -29030,6 +29097,18 @@ if (dealtHere("releaseChecks")) {
         }
         if (s.kind === "ok") {
           check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
+          // An opt-out that is no longer needed is stale: the snippet builds
+          // strict, so its marker, its `allow-panics:` line and the page's
+          // sentence about the flag come out.
+          if (run.status === 0 && s.args.includes(ALLOW_PANICS)) {
+            const strictEntry = { ...s, args: s.args.filter((arg) => arg !== ALLOW_PANICS) }
+            const bare = compileProgram({ ...program, entry: strictEntry }, `${prefix}_${s.line}_strict`)
+            check(
+              `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
+              bare.run.status !== 0,
+              "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
+            )
+          }
         } else {
           check(
             `${rel}:${s.line} is rejected with ${s.code}`,
