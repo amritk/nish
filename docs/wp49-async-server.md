@@ -5,8 +5,9 @@
 the in-place request read (design B, #2104), with 7 of 11 judged cells
 inside (`plaintext` 256, `json` 32 to 256, `db` 64 and 256), `plaintext`
 1024/4096 and `json` 16 outside, and `json` 512 not judgeable; the in-place
-read took 314 and 289 instructions a request off the async entry on
-`plaintext` and `json`; what is left is the second task per request and the
+read took 316 and 286 instructions a request off the async entry on
+`plaintext` and `json`, narrowing its gap to the explicit entry by 314
+and 289; what is left is the second task per request and the
 router (§6, §10).** The language half — `async`,
 `await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
 and runs on the executor that
@@ -619,14 +620,14 @@ with `run.sh` unchanged
 | test | connections | band after | async vs entry, after | verdict before | verdict after |
 | --- | ---: | ---: | ---: | --- | --- |
 | `plaintext` | 256 | 15.6% | −15.0% | inside | inside |
-| `plaintext` | 1024 | 4.4% | −18.6% | outside | outside (re-run) |
+| `plaintext` | 1024 | 4.4% (re-run; first run bimodal, 3.4%) | −18.6% (re-run; first run −19.6%) | outside | outside, the re-run's verdict |
 | `plaintext` | 4096 | 0.6% | −24.9% | outside (re-run) | outside |
 | `json` | 16 | 3.3% | −4.7% | inside | outside |
 | `json` | 32 | 1.6% | +1.6% | inside | inside |
 | `json` | 64 | 1.0% | +0.4% | inside | inside |
 | `json` | 128 | 1.4% | −0.8% | outside | inside |
 | `json` | 256 | 11.0% | −9.2% | outside | inside |
-| `json` | 512 | 12.6% | −11.8% | outside | not judgeable: bimodal twice |
+| `json` | 512 | 12.6% (re-run; first run bimodal, 3.6%) | −11.8% (re-run; first run −18.0%) | outside | not judgeable: the explicit pair was bimodal in the first run and again in the re-run (`entry` 85,447, 174,514 and 190,432), so neither run's delta is judged |
 | `db` | 64 | 7.5% | −0.9% | not judgeable: bimodal, no re-run | inside |
 | `db` | 256 | 2.6% | +10.2% | inside | inside |
 
@@ -635,8 +636,8 @@ same container, five were inside, five outside and `db` 64 not judgeable.
 The profile is the
 clearer reading: the async entry's self instructions a request fell from
 6,598 to 6,282 on `plaintext` and from 9,634 to 9,348 on `json`, and the
-explicit entry's did not move, so the gap is now about 1,807 and 2,148
-(was 2,121 and 2,437). `serveTask`'s resume lost about 242 and
+explicit entry's moved by −2 and +3, so the gap is now about 1,807 and
+2,148 (was 2,121 and 2,437), narrower by 314 and 289. `serveTask`'s resume lost about 242 and
 `HttpRequest`'s constructor and `memcpy` about 100 more; `serveOn`'s resume
 gained 69 and 114 for the lending and the give-back. The rest of the gap is
 the second task per request and `Router.match`, which the in-place read does
@@ -1195,13 +1196,18 @@ read with no library-only route around them; the construct is the route
 - **The library.** `serveTask` hands its handler
   `new Request(lend(st.reqs[k]))`. The connection lends its parsed request
   head out for the task's life (`ServeConns.lendOut`), keeps a lent head out
-  of its head pool so the next request on the connection cannot overwrite it
+  of its head pool so a restart cannot hand it to the slot's next connection
   (`Http1Connection.lendParsed`, `tests/link/net_http1_server_lend_park`),
-  and takes it back when the task ends (`giveBack`). Answered bytes and the
-  public API are unchanged.
+  and takes it back when the task ends (`giveBack`). A pipelined next
+  request is parsed into the head only after the task's last step, and a
+  handler that would keep its `Request` past then is refused
+  (`tests/link/net_serve_lent_window`, `tests/link/net_serve_handler_keeps`,
+  [serve.md](security/serve.md)). Answered bytes and the public API are
+  unchanged.
 - **The measurement and the regate.** §6, "After the in-place request read":
-  the async entry runs 314 and 289 fewer instructions a request on
-  `plaintext` and `json`, 7 of 11 judged cells are inside, and the gate is
+  the async entry runs 316 and 286 fewer instructions a request on
+  `plaintext` and `json` (its gap to the explicit entry narrows by 314 and
+  289), 7 of 11 judged cells are inside, and the gate is
   not met.
 
 ## Not in this work package

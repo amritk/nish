@@ -95,10 +95,22 @@ unchanged until the task ends:
    first, gives its record back at once (`release`). What the exchange needs
    besides — its state, its route, the answer's pending bytes — is the
    slot's own `ServeExchange`.
-2. **Nothing rewrites a lent head or its spans.** The parser reads a
-   connection's next request only once the one before it is answered
-   (SERVE-6), and the answer is written only once the task has ended, so on
-   a live connection the head stays the record's. A connection that closes
+2. **Nothing rewrites a lent head while its task runs, and nothing a
+   handler reaches reads it after.** The parser reads a connection's next
+   request only once the one before it is answered (SERVE-6). The task's
+   last step copies the answer into the slot's own arrays (`st.bodies`,
+   `st.types`) and only then queues its slot in `st.finished`; the loop's
+   `serveAnswer` then writes that answer, and its `finish` and `driveOn`
+   may parse a pipelined next request into the same head before `giveBack`
+   ends the loan. That window opens after the task's last step and closes
+   at `giveBack`, in the same pass of the loop, and in it the loop reads
+   only the slot's arrays, never the record. A handler cannot carry a view
+   of the head into it: `serveOn` instantiates `serveTask` with the handler,
+   and the lend rule refuses a handler that keeps its `Request`, stores it,
+   or hands it to a task of its own (NL2822,
+   `tests/link/net_serve_handler_keeps`). A handler that waits holds a head
+   no pipelined request is parsed into (`tests/link/net_serve_lent_window`).
+   A connection that closes
    while its task runs — a hang-up, a deadline, a draining close — restarts
    for the next connection on its slot, which would hand the parser's head
    to that connection's bytes; `lendOut` therefore marks the head and spans
@@ -200,6 +212,14 @@ the hang-up: 4 answered on that connection".
 — "park keeps a lent head out of the pool", "a restart gives the parser the
 spare", "after the restart the lent head is still in no pool", "ending the
 loan parks the head", "http1 lend and park: 11 passed, 0 failed, 0 skipped".
+
+**A lent head is not rewritten under its task**: `tests/link/net_serve_lent_window`
+— a handler that waits 20 ms behind a pipelined request with a longer path
+reads its own path before and after the wait ("slow /slow/0 /slow/0 0"), and
+the next request is answered with its own ("fast /fast/00000000000000000");
+`tests/link/net_serve_handler_keeps` — a handler that spawns a task with its
+`Request` is refused at `serveTask`'s instantiation, "hands `new
+Request(lend(st.reqs[k]))` to `handle`, which may keep it".
 
 **A request read in place** (SERVE-17): `tests/link/net_serve_slot_reuse` —
 "first, after its await (answered false, cancelled true): POST /first
