@@ -144,17 +144,11 @@ new positive `tests/cases/*` is registered with
 `docs/LANGUAGE.md`: rewrite it with `node scripts/gen-reference.mjs`; CI's
 `--check` fails on a stale, extra or hand-edited page
 ([`docs/README.md`](docs/README.md#the-library-reference)). A change to
-`nish --help` text regenerates `examples/break-web/help.ts` and
-`docs/site/break/` with `node examples/break-web/build.mjs` in the same PR:
-the break-web checks in the `test` shards pin both against the compiler's
-`--help`.
-
-**`--help` and `scripts/build.sh` are inputs of `examples/break-web`'s
-committed build.** A change to either, or a merge of `main` that touches
-either, reruns `node examples/break-web/build.mjs` and commits what it
-rewrites (`docs/site/break/**`, `examples/break-web/help.ts`) in the same
-commit; `--check` exits 0. A conflict in those files is regenerated, never
-resolved by hand.
+`nish --help` text or `scripts/build.sh`, or a merge of `main` that touches
+either, regenerates `examples/break-web/help.ts` and `docs/site/break/` with
+`node examples/break-web/build.mjs` in the same PR (`--check` exits 0): the
+break-web checks in the `test` shards pin both against the compiler's
+`--help`. A conflict in those files is regenerated, never resolved by hand.
 
 **The emit-ts known list is Node-version-specific.** Regenerate
 `tests/differential/emit-ts-known.txt` only under the Node that
