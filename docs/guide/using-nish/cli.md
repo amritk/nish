@@ -16,6 +16,7 @@ usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
        nish upgrade [<version>] [--check]     install a newer release
        nish c-import <header> -o <file.ts>    write declarations from a C header
+       nish proto <file.proto> -o <out.ts>    write message classes from .proto
        nish -v, --version | -h, --help
 ```
 
@@ -722,12 +723,22 @@ adds what the header cannot say (which pointers may be `NULL`, which results
 must be freed), and `--target <triple>` writes the module for another target.
 [Binding a C library](c-import.md) is the whole story.
 
+## Generating message classes: `nish proto`
+
+`nish proto <file.proto> -o <file.ts>` reads a proto3 file and writes a Nish
+module with a class per message, each with an `encode` and a `decode` over
+[`nish/net/protobuf`](standard-library.md#nishnetprotobuf). A construct it
+does not support is refused by name and line, and nothing is written.
+`--check` writes nothing and exits 1 when the module on disk is not the one it
+would write. [Message classes from a .proto file](protobuf-classes.md) is the
+whole story.
+
 ## Exit codes
 
 | Code | Meaning |
 | ---: | --- |
 | 0 | success |
-| 1 | the program was rejected: a compile error, or an input file that does not exist |
+| 1 | the program was rejected: a compile error, or an input file that does not exist; for `nish proto`, a refused `.proto` file, or `--check` finding the module stale |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
 | 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed; for `nish c-import`, `clang` cannot run |
 | 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |

@@ -1,0 +1,4 @@
+syntax = "proto3";
+message A {
+  oneof c {
+    int32 a = 1;

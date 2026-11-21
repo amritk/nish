@@ -1,0 +1,43 @@
+// Every scalar type, singular, optional and repeated.
+syntax = "proto3";
+
+package demo.scalars;
+
+option java_package = "com.example.scalars";
+option go_package = "example.com/scalars";
+
+message Scalars {
+  double d = 1;
+  float f = 2;
+  int32 i32 = 3;
+  int64 i64 = 4;
+  uint32 u32 = 5;
+  uint64 u64 = 6;
+  sint32 s32 = 7;
+  sint64 s64 = 8;
+  fixed32 fx32 = 9;
+  fixed64 fx64 = 10;
+  sfixed32 sfx32 = 11;
+  sfixed64 sfx64 = 12;
+  bool b = 13;
+  string s = 14;
+  bytes raw = 15;
+}
+
+message Optionals {
+  optional int32 count = 1;
+  optional string label = 2;
+  optional bytes blob = 3;
+  optional double ratio = 0x4;
+  optional bool flag = 05;
+}
+
+message Lists {
+  repeated int32 ints = 1;
+  repeated sint64 zigzag = 2;
+  repeated double doubles = 3;
+  repeated bool flags = 4;
+  repeated string names = 5;
+  repeated bytes blobs = 6;
+  repeated fixed32 words = 7;
+}

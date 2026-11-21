@@ -1,0 +1,1 @@
+proto: refused/top-level-word.proto:2: expected a message, enum, service, option or package, found "rpc"

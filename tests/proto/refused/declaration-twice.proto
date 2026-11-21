@@ -1,0 +1,5 @@
+syntax = "proto3";
+message A {}
+enum A {
+  A_ZERO = 0;
+}

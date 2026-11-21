@@ -1,0 +1,1 @@
+proto: refused/enum-alias.proto:4: refused: two values numbered 0 in enum E (an alias needs allow_alias, an option)

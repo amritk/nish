@@ -1,0 +1,1 @@
+proto: refused/map-in-oneof.proto:4: refused: map inside a oneof
