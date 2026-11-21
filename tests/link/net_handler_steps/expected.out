@@ -1,0 +1,25 @@
+PASS  GET / is answered 200
+PASS  its steps run lowest first before the body, the reverse after
+PASS  ID's field is in the answer
+PASS  and so is TAG's, added after the body
+PASS  after the body's own fields
+PASS  GET /admin with no authorization is refused 401
+PASS  by AUTH, so neither the body nor an after-step runs
+PASS  and the refusal carries ID's field
+PASS  but not TAG's
+PASS  GET /admin with authorization is answered 200
+PASS  after all three steps, and all three after it
+PASS  with both fields
+PASS  GET /nope is answered 404
+PASS  after the step bound to ROUTER_NOT_FOUND
+PASS  whose field the handler's problem carries
+PASS  POST /plain is answered 405
+PASS  with its Allow and the step's field
+PASS  GET /plain is answered 200
+PASS  and runs no step
+PASS  nor carries a field it did not name
+PASS  a field added to one request is not on the next
+PASS  a warm connection answers twelve hundred stepped and plain requests
+PASS  and the arena stays flat
+PASS  and the pool makes no request past its warm size
+handler steps: 24 passed, 0 failed, 0 skipped
