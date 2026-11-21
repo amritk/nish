@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 4a34e2f0478feec28c84397c28f084b4f0bf462d794b1deff072a4aa0b5e47be
+// vector-contract-sha256: d4706c1f05bb1937699eed3d8e4fe12a05b59bb19fac4ff6b445689ff8611215
 
 import { Suite } from "nish/testing";
 import { p256PublicKey, p256Sign, p256SignSha256, p256Verify, p256VerifySha256 } from "nish/crypto/p256";
@@ -238,7 +238,7 @@ const clause_A_2_5_SHA256_SAMPLE = (t: Suite): boolean => t.eqStr("[A.2.5-SHA256
 const clause_A_2_5_SHA256_TEST = (t: Suite): boolean => t.eqStr("[A.2.5-SHA256-TEST] RFC 6979 A.2.5: With SHA-256, message = \"test\" (R-DETERMINISTIC, R-HMAC-H, R-HASH, R-SIG-PAIR, R-MESSAGES)", hexOrNull(plain_p256SignSha256(unhex("c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721"), unhex("74657374"))), "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367019f4113742a2b14bd25926b49c649155f267e60d3814b4c0cc84250e46f0083");
 
 /**
- * the public key of any private key is 65 octets, 04 then Ux and Uy
+ * the public key of any private key is 65 octets and starts with the uncompressed-point octet 04; P-ROUNDTRIP holds the point itself
  *
  * R-PUB — RFC 6979 §2.2, DEFINITION:
  *   For ECDSA, the public key is the curve point: U = xG
@@ -282,14 +282,14 @@ const clause_P_PUB_FORM = (t: Suite): boolean => {
       if (u.sawNull) {
         why = "unwrap met a null";
       }
-      return t.fail("[P-PUB-FORM] the public key of any private key is 65 octets, 04 then Ux and Uy (R-PUB)", `sample ${i + 1} of 26 (len(x) = ${toI32(v_x.length)}): ${why}`);
+      return t.fail("[P-PUB-FORM] the public key of any private key is 65 octets and starts with the uncompressed-point octet 04; P-ROUNDTRIP holds the point itself (R-PUB)", `sample ${i + 1} of 26 (len(x) = ${toI32(v_x.length)}): ${why}`);
     }
   }
-  return t.pass("[P-PUB-FORM] the public key of any private key is 65 octets, 04 then Ux and Uy (R-PUB) — 26 samples");
+  return t.pass("[P-PUB-FORM] the public key of any private key is 65 octets and starts with the uncompressed-point octet 04; P-ROUNDTRIP holds the point itself (R-PUB) — 26 samples");
 };
 
 /**
- * a private key of 0 or of 2^256 - 1, past q - 1, is refused
+ * a private key of 0, of q (as Section A.2.5 prints it) or of 2^256 - 1 is refused, and q - 1 is accepted
  *
  * R-PRIV-RANGE — RFC 6979 §2.2, DEFINITION:
  *   The relevant standards prescribe that x shall not be 0; hence, x is an
@@ -329,12 +329,12 @@ const clause_P_PRIV_RANGE = (t: Suite): boolean => {
   ];
   for (let i: i32 = 0; i < 29; i += 1) {
     const v_d: u8[] = unhex(table_d[i]);
-    const holds: boolean = (isNullBytes(plain_p256PublicKey(fillBytes(0, 32))) && isNullBytes(plain_p256PublicKey(fillBytes(255, 32))) && isNullBytes(plain_p256Sign(fillBytes(0, 32), v_d)) && isNullBytes(plain_p256Sign(fillBytes(255, 32), v_d)));
+    const holds: boolean = (isNullBytes(plain_p256PublicKey(fillBytes(0, 32))) && isNullBytes(plain_p256PublicKey(fillBytes(255, 32))) && isNullBytes(plain_p256Sign(fillBytes(0, 32), v_d)) && isNullBytes(plain_p256Sign(fillBytes(255, 32), v_d)) && isNullBytes(plain_p256PublicKey(unhex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"))) && isNullBytes(plain_p256Sign(unhex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"), v_d)) && !isNullBytes(plain_p256PublicKey(unhex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"))) && !isNullBytes(plain_p256Sign(unhex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"), v_d)));
     if (!holds) {
-      return t.fail("[P-PRIV-RANGE] a private key of 0 or of 2^256 - 1, past q - 1, is refused (R-PRIV-RANGE)", `sample ${i + 1} of 29 (len(d) = ${toI32(v_d.length)}): the assertion is false`);
+      return t.fail("[P-PRIV-RANGE] a private key of 0, of q (as Section A.2.5 prints it) or of 2^256 - 1 is refused, and q - 1 is accepted (R-PRIV-RANGE)", `sample ${i + 1} of 29 (len(d) = ${toI32(v_d.length)}): the assertion is false`);
     }
   }
-  return t.pass("[P-PRIV-RANGE] a private key of 0 or of 2^256 - 1, past q - 1, is refused (R-PRIV-RANGE) — 29 samples");
+  return t.pass("[P-PRIV-RANGE] a private key of 0, of q (as Section A.2.5 prints it) or of 2^256 - 1 is refused, and q - 1 is accepted (R-PRIV-RANGE) — 29 samples");
 };
 
 /**

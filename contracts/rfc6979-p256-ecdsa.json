@@ -276,7 +276,7 @@
     {
       "kind": "property",
       "id": "P-PUB-FORM",
-      "title": "the public key of any private key is 65 octets, 04 then Ux and Uy",
+      "title": "the public key of any private key is 65 octets and starts with the uncompressed-point octet 04; P-ROUNDTRIP holds the point itself",
       "covers": ["R-PUB"],
       "forall": [
         {
@@ -361,7 +361,7 @@
     {
       "kind": "property",
       "id": "P-PRIV-RANGE",
-      "title": "a private key of 0 or of 2^256 - 1, past q - 1, is refused",
+      "title": "a private key of 0, of q (as Section A.2.5 prints it) or of 2^256 - 1 is refused, and q - 1 is accepted",
       "covers": ["R-PRIV-RANGE"],
       "forall": [
         {
@@ -450,6 +450,64 @@
                         "int": 32
                       }
                     ]
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256PublicKey",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "notNull",
+            "args": [
+              {
+                "call": "p256PublicKey",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "notNull",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
                   },
                   {
                     "var": "d"

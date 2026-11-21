@@ -168,8 +168,8 @@ message, for every key and message, so the two SHA-256 vectors of
 derived argument (`p256Sign(x = c9af…, sha256("sample"))`, an argument that
 a reference function computes from a printed value) would cite it directly.
 
-The other curves of Sections A.2.3 to A.2.17, and DSA (Sections A.2.1 and
-A.2.2), are not implemented.
+DSA (Sections A.2.1 and A.2.2) and the other curves (Sections A.2.3,
+A.2.4 and A.2.6 to A.2.17) are not implemented.
 
 Three statements of RFC 6979 are not functional and hold no binding
 keyword, so they are recorded here, not excluded:
@@ -205,15 +205,15 @@ silent on it, so no clause here asks `p256Verify` to refuse the upper s.
 # Properties
 
 ~~~ ts-property
-// P-PUB-FORM covers R-PUB — the public key of any private key is 65 octets, 04 then Ux and Uy
+// P-PUB-FORM covers R-PUB — the public key of any private key is 65 octets and starts with the uncompressed-point octet 04; P-ROUNDTRIP holds the point itself
 forall (x: u8[] /* 32..32 */) =>
   { const pub = unwrap(p256PublicKey(x)); return pub.length === 65 && pub.slice(0, 1) === fill(4, 1); }
 ~~~
 
 ~~~ ts-property
-// P-PRIV-RANGE covers R-PRIV-RANGE — a private key of 0 or of 2^256 - 1, past q - 1, is refused
+// P-PRIV-RANGE covers R-PRIV-RANGE — a private key of 0, of q (as Section A.2.5 prints it) or of 2^256 - 1 is refused, and q - 1 is accepted
 forall (d: u8[] /* 0..64 */) =>
-  p256PublicKey(zeros(32)) === null && p256PublicKey(fill(255, 32)) === null && p256Sign(zeros(32), d) === null && p256Sign(fill(255, 32), d) === null
+  p256PublicKey(zeros(32)) === null && p256PublicKey(fill(255, 32)) === null && p256Sign(zeros(32), d) === null && p256Sign(fill(255, 32), d) === null && p256PublicKey([ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff bc e6 fa ad a7 17 9e 84 f3 b9 ca c2 fc 63 25 51]) === null && p256Sign([ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff bc e6 fa ad a7 17 9e 84 f3 b9 ca c2 fc 63 25 51], d) === null && p256PublicKey([ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff bc e6 fa ad a7 17 9e 84 f3 b9 ca c2 fc 63 25 50]) !== null && p256Sign([ff ff ff ff 00 00 00 00 ff ff ff ff ff ff ff ff bc e6 fa ad a7 17 9e 84 f3 b9 ca c2 fc 63 25 50], d) !== null
 ~~~
 
 ~~~ ts-property
