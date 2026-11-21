@@ -1,13 +1,13 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
 **Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
-#1343), stage 6 measured, gate not met: re-measured on 2026-11-14 after the
-resume build (#1621), with 4 of 11 judged cells inside (`json` 64 and 128,
-`db` 64 and 256), `plaintext` 256/1024/4096 and `json` 16/256 outside, and
-`json` 32 and 512 not judgeable; #1621 cut the async entry's peak RSS at
-`plaintext` 16,384 connections from 32.4 to 26.9 MiB; what is left is the
-second task per request, the router and the request copy, the rest of the
-serve/handler/router hand-off redesign, an open question (§6, §10).** The language half — `async`,
+#1343), stage 6 measured, gate not met: re-measured on 2026-11-21 after
+the in-place request read (design B, #2104), with 7 of 11 judged cells
+inside (`plaintext` 256, `json` 32 to 256, `db` 64 and 256), `plaintext`
+1024/4096 and `json` 16 outside, and `json` 512 not judgeable; the in-place
+read took 314 and 289 instructions a request off the async entry on
+`plaintext` and `json`; what is left is the second task per request and the
+router (§6, §10).** The language half — `async`,
 `await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
 and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
@@ -606,7 +606,39 @@ more than the explicit one. Of that:
 - `serveTask`'s copy of the request is about 378.
 
 #1621's −0.8% does not move any of these by a share the throughput cells can
-show. What is left is the same three frames; stage 6 stays open.
+show. What is left is the same three frames.
+
+### After the in-place request read (design B, #2104)
+
+`lend` (`nish:async`, LANGUAGE.md) lets `serveTask` hand its handler the
+connection's parsed request in place, so the copy above is gone. Re-measured
+on 2026-11-21, before (`56ce4256`) and after (`cf52d581`) in one container,
+with `run.sh` unchanged
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-the-in-place-request-read-wp49-stage-6)):
+
+| test | connections | band after | async vs entry, after | verdict before | verdict after |
+| --- | ---: | ---: | ---: | --- | --- |
+| `plaintext` | 256 | 15.6% | −15.0% | inside | inside |
+| `plaintext` | 1024 | 4.4% | −18.6% | outside | outside (re-run) |
+| `plaintext` | 4096 | 0.6% | −24.9% | outside (re-run) | outside |
+| `json` | 16 | 3.3% | −4.7% | inside | outside |
+| `json` | 32 | 1.6% | +1.6% | inside | inside |
+| `json` | 64 | 1.0% | +0.4% | inside | inside |
+| `json` | 128 | 1.4% | −0.8% | outside | inside |
+| `json` | 256 | 11.0% | −9.2% | outside | inside |
+| `json` | 512 | 12.6% | −11.8% | outside | not judgeable: bimodal twice |
+| `db` | 64 | 7.5% | −0.9% | pending | inside |
+| `db` | 256 | 2.6% | +10.2% | pending | inside |
+
+Seven of the eleven are inside, so the gate is not met. The profile is the
+clearer reading: the async entry's self instructions a request fell from
+6,598 to 6,282 on `plaintext` and from 9,634 to 9,348 on `json`, and the
+explicit entry's did not move, so the gap is now about 1,807 and 2,148
+(was 2,121 and 2,437). `serveTask`'s resume lost about 242 and
+`HttpRequest`'s constructor and `memcpy` about 100 more; `serveOn`'s resume
+gained 69 and 114 for the lending and the give-back. The rest of the gap is
+the second task per request and `Router.match`, which the in-place read does
+not touch; stage 6 stays open.
 
 ## 7. A non-blocking call from a handler today, without `async`
 
@@ -726,7 +758,7 @@ page for anything a user sees.
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
 | 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); after the hand-off build (#1601) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/128/256 outside and `json` 512 not judgeable, and the recorded `/queries` at 64 connections worse than before by more than its band (§6, re-measured 2026-11-14 on `e9730272`, about 2,040 and 2,430 more instructions a request than the explicit entry); after the resume build (#1621) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/256 outside, `json` 32 and 512 not judgeable, and the async entry's peak RSS at `plaintext` 16,384 connections down from 32.4 to 26.9 MiB (§6, re-measured 2026-11-14 on `798636cb`, about 2,054 and 2,425 more instructions a request than the explicit entry, in the second task, the router and the request copy); the follow-up is the rest of the serve/handler/router hand-off redesign, the owner's decision |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); after the hand-off build (#1601) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/128/256 outside and `json` 512 not judgeable, and the recorded `/queries` at 64 connections worse than before by more than its band (§6, re-measured 2026-11-14 on `e9730272`, about 2,040 and 2,430 more instructions a request than the explicit entry); after the resume build (#1621) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/256 outside, `json` 32 and 512 not judgeable, and the async entry's peak RSS at `plaintext` 16,384 connections down from 32.4 to 26.9 MiB (§6, re-measured 2026-11-14 on `798636cb`, about 2,054 and 2,425 more instructions a request than the explicit entry, in the second task, the router and the request copy); after the in-place request read (design B, #2104) 7 of the 11 judged cells are inside, `plaintext` 1024/4096 and `json` 16 outside and `json` 512 not judgeable (§6, re-measured 2026-11-21 on `cf52d581`, about 1,807 and 2,148 more instructions a request than the explicit entry, down from 2,121 and 2,437 before it in the same container); measured, gate not met: what is left is the second task per request and the router |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
@@ -1136,15 +1168,39 @@ body. Lifting that needs facts per function value, in `src/region-rules.ts`.
 
 ## Stage 6: a task reads its spawner's request in place (design B)
 
-Work in progress (#2104). The owner chose design B for the rest of stage 6
-(#1637): a spawned task reads its spawner's slot in place, through a borrowed
-view it may neither grow, write into, keep past its end nor hand to anything
-that does, so `serveTask` in `std/net/serve.ts` stops copying the request.
-The spike (#1595) measured that copy at about 370 instructions a request on
+The owner chose design B for the rest of stage 6 (#1637): a spawned task
+reads its spawner's slot in place, through a borrowed view it may neither
+grow, write a pointer into, keep past its end nor hand to anything that does,
+so `serveTask` in `std/net/serve.ts` stops copying the request. The spike
+(#1595) measured that copy at about 370 instructions a request on
 `plaintext` and `json`, and showed the task-memory rules refuse the in-place
-read with no library-only route around them; the construct is the route.
-This section records the rule, the lowering, the measurement and the regate
-as they land.
+read with no library-only route around them; the construct is the route
+(#2104).
+
+- **The rule.** `lend(x)` from `nish:async` takes one object or array the
+  task was handed and answers it as given. Inside a spawned task the view,
+  and what is built from it, is the spawner's memory: the task may read it,
+  write numbers into it, copy out of it and hand it to a callee or a
+  constructor whose answer does not let it out. Storing a pointer into it,
+  growing it, or handing it to a callee that does either is NL2822
+  (`tests/link/async_lend_store`); `lend` of a number, `boolean`, enum or
+  `string` is NL2693. Outside a task, and under `--emit-ts`, `lend` is the
+  identity (LANGUAGE.md, "`lend(x)` reads a spawner's object in place").
+- **The lowering.** `lend` lowers to its argument (`src/emit.ts`), so the
+  task reads the spawner's pointer; `src/region-rules.ts` gives the view its
+  spawner's origin and judges what may hold it, from the per-callee store
+  and keep facts in `src/attributes.ts`.
+- **The library.** `serveTask` hands its handler
+  `new Request(lend(st.reqs[k]))`. The connection lends its parsed request
+  head out for the task's life (`ServeConns.lendOut`), keeps a lent head out
+  of its head pool so the next request on the connection cannot overwrite it
+  (`Http1Connection.lendParsed`, `tests/link/net_http1_server_lend_park`),
+  and takes it back when the task ends (`giveBack`). Answered bytes and the
+  public API are unchanged.
+- **The measurement and the regate.** §6, "After the in-place request read":
+  the async entry runs 314 and 289 fewer instructions a request on
+  `plaintext` and `json`, 7 of 11 judged cells are inside, and the gate is
+  not met.
 
 ## Not in this work package
 
