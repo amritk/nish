@@ -9970,7 +9970,7 @@ const PROVER_READS_FILES = {
   "tests/link/std_dns_soak/main.ts": ["dns-config.ll", "dns-message.ll"],
   "tests/link/std_http1_end_head/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/std_http1_mss/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/std_http_compress/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_http_compress/main.ts": ["chacha20poly1305.ll", "gzip.ll", "zlib.ll"],
   "tests/link/std_json_equal/main.ts": ["json-number.ll"],
   "tests/link/std_json_number/main.ts": ["json-number.ll"],
   "tests/link/std_json_pointer/main.ts": ["json-number.ll"],
@@ -18171,6 +18171,15 @@ const DECLARED = [
     changelog: "short Postgres int columns without the overflow test",
     why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
   })),
+  // WP43 S4: `HttpCompressor` gains the deflate value, the coding last sent
+  // and its level, so a program that names it in its C header sees the
+  // struct grow.
+  {
+    program: "tests/link/std_compress_f64/main.ts",
+    file: "main.h",
+    changelog: "Accept-Encoding: deflate",
+    why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
+  },
 ]
 
 /**
