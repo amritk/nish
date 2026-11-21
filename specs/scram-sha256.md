@@ -34,14 +34,24 @@ normalized; `Normalize`, SASLprep in RFC 5802, is the caller's, and
 nish/net/postgres sends the password's UTF-8 bytes unchanged, as a
 PostgreSQL server accepts.
 
-RFC 7677 Section 3 prints one SCRAM-SHA-256 exchange, as base64 inside
-wrapped protocol messages. vector binds a printed string to a value only
-whole and only beside the other values on its line, so the exchange cannot be
-cited value by value. Each vector below therefore takes its expected value
-from a command that `spec check --run-sources` runs: Python's hashlib for
-SaltedPassword, which the exchange does not print, and a base64 decode of the
-printed `p=` and `v=` for ClientProof and ServerSignature, so those two are
-the RFC's own values.
+RFC 7677 Section 3 prints one SCRAM-SHA-256 exchange, and vector 0.6.0
+cannot cite any value of it, so each vector below takes its expected value
+from a command that `spec check --run-sources` runs:
+
+- S1, Python's hashlib: the exchange does not print SaltedPassword at all.
+- S2 and S3, a base64 decode of the printed `p=` and `v=`, so those two are
+  the RFC's own bytes. The exchange prints the proof and the signature only
+  as base64 inside wrapped protocol messages, and the profile has no base64
+  literal, so the printed text never equals a hex or byte-array Expected.
+- S4, the refusal this profile adds in {{refused-count}}.
+
+The iteration counts 4096 (S1) and 0 (S4) carry no label. vector 0.6.0
+checks a labelled argument of a command-sourced or cross-referenced vector
+against this profile's own Test Vectors section. There `i` is printed more
+than once, since S2's and S3's AuthMessage holds `i=4096`, and with
+"pencil" on the same rows vector refuses: "nothing pairs a printed string
+with one of several labelled values". The integer is left bare, and
+`spec check` warns that it has no label to find it by.
 
 The arguments are the exchange's: the password 'pencil', the salt the server
 sends as `s=W22ZaJ0SNY7soEsUEjb6gQ==` (the 16 bytes `[5b 6d 99 68 9d 12 35 8e
@@ -58,6 +68,11 @@ message without its proof, with a comma between each.
 export const scramSha256SaltedPassword = (password: Secret<u8[]>, salt: u8[], iterations: i32): Secret<u8[]> | null
 export const scramSha256ClientProof = (saltedPassword: Secret<u8[]>, authMessage: u8[]): u8[]
 export const scramSha256ServerSignature = (saltedPassword: Secret<u8[]>, authMessage: u8[]): u8[]
+// module: nish/crypto/hmac
+export const pbkdf2HmacSha256 = (password: Secret<u8[]>, salt: u8[], iterations: i32, length: i32): Secret<u8[]> | null
+export const hmacSha256 = (key: u8[], data: u8[]): u8[]
+// module: nish/crypto/sha256
+export const sha256 = (data: u8[]): u8[]
 ~~~
 
 # The Hash
@@ -100,6 +115,50 @@ when the iteration count is less than 1.
 > ServerSignature := HMAC(ServerKey, AuthMessage)
 > {{Section 3 of RFC5802}}
 {: #R-SERVER-SIG gi="blockquote"}
+
+# Laws
+
+The ClientProof and ServerSignature of RFC 5802 Section 3 are each a fixed
+composition of HMAC-SHA-256 and SHA-256 over SaltedPassword, and
+SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte output. The clauses
+below state those compositions against the reference functions of
+nish/crypto/hmac and nish/crypto/sha256, for any key and AuthMessage, where
+the vectors hold one exchange. The bytes `[43 6c 69 65 6e 74 20 4b 65 79]`
+are "Client Key" and `[53 65 72 76 65 72 20 4b 65 79]` are "Server Key".
+
+~~~ ts-property
+// P-HI covers R-SALTED, R-HI — SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte key
+// samples: 32
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* 1..3 */) => {
+  const sp = scramSha256SaltedPassword(pw, salt, n);
+  return sp !== null && unwrap(sp).length === 32 && unwrap(sp) === unwrap(pbkdf2HmacSha256(pw, salt, n, 32));
+}
+~~~
+
+~~~ ts-property
+// P-COUNT covers R-COUNT — a count below 1 is null
+// samples: 32
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* -3..0 */) => scramSha256SaltedPassword(pw, salt, n) === null
+~~~
+
+~~~ ts-property
+// P-PROOF covers R-SHA256, R-CLIENT-KEY, R-PROOF — ClientProof is ClientKey XOR HMAC(H(ClientKey), AuthMessage)
+// samples: 64
+forall (sp: u8[] /* 0..80 */, am: u8[] /* 0..96 */) => {
+  const ck = hmacSha256(sp, [43 6c 69 65 6e 74 20 4b 65 79]);
+  return scramSha256ClientProof(sp, am) === xor(ck, hmacSha256(sha256(ck), am));
+}
+~~~
+
+~~~ ts-property
+// P-SERVER-SIG covers R-SHA256, R-SERVER-SIG — ServerSignature is HMAC(HMAC(SaltedPassword, "Server Key"), AuthMessage)
+// samples: 64
+forall (sp: u8[] /* 0..80 */, am: u8[] /* 0..96 */) => scramSha256ServerSignature(sp, am) === hmacSha256(hmacSha256(sp, [53 65 72 76 65 72 20 4b 65 79]), am)
+~~~
+
+The proof is also the server's check: it recovers ClientKey as
+`xor(ClientProof, ClientSignature)` and compares `H(ClientKey)` with
+StoredKey. P-PROOF states the same XOR, so no separate clause states it.
 
 # Security Considerations
 

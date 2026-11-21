@@ -4,7 +4,7 @@
   "source": {
     "title": "nish/crypto/scram — the SCRAM-SHA-256 client computation",
     "main": "scram-sha256",
-    "sha256": "c56b99b78c6966fc80697fcc74d35483cfff4b505bd8b26dead1730bfe363afe"
+    "sha256": "23fdd4a6d8ac83ffd3cd75c1172914cb1417144ac30d722756f9916bb9263a41"
   },
   "sources": [
     {
@@ -126,6 +126,55 @@
         }
       ],
       "returns": "bytes"
+    },
+    {
+      "name": "pbkdf2HmacSha256",
+      "module": "nish/crypto/hmac",
+      "params": [
+        {
+          "name": "password",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "salt",
+          "type": "bytes"
+        },
+        {
+          "name": "iterations",
+          "type": "i32"
+        },
+        {
+          "name": "length",
+          "type": "i32"
+        }
+      ],
+      "returns": "secret-bytes?"
+    },
+    {
+      "name": "hmacSha256",
+      "module": "nish/crypto/hmac",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "sha256",
+      "module": "nish/crypto/sha256",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
     }
   ],
   "clauses": [
@@ -137,7 +186,7 @@
       "source": {
         "command": "python3 -c 'import base64, hashlib; print(hashlib.pbkdf2_hmac(\"sha256\", b\"pencil\", base64.b64decode(\"W22ZaJ0SNY7soEsUEjb6gQ==\"), 4096).hex())'"
       },
-      "section": "8",
+      "section": "9",
       "call": "scramSha256SaltedPassword",
       "args": [
         {
@@ -162,7 +211,7 @@
       "source": {
         "command": "python3 -c 'import base64; print(base64.b64decode(\"dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=\").hex())'"
       },
-      "section": "8",
+      "section": "9",
       "call": "scramSha256ClientProof",
       "args": [
         {
@@ -184,7 +233,7 @@
       "source": {
         "command": "python3 -c 'import base64; print(base64.b64decode(\"6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=\").hex())'"
       },
-      "section": "8",
+      "section": "9",
       "call": "scramSha256ServerSignature",
       "args": [
         {
@@ -206,7 +255,7 @@
       "source": {
         "spec": "4.1"
       },
-      "section": "8",
+      "section": "9",
       "call": "scramSha256SaltedPassword",
       "args": [
         {
@@ -222,6 +271,304 @@
       "expect": {
         "null": true
       }
+    },
+    {
+      "kind": "property",
+      "id": "P-HI",
+      "title": "SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte key",
+      "covers": ["R-SALTED", "R-HI"],
+      "forall": [
+        {
+          "name": "pw",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 24
+        },
+        {
+          "name": "salt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 24
+        },
+        {
+          "name": "n",
+          "type": "i32",
+          "min": 1,
+          "max": 3
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "sp",
+            "value": {
+              "call": "scramSha256SaltedPassword",
+              "args": [
+                {
+                  "var": "pw"
+                },
+                {
+                  "var": "salt"
+                },
+                {
+                  "var": "n"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "sp"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "len",
+                  "args": [
+                    {
+                      "op": "unwrap",
+                      "args": [
+                        {
+                          "var": "sp"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "int": 32
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "sp"
+                    }
+                  ]
+                },
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "call": "pbkdf2HmacSha256",
+                      "args": [
+                        {
+                          "var": "pw"
+                        },
+                        {
+                          "var": "salt"
+                        },
+                        {
+                          "var": "n"
+                        },
+                        {
+                          "int": 32
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 32
+    },
+    {
+      "kind": "property",
+      "id": "P-COUNT",
+      "title": "a count below 1 is null",
+      "covers": ["R-COUNT"],
+      "forall": [
+        {
+          "name": "pw",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 24
+        },
+        {
+          "name": "salt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 24
+        },
+        {
+          "name": "n",
+          "type": "i32",
+          "min": -3,
+          "max": 0
+        }
+      ],
+      "assert": {
+        "op": "isNull",
+        "args": [
+          {
+            "call": "scramSha256SaltedPassword",
+            "args": [
+              {
+                "var": "pw"
+              },
+              {
+                "var": "salt"
+              },
+              {
+                "var": "n"
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 32
+    },
+    {
+      "kind": "property",
+      "id": "P-PROOF",
+      "title": "ClientProof is ClientKey XOR HMAC(H(ClientKey), AuthMessage)",
+      "covers": ["R-SHA256", "R-CLIENT-KEY", "R-PROOF"],
+      "forall": [
+        {
+          "name": "sp",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 80
+        },
+        {
+          "name": "am",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "ck",
+            "value": {
+              "call": "hmacSha256",
+              "args": [
+                {
+                  "var": "sp"
+                },
+                {
+                  "hex": "436c69656e74204b6579"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "==",
+          "args": [
+            {
+              "call": "scramSha256ClientProof",
+              "args": [
+                {
+                  "var": "sp"
+                },
+                {
+                  "var": "am"
+                }
+              ]
+            },
+            {
+              "op": "xor",
+              "args": [
+                {
+                  "var": "ck"
+                },
+                {
+                  "call": "hmacSha256",
+                  "args": [
+                    {
+                      "call": "sha256",
+                      "args": [
+                        {
+                          "var": "ck"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "am"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-SERVER-SIG",
+      "title": "ServerSignature is HMAC(HMAC(SaltedPassword, \"Server Key\"), AuthMessage)",
+      "covers": ["R-SHA256", "R-SERVER-SIG"],
+      "forall": [
+        {
+          "name": "sp",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 80
+        },
+        {
+          "name": "am",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "scramSha256ServerSignature",
+            "args": [
+              {
+                "var": "sp"
+              },
+              {
+                "var": "am"
+              }
+            ]
+          },
+          {
+            "call": "hmacSha256",
+            "args": [
+              {
+                "call": "hmacSha256",
+                "args": [
+                  {
+                    "var": "sp"
+                  },
+                  {
+                    "hex": "536572766572204b6579"
+                  }
+                ]
+              },
+              {
+                "var": "am"
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
     }
   ]
 }
