@@ -13,6 +13,8 @@
 //   4. RST_STREAM CANCEL part way through a body: the request comes back
 //      hung up and an answer to it is dropped.
 //   5. The connection lost part way through a body: the same.
+//   5a. An answer still flushing when more body queues its request again:
+//      the request stays out of `take`.
 //   6. `/early` answered before its body ends: the response, then
 //      RST_STREAM NO_ERROR for the rest.
 //   7. `/echo`, not marked, keeps the whole body: answered with it, and a
@@ -22,8 +24,8 @@
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { H2_CANCEL, H2_FLAG_END_STREAM } from "nish/net/http2-frame"
-import { HANDLER_DROPPED } from "nish/net/handler"
-import { HttpServerLimits } from "nish/net/http-server"
+import { HANDLER_DROPPED, HANDLER_SENT } from "nish/net/handler"
+import { HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
 import { leafPrivate } from "../net_tls_common/server"
 import { postOf } from "../net_http2/peer"
 import { ZERO } from "../net_tls_record_common/bytes"
@@ -144,6 +146,30 @@ const carrier = (t: Suite, rig: StreamRig, key: Secret<u8[]>, tls: boolean): voi
   t.ok(`${name}: a body whose connection closed comes back hung up`, awaitHung(rig, key, hung))
   t.ok(`${name}: the lost request's answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
   t.ok(`${name}: and the connection it was on closes`, awaitClosed(rig, key))
+
+  // An answer that outlasts the client's window while more body queues its request again.
+  const stuck = connected(t, rig, key, tls, name, "an answer still flushing")
+  const stuckSeen: i32 = toI32(rig.firsts.length)
+  stuck.open(toI32(1), "/lazy", toI32(100000), key)
+  stuck.wire.dataN(toI32(1), PIECE, ZERO)
+  stuck.flush(key)
+  t.ok(`${name}: the body to answer taken streaming`, awaitFirst(rig, key, stuckSeen))
+  const held: HttpServerRequest = rig.reading[toI32(rig.reading.length) - 1]
+  stuck.wire.dataN(toI32(1), PIECE, ZERO)
+  stuck.flush(key)
+  let queued: boolean = false
+  for (let turn: i32 = 0; turn < TURNS && !queued; turn++) {
+    rig.h.waitSigned(toI32(5), key)
+    queued = rig.h.ready()
+  }
+  t.ok(`${name}: more body queues the held request again`, queued)
+  rig.forget(held)
+  const big: u8[] = new Array<u8>(100000)
+  const sent: i32 = rig.h.send(held, 200, rig.text, big, ZERO, toI32(100000))
+  t.ok(`${name}: answered past the client's window, still flushing`, sent === HANDLER_SENT && rig.h.pending(held) > 0)
+  t.ok(`${name}: a request answered since it was queued again stays out of take`, !rig.h.ready())
+  stuck.close()
+  t.ok(`${name}: and its connection closes`, awaitClosed(rig, key))
 
   const early = connected(t, rig, key, tls, name, "an answer before the body ends")
   early.open(toI32(1), "/early", toI32(100000), key)

@@ -1,0 +1,17 @@
+PASS  every stream held
+PASS  arrival credits no held stream
+PASS  100 of 600 consumed
+PASS  below half the window: no WINDOW_UPDATE
+PASS  the other 500, and 1000 past them
+PASS  credits the 600 sent, no more
+PASS  a stream owing nothing more
+PASS  is credited nothing
+PASS  a consume with no room for its WINDOW_UPDATE: H2_AGAIN
+PASS  nothing owed is settled before the output drains
+PASS  the output held the other streams' WINDOW_UPDATEs
+PASS  but not the stalled stream's
+PASS  once drained, settleCredit sends what was owed
+PASS  the stalled stream's WINDOW_UPDATE
+PASS  and with nothing owed, settleCredit answers false
+http2 stream: 15 passed, 0 failed, 0 skipped
+

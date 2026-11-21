@@ -1965,12 +1965,18 @@ export class HttpServer {
     while (this.queueCount > 0) {
       const r: HttpServerRequest = this.requests[this.queue[this.queueStart]]
       // A streaming request queued again is the program's, live or not: it learns of a reset by taking it.
-      if (r.again || this.live(r)) {
+      // One whose answer ended since (`end`, `trailers`) is flushing on its own, and stays out of `take`.
+      const held: boolean = r.state === HTTP_SERVER_HELD || r.state === HTTP_SERVER_STREAMING
+      if ((r.again && held) || (!r.again && this.live(r))) {
         return true
       }
       this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
       this.queueCount -= 1
-      this.release(r)
+      if (r.again) {
+        r.again = false
+      } else {
+        this.release(r)
+      }
     }
     return false
   }
@@ -3131,7 +3137,9 @@ export class HttpServer {
    * get more of its body: each one still waiting is marked hung up and goes
    * back to the program, once, and its stream is reset CANCEL. A hung-up
    * request's answer is dropped without touching its stream, so a stream
-   * left open would keep the connection from ever being done.
+   * left open would keep the connection from ever being done. That holds for
+   * an answer already streaming or flushing too: its peer can never close the
+   * stream's other half, so the reset cuts the answer short, by design.
    */
   private h2Ended(slot: i32): void {
     const conn: Http2Connection = this.h2Conn(slot)

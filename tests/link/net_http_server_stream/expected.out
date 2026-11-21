@@ -26,6 +26,12 @@ PASS  h2c: the body to lose taken streaming
 PASS  h2c: a body whose connection closed comes back hung up
 PASS  h2c: the lost request's answer is dropped
 PASS  h2c: and the connection it was on closes
+PASS  h2c: an answer still flushing: connected
+PASS  h2c: the body to answer taken streaming
+PASS  h2c: more body queues the held request again
+PASS  h2c: answered past the client's window, still flushing
+PASS  h2c: a request answered since it was queued again stays out of take
+PASS  h2c: and its connection closes
 PASS  h2c: an answer before the body ends: connected
 PASS  h2c: the answer goes out with the body unfinished
 PASS  h2c: then RST_STREAM NO_ERROR for the rest
@@ -60,6 +66,12 @@ PASS  HTTP/2 over TLS: the body to lose taken streaming
 PASS  HTTP/2 over TLS: a body whose connection closed comes back hung up
 PASS  HTTP/2 over TLS: the lost request's answer is dropped
 PASS  HTTP/2 over TLS: and the connection it was on closes
+PASS  HTTP/2 over TLS: an answer still flushing: connected, the server's signature and Finished verified
+PASS  HTTP/2 over TLS: the body to answer taken streaming
+PASS  HTTP/2 over TLS: more body queues the held request again
+PASS  HTTP/2 over TLS: answered past the client's window, still flushing
+PASS  HTTP/2 over TLS: a request answered since it was queued again stays out of take
+PASS  HTTP/2 over TLS: and its connection closes
 PASS  HTTP/2 over TLS: an answer before the body ends: connected, the server's signature and Finished verified
 PASS  HTTP/2 over TLS: the answer goes out with the body unfinished
 PASS  HTTP/2 over TLS: then RST_STREAM NO_ERROR for the rest
@@ -71,5 +83,5 @@ PASS  HTTP/1.1: /upload answered
 PASS  HTTP/1.1: with the whole body
 PASS  HTTP/1.1: taken whole, not streaming
 PASS  HTTP/1.1: a body past maxBody is 413 on a marked route
-http server stream: 73 passed, 0 failed, 0 skipped
+http server stream: 85 passed, 0 failed, 0 skipped
 

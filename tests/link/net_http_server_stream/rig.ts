@@ -149,7 +149,7 @@ export class StreamRig {
   }
 
   /** The program is done with `r`. */
-  private forget(r: HttpServerRequest): void {
+  forget(r: HttpServerRequest): void {
     const kept: HttpServerRequest[] = []
     for (const seen of this.reading) {
       if (seen !== r) {
