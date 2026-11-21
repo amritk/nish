@@ -627,10 +627,12 @@ with `run.sh` unchanged
 | `json` | 128 | 1.4% | −0.8% | outside | inside |
 | `json` | 256 | 11.0% | −9.2% | outside | inside |
 | `json` | 512 | 12.6% | −11.8% | outside | not judgeable: bimodal twice |
-| `db` | 64 | 7.5% | −0.9% | pending | inside |
-| `db` | 256 | 2.6% | +10.2% | pending | inside |
+| `db` | 64 | 7.5% | −0.9% | not judgeable: bimodal, no re-run | inside |
+| `db` | 256 | 2.6% | +10.2% | inside | inside |
 
-Seven of the eleven are inside, so the gate is not met. The profile is the
+Seven of the eleven are inside, so the gate is not met; before it, in the
+same container, five were inside, five outside and `db` 64 not judgeable.
+The profile is the
 clearer reading: the async entry's self instructions a request fell from
 6,598 to 6,282 on `plaintext` and from 9,634 to 9,348 on `json`, and the
 explicit entry's did not move, so the gap is now about 1,807 and 2,148
