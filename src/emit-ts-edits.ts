@@ -1372,6 +1372,33 @@ const propertyImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
 }
 
 /**
+ * Where the edit that drops a `lend` import specifier ending at `end` stops:
+ * past the comma that follows it and the spaces after that, or at `end` when
+ * no comma follows.
+ */
+const lendSpecEnd = (text: string, end: i32): i32 => {
+  let i = end
+  while (i >= 0 && i < text.length) {
+    const c = text.charCodeAt(i)
+    if (c !== 32 && c !== 10) {
+      break
+    }
+    i = i + 1
+  }
+  if (i < 0 || i >= text.length || text.charCodeAt(i) !== 44) {
+    return end
+  }
+  i = i + 1
+  while (i < text.length) {
+    if (text.charCodeAt(i) !== 32) {
+      break
+    }
+    i = i + 1
+  }
+  return i
+}
+
+/**
  * The edits that take `lend` out of an import of `nish:async`, and the
  * declaration written after the import in its place. `lend` is the identity
  * at run time (WP49 stage 6): what it adds is a borrow the region walk checks,
@@ -1400,19 +1427,7 @@ const lendImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
     if (exported !== "lend") {
       continue
     }
-    let end = spec.end
-    while (end < text.length && (text.charCodeAt(end) === 32 || text.charCodeAt(end) === 10)) {
-      end = end + 1
-    }
-    if (end < text.length && text.charCodeAt(end) === 44) {
-      end = end + 1
-      while (end < text.length && text.charCodeAt(end) === 32) {
-        end = end + 1
-      }
-    } else {
-      end = spec.end
-    }
-    edits.push(new Edit(spec.start, end, ""))
+    edits.push(new Edit(spec.start, lendSpecEnd(text, spec.end), ""))
     sb.add(`\nconst ${spec.text} = <T>(x: T): T => x;`)
   }
   return sb.toText()

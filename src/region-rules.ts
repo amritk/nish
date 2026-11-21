@@ -1188,6 +1188,12 @@ class RegionWalk {
     }
   }
 
+  /** NL2822 at `node`: it hands the lent view `arg` to `name`, which stores into it or may keep it. */
+  reportLentHanded(node: Node, arg: Node, name: string, stores: boolean): void {
+    const which = stores ? "which stores into it" : "which may keep it"
+    this.report(node, lentMessage(this.who, handsText(this.program, arg, name, which)))
+  }
+
   /** The rules a user function or constructor is held to, from its facts, at `node`. */
   judgeCallee(node: Node, callee: FunctionSig, isNew: boolean): void {
     const f: FunctionFacts | null = this.facts.get(callee.name)
@@ -1233,8 +1239,7 @@ class RegionWalk {
           (pp.captured && !(isNew && (pp.keptInThis || !pp.outlives))) ||
           (pp.keptInThis && !isNew)
         ) {
-          const which = pp !== null && pp.storesReach ? "which stores into it" : "which may keep it"
-          this.report(node, lentMessage(this.who, handsText(this.program, arg, name, which)))
+          this.reportLentHanded(node, arg, name, pp !== null && pp.storesReach)
         }
         continue
       }

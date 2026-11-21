@@ -2641,9 +2641,10 @@ function FactCollector.noteWrittenArguments(this: FactCollector, call: Node): vo
   local +1:11 args: Node[] (const)
   local +2:14 i: i32 (let)
   callee +3:11 isWrittenArgument -> @isWrittenArgument
-  callee +4:9 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
-  callee +5:9 FactCollector.notePointerStore -> @FactCollector.notePointerStore
-  callee +5:40 FactCollector.elementTypeOf -> @FactCollector.elementTypeOf
+  local +4:15 arg: Node (const)
+  callee +5:9 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
+  callee +6:9 FactCollector.notePointerStore -> @FactCollector.notePointerStore
+  callee +6:36 FactCollector.elementTypeOf -> @FactCollector.elementTypeOf
 function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: Node): void -> @FactCollector.collectIdentifierBuiltinFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

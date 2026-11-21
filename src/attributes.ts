@@ -4361,8 +4361,9 @@ class FactCollector {
     const args = call.children[1].children
     for (let i = 0; i < args.length; i++) {
       if (isWrittenArgument(letters, i)) {
-        this.noteArrayWrite(call, args[i])
-        this.notePointerStore(args[i], this.elementTypeOf(args[i]))
+        const arg = args[i]
+        this.noteArrayWrite(call, arg)
+        this.notePointerStore(arg, this.elementTypeOf(arg))
       }
     }
   }

@@ -425,8 +425,6 @@ the very object the task was given, with no copy. The lent object stays its
 spawner's, lent only while the task runs: the task may read it, write
 numbers into it, and copy strings and numbers out of it.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
 ```ts
 import { lend, sleep, spawn } from "nish:async";
 
