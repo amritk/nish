@@ -1,0 +1,1 @@
+HttpServer.trailers: the HTTP/2 carrier refuses the fields: a name that is not a lowercase token, a connection-specific field, a value that is not field text, or names and values of different lengths

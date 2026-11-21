@@ -14,6 +14,10 @@
 //      h2c connection silent before its preface is closed by
 //      `prefaceTimeout`, and one silent after it by `idleTimeout`.
 //   6. A server with no TLS or QUIC listener turns by `wait`, no key lent.
+//   7. Trailers over HTTP/2 over TLS and h2c: after a body, with no body, and
+//      after a body that waits for flow-control window; more fields than
+//      `maxResponseFields` and a section too large for the output each reset
+//      the stream.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { H2_CANCEL, H2_FLAG_END_STREAM } from "nish/net/http2-frame"
@@ -24,6 +28,7 @@ import { leafPrivate } from "../net_tls_common/server"
 import { Wire, getOf, postOf } from "../net_http2/peer"
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Cat, h3ClientParams, h3ClientSettings, h3Frame, h3Section, h3Varint } from "../net_http3/peer"
 import { H2cClient, H2TlsClient, QuicClient, TURNS, h3Answer } from "./client"
+import { HANDLER_DROPPED, HANDLER_SENT } from "nish/net/handler"
 import { Rig, rigLimits } from "./rig"
 
 /** The HEADERS frame of an HTTP/3 request with these pseudo-headers, then `names`/`values`. */
@@ -197,6 +202,83 @@ const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.eqStr("404 as problem+json", `${missing.status} ${missing.body}`, `404 {"type":"about:blank","title":"Not Found","status":404}`)
 }
 
+/** The four trailer requests on streams 1, 3, 5 and 7 of `wire`, after the preface and SETTINGS. */
+const trailerRequests = (wire: Wire): void => {
+  const none: i32[] = []
+  const noValues: i64[] = []
+  wire.preface()
+  wire.settings(none, noValues)
+  wire.settingsAck()
+  wire.headers(n32(1), getOf("/trailers"), H2_FLAG_END_STREAM)
+  wire.headers(n32(3), getOf("/trailers-bare"), H2_FLAG_END_STREAM)
+  wire.headers(n32(5), getOf("/trailers-many"), H2_FLAG_END_STREAM)
+  wire.headers(n32(7), getOf("/trailers-huge"), H2_FLAG_END_STREAM)
+}
+
+/** What the trailer requests of `trailerRequests` read back as, on one carrier. */
+const trailerFrames = (t: Suite, rig: Rig, carrier: string, frames: string): void => {
+  const trailer: string = "grpc-status=0 grpc-message=ok"
+  t.ok(`${carrier}: /trailers: its body, a DATA frame that does not end the stream`, frames.indexOf("HEADERS 1 :status=200 ") >= 0 && frames.indexOf(`DATA 1 6 "hello\n";`) >= 0 && frames.indexOf(`DATA 1 6 "hello\n" end`) < 0)
+  t.ok(`${carrier}: then the trailer section, a HEADERS frame with END_STREAM`, frames.indexOf(`HEADERS 1 end ${trailer}`) >= 0 && frames.indexOf(`DATA 1 0`) < 0)
+  t.ok(`${carrier}: /trailers-bare: the head, then the trailer section, and no DATA`, frames.indexOf("HEADERS 3 :status=200 ") >= 0 && frames.indexOf(`HEADERS 3 end ${trailer}`) >= 0 && frames.indexOf("DATA 3 ") < 0)
+  t.ok(`${carrier}: more trailer fields than maxResponseFields reset the stream`, frames.indexOf("RST_STREAM 5") >= 0 && frames.indexOf("HEADERS 5 end") < 0)
+  t.ok(`${carrier}: a trailer section too large for the output resets the stream`, frames.indexOf("RST_STREAM 7") >= 0 && frames.indexOf("HEADERS 7 end") < 0)
+  const results: i32[] = rig.trailerResults
+  t.ok(`${carrier}: trailers answered SENT, SENT, DROPPED, SENT`, toI32(results.length) === 4 && results[0] === HANDLER_SENT && results[1] === HANDLER_SENT && results[2] === HANDLER_DROPPED && results[3] === HANDLER_SENT)
+}
+
+/** Trailers over HTTP/2 over TLS and over h2c, each on a server of its own. */
+const trailerChecks = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(rigLimits(n32(16)), true, toI32(4))
+  const h2 = new H2TlsClient(rig)
+  t.ok("trailers: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
+  trailerRequests(h2.wire)
+  h2.flush(key, null, null)
+  trailerFrames(t, rig, "HTTP/2", h2.awaitFrames(n32(12), key, null, null))
+  const clear = new Rig(rigLimits(n32(16)), true, toI32(4))
+  const c = new H2cClient(clear)
+  t.ok("trailers: an h2c connection", c.connect(clear.h2.h2cPort))
+  trailerRequests(c.wire)
+  c.flush(key)
+  trailerFrames(t, clear, "h2c", c.awaitFrames(n32(12), key))
+}
+
+/** Whether a DATA frame in the joined `frames` carries END_STREAM. */
+const dataEnds = (frames: string): boolean => {
+  for (const frame of frames.split("; ")) {
+    if (frame.startsWith("DATA ") && frame.endsWith(" end")) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Trailers behind a body that waits for flow-control window go once its last byte does. */
+const trailerWindow = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(rigLimits(n32(4)), true, toI32(4))
+  const c = new H2cClient(rig)
+  t.ok("trailers behind the window: an h2c connection", c.connect(rig.h2.h2cPort))
+  const none: i32[] = []
+  const noValues: i64[] = []
+  c.wire.preface()
+  c.wire.settings(none, noValues)
+  c.wire.settingsAck()
+  c.wire.headers(n32(1), getOf("/trailers-big"), H2_FLAG_END_STREAM)
+  c.flush(key)
+  const first: string = c.awaitFrames(n32(5), key)
+  t.ok("a GET of /trailers-big: 200, the body waits for window, no trailers yet", first.indexOf("HEADERS 1 :status=200 ") >= 0 && first.indexOf("DATA 1 ") >= 0 && first.indexOf("HEADERS 1 end") < 0)
+  t.ok("trailers answered SENT while the body waits", toI32(rig.trailerResults.length) === 1 && rig.trailerResults[0] === HANDLER_SENT)
+  c.wire.windowUpdate(n32(0), n32(65535))
+  c.wire.windowUpdate(n32(1), n32(65535))
+  c.flush(key)
+  let next: string = ""
+  for (let round: i32 = 0; round < 8 && next.indexOf("HEADERS 1 end") < 0 && !c.closed; round++) {
+    next = `${next}; ${c.awaitFrames(n32(1), key)}`
+  }
+  t.ok("the rest of the body, no DATA frame ending the stream", next.indexOf("DATA 1 ") >= 0 && !dataEnds(`${first}; ${next}`))
+  t.ok("then the trailer section with END_STREAM", next.indexOf("HEADERS 1 end grpc-status=0 grpc-message=ok") >= 0)
+}
+
 export const main = (): i32 => {
   const t = new Suite("http server carriers")
   const key: Secret<u8[]> = secret(leafPrivate())
@@ -208,6 +290,8 @@ export const main = (): i32 => {
   h2ResetFlushing(t, key)
   clearChecks(t, key)
   waitChecks(t, key)
+  trailerChecks(t, key)
+  trailerWindow(t, key)
   wipe(key)
   return t.done()
 }
