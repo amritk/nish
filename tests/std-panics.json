@@ -4,7 +4,7 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9614,
+  "total": 9751,
   "explicit": {
     "kept": 418,
     "toFix": 51
@@ -483,6 +483,13 @@
       "overflow": 41,
       "panic": 5,
       "slice": 8
+    },
+    "std/net/static.ts": {
+      "array-length": 8,
+      "divide": 5,
+      "index": 49,
+      "overflow": 71,
+      "slice": 4
     },
     "std/net/tls-tcp.ts": {
       "index": 44,
