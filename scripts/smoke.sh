@@ -67,8 +67,8 @@ failed=0
 skipped=0
 rows=()
 for src in "${programs[@]}"; do
-  # examples/multi/main.ts -> multi_main; examples/hello.ts -> hello
-  name=$(printf '%s' "${src#"$examples"/}" | sed -e 's/\.ts$//' -e 's#/#_#g')
+  # examples/multi/main.ts -> multi-main; examples/hello.ts -> hello
+  name=$(printf '%s' "${src#"$examples"/}" | sed -e 's/\.ts$//' -e 's#/#-#g')
   exe="$out/$name"
   skip=$(sed -n 's#^// smoke: skip \(.*\)#\1#p' "$src" | head -n 1)
   if [ -n "$skip" ]; then

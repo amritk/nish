@@ -102,7 +102,11 @@ const jsonPointerIntegerEnd = (s: string, from: i32): i32 => {
   }
   let i: i32 = from + 1
   if (first !== JSON_POINTER_DIGIT_0) {
-    while (i < n && jsonPointerByte(s, i) >= JSON_POINTER_DIGIT_0 && jsonPointerByte(s, i) <= JSON_POINTER_DIGIT_9) {
+    while (
+      i < n &&
+      jsonPointerByte(s, i) >= JSON_POINTER_DIGIT_0 &&
+      jsonPointerByte(s, i) <= JSON_POINTER_DIGIT_9
+    ) {
       i += 1
     }
   }

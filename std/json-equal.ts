@@ -118,7 +118,10 @@ const jsonEqualSortedMembers = (doc: JsonDocument, v: i32, keys: string[]): i32[
       for (let k: i32 = lo; k < hi; k++) {
         const left: i32 = jsonEqualAt(order, i)
         const right: i32 = jsonEqualAt(order, j)
-        if (i < mid && (j >= hi || !jsonEqualBefore(jsonEqualKeyAt(keys, right), jsonEqualKeyAt(keys, left)))) {
+        if (
+          i < mid &&
+          (j >= hi || !jsonEqualBefore(jsonEqualKeyAt(keys, right), jsonEqualKeyAt(keys, left)))
+        ) {
           jsonEqualSetAt(spare, k, left)
           i += 1
         } else if (j < hi) {
@@ -165,7 +168,7 @@ export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): b
     const x: i32 = left[left.length - 1]
     left.pop()
     // Never taken: the two stacks are pushed in pairs, so they empty together.
-    if (right.length < 1) {
+    if (right.length === 0) {
       return false
     }
     const y: i32 = right[right.length - 1]

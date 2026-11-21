@@ -524,13 +524,12 @@ export class JsonDocument {
           // under the cap, so this refusal is never reached.
           if (p >= JSON_VALUE_MAX_VALUES) {
             return this.parseFailed(JSON_VALUE_ERR_VALUES, tok.tokStart)
-          } else {
-            jsonValuePut(this.pendingValue, p, v)
-            jsonValuePut(this.pendingKeyAt, p, keyAt)
-            jsonValuePut(this.pendingKeyLength, p, keyLength)
-            jsonValuePut(this.pendingSource, p, keySource)
-            this.pendingTop = p + 1
           }
+          jsonValuePut(this.pendingValue, p, v)
+          jsonValuePut(this.pendingKeyAt, p, keyAt)
+          jsonValuePut(this.pendingKeyLength, p, keyLength)
+          jsonValuePut(this.pendingSource, p, keySource)
+          this.pendingTop = p + 1
         }
       }
       k = tok.next()
@@ -642,14 +641,13 @@ export class JsonDocument {
           // under the cap, so this refusal is never reached.
           if (p >= JSON_VALUE_MAX_VALUES) {
             return this.parseFailed(JSON_VALUE_ERR_VALUES, tok.tokStart)
-          } else {
-            jsonValuePut(this.pendingValue, p, v)
-            jsonValuePut(this.pendingKeyAt, p, keyAt)
-            jsonValuePut(this.pendingKeyLength, p, keyLength)
-            jsonValuePut(this.pendingSource, p, keySource)
-            jsonValuePut(r.pendingKeyEnd, p, keyEnd)
-            this.pendingTop = p + 1
           }
+          jsonValuePut(this.pendingValue, p, v)
+          jsonValuePut(this.pendingKeyAt, p, keyAt)
+          jsonValuePut(this.pendingKeyLength, p, keyLength)
+          jsonValuePut(this.pendingSource, p, keySource)
+          jsonValuePut(r.pendingKeyEnd, p, keyEnd)
+          this.pendingTop = p + 1
         }
       }
       k = tok.next()
@@ -918,7 +916,10 @@ export class JsonDocument {
         let out: i32 = lo
         while (out < hi) {
           // `a < mid` whenever `b >= hi`, since `out < hi`, so testing it first changes nothing.
-          if (a < mid && (b >= hi || this.comparePending(jsonValueGet(from, a), jsonValueGet(from, b)) <= 0)) {
+          if (
+            a < mid &&
+            (b >= hi || this.comparePending(jsonValueGet(from, a), jsonValueGet(from, b)) <= 0)
+          ) {
             jsonValuePut(to, out, jsonValueGet(from, a))
             a += 1
           } else if (b < hi) {
@@ -972,7 +973,10 @@ export class JsonDocument {
         let out: i32 = lo
         while (out < hi) {
           // `a < mid` whenever `b >= hi`, since `out < hi`, so testing it first changes nothing.
-          if (a < mid && (b >= hi || this.comparePending(jsonValueGet(from, a), jsonValueGet(from, b)) <= 0)) {
+          if (
+            a < mid &&
+            (b >= hi || this.comparePending(jsonValueGet(from, a), jsonValueGet(from, b)) <= 0)
+          ) {
             jsonValuePut(to, out, jsonValueGet(from, a))
             a += 1
           } else if (b < hi) {
@@ -1036,7 +1040,11 @@ export class JsonDocument {
     const buf: u8[] = jsonValueRoom(this.bytes, end)
     this.bytes = buf
     let o: i32 = at
-    for (let i: i32 = start; i < stop && i >= 0 && i < toI32(src.length) && o >= 0 && o < toI32(buf.length); i += 1) {
+    for (
+      let i: i32 = start;
+      i < stop && i >= 0 && i < toI32(src.length) && o >= 0 && o < toI32(buf.length);
+      i += 1
+    ) {
       buf[o] = src[i]
       o += 1
     }
@@ -1061,7 +1069,11 @@ export class JsonDocument {
     const buf: u8[] = jsonValueRoom(this.bytes, end)
     this.bytes = buf
     let o: i32 = at
-    for (let i: i32 = start; i < stop && i >= 0 && i < toI32(src.length) && o >= 0 && o < toI32(buf.length); i += 1) {
+    for (
+      let i: i32 = start;
+      i < stop && i >= 0 && i < toI32(src.length) && o >= 0 && o < toI32(buf.length);
+      i += 1
+    ) {
       buf[o] = src[i]
       o += 1
     }
@@ -2258,5 +2270,8 @@ const jsonValueCompareBytes = (bytes: u8[], a: i32, an: i32, b: i32, bn: i32): i
     p += 1
     q += 1
   }
-  return an < bn ? -1 : an > bn ? 1 : 0
+  if (an === bn) {
+    return 0
+  }
+  return an < bn ? -1 : 1
 }

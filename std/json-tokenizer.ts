@@ -1071,7 +1071,12 @@ export class JsonTokenizer {
     const fractionTo: i32 = fractionAt >= 0 ? i : 0
     let exponent: i32 = 0
     let minus: boolean = false
-    if (i >= 0 && i < end && i < n && (toI32(src[i]) === JSON_TOK_LOWER_E || toI32(src[i]) === JSON_TOK_UPPER_E)) {
+    if (
+      i >= 0 &&
+      i < end &&
+      i < n &&
+      (toI32(src[i]) === JSON_TOK_LOWER_E || toI32(src[i]) === JSON_TOK_UPPER_E)
+    ) {
       integral = false
       i += 1
       if (i < end && i < n) {

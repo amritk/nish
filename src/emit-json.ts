@@ -1900,7 +1900,12 @@ const emitJsonEncodeMapBody = (emitter: Emitter, part: JsonPart): void => {
   fn.placeBlock(body)
   const key = jsonCallMethod(emitter, map, "keyAt", "%v", [`i32 ${at}`, jsonNoEntry(emitter, map, "keyAt")])
   jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${key}`])
-  emitJsonEncodeValue(emitter, part, value, jsonCallMethod(emitter, map, "valueAt", "%v", [`i32 ${at}`, jsonNoEntry(emitter, map, "valueAt")]))
+  emitJsonEncodeValue(
+    emitter,
+    part,
+    value,
+    jsonCallMethod(emitter, map, "valueAt", "%v", [`i32 ${at}`, jsonNoEntry(emitter, map, "valueAt")])
+  )
   const after = fn.emitValue(`add i32 ${at}, 1`)
   const next = jsonCallMethod(emitter, map, "walkNext", "%v", [`i32 ${after}`])
   fn.emit(`store i32 ${next}, i32* ${cursor}, align 4`)
