@@ -213,13 +213,15 @@ const packedOf = (type: ProtoScalar, v: string): string => {
 class ProtoEmitter {
   out: StringBuilder
   file: ProtoFile
-  wires: boolean[]
+  usesVarint: boolean = false
+  usesI64: boolean = false
+  usesLen: boolean = false
+  usesI32: boolean = false
   usesString: boolean = false
   usesBytes: boolean = false
 
   constructor(file: ProtoFile) {
     this.out = new StringBuilder()
-    this.wires = [false, false, false, false]
     this.file = file
   }
 
@@ -235,16 +237,16 @@ class ProtoEmitter {
   /** A wire type's constant, marked as imported. */
   wire(name: string): string {
     if (name === "PROTO_WIRE_VARINT") {
-      this.wires[0] = true
+      this.usesVarint = true
     }
     if (name === "PROTO_WIRE_I64") {
-      this.wires[1] = true
+      this.usesI64 = true
     }
     if (name === "PROTO_WIRE_LEN") {
-      this.wires[2] = true
+      this.usesLen = true
     }
     if (name === "PROTO_WIRE_I32") {
-      this.wires[3] = true
+      this.usesI32 = true
     }
     return name
   }
@@ -317,6 +319,9 @@ class ProtoEmitter {
     this.line(2, "while (r.next()) {")
     for (let i = 0; i < msg.fields.length; i++) {
       this.emitDecode(msg, msg.fields[i], i === 0)
+    }
+    if (msg.fields.length > 0) {
+      this.line(3, "}")
     }
     this.line(2, "}")
     this.line(2, "return r.failed === PROTO_OK")
@@ -442,7 +447,6 @@ class ProtoEmitter {
       this.line(5, "return false")
       this.line(4, "}")
       this.line(4, `${x}.set(k, v)`)
-      this.closeIf(msg, f)
       return
     }
     if (f.label === ProtoLabel.Repeated) {
@@ -471,7 +475,6 @@ class ProtoEmitter {
         this.line(3, `${open} (r.field === ${n} && r.wireType === ${this.wire("PROTO_WIRE_LEN")}) {`)
         this.line(4, `${x}.push(${this.read(f.type)})`)
       }
-      this.closeIf(msg, f)
       return
     }
     this.line(3, `${open} (r.field === ${n} && r.wireType === ${this.wire(wireOf(f.type))}) {`)
@@ -489,15 +492,6 @@ class ProtoEmitter {
       if (f.label === ProtoLabel.Optional) {
         this.line(4, `this.has_${f.name} = true`)
       }
-    }
-    this.closeIf(msg, f)
-  }
-
-  /** Closes the last branch of `decode`'s loop after the message's last field. */
-  closeIf(msg: ProtoMessage, f: ProtoField): void {
-    const last = msg.fields.length > 0 ? msg.fields[msg.fields.length - 1] : f
-    if (last === f) {
-      this.line(3, "}")
     }
   }
 
@@ -564,16 +558,16 @@ export const emitProto = (file: ProtoFile, source: string, digest: string, comma
   }
   if (file.messages.length > 0) {
     const names: string[] = ["PROTO_OK"]
-    if (e.wires[1]) {
+    if (e.usesI64) {
       names.push("PROTO_WIRE_I64")
     }
-    if (e.wires[3]) {
+    if (e.usesI32) {
       names.push("PROTO_WIRE_I32")
     }
-    if (e.wires[2]) {
+    if (e.usesLen) {
       names.push("PROTO_WIRE_LEN")
     }
-    if (e.wires[0]) {
+    if (e.usesVarint) {
       names.push("PROTO_WIRE_VARINT")
     }
     names.push("ProtoReader")

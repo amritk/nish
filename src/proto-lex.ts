@@ -5,6 +5,7 @@
 // parser reports it at its line and nothing past it is read.
 
 import { StringBuilder } from "./strings"
+import { isDigit } from "./lexer"
 
 /** What a token is. */
 export enum ProtoTok {
@@ -34,10 +35,9 @@ export class ProtoToken {
 const isProtoIdentStart = (c: i32): boolean => (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95
 
 /** Whether `c` is an ASCII digit. */
-const isProtoDigit = (c: i32): boolean => c >= 48 && c <= 57
 
 /** Whether `c` continues an identifier or a number. */
-const isProtoWordByte = (c: i32): boolean => isProtoIdentStart(c) || isProtoDigit(c)
+const isProtoWordByte = (c: i32): boolean => isProtoIdentStart(c) || isDigit(c)
 
 /** The character code at `i`, or -1 past the end. */
 const at = (text: string, i: i32): i32 => (i >= 0 && i < text.length ? text.charCodeAt(i) : -1)
@@ -81,7 +81,7 @@ export const lexProto = (text: string): ProtoToken[] => {
         i++
       }
       out.push(new ProtoToken(ProtoTok.Ident, text.slice(from, i), line))
-    } else if (isProtoDigit(c) || (c === 46 && isProtoDigit(at(text, i + 1)))) {
+    } else if (isDigit(c) || (c === 46 && isDigit(at(text, i + 1)))) {
       const from = i
       let float = false
       while (i < text.length) {
@@ -182,7 +182,7 @@ export const protoIntValue = (text: string): i64 => {
   while (i < text.length) {
     const c = text.charCodeAt(i)
     let d: i32 = -1
-    if (isProtoDigit(c)) {
+    if (isDigit(c)) {
       d = c - 48
     } else if (c >= 97 && c <= 102) {
       d = c - 87
