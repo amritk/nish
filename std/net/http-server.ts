@@ -275,6 +275,18 @@ export class HttpServerRequest {
   headerCount: i32 = 0
   /** How many bytes of `body` are the request's body, 0 for none; read the body as `body[0 .. bodyLength)`. */
   bodyLength: i32 = 0
+  /**
+   * Whether the body comes in pieces: an HTTP/2 request on a route `streamBody` marked, handed over at its
+   * head. `body[0 .. bodyLength)` is then what arrived and `consume` has not taken yet.
+   */
+  streaming: boolean = false
+  /** Whether the whole body has arrived: always true unless `streaming`, where END_STREAM or trailers set it. */
+  bodyEnded: boolean = true
+  /**
+   * Whether the request is in the queue again for the program that holds it, to say a piece, the end or a reset came.
+   * @internal Set by `HttpServer` in this module for a streaming request, and cleared by `take` or when it goes back.
+   */
+  again: boolean = false
   /** The connection's slot in its carrier. */
   slot: i32 = 0
   /**
@@ -772,6 +784,9 @@ export class HttpServer {
   private h3Reqs: i32[]
   private h3Count: i32[]
   private queueStart: i32 = 0
+  /** Which routes take their body in pieces, by route index, and how many do. */
+  private streamRoutes: boolean[]
+  private streamCount: i32 = 0
   private queueCount: i32 = 0
   private maxBody: i32 = 0
   private maxHead: i32 = 0
@@ -838,6 +853,7 @@ export class HttpServer {
       this.free.push(limits.requests - 1 - k)
     }
     this.queue = new Array<i32>(limits.requests)
+    this.streamRoutes = []
     this.readyFds = new Array<i32>(2 * limits.maxEvents)
     this.watchedFired = new Array<boolean>(HANDLER_MAX_WATCHED)
     this.scratch = new Array<u8>(limits.jsonBytes)
@@ -1720,6 +1736,8 @@ export class HttpServer {
     r.left = -1
     r.ended = false
     r.trailing = false
+    r.streaming = false
+    r.bodyEnded = true
     this.route(r)
     const declared: i32 = this.declared(r)
     if (declared > toI32(r.body.length)) {
@@ -1835,9 +1853,51 @@ export class HttpServer {
     if (r.state === HTTP_SERVER_FREE) {
       return
     }
+    if (r.again) {
+      this.unqueue(r)
+    }
+    if (r.streaming && !r.bodyEnded && this.live(r)) {
+      // Answered before the body ended: the client may stop sending (RFC 9113 §8.1). With no room for
+      // the reset the stream stays held, so the client's window, not this server, bounds what it sends.
+      this.h2Conn(r.slot).reset(toI32(r.stream), H2_NO_ERROR)
+    }
     this.unlink(r)
     r.state = HTTP_SERVER_FREE
     this.free.push(r.index)
+  }
+
+  /**
+   * Queues held streaming request `r` again for the program, once until `take`
+   * hands it over, to say a piece, the end of its body or a reset came. One
+   * queued for the first time is already there, and one being answered is
+   * past caring.
+   */
+  private requeue(r: HttpServerRequest): void {
+    if (r.again || (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING)) {
+      return
+    }
+    r.again = true
+    const size: i32 = toI32(this.queue.length)
+    this.queue[(this.queueStart + this.queueCount) % size] = r.index
+    this.queueCount += 1
+  }
+
+  /** Takes `r`'s second place out of the queue, closing the gap so the ring still holds each request at most once. */
+  private unqueue(r: HttpServerRequest): void {
+    r.again = false
+    const size: i32 = toI32(this.queue.length)
+    let found: boolean = false
+    for (let k: i32 = 0; k < this.queueCount; k++) {
+      const at: i32 = (this.queueStart + k) % size
+      if (found) {
+        this.queue[(at + size - 1) % size] = this.queue[at]
+      } else if (this.queue[at] === r.index) {
+        found = true
+      }
+    }
+    if (found) {
+      this.queueCount -= 1
+    }
   }
 
   /**
@@ -1896,7 +1956,8 @@ export class HttpServer {
   ready(): boolean {
     while (this.queueCount > 0) {
       const r: HttpServerRequest = this.requests[this.queue[this.queueStart]]
-      if (this.live(r)) {
+      // A streaming request queued again is the program's, live or not: it learns of a reset by taking it.
+      if (r.again || this.live(r)) {
         return true
       }
       this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
@@ -1918,8 +1979,74 @@ export class HttpServer {
     const r: HttpServerRequest = this.requests[this.queue[this.queueStart]]
     this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
     this.queueCount -= 1
-    r.state = HTTP_SERVER_HELD
+    if (r.again) {
+      r.again = false
+    } else {
+      r.state = HTTP_SERVER_HELD
+    }
     return r
+  }
+
+  /**
+   * Marks `route` as taking its request body in pieces on the HTTP/2
+   * listeners: such a request comes out of `take` at its head, with
+   * `streaming` set, and again whenever a piece, the end of the body or a
+   * reset arrives. The program reads `body` up to `bodyLength`, hands bytes
+   * back with `consume`, and only then does the peer get window to send
+   * more. HTTP/1.1 and HTTP/3 requests to `route` keep the whole body, up to
+   * `maxBody`. Panics when `route` is not one of the router's.
+   * @param route a route index the server's router gave out
+   */
+  streamBody(route: i32): void {
+    this.router.paramCount(route)
+    while (toI32(this.streamRoutes.length) <= route) {
+      this.streamRoutes.push(false)
+    }
+    if (!this.streamRoutes[route]) {
+      this.streamRoutes[route] = true
+      this.streamCount += 1
+    }
+  }
+
+  /** Whether `route` takes its body in pieces. */
+  private streamsBody(route: i32): boolean {
+    return route >= 0 && route < toI32(this.streamRoutes.length) && this.streamRoutes[route]
+  }
+
+  /**
+   * Hands the first `n` bytes of `r`'s body back: what follows moves to the
+   * front of `body` and `bodyLength` drops by `n`. For a `streaming` request
+   * the peer is credited `n` bytes of window, so it may send that much more.
+   * Panics when `r` is another server's, is not the program's, or `n` is
+   * negative or past `bodyLength`.
+   * @param r a request the program holds
+   * @param n how many bytes from the front of `body` the program is done with
+   */
+  consume(r: HttpServerRequest, n: i32): void {
+    this.own(r, "consume")
+    if (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING) {
+      panic("HttpServer.consume: the request is not the program's")
+    }
+    if (n < 0 || n > r.bodyLength) {
+      panic(`HttpServer.consume: ${n} bytes is outside the body's ${r.bodyLength}`)
+    }
+    copyBytes(r.body, HTTP_SERVER_ZERO, r.body, n, r.bodyLength - n)
+    r.bodyLength -= n
+    if (r.streaming && n > 0 && this.live(r)) {
+      this.h2Conn(r.slot).consumeBody(toI32(r.stream), n)
+      this.h2Settle(r.slot)
+    }
+  }
+
+  /**
+   * How many bytes of `r`'s response are written but not yet sent, so a
+   * program streaming an answer can wait for them to drain.
+   * @param r one of this server's requests
+   * @returns the response bytes the server still holds for `r`
+   */
+  pending(r: HttpServerRequest): i32 {
+    this.own(r, "pending")
+    return r.pendingEnd - r.pendingStart
   }
 
   /**
@@ -2982,8 +3109,30 @@ export class HttpServer {
         this.h2Event(v, conn, event)
         event = this.h2Next(v)
       }
+      if (conn.inputEnded) {
+        this.h2Ended(v)
+      }
     }
     this.h2Settle(v)
+  }
+
+  /**
+   * `slot`'s peer has stopped sending, so no streaming request on it will
+   * get more of its body: each one still waiting is marked hung up and goes
+   * back to the program, once.
+   */
+  private h2Ended(slot: i32): void {
+    const base: i32 = slot * this.perConnection2
+    for (let e: i32 = base; e < base + this.perConnection2; e++) {
+      const at: i32 = this.h2Reqs[e]
+      if (at >= 0) {
+        const r: HttpServerRequest = this.requests[at]
+        if (r.streaming && !r.bodyEnded && !r.hung) {
+          this.drop(r)
+          this.requeue(r)
+        }
+      }
+    }
   }
 
   /** One HTTP/2 event of `slot`'s connection. */
@@ -2992,7 +3141,9 @@ export class HttpServer {
     if (event === H2_REQUEST) {
       const f: HttpFields = conn.fields
       const status: i32 = this.screen(f)
-      if (status > 0) {
+      // A declared length past `maxBody` is refused once the route is known, since a streaming route takes any.
+      const long: boolean = status === HTTP_SERVER_TOO_LARGE && this.streamCount > 0
+      if (status > 0 && !long) {
         this.h2Direct(slot, conn, id, status, conn.endStream)
         return
       }
@@ -3016,7 +3167,18 @@ export class HttpServer {
       this.h2Count[slot] = this.h2Count[slot] + 1
       this.h2IdleSince[slot] = 0
       this.admit(r)
-      if (conn.endStream) {
+      const streaming: boolean = !conn.endStream && this.streamsBody(r.route)
+      if (long && !streaming) {
+        this.release(r)
+        this.h2Direct(slot, conn, id, status, conn.endStream)
+        return
+      }
+      if (streaming) {
+        conn.hold(id)
+        r.streaming = true
+        r.bodyEnded = false
+        this.enqueue(r)
+      } else if (conn.endStream) {
         this.enqueue(r)
       }
       return
@@ -3026,6 +3188,10 @@ export class HttpServer {
       return
     }
     const r: HttpServerRequest = this.requests[at]
+    if (r.streaming) {
+      this.h2Piece(conn, r, event)
+      return
+    }
     if (event === H2_DATA) {
       if (r.state !== HTTP_SERVER_READING) {
         return
@@ -3049,6 +3215,51 @@ export class HttpServer {
       this.drop(r)
       this.unlink(r)
     }
+  }
+
+  /**
+   * One HTTP/2 event of streaming request `r`: a piece of its body is kept for
+   * the program while it holds `r` and credited back at once otherwise, the
+   * end of its body or a reset is marked, and the program is told by `r`
+   * coming out of `take` again. What is kept is bounded by the stream's
+   * window, which only `consume` credits.
+   */
+  private h2Piece(conn: Http2Connection, r: HttpServerRequest, event: i32): void {
+    if (event === H2_DATA) {
+      const n: i32 = conn.dataLength
+      if (
+        r.state === HTTP_SERVER_QUEUED ||
+        r.state === HTTP_SERVER_HELD ||
+        r.state === HTTP_SERVER_STREAMING
+      ) {
+        const need: i32 = r.bodyLength + n
+        if (toI32(r.body.length) < need) {
+          const have: i32 = toI32(r.body.length)
+          let size: i32 = have < HTTP_SERVER_BODY_FIRST ? HTTP_SERVER_BODY_FIRST : have * 2
+          const cap: i32 = conn.streamWindow()
+          if (size > cap) {
+            size = cap
+          }
+          if (size < need) {
+            size = need
+          }
+          const grown: u8[] = new Array<u8>(size)
+          copyBytes(grown, HTTP_SERVER_ZERO, r.body, HTTP_SERVER_ZERO, r.bodyLength)
+          r.body = grown
+        }
+        copyBytes(r.body, r.bodyLength, conn.data, conn.dataStart, n)
+        r.bodyLength = need
+      } else {
+        conn.consumeBody(conn.stream, n)
+      }
+      r.bodyEnded = conn.endStream
+    } else if (event === H2_TRAILERS) {
+      r.bodyEnded = true
+    } else if (event === H2_RESET) {
+      this.drop(r)
+      this.unlink(r)
+    }
+    this.requeue(r)
   }
 
   /**
@@ -3171,6 +3382,9 @@ export class HttpServer {
         const r: HttpServerRequest = this.requests[at]
         r.entry = -1
         this.drop(r)
+        if (r.streaming) {
+          this.requeue(r)
+        }
       }
     }
   }
