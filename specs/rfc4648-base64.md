@@ -50,6 +50,24 @@ and decoder to Section 10, and the properties hold the URL codec to the
 standard one: the URL encoding of any bytes is their standard encoding with
 `+` and `/` written as `-` and `_` and the padding dropped.
 
+This profile leaves out the following, each for the reason given.
+
+The base 32, base 32 hex and base 16 encodings (Sections 6 to 8): std/
+implements none of them.
+
+Line feeds, and decoders that skip characters outside the alphabet, where a
+referring specification directs them (Sections 3.1 and 3.3): neither codec
+has such a mode, so the exceptions those sections allow are unused.
+
+base64StdPadDecode and base64urlDecode on text holding a character above
+U+007F: a property's string alphabet holds only printable ASCII, tab, LF and
+CR in vector 0.6.0. base64StdPadDecodedLength reads bytes, so it alone is
+given a byte at or above 0x80, built with `fill`.
+
+An output buffer too short for the encoding: RFC 4648 says nothing of
+buffers, and the interface gives every base64StdPadEncodeInto and
+base64EncodeInto call room for the whole encoding.
+
 # Interface
 
 ~~~ ts-interface
@@ -119,6 +137,17 @@ forall (
   z: string /* 0..16 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" */,
 ) => base64StdPadDecode(a + (x + z)) === null && base64StdPadDecodedLength(utf8(a + (x + z))) === -1
 where (a + (x + z)).length % 4 === 0
+~~~
+
+~~~ ts-property
+// P-STD-HIGH-BYTE covers R-REJECT — a byte at or above 0x80, anywhere in the text, is refused by base64StdPadDecodedLength
+// samples: 128
+forall (
+  a: string /* 0..16 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" */,
+  x: i32 /* 128..255 */,
+  z: string /* 0..16 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" */,
+) => base64StdPadDecodedLength(utf8(a).concat(fill(x, 1)).concat(utf8(z))) === -1
+where (a.length + z.length + 1) % 4 === 0
 ~~~
 
 ~~~ ts-property

@@ -1326,6 +1326,260 @@
     },
     {
       "kind": "property",
+      "id": "P-STD-HIGH-BYTE",
+      "title": "a byte at or above 0x80, anywhere in the text, is refused by base64StdPadDecodedLength",
+      "covers": ["R-REJECT"],
+      "forall": [
+        {
+          "name": "a",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        },
+        {
+          "name": "x",
+          "type": "i32",
+          "min": 128,
+          "max": 255
+        },
+        {
+          "name": "z",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        }
+      ],
+      "where": {
+        "op": "==",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "strLen",
+                        "args": [
+                          {
+                            "var": "a"
+                          }
+                        ]
+                      },
+                      {
+                        "op": "strLen",
+                        "args": [
+                          {
+                            "var": "z"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "int": 1
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "base64StdPadDecodedLength",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "op": "utf8",
+                        "args": [
+                          {
+                            "var": "a"
+                          }
+                        ]
+                      },
+                      {
+                        "op": "fill",
+                        "args": [
+                          {
+                            "var": "x"
+                          },
+                          {
+                            "int": 1
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "utf8",
+                    "args": [
+                      {
+                        "var": "z"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": -1
+          }
+        ]
+      },
+      "samples": 128
+    },
+    {
+      "kind": "property",
       "id": "P-URL-OTHER",
       "title": "a character outside the URL alphabet, \"+\", \"/\", \"=\" and whitespace included, anywhere, is refused",
       "covers": ["R-REJECT"],
