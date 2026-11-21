@@ -1322,6 +1322,26 @@ const WP68_BENCH = "WP68, shared libraries layered like atomic design"
 const WP68_BENCH_WHY =
   "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
 
+/** The changelog words of the stage that adds nish/net/protobuf. */
+const PROTOBUF_MODULE = "nish/net/protobuf, protobuf's wire format"
+const protobufModule = () =>
+  [
+    "net_protobuf",
+    "net_protobuf_bad_depth",
+    "net_protobuf_bad_field",
+    "net_protobuf_bad_group",
+    "net_protobuf_bad_length",
+    "net_protobuf_bad_reader_window",
+    "net_protobuf_bad_varint",
+    "net_protobuf_bad_writer_window",
+    "net_protobuf_f64",
+  ].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: PROTOBUF_MODULE,
+    why: "the program tests nish/net/protobuf, which is new in this release, so the seed's standard library has no such module and refuses it",
+  }))
+
 /** The changelog line of the stage that adds nish/crypto/scram. */
 const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
 // nish/net/postgres reaches its SCRAM arithmetic through the new
@@ -10186,6 +10206,7 @@ const DECLARED = [
     }
   ),
   ...scramModule(),
+  ...protobufModule(),
   {
     program: "tests/cases/cls_field_init.ts",
     file: "exit",
