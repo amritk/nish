@@ -7,7 +7,7 @@ the test that pins each property. It is written with the code rather than
 after an audit, so that the audit of the HTTP application layer starts from
 evidence.
 
-Anchors are function names in `std/net/router.ts` at `cf61c0f`, the last
+Anchors are function names in `std/net/router.ts` at `ebe340ff`, the last
 commit to change it on the head that merges this record.
 
 **Result.** Every route a table would hold ambiguously is refused when it is
@@ -38,7 +38,7 @@ matched before it is decoded (ROUTE-9).
 
 | File | Functions |
 | --- | --- |
-| `std/net/router.ts` | `RouterLimits`; `Router` (`add`, `splitPattern`, `childFor`, `addChild`, `growStatic`, `fileStatic`, `methodIndex`, `match`, `matchTree`, `enter`, `staticRoute`, `descend`, `answer`, `walk`, `endpointFor`, and the accessors `routes`, `nodeCount`, `paramCount`, `staticCount`, `lastVisited`); `routerDecode`; the helpers `routerLimit`, `routerTchar`, `routerSegmentKind`, `routerSameName`, `routerLabelIsText`, `routerSameBytes`, `routerMethodKey`, `routerHashOf`, `routerHashWith`, `routerSlot`, `routerOutside`, `routerNoRoute`, `routerHex` |
+| `std/net/router.ts` | `RouterLimits`; `Router` (`add`, `splitPattern`, `childFor`, `addChild`, `growStatic`, `fileStatic`, `methodIndex`, `step`, `use`, `steps`, `match`, `matchTree`, `enter`, `staticRoute`, `descend`, `answer`, `walk`, `endpointFor`, and the accessors `routes`, `nodeCount`, `paramCount`, `staticCount`, `lastVisited`); `routerDecode`; the helpers `routerLimit`, `routerTchar`, `routerSegmentKind`, `routerSameName`, `routerLabelIsText`, `routerSameBytes`, `routerMethodKey`, `routerHashOf`, `routerHashWith`, `routerSlot`, `routerOutside`, `routerNoRoute`, `routerHex` |
 
 Out of scope: the carriers that hand the router its method and target
 (`docs/security/http1-codec.md`, `http2.md`, `http3.md`), which have already refused
@@ -63,7 +63,7 @@ Rows ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, each
 checked and found to hold; they are recorded so that the audit can see what
 was tried. ROUTE-8 and ROUTE-9 are accepted. ROUTE-10 to ROUTE-12 are what the
 exact-path table adds to the surface, and ROUTE-13 what the packed method
-compare adds, checked the same way. None is counted as
+compare adds, checked the same way, and ROUTE-14 what the step table adds. None is counted as
 fixed or open in the index.
 
 | Id | Severity | Where | Description | Disposition |
@@ -81,6 +81,7 @@ fixed or open in the index.
 | ROUTE-11 | Medium if it failed | `staticRoute`, `fileStatic`, `growStatic` | A client must not be able to make the table slow: paths chosen to collide, a very long path, many requests. | **Holds.** The client adds nothing to the table: it holds only routes `add` filed, at most `maxRoutes`. A lookup reads the path once, and only when the target is no longer than the longest filed path, then at most `ROUTER_PROBES` (8) slots, stopping at the first empty one; each slot costs a comparison of at most that length. `add` keeps four slots a route and files a route only within eight slots of its home, leaving it to the tree otherwise, so no run a lookup follows is longer. The hash is not keyed and need not be: a chosen path can reach a full run. What a miss costs is stated plainly: a target no longer than the longest static route that the table does not hold now pays one hash pass over its path and up to eight slots, each a length compare and at most one byte comparison of that length, and then the tree walk, which starts from the segments that same pass recorded and so reads no byte of the path again. That is more than before by a bounded amount the server's own routes set, never by one the client sets; a target longer than the longest static route pays nothing new. |
 | ROUTE-12 | High if it failed | `routerSameBytes`, `routerMethodKey`, `enter`, `staticRoute`, `walk` | The comparison and the method packing that read without a bounds check (`nish:unsafe`) must not read outside either array, whatever the ranges its caller hands it. | **Holds.** `routerSameBytes` checks first that both ranges, `a[at .. at + length)` and `b[from .. from + length)`, start at 0 or past it and end inside their arrays, written as `length > a.length - at` so that no sum can overflow, and compares unequal otherwise; only then does it read, with two cursors that run from those starts to `at + length`, which the check has put inside `a`. A negative length puts `at + length` below `at`, so the loop reads nothing and the closing test, that the cursor reached `at + length`, compares it unequal too. So no caller can make it read outside an array, and none relies on another's check: `staticRoute` hands it the private `staticPaths` and a target range `enter` checked, `walk` a label and a segment, and `enter` the public `methodBytes`, `methodStart` and `methodEnd`, which a program can rewrite. `routerMethodKey` reads the same way: it checks first that its range is one to seven bytes, starts at 0 or past it and ends inside `bytes` (again `length > bytes.length - at`), returns 0 otherwise, and only then reads with one cursor from `at` to `at + length`. Before this stage the compare was checked and the unchecked one (`routerSameRange`) relied on its one caller's checks; now the check travels with the read. |
 | ROUTE-13 | Medium if it failed | `routerMethodKey`, `enter`, `add` | A method of one to seven bytes is matched by comparing one 64-bit word, its bytes and its length packed by `routerMethodKey`, with each known method's word, which `add` stores in the private `methodKey`. Two different methods must never share a word, a method must not match a prefix or an extension of itself, and no request may reach a route by a method `add` was not given. | **Holds.** The key puts byte `k` of the method in bits `8k` to `8k + 7` and the length in the top byte, so a key of up to seven bytes is a one-to-one encoding of the bytes and their count: methods of different lengths differ in the top byte, and of one length in the byte where they differ. 0 is no packed method's key (the length byte is at least 1), and a method that is not packed, longer than seven bytes or a range outside its buffer, takes the byte compare of ROUTE-12 instead, as every method did before. `methodKey` is private and written only by `add`, beside the public arrays it is made from; a program that rewrites `methodBytes` after `add` (an `@internal` field) changes what the byte compare reads and not the key, so for a method of up to seven bytes the table keeps answering the method `add` was given. |
+| ROUTE-14 | Medium if it failed | `step`, `use`, `steps`, `add` | A step bound to one route must not run for another route, for a request no route matches of the other kind, or for a route added later; and step ids must stay inside the bits an `i32` holds, so that a set is never negative and never mistaken for a `ROUTER_*` code. | **Holds.** Each route keeps its own set (`routeSteps`), which `add` starts at 0; the requests no route matches keep theirs apart (`missSteps` for 404 and every other negative code, `refusedSteps` for 405), and `steps` answers 0 for an index past the table. `step` answers `ROUTER_FULL` once the table names `ROUTER_MAX_STEPS` (31), so the highest id is 30 and bit 31, the sign, is never set. `use` panics on a step `step` never handed out (`tests/link/net_router_use_unknown`) and on a route the table does not hold, while the table is built. The table holds only what the program bound: a request reads its set and changes nothing. |
 
 `add`'s refusals are the program's, not the attacker's, and are listed under
 the properties below.
@@ -213,3 +214,16 @@ split the table's pass made: "a shorter target it misses is the tree's, pairs
 and all", "one deeper than any route is 404". Each answers as it did before
 the packed compare: the same checks against the previous router print the
 same lines.
+
+**The step table** (ROUTE-14): "a table with no step binds none to a route",
+"nor to the requests no route matches", "steps are named 0, 1, 2 in the order
+asked for", "a route answers one bit per step bound to it, a step bound twice
+once", "a route bound to one step answers its bit alone", "405 answers the
+steps bound to ROUTER_METHOD_NOT_ALLOWED", "404 answers the steps bound to
+ROUTER_NOT_FOUND", "any other code answers the same as 404", "an index past
+the table answers no step", "a route added after the steps starts bound to
+none", "31 steps fit, the last named 30", "one more is refused with
+ROUTER_FULL", "the highest step's bit keeps the set positive". A step the
+table never named is refused while it is built:
+`link/net_router_use_unknown` prints "step 0 bound" and exits 1 on the second
+`use`.

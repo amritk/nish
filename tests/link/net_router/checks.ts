@@ -34,6 +34,7 @@ import {
 } from "nish/net/router";
 import { Suite } from "nish/testing";
 import { exactChecks } from "./exact";
+import { stepChecks } from "./steps";
 
 /** `bytes[start .. end)` as a string, one character a byte. */
 const textOf = (bytes: u8[], start: i32, end: i32): string => {
@@ -404,5 +405,6 @@ export const routerChecks = (): i32 => {
   const fn: i32 = routerDecode(ft, fp[0], fp[1], fout);
   t.eqStr("decodes its pair in place to a/b", fn < 0 ? `${fn}` : textOf(fout, 0, fn), "a/b");
   exactChecks(t);
+  stepChecks(t);
   return t.done();
 };
