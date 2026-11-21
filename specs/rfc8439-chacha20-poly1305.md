@@ -61,7 +61,7 @@ returns `u8[] | null`, except chacha20QuarterRound, which works on the
 only where they say so.
 
 Every test vector of Sections 2.1.1 to 2.8.2 and Appendix A.1 to A.5 is a
-row, each Appendix row citing its one `Test Vector #N`. The quarter-round
+row, and each A.1 to A.4 row cites its one `Test Vector #N`. The quarter-round
 rows of Sections 2.1.1 and 2.2.1 are over the `u32[]` state; fidelity holds
 their state words to the RFC, but not their four word positions, which
 `spec check` reports as not checked against the RFC:
