@@ -52,7 +52,7 @@ the record that found it. The notes below the table name each such finding.
 | YAML into a JsonDocument | [yaml.md](yaml.md) | `std/yaml-json.ts`, `std/yaml.ts` (the merge check) | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
-| Static files | [static.md](static.md) | `std/net/static.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 4 ³² |
+| Static files | [static.md](static.md) | `std/net/static.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 4 ³² |
 | Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ¹⁴ |
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
@@ -82,7 +82,7 @@ the record that found it. The notes below the table name each such finding.
 | Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC unary calls | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| **Total** ⁸ | | | **3 / 19 / 104 / 224** | **0 / 0 / 3 / 46** |
+| **Total** ⁸ | | | **3 / 19 / 104 / 226** | **0 / 0 / 3 / 46** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -470,9 +470,9 @@ the record that found it. The notes below the table name each such finding.
     attacker wrote and of trusting the overrides file beside it, are
     accepted, with the reason in their record, and are not counted.
 32. STATIC-1 to STATIC-8 are the shapes an attacker's request can take,
-    checked and found to hold, and are not findings. STATIC-13 (Low) was
-    fixed in the stage that wrote the record. The Total moves by this row:
-    fixed +1 Low, open +4 Low.
+    checked and found to hold, and are not findings. STATIC-13 to STATIC-15
+    (Low) were fixed in the stage that wrote the record. The Total moves by
+    this row: fixed +3 Low, open +4 Low.
 
 ## Fuzzed
 

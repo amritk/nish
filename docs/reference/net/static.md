@@ -148,8 +148,7 @@ class StaticFiles
 
 | Member | |
 | --- | --- |
-| `new StaticFiles(root: string, limits: StaticLimits)` | A server of the files under `root`, which is resolved once, now. Limits out of range (`maxEntries` or `maxPath` outside 1 to 4096, or a `maxCachedBytes` outside 0 to 2^30) leave the root empty, so every request is not found. |
-| `limits: StaticLimits` | What the constructor was given. |
+| `new StaticFiles(root: string, limits: StaticLimits)` | A server of the files under `root`, which is resolved once, now. Limits out of range (`maxEntries` or `maxPath` outside 1 to 4096, or a `maxCachedBytes` outside 0 to 2^30) leave the root empty, so every GET or HEAD is not found. |
 | `refused: boolean` | Whether the last `serve` that answered `STATIC_NOT_FOUND` refused the path rather than missing the file. |
 | `root: string` | The root's real path, or `""` when it did not resolve (then every request is not found). |
 | `status: i32` | The status the last `serve` sent, or 0 when it sent none. |

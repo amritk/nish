@@ -130,7 +130,8 @@ with its `Content-Range`. A range past the end is cut to the file; one that
 starts past the end, is not a number, or ends before it starts answers 416
 with `Content-Range: bytes */<size>`. Several ranges are answered 200 with
 the whole file. `If-Range` keeps the range only while the file still has
-that ETag or that `Last-Modified`.
+that ETag, or that `Last-Modified` and no change for a second or more: two
+versions written within one second share the date.
 
 A method other than `GET` or `HEAD` answers 405 with `Allow: GET, HEAD`.
 
@@ -141,7 +142,8 @@ and `app.js.gz` next to `app.js`. A request whose `Accept-Encoding` offers
 `br` or `gzip` is sent the sibling, with `Content-Encoding`, the content type
 of `app.js` and an ETag of its own; one that offers neither is sent `app.js`.
 The codings are weighed by their q-values (`gzip;q=0.8, br;q=0.5` sends
-gzip), a tie goes to `br`, and `q=0` refuses a coding. A range on a
+gzip), a tie goes to `br`, and `q=0` refuses a coding. When no sibling is
+acceptable the file is sent as it is, even to `identity;q=0`. A range on a
 compressed file counts the compressed bytes. Every file it sends, and
 every 304, says `Vary: Accept-Encoding`, so a cache keeps each variant apart.
 
@@ -166,7 +168,8 @@ a running server.
 | `index` | `true` | |
 
 A limit out of its range, or a root that does not exist, leaves `root`
-empty, and every request is then a 404. A file of 2 GiB or more is a 404.
+empty, and every `GET` or `HEAD` is then a 404. The files keep a copy of
+their limits, so changing the `StaticLimits` afterwards changes nothing. A file of 2 GiB or more is a 404.
 
 ## Under the sandbox
 
