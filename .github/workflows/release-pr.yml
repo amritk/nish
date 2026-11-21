@@ -17,6 +17,10 @@
 # that needs one click is not a reason to paint main red on every merge. A
 # RELEASE_PR_TOKEN secret (a PAT or app token with `repo`) also lifts it.
 #
+# That secret does a second job: the branch is pushed with it, so CI runs on
+# the Release PR as the token's owner. Pushed with GITHUB_TOKEN, every run on
+# it waits as `action_required` until a maintainer approves it.
+#
 # Why the tag is created here and not by the merge itself: a tag pushed by a
 # workflow using the default GITHUB_TOKEN does not start another workflow, so
 # release.yml would never run on it.
@@ -205,6 +209,7 @@ jobs:
           # the fallback, and the step below degrades rather than fails when it
           # turns out to be refused.
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          RELEASE_PR_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
           NEXT: ${{ steps.next.outputs.next }}
         run: |
           branch="release/next"
@@ -221,7 +226,22 @@ jobs:
             exit 0
           fi
           git commit -m "$title"
-          git push --force origin "$branch"
+          # The push's author decides whether CI runs on the Release PR
+          # unattended. A push made with GITHUB_TOKEN raises pull_request runs
+          # as github-actions[bot], which wait as `action_required` until
+          # someone approves them; one made with RELEASE_PR_TOKEN runs as that
+          # token's owner, like any collaborator's push. So the token reaches
+          # the push itself, not only `gh`: checkout persisted GITHUB_TOKEN as
+          # an extraheader, which the empty `-c` value clears (an empty
+          # http.extraHeader resets the list) for this one command, and the
+          # token travels in that command's URL rather than in .git/config,
+          # where the build steps above could have read it.
+          if [ -n "$RELEASE_PR_TOKEN" ]; then
+            git -c "http.https://github.com/.extraheader=" push --force \
+              "https://x-access-token:${RELEASE_PR_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          else
+            git push --force origin "$branch"
+          fi
 
           # The notes are a `$(...)` away from the prose, and command
           # substitution eats trailing newlines: appending them to a preamble

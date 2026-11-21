@@ -1343,9 +1343,10 @@ jobs:
   # The full pass runs per release, not per push: on the Release PR
   # (`release/next`) and in the run release.yml makes of this workflow at the
   # `v*` tag, whose `release` job needs it. The Release PR's run shows a broken
-  # runner before the tag is cut only once someone approves it: release-pr.yml
-  # pushes with GITHUB_TOKEN unless a RELEASE_PR_TOKEN secret is set, and those
-  # runs wait as `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
+  # runner before the tag is cut without anyone approving it only when the
+  # repository has a RELEASE_PR_TOKEN secret: release-pr.yml pushes with it,
+  # and a push made with GITHUB_TOKEN instead raises runs that wait as
+  # `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
   # job makes too, so per push it was about 36 runner-minutes spent proving the
   # same corpus twice (run 44224030613). What it alone catches -- a regression in
   # the runner itself, or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`

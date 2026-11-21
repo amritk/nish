@@ -166,15 +166,15 @@ const listsAllowPanics = (compiler: string[], work: string): boolean => {
 };
 
 /**
- * The compiler's argv prefix, `--allow-panics` when it lists the flag, and then
- * `args`: one compile's whole command line.
+ * The compiler's argv prefix, `--allow-panics` when it lists the flag and the
+ * program is not `strict`, and then `args`: one compile's whole command line.
  */
-const compilerArgv = (tools: Tools, args: string[]): string[] => {
+const compilerArgv = (tools: Tools, args: string[], strict: boolean): string[] => {
   const argv: string[] = [];
   for (const part of tools.compiler) {
     argv.push(part);
   }
-  if (tools.allowPanics) {
+  if (tools.allowPanics && !strict) {
     argv.push("--allow-panics");
   }
   for (const arg of args) {
@@ -547,7 +547,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   const irPath = `${tools.work}/${name}.ll`;
   const compileOut = `${tools.work}/${name}.compile.out`;
   const compileErr = `${tools.work}/${name}.compile.err`;
-  const argv = compilerArgv(tools, [`${CASES}/${name}.ts`, "-o", irPath]);
+  const argv = compilerArgv(tools, [`${CASES}/${name}.ts`, "-o", irPath], false);
   // `--threads` is the one compiler flag that also changes how the case is
   // *linked*: the IR then reaches for a `_Thread_local` arena, which only
   // `runtime.c` compiled with `-DNISH_THREADS=1` defines (WP20 T0). Reading it
@@ -796,7 +796,11 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
     return;
   }
   const exe = `${outDir}/app`;
-  const argv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${outDir}/`]);
+  // `panicScope` in tests/run.js: a `strict` file beside `main.ts` builds the
+  // program as a user would, with no flag the harness adds, because the
+  // no-panic default itself is what it tests.
+  const strict = readFileSyncOrNull(`${dir}/strict`) !== null;
+  const argv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${outDir}/`], strict);
   if (tools.clang) {
     argv.push("--link");
     argv.push(exe);
@@ -846,7 +850,7 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   }
   if (wasmRun) {
     const wasmDir = `${outDir}.wasm32`;
-    const wasmArgv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${wasmDir}/`]);
+    const wasmArgv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${wasmDir}/`], strict);
     for (const flag of flags) {
       wasmArgv.push(flag);
     }
