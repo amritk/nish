@@ -10048,7 +10048,7 @@ const proverReadsDeclared = () => [
 const SERVER_TRAILERS = "Trailers on the nish/net/http-server façade's HTTP/2 answers"
 /** WP72 S2's negatives call `HttpServer.trailers`, which the seed's std/net does not have. */
 const serverTrailersDeclared = () =>
-  ["ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
+  ["after_end", "ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
     program: `tests/link/net_http_server_trailers_${name}/main.ts`,
     file: "exit",
     changelog: SERVER_TRAILERS,

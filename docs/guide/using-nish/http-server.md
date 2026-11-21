@@ -207,15 +207,34 @@ server.trailers(r, names, values)
 that ends the stream, after the last byte of the body, on HTTP/2 over TLS
 and on h2c alike. It returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the
 client has gone or when there are more fields than `maxResponseFields`,
-which resets the stream. So does a section too large for the connection's
-output buffer, once the server comes to send it.
+which resets the stream. A section too large for the connection's output
+buffer returns `HANDLER_SENT`, and the stream is reset when the server
+comes to send it.
+
+The server keeps the `names` and `values` arrays you pass, not a copy, and
+reads them when it sends the section, which can be after `trailers`
+returns while the body waits for the client's window. Give each answer
+arrays you do not change or reuse for another request.
 
 Start with `HTTP1_CHUNKED` or a length you then write in full: a head that
 declared a length of 0 has already ended the stream, and calling
 `trailers` on it panics. An answer to a HEAD request, or a 204 or 304, ends
-with its head and sends no trailers. Trailers are only for HTTP/2: on a
-request taken from an HTTP/1.1 or HTTP/3 listener (`r.version` is not 2),
-end with `server.end`: calling `trailers` there panics.
+with its head and sends no trailers (more fields than `maxResponseFields`
+still reset its stream). Trailers are only for HTTP/2: on a request taken
+from an HTTP/1.1 or HTTP/3 listener (`r.version` is not 2), end with
+`server.end`: calling `trailers` there panics. The client chooses the
+version, so a server with more than one kind of listener checks first:
+
+```ts
+if (r.version === 2) {
+  server.trailers(r, names, values)
+} else {
+  server.end(r)
+}
+```
+
+Without that check, any HTTP/1.1 or HTTP/3 client can make the handler
+panic.
 
 On HTTP/2 and HTTP/3, field names are lowercase. The server writes the
 length and connection fields itself. A status outside 200 to 599, more or

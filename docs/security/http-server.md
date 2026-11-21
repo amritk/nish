@@ -10,7 +10,7 @@ stream, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the HTTP application layer
 starts from evidence.
 
-Anchors are function names in `std/net/http-server.ts` at `24468382`, the
+Anchors are function names in `std/net/http-server.ts` at `67e1b333`, the
 last commit to change it on the head that merges this record.
 
 **Result.** The façade parses nothing itself. A request's bytes are read by
@@ -28,6 +28,10 @@ answer never reaches the wrong peer, a body deadline, and the Alt-Svc field.
 Every piece is bounded by `HttpServerLimits`, and each listener refuses at
 configuration a carrier whose own caps would let in more.
 
+A trailer section on an HTTP/2 answer passes the same outgoing-field check
+as a head and is bounded by `maxResponseFields` and the connection's output
+(HTTPSRV-13).
+
 One finding was fixed in review: a stream reset while its answer was still
 flushing kept its request out of the pool for good (HTTPSRV-12, Medium).
 One is left open: the cap that keeps one connection from taking the pool is
@@ -42,7 +46,7 @@ request it took (HTTPSRV-8) and what it does with a decoded parameter
 
 | File | Functions |
 | --- | --- |
-| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`); the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
+| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`); the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
 
 Out of scope, each with its own record: the carriers
 (`std/net/http1-server.ts`, `std/net/http2*.ts`, `std/net/http3*.ts`,
@@ -66,7 +70,10 @@ one version starving those on another, or an Alt-Svc field a request chose.
 The program and its `HttpServerLimits` are trusted. Misuse of the answer API
 (a status outside 200 to 599, more or less body than the length said, a
 second `start`, an answer through another server) panics, since a peer
-cannot cause it.
+cannot cause it. One call is the exception: the client picks the HTTP
+version, and `trailers` panics on an HTTP/1.1 or HTTP/3 request, so a
+handler behind more than one kind of listener that calls it without
+checking `r.version === 2` can be panicked by any client (HTTPSRV-13).
 
 ## Findings
 
@@ -89,7 +96,7 @@ fixed in review, with a test that failed before the fix.
 | HTTPSRV-10 | High if it failed | `h2Grow`, `h2Holds`, `h2Conn`, `h2Event`, `live` | HTTP/2 over TLS and h2c share one table of slots, generations and stream entries; an answer or a request must not cross from a connection of one into a slot of the other, and growing the table for the second listener must not move a request already taken. | **Holds.** Each listener owns a fixed range of virtual slots, given when it is configured (`h2TlsBase`, `h2cBase`), and every per-slot call goes to the carrier that owns the range (`h2Clear` says which), so a slot index means one connection of one carrier. `h2Grow` widens the per-slot stream table to the larger of the two listeners' caps and remaps the entry of each HTTP/2 request already in the pool, so `live`'s slot and generation check (HTTPSRV-3) still names the same connection. `r.secure` is set from the owning carrier, false on h2c. |
 | HTTPSRV-11 | Medium | `listenH2c` | An h2c connection is neither encrypted nor authenticated: anyone on the path reads and rewrites every request and answer. | **Accepted.** That is what h2c is; the guide page says to serve it only behind a proxy that ends TLS, or on a trusted network. The façade adds nothing on top that would claim otherwise: `r.secure` is false and no Alt-Svc is sent (HTTPSRV-7). |
 | HTTPSRV-12 | Medium | `h2Close`, `h3Clear`, `release`, `drop` | A stream reset while its answer was still flushing left its request outside the pool for good, so a client that reset enough streams emptied the pool and every later stream was refused. | **Fixed.** A reset now hands back a request in any state the program no longer holds (commit `2fa11bf`). `link/net_http_server_carriers` pins it with a pool of one: "the reset handed the request back: the next stream is answered, not refused", which failed before the fix. |
-| HTTPSRV-13 | Medium if it failed | `trailers`, `push`, `carryTrailers` | A trailer section the program ends an HTTP/2 answer with must not split the answer or smuggle a field the head could not carry, must not grow past `maxResponseFields` or the connection's output, and must not be sent on a carrier that has no trailers in the façade (HTTP/1.1, HTTP/3). | **Holds.** `trailers` runs the same `httpFieldsCheckOutgoing` as a head, so a name that is not a lowercase token (a pseudo-field included), a connection-specific field, or a value with CR, LF or NUL panics before anything is written. More fields than `maxResponseFields` reset the stream and answer `HANDLER_DROPPED`; a section larger than the connection's output buffer is `H2_INVALID` from `Http2Connection.writeTrailers`, and `carryTrailers` resets the stream. On HTTP/1.1 and HTTP/3 the call panics. The section goes only after the body's last byte, as one HEADERS frame with END_STREAM, and a HEAD, 204 or 304 answer, whose head ended the stream, sends none. |
+| HTTPSRV-13 | Medium if it failed | `trailers`, `push`, `carryTrailers` | A trailer section the program ends an HTTP/2 answer with must not split the answer or smuggle a field the head could not carry, must not grow past `maxResponseFields` or the connection's output, and must not be sent on a carrier that has no trailers in the façade (HTTP/1.1, HTTP/3). | **Holds.** `trailers` runs the same `httpFieldsCheckOutgoing` as a head, so a name that is not a lowercase token (a pseudo-field included), a connection-specific field, or a value with CR, LF or NUL panics before anything is written. More fields than `maxResponseFields` reset the stream and answer `HANDLER_DROPPED`, on a HEAD, 204 or 304 answer too, since the count is checked before a quiet answer's trailers are set aside; a section larger than the connection's output buffer answers `HANDLER_SENT`, is `H2_INVALID` from `Http2Connection.writeTrailers` when it comes to be sent, and `carryTrailers` resets the stream. On HTTP/1.1 and HTTP/3 the call panics, and that panic is the program's to avoid: the peer picks the version, so a handler that does not check `r.version === 2` first is panicked by any HTTP/1.1 or HTTP/3 client. `trailers` keeps the caller's `names` and `values` arrays and `carryTrailers` reads them when it sends, which can be after the call returns; a program that reuses one pair across requests sends what they hold then. The section goes only after the body's last byte, as one HEADERS frame with END_STREAM, and a HEAD, 204 or 304 answer, whose head ended the stream, sends none. A call after `end`, or after an earlier `trailers`, finds the answer no longer streaming and panics; `net_http_server_trailers_after_end` pins the first. |
 
 ## Properties verified
 
@@ -163,8 +170,9 @@ reset, "and trailers answers HANDLER_DROPPED". The panics each exit 1 with
 their message: `link/net_http_server_trailers_h1`,
 `net_http_server_trailers_h3`, `net_http_server_trailers_fields` (an
 uppercase name), `net_http_server_trailers_unstarted`,
-`net_http_server_trailers_ended` (a head that declared a length of 0) and
-`net_http_server_trailers_short` (a body short of its declared length).
+`net_http_server_trailers_ended` (a head that declared a length of 0),
+`net_http_server_trailers_short` (a body short of its declared length) and
+`net_http_server_trailers_after_end` (a call after `end`).
 
 A pipeline of HTTP/1.1 requests behind a held one must not grow the stack
 per request. `tests/run.js` runs `tests/link/net_http_server/deep.ts` under

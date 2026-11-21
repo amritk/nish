@@ -264,11 +264,16 @@ Each returns `HANDLER_SENT` or `HANDLER_DROPPED`, as `HttpHandler` does.
   after the body's last byte, `Http2Connection.writeTrailers` sends the
   section as one HEADERS frame with END_STREAM. The fields pass the same
   `httpFieldsCheckOutgoing` as a head. More than `maxResponseFields` resets
-  the stream and answers `HANDLER_DROPPED`; so does a section larger than
-  the connection's output, when it is sent. A HEAD, 204 or 304 answer sends
-  none. On an HTTP/1.1 or HTTP/3 request it panics: the HTTP/1.1 carrier's
-  chunked trailers and HTTP/3's trailing HEADERS are not wired through the
-  façade.
+  the stream and answers `HANDLER_DROPPED`, on a HEAD, 204 or 304 answer
+  too. A section larger than the connection's output answers
+  `HANDLER_SENT`, and the stream is reset later, when `carryTrailers` comes
+  to send it. Otherwise a HEAD, 204 or 304 answer sends none. The server
+  keeps `names` and `values` themselves until the section is sent, which can
+  be after the call returns, so a handler gives each answer arrays it does
+  not change or reuse. On an HTTP/1.1 or HTTP/3 request it panics: the
+  HTTP/1.1 carrier's chunked trailers and HTTP/3's trailing HEADERS are not
+  wired through the façade. The client picks the version, so a handler
+  behind more than one kind of listener checks `r.version === 2` first.
 
 ### 2.5 The request view
 
