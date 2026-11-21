@@ -95,5 +95,6 @@ PASS  handler: a file past the cache streams whole
 PASS  limits out of range: no entries, nothing served
 PASS  limits out of range: a path past 4096, nothing served
 PASS  limits out of range: a negative cache, nothing served
+PASS  limits out of range: a cache past 2^30, nothing served
 PASS  limits in range: the root resolves
-static files: 98 passed, 0 failed, 0 skipped
+static files: 99 passed, 0 failed, 0 skipped

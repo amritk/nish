@@ -41,7 +41,7 @@
  * is sent `name.br` or `name.gz` when that file exists beside `name`, with a
  * `Content-Encoding`, the base name's content type and an ETag of its own.
  * Codings are weighed by their q-values; a tie goes to `br`, then `gzip`,
- * then the file as it is. Every response says `Vary: Accept-Encoding`.
+ * then the file as it is. With it on, every answer says `Vary: Accept-Encoding`.
  *
  * **Validators and ranges.** The ETag is strong, `"<size>-<mtime µs>"` in
  * hex, with `-br` or `-gz` for a coded variant. `If-None-Match` (weak
@@ -60,7 +60,7 @@
 
 import { realpathSync, statMtimeSync } from "nish:fs"
 import { copyBytes } from "nish/bytes"
-import { HANDLER_DROPPED, HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
+import { HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
 import { HTTP_DATE_SIZE, httpDateWrite, httpFieldBytes } from "nish/net/http-fields"
 import { HttpServer, HttpServerRequest } from "nish/net/http-server"
 import { percentDecode } from "nish/net/url"
@@ -90,7 +90,7 @@ const STATIC_MAX_PATH: i32 = 4096
 export class StaticLimits {
   /** How many files the cache keeps at once. */
   maxEntries: i32 = 32
-  /** The largest file the cache keeps; a larger one is read from disk on each request. */
+  /** The largest file the cache keeps, at most 2^30; a larger one is read from disk on each request. */
   maxCachedBytes: i32 = 262144
   /** The longest path span `serve` takes, before decoding; a longer one is refused. */
   maxPath: i32 = 1024
@@ -423,7 +423,7 @@ export class StaticFiles {
   /**
    * A server of the files under `root`, which is resolved once, now. Limits
    * out of range (`maxEntries` or `maxPath` outside 1 to 4096, or a
-   * negative `maxCachedBytes`) leave the root empty, so every request is not
+   * `maxCachedBytes` outside 0 to 2^30) leave the root empty, so every request is not
    * found.
    * @param root the directory to serve
    * @param limits the cache and path limits
@@ -434,7 +434,8 @@ export class StaticFiles {
       limits.maxEntries <= STATIC_MAX_ENTRIES &&
       limits.maxPath >= 1 &&
       limits.maxPath <= STATIC_MAX_PATH &&
-      limits.maxCachedBytes >= 0
+      limits.maxCachedBytes >= 0 &&
+      limits.maxCachedBytes <= 1073741824
     const real: string | null = ok ? realpathSync(root) : null
     this.root = real === null ? "" : real
     this.limits = limits
@@ -701,6 +702,7 @@ export class StaticFiles {
     this.fd = fd
     this.size = fileSize(fd)
     const mtime: f64 = statMtimeSync(chosen)
+    // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
     this.mtime = mtime === mtime ? mtime : 0
     if (this.size < 0) {
       this.staticClose()
@@ -776,9 +778,12 @@ export class StaticFiles {
       }
       i = j + 1
     }
-    this.qBr = br >= 0 ? br : star >= 0 ? star : 0
-    this.qGzip = gzip >= 0 ? gzip : star >= 0 ? star : 0
-    this.qIdentity = identity >= 0 ? identity : star >= 0 ? star : 1
+    // A coding the header does not name takes `*`'s weight, else its default.
+    const coded: i32 = star >= 0 ? star : 0
+    const plain: i32 = star >= 0 ? star : 1
+    this.qBr = br >= 0 ? br : coded
+    this.qGzip = gzip >= 0 ? gzip : coded
+    this.qIdentity = identity >= 0 ? identity : plain
   }
 
   /** The file's modification time in whole seconds, or -1 when it has none. @internal */

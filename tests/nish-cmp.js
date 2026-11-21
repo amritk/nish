@@ -10983,12 +10983,14 @@ const DECLARED = [
   },
   // WP43 S3: `nish/net/static` is a new module, so the 0.42.0 seed refuses
   // every program that imports it, the http-app example's `--static` included.
-  ...["examples/http-app/main.ts", "tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map((program) => ({
-    program,
-    file: "exit",
-    changelog: "MIME types, ETag, Range and traversal refused",
-    why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
-  })),
+  ...["examples/http-app/main.ts", "tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "MIME types, ETag, Range and traversal refused",
+      why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
+    })
+  ),
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
   {

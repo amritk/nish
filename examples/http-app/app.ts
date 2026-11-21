@@ -203,7 +203,10 @@ export class App {
       case FILES: {
         const files: StaticFiles | null = this.files
         // A path it refuses, a file that is not there, or no `--static`: 404.
-        if (files !== null && files.serveHandler(h, req, req.paramStart(ZERO), req.paramEnd(ZERO)) !== STATIC_NOT_FOUND) {
+        if (
+          files !== null &&
+          files.serveHandler(h, req, req.paramStart(ZERO), req.paramEnd(ZERO)) !== STATIC_NOT_FOUND
+        ) {
           return files.status
         }
         h.refuse(req)

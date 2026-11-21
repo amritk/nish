@@ -399,6 +399,9 @@ const limitChecks = (t: Suite): void => {
   const negative = new StaticLimits()
   negative.maxCachedBytes = -1
   t.ok("limits out of range: a negative cache, nothing served", new StaticFiles(WWW, negative).root === "")
+  const huge = new StaticLimits()
+  huge.maxCachedBytes = 1073741825
+  t.ok("limits out of range: a cache past 2^30, nothing served", new StaticFiles(WWW, huge).root === "")
   t.ok("limits in range: the root resolves", new StaticFiles(WWW, new StaticLimits()).root !== "")
 }
 
