@@ -56,7 +56,7 @@ import {
   HttpFields,
   httpFieldBytes,
   httpFieldIs,
-  httpFieldsCheckOutgoing
+  httpFieldsCheckOutgoing,
 } from "nish/net/http-fields"
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
 import {
@@ -2399,7 +2399,9 @@ export class HttpServer {
       )
     }
     if (r.ended && !r.quiet) {
-      panic("HttpServer.trailers: the head declared a body length of 0, which ended the stream; start with HTTP1_CHUNKED")
+      panic(
+        "HttpServer.trailers: the head declared a body length of 0, which ended the stream; start with HTTP1_CHUNKED"
+      )
     }
     if (!this.live(r)) {
       this.release(r)
