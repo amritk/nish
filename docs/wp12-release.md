@@ -179,6 +179,12 @@ Releases ride a train; nothing is published from a developer machine.
    or a `RELEASE_PR_TOKEN` secret. Without either the branch is still pushed
    and the job warns with a link to open the pull request by hand.
 
+   The Release PR's checks start themselves. A push made with the default
+   `GITHUB_TOKEN` starts no workflow, and the `pull_request` run the Release PR
+   gets waits as `action_required` until someone approves it, so after each
+   push the job dispatches `ci.yml` and `pr-title.yml` at `release/next`. A
+   newer push cancels the older commit's run (`ci.yml`'s concurrency group).
+   That run includes the `runner` job, which no other pull request runs.
 2. **Merge the Release pull request.** That is the act of releasing, and it is
    a human's decision. The workflow sees `changelog/<version>.json` without a
    `v<version>` tag, creates the tag and **dispatches `release.yml` at it**.

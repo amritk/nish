@@ -22,6 +22,12 @@ on:
   # merges was checked on the pull request itself, so the step is skipped and
   # the job reports success.
   merge_group:
+  # The Release PR's run: release-pr.yml dispatches this at `release/next`
+  # after each push, because the `pull_request` run a GITHUB_TOKEN push raises
+  # waits for approval. The title there is the one the train builds,
+  # `chore(release): <version>`, so like the queue the step is skipped and the
+  # job reports success.
+  workflow_dispatch:
 
 permissions:
   contents: read

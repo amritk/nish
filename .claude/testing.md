@@ -412,7 +412,8 @@ in between. Running it at each release is what keeps it honest: a harness
 nobody runs is a harness that rots. It is also the only place `readdirSync`,
 `spawnSyncTo` and `monotonicNanos` are exercised together on a real workload,
 and a check in `tests/run.js` fails if the job's `if:` stops being exactly
-`github.ref_type == 'tag' || github.head_ref == 'release/next'`.
+`github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'`
+(the last is the run `release-pr.yml` dispatches at the branch).
 
 Two POSIX utilities stand in for builtins the language does not have, and both
 are deliberate: `env(1)` gives a child its `.env` (including `env -u` for a name
