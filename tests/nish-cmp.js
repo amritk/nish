@@ -10986,7 +10986,7 @@ const DECLARED = [
   ...["examples/http-app/main.ts", "tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map((program) => ({
     program,
     file: "exit",
-    changelog: "nish/net/static with MIME types, ETag, Range and traversal refused",
+    changelog: "MIME types, ETag, Range and traversal refused",
     why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
   })),
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
