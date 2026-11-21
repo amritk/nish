@@ -87,17 +87,16 @@ stages:
         status: pending
   - id: s5-middleware
     title: WP43 S5 — middleware, steps that run before and after route bodies
-    goal: A program registers steps that run before and after its route bodies on every version the façade serves, under a settled rule for what a step may see and change and what a route that uses no step pays.
+    goal: A program registers steps that run before and after its route bodies on every version the façade serves; a step reads the request and may only refuse it or add answer fields, and a route with no step pays nothing.
     verification: node tests/run.js net_handler && node tests/run.js net_http_server && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
-    labels: [needs-decision]
     issue: 2007
     todos:
       - id: middleware-decide
-        content: Settle what a step may see and change, and whether a route that uses no step pays anything — see WP43 S5 middleware, Decision needed
-        status: pending
+        content: Settle what a step may see and change, and whether a route that uses no step pays anything — see WP43 S5 middleware, Decision
+        status: completed
       - id: middleware-api
-        content: Add step registration and the before and after calls to std/net/handler.ts and std/net/http-server.ts under the settled rule — see WP43 S5 middleware
+        content: Add read-only step registration, bound per route at router build time, and the before and after calls to std/net/handler.ts and std/net/http-server.ts — see WP43 S5 middleware
         status: pending
       - id: middleware-tests
         content: Add tests/link cases for a request id, a header check that refuses, and a field added to every answer, on each version — see WP43 S5 middleware
@@ -142,15 +141,16 @@ Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485). Issue #485
 Likely files: `std/net/handler.ts`, `std/net/http-compress.ts`, `docs/security/compress.md`.
 
 ## WP43 S4 — br as a response coding, on WP73's encoder
-Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485), [WP73](../../docs/wp73-brotli.md) §3. Waits on WP73 S2, the encoder `nish/compress/brotli`, which itself waits on WP73 S1's measurement saying go; if S1 says no, this stage is retired with `not_planned`. WP73's S3 is this same deliverable, so WP73's plan, when written, should point at this stage rather than file its own. Adds `br` to `HttpCompressor` and `httpAcceptEncoding` beside gzip and deflate, at the quality WP73 S1 picked; the test decodes each body with an independent decoder (Node's `zlib.brotliDecompressSync`) since nish has none (WP73 S4 is deferred). Feeds [WP71](../../docs/wp71-httparena.md)'s `json-comp` profile.
+Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485), [WP73](../../docs/wp73-brotli.md) §3. Waits on WP73 S2, the encoder `nish/compress/brotli`, which itself waits on WP73 S1's measurement saying go; if S1 says no, this stage is retired with `not_planned`. WP73's S3 ([plan](wp73-brotli.plan.md)) is this same deliverable and points at this issue; its section lists the negotiation cases and the `docs/security/compress.md` scope change this PR also owes. Adds `br` to `HttpCompressor` and `httpAcceptEncoding` beside gzip and deflate, at the quality WP73 S1 picked; the test decodes each body with an independent decoder (Node's `zlib.brotliDecompressSync`) since nish has none (WP73 S4 is deferred). Feeds [WP71](../../docs/wp71-httparena.md)'s `json-comp` profile.
 Likely files: `std/net/http-compress.ts`, `tests/link/std_http_compress/`, `docs/guide/`.
 
 ## WP43 S5 — middleware, steps that run before and after route bodies
 Spec: [§4](../../docs/wp43-http-app-layer.md#4-later-stages-of-485). A step is code a program registers once to run before and after its route bodies: a request id, a check on a header that refuses the request, a field added to every answer. Nothing in `std/net` has one today. HttpArena scores a framework entry's completeness on routing, middleware, request and response, and takes 2.5% off a family's score for each one the entry declares missing ([composite score](https://www.http-arena.com/docs/scoring/composite-score/)); [WP71](../../docs/wp71-httparena.md) D5 declares middleware missing until this lands. Nish has no function values, so a step cannot be a callback; the shape follows the pull loop the handler already has.
 
-### Decision needed
-1. **What a step may see and change.** Read-only access to the request (method, path, fields) and the right to refuse it or add answer fields; or also rewrite the request (path, fields) before routing; or also see and rewrite the answer body after the route. **Recommended:** the first, read-only request plus refuse and add answer fields; it covers the three examples, keeps the body path copy-free, and a later stage can widen it.
-2. **Whether a route that uses no step pays anything.** Zero cost (steps are bound per route at router build time, and a route with none takes today's path unchanged, proved by an interleaved bench); or a fixed per-request check accepted within the bench's noise band. **Recommended:** zero cost, since the plaintext and JSON profiles WP71 scores run routes with no step.
+### Decision
+Settled by the owner on [#2007](https://github.com/amritk/nish/issues/2007) (2026-11-20, via `/decide`):
+1. **What a step may see and change.** Read-only access to the request (method, path, fields), and the right to refuse it or add answer fields. A step does not rewrite the request or the answer body; a later stage can widen what a step may do.
+2. **What a route that uses no step pays.** Nothing. Steps are bound per route at router build time, so a route with no step takes today's path unchanged, proved by an interleaved bench on `bench/http1-server.ts`.
 
 Applies to `HttpHandler` and `HttpServer` alike, so one rule serves every version. Measured on `bench/http1-server.ts` against `main`, interleaved, before it lands.
 Likely files: `std/net/handler.ts`, `std/net/http-server.ts`, `std/net/router.ts`, `tests/link/`, `docs/guide/`, `docs/security/handler.md`.

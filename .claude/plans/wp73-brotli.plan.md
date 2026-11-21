@@ -54,9 +54,8 @@ stages:
   - id: s3-br-response
     title: WP73 S3 — br as a response coding in nish/net/http-compress
     goal: A request offering br gets a br response from HttpCompressor when its q-values and the program's preference choose it, after S2's encoder lands.
-    related: [2006]
     verification: node tests/run.js std_http_compress && node scripts/gen-reference.mjs --check && node scripts/security-scope.mjs && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
-    issue: 2037
+    issue: 2006
     todos:
       - id: s3-offer
         content: Add HTTP_OFFER_BR and HTTP_CODING_BR to std/net/http-compress.ts and choose by q-value then program preference in httpAcceptEncoding — see S3 — br responses
@@ -150,7 +149,7 @@ A `tests/run.js` section `std_brotli` (mirroring the gzip checks there) decodes 
 
 ## WP73 S3 — br as a response coding in nish/net/http-compress
 
-Spec: [§3](../../docs/wp73-brotli.md#3-br-in-nishnethttp-compress-s3). Waits on S2's encoder; if S1 is a no-go this issue is closed as not planned with S2. This is the same work as WP43 stage 4's `br` item, filed as #2006, so its PR closes #2006 too.
+Spec: [§3](../../docs/wp73-brotli.md#3-br-in-nishnethttp-compress-s3). Waits on S2's encoder; if S1 is a no-go this issue is closed as not planned with S2. This is the same work as WP43 stage 4's `br` item, so both plans track it as one issue, #2006, a sub-issue of WP43's parent; this section adds the negotiation cases and the security-record change its PR also owes.
 
 ### S3 — br responses
 

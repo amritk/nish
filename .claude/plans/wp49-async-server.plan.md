@@ -13,16 +13,15 @@ stages:
     status: pending
     issue: 1637
     related: [1402, 1468, 1509, 1610]
-    labels: [needs-decision]
     todos:
       - id: s6-owner-choice
         content: Put the three remaining cuts to the owner with figures (design B borrowed view, spike-a revived with an inlined region switch, Router.match's last ~455 Ir) and record the choice — see WP49 S6, Decision on the cuts
-        status: pending
+        status: completed
       - id: s6-spike
-        content: Spike each approved cut and measure Ir per request with bench/techempower/profile.sh plus a plain serve and Router app — see WP49 S6
+        content: Measure design B's Ir per request with bench/techempower/profile.sh plus a plain serve and Router app — see WP49 S6, Decision on the cuts
         status: pending
       - id: s6-build
-        content: Build the approved cut in std/net/serve.ts, std/net/router.ts or src/emit-async.ts, keeping every answered byte identical — see WP49 S6
+        content: Build design B, the borrowed read of the spawner's slot, as a construct under the ARCHITECTURE checklist and the rolling freeze, keeping every answered byte identical — see WP49 S6, Decision on the cuts
         status: pending
       - id: s6-queries-cell
         content: Explain or fix the /queries?queries=20 c=64 cell that fell from 31,287 to 28,382 req/s in bench/techempower — see WP49 S6
@@ -68,7 +67,8 @@ Owner's rules from #1637, unchanged: only changes that help regular serve and Ro
 Likely files: `std/net/serve.ts`, `std/net/router.ts`, `std/net/handler.ts`, `runtime/runtime-async.c`, `src/emit-async.ts`, `docs/BENCHMARKS.md`.
 
 ### Decision on the cuts
-Which of the three remaining cuts to build, asked of the owner first with figures (this stage is not labelled needs-decision so the lead can ask and continue). (a) Design B, a task reads its spawner's slot in place through a borrowed non-growable view; removes about 378 Ir but is a construct (ARCHITECTURE checklist, rolling freeze), ceiling about 370 Ir. (b) Spike-a (#1620) revived with the region switch inlined so a suspending handler pays nothing, plus a RUNTIME_ASYNC_TEXT_BUDGET raise; about −132/−112 Ir on a non-suspending handler. (c) Router.match's remaining about 455 Ir. No recommendation in the issues; the unsound upper bound of dropping spawn, region and copy together was about 760 Ir.
+Settled by the owner on [#1637](https://github.com/amritk/nish/issues/1637) (2026-11-20, via `/decide`): build **design B**, then regate. A task reads its spawner's slot in place through a borrowed non-growable view, removing `serveTask`'s request copy (about −378 Ir per request). It is a new construct, so it follows the full checklist in [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) → "How to add a construct" and the rolling freeze: `src/` cannot use it until the next release ships it.
+The two cuts not chosen: spike-a (#1620) revived with the region switch inlined, about −132/−112 Ir on a non-suspending handler; and Router.match's remaining about 455 Ir. The unsound upper bound of dropping spawn, region and copy together was about 760 Ir.
 
 ## WP49 S7 — awaitAll lanes, a lazy region for members that never wait and a free list for region tails
 Issue #1327. #1320 gave each `awaitAll` member a region of its own (HF-13); two costs are recorded open in `docs/security/async.md`.
