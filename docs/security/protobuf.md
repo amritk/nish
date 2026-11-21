@@ -185,6 +185,47 @@ one. Between them they call `next`, `len`, `enter`, `enterPacked`, `more`,
 `double`, and every writer method but `reset`, `int64`, `uint32`, `bool`,
 `sint64`, `sfixed32` and `sfixed64`.
 
+## Generated decoders
+
+`nish proto` (`src/proto-emit.ts`) writes a `decode` method per message class
+over this reader. A generated decoder reads only through the reader's public
+methods, so every byte, length and nesting level it is sent meets the reader's
+checks above; what the generator adds is the loops that grow the class's
+fields. No finding is counted for them.
+
+- **Nesting depth.** Each message field, `repeated` message and map entry is
+  read between `r.enter()` and `r.leave()`, and `decode` answers false as soon
+  as either does, so a decoder is bounded by `PROTO_MAX_DEPTH` (100) like a
+  hand-written loop. `tests/link/net_proto_classes` sends a message nested 100
+  levels below the top (`one hundred nested messages`, which it holds) and one
+  nested 101 levels (`past the depth limit: refused`).
+- **Repeated growth.** A `repeated` field appends one element per field or
+  packed element read. A field read takes at least its tag byte, and a packed
+  element at least one byte inside a run `enterPacked` has bounded by the
+  message, and `more()` answers false once the reader has failed, so a field
+  grows by at most one element per byte of the message. A packed run whose
+  length runs past its field is refused (`packed length past the field:
+  refused`).
+- **Map growth.** A map entry is one length-delimited field: `decode` enters
+  it, reads its key and value, leaves it and sets one entry, so a map grows by
+  at most one entry per entry field read, and a repeated key replaces its
+  entry rather than adding one (`map key repeated keeps the last`). An entry
+  whose length runs past the message is refused (`bad map entry: refused`).
+- **String and bytes copies.** A `string` or `bytes` field is copied byte by
+  byte from the span `len()` and `spanStart` name, with the index tested
+  against the buffer's length at each step, so the copy never reads past the
+  buffer even if the span did not fit it, and a generated module has no
+  indexing the panic rule refuses. `a two-byte string length` and the `every
+  field kind` vector (a non-ASCII string, and the bytes 0, 1, 127, 128 and 255) pin the copies
+  against the reference.
+
+Each named line is a line of `tests/link/net_proto_classes`'s `expected.out`,
+so the check that fails when one stops holding is
+`link/net_proto_classes: exits with 0 and stdout matches expected.out`. That
+every generated module compiles under the default panic rule is pinned by
+`proto: the <name> module compiles under the default panic rule` in
+`node tests/run.js proto`, one check per `tests/proto/*.ts.expected` golden.
+
 ## Not pinned
 
 - The no-panic property of the methods neither guide example calls (the
