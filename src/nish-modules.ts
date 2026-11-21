@@ -203,7 +203,9 @@ export const simdSuffix = (name: string, prefix: string): string => {
  * waits on the executor, `sleep`, `readable` and `writable`, each written
  * only as `await sleep(ms)`; part 7 the bounded waits `readableWithin` and
  * `writableWithin`, and the cancellation calls `taskId`, `cancel`,
- * `cancelled` and `cancelAfter`, which are plain calls.
+ * `cancelled` and `cancelAfter`, which are plain calls. Stage 6 adds `lend`,
+ * which hands a task its spawner's memory in place: the identity at run time,
+ * and a borrow the region walk holds to reads (`src/region-rules.ts`).
  */
 const ASYNC_SPECIFIER: string = "nish:async"
 
@@ -218,7 +220,8 @@ const isAsyncExport = (name: string): boolean =>
   name === "taskId" ||
   name === "cancel" ||
   name === "cancelled" ||
-  name === "cancelAfter"
+  name === "cancelAfter" ||
+  name === "lend"
 
 /**
  * Whether `canonical`, a builtin's canonical name, is a `nish:async` call on
@@ -228,7 +231,10 @@ const isAsyncExport = (name: string): boolean =>
  * facts.
  */
 export const isExecutorCall = (canonical: string): boolean =>
-  canonical.startsWith("async.") && canonical !== "async.spawn" && canonical !== "async.awaitAll"
+  canonical.startsWith("async.") &&
+  canonical !== "async.spawn" &&
+  canonical !== "async.awaitAll" &&
+  canonical !== "async.lend"
 
 /**
  * `nish:compact` (WP48): the marker interfaces a class names to pick its
@@ -310,7 +316,7 @@ export const nishModuleExports = (specifier: string): string => {
     return `${SIMD_TYPE_NAMES}, splatU8x16, splatU16x8, splatI32x4, splatU32x4, splatF32x4, splatF64x2, loadU8x16, loadU16x8, loadI32x4, loadU32x4, loadF32x4, loadF64x2, store, extract, replace, ${SIMD_MASK_NAMES}, ${SIMD_OP_NAMES}`
   }
   if (specifier === ASYNC_SPECIFIER) {
-    return "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter"
+    return "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter, lend"
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString, readStruct, cErrno"

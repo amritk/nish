@@ -335,6 +335,33 @@ const checkTaskCall = (ctx: CheckContext, expr: Node, scope: Scope, what: string
   return what === "taskId" ? T_I64 : T_BOOL
 }
 
+/** What `lend` takes, said when its argument is not that. */
+const LEND_SHAPE: string =
+  "one object or array, its spawner's memory, which a task reads in place and answers as it was given"
+
+/**
+ * `lend(x)` (WP49 stage 6): the identity, typed as its argument. A task that
+ * writes it reads `x`, its spawner's memory, without copying it into its own
+ * region, and the region walk holds what it does with the view to reads
+ * (`src/region-rules.ts`, NL2822). Only an object or an array is lent: a
+ * number or a `string` is copied anyway, so there is no view to borrow.
+ */
+const checkLend = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  const args = expr.children[1].children
+  if (args.length !== 1) {
+    return ctx.errorType(expr, taskCallArgumentMessage("lend", LEND_SHAPE))
+  }
+  const type = checkExpression(ctx, args[0], scope, -1)
+  if (type === T_ERROR) {
+    return T_ERROR
+  }
+  const bare = ctx.table.stripNull(type)
+  if (!ctx.table.isArray(bare) && !ctx.table.isStruct(bare)) {
+    return ctx.errorType(args[0], taskCallArgumentMessage("lend", LEND_SHAPE))
+  }
+  return type
+}
+
 /** The `nish:async` builtin a call is to: `spawn`, `awaitAll`, or "" for another. */
 export const asyncBuiltinOf = (imported: BuiltinExport): string =>
   imported.namespace === "async" ? imported.member : ""
@@ -355,6 +382,9 @@ export const checkAsyncBuiltin = (
   const what = imported.member
   if (isTaskCall(what)) {
     return checkTaskCall(ctx, expr, scope, what)
+  }
+  if (what === "lend") {
+    return checkLend(ctx, expr, scope)
   }
   if (what === "awaitAll") {
     return ctx.errorType(expr, AWAIT_ALL_FORM)

@@ -127,6 +127,9 @@ const WAIT_REFUSAL: string =
 const CANCEL_REFUSAL: string =
   "--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native"
 
+/** The module `lend` comes from, which `lendImports` takes it out of. */
+const ASYNC_LEND_SPECIFIER: string = "nish:async"
+
 /**
  * The message NL4015 carries. A region is an allocator swap, and the runtime
  * the output imports (`nish/runtime`) has no regions to swap to yet.
@@ -1369,6 +1372,53 @@ const propertyImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
 }
 
 /**
+ * The edits that take `lend` out of an import of `nish:async`, and the
+ * declaration written after the import in its place. `lend` is the identity
+ * at run time (WP49 stage 6): what it adds is a borrow the region walk checks,
+ * and Node has no region, so the TypeScript reading is the argument itself.
+ * `runtime/async.mjs` exports no `lend`, so the name leaves the import, with
+ * the comma after it, and a local function of the same name answers its
+ * calls. An import of `{ lend }` alone keeps its empty braces, which import
+ * nothing and still load the module.
+ */
+const lendImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
+  if (
+    stmt.text !== ASYNC_LEND_SPECIFIER ||
+    stmt.children.length === 0 ||
+    stmt.children[0].kind !== NodeKind.List ||
+    (stmt.flags & FLAG_TYPE_ONLY) !== 0
+  ) {
+    return ""
+  }
+  const text = walk.source.text
+  const sb = new StringBuilder()
+  for (const spec of stmt.children[0].children) {
+    if (spec.kind !== NodeKind.ImportSpec || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
+      continue
+    }
+    const exported = spec.children.length > 0 ? spec.children[0].text : spec.text
+    if (exported !== "lend") {
+      continue
+    }
+    let end = spec.end
+    while (end < text.length && (text.charCodeAt(end) === 32 || text.charCodeAt(end) === 10)) {
+      end = end + 1
+    }
+    if (end < text.length && text.charCodeAt(end) === 44) {
+      end = end + 1
+      while (end < text.length && text.charCodeAt(end) === 32) {
+        end = end + 1
+      }
+    } else {
+      end = spec.end
+    }
+    edits.push(new Edit(spec.start, end, ""))
+    sb.add(`\nconst ${spec.text} = <T>(x: T): T => x;`)
+  }
+  return sb.toText()
+}
+
+/**
  * Walk the module's top-level statements and collect their edits, front to
  * back: `type` before an imported name that is only a type (`typeNames`), a
  * rewritten import specifier (from `specifierFrom`), and each statement that
@@ -1399,7 +1449,7 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
           }
         }
       }
-      const values = propertyImports(walk, stmt, edits)
+      const values = propertyImports(walk, stmt, edits) + lendImports(walk, stmt, edits)
       let k = 0
       while (k < walk.specifierFrom.length) {
         if (walk.specifierFrom[k] === stmt.text) {

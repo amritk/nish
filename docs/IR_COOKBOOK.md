@@ -12536,6 +12536,310 @@ bad:
 ```
 <!-- cookbook:end async-spawn-shared -->
 
+### `lend`: the spawner's object, read in place
+
+`lend(note)` in `read` emits nothing: it is the identity, and `tally` is
+handed the pointer the frame holds, the spawner's `Note`, with no copy into
+the task's region. What it changes is the checker's view. Without it a
+spawned task may not put a shared object into memory of its own (NL2610),
+so a helper that builds a holder around it (`new Request(raw)` in
+`std/net/serve.ts`) is refused. A lent view may go into a callee or a
+holder whose answer does not let it out, and a store of a pointer into it,
+its growth, or a callee that does either is NL2822
+([Async functions](LANGUAGE.md#async-functions-async-and-await),
+`tests/cases/async_lend`, `tests/link/async_lend_store`).
+
+<!-- cookbook:begin async-lend -->
+```ts
+import { lend, sleep, spawn } from "nish:async"
+
+class Note {
+  counts: i32[] = []
+  seen: i32 = 0
+}
+
+const tally = (n: Note): i32 => n.counts.length
+
+const read = async (note: Note): Promise<void> => {
+  note.seen = tally(lend(note))
+}
+
+export const main = async (): Promise<i32> => {
+  const note = new Note()
+  note.counts.push(3)
+  spawn(read(note))
+  await sleep(1)
+  return note.seen
+}
+```
+
+```llvm
+%struct.Note = type { %struct.nish_array*, i32 }
+%struct.nish_array = type { i64, i64, i8* }
+%frame.nish_main = type { i32, i32, %frame.nish_main.rest }
+%frame.nish_main.rest = type { [0 x <2 x i64>], %struct.Note*, i64 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.trap()
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_async_sleep(i32 noundef) #2
+declare noundef i32 @nish_async_poll(i64 noundef) #2
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef i32 @tally(%struct.Note* noundef nonnull readonly align 8 dereferenceable(16) nocapture %n) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Note, %struct.Note* %n, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !5
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %4 = trunc i64 %3 to i32
+  ret i32 %4
+}
+
+define internal void @read$(%struct.Note* noundef nonnull align 8 dereferenceable(16) nocapture %note) #1 {
+entry:
+  %0 = call i32 @tally(%struct.Note* %note)
+  %1 = getelementptr inbounds %struct.Note, %struct.Note* %note, i32 0, i32 1
+  store i32 %0, i32* %1, align 4, !tbaa !15
+  ret void
+}
+
+define i1 @nish_main.resume(i8* %async.raw) #2 {
+async.entry:
+  %async.frame = bitcast i8* %async.raw to %frame.nish_main*
+  %async.state = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 0
+  %async.answer = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 1
+  %async.rest = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 2
+  %async.kids = bitcast %frame.nish_main.rest* %async.rest to i8*
+  %note.addr = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 1
+  %async.wait = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 2
+  %async.at = load i32, i32* %async.state
+  switch i32 %async.at, label %async.bad [ i32 0, label %entry i32 -1, label %async.finished i32 1, label %wait.poll ]
+
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Note*
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 0, i64* %4, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 0, i64* %5, align 8, !alias.scope !9, !noalias !10, !tbaa !16
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* null, i8** %6, align 8, !alias.scope !9, !noalias !10, !tbaa !17
+  %7 = getelementptr inbounds %struct.Note, %struct.Note* %1, i32 0, i32 0
+  store %struct.nish_array* %3, %struct.nish_array** %7, align 8, !tbaa !5
+  %8 = getelementptr inbounds %struct.Note, %struct.Note* %1, i32 0, i32 1
+  store i32 0, i32* %8, align 4, !tbaa !15
+  store %struct.Note* %1, %struct.Note** %note.addr, align 8
+  %9 = load %struct.Note*, %struct.Note** %note.addr, align 8
+  %10 = getelementptr inbounds %struct.Note, %struct.Note* %9, i32 0, i32 0
+  %11 = load %struct.nish_array*, %struct.nish_array** %10, align 8, !tbaa !5
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
+  %13 = load i64, i64* %12, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 1
+  %15 = load i64, i64* %14, align 8, !alias.scope !9, !noalias !10, !tbaa !16
+  %16 = icmp eq i64 %13, %15
+  br i1 %16, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %11, i64 4)
+  br label %push.store
+
+push.store:
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
+  %18 = load i8*, i8** %17, align 8, !alias.scope !9, !noalias !10, !tbaa !17
+  %19 = bitcast i8* %18 to i32*
+  %20 = getelementptr inbounds i32, i32* %19, i64 %13
+  store i32 3, i32* %20, align 4, !alias.scope !10, !noalias !9, !tbaa !19
+  %21 = add i64 %13, 1
+  store i64 %21, i64* %12, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %22 = trunc i64 %21 to i32
+  %23 = load %struct.Note*, %struct.Note** %note.addr, align 8
+  call void @read$(%struct.Note* %23)
+  %24 = call i64 @nish_async_sleep(i32 1)
+  store i64 %24, i64* %async.wait
+  br label %wait.poll
+
+wait.poll:
+  %25 = load i64, i64* %async.wait
+  %26 = call i32 @nish_async_poll(i64 %25)
+  %27 = icmp slt i32 %26, 0
+  br i1 %27, label %wait.pending, label %wait.ready
+
+wait.pending:
+  store i32 1, i32* %async.state
+  br label %async.suspend
+
+wait.ready:
+  %28 = icmp ne i32 %26, 0
+  %29 = load %struct.Note*, %struct.Note** %note.addr, align 8
+  %30 = getelementptr inbounds %struct.Note, %struct.Note* %29, i32 0, i32 1
+  %31 = load i32, i32* %30, align 4, !tbaa !15
+  store i32 %31, i32* %async.answer
+  store i32 -1, i32* %async.state
+  ret i1 true
+
+async.bad:
+  unreachable
+
+async.finished:
+  ret i1 true
+
+async.suspend:
+  ret i1 false
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %async.main = alloca %frame.nish_main, align 16
+  %0 = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.main, i32 0, i32 0
+  store i32 0, i32* %0
+  %1 = bitcast %frame.nish_main* %async.main to i8*
+  br label %async.poll
+
+async.poll:
+  %2 = call i1 @nish_main.resume(i8* %1)
+  br i1 %2, label %async.done, label %async.wait
+
+async.wait:
+  %3 = call i1 @nish.async.run()
+  br i1 %3, label %async.poll, label %async.stuck
+
+async.stuck:
+  call void @llvm.trap()
+  unreachable
+
+async.done:
+  call void @nish.async.drain()
+  %4 = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.main, i32 0, i32 1
+  %5 = load i32, i32* %4
+  call void @nish_free_arena()
+  ret i32 %5
+}
+
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!20, !21, !22, !23, !24}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"i32", !1, i64 0}
+!4 = !{!"Note", !2, i64 0, !3, i64 8}
+!5 = !{!4, !2, i64 0}
+!6 = !{!"nish array"}
+!7 = !{!"header", !6}
+!8 = !{!"elements", !6}
+!9 = !{!7}
+!10 = !{!8}
+!11 = !{!"header i64", !1, i64 0}
+!12 = !{!"header ptr", !1, i64 0}
+!13 = !{!"array header", !11, i64 0, !11, i64 8, !12, i64 16}
+!14 = !{!13, !11, i64 0}
+!15 = !{!4, !3, i64 8}
+!16 = !{!13, !11, i64 8}
+!17 = !{!13, !12, i64 16}
+!18 = !{!"element i32", !1, i64 0}
+!19 = !{!18, !18, i64 0}
+!20 = !{i32 8, !"cf-protection-branch", i32 1}
+!21 = !{i32 8, !"cf-protection-return", i32 1}
+!22 = !{i32 8, !"branch-target-enforcement", i32 1}
+!23 = !{i32 8, !"sign-return-address", i32 1}
+!24 = !{i32 4, !"probe-stack", !"inline-asm"}
+
+declare i8* @nish_async_next()
+declare i8* @nish_async_enter(i8* nonnull)
+declare void @nish_async_leave(i8* nonnull, i8*)
+declare void @nish_async_done(i8* nonnull)
+
+define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
+entry:
+  br label %loop
+
+loop:
+  %node = call i8* @nish_async_next()
+  %idle = icmp eq i8* %node, null
+  br i1 %idle, label %idle.out, label %got
+
+idle.out:
+  ret i1 false
+
+got:
+  %kind.at = getelementptr inbounds i8, i8* %node, i64 8
+  %kind.ptr = bitcast i8* %kind.at to i32*
+  %kind = load i32, i32* %kind.ptr, align 8
+  %main = icmp slt i32 %kind, 0
+  br i1 %main, label %main.out, label %task
+
+main.out:
+  ret i1 true
+
+task:
+  %prev = call i8* @nish_async_enter(i8* %node)
+  %frame = getelementptr inbounds i8, i8* %node, i64 32
+  %finished = call i1 @nish.async.resume(i32 %kind, i8* %frame)
+  call void @nish_async_leave(i8* %node, i8* %prev)
+  br i1 %finished, label %release, label %loop
+
+release:
+  call void @nish_async_done(i8* %node)
+  br label %loop
+}
+
+define hidden void @nish.async.drain() nounwind "probe-stack"="inline-asm" {
+entry:
+  br label %loop
+
+loop:
+  %woke = call i1 @nish.async.run()
+  br i1 %woke, label %loop, label %done
+
+done:
+  ret void
+}
+
+define internal i1 @nish.async.resume(i32 %kind, i8* %frame) nounwind "probe-stack"="inline-asm" {
+entry:
+  switch i32 %kind, label %bad [  ]
+
+bad:
+  call void @llvm.trap()
+  unreachable
+}
+```
+<!-- cookbook:end async-lend -->
+
 
 ### `awaitAll`: a region per lane
 

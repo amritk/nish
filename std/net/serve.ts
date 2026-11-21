@@ -32,14 +32,16 @@
  * the program's other tasks run while no socket is ready. It routes each
  * request at its head, gathers its body, and hands the whole request to
  * `handle` in a task of its own, spawned with the request's slot; the
- * task's allocations — the request it reads, the response it builds,
- * whatever `handle` makes on the way — live in the task's region and go
- * when it ends.
+ * task's allocations — the `Request` it reads through, the response it
+ * builds, whatever `handle` makes on the way — live in the task's region and
+ * go when it ends.
  *
- * **The task reads its own copy.** Until it is answered, a request's head is
- * the connection parser's own buffer, read in place. The task copies the
- * head and body into its own memory before `handle` runs, as `spawn` runs it
- * that far at once,
+ * **The task reads the request in place.** Until it is answered, a request's
+ * head is the connection parser's own buffer, and the task reads it, its
+ * spans and its body where the server parsed them, with no copy: the record
+ * is lent to the task (`lend` of `nish:async`), which the compiler holds to
+ * reading it and writing numbers into it (NL2822). A connection that closes
+ * while the task runs leaves the buffers to the record until the task ends,
  * and when `handle` answers it writes the status, the content type and the
  * body back into the slot's fixed buffers, in bulk, and wakes the
  * loop. The loop then sends the answer and frees the slot. Nothing the task
@@ -94,7 +96,7 @@ import {
   Http1Server,
 } from "nish/net/http1-server"
 import { ROUTER_BAD_ESCAPE, ROUTER_METHOD_NOT_ALLOWED, Router } from "nish/net/router"
-import { cancel, cancelAfter, readable, sleep, spawn, taskId } from "nish:async"
+import { cancel, cancelAfter, lend, readable, sleep, spawn, taskId } from "nish:async"
 import {
   NET_UNIX_STREAM,
   netClose,
@@ -226,18 +228,19 @@ export class ServeStats {
 }
 
 /**
- * A request, as `handle` reads it: the task's own copy of the head and body,
- * valid for as long as the task runs.
+ * A request, as `handle` reads it: the server's parsed record, read in place
+ * (`lend` of `nish:async`), its head and body valid for as long as the task
+ * runs. Copy out what must outlive the task.
  */
 export class Request {
   /** The index `Router.add` answered for the route, or a negative `ROUTER_*` code. */
   route: i32 = 0
-  /** The request as the server parsed it, copied into the task: its spans, its head and its body. */
+  /** The request as the server parsed it, lent to the task: its spans, its head and its body. */
   raw: HttpRequest
 
   /**
    * A request over `raw`, which it keeps.
-   * @param raw the parsed request, the task's own
+   * @param raw the parsed request, lent to the task for as long as it runs
    */
   constructor(raw: HttpRequest) {
     this.raw = raw
@@ -406,8 +409,15 @@ export const refuse = (_req: Request): Response => new Response(SERVE_REFUSE)
  * used, and kept.
  */
 class ServeState {
-  /** The request each slot holds: its connection's, read by the task before it first waits. */
+  /** The request each slot holds: its connection's own parser state, lent to the task (`lend`) until the loop takes it back. */
   reqs: HttpRequest[]
+  /**
+   * Per slot: the head and spans its connection's parser takes if the
+   * connection restarts while the slot's task still reads the old ones in
+   * place. Empty at first; then what an earlier such task was left with.
+   */
+  spareHeads: u8[][]
+  spareSpans: i32[][]
   /** The connection slot each request was read on, and that slot's generation then: where its answer goes. */
   slots: i32[]
   gens: i32[]
@@ -474,6 +484,8 @@ class ServeState {
 
   constructor() {
     this.reqs = []
+    this.spareHeads = []
+    this.spareSpans = []
     this.slots = []
     this.gens = []
     this.busy = []
@@ -523,7 +535,7 @@ const serveFields = (st: ServeState, server: string): void => {
 /**
  * The last freed slot, making one when every slot is busy and `inFlight`
  * allows; -1 when none. A slot made here starts on `rec`, the record its
- * first request is copied from, which the caller sets again for each one.
+ * first request is read from, which the caller sets again for each one.
  */
 const serveFreeSlot = (st: ServeState, limits: ServeLimits, rec: HttpRequest): i32 => {
   if (st.freeCount > 0) {
@@ -535,6 +547,8 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits, rec: HttpRequest): i
     return -1
   }
   st.reqs.push(rec)
+  st.spareHeads.push(new Array<u8>(0))
+  st.spareSpans.push(new Array<i32>(0))
   st.slots.push(toI32(0))
   st.gens.push(toI32(0))
   st.busy.push(false)
@@ -652,7 +666,7 @@ const serveBytes = (s: string): u8[] => {
   return out
 }
 
-/** One request's task: copies it in, runs `handle`, writes the answer into slot `k` and wakes the loop. */
+/** One request's task: runs `handle` on the record it reads in place, writes the answer into slot `k` and wakes the loop. */
 const serveTask = async (
   handle: (req: Request) => Promise<Response>,
   st: ServeState,
@@ -665,43 +679,7 @@ const serveTask = async (
   } else if (st.deadline > 0) {
     cancelAfter(self, st.deadline)
   }
-  // The copy is written out here, not in a helper: a helper handed both the
-  // shared request and the task's own would be refused, as it could store
-  // one into the other.
-  const src: HttpRequest = st.reqs[k]
-  const r: HttpRequest = new HttpRequest(-1)
-  const head: u8[] = new Array<u8>(src.headLength)
-  copyBytes(head, 0, src.head, 0, src.headLength)
-  const spans: i32[] = new Array<i32>(4 * src.headerCount)
-  for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
-    spans[i] = src.spans[i]
-  }
-  // No parameters and no body keep the empty arrays the constructor made.
-  if (src.paramCount > 0) {
-    const params: i32[] = new Array<i32>(2 * src.paramCount)
-    for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
-      params[i] = src.params[i]
-    }
-    r.params = params
-  }
-  if (src.bodyLength > 0) {
-    const body: u8[] = new Array<u8>(src.bodyLength)
-    copyBytes(body, 0, src.body, 0, src.bodyLength)
-    r.body = body
-  }
-  r.head = head
-  r.spans = spans
-  r.route = src.route
-  r.paramCount = src.paramCount
-  r.methodStart = src.methodStart
-  r.methodEnd = src.methodEnd
-  r.targetStart = src.targetStart
-  r.targetEnd = src.targetEnd
-  r.pathEnd = src.pathEnd
-  r.headLength = src.headLength
-  r.headerCount = src.headerCount
-  r.bodyLength = src.bodyLength
-  const res: Response = await handle(new Request(r))
+  const res: Response = await handle(new Request(lend(st.reqs[k])))
   st.status[k] = res.status
   const out: u8[] = st.bodies[k]
   // A length the body cannot hold, negative or past either array, is the
@@ -816,11 +794,11 @@ const serveGrown = (have: i32, need: i32): i32 => {
   return size < need ? need : size
 }
 
-/** One slot's exchange: what it needs after its task's copy, and its record until then. */
+/** One slot's exchange: what it needs after its task's spawn, and its record until then. */
 class ServeExchange {
   /** The slot's connection as of its last drive: the carrier lends one to a busy slot, so `driveOn` sets it again. */
   conn: Http1Connection
-  /** The record, from the head's parse to the task's copy; `ServeConns.none` otherwise. */
+  /** The record, from the head's parse to the task's spawn (`lendOut`); `ServeConns.none` otherwise. */
   rec: HttpRequest
   /** What the output had no room for yet, `pending[pendingStart .. pendingEnd)`; `noBytes` until the slot needs its own. */
   pending: u8[]
@@ -842,14 +820,15 @@ class ServeExchange {
 
 /**
  * The connections: an `Http1Server` driven straight from the loop. A slot
- * holds an `HttpRequest` record only from the head's parse to the task's
- * copy: `begin` takes a spare one (building one only when every built
- * record is held) and the loop gives it back once the task has copied it, or
- * once it answered 503, or the connection closed first. The record's head
- * and spans are the parser's own: the parser keeps them until the exchange's
- * answer is sent, and the request's task copies them before it first waits,
- * as `spawn` runs it that far at once. What an exchange needs after the copy
- * — its state, its route for a 404 or 405, the answer's pending bytes — is
+ * holds an `HttpRequest` record only from the head's parse to its task's
+ * spawn: `begin` takes a spare one (building one only when every built
+ * record is held), `lendOut` hands it to the task, which reads it in place,
+ * and `giveBack` takes it back once the task ends; a 503, or a connection
+ * closed first, gives it back at once. The record's head and spans are the
+ * parser's own: the parser keeps them until the exchange's answer is sent,
+ * and a connection that restarts while the task runs leaves them to the
+ * record and takes the slot's spares instead (`lendParsed`). What an
+ * exchange needs past the spawn — its state, its route for a 404 or 405, the answer's pending bytes — is
  * the slot's own, in a `ServeExchange`: a few dozen bytes, and the pending
  * array, which doubles from 64 bytes until it holds the most of an answer
  * the output could not take (under 2 × `responseBytes`, at most the power of
@@ -1201,7 +1180,7 @@ class ServeConns {
     return r
   }
 
-  /** Gives slot `s`'s record back, if it holds one: its task has copied it, or nobody will. */
+  /** Gives slot `s`'s record back, if it holds one: nobody will read it. */
   release(s: i32): void {
     const e: ServeExchange = this.ex[s]
     if (e.holds) {
@@ -1210,6 +1189,33 @@ class ServeConns {
       this.spareCount += 1
       e.rec = this.none
     }
+  }
+
+  /**
+   * Hands slot `s`'s record to a task that reads it in place: the slot holds
+   * it no more, and its connection lends the parser's head and spans, which
+   * the record points at, until `giveBack`. A restart meanwhile takes `head`
+   * and `spans` for the next peer and leaves the record its own.
+   */
+  lendOut(s: i32, head: u8[], spans: i32[]): HttpRequest {
+    const e: ServeExchange = this.ex[s]
+    const r: HttpRequest = e.rec
+    e.holds = false
+    e.rec = this.none
+    e.conn.lendParsed(head, spans)
+    return r
+  }
+
+  /**
+   * Takes back record `r` that `lendOut` gave for slot `s` at generation
+   * `gen`, once its task has ended, into the spares.
+   *
+   * @returns true when the connection restarted meanwhile: `r`'s head and spans are then nobody else's, the spares for the next `lendOut`
+   */
+  giveBack(r: HttpRequest, s: i32, gen: i32): boolean {
+    this.spare[this.spareCount] = r
+    this.spareCount += 1
+    return !this.live(s, gen) || !this.ex[s].conn.unlendParsed()
   }
 
   /** Slot `s`'s record; only while it holds one, from `begin` to `release`. */
@@ -1557,6 +1563,11 @@ export const serveOn = async (
       for (let i: i32 = 0; i < st.finishedCount && i < toI32(st.finished.length); i++) {
         const k: i32 = st.finished[i]
         serveAnswer(c, st, k, stats)
+        const r: HttpRequest = st.reqs[k]
+        if (c.giveBack(r, st.slots[k], st.gens[k])) {
+          st.spareHeads[k] = r.head
+          st.spareSpans[k] = r.spans
+        }
         st.busy[k] = false
         st.done[k] = false
         st.cancelled[k] = false
@@ -1578,7 +1589,7 @@ export const serveOn = async (
           stats.answered += 1
           continue
         }
-        st.reqs[k] = c.req(s)
+        st.reqs[k] = c.lendOut(s, st.spareHeads[k], st.spareSpans[k])
         st.slots[k] = s
         st.gens[k] = c.slotGen[s]
         st.busy[k] = true
@@ -1590,11 +1601,9 @@ export const serveOn = async (
           st.running[st.runningCount] = k
           st.runningCount += 1
         }
-        // `spawn` runs the task to its first await, past its copy of the
-        // request, so the record goes back to the pool here: an idle
-        // keep-alive connection holds none.
+        // The task reads the record in place, and its connection's parser
+        // head and spans with it: `giveBack` takes them back once it ends.
         spawn(serveTask(handle, st, k))
-        c.release(s)
       }
     }
     // A task still running whose client hung up, or any once the server is

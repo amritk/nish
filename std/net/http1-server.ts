@@ -833,6 +833,8 @@ export class Http1Connection {
   private inputEnded: boolean = false
   /** A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. */
   headTimed: boolean = false
+  /** Whether a reader holds the parser's head and spans past the exchange: `restart` hands it them rather than reuse them. */
+  private lentParsed: boolean = false
   /** Where the bytes `H1_BODY` or `H1_WS_MESSAGE` handed over start in `data`. */
   dataStart: i32 = 0
   /** How many bytes `H1_BODY` or `H1_WS_MESSAGE` handed over, from `data[dataStart]`. */
@@ -931,6 +933,12 @@ export class Http1Connection {
    * @internal Read by `tests/link/net_http1_server_head_reuse` to tell a copied head from a written one.
    */
   headCopies: i64 = 0
+  /**
+   * The head and spans `restart` gives the parser while `lentParsed`, in
+   * place of the ones a reader still holds: set by `lendParsed`.
+   */
+  private spareHead: u8[]
+  private spareSpans: i32[]
 
   /**
    * A connection under `config`. A cap outside what the connection can work with panics.
@@ -976,6 +984,8 @@ export class Http1Connection {
     this.acceptKey = null
     this.noOutput = []
     this.output = this.noOutput
+    this.spareHead = this.noOutput
+    this.spareSpans = []
     this.pool = null
     this.inputs = null
     this.heads = null
@@ -1000,6 +1010,14 @@ export class Http1Connection {
 
   /** Puts the connection back as the constructor left it, for the next peer. It allocates nothing. */
   restart(): void {
+    if (this.lentParsed) {
+      // A reader still holds the head and spans: the next peer's go in the
+      // ones it gave, and the reader's stay its own.
+      this.lentParsed = false
+      this.parser.head = this.spareHead
+      this.parser.spans = this.spareSpans
+      this.spareHead = this.noOutput
+    }
     this.parser.restart()
     const ws: WsDecoder | null = this.ws
     if (ws !== null) {
@@ -1041,6 +1059,33 @@ export class Http1Connection {
     this.fd = -1
     this.release()
     this.park()
+  }
+
+  /**
+   * Lends the parser's head and spans to a reader that may hold them past
+   * the connection: until `unlendParsed`, a `restart` gives the parser `head`
+   * and `spans` in their place and leaves its own with the reader. While the
+   * request is open they stay the parser's as well, unchanged.
+   *
+   * @param head an empty buffer, or one the reader is done with, that the parser takes as its head on a restart
+   * @param spans the same for the parser's spans
+   */
+  lendParsed(head: u8[], spans: i32[]): void {
+    this.spareHead = head
+    this.spareSpans = spans
+    this.lentParsed = true
+  }
+
+  /**
+   * Ends `lendParsed`: the reader is done, and the parser's head and spans
+   * are its own again.
+   *
+   * @returns false when the connection restarted meanwhile, so the reader keeps what it was lent and the parser has the buffers it gave
+   */
+  unlendParsed(): boolean {
+    const held: boolean = this.lentParsed
+    this.lentParsed = false
+    return held
   }
 
   /**

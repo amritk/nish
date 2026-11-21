@@ -1944,6 +1944,10 @@ export class Emitter {
     if (imported === "async.spawn") {
       return emitSpawn(this, expr)
     }
+    if (imported === "async.lend") {
+      // WP49 stage 6: the identity; the borrow is the region walk's to check
+      return this.emitExpression(expr.children[1].children[0])
+    }
     if (isExecutorCall(imported)) {
       // WP49 stage 5: a wait on the executor, or (part 7) a cancellation call
       return isTaskCallName(imported)

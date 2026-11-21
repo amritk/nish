@@ -5328,6 +5328,18 @@ declare module "nish:async" {
    *   (or removed); `false` for a task that has finished or is `main`.
    */
   export function cancelAfter(task: i64, ms: i32): boolean;
+  /**
+   * Read `view`, an object or array its spawner owns, in place, without
+   * copying it into the task's region. Inside a spawned task the view, and
+   * what is built from it, is lent only while the task runs: the task may
+   * read it, write numbers into it and copy out of it, but may not store a
+   * pointer into it, grow it, or keep it, its parts or what holds it past its
+   * end (NL2822). Outside a task, and under `--emit-ts`, it is the identity.
+   *
+   * @param view The spawner's object or array the task reads.
+   * @returns `view` itself.
+   */
+  export function lend<T>(view: T): T;
 }
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------

@@ -4374,6 +4374,26 @@ const run = async (): Promise<void> => {
   which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
+- **`lend(x)` reads a spawner's object in place.** `nish:async` exports
+  `lend`, which takes one object or array the task was handed and answers it
+  as it was given, with no copy (`async_lend`). Inside a spawned task the
+  view, and anything built from it, is the spawner's memory lent only while
+  the task runs: the task may read it, write numbers into it, copy out of it
+  and hand it to a callee or a constructor whose answer does not let it out.
+  Storing a pointer into it, growing it, or handing it to a callee that does
+  either is
+  `` hands `lend(note)` to `fill`, which stores into it: a view `lend`
+  borrows is its spawner's memory, lent only while the task runs `` (NL2822,
+  `reject_async_lend_store`, `tests/link/async_lend_store`,
+  `tests/wordings/nl2822_lent_view_stored`), and so is reaching it through
+  what a callee answers out of it (`reject_async_lend_returned`). A number,
+  `boolean`, enum or `string` is copied anyway, so `lend` of one is
+  `` `lend` from `nish:async` takes one object or array, its spawner's
+  memory, which a task reads in place and answers as it was given `` (NL2693,
+  `reject_async_lend_number`). Outside a task `lend` is
+  the identity, as it is under `--emit-ts` (`tests/emit-ts/async/lend`).
+  `std/net/serve.ts` reads each request this way, so a handler is handed
+  the connection's parsed request without a copy.
 - **A spawned task's function argument captures only what the task may
   share.** A top-level function, or an arrow written at the call, is a
   compile-time argument: the call is an instance with the function in its

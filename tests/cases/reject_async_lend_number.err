@@ -1,0 +1,1 @@
+`lend` from `nish:async` takes one object or array, its spawner's memory, which a task reads in place and answers as it was given
