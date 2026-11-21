@@ -18192,6 +18192,12 @@ const DECLARED = [
     changelog: "request bodies on the façade's HTTP/2 listeners",
     why: "a probe new with this change: it calls `HttpServer.streamBody`, which the 0.42.0 seed's façade lacks, so the seed refuses it (WP72 S6a)",
   },
+  {
+    program: "tests/link/net_http2_stream/main.ts",
+    file: "exit",
+    changelog: "request bodies on the façade's HTTP/2 listeners",
+    why: "a probe new with this change: it calls `Http2Connection.hold`, `consumeBody` and `settleCredit`, which the 0.42.0 seed's carrier lacks, so the seed refuses it (WP72 S6a)",
+  },
   // WP43 S4: `HttpCompressor` gains the deflate value, the coding last sent
   // and its level, so a program that names it in its C header sees the
   // struct grow.
