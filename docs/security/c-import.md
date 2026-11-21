@@ -40,7 +40,7 @@ the index row.
 
 | File | Functions |
 | --- | --- |
-| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `attrWhy`, `typeWhy`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `emittable`, `isIdent`, `isPrintable` and `reportLine` |
+| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `attrWhy`, `typeWhy`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `isCountType`, `countOf`, `isNamedCount`, `selected`, `refuseDuplicate`, `functionDecl`, `whyNotClass`, `fieldType`, `arrayField`, `decideOpaque`, `keepCPtr`, `pointee`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `arrayType`, `firstDeclarator`, `closingParen`, `emittable`, `isIdent`, `isPrintable` and `reportLine` |
 | `src/c-import-json.ts` | `CJson`, the JSON reader the AST, the macro probe's AST and the overrides file go through, with its depth and value limits |
 | `src/c-import-model.ts` | `dataModelOf`, `dataModelRefusal` |
 | `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3062 |
@@ -170,6 +170,26 @@ first one includes is bound only when the overrides file's `allow` names it
 (`selected`). `allow` selects functions only: structs, enums and macros come
 from the header itself whether or not `allow` is given.
 
+Three spellings carry more of the header into the module, each through the
+same `word` check. A struct the header only names becomes `declare class X {}`
+(`decideOpaque`) under the name the struct's class would have had, so it is
+claimed in the same order as any class (`claimConst`) and a name another
+declaration takes leaves it a `CPtr` with the reason listed; each such struct
+gets its own class, so two C types never share one. An array field's length
+is the decimal clang wrote in the field's type (`arrayType` reads `T [N]` and
+nothing else; a length that is not plain digits, a flexible member, a zero
+length and an array of arrays are listed); the last index, the length less
+one, is written through `word` as an integer (`arrayField`), and its element is one of `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+`f32` or `f64`, which a `declare class` lays out inline at C's size and
+alignment for an element of that type; any other element, and an element type
+with its own `aligned` attribute, leaves the struct listed. In a
+`CountedBy<u8[], "n">` the overrides file picks which parameter is the count
+(`readParamOverride` finds it among the function's parameters); the name
+written is that parameter's name from the header, after the same renaming as
+any parameter (`nishName`; an unnamed one is `argN`, N its position from 0,
+or `argN_K` while another parameter already holds that name, in
+`uniqueArgNames`), and goes through `word` as an identifier.
+
 clang's `_Nonnull` and `_Nullable` are read on a parameter's or result's
 outermost pointer only, and `returns_nonnull` (`ReturnsNonNullAttr`) on a
 result. The `nonnull` function attribute (`NonNullAttr`) is not read: clang's
@@ -199,8 +219,14 @@ and `c-import: each of the 300 functions clang finds in sqlite3.h is bound or li
 JSON object, names another header, has an unknown key, names a function,
 parameter or free function the header does not declare, makes a non-pointer
 nullable, sets `return` on a function that does not return a pointer (CI-3),
-or binds a buffer that is not a `void *` or `char *` followed by an unsigned
-64-bit count. `readonly` is refused on a buffer the header lets the function
+or binds a buffer that is not a `void *` or `char *`, or whose count is not
+another parameter of the function, is the buffer itself, is another buffer,
+or is not a `u8`, `u16`, `u32` or `u64` (an `unsigned char` included) passed
+by value or through a non-`const` pointer (`isCountType`). Which parameter
+is the count comes only from the overrides file (the name written is that
+parameter's own, renamed as any parameter is and checked by `word`): no count
+is guessed from a parameter's name, and clang 18's JSON AST carries no `counted_by` on a parameter, so the
+header cannot name one. `readonly` is refused on a buffer the header lets the function
 write, and on a `const` one, which is bound `readonly` already. `"return":
 "nullable"` is refused on a result the header marks `_Nonnull` or
 `returns_nonnull`. A file with neither `allow` nor `functions`, an empty
@@ -219,9 +245,9 @@ object, which JSON readers settle differently (the JSON reader refuses it while
 parsing). A stale override cannot silently bind a renamed function, or silently
 stop applying. `-o` naming the overrides file is refused before clang runs.
 
-Tests: `c-import: the override file ${json} is refused` (nineteen files, one per
+Tests: `c-import: the override file ${json} is refused` (twenty-one files, one per
 refusal), `c-import: the override file ${json} for ${header} is refused`
-(eighteen files, one per change-nothing case) and `c-import: -o naming the
+(nineteen files, one per change-nothing case or count shape) and `c-import: -o naming the
 overrides file is refused, and the file is kept`.
 
 ### A module for another data model
@@ -277,5 +303,5 @@ same as running `clang` on that header by hand. Each is accepted, not fixed.
 | CI-6 | Medium | `src/c-import.ts` (`emit`, `functionDecl`, `decideNames`, `whyNotClass`, `readEnum`) | Names were copied into the module as clang gave them, and clang accepts `$` and Unicode letters in an identifier: a function `pаss` with a Cyrillic `а` was declared under a name that reads as `pass`, a struct `wіdget` became `declare class wіdget`, and `get$value`, a field `$bad` and an enumerator `MODE_$B` were written as they stood, so a header could put look-alike or bidirectional-control names into a module that is read as reviewed code. | **Fixed** before the command shipped: every string taken from the header, the overrides or the command line is written through `Importer.word`, which checks it with `emittable` as an identifier, integer, string body or comment line, and the same check before a declaration is chosen lists it as not bound (`its name is not an ASCII identifier`). Before, `hostile.h` wrote `declare function get$value(x: i32): i32`, `declare function pаss(x: i32): i32`, `declare class wіdget`, `$bad: i32` and `export const MODE_$B: i32 = 1`; after, `c-import: every tests/c-import header writes its golden module` pins each listed and only `use_box(b: CPtr)` and `MODE_A` written. |
 | CI-7 | Medium | `src/c-import.ts` (`readDefine`, `emit`) | A string macro was copied when its body was one literal with no backslash, whatever bytes it held, so `#define SNEAKY "admin<U+202E>txt.exe"` put a right-to-left override into a Nish string literal, which an editor shows reversed (`adminexe.txt`). | **Fixed** before the command shipped: a string body is copied only when every byte is printable ASCII (0x20 to 0x7e) with no `"` or `\` inside, checked by `emittable` when the macro is read and again when it is written. Before, `hostile.h` wrote `export const SNEAKY: string = "admin\u202etxt.exe"` (the byte itself) and `export const CAFE: string = "café"`; after, both are listed as `a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)` and only `GREETING` is written. |
 | CI-8 | Low | `src/c-import.ts` (`readFunction`, `attrWhy`, `readDefine`) | Only a function's first declaration was read, so `int f(int); int f(int) __asm__("g");` bound `f` though the linker resolves it as `g`, and the same held for `alias` and `overloadable`; and a macro's name was cut at the first byte that is not an identifier byte, so `#define INT_MAX$X 0` in a header that includes `<limits.h>` was read as `INT_MAX` and exported a constant the header itself never defines. | **Fixed** in review: every redeclaration's attributes and type are read and refuse the function as the first's would, and a macro's name runs to a space, tab, `(` or the line's end and is listed when it is not an ASCII identifier. Before, `attrs.h` wrote `declare function late_label(x: i32): i32`, `late_alias` and `over`, and `hostile.h` wrote `export const INT_MAX: i32 = 2147483647`; after, `c-import: every tests/c-import header writes its golden module` lists each as not bound (`declared with an asm label or alias, so its symbol is not its name`, `declared overloadable, so clang mangles its symbol`, `INT_MAX$X: its name is not an ASCII identifier`). |
-| CI-9 | Low | `src/c-import.ts` (`readTypedef`, `readEnum`, `readFunction`) | A typedef or function declared again kept only what its first declaration said, though clang puts an attribute on the declaration that spells it, and an enum declared again was read as a new one: `typedef T T __attribute__((aligned(16)));` after `typedef long long T;` left `T` unmarked, so a struct with a `T` field was bound as a `declare class` whose layout is not the C one; and `enum high;` after the definition replaced the enum with an empty one, so every parameter of type `enum high`, those declared before it included, was bound as `i32` though the enum is unsigned. | **Fixed** in review: an `aligned` on any declaration of a typedef marks it, an enum declaration with no enumerators names the enum already read, and a later `returns_nonnull` marks the function. Before, `layout.h` wrote `declare class la` and `declare function use_la(v: la): i32`, and `enums.h` wrote `take_high(h: i32)` and `take_high_again(h: i32)`; after, `c-import: every tests/c-import header writes its golden module` pins `struct la: field \`a\` is a typedef with its own \`aligned\` attribute`, `use_la(v: CPtr)` and both functions taking `u32`. |
+| CI-9 | Low | `src/c-import.ts` (`readTypedef`, `readEnum`, `readFunction`) | A typedef or function declared again kept only what its first declaration said, though clang puts an attribute on the declaration that spells it, and an enum declared again was read as a new one: `typedef T T __attribute__((aligned(16)));` after `typedef long long T;` left `T` unmarked, so a struct with a `T` field was bound as a `declare class` whose layout is not the C one; and `enum high;` after the definition replaced the enum with an empty one, so every parameter of type `enum high`, those declared before it included, was bound as `i32` though the enum is unsigned. | **Fixed** in review: an `aligned` on any declaration of a typedef marks it, an enum declaration with no enumerators names the enum already read, and a later `returns_nonnull` marks the function. Before, `layout.h` wrote `declare class la` and `declare function use_la(v: la): i32`, and `enums.h` wrote `take_high(h: i32)` and `take_high_again(h: i32)`; after, `c-import: every tests/c-import header writes its golden module` pins `struct la: field \`a\` is a typedef with its own \`aligned\` attribute`, `use_la(v: CPtr)` and both functions taking `u32`. The mark is not ordered: a struct declared before the `aligned` redeclaration, which clang lays out with the typedef's natural alignment, is listed as not bound too. That over-refusal is accepted, since it fails closed (the struct stays a `CPtr`). |
 | CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, so a header that puts escape bytes into an `#error` line writes them to the terminal. | **Open, accepted.** The same text running clang on the header prints; the module is not written. The text can include lines of any file the header `#include`s (see [Accepted limits](#accepted-limits)). |

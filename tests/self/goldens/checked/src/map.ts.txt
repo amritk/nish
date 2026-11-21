@@ -56,8 +56,7 @@ function entryOf(slot: u32): i32 -> @entryOf [exported]
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function StringMap.constructor(this: StringMap): void -> @StringMap.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function StringMap.size(this: StringMap): i32 -> @StringMap.size [exported method]
@@ -160,7 +159,7 @@ function StringMap.grow(this: StringMap): void -> @StringMap.grow [exported meth
   callee +5:20 home -> @home
   callee +9:28 slotOf -> @slotOf
 function StringSet.constructor(this: StringSet): void -> @StringSet.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0

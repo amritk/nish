@@ -56,6 +56,8 @@ declare class OutI64 {
   value: i64
 }
 
+declare class counter {}
+
 declare class wc_span {
   start: i64
   len: i64
@@ -66,12 +68,12 @@ export const WC_WORDS: i32 = 2
 export const WC_MAX_WORD: i32 = 64
 export const WC_NAME: string = "wc"
 
-declare function wc_new(mode: i32): CPtr | null
-declare function wc_feed(c: CPtr, text: string): i32
-declare function wc_total(c: CPtr, words: OutI64): i64
-declare function wc_last(c: CPtr, span: wc_span): i32
-declare function wc_report(c: CPtr): CPtr | null
-declare function wc_free(c: CPtr): void
+declare function wc_new(mode: i32): counter | null
+declare function wc_feed(c: counter, text: string): i32
+declare function wc_total(c: counter, words: OutI64): i64
+declare function wc_last(c: counter, span: wc_span): i32
+declare function wc_report(c: counter): CPtr | null
+declare function wc_free(c: counter): void
 declare function wc_free_report(r: CPtr): void
 
 /* Not bound:
@@ -85,7 +87,8 @@ Each part of the header becomes one kind of declaration:
 | --- | --- |
 | a function | a `declare function` with the same name |
 | a struct of numbers and pointers | a `declare class` with the same fields; a pointer field is `CPtr \| null` |
-| a struct the header only names (`typedef struct counter counter`) | nothing: a pointer to it is a `CPtr` |
+| a fixed-length array field of numbers (`uint32_t h[8]`) | a field of type `Record<integer<0, 7>, u32>`, indexed `d.h[i]` |
+| a struct the header only names (`typedef struct counter counter`) that a bound function returns | an opaque class, `declare class counter {}`: a pointer to it is a `counter` |
 | an enum constant, an integer `#define` | an `export const` of `i32`, `u32`, `i64` or `u64`, by the C type of the constant or of its enum |
 | a string `#define` of printable ASCII | an `export const` of `string` |
 | a pointer to a number a function writes into (`int64_t *`) | an out class, `OutI64`, with one `value` field |
@@ -101,10 +104,23 @@ The defaults for pointers are the safe ones:
 - A `const char *` parameter is a `string`, which is never null; a
   `const char *` result is `string | null`. Where the C function accepts
   `NULL`, say so with `"nullable": true` (below).
-- A pointer to a struct is the struct's class, or a `CPtr` when the header
-  only names the struct; as a parameter it is never null unless the
-  overrides file says `"nullable": true`, and as a result it is `CPtr | null`,
-  since C may hand back `NULL`.
+- A pointer to a struct the header defines, and the command binds, is the
+  struct's class as a parameter, never null unless the overrides file says
+  `"nullable": true`. As a result it is a `CPtr | null`. A defined struct the
+  command does not bind (a bitfield, a union, a packed layout, an array it
+  cannot hold) stays a `CPtr` both ways.
+- A pointer to an opaque struct (below) is its class both ways: never null
+  as a parameter unless the overrides file says `"nullable": true`, and
+  nullable as a result (`counter | null`).
+- A struct the header only names is an opaque class of its own, so a
+  `counter` cannot be passed where a `chan` is wanted, and neither can a
+  `CPtr`. It stays a `CPtr` where a class cannot stand for it, and the
+  comment at the end of the module says which. For example: no bound
+  function returns it
+  (no value of the class could exist), a function takes a pointer to a
+  pointer to it (`counter **`, which only an `OutPtr` holds), a result is
+  `"owned"` (below), a struct's field points to it, or its name is taken by
+  another declaration (or is not a name Nish can write).
 - Any other `char *` result is a `CPtr | null`: the module cannot know
   whether you must free it.
 - A `void *` or `unsigned char *` parameter is a `CPtr | null`, or a `CPtr`
@@ -130,20 +146,28 @@ functions.
 
 ## Using the module
 
+This example builds with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): it adds two `i64`
+values C answered, a sum the compiler cannot prove fits. Test both against a
+bound before the addition to build it under the default.
+
 Import what you need and call it as you would any declared function. The
 library is linked the way any other C your program calls is, as
 [Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
 shows:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare class OutI64 {
   value: i64;
 }
 
-declare function wc_new(mode: i32): CPtr | null;
-declare function wc_total(c: CPtr, words: OutI64): i64;
-declare function wc_free(c: CPtr): void;
+declare class counter {}
+
+declare function wc_new(mode: i32): counter | null;
+declare function wc_total(c: counter, words: OutI64): i64;
+declare function wc_free(c: counter): void;
 
 export const WC_WORDS: i32 = 2;
 
@@ -172,9 +196,15 @@ bind today:
 - a function-like macro, a macro whose value is not an integer or a string,
   an integer macro wider than 8 bytes (`((__int128)1)`), and a string macro
   with an escape, two pieces or a byte that is not printable ASCII (`"café"`);
-- a union, a struct with a bitfield or an array in it, a packed struct or one
-  with an `aligned` attribute or under `#pragma pack`, whose layout a
-  `declare class` cannot copy;
+- a union, a struct with a bitfield, a packed struct or one with an
+  `aligned` attribute or under `#pragma pack`, whose layout a `declare class`
+  cannot copy;
+- a struct with an array field whose element is not an `i32`, `i64`, `u8`,
+  `u16`, `u32`, `u64`, `f32` or `f64` (an array of pointers, structs, arrays,
+  `_Bool`, plain `char` where the target makes it signed, or an `aligned`
+  typedef; on AArch64 Linux an array of plain `char` is a `u8` array), a
+  flexible array
+  member (`int data[]`) and a zero-length array;
 - `long double`, `__int128` and `_Complex`, in any spelling or word order;
 - `signed char` and `short`, which have no Nish width, and a plain `char`
   where the target makes it signed;
@@ -237,15 +267,26 @@ says so; pass it with `--overrides`:
     the overrides file cannot overrule the header;
   - `"return": { "owned": "<free function>" }`, which records above the
     declaration which function frees the result;
-  - per parameter, by name: `"nullable": true` for a pointer the defaults
+  - per parameter, by name (an unnamed parameter is `arg0`, `arg1`, ... by
+    its position, as the module writes it): `"nullable": true` for a pointer the defaults
     bind as never null (only `true` changes anything), and
-    `"buffer": "<length parameter>"`, which binds a `void *` and its length,
-    the next parameter, as a `u8[]` (a `readonly u8[]` when the header says
-    `const void *`, so `"readonly"` is never needed and is refused). The
-    length must be an unsigned 64-bit integer, so on wasm32, where `size_t`
-    is 32 bits, the pairing is refused.
+    `"buffer": "<length parameter>"`, which binds a `void *` or `char *` and
+    its length as a `u8[]` (a `readonly u8[]` when the header says
+    `const void *`, so `"readonly"` is never needed and is refused). A
+    `size_t` length straight after the buffer on a 64-bit target keeps the
+    plain form, `(data: u8[], len: u64)`. Any other length -- a `uint32_t`,
+    `uint16_t` or `uint8_t`, one before the buffer, or a `uint32_t *` the
+    function writes, bound as an out class such as `OutU32` (`OutU8` for an
+    `unsigned char *`) -- is named on the buffer,
+    `(len: u16, data: CountedBy<readonly u8[], "len">)`, and the call checks
+    it against the buffer's length before C runs. The length must be one of
+    those unsigned widths, by value or through a pointer the function writes;
+    a signed one, the buffer itself, another buffer, or a name that is not a
+    parameter is refused. The command never guesses a length from a parameter's name, and
+    clang 18 drops the header's own `__counted_by` from a parameter, so the
+    overrides file is where a pairing is said.
 
-With this file, `wc_new` returns `CPtr`, `wc_report` carries the comment
+With this file, `wc_new` returns `counter` rather than `counter | null`, `wc_report` carries the comment
 `// The result is owned: free it with wc_free_report.`, and `wc_feed` takes
 `string | null`. An override that would change nothing is refused, so a
 renamed C function cannot leave a stale override behind: one that names a

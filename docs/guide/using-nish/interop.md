@@ -6,10 +6,20 @@ the parsing, the maths, the data transforms — with Nish, and call it from
 Node, from a WebAssembly host or from C. In the opposite direction, a Nish
 program can call a C function you declare.
 
+The examples on this page that keep a check build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do), which tests it as the
+program runs and stops the program if it fails. Under the default each is a
+compile error: an `i32` sum that may overflow, an index the compiler cannot
+prove in range, a string passed to C that may hold a NUL, a C pointer that may
+be `NULL`. A guard removes most of them: a bound on the sum's inputs, a test of
+the index against `length`, a string literal, a C result declared `| null` and
+narrowed.
+
 Each direction starts from an ordinary module that `export`s the functions to
 call. This one is used throughout the page:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const add = (a: i32, b: i32): i32 => a + b;
 
@@ -471,7 +481,8 @@ world, a document, a list — declare module storage whose element is a class
 or `null`. Each slot is a *root*: the object in it, and everything that
 object reaches, outlives the call that built it.
 
-<!-- nish:ok --target wasm32 -->
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 class Node {
   value: i32
@@ -579,14 +590,16 @@ export const tick = (): void => {
   without `at: u32, n: u32` after it (NL2682), or with them of another type
   (NL2683). Module storage and a local array both lend; a storage of records
   does not.
-- **The module checks the window before the page runs.** A window that
-  reaches past the end of the array panics, naming your parameters:
+- **The module checks the window before the page runs.** A window the
+  compiler cannot prove in bounds is a compile error under the default; under
+  `--allow-panics`, one that reaches past the end of the array panics, naming
+  your parameters:
   `` `scale`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``.
   `at + n` is added in 64 bits, so huge values cannot wrap around the check.
   Lending `0, toU32(xs.length)` of a local array `xs` is proven in bounds
   and costs no check. A window of module storage, such as `DATA` here,
-  always keeps the check, even `0, toU32(DATA.length)`: the compiler proves
-  facts about locals, not about storage.
+  always keeps the check, even `0, toU32(DATA.length)`, so lending one needs
+  `--allow-panics`: the compiler proves facts about locals, not about storage.
 - **The page is handed a view of all of memory and an index**, so its
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory
@@ -663,8 +676,9 @@ A native program that panics prints a message and stops. A module in a page
 cannot stop the page, so under `--profile wasm-host` a program that keeps
 [module storage](#sharing-memory-with-the-page) or imports a
 [host module](#functions-the-page-supplies-host-modules) reports every panic
-(an index out of range, an overflow, a `panic(...)`, an allocation
-`--memory` cannot hold, a `process.exit`): it unwinds out of the module and
+(a check `--allow-panics` left to run time, such as an index out of range, an
+overflow or a `panic(...)`; an allocation `--memory` cannot hold; a
+`process.exit`): it unwinds out of the module and
 the call that started it throws `NishPanic`, exported by the generated
 loader. A program with neither gets a plainer loader: a panic is the bare
 `RuntimeError` a trap is, what the call allocated is released, and the next
@@ -870,9 +884,11 @@ A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
 [Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
-A numeric enum crosses as its number. A string enum has no spelling in C or
-in the typings yet, so a function that takes or returns one is refused under
-`--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
+An enum does not cross. A function that takes or returns a numeric enum is
+left out of the header and the typings, and each writes a comment naming
+the signature where the declaration would be. A string enum has no spelling in C or in the typings yet either,
+and a function that takes or returns one is refused under `--emit-header`,
+`--emit-dts`, `--emit-napi` and `--emit-napi-async`:
 
 <!-- nish:err NL4019 --emit-header build/docs-ai/nl4019.h -->
 ```ts
@@ -886,6 +902,9 @@ export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest
 
 Give the host the member's text instead, a `string` from `String(r)`, or an
 `i32` of your own choosing.
+
+A compact class crosses as an opaque handle, and its host links the range
+runtime: see [A compact class in a C host](../language/compact-classes.md#a-compact-class-in-a-c-host).
 
 ## Calling C from Nish: `declare function`
 
@@ -995,7 +1014,8 @@ the rest), `boolean` and `void`. A `u8`, `u16` and `boolean` are C's
 as the C ABI expects, so `toU8(511)` reaches C as 255. So does a `string` *parameter*, which C reads
 as a NUL-terminated `const char *`:
 
-<!-- nish:ok -->
+<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function puts(s: string): i32;
 declare function strlen(s: string): u64;
@@ -1015,7 +1035,9 @@ take a `CPtr` instead, and handed memory C allocated. A `string | null`
 parameter passes `NULL` for `null`.
 
 A Nish string can hold a NUL byte, and C would stop reading at it, so a string
-that holds one stops the program before the call instead:
+that is not a literal is a compile error under the default, and under
+`--allow-panics` one that holds a NUL stops the program before the call
+instead:
 
 ```console
 `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
@@ -1033,7 +1055,8 @@ like any other string the function makes, in a loop as anywhere else. A C
 function that may answer `NULL` is declared `string | null`, and `NULL` arrives
 as `null`:
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function strerror(errnum: i32): string;
 declare function getenv(name: string): string | null;
@@ -1046,8 +1069,10 @@ export const main = (): i32 => {
 };
 ```
 
-A result declared `string` that is `NULL` after all stops the program, because
-a `string` cannot hold it, and `--emit-panics` lists the call as an `ffi-null`
+Under `--allow-panics`, a result declared `string` that is `NULL` after all
+stops the program, because a `string` cannot hold it (the default refuses the
+call, since no proof removes the test), and `--emit-panics` lists the call as
+an `ffi-null`
 site:
 
 ```console
@@ -1093,11 +1118,12 @@ as the third argument, so the one count is the whole size. A buffer with no
 the declaration, is named with `CountedBy` (below).
 
 A call passes the array's bytes, and checks the count against each buffer
-first: a count larger than the array stops the program before C runs, with
+first: under `--allow-panics`, a count larger than the array stops the
+program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
 and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
-proves the count, so the call carries no check and compiles under
-`--deny-panics`:
+proves the count, so the call carries no check and compiles in a module
+held to no panic, as every module of your package is by default:
 
 <!-- nish:ok -->
 ```ts
@@ -1154,9 +1180,10 @@ export const main = (): i32 => {
 };
 ```
 
-`CountedBy` is only for a `declare function`, and `nish c-import` does not
-write it yet. To check such a file with `tsc`, declare the alias in a
-`.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
+`CountedBy` is only for a `declare function`. `nish c-import` writes it for
+a buffer the overrides file pairs with a count
+([Binding a C library](c-import.md)). To check such a file with `tsc`,
+declare the alias in a `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
 `type CountedBy<T, N extends string> = T`.
 
 The one exception is `CPtr`, an address that C owns. A declared function can
@@ -1183,7 +1210,8 @@ it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
 yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
 how `realpath` is asked to allocate:
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
 
@@ -1210,7 +1238,7 @@ behaviour, and the import is where a module says it takes that on. It takes a
 declared to answer `CPtr` may still answer `NULL`, so `readCString` tests its
 pointer first: `NULL` stops the program with
 `` `readCString` read a NULL pointer `` on stderr and exit status 1, and
-`--deny-panics` refuses the call for that reason. Declare a result that may be
+the no-panic default refuses the call for that reason. Declare a result that may be
 `NULL` as `CPtr | null` and narrow it instead.
 
 A `NULL` reaches C only where the source spells it. A nullable pointer held in
@@ -1239,7 +1267,8 @@ its `[Symbol.dispose]` is exactly the call that closes it. Open one with
 block — falling off its end, an early `return`, `break`, `continue`, or an
 `orReturn()` that propagates:
 
-<!-- nish:ok -->
+<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function fopen(path: string, mode: string): CPtr | null;
 declare function fclose(p: CPtr): i32;
@@ -1379,8 +1408,10 @@ export const main = (): i32 => {
 ```
 
 Every index is checked against the length. A constant outside it, such as
-`name.sysname[65]`, does not compile; any other index outside it panics
-before it reads or writes; and an index the compiler can prove is inside it,
+`name.sysname[65]`, does not compile; any other index the compiler cannot
+prove inside it is a compile error under the default and, under
+`--allow-panics`, panics before it reads or writes outside it; and an index
+the compiler can prove is inside it,
 like a constant or a counter the loop keeps below 65, costs no check:
 `--emit-panics` lists the `name.sysname[length]` read above as `proven`. The
 field is part of the struct, not a Nish array: you cannot hold it in a
@@ -1404,7 +1435,8 @@ program owns, so a later call that overwrites C's buffer leaves the copy
 alone. The type to copy into comes from the context, an annotation or a
 return type, and the copy is the class's size in bytes:
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { readCString, readStruct } from "nish:unsafe";
 
@@ -1423,7 +1455,7 @@ export const main = (): i32 => {
 
 A `NULL` pointer stops the program before the copy, with
 `` `readStruct` read a NULL pointer into a `Lconv` `` on stderr and exit
-status 1, and `--deny-panics` refuses the call for that reason. Nothing else
+status 1, and the no-panic default refuses the call for that reason. Nothing else
 is checked: the pointer must be live, and the class must declare C's fields
 in C's order, or the copy reads the wrong bytes. That is why `readStruct`
 comes from `nish:unsafe`: a call to it gives the function the `unsafe`

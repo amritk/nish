@@ -47,7 +47,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -138,8 +138,7 @@ const buildIn = (cmd, prefix, cwd, dir) => {
   const rel = (p) => path.relative(cwd, p)
   run(
     cmd,
-    [
-      ...prefix,
+    compileArgv({ cmd, prefix }, [
       "bench/runtime-copies/main.ts",
       "-o",
       `${rel(dir)}/`,
@@ -148,7 +147,7 @@ const buildIn = (cmd, prefix, cwd, dir) => {
       "--profile",
       "speed",
       ...(cpu === "x86-64" ? [] : ["--cpu", cpu]),
-    ],
+    ]),
     cwd
   )
   // A copy rather than the same path twice, as bench/crypto/run.mjs makes one:

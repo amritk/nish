@@ -1381,12 +1381,17 @@ export class Emitter {
     }
     if (wantsAlloc) {
       const group = this.module.attrGroupFor(inlineAllocatorAttrs())
+      // WP48: either bump names the range runtime's ABI symbol in a module
+      // whose links are offsets and that allocates, whichever one its compact
+      // classes use. A module that allocates nothing names nothing.
+      if (wantsRef || this.opts.compactLinks) {
+        this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
+      }
       if (all || this.usedRuntime.has("nish_alloc_struct")) {
         this.module.addRawDefinition(inlineAllocator(group, this.opts.compactLinks))
       }
       // WP48: a compact class's own 4-rounding bump.
       if (wantsRef) {
-        this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
         this.module.addRawDefinition(inlineRefAllocator(group))
       }
     }
@@ -2407,9 +2412,14 @@ export class Emitter {
     // A vector's ABI alignment is sixteen, more than an arena block promises,
     // so its accesses state their alignment even with the attributes off.
     if (this.opts.optimizeAttributes || this.table.isVector(type)) {
-      return accessAlign(this.table.alignWithPointer(type, isWasmBuild(this.opts) ? 4 : 8))
+      return accessAlign(this.table.alignWithPointer(type, this.pointerBytes()))
     }
     return 0
+  }
+
+  /** Bytes in one pointer on the target: four under wasm32's `p:32:32`, eight natively. */
+  pointerBytes(): i32 {
+    return isWasmBuild(this.opts) ? 4 : 8
   }
 
   alignSuffix(type: i32): string {

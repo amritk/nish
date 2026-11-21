@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url"
 import { Worker } from "node:worker_threads"
 
 import { scanBatch } from "../web/bytes-worker.mjs"
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const out = path.join(root, "build", "bench")
@@ -48,7 +48,7 @@ if (spawnSync("clang", ["-print-prog-name=wasm-ld"]).status !== 0) {
   process.exit(2)
 }
 const nishc = compilerFrom(process.argv)
-run(nishc.cmd, [...nishc.prefix, "bench/scan.ts", "-o", `${out}/scan.ll`])
+run(nishc.cmd, compileArgv(nishc, ["bench/scan.ts", "-o", `${out}/scan.ll`]))
 run("bash", [
   "scripts/build.sh",
   `${out}/scan.ll`,

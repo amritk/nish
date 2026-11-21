@@ -172,12 +172,15 @@ likely to add to it:
   hash of the binary's bytes, so linking the same program twice gives the
   same id, while two different builds (a `-g` link and a plain one, or two
   profiles) give different ones.
-- **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
-  CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
-  tight loops faster. It is the one level `nish` accepts; anything else, and
-  the flag with `--profile wasi` or a non-x86-64 `--target`, is refused with
-  exit 2. What your program computes does not change. A binary built with it
-  **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
+- **`--cpu x86-64-v3`** — compiles your program, the runtime and SQLite (when
+  your program uses it) for x86-64 CPUs with AVX2 (Intel Haswell, AMD
+  Excavator and later), which can make tight loops faster. It is the one level
+  `nish` accepts; anything else, and the flag with `--profile wasi` or a
+  non-x86-64 `--target`, is refused with exit 2. `--cpu native` is refused
+  too: on some CPUs (AMD Zen 2 to Zen 4, Intel Sapphire Rapids) the
+  constant-time check does not pass the code clang 18 makes for that CPU, so
+  `nish` does not build it. What your program computes does not change. A
+  binary built with it **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
   that stay on machines you know; ship anything else without it.
 - **`--debug-arena`** — links a runtime that catches a stale reference to
   arena memory. Every allocation gets memory pages of its own, and when the
@@ -274,7 +277,13 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-<!-- nish:ok -->
+This example builds with [`--allow-panics`](#asking-what-a-program-can-do): a
+`string` result from C is tested for `NULL` as the program runs, a check no
+proof removes. Declare the result `string | null` and test it for `null` to
+build it under the default.
+
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function sqlite3_libversion(): string;
 
@@ -285,7 +294,7 @@ export const main = (): i32 => {
 ```
 
 ```console
-$ nish run version.ts
+$ nish run --allow-panics version.ts
 3.54.1
 ```
 
@@ -725,7 +734,8 @@ must be freed), and `--target <triple>` writes the module for another target.
 
 `nish run` answers these codes until the program starts, and the program's own
 exit status after that — the value `main` returns, `1` for a panic such as an
-index out of range, or `128 + n` for a signal.
+index out of range in a program built with `--allow-panics`, or `128 + n` for a
+signal.
 
 ## Asking what a program can do
 
@@ -805,34 +815,58 @@ leaves the IR unchanged.
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too
   ([The compatibility dialect](compat.md)).
-- **`--deny-panics`** turns every panic the compiler cannot prove away into an
-  error, and `--emit-panics <file.json>` lists them all. A call to
+- **Every module of your package is held to no panic by default.** A panic
+  the compiler cannot prove away is an error that names the guard which
+  proves it, and `--emit-panics <file.json>` lists every site. The proof reads
+  a test that reaches the site, a `const` bound to an integer literal (never a
+  `let`), a mask `x & 255` or shift `x >>> 8`, the byte `charCodeAt`
+  answers, and a loop counting down from `s.length` under `end > 0`. A call to
   `readCString` or `readStruct` from `nish:unsafe` is refused there: each
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
-  removes
+  removes. The standard library is not yet panic-free, so a call to `Map`,
+  `Set`, `split` or a `JSON` read is refused too, for now
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
+- **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
+  list in your `package.json`'s `"nish"` field names are still held to no
+  panic, and with no list, none is. **`--deny-panics`** spells the default
+  out; of the two, the last one written wins, and neither changes the
+  program the compiler builds. `--emit-ast`, which stops before the check,
+  holds nothing to it and takes `--allow-panics` but not `--deny-panics`.
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`
   takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--explain-layout`** prints one line for each class: whether the
-  compact-class rule would pick it, or the first of the rule's five tests
-  that refuses it, with its size in bytes now and with its links narrowed
+  compact-class rule picks it, or the first of the rule's five tests
+  that refuses it (test 3 names the saving it found too small, or a holder
+  whose saving does not count; test 4 says the class itself is not made in a
+  loop or recursion), with its size in bytes now and with its links narrowed
   to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
   A generic class gets one line for each of its instantiations, named as
   written in a type (`TNode<i32>`), at the generic class's declaration. An
   instantiation from the standard library is marked `(std)`. A generic class
   that nothing instantiates gets no line.
-  Nothing uses the verdict yet, and the flag changes no byte of the build.
+  The flag changes no byte of the build: the picks it prints are the ones
+  the build makes either way.
   Only a native executable can pick a class: a build with `--link`, or
   `nish run`. Every other build refuses every class at the first test: IR
   alone (`-o` with no `--link`), which a host may link; a wasm32 target;
   `--emit-ts`, `--emit-header`, `--emit-napi`, `--emit-napi-async` and
-  `--emit-dts`; and a program that declares a C function. The report is
+  `--emit-dts`; and a program that declares a C function. Under
+  `--emit-header` the line is the automatic rule's verdict
+  (`native: --emit-header`), not the layout an explicit `implements Compact`
+  class gets in the header build: that class still narrows its links
+  ([Compact classes](../language/compact-classes.md)). The report is
   printed once the program checks cleanly and passes the build's own
   refusals, so a program with errors prints none, and nor does one with no
   `main` under `--link`, `--emit-ts`, `--sandbox` or `nish run`.
   `nish run` takes the flag; `--emit-ast`, `--json` and `--fix` do not.
+- **`--compact on|off`** picks whether a native build compacts classes
+  ([Compact classes](../language/compact-classes.md#classes-the-compiler-picks-for-you)).
+  `on`, the default, compacts each class the rule picks and each written
+  `implements Compact`; `off` keeps every class's links full pointers, so the
+  IR is that of a program with no compact class. `--explain-layout` then
+  refuses every class with `off: --compact off`. `nish run` takes the flag.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.
 

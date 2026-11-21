@@ -1,0 +1,3 @@
+define internal noundef i32 @up$.step(
+define internal noundef i32 @down$.step(
+define internal noundef i32 @main$.step(

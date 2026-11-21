@@ -25,6 +25,10 @@ export const main = (): number => {
     return 2
   }
   const opts = new Options()
+  // A dump of the checked program, not a build: the goldens it writes cover
+  // `src/` and the test corpus, which are not held to no panic, and a refusal
+  // would leave a module out of the dump rather than say anything about it.
+  opts.denyPanics = false
   let path = ""
   let arg = 1
   while (arg < process.argv.length) {

@@ -32,9 +32,9 @@ level, the way a script does:
 
 <!-- nish:ok -->
 ```ts
-const square = (n: i32): i32 => n * n
+const square = (n: f64): f64 => n * n
 
-const sides = [3, 4, 5]
+const sides: f64[] = [3, 4, 5]
 for (const side of sides) {
   console.log(square(side))
 }
@@ -212,11 +212,13 @@ exit status is your program's own: whatever `main` returns.
 
 A program can also stop with a **panic**. A panic is how Nish ends a program
 that reached a state it cannot continue from, such as reading past the end of
-an array, or arithmetic that overflows. Integer arithmetic is checked, so this
-program, saved as `overflow.ts`, stops rather than wrap round to a negative
-number:
+an array, or arithmetic that overflows. By default `nish` refuses to build a
+program that could panic: each place it cannot prove safe is a compile error,
+with the line and the guard that would prove it. This program, saved as
+`overflow.ts`, adds past the largest `i32`:
 
-<!-- nish:ok -->
+<!-- allow-panics: it is the program that shows a panic at run time -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   let n: i32 = 2147483600;
@@ -230,6 +232,18 @@ export const main = (): i32 => {
 
 ```bash
 nish run overflow.ts
+```
+
+```
+overflow.ts:4:9: error: `overflow` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), ...
+```
+
+Pass `--allow-panics` to build it anyway. The addition is then checked while
+the program runs, and the program stops rather than wrap round to a negative
+number:
+
+```bash
+nish run --allow-panics overflow.ts
 ```
 
 ```

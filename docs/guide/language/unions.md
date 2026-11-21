@@ -95,9 +95,16 @@ too.
 class over it, `Box<Shape>` or `Stack<Shape>`, holds the union in each `T`
 slot, a generic function called with one binds its type parameter to the
 union, and a `Result` can carry one on either side. A variant converts here
-too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast:
+too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast.
+The examples from here on build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): some add and index with
+nothing bounding them, which bounding the operands and testing
+`i < xs.length` before an index would fix, and the JSON one calls
+standard-library code that keeps panic sites no proof removes yet, which will
+build under the default once that code is made panic-free:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 enum Kind {
   Circle,
@@ -229,7 +236,8 @@ whatever variants remain. `!==`, the operands the other way round
 so does each `case` of a `switch (s.kind)`, with `default` holding the
 variants no `case` named.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 enum Kind {
   Circle,
@@ -532,7 +540,8 @@ goes on the wire as the name of its enum member, and `jsonDecodeUnion` picks
 the variant by it. When the tags come from a string enum, the tag on the wire
 is the member's string instead:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

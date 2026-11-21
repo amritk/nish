@@ -19,6 +19,10 @@ declare class point {
   cb: CPtr | null
 }
 
+declare class arr {
+  a: Record<integer<0, 3>, i32>
+}
+
 export const RED: i32 = 0
 export const GREEN: i32 = 5
 export const BLUE: i32 = 6
@@ -35,8 +39,8 @@ declare function f2(): string | null
 declare function f6(): i64
 
 /* Not bound:
+ *   struct opaque: stays a `CPtr`: `f1` takes a pointer to a pointer to it, which only a `CPtr` can stand for
  *   struct bits: field `a` is a bitfield
- *   struct arr: field `a` is an array
  *   union u: a union, which has no Nish type
  *   f3: variadic
  *   f4: returns a function pointer

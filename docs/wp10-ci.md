@@ -18,8 +18,10 @@ the merge queue (below) already tested that tree and records which merge broke
 kinds of `main` run are pinned to a group of their own and never cancelled: the
 Release PR's merge (its `chore(release):` subject, or a push adding
 `changelog/`) and a re-run. Release CI is otherwise untouched: `release.yml`'s
-call runs at the tag's ref, and the Release PR's runs are ordinary pull request
-runs. `interop.yml` follows the same rule. (Before the queue, `main`'s runs
+call runs at the tag's ref. The Release PR's runs that `release-pr.yml`
+dispatches at `release/next` share the group `refs/heads/release/next`, and a
+newer push to that branch cancels the older commit's run, as on a pull request.
+`interop.yml` follows the same rule. (Before the queue, `main`'s runs
 queued instead, after the runs of #396 and #397 ended cancelled with nothing to
 say which merge broke `main`.)
 
@@ -50,7 +52,7 @@ them for review.
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
-| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut, once that run is approved (`release-pr.yml` pushes with `GITHUB_TOKEN` unless a `RELEASE_PR_TOKEN` secret is set, so the run waits as `action_required`), and otherwise first at the tag |
+| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut (the run `release-pr.yml` dispatches at `release/next`, since its `GITHUB_TOKEN` push raises `pull_request` runs that wait as `action_required`), and otherwise first at the tag |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `scope` | Ubuntu | `node scripts/ci-scope.mjs`: decides which [scoped lanes](#scoped-lanes) this run needs and writes one `<lane>=true\|false` output per lane |
 | `ci-gate` | Ubuntu | `if: always()`, needs every other job: `node scripts/ci-scope.mjs --gate` fails unless each one succeeded or was skipped by its own `if:` ([below](#scoped-lanes)) |
@@ -104,7 +106,10 @@ A pull request that touches only the docs used to pay for every side job:
 about 42 of a run's ~119 runner-minutes go to seven jobs that read only the
 compiler and some test trees. Those jobs are now **lanes**. The `scope` job runs
 `scripts/ci-scope.mjs`, which reads the pull request's changed files and labels
-from the API and writes `<lane>=true|false`. A lane job `needs: scope` and gates
+from the API and writes `<lane>=true|false` and a one-line `why=`: the reason
+every lane runs (a `ci:full` label, a deleted file, a path that changes what CI
+runs, ...), else `lanes off: <names>; ...` naming each lane that is off, else
+`every lane reads a changed path`. A lane job `needs: scope` and gates
 every work step on `needs.scope.outputs.<lane> != 'false'`, so an empty or missing
 output runs it. If `scope` itself fails, GitHub skips the jobs that need it, and
 `ci-gate` fails on that. When the lane is off, the job's first step writes why to the job
@@ -361,6 +366,24 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   (`2df949d`) took 9.1 minutes wall, its test jobs 355 to 537 s, the
   slowest 1.14 times the median. The table was refitted again from the
   median of the two nine-way runs and run 44569577732.
+
+  By November the table had drifted again: in
+  [run 44844198696](https://github.com/amritk/nish/actions/runs/44844198696)
+  (`29b227f`) the shards reached their summaries at 5.5 to 11.2 minutes, and
+  shard 6 took 9.9 to 12.2 minutes in each of the six runs sampled. The
+  table gave `cryptoBench` 143 s where the median run measures 282 s,
+  `cliChecks` 137 s against 218 s, and shard 1's own stretch 137 s against
+  185 s. The script had also stopped reading shard 1: its `netStartup`
+  recognizer matched any `net_` check, and the `net_tcp_connect` checks that
+  now print before the link programs ended them before they began. It now
+  matches that section's own first check. The table is refitted from the
+  median of `main`'s runs 44854582983, 44844198696, 44827024001 and
+  44822891907; runs 44846716586 and 44839975519 were left out because their
+  shard 8 log ends before its summary. Summed under the new median costs,
+  the old deal's shards carry 6.4 to 9.4 minutes of the Test step and the
+  new deal's 8.1 minutes each. Twelve ways the same table deals 6.1 minutes
+  a shard, but each of the three added jobs repeats the setup and the
+  compiler build, so the job stays nine ways.
 
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it

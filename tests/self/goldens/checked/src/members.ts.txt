@@ -59,6 +59,7 @@ import regionNewMessage from "./region-rules" -> function @regionNewMessage
 import EnumInfo from "./program" -> struct EnumInfo
 import FieldInfo from "./program" -> struct FieldInfo
 import FunctionSig from "./program" -> struct FunctionSig
+import CheckedProgram from "./program" -> struct CheckedProgram
 import ROLE_CONSTRUCTOR from "./program" -> const ROLE_CONSTRUCTOR
 import SpreadCopy from "./program" -> struct SpreadCopy
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
@@ -71,11 +72,14 @@ import T_BOOL from "./types" -> const T_BOOL
 import T_ERROR from "./types" -> const T_ERROR
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
+import TypeTable from "./types" -> struct TypeTable
 const ITERATOR_STORED: string = " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`"
 const ITERATOR_ARGUMENT: string = " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`"
 const ITERATOR_RETURNED: string = " cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used"
 const ITERATOR_ELSEWHERE: string = " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version"
 const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith"
+const CHAR_CODE_TOP: i32 = 255
+const CLZ32_TOP: i32 = 32 [exported]
 function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope): boolean -> @isValueReceiver [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.capturesOuter CheckedProgram.builtinImport CheckedProgram.constant Scope.lookup
@@ -294,48 +298,53 @@ function exposeMethod(ctx: CheckContext, method: FunctionSig): void -> @exposeMe
 function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections Node.constructor StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.isArray TypeTable.isFnRef TypeTable.isNullable TypeTable.isOpaque TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.refOf TypeTable.typeName checkArrayMethod checkCollectionForEach checkExpression checkGenericCall checkMapGet checkMethodArguments checkReferenceCall checkResultMethod checkStringMethod checkWalkIterable exposeMethod isChannelSend isCollectionStruct isMapOwner isWalkIterable linkReceiver nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nullableHint nullableReference opaqueMemberMessage opaqueReferenceMessage recordRegionCall recordUpdateFusion refuseCollectionMember refuseNullableCall refuseParameterMember refuseSecretMember simdCompareMessage spawnFormFor structOf toStringFix unionMemberMessage
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 CheckContext.errorAtProperty#0 unionMemberMessage#0 checkStringMethod#0 checkResultMethod#0 CheckContext.errorAtProperty#0 checkArrayMethod#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorFix#0 toStringFix#0 structOf#0 isWalkIterable#0 checkWalkIterable#0 checkCollectionForEach#0 refuseCollectionMember#0 checkMapGet#0 checkGenericCall#0 exposeMethod#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 checkMethodArguments#0 exposeMethod#0 recordUpdateFusion#0
+  calls: CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections Node.constructor StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.isArray TypeTable.isFnRef TypeTable.isNullable TypeTable.isOpaque TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.refOf TypeTable.typeName checkArrayMethod checkCollectionForEach checkExpression checkGenericCall checkMapGet checkMethodArguments checkReferenceCall checkResultMethod checkStringMethod checkWalkIterable exposeMethod isChannelSend isCollectionStruct isMapOwner isNumeric isWalkIterable linkReceiver nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nullableHint nullableReference opaqueMemberMessage opaqueReferenceMessage recordRegionCall recordUpdateFusion refuseCollectionMember refuseNullableCall refuseParameterMember refuseSecretMember simdCompareMessage spawnFormFor structOf toStringFix unionMemberMessage unwrapParens
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 CheckContext.errorAtProperty#0 unionMemberMessage#0 checkStringMethod#0 checkResultMethod#0 CheckContext.errorAtProperty#0 checkArrayMethod#0 CheckContext.errorType#0 CheckContext.textOf#0 toStringFix#0 CheckContext.textOf#0 CheckContext.errorFix#0 structOf#0 isWalkIterable#0 checkWalkIterable#0 checkCollectionForEach#0 refuseCollectionMember#0 checkMapGet#0 checkGenericCall#0 exposeMethod#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 checkMethodArguments#0 exposeMethod#0 recordUpdateFusion#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkStringMethod#1 checkResultMethod#1 checkArrayMethod#1 CheckContext.errorType#1 toStringFix#1 isWalkIterable#2 checkWalkIterable#1 checkCollectionForEach#1 checkMapGet#1 checkGenericCall#1 checkReferenceCall#1 checkMethodArguments#1 recordRegionCall#1 recordUpdateFusion#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 refuseParameterMember#6 checkStringMethod#4 checkResultMethod#5 checkArrayMethod#5 checkWalkIterable#5 checkCollectionForEach#5 checkMapGet#4 checkGenericCall#3 checkExpression#2 checkReferenceCall#4 checkMethodArguments#5
   stackSites=1 stackLocals=1
-  local -117:9 access: Node (const)
-  local -116:9 receiverExpr: Node (const)
-  local -115:9 receiver: i32 (const)
-  callee -115:20 linkReceiver -> @linkReceiver
-  callee -115:60 checkExpression -> @checkExpression
-  local -111:9 args: Node (const)
-  callee -110:7 refuseSecretMember -> @refuseSecretMember
-  callee -107:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee -105:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -103:46 TypeTable.typeName -> @TypeTable.typeName
-  callee -103:81 nullableHint -> @nullableHint
-  callee -99:7 refuseParameterMember -> @refuseParameterMember
-  callee -96:7 TypeTable.isUnion -> @TypeTable.isUnion
-  callee -95:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -95:33 unionMemberMessage -> @unionMemberMessage
-  callee -91:12 checkStringMethod -> @checkStringMethod
-  callee -89:7 TypeTable.isResult -> @TypeTable.isResult
-  callee -88:12 checkResultMethod -> @checkResultMethod
-  callee -86:7 TypeTable.isArray -> @TypeTable.isArray
-  callee -84:38 TypeTable.isVector -> @TypeTable.isVector
-  callee -84:57 TypeTable.refOf -> @TypeTable.refOf
-  callee -83:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -81:9 simdCompareMessage -> @simdCompareMessage
-  callee -81:39 TypeTable.typeName -> @TypeTable.typeName
-  callee -81:58 TypeTable.refOf -> @TypeTable.refOf
-  callee -77:12 checkArrayMethod -> @checkArrayMethod
-  callee -75:7 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -74:12 CheckContext.errorType -> @CheckContext.errorType
-  callee -74:32 opaqueReferenceMessage -> @opaqueReferenceMessage
-  callee -74:55 CheckContext.textOf -> @CheckContext.textOf
-  callee -72:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local -69:11 name: Node (const)
-  callee -69:18 new Node -> @Node.constructor
+  local -123:9 access: Node (const)
+  local -122:9 receiverExpr: Node (const)
+  local -121:9 receiver: i32 (const)
+  callee -121:20 linkReceiver -> @linkReceiver
+  callee -121:60 checkExpression -> @checkExpression
+  local -117:9 args: Node (const)
+  callee -116:7 refuseSecretMember -> @refuseSecretMember
+  callee -113:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee -111:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -109:46 TypeTable.typeName -> @TypeTable.typeName
+  callee -109:81 nullableHint -> @nullableHint
+  callee -105:7 refuseParameterMember -> @refuseParameterMember
+  callee -102:7 TypeTable.isUnion -> @TypeTable.isUnion
+  callee -101:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -101:33 unionMemberMessage -> @unionMemberMessage
+  callee -97:12 checkStringMethod -> @checkStringMethod
+  callee -95:7 TypeTable.isResult -> @TypeTable.isResult
+  callee -94:12 checkResultMethod -> @checkResultMethod
+  callee -92:7 TypeTable.isArray -> @TypeTable.isArray
+  callee -90:38 TypeTable.isVector -> @TypeTable.isVector
+  callee -90:57 TypeTable.refOf -> @TypeTable.refOf
+  callee -89:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -87:9 simdCompareMessage -> @simdCompareMessage
+  callee -87:39 TypeTable.typeName -> @TypeTable.typeName
+  callee -87:58 TypeTable.refOf -> @TypeTable.refOf
+  callee -83:12 checkArrayMethod -> @checkArrayMethod
+  callee -81:7 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -80:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -80:32 opaqueReferenceMessage -> @opaqueReferenceMessage
+  callee -80:55 CheckContext.textOf -> @CheckContext.textOf
+  callee -78:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local -75:11 name: Node (const)
+  callee -75:18 new Node -> @Node.constructor
+  local -74:11 fix: Edit[] (const)
+  callee -74:17 toStringFix -> @toStringFix
+  local -72:11 hint: string (const)
+  callee -71:25 isNumeric -> @isNumeric
+  callee -70:45 CheckContext.textOf -> @CheckContext.textOf
+  callee -70:56 unwrapParens -> @unwrapParens
   local -68:11 message: string (const)
   callee -68:61 TypeTable.typeName -> @TypeTable.typeName
   callee -67:5 CheckContext.errorFix -> @CheckContext.errorFix
-  callee -67:33 toStringFix -> @toStringFix
   local -64:9 info: StructInfo | null (const)
   callee -64:16 structOf -> @structOf
   callee -60:7 isWalkIterable -> @isWalkIterable
@@ -390,7 +399,7 @@ function checkMapGet(ctx: CheckContext, expr: Node, info: StructInfo, args: Node
   calls: StructInfo.method TypeTable.maybeOf TypeTable.typeName checkMethodArguments internalErrorFor nish_exit nish_panic_index nish_str_concat
   pointer ctx: size=448 writesThrough=true captured=true passedTo=checkMethodArguments#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#1
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.method#0 StructInfo.method#0
+  pointer info: size=184 writesThrough=false captured=false passedTo=StructInfo.method#0 StructInfo.method#0
   pointer args: size=40 writesThrough=true captured=false passedTo=checkMethodArguments#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMethodArguments#5
   stackSites=0 stackLocals=0
@@ -420,7 +429,7 @@ function isWalkIterable(ctx: CheckContext, info: StructInfo, call: Node, access:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.isCollections isCollectionStruct nish_panic_index nish_str_eq unwrapParens
   pointer ctx: size=448 writesThrough=false captured=false
-  pointer info: size=176 writesThrough=false captured=false passedTo=isCollectionStruct#0
+  pointer info: size=184 writesThrough=false captured=false passedTo=isCollectionStruct#0
   pointer call: size=40 writesThrough=false captured=false
   pointer access: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -433,7 +442,7 @@ function walkReaderOf(ctx: CheckContext, info: StructInfo, name: string): Functi
   sharedWrite: via nish_exit
   calls: StructInfo.method internalErrorFor isMapOwner nish_exit nish_str_eq
   pointer ctx: size=448 writesThrough=false captured=false
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.method#0 isMapOwner#0 StructInfo.method#0
+  pointer info: size=184 writesThrough=false captured=false passedTo=StructInfo.method#0 isMapOwner#0 StructInfo.method#0
   stackSites=0 stackLocals=0
   local +0:9 read: FunctionSig | null (const)
   callee +0:16 StructInfo.method -> @StructInfo.method
@@ -446,7 +455,7 @@ function checkWalkIterable(ctx: CheckContext, call: Node, info: StructInfo, acce
   calls: StructInfo.method TypeTable.typeName checkMethodArguments internalErrorFor nish_exit nish_panic_index nish_str_concat walkReaderOf
   pointer ctx: size=448 writesThrough=true captured=true passedTo=checkMethodArguments#0 walkReaderOf#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#1
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.method#0 walkReaderOf#1
+  pointer info: size=184 writesThrough=false captured=false passedTo=StructInfo.method#0 walkReaderOf#1
   pointer access: size=40 writesThrough=false captured=false
   pointer args: size=40 writesThrough=true captured=false passedTo=checkMethodArguments#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMethodArguments#5
@@ -549,7 +558,7 @@ function takesDeclaredContext(value: Node): boolean -> @takesDeclaredContext
   callee +6:12 takesDeclaredContext -> @takesDeclaredContext
 function hasMethods(info: StructInfo): boolean -> @hasMethods
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function classLiteralMessage(name: string): string -> @classLiteralMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -580,7 +589,7 @@ function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, li
   calls: CheckContext.error StructInfo.field TypeTable.isNullable TypeTable.isStruct TypeTable.isUnion TypeTable.secretInner TypeTable.typeName checkExpression isCollectionStruct isThreadsStruct nish_panic_index nish_str_concat reportSpreadField setByNameAfter structOf
   pointer ctx: size=448 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 structOf#0 CheckContext.error#0 CheckContext.error#0 reportSpreadField#0
   pointer spread: size=40 writesThrough=false captured=false passedTo=setByNameAfter#1
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0 reportSpreadField#3
+  pointer info: size=184 writesThrough=false captured=false passedTo=StructInfo.field#0 reportSpreadField#3
   pointer literal: size=40 writesThrough=false captured=false passedTo=setByNameAfter#0
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -630,10 +639,10 @@ function reportSpreadField(ctx: CheckContext, value: Node, source: StructInfo, i
   calls: CheckContext.error TypeTable.typeName nish_str_concat
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
   pointer value: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
-  pointer source: size=176 writesThrough=false captured=false
-  pointer info: size=176 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false
-  pointer into: size=88 writesThrough=false captured=false
+  pointer source: size=184 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
+  pointer into: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 target: string (const)
   callee +0:18 TypeTable.typeName -> @TypeTable.typeName
@@ -800,7 +809,7 @@ function refuseCollectionMember(ctx: CheckContext, info: StructInfo, at: Node, c
   escaping: call
   calls: CheckContext.errorAtProperty CheckedProgram.isCollections TypeTable.typeName isCollectionStruct isMapOwner iteratorPlaceReason nish_str_concat nish_str_eq
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 iteratorPlaceReason#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0
-  pointer info: size=176 writesThrough=false captured=false passedTo=isCollectionStruct#0 isMapOwner#0
+  pointer info: size=184 writesThrough=false captured=false passedTo=isCollectionStruct#0 isMapOwner#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 iteratorPlaceReason#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   callee +0:8 isCollectionStruct -> @isCollectionStruct
@@ -838,7 +847,7 @@ function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, r
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.field nish_str_eq
   pointer ctx: size=448 writesThrough=false captured=false
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer info: size=184 writesThrough=false captured=false passedTo=StructInfo.field#0
   pointer target: size=40 writesThrough=false captured=false
   pointer receiverExpr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -882,6 +891,18 @@ function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
   callee +0:16 checkExpression -> @checkExpression
   callee +5:5 CheckContext.error -> @CheckContext.error
   callee +5:75 TypeTable.typeName -> @TypeTable.typeName
+function builtinAnswerTop(program: CheckedProgram, table: TypeTable, call: Node): i32 -> @builtinAnswerTop [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.baseOf nish_panic_index nish_str_eq
+  pointer program: size=928 writesThrough=false captured=false
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +4:9 receiver: Node (const)
+  local +5:9 type: i32 (const)
+  callee +6:52 TypeTable.baseOf -> @TypeTable.baseOf
+  local +9:9 isMath: boolean (const)
 function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkStringMethod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity

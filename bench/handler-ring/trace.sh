@@ -49,7 +49,11 @@ fi
 
 git -C "$root" apply bench/handler-ring/trace.patch
 trap 'git -C "$root" apply -R bench/handler-ring/trace.patch' EXIT
-"$compiler" "$root/bench/handler-ring/server.ts" --link "$out/server-trace" >/dev/null
+# The server is a bench program, not an example: it builds the way the suite
+# builds its cases (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$compiler"
+"$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server-trace" >/dev/null
 git -C "$root" apply -R bench/handler-ring/trace.patch
 trap - EXIT
 

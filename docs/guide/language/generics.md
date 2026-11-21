@@ -12,9 +12,16 @@ and [Generic methods](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#
 
 ## Generic functions
 
+Several examples on this page index and add with nothing bounding them, so the
+compiler cannot prove them safe and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); testing `i < xs.length`
+before an index and bounding the operands, as the compile error suggests,
+builds them under the default.
+
 Both ways of writing a function take type parameters:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const identity = <T>(x: T): T => x;
 
@@ -57,7 +64,8 @@ A class or interface takes type parameters too. Here the type arguments are
 always written out, after `new` or in a type annotation, because there is
 nothing to infer them from:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Stack<T> {
   items: T[];
@@ -151,7 +159,8 @@ export const main = (): i32 => areaOf(new Square(4));
 type argument then has to *be* `Shape`, or a class that declares
 `implements Shape`; having fields with the same names is not enough.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Shape {
   area: i32;

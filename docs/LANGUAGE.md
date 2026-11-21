@@ -1932,8 +1932,14 @@ having no top-level code and therefore no initialisation order.
   [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
-  There is deliberately no second, larger language inside `const`: a constant
-  can compute exactly what a runtime expression can.
+  There is deliberately no second, larger language inside `const`: what a
+  constant computes, it computes as the runtime expression would, but it
+  computes less.
+  "Arithmetic" here is `+ - * / %`, the comparisons, `!`, `&&`, `||`, unary
+  minus and string `+`. The shift and bitwise operators (`<< >> >>> & | ^ ~`)
+  are refused in a constant and in a [constant table](#constant-tables)'s
+  element alike, whatever their operands' type, not folded. Write the
+  value out (`8`, not `1 << 3`), or compute it at run time.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
   replaces computes. By default that instruction is checked, so a fold that
@@ -3184,15 +3190,40 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     (`tests/link/package_hidden_class_import`), and naming it in an annotation
     is `` Unsupported type reference `Space` ``
     (`tests/link/package_hidden_class_annotation`).
-- **A function name is unique across the whole program**, exported or not, in
-  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
-  `internal` linkage keeps a name out of the linker's way but it does not buy a
-  second namespace: the whole-program attribute analysis is keyed by symbol
-  name, so two functions sharing one would be emitted with each other's
-  attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag. A proposal to qualify a private function's
-  symbol by its module when it would clash is
-  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
+- **Two modules may each keep a private function of one name** (WP57 S1).
+  A non-exported free function or generic function whose name another
+  function of its package also defines — in another module, exported or not —
+  is emitted under a symbol qualified by its module's path:
+  `<package prefix><module>$.<name>`, where `<module>` is the module's path
+  from its package's root (the entry's directory, for the program's own
+  package) without `.ts`, every character outside `[A-Za-z0-9_]` spelled `_`.
+  So `helper.ts` and `main.ts` may each keep a private `add`, emitted as
+  `@helper$.add` and `@main$.add` (`tests/link/duplicate_internal`,
+  `module_private_helpers`); a private generic's instantiations are
+  `@a$.identity$i32` (`module_private_generic`); a task's arrow follows the
+  function it is written in (`@m$.work$arrow0`, `module_private_spawn`); and
+  a private `helper` beside an imported, exported `helper` is `@main$.helper`
+  while the exported one keeps `@helper` (`module_private_mixed`). The
+  qualifier is the module's path relative to its package root (the entry's
+  directory for the program's own modules), so a module outside that
+  directory keeps its `..` steps: `../shared/u.ts` gives
+  `@___shared_u$.helper` however the entry is named. A name no
+  other function shares keeps its bare symbol, so a program that built before
+  emits exactly what it did, and the entry's `main` is never qualified.
+- **Everything else still needs a unique symbol.** Two exported functions of
+  one name are refused (`tests/link/duplicate_export`), and so are two
+  exported generic functions. Under `--no-strict-exports` every function is
+  external and keeps its bare name, so there a function name is unique across
+  the program, exported or not
+  (`` under `--no-strict-exports` every function keeps its bare name as its symbol ``,
+  `tests/link/module_private_no_strict`). Two module paths that spell one
+  qualifier (`lib/util.ts` and `lib_util.ts`) are refused too, naming both
+  files: `` both modules' paths qualify it to one symbol ``. Each refusal is
+  the same reason: `internal` linkage keeps a name out of the linker's way but
+  the whole-program attribute analysis is keyed by symbol, so two functions
+  sharing one would be emitted with each other's attributes — a miscompile
+  rather than a link error. The design is
+  [`docs/wp57-module-scoped-names.md`](wp57-module-scoped-names.md).
 
 ### `main`
 
@@ -3242,9 +3273,36 @@ class Point {
 ```
 
 - **Fields** need a type annotation (`` Field `x` of class `Point` needs a type annotation ``,
-  `tests/cases/reject_cls_field_no_type`). An initializer must be a literal
-  (a number, a negated number, a string, or a boolean) of the field's type
-  (`initializers must be literals` *(CLI only)*; `tests/cases/cls_initializers`).
+  `tests/cases/reject_cls_field_no_type`). An initializer is one of
+  (`tests/cases/cls_initializers`, `cls_field_init`):
+  - a literal (a number, a negated number, a string, or a boolean) of the
+    field's type, or `null`, or an enum member;
+  - `[]` when the field's type is an array (`kind: i32[] = []`): a fresh,
+    empty array of the declared element type, one per object;
+  - `new C(args)` (`child: Leaf = new Leaf(0)`) where `C` is a class with no
+    type parameters and the field's type is `C` or `C | null` (not a union or
+    interface `C` converts to), and each argument is itself a literal or enum
+    member of its parameter's type.
+
+  **An initializer reads nothing.** It may not name `this`, a constructor
+  parameter, another field, a local or a module constant; an argument of its
+  `new` is a literal too. Anything else, a call that is not `new` included,
+  is `initializers must be literals` *(CLI only)*
+  (`reject_cls_field_init_call`, `reject_cls_field_init_new_arg`), and a `new`
+  of a generic, handle or layout class is refused the same way
+  (`reject_cls_field_init_new_generic`). Assign a value computed from those
+  in the constructor. The constructor stores every initializer before the
+  first statement of its body, in declaration order; a class without a
+  constructor stores them at its `new`. So a class whose initializers
+  construct the class itself, directly or through another class's
+  initializers, would construct forever, and is refused
+  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`),
+  once per loop however many classes are on it (`tests/link/cls_field_init_cycle`).
+  An exported class with no constructor, and an exported generic class, has
+  its initializers run in the module that builds it, so a class they
+  construct is exported too (`` `Pin` is not exported, but this class's
+  initializers run in the module that builds it ``,
+  `tests/link/cls_field_init_private`, `reject_cls_field_init_private`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
 - **Constructor**: at most one, with a body
@@ -5059,8 +5117,10 @@ export const main = (): i32 => {
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
   reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
-  named after the one it is written in and a counter (`main$arrow0`), which
-  is the name a debugger or a profiler shows for the task's thread.
+  named after the symbol of the one it is written in and a counter
+  (`nish_main$arrow0` in the entry's `main`, `m$.work$arrow0` in a private
+  `work` that WP57 S1 qualified by its module `m.ts`), which is the name a
+  debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -6991,8 +7051,8 @@ ffi.copy:
   (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
   `declare function` declared to answer `CPtr` may still answer `NULL`, so
   the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
-  above. No proof removes the test, so `--deny-panics` refuses a call in its
-  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  above. No proof removes the test, so the no-panic scope refuses a call in
+  it; the copy's `oom` beside it is allowed. Declare a result that may be
   `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
@@ -7130,9 +7190,9 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
 - **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
   is a `const` local or a parameter named alone and no later argument may
   resize an array. Such a call carries no check and is not a panic site, so
-  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  `read(fd, buf, toU64(buf.length))` compiles in the no-panic scope. A field
   path, an alias of the buffer, another array's length and a literal are
-  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  checked (`tests/cases/ffi_buffer_count_proved`). The scope refuses
   any other count and names the one it accepts: `` pass `toU64(buf.length)`
   of the buffer itself, which needs no check ``.
 - **C borrows the bytes for the call, and writes through a `u8[]`.** As with
@@ -7236,9 +7296,10 @@ declare function compress(
   `CountedBy` on a parameter, so a program's own type of that name is not
   reachable there: on a `declare function` the annotation is read as this
   form, and elsewhere it is refused as above.
-- **`runtime/nish.d.ts` does not declare `CountedBy` yet,** and `nish
-  c-import` does not write it: a module that uses it under `tsc` declares the
-  alias itself.
+- **`runtime/nish.d.ts` does not declare `CountedBy` yet:** a module that
+  uses it under `tsc` declares the alias itself. `nish c-import` writes it on
+  a buffer whose override names a count that is not a `u64` straight after
+  it.
 
 #### A handle class: a class that owns a `CPtr`
 
@@ -7587,7 +7648,7 @@ return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
 what it adds is a name, so one C pointer type is never passed where another is
 wanted** (`tests/cases/ffi_opaque_handle`,
 [cookbook](IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
-`docs/roadmap/wp66-c-headers.md` S3):
+`docs/wp66-c-headers.md` S3):
 
 ```ts
 declare class Db {}
@@ -7644,7 +7705,7 @@ ffi.null:
 - **A `Name` result is checked for `NULL`.** A `declare function` that returns
   `Name` promises a pointer, so a `NULL` from C stops the program with
   `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
-  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  on stderr and exit status 1, the `ffi-null` panic the no-panic scope refuses.
   A `Name | null` result is narrowed with `!== null` before it goes back to C:
   passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
   Db, got Db | null `` (`ffi_opaque_nullable`).
@@ -7722,7 +7783,7 @@ ffi.copy:
   `reject_unsafe_read_struct_null`), but a `declare function` declared to
   answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
   `icmp eq` and the branch to `ffi.null` above.
-  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+  No proof removes the test, so the no-panic scope refuses a call in it.
 - **The rest of the pointer is not checked**: not that it is live, not the
   size it covers. The layout must be C's struct or a prefix of it. That is why
   it is in [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping):
@@ -7778,7 +7839,9 @@ or a private one whose name is not reserved to C:
 rename the defined function `` (`tests/link/ffi_package_declare_root_clash`).
 A private function named like a C library function is emitted as `abs$`, and a
 generic one's instantiations as `labs$i32`, so neither takes the C symbol and
-both are accepted (`tests/link/ffi_package_declare_apart`). The two refusals
+both are accepted (`tests/link/ffi_package_declare_apart`). A private function
+qualified by its module because another module defines its name (WP57 S1,
+`helper$.add`) holds a `$` already, so it is never one of these. The two refusals
 are refused rather than linked because the whole-program analysis keeps one
 set of facts per symbol, and the two would share it.
 
@@ -8710,7 +8773,8 @@ an integer division is neither `willreturn` nor `readnone`, exactly like one
 containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
 locals, fields, and elements. **A divisor the checker proves is left
 unchecked**, as a proven index is: one that is neither 0 nor -1 — a constant
-(`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor
+(`a / 2`, `a % -3`, a folded module constant, a `const` bound to a literal or
+a fitting conversion of one), a ranged or unsigned divisor
 whose declared range leaves both out, a local behind `d > 0` or behind
 `d !== 0 && d !== -1` — or one that is not 0 against a dividend known to be
 non-negative, which cannot be the minimum. Such a division is the bare
@@ -8774,7 +8838,7 @@ divide with overflow` is simply unreachable on an unsigned type.
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
   under `f64`, a negative `i32` or `i64` (a ranged integer is read as an
   `i32`, so it is checked as one), or a NaN. A narrower unsigned length and a
-  literal up to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
+  literal or named integer `const` from 0 to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
   `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1 and CG-2).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
@@ -9871,16 +9935,17 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
   rather than the source (`tests/self/goldens/checked/`, one file per module).
-- **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
-  or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
+- **The import is the opt-in the no-panic scope takes.** In the scope — every
+  module of the package by default, the `"nish".noPanic` list under
+  `--allow-panics` — `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
   `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
   its pointer for `NULL`, an `ffi-null` site no proof removes
   (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
-  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
-  refuses a call to either in its scope. The
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so the scope
+  refuses a call to either. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -10255,7 +10320,7 @@ multiplies where its hardware has one (WP41,
 - **`u64` operands only**, because the product is defined on the unsigned
   64-bit value: anything else, a `u32`, an `i64`, a `number` or a ranged
   integer, is `` `mulHigh` takes u64 operands (convert with toU64), got u32 ``
-  (NL2819, `tests/link/mul_high_reject_operand`). A bare numeric literal is
+  (NL2822, `tests/link/mul_high_reject_operand`). A bare numeric literal is
   read as a `u64`, so `mulHigh(x, 3)` works. The call takes exactly two
   arguments, and `mulHighIsNative` none.
 - **The lowering on a 64-bit target is one multiply**: `zext` both operands to
@@ -10801,18 +10866,53 @@ class Cell implements Compact {
 - **A generic field instantiated as exactly a compact class is narrowed.**
   `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
   interface view of the field and its implementer agree on the layout.
-- **A compact class is refused where C, Node or the runtime would read its
-  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
-  `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`); as a
+- **A C host reaches a compact class only through a handle.** A
+  `--emit-header` build keeps every class that holds a link opaque
+  (`typedef struct Cell Cell;`): the compact class, a class with a field of
+  it, and an instantiation such as `Box<Cell>`. An export takes and returns
+  one as a full `struct Cell *`. The C host links the range runtime
+  (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
+  default runtime a program fails to link as soon as one of its modules
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
+  shared library another process loads is not supported.
+- **A compact class is refused where Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-napi` or
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and each
+  constructor and method of an exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
   class, whose instantiations keep full-pointer links (NL2798,
   `compact_reject_generic`).
 
-`Wide` is accepted and changes nothing yet; it is reserved for a class to
-refuse a compact layout the compiler would pick on its own.
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2819, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
 
 Reference: [`nish:compact`](reference/nish-compact.md).
 
@@ -10939,7 +11039,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   panic and never a double free. A child's handle is dead once its parent is
   freed (`tests/link/region_child_stale`), and `child` with no region entered
   stops the program. Each call
-  is a `region` site under [`--deny-panics`](#panic-sites)
+  is a `region` site the [no-panic scope](#the-no-panic-scope) refuses
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
 - A program run under Node as it is written (`runtime/nish.mjs`) gets a
@@ -13208,7 +13308,7 @@ default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
 message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
 `slice` [panic site](#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
-proof at the call removes, and `--deny-panics` refuses it
+proof at the call removes, and the no-panic scope refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,
@@ -14248,7 +14348,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program
@@ -15445,7 +15546,8 @@ by the caller.
 ### The CPU level
 
 - **`--cpu x86-64-v3`** links the program for one CPU level above the
-  baseline: the module and the runtime are both compiled, and linked, with
+  baseline: the module, the runtime and, when the program calls it, SQLite
+  (each `runtime/sqlite/*.c` unit) are all compiled, and linked, with
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
@@ -15469,6 +15571,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+  `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
+  check refuses: clang keeps a loop counter or overflow flag in a stack slot
+  there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ### Profile-guided builds
 
@@ -16193,7 +16305,8 @@ by the caller.
   locals with types, callees) (`tests/cases/dump_checked`).
 - **`--emit-panics <file.json>`** writes every panic site of the program,
   function by function, beside the IR, and changes no byte of it; see
-  [Panic sites](#panic-sites) below.
+  [Panic sites](#panic-sites) below. A build the no-panic scope refuses
+  writes no file: pass `--allow-panics` to list the sites it refused.
 - **`--deny-retention`** refuses a program whose own code keeps arena memory
   that nothing can reach, for a long-running program that cannot afford it; see
   [Retention as an error](#retention-as-an-error) below.
@@ -16320,14 +16433,27 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](#element-access): a dominating guard, a loop bounded by the length,
-  or every call site proving the argument (`tests/cases/panics_index`);
+  or every call site proving the argument (`tests/cases/panics_index`). A
+  down-counting loop keeps its variable's upper bound: in
+  `while (end > 0 && t.charCodeAt(end - 1) === 32) end--`, with `end` starting
+  at `t.length`, `end - 1` stays below the length, but only while nothing else
+  writes `end` and nothing reassigns `t` (`tests/cases/deny_panics_trim_end`,
+  `reject_deny_panics_downcount_write`, `reject_deny_panics_downcount_reassign`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a program held
+  to no panic may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 
@@ -16351,10 +16477,19 @@ when signed
 
 - *What proves it away:* a divisor that is not 0, and not -1 unless the
   dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded
-  module constant), a ranged or unsigned divisor whose declared range leaves
+  module constant, or a `const` binding at module or function level whose
+  initializer is an integer literal, a folded constant, or a conversion such
+  as `toU64(0)` of a literal that fits — never a `let`, a field, a call, or a
+  conversion that wraps; a named one is read as its value only from 0 to
+  2^31 − 2, below the 2^31 − 1 an array length takes), a ranged or unsigned
+  divisor whose declared range leaves
   those values out, or a guard on a local divisor —
   `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned
-  one. A float division is not a site (`tests/cases/panics_divide`)
+  one, or the other arm of an equality test against a named zero,
+  `b === zero ? a : a % b`. A float division is not a site
+  (`tests/cases/panics_divide`, `deny_panics_const_names`;
+  `reject_deny_panics_const_let`, `reject_deny_panics_const_call` and
+  `reject_deny_panics_const_overflowing_conversion` stay refused)
 
 **`overflow`**: a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or
 `op=` whose result does not fit: `attempt to add with overflow` and its
@@ -16362,7 +16497,13 @@ siblings
 
 - *What proves it away:* the overflow proof of [Semantics
   decisions](#semantics-decisions): an operation the bounds walk proves fits
-  is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other
+  is `nsw` with no check (`tests/cases/panics_overflow_proven`). The proof
+  reads `x & C` as `[0, C]`, `x >>> k` as `[0, 2^(bits - k) - 1]` (`C` and
+  `k` may be named constants, read from 0 to 2^31 - 2), `toI32` of
+  a `u32` whose range fits as that range, and the builtins with a documented
+  range: `s.charCodeAt(i)` as `[0, 255]` (it answers a byte) and
+  `Math.clz32(x)` as `[0, 32]` (`tests/cases/deny_panics_mask`,
+  `deny_panics_i32_mask_const`, `deny_panics_charcode`); every other
   one is checked (`tests/cases/panics_overflow`). A `nish:unsafe`
   `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not
   a site
@@ -16380,8 +16521,11 @@ entry
 header or a negative byte count (an `i64`, a float, an `i32` or a ranged
 integer, a `u32` under `--number-mode i32`)
 
-- *What proves it away:* a narrower unsigned length or a literal up to 2^31 -
-  1, which is not checked and not a site (`tests/cases/panics_array_length`)
+- *What proves it away:* a narrower unsigned length, or a literal or named
+  integer constant (as for `divide`) from 0 to 2^31 - 1 inclusive, one more
+  than a named divisor or `&`/`>>>` operand is read up to, which is not checked
+  and not a site (`tests/cases/panics_array_length`, `deny_panics_const_names`;
+  a negative constant stays refused, `reject_deny_panics_const_negative_length`)
 
 **`panic`**: `panic(message)`
 
@@ -16509,16 +16653,18 @@ each is an `ffi-null` site above)
 
 ### The no-panic scope
 
-A module can be **required** to have no panic site left. `--deny-panics` puts
-every module of the program's own package in the scope; the root package's
-`package.json` — the one nearest above the entry file — puts the modules it
-lists there, by their path relative to that file:
+**Every module of the program's own package is required to have no panic
+site left, by default.** `--allow-panics` relaxes that: under it, the scope is
+only the modules the root package's `package.json` — the one nearest above the
+entry file — lists, by their path relative to that file:
 
 ```json
 { "nish": { "noPanic": ["src/parser.ts", "src/lexer.ts"] } }
 ```
 
-Both together put the union in scope; with neither, nothing changes. In a
+A listed module stays in the scope under `--allow-panics`; with the flag and
+no list, nothing is in it. `--deny-panics` spells the default out, and of the
+two flags the last one on the line wins. In a
 module of the scope, every site of a kind above that is not proven is an
 error, NL2457, which names the kind and, where a proof the checker makes would
 remove the check, the guard that gives it — the same sentence the performance
@@ -16534,9 +16680,12 @@ performance warning about the same check is not printed beside the error.
   panic names the callee and the site it reaches (`reject_deny_panics_call`,
   `tests/link/no_panic_transitive`). A call into a function that is itself in
   the scope is not refused again: its own sites are.
-- **A module the list does not name keeps its checks**: the same unproven index
-  is refused in a listed module and compiles in an unlisted one
-  (`tests/link/no_panic_module`, `tests/link/no_panic_unlisted`).
+- **Under `--allow-panics`, a module the list does not name keeps its
+  checks**: the same unproven index is refused in a listed module and compiles
+  in an unlisted one (`tests/link/no_panic_module`,
+  `tests/link/no_panic_unlisted`). With no flag the list changes nothing,
+  since every module of the package is in the scope already
+  (`tests/link/no_panic_empty_list`).
 - **An entry that names no module of the program is an error** (NL3031),
   reported in `package.json` where the entry is written: a typo would
   otherwise leave the module it meant outside the scope without a word
@@ -16585,9 +16734,14 @@ performance warning about the same check is not printed beside the error.
   So a module in the scope cannot *panic* except by running out of memory,
   and that is the whole claim. Nor can it reach undefined behaviour through a
   check the compiler left out, except where a `nish:unsafe` import says so.
-- `--deny-panics` changes no byte of the IR: a program it accepts is the one the
-  build compiles without it. With `--emit-ast`, which stops before the checker,
-  it is a usage error (exit 2).
+- The scope changes no byte of the IR: a program the default accepts is the
+  one `--allow-panics` compiles. `--emit-ast`, which stops before the checker,
+  holds nothing to the scope, and an explicit `--deny-panics` beside it is a
+  usage error (exit 2).
+- **The standard library is not yet panic-free**, so a module in the scope
+  cannot yet call what reaches a panic site in `std/` — `Map`, `Set`,
+  `split` and the `JSON` reads among them — without NL2458. Such a program
+  builds with `--allow-panics` until `std/` is proven.
 
 ### The compatibility dialect
 

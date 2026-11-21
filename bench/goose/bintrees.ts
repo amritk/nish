@@ -7,6 +7,13 @@
 // with one long-lived tree kept across the run. A node is a class with two
 // nullable links; each tree is built inside `treeCheck`, whose automatic
 // arena scope gives the whole tree back when it returns.
+//
+// The compact rule leaves `TNode` wide: 16 bytes would become 8, and the rule
+// counts a saving only on a class of at least 24 bytes. That floor comes from
+// this program: compacted under an earlier rule, `TNode` ran 18.8% slower at
+// depth 19, since each tree is freed before the next and its nodes are
+// already four to a cache line (docs/wp48-ref32-classes.md, section 5.5).
+// So do not add `implements Compact` here.
 
 class TNode {
   l: TNode | null

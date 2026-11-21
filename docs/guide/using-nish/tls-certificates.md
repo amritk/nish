@@ -19,7 +19,14 @@ the time to check validity at, in milliseconds since the epoch. It answers a
 `PkiResult`: `code` is `PKI_OK` or the reason it was refused, and `path` is
 the chain it accepted, the server's certificate first and the root last.
 
-<!-- nish:ok -->
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/crypto/pki` and
+the collections code it uses keep panic sites no proof removes yet, and
+they will build under the default once the standard library is made
+panic-free.
+
+<!-- allow-panics: calls `std/collections.ts`, `std/crypto/pki.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
 import { PKI_OK, PkiResult, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki";
@@ -77,7 +84,8 @@ too. It is the hash HTTP public key pinning used; for a PEM certificate,
 until you call it, and a hash that is not 32 bytes is not added: the call
 answers `false`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/collections.ts`, `std/crypto/pki.ts`, `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { PKI_ERR_DISTRUSTED, PkiTrustStore, pkiDistrustSpki, pkiTrustStore } from "nish/crypto/pki";
 import { sha256 } from "nish/crypto/sha256";

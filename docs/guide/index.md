@@ -56,8 +56,10 @@ compile error with a stable code and a message saying what to write instead.
 
 <scalar-card title="Checked by default" icon="phosphor/regular/shield-check">
 
-Integers have fixed widths, and arithmetic that overflows stops the program
-with a message rather than wrapping round.
+Integers have fixed widths. A build is refused where the compiler cannot
+prove an index in range or a sum in its width; `--allow-panics` checks those
+while the program runs, and stops it with a message rather than wrapping
+round.
 
 </scalar-card>
 
@@ -72,7 +74,8 @@ browser, and a native build can be called from Node, WebAssembly or C.
 
 ## A first look
 
-<!-- nish:ok -->
+<!-- allow-panics: the sum is not bounded, which the text below explains -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const sumOfSquares = (limit: i32): i32 => {
   let total = 0;
@@ -89,9 +92,13 @@ export const main = (): i32 => {
 ```
 
 `i32` is a 32-bit integer, `export const main` is where the program starts and
-its return value is the exit status, and `total + i * i` is checked: if it
-overflowed, the program would stop with a message rather than wrap round.
-Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385`.
+its return value is the exit status. Nothing bounds `total + i * i`, so the
+compiler cannot prove it fits an `i32`, and by default it refuses a program
+that could panic; the error names the guard that would prove it, such as a
+bound on `limit`. `--allow-panics` builds it with the addition checked
+instead: if it overflowed, the program would stop with a message rather than
+wrap round. Save it as `squares.ts` and
+`nish run --allow-panics squares.ts` prints `1² + … + 10² = 385`.
 
 ## Explore the docs
 

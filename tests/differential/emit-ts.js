@@ -42,6 +42,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "../allow-panics.js"
 import { pool } from "../pool.js"
 import { buildDir, discoverPrograms } from "./lib.js"
 
@@ -348,14 +349,17 @@ export const compare = async (prog, compiler, workRoot = WORK) => {
   fs.rmSync(work, { recursive: true, force: true })
   fs.mkdirSync(work, { recursive: true })
   const exe = path.join(work, "app")
-  const built = await run(compiler, [
-    prog.entry,
-    "-o",
-    `${path.join(work, "ir")}${path.sep}`,
-    "--link",
-    exe,
-    ...prog.args,
-  ])
+  const built = await run(
+    compiler,
+    withAllowPanics(compiler, [
+      prog.entry,
+      "-o",
+      `${path.join(work, "ir")}${path.sep}`,
+      "--link",
+      exe,
+      ...prog.args,
+    ])
+  )
   const out = path.join(work, "ts")
   // `--json`, so a refusal names its code, which is the row it is filed under.
   // A dump flag a case passes for its own test is dropped: it prints the
@@ -363,7 +367,10 @@ export const compare = async (prog, compiler, workRoot = WORK) => {
   // refuses it as a usage error. So is `--sandbox`, which confines only a
   // native process.
   const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg) && !NATIVE_ONLY.includes(arg))
-  const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
+  const emitted = await run(
+    compiler,
+    withAllowPanics(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
+  )
   const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL401[0-5])"/)
   // The native build is read first, so a program that is both refused and
   // broken natively is an error rather than a listed refusal. The exception is

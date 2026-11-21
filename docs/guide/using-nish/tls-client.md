@@ -24,7 +24,16 @@ so resolve a name first with [`nish/net/dns`](networking.md#names-nishnetdns).
 `serverName` is what the server is checked against and is sent as SNI unless
 it is an IP literal; it is always yours, never taken from the address.
 
-<!-- nish:ok -->
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): nothing bounds the
+byte counts they add up, so the compiler cannot prove the sums fit, and the
+later ones call TLS code in the standard library that keeps panic sites no
+proof removes yet. Bounding each count, for example by stopping once it
+passes a limit you test, builds your own code under the default; the library
+calls will build under it once the standard library is made panic-free.
+
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { netAddress } from "nish:net";
 import { tlsConnect } from "nish/net/tls-tcp";
@@ -126,7 +135,8 @@ randomness: 32 random bytes for the ClientHello and a 32-byte private key per
 key-exchange group. Use a fresh key from a secure random source for every
 connection; the fixed bytes below are only for the example:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/crypto/x25519.ts`, `std/net/tls/codec.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { TLS_LEVEL_INITIAL } from "nish/net/tls";
 import { TLS_CLIENT_STATE_WAIT_SERVER_HELLO, TlsClient, TlsClientConfig } from "nish/net/tls/client";
@@ -192,7 +202,8 @@ that decision the way `TlsTcpClient` does: the signature under the leaf's
 key, then the chain to a root in `trust` for the server's name at `nowMs`,
 and the verdict sent. Use it unless you have your own check.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/tls/record.ts`, `std/net/tls/verify.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";
 import { TlsClientTrust, tlsClientAuthenticate } from "nish/net/tls/verify";
@@ -214,7 +225,8 @@ to a root you trust, that the leaf names the server, and that
 chain, leaf first. Then call `authenticate(true)`, or `reject(alert)` to
 fail the connection with that alert sent:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/tls/client.ts`, `std/net/tls/record.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";
 

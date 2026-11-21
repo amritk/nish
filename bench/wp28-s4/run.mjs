@@ -27,7 +27,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { sideOf, times3 } from "../par-reading.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
@@ -84,8 +84,7 @@ const build = (name) => {
   const exe = path.join(outDir, name)
   const res = spawnSync(
     nishc.cmd,
-    [
-      ...nishc.prefix,
+    compileArgv(nishc, [
       rel(path.join(sourceDir, `${name}.ts`)),
       "-o",
       `${rel(outDir)}/ir-${name}/`,
@@ -93,7 +92,7 @@ const build = (name) => {
       rel(exe),
       "--profile",
       "speed",
-    ],
+    ]),
     { cwd: root, encoding: "utf8" }
   )
   if (res.status !== 0) {

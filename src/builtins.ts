@@ -18,7 +18,7 @@ import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
-import { checkIndexArgument } from "./members"
+import { checkIndexArgument, CLZ32_TOP } from "./members"
 import {
   isFileStreamExport,
   isNetBufferLetter,
@@ -797,7 +797,7 @@ const checkMath = (
   // the index of a bit, then needs no overflow check, and a ranged value reads
   // as an `i32` everywhere else.
   if (member === "clz32") {
-    const answer = ctx.table.rangedOf(0, 32)
+    const answer = ctx.table.rangedOf(0, CLZ32_TOP)
     if (!checkBuiltinArity(ctx, call, name, args, 1)) {
       return answer
     }

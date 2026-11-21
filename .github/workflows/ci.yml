@@ -83,6 +83,10 @@ on:
   pull_request:
   merge_group:
   workflow_call:
+  # release-pr.yml starts the Release PR's run this way (`release/next`): its
+  # GITHUB_TOKEN push raises `pull_request` runs that wait for approval, and a
+  # dispatch does not. A dispatched run selects every lane (ci-scope.mjs).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -150,16 +154,19 @@ env:
 # - Re-runs (a later attempt), so recovering an older run never cancels the
 #   tip's run.
 # Release CI proper is untouched: release.yml calls this workflow at the tag,
-# where `github.ref` is `refs/tags/v*`, and the Release PR's own runs are
-# `pull_request` runs like any other. A merge-queue run has a ref of its own
-# per queued entry, so it shares a group with nothing and the queue, not this
-# setting, decides when it is superseded. interop.yml uses the same rule.
+# where `github.ref` is `refs/tags/v*`. The Release PR's runs that
+# release-pr.yml dispatches at `release/next` (its `pull_request` runs wait for
+# approval) share the group `refs/heads/release/next` and cancel like a pull
+# request's: the train force-pushes that branch on every merge to main, so an
+# older run tests a release commit nobody can merge any more. A merge-queue run
+# has a ref of its own per queued entry, so it shares a group with nothing and
+# the queue, not this setting, decides when it is superseded. interop.yml uses the same rule.
 # `run_attempt` is a string in the `github` context, hence `'1'`.
 concurrency:
   group: >-
     ci-${{ github.workflow }}-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
   cancel-in-progress: >-
-    ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
+    ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
 jobs:
   # Which side jobs this run needs (docs/wp10-ci.md, "Scoped lanes"). One
@@ -477,14 +484,36 @@ jobs:
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
       # scripts/build.sh and tests/run.js look in exists.
+      #
+      # The log is kept for the steps below that require a line of it, and for
+      # the step summary after this step (#1836). The step's status is npm's;
+      # tee's is written beside the log rather than folded into it. On these
+      # runners tee is uutils', which by default stops writing to a broken
+      # console pipe without a word and exits 0: had the pipe broken, the run
+      # stayed green with no sign of it. `--output-error=warn` keeps it
+      # writing the file and makes that case `tee=1` in the summary.
       - name: Test
         env:
           WASI_SYSROOT: /usr
           SHARD: ${{ matrix.shard }}
-        # The log is kept for the steps below that require a line of it.
         run: |
-          set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee "$RUNNER_TEMP/test.log"
+          set +e
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee --output-error=warn "$RUNNER_TEMP/test.log"
+          status=("${PIPESTATUS[@]}")
+          echo "npm=${status[0]} tee=${status[1]}" > "$RUNNER_TEMP/test.status"
+          exit "${status[0]}"
+
+      # The shard's summary line, every FAIL line with its detail and every
+      # SKIP line, copied into the job's step summary from the log the Test
+      # step kept. The stored console log of shard 8 has lost its last minutes
+      # in green runs (#1836); the step summary is a separate upload, so these
+      # survive it. It reports and never fails, and runs after a failed Test
+      # step too, which is when the FAIL lines are wanted.
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node scripts/ci-test-summary.mjs "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/test.status"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -738,7 +767,7 @@ jobs:
         env:
           RUNNER_LABEL: ubuntu-latest
         run: |
-          build/nish examples/add.ts -o build/add.ll
+          build/nish examples/add.ts --allow-panics -o build/add.ll
           bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
           {
             echo "### Binary size ($RUNNER_LABEL, LLVM 18)"
@@ -1014,7 +1043,9 @@ jobs:
         if: needs.scope.outputs.bootstrap != 'false'
         run: |
           set -o pipefail
-          build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
@@ -1318,10 +1349,10 @@ jobs:
   #
   # The full pass runs per release, not per push: on the Release PR
   # (`release/next`) and in the run release.yml makes of this workflow at the
-  # `v*` tag, whose `release` job needs it. The Release PR's run shows a broken
-  # runner before the tag is cut only once someone approves it: release-pr.yml
-  # pushes with GITHUB_TOKEN unless a RELEASE_PR_TOKEN secret is set, and those
-  # runs wait as `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
+  # `v*` tag, whose `release` job needs it. On the Release PR that is the run
+  # release-pr.yml dispatches at `release/next` (`github.ref`), since its
+  # `pull_request` runs wait for approval (`github.head_ref`, once approved).
+  # Every assertion it makes about a compiler is one the `test`
   # job makes too, so per push it was about 36 runner-minutes spent proving the
   # same corpus twice (run 44224030613). What it alone catches -- a regression in
   # the runner itself, or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`
@@ -1331,7 +1362,7 @@ jobs:
   # that expression and that release.yml still calls this workflow.
   runner:
     name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
-    if: github.ref_type == 'tag' || github.head_ref == 'release/next'
+    if: github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The runner walks the corpus one program at a time; `--shard` deals the
@@ -1418,7 +1449,9 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
           jobs="$(nproc)"
           if [ "$jobs" -gt 8 ]; then jobs=8; fi
           node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$jobs"
@@ -2196,6 +2229,10 @@ jobs:
       - lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      # The commit status below, on a dispatched run only.
+      statuses: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -2203,8 +2240,33 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Every selected job succeeded
+        id: gate
         env:
           NEEDS: ${{ toJSON(needs) }}
           EXPECT_SKIP: >-
-            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
+            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
         run: node scripts/ci-scope.mjs --gate
+
+      # A pull request's required checks count only check runs from push,
+      # pull_request and a few other events, never from workflow_dispatch, so
+      # the gate's own check on a dispatched run (the Release PR's, from
+      # release-pr.yml) leaves the PR "Waiting for status to be reported". A
+      # commit status counts whatever made it, so a dispatched run also reports
+      # the gate's outcome as a `ci-gate` status on the commit it tested.
+      - name: Report the gate as a commit status
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.gate.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$OUTCOME" = "success" ]; then
+            state=success
+            description="Every selected job succeeded"
+          else
+            state=failure
+            description="A selected job failed or was cancelled"
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" -f context=ci-gate \
+            -f description="$description" -f target_url="$RUN_URL" > /dev/null

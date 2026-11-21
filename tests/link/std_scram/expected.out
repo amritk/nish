@@ -1,0 +1,5 @@
+PASS  RFC 7677 §3: SaltedPassword for 'pencil', i=4096
+PASS  RFC 7677 §3: the p= and v= of the exchange
+PASS  0 iterations answers null
+PASS  -1 iterations answers null
+scram: 4 passed, 0 failed, 0 skipped

@@ -7,12 +7,16 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /**
  * Runs the checks, each under `tests/run.js`'s filter: `only`, when set, is
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, buildDir, wasiSysroot }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   // WP53 H1.2 on wasm. A `--target wasm32-wasi` build of ffi_handle_file
   // assembles, and llc gives its `counted_fclose` the handle's pointer as an
   // i32; a freestanding `--target wasm32` build links no C and refuses its
@@ -28,7 +32,7 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.mkdirSync(wasmDir, { recursive: true })
     const handleCase = path.join(root, "tests", "cases", "ffi_handle_file.ts")
     const w32Dir = path.join(wasmDir, "wasm32")
-    const w32 = spawnSync(nish, [handleCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
+    const w32 = nishSync([handleCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -51,7 +55,7 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
         /call\s+counted_fclose\n/.test(asm),
       shown(w32Llc)
     )
-    const free = spawnSync(nish, [handleCase, "--target", "wasm32", "-o", path.join(wasmDir, "refused.ll")], {
+    const free = nishSync([handleCase, "--target", "wasm32", "-o", path.join(wasmDir, "refused.ll")], {
       cwd: root,
       encoding: "utf8",
     })
@@ -67,7 +71,7 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
 
     if (wasiSysroot && has("wasm-ld")) {
       const wasiDir = path.join(wasmDir, "wasi")
-      const hostBuilt = spawnSync(nish, [handleCase, "-o", `${wasiDir}${path.sep}`], {
+      const hostBuilt = nishSync([handleCase, "-o", `${wasiDir}${path.sep}`], {
         cwd: root,
         encoding: "utf8",
       })

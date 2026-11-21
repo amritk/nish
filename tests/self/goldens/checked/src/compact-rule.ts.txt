@@ -15,6 +15,8 @@ import narrowedSize from "./structs" -> function @narrowedSize
 import TypeTable from "./types" -> struct TypeTable
 import buildModeOf from "./visibility" -> function @buildModeOf
 import isWasmBuild from "./visibility" -> function @isWasmBuild
+const NO_TARGET: i32 = -1
+const PAYING_SIZE: i32 = 24
 struct LayoutModule (class) size=16 align=8 exported
   field program: CheckedProgram index=0 offset=0
   field std: boolean index=1 offset=8
@@ -43,24 +45,25 @@ struct CallGraph (class) size=40 align=8
   field stack: i32[] index=3 offset=24
   field counter: i32 index=4 offset=32
   constructor -> @CallGraph.constructor
-struct LayoutReport (class) size=16 align=8 exported
+struct LayoutReport (class) size=24 align=8 exported
   field text: string index=0 offset=0
   field classes: i32 index=1 offset=8
   field picked: i32 index=2 offset=12
+  field compact: StructInfo[] index=3 offset=16
   constructor -> @LayoutReport.constructor
 function LayoutModule.constructor(this: LayoutModule, program: CheckedProgram, std: boolean): void -> @LayoutModule.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: program std
   pointer this: size=16 writesThrough=true captured=false
-  pointer program: size=920 writesThrough=true captured=true
+  pointer program: size=928 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CallNode.constructor(this: CallNode, key: string, program: CheckedProgram, owner: StructInfo | null, body: Node): void -> @CallNode.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: body key owner program
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
-  pointer program: size=920 writesThrough=true captured=true
-  pointer owner: size=176 writesThrough=true captured=true
+  pointer program: size=928 writesThrough=true captured=true
+  pointer owner: size=184 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:21 new StringMap -> @StringMap.constructor
@@ -70,7 +73,7 @@ function MadeSite.constructor(this: MadeSite, key: string, fn: i32, inLoop: bool
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function CallGraph.constructor(this: CallGraph): void -> @CallGraph.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -98,14 +101,14 @@ function functionKey(sig: FunctionSig): string -> @functionKey
 function classKey(info: StructInfo): string -> @classKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   local +1:9 name: string (const)
 function memberKey(owner: StructInfo, member: string): string -> @memberKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: classKey nish_str_concat
-  pointer owner: size=176 writesThrough=false captured=false passedTo=classKey#0
+  pointer owner: size=184 writesThrough=false captured=false passedTo=classKey#0
   stackSites=0 stackLocals=0
   callee +0:69 classKey -> @classKey
 function functionBodyOf(decl: Node): Node | null -> @functionBodyOf
@@ -164,7 +167,7 @@ function calleeIndex(graph: CallGraph, self: CallNode, callee: Node): i32 -> @ca
 function madeClass(program: CheckedProgram, node: Node): string -> @madeClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct CheckedProgram.structTemplate classKey nish_panic_index nish_str_concat
-  pointer program: size=920 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
+  pointer program: size=928 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -222,7 +225,7 @@ function buildGraph(modules: LayoutModule[]): CallGraph -> @buildGraph
   callee +10:7 connect -> @connect$
 function reportable(info: StructInfo): boolean -> @reportable
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function collectInstances(modules: LayoutModule[], into: StructInfo[], homes: i32[]): void -> @collectInstances
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -244,8 +247,8 @@ function collectInstances(modules: LayoutModule[], into: StructInfo[], homes: i3
 function collectClasses(m: i32, program: CheckedProgram, instances: StructInfo[], homes: i32[], into: StructInfo[]): void -> @collectClasses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_array_grow nish_panic_index nish_panic_overflow reportable
-  pointer program: size=920 writesThrough=false captured=false
+  calls: nish_array_grow nish_panic_overflow reportable
+  pointer program: size=928 writesThrough=false captured=false
   pointer instances: size=0 writesThrough=false captured=false
   pointer homes: size=0 writesThrough=false captured=false
   pointer into: size=0 writesThrough=true captured=false
@@ -261,13 +264,13 @@ function displayName(table: TypeTable, info: StructInfo): string -> @displayName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.typeName#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:40 TypeTable.typeName -> @TypeTable.typeName
 function notNative(opts: Options, programs: CheckedProgram[]): string -> @notNative
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: buildModeOf isWasmBuild nish_arena_mark nish_arena_release
-  pointer opts: size=248 writesThrough=false captured=false passedTo=isWasmBuild#0 buildModeOf#0
+  pointer opts: size=256 writesThrough=false captured=false passedTo=isWasmBuild#0 buildModeOf#0
   pointer programs: size=0 writesThrough=false captured=false passedTo=buildModeOf#1
   stackSites=0 stackLocals=0
   callee +0:7 isWasmBuild -> @isWasmBuild
@@ -277,7 +280,7 @@ function linksTo(table: TypeTable, info: StructInfo, target: i32): boolean -> @l
   escaping: target
   calls: isLinkTo
   pointer table: size=168 writesThrough=false captured=false passedTo=isLinkTo#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   callee +1:9 isLinkTo -> @isLinkTo
@@ -285,77 +288,95 @@ function forbidden(table: TypeTable, info: StructInfo): string -> @forbidden
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsSecret nish_str_concat
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.holdsSecret#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   callee +1:9 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-function LayoutReport.constructor(this: LayoutReport, text: string, classes: i32, picked: i32): void -> @LayoutReport.constructor [exported constructor]
+function LayoutReport.constructor(this: LayoutReport, text: string, classes: i32, picked: i32, compact: StructInfo[]): void -> @LayoutReport.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: classes picked text
-  pointer this: size=16 writesThrough=true captured=false
+  escaping: classes compact picked text
+  pointer this: size=24 writesThrough=true captured=false
+  pointer compact: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function explainLayout(opts: Options, table: TypeTable, modules: LayoutModule[]): LayoutReport -> @explainLayout [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: via buildGraph
-  calls: LayoutReport.constructor SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText buildGraph classKey collectClasses collectInstances displayName forbidden isWasmBuild linksTo narrowedSize nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 notNative
-  pointer opts: size=248 writesThrough=false captured=false passedTo=isWasmBuild#0 notNative#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=displayName#0 narrowedSize#0 linksTo#0 narrowedSize#0 forbidden#0
+function pays(size: i32, narrowed: i32): boolean -> @pays
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function madeInLoop(graph: CallGraph, key: string): boolean -> @madeInLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq
+  pointer graph: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 site: MadeSite (const)
+function explainLayout(opts: Options, table: TypeTable, modules: LayoutModule[], pointers: string): LayoutReport -> @explainLayout [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  sharedWrite: +0:9
+  escaping: pointers
+  calls: LayoutReport.constructor SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText buildGraph classKey collectClasses collectInstances displayName forbidden isWasmBuild linksTo madeInLoop narrowedSize nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 notNative pays
+  pointer opts: size=256 writesThrough=false captured=false passedTo=isWasmBuild#0 notNative#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=displayName#0 narrowedSize#0 narrowedSize#0 linksTo#0 narrowedSize#0 narrowedSize#0 forbidden#0
   pointer modules: size=0 writesThrough=false captured=false passedTo=collectInstances#0 buildGraph#0
   stackSites=8 stackLocals=8
-  local +0:9 wasm: boolean (const)
-  callee +0:16 isWasmBuild -> @isWasmBuild
-  local +4:9 instances: StructInfo[] (const)
-  local +5:9 homes: i32[] (const)
-  callee +6:3 collectInstances -> @collectInstances
-  local +7:9 all: StructInfo[] (const)
-  local +8:9 owners: i32[] (const)
-  local +9:9 programs: CheckedProgram[] (const)
-  local +10:7 m: i32 (let)
-  local +12:11 program: CheckedProgram (const)
-  callee +14:5 collectClasses -> @collectClasses
-  local +20:9 native: string (const)
-  callee +20:18 notNative -> @notNative
-  local +21:9 graph: CallGraph (const)
-  callee +21:17 buildGraph -> @buildGraph
-  local +24:9 names: string[] (const)
-  local +25:9 keys: string[] (const)
-  local +26:14 each: StructInfo (const)
-  callee +27:16 displayName -> @displayName
-  callee +28:15 classKey -> @classKey
-  local +30:9 lines: StringBuilder (const)
-  callee +30:17 new StringBuilder -> @StringBuilder.constructor
-  local +31:7 classes: i32 (let)
-  local +32:7 picked: i32 (let)
-  local +33:7 k: i32 (let)
-  local +35:11 info: StructInfo (const)
-  local +36:11 module: LayoutModule (const)
-  local +37:11 source: SourceFile (const)
-  local +38:11 shownName: string (const)
-  local +39:11 key: string (const)
-  local +43:13 after: i32 (const)
-  callee +43:21 narrowedSize -> @narrowedSize
-  local +44:11 linked: boolean (let)
-  local +45:11 saver: string (let)
-  local +46:11 saving: string (let)
-  local +47:11 h: i32 (let)
-  local +49:15 holder: StructInfo (const)
-  local +50:15 holderName: string (const)
-  callee +52:14 linksTo -> @linksTo
-  local +57:17 narrowed: i32 (const)
-  callee +57:28 narrowedSize -> @narrowedSize
-  local +64:11 made: boolean (let)
-  local +65:18 site: MadeSite (const)
-  local +70:13 forbids: string (const)
-  callee +70:23 forbidden -> @forbidden
-  local +71:11 verdict: string (let)
-  local +83:13 shown: i32 (const)
-  local +84:13 name: Node (const)
-  callee +85:7 StringBuilder.add -> @StringBuilder.add
-  callee +85:35 SourceFile.lineOf -> @SourceFile.lineOf
-  callee +85:64 SourceFile.columnOf -> @SourceFile.columnOf
-  callee +86:7 StringBuilder.add -> @StringBuilder.add
-  callee +93:9 StringBuilder.add -> @StringBuilder.add
-  callee +95:7 StringBuilder.add -> @StringBuilder.add
-  callee +98:3 StringBuilder.add -> @StringBuilder.add
-  callee +99:10 new LayoutReport -> @LayoutReport.constructor
-  callee +99:27 StringBuilder.toText -> @StringBuilder.toText
+  local -113:9 wasm: boolean (const)
+  callee -113:16 isWasmBuild -> @isWasmBuild
+  local -109:9 instances: StructInfo[] (const)
+  local -108:9 homes: i32[] (const)
+  callee -107:3 collectInstances -> @collectInstances
+  local -106:9 all: StructInfo[] (const)
+  local -105:9 owners: i32[] (const)
+  local -104:9 programs: CheckedProgram[] (const)
+  local -103:7 m: i32 (let)
+  local -101:11 program: CheckedProgram (const)
+  callee -99:5 collectClasses -> @collectClasses
+  local -93:9 refused: string (const)
+  callee -93:19 notNative -> @notNative
+  local -92:9 native: string (const)
+  local -91:9 graph: CallGraph (const)
+  callee -91:17 buildGraph -> @buildGraph
+  local -88:9 names: string[] (const)
+  local -87:9 keys: string[] (const)
+  local -86:14 each: StructInfo (const)
+  callee -85:16 displayName -> @displayName
+  callee -84:15 classKey -> @classKey
+  local -82:9 lines: StringBuilder (const)
+  callee -82:17 new StringBuilder -> @StringBuilder.constructor
+  local -81:7 classes: i32 (let)
+  local -80:7 picked: i32 (let)
+  local -79:9 compact: StructInfo[] (const)
+  local -78:7 k: i32 (let)
+  local -76:11 info: StructInfo (const)
+  local -75:11 module: LayoutModule (const)
+  local -74:11 source: SourceFile (const)
+  local -73:11 shownName: string (const)
+  local -72:11 key: string (const)
+  local -65:13 before: i32 (const)
+  callee -65:37 narrowedSize -> @narrowedSize
+  local -64:13 after: i32 (const)
+  callee -64:21 narrowedSize -> @narrowedSize
+  local -63:11 linked: boolean (let)
+  local -62:11 saves: boolean (let)
+  local -59:11 unpaid: string (let)
+  callee -57:13 pays -> @pays
+  local -48:11 h: i32 (let)
+  local -46:15 holder: StructInfo (const)
+  local -45:15 holderName: string (const)
+  callee -43:14 linksTo -> @linksTo
+  local -36:17 held: i32 (const)
+  callee -36:24 narrowedSize -> @narrowedSize
+  local -35:17 narrowed: i32 (const)
+  callee -35:28 narrowedSize -> @narrowedSize
+  local -29:13 made: boolean (const)
+  callee -29:20 madeInLoop -> @madeInLoop
+  local -28:13 forbids: string (const)
+  callee -28:23 forbidden -> @forbidden
+  local -27:11 verdict: string (let)
+  local -5:13 shown: i32 (const)
+  local -4:13 name: Node (const)
+  callee -3:7 StringBuilder.add -> @StringBuilder.add
+  callee -3:35 SourceFile.lineOf -> @SourceFile.lineOf
+  callee -3:64 SourceFile.columnOf -> @SourceFile.columnOf
+  callee -2:7 StringBuilder.add -> @StringBuilder.add
+  callee +5:7 StringBuilder.add -> @StringBuilder.add
+  callee +8:3 StringBuilder.add -> @StringBuilder.add
+  callee +9:10 new LayoutReport -> @LayoutReport.constructor
+  callee +9:27 StringBuilder.toText -> @StringBuilder.toText

@@ -1,3 +1,7 @@
+// Opt-out (`--allow-panics`): it indexes the `BODIES` and `SHOTS` records in
+// module storage, which the checker cannot yet prove in range (client.ts's
+// header has the follow-up).
+//
 // The simulation of examples/wasm-arena (docs/wp50-wasm-host.md §10, W9): a
 // fixed-step arena of bodies, a ship the input steers, and its shots. Every
 // pool is module storage sized from the caps below, so a tick allocates
@@ -56,6 +60,12 @@ export const SHOTS = new Array<Shot>(SHOT_CAP)
 /** The ship: x, y, heading, speed, cooldown, score, then the tick count. */
 export const SHIP = new Float64Array(7)
 
+// The functions below take the ship as `ship`, lent from `SHIP`: the checker
+// proves an index in range under a test of a parameter's length, not an index
+// into module storage, so each opens with that test or counts to the length.
+// `SHIP` is always 7 long, so those tests never return early. `BODIES` and `SHOTS` hold records,
+// which storage never lends, so they are indexed in place.
+
 /** The next value of a 32-bit LCG; unsigned arithmetic wraps. */
 const lcg = (s: u32): u32 => s * toU32(1664525) + toU32(1013904223)
 
@@ -90,13 +100,21 @@ export const simReset = (seed: u32): void => {
     SHOTS[i].vy = 0.0
     SHOTS[i].life = 0.0
   }
-  SHIP[0] = ARENA_W / 2.0
-  SHIP[1] = ARENA_H / 2.0
-  SHIP[2] = 0.0
-  SHIP[3] = 0.0
-  SHIP[4] = 0.0
-  SHIP[5] = 0.0
-  SHIP[6] = 0.0
+  park(SHIP)
+}
+
+/** Puts the ship in the middle, at rest, with no score and no ticks. */
+const park = (ship: Float64Array): void => {
+  if (ship.length < 7) {
+    return
+  }
+  ship[0] = ARENA_W / 2.0
+  ship[1] = ARENA_H / 2.0
+  ship[2] = 0.0
+  ship[3] = 0.0
+  ship[4] = 0.0
+  ship[5] = 0.0
+  ship[6] = 0.0
 }
 
 /** Keeps `v` off a wall: the position folded back inside, the velocity turned. */
@@ -143,37 +161,40 @@ const collide = (i: i32, j: i32): void => {
 }
 
 /** The ship turns, thrusts and fires as `input`'s bits say. */
-const steer = (input: i32): void => {
+const steer = (ship: Float64Array, input: i32): void => {
+  if (ship.length < 7) {
+    return
+  }
   if ((input & IN_LEFT) !== 0) {
-    SHIP[2] = SHIP[2] - 0.08
+    ship[2] = ship[2] - 0.08
   }
   if ((input & IN_RIGHT) !== 0) {
-    SHIP[2] = SHIP[2] + 0.08
+    ship[2] = ship[2] + 0.08
   }
   if ((input & IN_THRUST) !== 0) {
-    SHIP[3] = SHIP[3] + 6.0
+    ship[3] = ship[3] + 6.0
   }
   if ((input & IN_BRAKE) !== 0) {
-    SHIP[3] = SHIP[3] * 0.9
+    ship[3] = ship[3] * 0.9
   }
-  const c: f64 = Math.cos(SHIP[2])
-  const s: f64 = Math.sin(SHIP[2])
-  SHIP[0] = SHIP[0] + c * SHIP[3] * TICK_SECONDS
-  SHIP[1] = SHIP[1] + s * SHIP[3] * TICK_SECONDS
+  const c: f64 = Math.cos(ship[2])
+  const s: f64 = Math.sin(ship[2])
+  ship[0] = ship[0] + c * ship[3] * TICK_SECONDS
+  ship[1] = ship[1] + s * ship[3] * TICK_SECONDS
   // The arena wraps for the ship: `%` is fmodF64 on a page module and under the flag.
-  SHIP[0] = (SHIP[0] + ARENA_W) % ARENA_W
-  SHIP[1] = (SHIP[1] + ARENA_H) % ARENA_H
-  SHIP[3] = SHIP[3] * 0.99
-  SHIP[4] = SHIP[4] > 0.0 ? SHIP[4] - 1.0 : 0.0
-  if ((input & IN_FIRE) !== 0 && SHIP[4] === 0.0) {
+  ship[0] = (ship[0] + ARENA_W) % ARENA_W
+  ship[1] = (ship[1] + ARENA_H) % ARENA_H
+  ship[3] = ship[3] * 0.99
+  ship[4] = ship[4] > 0.0 ? ship[4] - 1.0 : 0.0
+  if ((input & IN_FIRE) !== 0 && ship[4] === 0.0) {
     for (let k = 0; k < SHOT_CAP; k++) {
       if (SHOTS[k].life === 0.0) {
-        SHOTS[k].x = SHIP[0]
-        SHOTS[k].y = SHIP[1]
+        SHOTS[k].x = ship[0]
+        SHOTS[k].y = ship[1]
         SHOTS[k].vx = c * 420.0
         SHOTS[k].vy = s * 420.0
         SHOTS[k].life = SHOT_LIFE
-        SHIP[4] = SHOT_GAP
+        ship[4] = SHOT_GAP
         return
       }
     }
@@ -181,7 +202,10 @@ const steer = (input: i32): void => {
 }
 
 /** A live shot moves, and pushes and heats the first body it is inside. */
-const fly = (k: i32): void => {
+const fly = (ship: Float64Array, k: i32): void => {
+  if (ship.length < 7) {
+    return
+  }
   if (SHOTS[k].life === 0.0) {
     return
   }
@@ -200,7 +224,7 @@ const fly = (k: i32): void => {
       BODIES[i].vy = BODIES[i].vy + SHOTS[k].vy * 0.25
       BODIES[i].heat = BODIES[i].heat + 50.0
       SHOTS[k].life = 0.0
-      SHIP[5] = SHIP[5] + 1.0
+      ship[5] = ship[5] + 1.0
       return
     }
   }
@@ -212,9 +236,17 @@ const fly = (k: i32): void => {
  * @param input - the tick's input word: the `IN_*` bits held
  */
 export const simStep = (input: i32): void => {
-  steer(input)
+  step(SHIP, input)
+}
+
+/** `simStep` on the ship in `ship`. */
+const step = (ship: Float64Array, input: i32): void => {
+  if (ship.length < 7) {
+    return
+  }
+  steer(ship, input)
   // A slow wind across the arena, so the bodies never settle.
-  const wind: f64 = Math.sin(SHIP[6] * 0.01) * 4.0
+  const wind: f64 = Math.sin(ship[6] * 0.01) * 4.0
   for (let i = 0; i < BODY_CAP; i++) {
     BODIES[i].vx = (BODIES[i].vx + wind * TICK_SECONDS) * 0.999
     BODIES[i].vy = BODIES[i].vy * 0.999
@@ -229,9 +261,9 @@ export const simStep = (input: i32): void => {
     }
   }
   for (let k = 0; k < SHOT_CAP; k++) {
-    fly(k)
+    fly(ship, k)
   }
-  SHIP[6] = SHIP[6] + 1.0
+  ship[6] = ship[6] + 1.0
 }
 
 /** The ticks stepped since the last reset. */
@@ -282,10 +314,16 @@ export const simHash = (): u64 => {
     h = fold(h, SHOTS[k].vy)
     h = fold(h, SHOTS[k].life)
   }
-  for (let f = 0; f < 7; f++) {
-    h = fold(h, SHIP[f])
+  return foldAll(h, SHIP)
+}
+
+/** `h` with every float of `xs` folded in, in order. */
+const foldAll = (h: u64, xs: Float64Array): u64 => {
+  let out: u64 = h
+  for (let f = 0; f < toI32(xs.length); f++) {
+    out = fold(out, xs[f])
   }
-  return h
+  return out
 }
 
 /** The hash's high 32 bits, for a page that keeps to numbers. */
@@ -296,3 +334,5 @@ export const simHashLo = (): u32 => {
   const low: u64 = 4294967295
   return toU32(simHash() & low)
 }
+
+// smoke: args --allow-panics

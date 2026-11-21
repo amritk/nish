@@ -21,6 +21,7 @@ declare function db_rename(d: CPtr, name: string | null): i32
 declare function db_flags(d: CPtr, mask: u16, seed: u64, scale: f32): u8
 
 /* Not bound:
+ *   struct db: stays a `CPtr`: `db_open` takes a pointer to a pointer to it, which only a `CPtr` can stand for
  *   db_tiny: parameter `s` is `short`, which has no Nish type
  *   internal_helper: "allow" does not name it
  */

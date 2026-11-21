@@ -472,7 +472,8 @@ by the caller.
 ## The CPU level
 
 - **`--cpu x86-64-v3`** links the program for one CPU level above the
-  baseline: the module and the runtime are both compiled, and linked, with
+  baseline: the module, the runtime and, when the program calls it, SQLite
+  (each `runtime/sqlite/*.c` unit) are all compiled, and linked, with
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
@@ -496,6 +497,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](../../security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+  `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
+  check refuses: clang keeps a loop counter or overflow flag in a stack slot
+  there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ## Profile-guided builds
 
@@ -1220,7 +1231,8 @@ by the caller.
   locals with types, callees) (`tests/cases/dump_checked`).
 - **`--emit-panics <file.json>`** writes every panic site of the program,
   function by function, beside the IR, and changes no byte of it; see
-  [Panic sites](#panic-sites) below.
+  [Panic sites](#panic-sites) below. A build the no-panic scope refuses
+  writes no file: pass `--allow-panics` to list the sites it refused.
 - **`--deny-retention`** refuses a program whose own code keeps arena memory
   that nothing can reach, for a long-running program that cannot afford it; see
   [Retention as an error](#retention-as-an-error) below.
@@ -1347,14 +1359,27 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](expressions.md#element-access): a dominating guard, a loop bounded by the length,
-  or every call site proving the argument (`tests/cases/panics_index`);
+  or every call site proving the argument (`tests/cases/panics_index`). A
+  down-counting loop keeps its variable's upper bound: in
+  `while (end > 0 && t.charCodeAt(end - 1) === 32) end--`, with `end` starting
+  at `t.length`, `end - 1` stays below the length, but only while nothing else
+  writes `end` and nothing reassigns `t` (`tests/cases/deny_panics_trim_end`,
+  `reject_deny_panics_downcount_write`, `reject_deny_panics_downcount_reassign`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](builtins.md#nishsimd-sixteen-byte-vectors)), so a program held
+  to no panic may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 
@@ -1378,10 +1403,19 @@ when signed
 
 - *What proves it away:* a divisor that is not 0, and not -1 unless the
   dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded
-  module constant), a ranged or unsigned divisor whose declared range leaves
+  module constant, or a `const` binding at module or function level whose
+  initializer is an integer literal, a folded constant, or a conversion such
+  as `toU64(0)` of a literal that fits — never a `let`, a field, a call, or a
+  conversion that wraps; a named one is read as its value only from 0 to
+  2^31 − 2, below the 2^31 − 1 an array length takes), a ranged or unsigned
+  divisor whose declared range leaves
   those values out, or a guard on a local divisor —
   `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned
-  one. A float division is not a site (`tests/cases/panics_divide`)
+  one, or the other arm of an equality test against a named zero,
+  `b === zero ? a : a % b`. A float division is not a site
+  (`tests/cases/panics_divide`, `deny_panics_const_names`;
+  `reject_deny_panics_const_let`, `reject_deny_panics_const_call` and
+  `reject_deny_panics_const_overflowing_conversion` stay refused)
 
 **`overflow`**: a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or
 `op=` whose result does not fit: `attempt to add with overflow` and its
@@ -1389,7 +1423,13 @@ siblings
 
 - *What proves it away:* the overflow proof of [Semantics
   decisions](#semantics-decisions): an operation the bounds walk proves fits
-  is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other
+  is `nsw` with no check (`tests/cases/panics_overflow_proven`). The proof
+  reads `x & C` as `[0, C]`, `x >>> k` as `[0, 2^(bits - k) - 1]` (`C` and
+  `k` may be named constants, read from 0 to 2^31 - 2), `toI32` of
+  a `u32` whose range fits as that range, and the builtins with a documented
+  range: `s.charCodeAt(i)` as `[0, 255]` (it answers a byte) and
+  `Math.clz32(x)` as `[0, 32]` (`tests/cases/deny_panics_mask`,
+  `deny_panics_i32_mask_const`, `deny_panics_charcode`); every other
   one is checked (`tests/cases/panics_overflow`). A `nish:unsafe`
   `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not
   a site
@@ -1407,8 +1447,11 @@ entry
 header or a negative byte count (an `i64`, a float, an `i32` or a ranged
 integer, a `u32` under `--number-mode i32`)
 
-- *What proves it away:* a narrower unsigned length or a literal up to 2^31 -
-  1, which is not checked and not a site (`tests/cases/panics_array_length`)
+- *What proves it away:* a narrower unsigned length, or a literal or named
+  integer constant (as for `divide`) from 0 to 2^31 - 1 inclusive, one more
+  than a named divisor or `&`/`>>>` operand is read up to, which is not checked
+  and not a site (`tests/cases/panics_array_length`, `deny_panics_const_names`;
+  a negative constant stays refused, `reject_deny_panics_const_negative_length`)
 
 **`panic`**: `panic(message)`
 
@@ -1536,16 +1579,18 @@ each is an `ffi-null` site above)
 
 ## The no-panic scope
 
-A module can be **required** to have no panic site left. `--deny-panics` puts
-every module of the program's own package in the scope; the root package's
-`package.json` — the one nearest above the entry file — puts the modules it
-lists there, by their path relative to that file:
+**Every module of the program's own package is required to have no panic
+site left, by default.** `--allow-panics` relaxes that: under it, the scope is
+only the modules the root package's `package.json` — the one nearest above the
+entry file — lists, by their path relative to that file:
 
 ```json
 { "nish": { "noPanic": ["src/parser.ts", "src/lexer.ts"] } }
 ```
 
-Both together put the union in scope; with neither, nothing changes. In a
+A listed module stays in the scope under `--allow-panics`; with the flag and
+no list, nothing is in it. `--deny-panics` spells the default out, and of the
+two flags the last one on the line wins. In a
 module of the scope, every site of a kind above that is not proven is an
 error, NL2457, which names the kind and, where a proof the checker makes would
 remove the check, the guard that gives it — the same sentence the performance
@@ -1561,9 +1606,12 @@ performance warning about the same check is not printed beside the error.
   panic names the callee and the site it reaches (`reject_deny_panics_call`,
   `tests/link/no_panic_transitive`). A call into a function that is itself in
   the scope is not refused again: its own sites are.
-- **A module the list does not name keeps its checks**: the same unproven index
-  is refused in a listed module and compiles in an unlisted one
-  (`tests/link/no_panic_module`, `tests/link/no_panic_unlisted`).
+- **Under `--allow-panics`, a module the list does not name keeps its
+  checks**: the same unproven index is refused in a listed module and compiles
+  in an unlisted one (`tests/link/no_panic_module`,
+  `tests/link/no_panic_unlisted`). With no flag the list changes nothing,
+  since every module of the package is in the scope already
+  (`tests/link/no_panic_empty_list`).
 - **An entry that names no module of the program is an error** (NL3031),
   reported in `package.json` where the entry is written: a typo would
   otherwise leave the module it meant outside the scope without a word
@@ -1612,9 +1660,14 @@ performance warning about the same check is not printed beside the error.
   So a module in the scope cannot *panic* except by running out of memory,
   and that is the whole claim. Nor can it reach undefined behaviour through a
   check the compiler left out, except where a `nish:unsafe` import says so.
-- `--deny-panics` changes no byte of the IR: a program it accepts is the one the
-  build compiles without it. With `--emit-ast`, which stops before the checker,
-  it is a usage error (exit 2).
+- The scope changes no byte of the IR: a program the default accepts is the
+  one `--allow-panics` compiles. `--emit-ast`, which stops before the checker,
+  holds nothing to the scope, and an explicit `--deny-panics` beside it is a
+  usage error (exit 2).
+- **The standard library is not yet panic-free**, so a module in the scope
+  cannot yet call what reaches a panic site in `std/` — `Map`, `Set`,
+  `split` and the `JSON` reads among them — without NL2458. Such a program
+  builds with `--allow-panics` until `std/` is proven.
 
 ## The compatibility dialect
 

@@ -1633,7 +1633,7 @@ nanoseconds since an arbitrary origin.
 
 The high 64 bits of the 128-bit product of `a` and `b`, the half a `u64`
 `a * b` drops (WP41). Both operands are `u64`. Any other type is refused as
-`` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2819):
+`` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2822):
 `u32`, `i64`, `number` and a ranged integer included. A bare numeric
 literal is read as a `u64`, so `mulHigh(x, 3)` works, and one that does not
 fit is the literal's own refusal. The call takes exactly two arguments, and
@@ -2431,7 +2431,7 @@ may still answer `NULL`, so the call tests `p` first and panics with
 The copy is new on every call and is the calling function's allocation, and
 it is refused inside a `using a = arena()` block that would release one held
 outside it (`` `readCString(p)` may be allocated inside the `using arena()`
-block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+block ``). In the no-panic scope its `NULL` test is an `ffi-null` site no
 proof removes, so the scope refuses the call (the copy's `oom` beside it is
 allowed), and the pointer it reads is `ffi`. It lowers the same
 on wasm32, where whether the program links is the `declare function`'s
@@ -2641,7 +2641,7 @@ unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
 
 A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
 naming the layout, since a `declare function` declared to answer `CPtr` may
-still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+still answer `NULL`. No proof removes that test, so the no-panic scope refuses
 the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
 `oom` beside it.
 
@@ -4079,7 +4079,7 @@ array may be read.
 
 To the bounds proof it is the load `xs[i]` is, less the check: it moves no
 length, and it records no passed check, so a checked `xs[i]` after it keeps
-its check. Under `--deny-panics` it is an allowed `unchecked` site. Under
+its check. In the no-panic scope it is an allowed `unchecked` site. Under
 Node the runtime shim reads `xs[i]`. Capability: unsafe.
 
 ```ts
@@ -4120,7 +4120,7 @@ to it is a value and is not stored inline.
 The store is a write of the array for every rule that asks, the rule for a
 parallel body included. To the bounds proof it is the store `xs[i] = v` is,
 less the check, and a resize in the value stored still takes the length away.
-Under `--deny-panics` it is an allowed `unchecked` site. Under Node the
+In the no-panic scope it is an allowed `unchecked` site. Under Node the
 runtime shim stores `xs[i] = v`. Capability: unsafe.
 
 ```ts
@@ -4463,7 +4463,7 @@ operand's type, wherever it stands. `wrappingAdd(2147483647, 1)` is
 
 In a module constant's initialiser the call folds, wrapping, where
 `2147483647 + 1` is refused; it is the one call such an initialiser may make.
-It is not a site under `--deny-panics`, as it cannot panic. Under Node the
+It is not a site in the no-panic scope, as it cannot panic. Under Node the
 runtime shim computes `(a + b) | 0` on an `i32` and `BigInt.asIntN(64, ...)`
 on the BigInt an `i64` is there. Capability: unsafe.
 
@@ -4789,6 +4789,7 @@ interface Array<T>
 | `fill(value: T, start?: number, end?: number): this` | Store `value` into every slot of `[start, end)`, each end relative (a negative one counts back from the length) and then clamped into `[0, a.length]`, as `TypedArray.prototype.fill`'s are, so no range is out of range, a reversed range fills nothing, and `fill` never panics. Arrays of numbers only, of any width and ranged integers included (a ranged element checks `value` once, before the fill); on any other array it is refused: "`set` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got string[]" (NL2395).<br><br>`value` is the element type ("`fill` expects u8 (the element type of u8[]), got string"), one to three arguments are taken (NL2398), and each end is a number. It is a statement: its answer cannot be used as a value, and JavaScript's answer is the array the program already holds.<br><br>A float end converts as JavaScript's `ToIntegerOrInfinity` does: `NaN` is `0`, a fraction truncates toward zero (`2.7` is `2`, `-0.5` is `0`), and an infinity or a value past the `i64` range saturates, then clamps, so in f64 mode `a.fill(v, 0, 1 / 0)` fills all of it. An unsigned end is never negative, whatever its width: a `u64` of 2^63 or more as a start fills nothing and as an end fills to the length. Natively a `u8[]` fill is one `memset`.<br><br>Under Node it is `Array.prototype.fill`, which has `TypedArray.prototype.fill`'s meaning for every argument Nish admits, except that an `i64` or `u64` end is a `bigint` there and throws a `TypeError`, as all 64-bit arithmetic does. A `readonly T[]` refuses it: "Cannot `fill` through readonly u8[] (declare it u8[] to write through it)". Capability: none. |
 | `filter(predicate: (value: T, index: number) => boolean): T[]` | A new array of the elements for which `predicate` answers `true`, in order, as `Array.prototype.filter` gives. The predicate answers a `boolean` and takes the element, or the element and its index, under the callback rules of `map`. Capability: none. |
 | `findIndex(predicate: (value: T, index: number) => boolean): number` | The index of the first element for which `predicate` answers `true`, or `-1`, as `Array.prototype.findIndex` gives. The callback rules are `map`'s. There is no `find`: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and points here. Capability: none. |
+| `forEach(callbackfn: (value: T, index: number) => void): void` | Call `callbackfn` with each element in order, as `Array.prototype.forEach` does, up to the length the array had when the call began: an element the callback pushes is not visited, and one that shrinks the array ends the walk at its new length. The call answers `void`, and so does the callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its index; one that declares a third parameter, JavaScript's array, is refused (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow written at the call, which may not assign a name of the function around it (NL2586), so a running total is a `for...of` loop. The call compiles to a counted loop with the callback inlined (`std/array`'s `forEach`, or `forEachIndexed` for a two-parameter callback). Capability: none. |
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`: strings by content, classes, interfaces and arrays by identity, floats by `==` on the number (so a `NaN` element is never found, as in JavaScript). One argument; an argument of another type than the element is refused. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`. `string[]` only: "`join` requires string[], got i32[]", because converting an element would allocate once per element. One pass sums the lengths, then one allocation holds the result. Like a concatenation, the result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated. Capability: none. |
 | `map<U>(callbackfn: (value: T, index: number) => U): U[]` | A new array of `callbackfn(element)` for each element, in order, as `Array.prototype.map` gives. The callback takes the element, or the element and its index; a third parameter (JavaScript's array argument) is refused (NL2698), as is a second argument to `map` itself. It is a top-level function or an arrow reading only `const` locals and parameters, and the call compiles to a loop that calls it directly (`std/array`'s `map`). Capability: none. |
@@ -5050,7 +5051,7 @@ keeps, and a `--emit-header` prototype spells such a parameter `const
 nish_array *`.
 
 Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
-`map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+`map`, `filter`, `some`, `every`, `findIndex`, `forEach`, `slice`, passing it on to
 another `readonly T[]`); every write is refused under its own name, an
 element store ("Cannot assign to an element of readonly i32[]
 (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
@@ -5073,6 +5074,7 @@ interface ReadonlyArray<T>
 | `every(predicate: (value: T, index: number) => boolean): boolean` | Whether `predicate` answers `true` for every element, stopping at the first that does not, as `Array.prototype.every` does; an empty array answers `true`. The callback rules are `map`'s. Capability: none. |
 | `filter(predicate: (value: T, index: number) => boolean): T[]` | A new array of the elements for which `predicate` answers `true`, in order, as `Array.prototype.filter` gives. The predicate answers a `boolean` and takes the element, or the element and its index, under the callback rules of `map`. Capability: none. |
 | `findIndex(predicate: (value: T, index: number) => boolean): number` | The index of the first element for which `predicate` answers `true`, or `-1`, as `Array.prototype.findIndex` gives. The callback rules are `map`'s. There is no `find`: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and points here. Capability: none. |
+| `forEach(callbackfn: (value: T, index: number) => void): void` | Call `callbackfn` with each element in order, as `Array.prototype.forEach` does, up to the length the array had when the call began: an element the callback pushes is not visited, and one that shrinks the array ends the walk at its new length. The call answers `void`, and so does the callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its index; one that declares a third parameter, JavaScript's array, is refused (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow written at the call, which may not assign a name of the function around it (NL2586), so a running total is a `for...of` loop. The call compiles to a counted loop with the callback inlined (`std/array`'s `forEach`, or `forEachIndexed` for a two-parameter callback). Capability: none. |
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`, as on `T[]`: one argument, strings by content, classes, interfaces and arrays by identity, and a `NaN` element is never found. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`, as on `string[]`: `string[]` only, and the result is held to 2^31 − 1 bytes. Capability: none. |
 | `map<U>(callbackfn: (value: T, index: number) => U): U[]` | A new array of `callbackfn(element)` for each element, in order, as `Array.prototype.map` gives. The callback takes the element, or the element and its index; a third parameter (JavaScript's array argument) is refused (NL2698), as is a second argument to `map` itself. It is a top-level function or an arrow reading only `const` locals and parameters, and the call compiles to a loop that calls it directly (`std/array`'s `map`). Capability: none. |
@@ -5123,6 +5125,7 @@ interface Set<T>
 | `add(value: T): this` | Add `value`; a member already there keeps its place. Calls chain. Capability: none. |
 | `clear(): void` | Remove every member. Capability: none. |
 | `delete(value: T): boolean` | Remove `value`. Adding it again appends it at the end of the order. Capability: none. |
+| `forEach(callbackfn: (value: T) => void): void` | Call `callbackfn` with each member in insertion order, as `Set.prototype.forEach` does: the `for...of` walk over the set with the callback inlined (`std/collections`' `forEachElement`), so a member added during the walk is visited and one deleted before the walk reaches it is not. The callback takes the member alone; JavaScript passes it again as a second argument and the set as a third, and a callback that declares a second parameter is refused (NL2772). The callback rules are those of an array's `forEach`. Capability: none. |
 | `has(value: T): boolean` | Whether `value` is a member. One probe. Capability: none. |
 
 ### String

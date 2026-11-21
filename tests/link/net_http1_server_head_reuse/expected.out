@@ -929,4 +929,18 @@ PASS  now copied
 PASS  its bytes
 PASS  two hundred answers, each byte for byte
 PASS  two heads written, 198 copied
-http1 head reuse: 931 passed, 0 failed, 0 skipped
+PASS  H1-7: peer 1's first head
+PASS  H1-7: peer 1's first head: written
+PASS  H1-7: peer 1's second head, kept
+PASS  H1-7: peer 1's second head, kept: written
+PASS  H1-7: peer 1's third head
+PASS  H1-7: peer 1's third head: copied
+PASS  H1-7: lent to peer 2, the same head is not taken from peer 1's
+PASS  H1-7: lent to peer 2, the same head is not taken from peer 1's: written
+PASS  H1-7: lent to peer 2 again, its own kept head
+PASS  H1-7: lent to peer 2 again, its own kept head: written
+PASS  H1-7: and peer 2's next
+PASS  H1-7: and peer 2's next: copied
+PASS  H1-7: lent back to peer 1, peer 2's head is not taken
+PASS  H1-7: lent back to peer 1, peer 2's head is not taken: written
+http1 head reuse: 945 passed, 0 failed, 0 skipped

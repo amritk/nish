@@ -1,3 +1,12 @@
+// Opt-out (`--allow-panics`): relay keeps four deliberate `panic`s its link
+// tests pin (relay.ts, peers.ts), I/O calls that exit on failure
+// (`getRandomValues`, `writeFileSync`), UDP slices the checker cannot yet
+// bound, and index and overflow sites in its frame, grant and JSON parsers
+// that need real bounds rather than fallback values; its `std/net` and
+// `std/crypto` calls reach their own sites too. Follow-up: rework those parsers
+// and the pinned panics into `Result`s, then build this program without
+// `--allow-panics`.
+//
 /**
  * The WebTransport relay: a game's `services/relay` (Rust, over `wtransport`
  * 0.7) written in Nish on `std/net`. Its whole job is to get game traffic off
@@ -7,7 +16,7 @@
  * about the game. README.md beside this file says what it does, how it is
  * tested, and what is still open.
  *
- *     nish examples/relay/main.ts --link build/relay
+ *     nish --allow-panics examples/relay/main.ts --link build/relay
  *     build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/relay/relay.json
  *
  * The command line and the environment are main.rs's: `--port`
@@ -26,6 +35,7 @@
  * SIGINT and SIGTERM stop it cleanly: every session is sent CLOSE SHUTDOWN
  * and its connection closed, then the process exits 0.
  */
+// smoke: args --allow-panics
 // smoke: argv --help
 import { writeFileSync } from "nish:fs"
 import { udpBind } from "nish:net"

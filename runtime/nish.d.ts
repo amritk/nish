@@ -631,7 +631,7 @@ declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
 /**
  * The high 64 bits of the 128-bit product of `a` and `b`, the half a `u64`
  * `a * b` drops (WP41). Both operands are `u64`. Any other type is refused as
- * `` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2819):
+ * `` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2822):
  * `u32`, `i64`, `number` and a ranged integer included. A bare numeric
  * literal is read as a `u64`, so `mulHigh(x, 3)` works, and one that does not
  * fit is the literal's own refusal. The call takes exactly two arguments, and
@@ -742,8 +742,8 @@ declare function isExecutableSync(path: string): boolean;
 // refusal reads `` `uncheckedGet` is a `nish:unsafe` function and is called only
 // through an import of it `` (NL2456). An import may rename (`as`) and cannot be
 // shadowed; a user function of the same name, with no import, is the user's.
-// Every import and call is a recorded fact in `--emit-checked`. Under
-// `--deny-panics` or `"nish".noPanic` the import is the opt-in the scope takes.
+// Every import and call is a recorded fact in `--emit-checked`. In
+// the no-panic scope, the default, the import is the opt-in the scope takes.
 
 /**
  * `xs[i]` with no bounds check: undefined behaviour when `i` is out of range,
@@ -756,7 +756,7 @@ declare function isExecutableSync(path: string): boolean;
  *
  * To the bounds proof it is the load `xs[i]` is, less the check: it moves no
  * length, and it records no passed check, so a checked `xs[i]` after it keeps
- * its check. Under `--deny-panics` it is an allowed `unchecked` site. Under
+ * its check. In the no-panic scope it is an allowed `unchecked` site. Under
  * Node the runtime shim reads `xs[i]`. Capability: unsafe.
  *
  * @param xs the array of numbers to read.
@@ -776,7 +776,7 @@ declare function uncheckedGet<T extends number>(xs: readonly T[], i: i32): T;
  * The store is a write of the array for every rule that asks, the rule for a
  * parallel body included. To the bounds proof it is the store `xs[i] = v` is,
  * less the check, and a resize in the value stored still takes the length away.
- * Under `--deny-panics` it is an allowed `unchecked` site. Under Node the
+ * In the no-panic scope it is an allowed `unchecked` site. Under Node the
  * runtime shim stores `xs[i] = v`. Capability: unsafe.
  *
  * @param xs the array of numbers to write.
@@ -796,7 +796,7 @@ declare function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): void;
  *
  * In a module constant's initialiser the call folds, wrapping, where
  * `2147483647 + 1` is refused; it is the one call such an initialiser may make.
- * It is not a site under `--deny-panics`, as it cannot panic. Under Node the
+ * It is not a site in the no-panic scope, as it cannot panic. Under Node the
  * runtime shim computes `(a + b) | 0` on an `i32` and `BigInt.asIntN(64, ...)`
  * on the BigInt an `i64` is there. Capability: unsafe.
  *
@@ -843,7 +843,7 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  * The copy is new on every call and is the calling function's allocation, and
  * it is refused inside a `using a = arena()` block that would release one held
  * outside it (`` `readCString(p)` may be allocated inside the `using arena()`
- * block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+ * block ``). In the no-panic scope its `NULL` test is an `ffi-null` site no
  * proof removes, so the scope refuses the call (the copy's `oom` beside it is
  * allowed), and the pointer it reads is `ffi`. It lowers the same
  * on wasm32, where whether the program links is the `declare function`'s
@@ -872,7 +872,7 @@ declare function readCString(p: CPtr): string;
  *
  * A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
  * naming the layout, since a `declare function` declared to answer `CPtr` may
- * still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+ * still answer `NULL`. No proof removes that test, so the no-panic scope refuses
  * the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
  * `oom` beside it.
  *
@@ -3682,7 +3682,7 @@ declare module "nish:net" {
  * `(a - b) | 0` and `Math.imul` on an `i32` and `BigInt.asIntN(64, …)` on an
  * `i64`. A program that stays in range prints the same as natively.
  *
- * **The no-panic scope.** Under `--deny-panics` or `"nish".noPanic`,
+ * **The no-panic scope.** In the scope, every module of the package by default,
  * `uncheckedGet` and `uncheckedSet` are allowed `unchecked` sites, because
  * the import has already said that an index out of range is the author's to
  * rule out. `readCString` and `readStruct` are not: each tests its pointer and
@@ -3789,10 +3789,19 @@ declare module "nish:unsafe" {
  * so a tree or list node of an `i32` and two links is 12 bytes, not 24. Locals,
  * parameters, returns, arrays, maps and other unions stay full pointers.
  *
- * The compiler refuses a compact class where C or Node would see its layout:
- * a build with `--emit-header`, `--emit-napi` or `--emit-napi-async`, a
- * `declare class`, a class holding a `Secret`, and a class a C or N-API surface
- * exports. wasm32, a host `--emit-dts` page module and an ASAN build compile
+ * A native `--link` build also compacts, with no marker, each class whose
+ * links take at least a quarter off a class made in a loop or recursion
+ * (`--explain-layout` prints each pick and why the others are left alone).
+ * `implements Wide` keeps one class out of that, and `--compact off` keeps
+ * every class, `implements Compact` included, at full pointers.
+ *
+ * A `--emit-header` build keeps a compact class, and every class holding one
+ * of its links, opaque: C holds it as a full `struct X *` handle and links the
+ * range runtime (`scripts/build.sh --arena-range`). The compiler refuses a
+ * compact class where Node or the runtime would read its layout: a build with
+ * `--emit-napi` or `--emit-napi-async` (also beside `--emit-header`), an
+ * N-API export whose signature holds one, a `declare class`, and a class
+ * holding a `Secret`. wasm32, a host `--emit-dts` page module and an ASAN build compile
  * it uncompressed: a pointer there is already 4 bytes, the page runs on the
  * wasm runtime, or the range cannot hold the sanitizer's blocks.
  *
@@ -3810,8 +3819,11 @@ declare module "nish:compact" {
   export interface Compact {}
 
   /**
-   * Reserved for WP48 stage 3, which lets a class refuse a layout the
-   * compiler picks. Accepted today and changes nothing.
+   * The marker a class implements to keep its links full pointers. The
+   * compiler compacts a class on its own when its rule finds the saving pays
+   * (`--explain-layout` names each pick); `implements Wide` refuses that
+   * pick, the way `--compact off` refuses every one. It has no members, so it
+   * adds no field, and a class cannot write it with `Compact`.
    */
   export interface Wide {}
 }
@@ -5946,6 +5958,22 @@ interface Array<T> {
    */
   findIndex(predicate: (value: T, index: number) => boolean): number;
   /**
+   * Call `callbackfn` with each element in order, as `Array.prototype.forEach`
+   * does, up to the length the array had when the call began: an element the
+   * callback pushes is not visited, and one that shrinks the array ends the
+   * walk at its new length. The call answers `void`, and so does the
+   * callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its
+   * index; one that declares a third parameter, JavaScript's array, is refused
+   * (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow
+   * written at the call, which may not assign a name of the function around it
+   * (NL2586), so a running total is a `for...of` loop. The call compiles to a
+   * counted loop with the callback inlined (`std/array`'s `forEach`, or
+   * `forEachIndexed` for a two-parameter callback). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   */
+  forEach(callbackfn: (value: T, index: number) => void): void;
+  /**
    * A copy of the elements from `start` up to `end`, in a new array, with
    * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
    * length`, and anything else panics with `slice out of range: [start, end)
@@ -5969,7 +5997,7 @@ interface Array<T> {
  * nish_array *`.
  *
  * Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
- * `map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+ * `map`, `filter`, `some`, `every`, `findIndex`, `forEach`, `slice`, passing it on to
  * another `readonly T[]`); every write is refused under its own name, an
  * element store ("Cannot assign to an element of readonly i32[]
  * (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
@@ -6055,6 +6083,22 @@ interface ReadonlyArray<T> {
    * @returns the first such index, or `-1`.
    */
   findIndex(predicate: (value: T, index: number) => boolean): number;
+  /**
+   * Call `callbackfn` with each element in order, as `Array.prototype.forEach`
+   * does, up to the length the array had when the call began: an element the
+   * callback pushes is not visited, and one that shrinks the array ends the
+   * walk at its new length. The call answers `void`, and so does the
+   * callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its
+   * index; one that declares a third parameter, JavaScript's array, is refused
+   * (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow
+   * written at the call, which may not assign a name of the function around it
+   * (NL2586), so a running total is a `for...of` loop. The call compiles to a
+   * counted loop with the callback inlined (`std/array`'s `forEach`, or
+   * `forEachIndexed` for a two-parameter callback). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   */
+  forEach(callbackfn: (value: T, index: number) => void): void;
   /**
    * A copy of the elements from `start` up to `end`, in a new array, with
    * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
@@ -6321,6 +6365,19 @@ interface Set<T> {
   delete(value: T): boolean;
   /** Remove every member. Capability: none. */
   clear(): void;
+  /**
+   * Call `callbackfn` with each member in insertion order, as
+   * `Set.prototype.forEach` does: the `for...of` walk over the set with the
+   * callback inlined (`std/collections`' `forEachElement`), so a member added
+   * during the walk is visited and one deleted before the walk reaches it is
+   * not. The callback takes the member alone; JavaScript passes it again as a
+   * second argument and the set as a third, and a callback that declares a
+   * second parameter is refused (NL2772). The callback rules are those of an
+   * array's `forEach`. Capability: none.
+   *
+   * @param callbackfn called once per member, with the member.
+   */
+  forEach(callbackfn: (value: T) => void): void;
 }
 
 // ---- What this file cannot say ----------------------------------------------

@@ -9,7 +9,13 @@ sections.
 
 ## Classes
 
-<!-- nish:ok -->
+Several examples on this page do `i32` arithmetic nothing bounds, so the
+compiler cannot prove it fits and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
+as the compile error suggests, builds them under the default.
+
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Counter {
   name: string;
@@ -38,8 +44,15 @@ export const main = (): i32 => {
 ```
 
 - **Every field has a type annotation.** A field initializer, like
-  `count: i32 = 0`, must be a literal; anything computed goes in the
-  constructor.
+  `count: i32 = 0`, is a literal, an empty array (`items: i32[] = []`) or a
+  `new` of a non-generic class with literal arguments
+  (`left: Leaf = new Leaf(7)`); anything computed goes in the constructor.
+  Initializers are stored before the constructor body runs, in declaration
+  order, and each object gets its own array and its own child (the
+  example after this list). An initializer that constructs its own class again is
+  refused: it would never end. If an exported class has no constructor, or
+  is generic, and an initializer constructs another class, export that class
+  too: another module's `new` of the exported class runs the initializer.
 - **Every field holds a value when the constructor returns.** The compiler
   checks this, and refuses a read of `this.f` (or a method call on `this`)
   before every field is assigned. A class with no constructor initialises
@@ -52,6 +65,33 @@ export const main = (): i32 => {
 - `public`, `private` and `protected` are accepted and ignored. `static`
   members, getters and setters are not supported: use a module `const` or a
   top-level function, and a plain method.
+
+Two objects of a class with `[]` and `new` initializers share nothing:
+
+<!-- nish:ok -->
+```ts
+class Leaf {
+  value: i32;
+  constructor(value: i32) {
+    this.value = value;
+  }
+}
+
+class Bag {
+  items: i32[] = [];
+  first: Leaf = new Leaf(7);
+}
+
+export const main = (): i32 => {
+  const a = new Bag();
+  const b = new Bag();
+  a.items.push(1);
+  a.first.value = 8;
+  console.log(`${a.items.length} ${b.items.length}`);   // 1 0
+  console.log(`${a.first.value} ${b.first.value}`);     // 8 7
+  return 0;
+};
+```
 
 ## `readonly`
 
@@ -82,7 +122,8 @@ with an object literal, which takes its type from where it is written (an
 annotation, a parameter, a return type) and must set every field exactly
 once:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Point {
   x: i32;
@@ -219,7 +260,8 @@ them. A `C` is then accepted anywhere an `I` is expected. This is the only
 widening between class and interface types, and it goes one way: nothing
 turns an `I` back into a `C`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Shape {
   width: i32;

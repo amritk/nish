@@ -69,7 +69,7 @@ import { createServer } from "node:net"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom, hardeningFlags, unhardened } from "../compiler.mjs"
+import { compileArgv, compilerFrom, hardeningFlags, unhardened } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const here = path.join(root, "bench", "postgres")
@@ -213,14 +213,13 @@ for (const f of [exe, copy, twin, twinRs]) {
 fs.rmSync(path.join(outDir, "nish.ir"), { recursive: true, force: true })
 run(
   nishc.cmd,
-  [
-    ...nishc.prefix,
+  compileArgv(nishc, [
     path.join(here, "main.ts"),
     "-o",
     `${path.join(outDir, "nish.ir")}${path.sep}`,
     "--link",
     exe,
-  ],
+  ]),
   "the Nish build"
 )
 fs.copyFileSync(exe, copy)

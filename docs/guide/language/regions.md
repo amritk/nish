@@ -10,13 +10,21 @@ one `free` gives all of it back. The functions come from the built-in module
 
 ## Making, using and freeing a region
 
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): `nish:region`'s code in the
+standard library keeps panic sites no proof removes yet, and they will build
+under the default once it is made panic-free. Some also add, index or size an
+array with nothing bounding it, which a bound or an `i < xs.length` test before
+the index would fix.
+
 `region(f)` makes a region and runs `f` in it: every object `f` allocates
 lands in the region, and what `f` answers is the region's *root*. You get back
 a `Region<T>` handle, which is a number, not a pointer. `enter(r, f)` runs
 `f(root)` in the region again and answers what `f` answers. `free(r)` gives
 the memory back:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enter, free, region } from "nish:region";
 
@@ -49,7 +57,8 @@ region captures nothing.
 `f(arg)` and `f(root, arg)`. Numbers that `f` copies out of the region, into an
 array it was given, are yours to keep after `free`:
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enterWith, free, regionWith } from "nish:region";
 
@@ -156,7 +165,8 @@ Inside the `f` an `enter` runs, `child(f)` and `childWith(arg, f)` make a
 that was there before this `enter`, so it can use the parent's strings and
 objects without copying them, and `free` of the parent frees every child too:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, childWith, enter, free, region } from "nish:region";
 
@@ -247,9 +257,10 @@ plain rules.
 never made, that is freed already or that belongs to another thread stops the
 program with a message, and so does entering a region that is already entered
 or freeing one that is (or a parent whose child is entered). Freeing twice
-is a stop, never a corruption. Under
-[`--deny-panics`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) each of these calls is
-reported.
+is a stop, never a corruption. In a module
+held to [no panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope),
+as every module of your package is by default, each of these calls is
+refused.
 
 `nish --emit-ts` does not translate a program that imports `nish:region` yet
 (NL4015); build it native.

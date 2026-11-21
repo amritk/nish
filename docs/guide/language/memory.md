@@ -27,7 +27,13 @@ wherever it can prove that nothing allocated inside them is still reachable
 afterwards, and whatever is left in the arena is released when `main`
 returns.
 
-<!-- nish:ok -->
+Several examples on this page do `i32` arithmetic nothing bounds, so the
+compiler cannot prove it fits and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
+as the compile error suggests, builds them under the default.
+
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const describe = (name: string, score: i32): i32 => {
   const line = `${name} scored ${score}`;
@@ -52,7 +58,8 @@ A `Result` held in a `let` that you assign again does not cost a function its
 bracket. The `Ok` and the `Err` below live on `pick`'s stack frame, so calling
 it in a loop leaves the arena where it was:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const pick = (n: i32): i32 => {
   let r: Result<i32, string> = Ok(n);
@@ -81,7 +88,9 @@ None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 
 - you never free anything but a [region](regions.md), and freeing one twice
-  stops the program with a message rather than corrupting memory;
+  is caught rather than corrupting memory: a program that uses regions
+  builds with `--allow-panics` for now, and the second free stops it with a
+  message;
 - a value you can still reach is never released under you;
 - there are no lifetimes or ownership annotations to write.
 
@@ -199,7 +208,8 @@ pointers for each child where a sibling link follows one. On a tree of four
 million nodes, the linked layout took **0.52x the memory and 0.68x the time**
 of an array per node.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Node {
   kind: i32;
@@ -248,12 +258,14 @@ This prints `10`. A child is added after the parent's last one, so the
 children stay in the order they were made, and the walk reads them in that
 order.
 
-A class that links to its own kind, as `Node` does, is what a later release
-will lay out in less memory by itself: its links in 4 bytes rather than 8,
-when the program is a native executable and makes the class in a loop or a
-recursive function. To see which of your classes that rule would pick, and
-the first test that refuses each of the others, build it with `--link` (or
-`nish run` it) and add `--explain-layout`. IR alone (`-o` with no `--link`)
+A class that links to its own kind, as `Node` does, is one Nish lays out in
+less memory by itself: its links in 4 bytes rather than 8, when the program
+is a native executable, the saving is at least a quarter, and the program
+makes the class in a loop or a recursive function
+([Compact classes](compact-classes.md#classes-the-compiler-picks-for-you)).
+To see which of your classes the rule picks, and the first test that refuses
+each of the others, build it with `--link` (or `nish run` it) and add
+`--explain-layout`. IR alone (`-o` with no `--link`)
 is refused at the first test, since a host may link it. For the program
 above it prints:
 
@@ -262,7 +274,22 @@ app.ts:1:7: layout: Node: 4 not made in a loop or recursion, 32 → 16 bytes
 explain-layout: 0 of 1 classes compact
 ```
 
-Nothing uses the verdict yet: the flag changes no byte of what is built.
+`Node` is made only in `add` and `main`, outside any loop, so it keeps full
+pointers. The flag changes no byte of what is built; `--compact off` turns the
+rule off.
+
+Where the rule does pick a node, as it does for a tree built in a recursive
+function, the node takes half the memory or a little more, and the program
+is faster when its nodes do not fit in the cache: a 24-byte tree node of an
+`i32` and two links becomes 12 bytes, and a 33-million-node tree built and
+walked eight times ran in two thirds of the time. The price is one extra step
+on every link read. A small graph that stays in the cache and is mostly a
+loop that chases one link after another, such as a climb from a node to the
+root, gains nothing from the smaller node and pays that step on each hop:
+write `implements Wide` on that class. The opposite case, a class under
+24 bytes that the rule leaves alone, is better left alone unless you have
+measured your program both ways
+([Compact classes](compact-classes.md#when-to-override-the-rule)).
 
 Where some pass needs to reach a node's children by index, keep a count of
 them on the node, and fill its `Node[]` once, when the node is complete,
@@ -276,7 +303,7 @@ referred to by its index, with `-1` for none. On the same tree that took
 then an index into a column, which is harder to follow than a field, so keep
 it to the tables that are hot. `uncheckedGet` and `uncheckedSet` from
 `nish:unsafe` skip the bounds check there; an index out of range is then
-undefined behaviour rather than a stopped program, so they belong in that
+undefined behaviour rather than a compile error or a stopped program, so they belong in that
 table's code and nowhere else. The programs and the full measurements are in
 [the benchmark](https://github.com/amritk/nish/tree/main/bench/wp48-refs).
 
@@ -289,7 +316,8 @@ When you know a block's allocations are temporary, say so with
 released when the block ends, on every way out of it: the closing brace, a
 `return`, a `break` or a `continue`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const checksum = (lines: string[]): i32 => {
   let total = 0;

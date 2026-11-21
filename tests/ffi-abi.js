@@ -9,12 +9,16 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /**
  * Runs the check under `tests/run.js`'s filter: `only`, when set, is matched
  * against the group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiAbiChecks = ({ only, has, check, skip, shown, nish, root, buildDir }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   if (only && !"ffi_narrow_zeroext ffi_abi shared object".includes(only)) {
     return
   }
@@ -30,7 +34,7 @@ export const runFfiAbiChecks = ({ only, has, check, skip, shown, nish, root, bui
   const source = path.join(caseDir, "ffi_narrow_zeroext.ts")
   const driver = path.join(caseDir, "ffi_narrow_zeroext.c")
   const ll = path.join(dir, "ffi_narrow_zeroext.ll")
-  const compiled = spawnSync(nish, [source, "-o", ll], { cwd: root, encoding: "utf8" })
+  const compiled = nishSync([source, "-o", ll], { cwd: root, encoding: "utf8" })
   const lib = path.join(dir, "libnarrow.so")
   const shared =
     compiled.status === 0

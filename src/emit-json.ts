@@ -73,7 +73,7 @@ import {
 } from "./emit-arrays"
 import {
   emitNewWithoutArguments,
-  initializerConstant,
+  initializerValue,
   loadField,
   storeField,
   structInfoOf,
@@ -1003,7 +1003,7 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
       const absent = fn.newBlock("json.default")
       jsonBranch(emitter, given, next.label, absent.label)
       fn.placeBlock(absent)
-      storeField(emitter, info, "%v", field, initializerConstant(emitter, field))
+      storeField(emitter, info, "%v", field, initializerValue(emitter, field))
       fn.emit(`br label %${next.label}`)
     } else {
       jsonBranch(emitter, given, next.label, missing.label)

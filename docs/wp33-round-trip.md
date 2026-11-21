@@ -9,7 +9,7 @@ the runtime split by host (#848, #851), and R4, `--emit-ts <dir>` with its
 live differential (#853, #859, #864, #866, #867, and the oracle that holds
 it), and R5's `review` tier (`review` in `--json`, NL8006's rewrite). Next:
 R6, which is WP28: its spikes are measured and its stages have started
-([roadmap](roadmap/wp28-compatibility-mode.md)). §9 has each stage's state.** This is the plan of record for one
+([open-work issue](https://github.com/amritk/nish/issues/1907)). §9 has each stage's state.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 **2026-10-30:** an arrow passed to a function-typed parameter of a top-level

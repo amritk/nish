@@ -3139,6 +3139,35 @@ ns per request, median (min–max) and ratio of medians to `old`. `idle` shows n
 What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
+<!-- http-idle-bytes:begin -->
+## What an idle keep-alive connection costs Http1Server
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bash bench/http1-conn/idle.sh` serves `bench/http1-server.ts` (bench/handler-ring's `h1` design) on descriptors (`epoll`) and with `BENCH_RING=1` on `NET_LISTEN_RING` slots (`ring`). `bench/fd-limit/loadgen.c` holds 18,000 keep-alive connections, sends `GET /plaintext` at 30,000 requests a second for 4 seconds, then sends nothing for 5 seconds with every connection open. Its `-i` reads the server's RSS and PSS, and the box's `Slab` and TCP pages, then and before the first connect. Each figure is that difference over 18,000.
+
+| | |
+| --- | --- |
+| Date | 2026-11-18 |
+| nish | an `Http1Server` that lends a connection only to a busy slot (`new`, commit 9c39ab8c, whose `bench/http1-conn/idle.sh` and `bench/fd-limit/loadgen.c` produced this table), against `main` at b18d1bf1 (`old`), `--profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, Linux 6.18 |
+| Runs | 5 interleaved rounds, the two builds' order turned each round |
+| Command | `bash bench/http1-conn/idle.sh --rounds 5 --binary before=<old build of bench/http1-server.ts>` |
+
+| mode | build | RSS B/conn | PSS B/conn | Slab B/conn | server µs/req under load |
+| --- | --- | ---: | ---: | ---: | ---: |
+| epoll | old | 1265 (1263–1267) | 1261 (1259–1264) | 9330 (9316–9356) | 13.83 (13.42–14.00) |
+| epoll | new | 99 (96–106) | 96 (93–102) | 9329 (9311–9344) | 13.41 (13.33–13.83) |
+| ring | old | 1610 (1609–1614) | 1609 (1608–1613) | 9049 (9034–9075) | 17.92 (17.75–18.33) |
+| ring | new | 459 (448–485) | 458 (448–485) | 9053 (9034–9061) | 17.25 (16.92–18.00) |
+
+Median (min–max) of 5 runs. Every run answered every request and closed none.
+
+- **The server's resident bytes for an idle connection fall by 1157 to 1171 on epoll and by 1124 to 1166 on the ring.** These are the band edges: old's minimum less new's maximum, and old's maximum less new's minimum. A resting slot no longer holds its `Http1Connection`, which was 904 arena bytes after four requests (`HTTP1_SERVER_IDLE_BYTES`), with its pages. It keeps 32 bytes of slot arrays (`fds`, `armed`, `at` and `restedMss` as i32, `rested` and `owner` as i64). Growth by doubling can leave up to twice that allocated. The rest of new's 99 bytes is not broken down here.
+- **The ring holds about 350 bytes a connection more than epoll in both builds** (345 old, 360 new, medians). This change does not move it. It is the runtime's io_uring set (`runtime/runtime-uring.c`), not `Http1Server`.
+- **The kernel holds about 9.3 KB a connection on epoll and 9.0 KB on the ring, unchanged.** `Slab` is the box's, so it counts the client's end of each loopback socket too. TCP pages read 0 at idle, within ±112 bytes a connection.
+- **Server CPU a request under load is inside noise in both modes.** The ranges overlap. On a lent connection, the kept response head (H1-7) is reused only for the peer whose responses wrote it. Here 18,000 peers share the busy connections, so it is seldom reused, and no cost shows outside the band. `node bench/http1-request/run.mjs --instructions --base b18d1bf1` counts the same instructions per request in every case, with no change beyond 0.1%. Its path feeds one `Http1Connection`, which is never lent.
+- **`node bench/http1-conn/run.mjs --shape rss --base b18d1bf1 --connections 10000`** builds its own pool of `Http1Connection`s, not an `Http1Server`. Each connection there costs 9 bytes more: 1059 (1057–1061) against 1050 (1049–1052) with `idleInput` and one request. That is the `keptFor` field `lendTo` keys the kept head on. `Http1Server` now pays it only for a connection lent to a busy slot.
+<!-- http-idle-bytes:end -->
+
 <!-- http-lean-get:begin -->
 ## A minimal GET on Http1Server
 
@@ -3582,6 +3611,106 @@ One figure falls outside its bands: twitter.json's minimum, 0.94x, is a 6.4% slo
 
 The wasm32 build of the tokenizer was not timed and is not byte-identical. After `opt -O2` and `llc -mtriple=wasm32-wasi`, `jsonTokEiselLemire` grows from 263 to 277 instructions; every other function is unchanged. The removed `jsonTokMulHigh` left one cross product unmasked, which its sum has room for. The builtin's wasm32 sequence, like the removed P-256 helper, masks both.
 <!-- mul-high:end -->
+<!-- sqlite-cursor:begin -->
+## The feed through cursors against SQL
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed three ways through `nish/sqlite`. All three read the 20 newest posts with each author's username and like count, and fold them the same way:
+
+- **`feed`** is SQL. One statement is prepared once; each call steps it 21 times, reads every column and resets. The statement has no parameters, so nothing is bound.
+- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx`.
+- **`feed-cursor`** is the same walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
+
+Every run of all three printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the two cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy.
+
+`node bench/sqlite/run.mjs` (12 rounds after a warm-up round) with the bench code of commit `c940ecb3`, which includes #1801 (`9996c9b1`): `openCursor` caches checked cursor shapes, and `beginRead`/`endRead` keep `BEGIN`, the schema read and `COMMIT` prepared. The machine is an Intel Xeon @ 2.10GHz with 4 logical cores, Linux 6.18.44, Ubuntu clang 18.1.3 and SQLite 3.54.1. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 14,429 / 18,082 (1,208) | 15,598 / 17,517 (624) | 1,169 / 564 |
+| `feed-cursor-walk` | 10,000 / 12,531 (759) | 9,799 / 12,585 (2,809) | 201 / 54 |
+| `feed-cursor` | 11,676 / 14,647 (2,346) | 11,692 / 14,694 (1,370) | 16 / 46 |
+
+Against `feed`, both on the build in the same rounds:
+
+- `feed-cursor-walk` less `feed`: min −4,429 ns, median −5,550 ns (−30.7 % of `feed`'s median).
+- `feed-cursor` less `feed`: min −2,754 ns, median −3,434 ns (−19.0 % of `feed`'s median).
+
+The verdict statistic is the median.
+
+**The walk is faster than the SQL statement here: 5,550 ns less a call.** That is larger than both noise bands (564 and 54) and the four IQRs (1,208, 624, 759 and 2,809). The gap is not the VDBE alone: each `feed` call opens and closes its own read transaction, while the walk holds one across every call, and this run does not separate the two.
+
+**With a request's setup on every call, the cursors are still faster than the SQL: 3,434 ns less a call.** That is larger than both noise bands (564 and 46) and the four IQRs (1,208, 624, 2,346 and 1,370).
+
+**The setup a per-request open adds is derived, not measured: `feed-cursor` less `feed-cursor-walk` is 2,116 ns at the median (1,676 ns at the min).** It is the difference of two rows of the table, not a timed row of its own. It is larger than both of their noise bands (54 and 46) but smaller than the IQRs of `feed-cursor` (2,346) and of `feed-cursor-walk`'s copy (2,809), so this run does not resolve it beyond those spreads.
+<!-- sqlite-cursor:end -->
+
+<!-- sqlite-pgo:begin -->
+## PGO and the CPU level on the SQLite feed
+
+`bench/run.mjs` does not measure this section; it carries the section over unchanged. `node bench/sqlite/run.mjs --variant V` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#variants-pgo-and-the-cpu-level)) adds one binary to the rounds and times it against what it varies:
+
+- `pgo`: the build linked with `--pgo-use` on a profile trained on another database.
+- `x86-64-v3`: the build linked with `--cpu x86-64-v3`.
+- `pgo-x86-64-v3`: both.
+- `c-native`: the C twin with `-march=native`. It is C only, because `nish` refuses `--cpu native`.
+
+Each comparison's noise band is the binary it varies (the build, or for `c-native` the C twin) against that binary's byte-identical copy.
+
+**The run.**
+
+- **Bench code:** commit `b52f0131`. The commit that adds this section changes only documentation.
+- **CPU:** this container, `Intel(R) Xeon(R) Processor @ 2.10GHz`, 4 CPUs (one thread a core), Linux 6.18.44.
+  - `lscpu` lists `fma`, `movbe`, `avx2` and `bmi2`, which x86-64-v3 needs. It also lists `avx512f`, `avx512dq`, `avx512cd`, `avx512bw`, `avx512vl`, `avx512_vnni`, `avx512_bf16` and `avx512_fp16`.
+  - `clang -march=native` picks `sapphirerapids`.
+- **Toolchain:** Ubuntu clang 18.1.3. `LLVM_PROFDATA` was unset, so run.mjs found `llvm-profdata` on PATH: `/usr/bin/llvm-profdata`, a link to LLVM 18's `/usr/lib/llvm-18/bin/llvm-profdata`.
+- **SQLite:** 3.54.1.
+
+```bash
+npm run build
+node bench/sqlite/run.mjs --validate --variant pgo   # likewise for each V: rows and checksums agree
+node bench/sqlite/run.mjs --rounds 12 --variant pgo
+node bench/sqlite/run.mjs --rounds 12 --variant x86-64-v3
+node bench/sqlite/run.mjs --rounds 24 --variant x86-64-v3
+node bench/sqlite/run.mjs --rounds 12 --variant pgo-x86-64-v3
+node bench/sqlite/run.mjs --rounds 24 --variant pgo-x86-64-v3
+node bench/sqlite/run.mjs --rounds 12 --variant c-native   # five binaries, so run.mjs rounds 12 up to 20
+```
+
+**What the figures are.** Each figure is wall-clock ns per call of `feed`, which reads the 20 newest posts: 20 rows of five columns. One process runs the call in a single-threaded loop, and each run times its own loop. That makes the figures neither per-request CPU time nor throughput. They are min, median and IQR over the rounds, after one uncounted warm-up round. Every timed run printed `rows 200000 checksum 1510587328`.
+
+**The verdict rule.** The verdict statistic is the median difference. A difference is claimed only when it is larger than its noise band and than the IQR of both binaries it compares. The min is reported but not judged.
+
+**This session's machine was slower and noisier than the one behind bench/README.md's figures.** The plain build's `feed` median ran from 18,488 to 20,866 ns across these runs. That record, from another session, puts it at 15,391 ns.
+
+| Comparison | Rounds | Base min / median (IQR) | Copy min / median (IQR) | Variant min / median (IQR) | Noise band, min / median | Variant − base, min / median |
+| --- | --- | --- | --- | --- | --- | --- |
+| PGO, against the build | 12 | 17,854 / 19,937 (3,254) | 17,582 / 19,148 (833) | 14,819 / 15,795 (1,752) | 273 / 789 | −3,035 / −4,142 (−20.8 %) |
+| `--cpu x86-64-v3`, against the build | 12 | 17,666 / 18,488 (2,898) | 17,636 / 19,217 (2,676) | 17,620 / 19,377 (2,052) | 30 / 730 | −46 / +889 (+4.8 %) |
+| `--cpu x86-64-v3`, against the build | 24 | 17,878 / 20,827 (5,105) | 17,833 / 20,221 (6,814) | 17,899 / 20,464 (3,792) | 45 / 607 | +21 / −363 (−1.7 %) |
+| PGO and `--cpu x86-64-v3`, against the build | 12 | 17,827 / 18,868 (3,926) | 17,548 / 18,518 (722) | 14,769 / 16,631 (3,870) | 279 / 349 | −3,059 / −2,236 (−11.9 %) |
+| PGO and `--cpu x86-64-v3`, against the build | 24 | 18,069 / 20,866 (4,669) | 17,731 / 21,201 (4,487) | 14,910 / 16,716 (2,952) | 339 / 335 | −3,160 / −4,150 (−19.9 %) |
+| C twin `-march=native`, against the C twin | 20 | 17,400 / 18,905 (4,306) | 17,528 / 19,897 (3,391) | 17,499 / 19,226 (3,444) | 128 / 993 | +99 / +322 (+1.7 %) |
+
+In the C row, "base" is the C twin and "copy" is the twin's byte-identical copy. In every other row, "base" is the Nish build and "copy" is its copy.
+
+**PGO: the build is faster on `feed`, 4,142 ns a call at the median (−20.8 %).** That is larger than the band (789) and both IQRs (3,254 and 1,752). This verdict rests on a single 12-round run; the other two Nish comparisons each have a 12- and a 24-round run.
+
+**`--cpu x86-64-v3` alone: no measurable change.** At 12 rounds, +889 ns is outside the band (730) but inside both IQRs (2,898 and 2,052). At 24 rounds, −363 ns is inside the band (607). The two runs also disagree on the sign.
+
+**PGO with `--cpu x86-64-v3`: this run does not resolve it at the median, though both runs point the same way as PGO alone.**
+
+- At 24 rounds, −4,150 ns (−19.9 %) is larger than the band (335) and than the variant's IQR (2,952). It is smaller than the build's IQR (4,669).
+- At 12 rounds, −2,236 ns is larger than the band (349) but smaller than both IQRs (3,926 and 3,870).
+- With `x86-64-v3` alone showing nothing, nothing here separates this variant from PGO alone.
+
+**C twin with `-march=native`: no measurable change.** +322 ns is inside the twin's band (993) and both IQRs (4,306 and 3,444).
+
+**Not measured here:**
+
+- `lookup`, `insert`, `insert-txn` and the cursor workloads. The same runs printed them; this record does not judge them.
+- PGO's effect on a profile trained on the timed database itself.
+- PGO's effect on the multi-threaded rusqlite group, which `--variant` leaves out.
+<!-- sqlite-pgo:end -->
 
 <!-- crypto:begin -->
 ## Crypto against other languages

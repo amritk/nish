@@ -55,7 +55,7 @@ function ones(n: i32): u8[] -> @ones
   local +1:12 i: i32 (let)
 function hex8(x: u32): string -> @hex8
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish_panic_slice nish_str_new
   stackSites=1 stackLocals=1
   local +0:9 out: u8[] (const)
   local +1:12 k: i32 (let)

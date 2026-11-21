@@ -6,12 +6,16 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /**
  * Runs the checks, each under `tests/run.js`'s filter: `only`, when set, is
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   // WP27 S3.1: a `string` handed to a `declare function` is borrowed as
   // `const char *`, and one that holds a NUL panics before the call (`ffi-nul`,
   // docs/wp27-ffi.md §8c). A literal with no NUL is proved and is no site;
@@ -31,7 +35,7 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
       return file
     }
     const compileFfi = (file, extra) =>
-      spawnSync(nish, [file, "-o", path.join(ffiDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
+      nishSync([file, "-o", path.join(ffiDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
         cwd: root,
         encoding: "utf8",
       })
@@ -335,7 +339,7 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
       keptSites.report === null ? shown(keptSites.r) : JSON.stringify(keptSites.report)
     )
     const keptExe = path.join(ffiDir, "kept.exe")
-    const keptBuilt = spawnSync(nish, [kept, "-o", path.join(ffiDir, "kept") + path.sep, "--link", keptExe], {
+    const keptBuilt = nishSync([kept, "-o", path.join(ffiDir, "kept") + path.sep, "--link", keptExe], {
       cwd: root,
       encoding: "utf8",
     })
@@ -419,7 +423,7 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
         ownedFfi.stderr.includes("calls realpath"),
       shown(ownedFfi)
     )
-    const ownedChecked = spawnSync(nish, [owned, "--emit-checked"], { cwd: root, encoding: "utf8" })
+    const ownedChecked = nishSync([owned, "--emit-checked"], { cwd: root, encoding: "utf8" })
     check(
       "ffi_owned_string: --emit-checked records the `readCString` import and its call",
       ownedChecked.status === 0 &&
@@ -514,8 +518,7 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
       ].join("\n")
     )
     const ownedKeptExe = path.join(ffiDir, "owned-kept.exe")
-    const ownedKeptBuilt = spawnSync(
-      nish,
+    const ownedKeptBuilt = nishSync(
       [ownedKept, "-o", path.join(ffiDir, "owned-kept") + path.sep, "--link", ownedKeptExe],
       { cwd: root, encoding: "utf8" }
     )
@@ -576,8 +579,7 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
       passedSites.report === null ? shown(passedSites.r) : JSON.stringify(passedSites.report)
     )
     const passedExe = path.join(ffiDir, "passed.exe")
-    const passedBuilt = spawnSync(
-      nish,
+    const passedBuilt = nishSync(
       [passed, "-o", path.join(ffiDir, "passed") + path.sep, "--link", passedExe],
       { cwd: root, encoding: "utf8" }
     )

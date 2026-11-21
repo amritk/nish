@@ -67,6 +67,7 @@ import {
   EnumInfo,
   FieldInfo,
   FunctionSig,
+  CheckedProgram,
   ROLE_CONSTRUCTOR,
   SpreadCopy,
   STRUCT_CLASS,
@@ -75,7 +76,7 @@ import {
 import { simdCompareMessage } from "./simd"
 import { refuseStorageLength } from "./module-storage"
 import { Scope } from "./symbols"
-import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
+import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /**
  * Whether `receiver` is a value rather than a builtin namespace: `x.length`
@@ -428,8 +429,14 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     // Against the method name, as `errorAtProperty` reports it, so that the
     // fix can carry the whole call.
     const name = new Node(NodeKind.Ident, access.end - access.text.length, access.end)
-    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`
-    ctx.errorFix(name, message, toStringFix(ctx, expr, receiver))
+    const fix = toStringFix(ctx, expr, receiver)
+    // A number's `toString()` names the spelling its fix writes (#1632).
+    const hint =
+      fix.length > 0 && isNumeric(receiver)
+        ? `; use a template literal: \`\${${ctx.textOf(unwrapParens(receiverExpr))}}\``
+        : ""
+    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}${hint}`
+    ctx.errorFix(name, message, fix)
     return T_ERROR
   }
   const info = structOf(ctx, receiver)
@@ -1411,6 +1418,44 @@ const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
     // rule from, and one sentence for a reader to recognise.
     ctx.error(arg, `\`${name}\` expects an argument of type string, got ${ctx.table.typeName(type)}`)
   }
+}
+
+/** The largest answer of `s.charCodeAt(i)`: a byte. */
+const CHAR_CODE_TOP: i32 = 255
+
+/** The largest answer of `Math.clz32(x)`, which src/builtins.ts types as `integer<0, CLZ32_TOP>`. */
+export const CLZ32_TOP: i32 = 32
+
+/**
+ * The top of the range `[0, top]` a builtin call's answer is documented to
+ * land in, or -1 for any other call. `s.charCodeAt(i)` answers the byte at `i`
+ * (a `zext` of the `i8` it loads), `[0, 255]`, as "String methods" in
+ * docs/LANGUAGE.md states and `String.fromCharCode`, its inverse on `c & 0xFF`,
+ * relies on; `Math.clz32(x)` counts bits, `[0, 32]`, and is typed
+ * `integer<0, 32>` for it in src/builtins.ts. `charCodeAt` is not typed
+ * `rangedOf(0, 255)` the same way: a ranged type reads as `i32`, which would
+ * change its documented `number` result under the default number mode, so its
+ * range lives only here. An operand is recorded as the
+ * base it is read as (`readAsBase` in src/expressions.ts), so the panic prover
+ * reads the range here rather than through the node's type. A user function or
+ * method of either name is not this, which `nodeCallees` and the receiver's
+ * type say.
+ */
+export const builtinAnswerTop = (program: CheckedProgram, table: TypeTable, call: Node): i32 => {
+  if (call.kind !== NodeKind.Call || program.nodeCallees[call.id] !== null) {
+    return -1
+  }
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Member || call.children[1].children.length !== 1) {
+    return -1
+  }
+  const receiver = callee.children[0]
+  const type = program.nodeTypes[receiver.id]
+  if (callee.text === "charCodeAt" && type >= 0 && table.baseOf(type) === T_STRING) {
+    return CHAR_CODE_TOP
+  }
+  const isMath = receiver.kind === NodeKind.Ident && receiver.text === "Math" && type < 0
+  return callee.text === "clz32" && isMath ? CLZ32_TOP : -1
 }
 
 const checkStringMethod = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {

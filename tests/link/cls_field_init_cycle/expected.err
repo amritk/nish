@@ -1,0 +1,1 @@
+main.ts:8:22: error: Field `next` of class `Even`: initializers construct `Even` again, which never ends (assign it in the constructor)

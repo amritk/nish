@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 811 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 814 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -3661,7 +3661,54 @@ Unknown identifier `
 The message of an error contains:
 
 ```text
-Unknown method `
+Unknown method `…
+```
+
+[`nl2249_num_tostring.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring.ts):
+
+```ts
+// NL2249: a `u8`'s `toString()` is refused, and the message names `${b}`.
+export const main = (): i32 => {
+  const b: u8 = 1;
+  console.log(b.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on u8; use a template literal: `${b}`
+```
+
+[`nl2249_num_tostring_i64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_i64.ts):
+
+```ts
+// NL2249: an `i64`'s `toString()` with no argument names `${n}`, as the other
+// numeric types do (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64; use a template literal: `${n}`
+```
+
+[`nl2249_num_tostring_radix.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_radix.ts):
+
+```ts
+// NL2249: with a radix a number's `toString` names no template literal, since
+// a template literal has no radix (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString(16));
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64
 ```
 
 ## NL2250
@@ -7144,7 +7191,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: …
+… may keep no panic site but out of memory: …
 ```
 
 [`nl2457_deny_panics_index.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index.ts) (compiled with `--deny-panics`):
@@ -7156,7 +7203,7 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < xs.length)` proves both ends, and an unsigned index needs only the upper one
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < xs.length)` proves both ends, and an unsigned index needs only the upper one
 ```
 
 [`nl2457_deny_panics_index_f64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7168,7 +7215,7 @@ export const at = (xs: number[], i: number): number => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `f64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `f64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
 ```
 
 [`nl2457_deny_panics_index_f64_i32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64_i32.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7181,7 +7228,7 @@ export const at = (xs: number[], i: i32): number => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
 ```
 
 [`nl2457_deny_panics_index_f64_ranged.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64_ranged.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7199,7 +7246,7 @@ export const at = (xs: i32[], k: i32): i32 => {
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
 ```
 
 [`nl2457_deny_panics_index_f64_shadowed_to_i32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64_shadowed_to_i32.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7214,7 +7261,7 @@ export const at = (xs: number[], i: i32): number => xs[i] + toI32(0);
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toI32`, which this module's own `toI32` hides: rename it to guard the access
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toI32`, which this module's own `toI32` hides: rename it to guard the access
 ```
 
 [`nl2457_deny_panics_index_shadowed_to_u32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_shadowed_to_u32.ts) (compiled with `--deny-panics`):
@@ -7229,7 +7276,7 @@ export const at = (xs: i32[], i: u32): i32 => xs[i] + toU32(0);
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toU32`, which this module's own `toU32` hides: rename it to guard the access
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toU32`, which this module's own `toU32` hides: rename it to guard the access
 ```
 
 [`nl2457_deny_panics_index_u64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_u64.ts) (compiled with `--deny-panics`):
@@ -7241,7 +7288,7 @@ export const at = (xs: i32[], i: u64): i32 => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `u64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `u64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
 ```
 
 ## NL2458
@@ -7249,7 +7296,7 @@ export const at = (xs: i32[], i: u64): i32 => xs[i];
 The message of an error contains:
 
 ```text
-…, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+…, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope…
 ```
 
 [`nl2458_deny_panics_call.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2458_deny_panics_call.ts) (compiled with `--deny-panics`):
@@ -7257,13 +7304,13 @@ The message of an error contains:
 ```ts
 // --deny-panics refuses a call into the standard library that may panic
 // (NL2458): the callee is outside the scope, so the call is where it is refused.
-import { trim } from "nish/text";
+import { split } from "nish/text";
 
-export const tidy = (s: string): string => trim(s);
+export const fields = (s: string, sep: string): string[] => split(s, sep);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `split` may panic: it reaches the `panic` site at std/text.ts:289:5, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope: every module of this package is in it by default, and `--allow-panics` takes out the ones `noPanic` does not list
 ```
 
 ## NL2459
@@ -15634,6 +15681,30 @@ The message of an error contains:
 ```
 
 ## NL2819
+
+The message of an error contains:
+
+```text
+` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
+```
+
+## NL2820
+
+The message of an error contains:
+
+```text
+` is not exported, but this class's initializers run in the module that builds it (export `
+```
+
+## NL2821
+
+The message of an error contains:
+
+```text
+` again, which never ends (assign it in the constructor)
+```
+
+## NL2822
 
 The message of an error contains:
 
