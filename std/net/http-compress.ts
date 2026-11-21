@@ -1021,8 +1021,8 @@ export class HttpBodyDecoder {
       }
       const end: i32 =
         coding === HTTP_CODING_GZIP
-          ? this.gunzip.decompress(src, off, len, this.output, 0, limit)
-          : this.unzlib.decompress(src, off, len, this.output, 0, limit)
+          ? this.gunzip.decompress(src, off, len, this.output, toI32(0), limit)
+          : this.unzlib.decompress(src, off, len, this.output, toI32(0), limit)
       if (end >= 0) {
         return end
       }
