@@ -278,6 +278,13 @@ function childPlacementMessage(what: string): string -> @childPlacementMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function literalValues(literal: Node): Node[] -> @literalValues
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_panic_index
+  pointer literal: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 out: Node[] (const)
+  local +1:14 child: Node (const)
 function lentMessage(who: string, what: string): string -> @lentMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -534,8 +541,8 @@ function RegionWalk.typeOf(this: RegionWalk, node: Node): i32 -> @RegionWalk.typ
 function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.origin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.identOrigin
-  calls: RegionWalk.callOrigin RegionWalk.handedTo RegionWalk.identOrigin RegionWalk.join RegionWalk.lentIn RegionWalk.origin RegionWalk.typeOf isAssignmentOperator isCopied joinOrigin nish_panic_index nish_str_eq unwrapParens
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.identOrigin#0 RegionWalk.origin#0 RegionWalk.lentIn#0 RegionWalk.handedTo#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.callOrigin#0
+  calls: RegionWalk.callOrigin RegionWalk.handedTo RegionWalk.identOrigin RegionWalk.join RegionWalk.lentIn RegionWalk.origin RegionWalk.typeOf isAssignmentOperator isCopied joinOrigin literalValues nish_panic_index nish_str_eq unwrapParens
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.identOrigin#0 RegionWalk.origin#0 RegionWalk.lentIn#0 RegionWalk.handedTo#0 RegionWalk.lentIn#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.callOrigin#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 e: Node (const)
@@ -547,24 +554,26 @@ function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.ori
   callee +18:14 RegionWalk.origin -> @RegionWalk.origin
   callee +23:14 RegionWalk.lentIn -> @RegionWalk.lentIn
   callee +23:26 RegionWalk.handedTo -> @RegionWalk.handedTo
-  local +30:11 out: i32 (let)
-  local +31:18 part: Node (const)
-  callee +32:15 joinOrigin -> @joinOrigin
-  callee +32:31 RegionWalk.origin -> @RegionWalk.origin
-  callee +37:14 RegionWalk.join -> @RegionWalk.join
-  callee +37:24 RegionWalk.origin -> @RegionWalk.origin
-  callee +37:52 RegionWalk.origin -> @RegionWalk.origin
-  callee +40:11 isAssignmentOperator -> @isAssignmentOperator
-  callee +41:16 RegionWalk.origin -> @RegionWalk.origin
-  local +44:13 left: i32 (const)
-  callee +44:20 RegionWalk.origin -> @RegionWalk.origin
-  local +45:13 right: i32 (const)
-  callee +45:21 RegionWalk.origin -> @RegionWalk.origin
-  local +46:13 either: i32 (const)
-  callee +46:39 joinOrigin -> @joinOrigin
-  callee +46:65 RegionWalk.join -> @RegionWalk.join
-  callee +47:31 joinOrigin -> @joinOrigin
-  callee +50:14 RegionWalk.callOrigin -> @RegionWalk.callOrigin
+  callee +28:14 RegionWalk.lentIn -> @RegionWalk.lentIn
+  callee +28:26 literalValues -> @literalValues
+  local +32:11 out: i32 (let)
+  local +33:18 part: Node (const)
+  callee +34:15 joinOrigin -> @joinOrigin
+  callee +34:31 RegionWalk.origin -> @RegionWalk.origin
+  callee +39:14 RegionWalk.join -> @RegionWalk.join
+  callee +39:24 RegionWalk.origin -> @RegionWalk.origin
+  callee +39:52 RegionWalk.origin -> @RegionWalk.origin
+  callee +42:11 isAssignmentOperator -> @isAssignmentOperator
+  callee +43:16 RegionWalk.origin -> @RegionWalk.origin
+  local +46:13 left: i32 (const)
+  callee +46:20 RegionWalk.origin -> @RegionWalk.origin
+  local +47:13 right: i32 (const)
+  callee +47:21 RegionWalk.origin -> @RegionWalk.origin
+  local +48:13 either: i32 (const)
+  callee +48:39 joinOrigin -> @joinOrigin
+  callee +48:65 RegionWalk.join -> @RegionWalk.join
+  callee +49:31 joinOrigin -> @joinOrigin
+  callee +52:14 RegionWalk.callOrigin -> @RegionWalk.callOrigin
 function RegionWalk.identOrigin(this: RegionWalk, e: Node): i32 -> @RegionWalk.identOrigin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.join

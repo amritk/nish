@@ -4386,7 +4386,12 @@ const run = async (): Promise<void> => {
   borrows is its spawner's memory, lent only while the task runs `` (NL2822,
   `reject_async_lend_store`, `tests/link/async_lend_store`,
   `tests/wordings/nl2822_lent_view_stored`), and so is reaching it through
-  what a callee answers out of it (`reject_async_lend_returned`). A number,
+  what a callee answers out of it (`reject_async_lend_returned`). An array or
+  object literal the task builds around the view is lent too, so a store
+  through `[lend(note)][0]` or `{ n: lend(note) }.n`, or a callee handed
+  such a literal that stores into it, is refused the same way
+  (`reject_async_lend_literal_array`, `reject_async_lend_literal_object`,
+  `reject_async_lend_literal_call`, `tests/link/async_lend_literal`). A number,
   `boolean`, enum or `string` is copied anyway, so `lend` of one is
   `` `lend` from `nish:async` takes one object or array, its spawner's
   memory, which a task reads in place and answers as it was given `` (NL2693,

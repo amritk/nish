@@ -256,6 +256,15 @@ const childPlacementMessage = (what: string): string =>
  * its spawner, which outlives the task's memory and is the spawner's again
  * once the task ends.
  */
+/** The values an array or object literal holds: its elements, or each property's value. */
+const literalValues = (literal: Node): Node[] => {
+  const out: Node[] = []
+  for (const child of literal.children) {
+    out.push(child.kind === NodeKind.Property ? child.children[child.children.length - 1] : child)
+  }
+  return out
+}
+
 const lentMessage = (who: string, what: string): string =>
   `${who}, and ${what}: a view \`lend\` borrows is its spawner's memory, lent only while the task runs, ` +
   "so the task may read it and copy out of it but may not write a pointer into it, grow it, or keep it " +
@@ -699,7 +708,9 @@ class RegionWalk {
       return this.lentIn(this.handedTo(e, this.program.nodeCallees[e.id])) ? ORIGIN_LENT : ORIGIN_REGION
     }
     if (kind === NodeKind.Array || kind === NodeKind.Object) {
-      return ORIGIN_REGION
+      // As with `new`: a literal of the task's own that holds a lent view is
+      // the view's to hold to, so a store through it is a store into the view.
+      return this.lentIn(literalValues(e)) ? ORIGIN_LENT : ORIGIN_REGION
     }
     if (kind === NodeKind.Template) {
       // A new string; a substitution that is one already may come back as it is.

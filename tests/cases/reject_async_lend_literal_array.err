@@ -1,0 +1,1 @@
+stores `[1, 2, 3]` into `h[0].bytes`: a view `lend` borrows is its spawner's memory, lent only while the task runs
