@@ -99,7 +99,7 @@ const tombstone = (mask: i32): u32 => toU32(mask) + 1
 const foundAt = (bucket: i32, index: i32): i64 => (toI64(bucket) << 32) | toI64(index)
 
 /** A probe that stopped at the empty `bucket` for hash `h`. Always negative. */
-const absentAt = (bucket: i32, h: u32): i64 => toI64(-1) - ((toI64(bucket) << 32) | toI64(h))
+const absentAt = (bucket: i32, h: u32): i64 => ~((toI64(bucket) << 32) | toI64(h))
 
 /**
  * The one probe, for both classes: linear probing from `h`'s home bucket to
@@ -301,7 +301,8 @@ const truncate = <T>(items: T[]): void => {
  */
 const fileAppended = (slots: u32[], mask: i32, bucket: i32, hashes: u32[]): boolean => {
   const used = toI32(hashes.length)
-  if (toI64(used) * 4 > toI64(slots.length) * 3 || bucket < 0 || bucket >= toI32(slots.length)) {
+  const size = toI32(slots.length)
+  if (toI64(used) * 4 > toI64(size) * 3 || bucket < 0 || bucket >= size) {
     return false
   }
   if (used > 0) {

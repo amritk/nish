@@ -278,8 +278,7 @@ arrays of lines, and `skip(name, reason)`. Because an assertion returns a
 
 The string operations a program would otherwise write by hand.
 
-<!-- allow-panics: calls `std/text.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { contains, replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
 
@@ -539,8 +538,7 @@ it does not validate, and a nested value is stepped over rather than searched.
 It reads exactly the shape `nish --json` prints, which is what it was written
 for ([The CLI](cli.md#--json-for-tools)).
 
-<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { jsonField } from "nish/json";
 
@@ -569,8 +567,7 @@ one pass.
 own, placing every comma and colon itself, byte for byte what
 `JSON.stringify` writes. You say only what the value is:
 
-<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonWriter } from "nish/json";
 
@@ -617,8 +614,7 @@ it once, and it stays until you set it again.
   `null` as `JSON.stringify` does. A misuse before it, such as a value where a
   key is due, keeps its own code.
 
-<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";
 
@@ -748,7 +744,7 @@ a `Map` with `string` keys whose values are any of those, or a `string`, a
 class, an array or a map with `| null`; and a `JsonNumber`, which keeps a
 number's text exactly.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -823,7 +819,7 @@ field keeps the member it held. That makes a string enum field the way to take
 one of a fixed set of strings from input: the decoder checks it for you, and
 allocates nothing to do it.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -877,7 +873,7 @@ can't be keyed by an enum; an array of one, `Role[]`, is fine. A
 decoding empties the map and fills it in the order the keys arrive, a key given
 twice is an error, and encoding writes the entries in the map's order.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/collections.ts`, `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -946,7 +942,7 @@ wider than a `u64` or with more digits than an `f64` comes back byte for byte.
 Read it with `text()`, `isI64()` and `i64()`, `isU64()` and `u64()`, or
 `f64()`, and set it with `setText`.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -1081,7 +1077,7 @@ variant, half read, so check `d.failed` before using anything it decoded. The ta
 when it is not the first key the decoder reads ahead to find it. A tag that is
 missing, not a string or no variant's is `JSON_DECODE_TAG`.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -1251,8 +1247,7 @@ The offsets are into the array you gave `parseRanged`, or into the string
 UTF-16 code unit, its offsets count code units, so past the first non-ASCII
 character they differ from a native build's, which count UTF-8 bytes.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1350,7 +1345,7 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; pops an array it does not test for empty; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; pops an array it does not test for empty; calls `std/json-equal.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
@@ -1395,8 +1390,7 @@ first element of the member `tags`. A token is a member's key, with `~1` for a
 `/` in it and `~0` for a `~`, or an array index written without a leading
 zero.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_POINTER_NONE, isRelativeJsonPointer, jsonPointerEscape, jsonPointerParse, jsonPointerResolve } from "nish/json-pointer";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1774,7 +1768,7 @@ value at `key`, first storing `value` there if the key was missing, in one
 lookup. `reserve(m, n)` makes room for `n` entries up front, so filling the
 map never has to grow it.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
@@ -2102,7 +2096,7 @@ walks the arguments, and the answer is the id of the command they reached
 and every flag's value with where it came from. `finish` then prints the
 help, the version or an error, the way [`nish/cli`](#nishcli) lays help out.
 
-<!-- allow-panics: calls `panic`; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `panic`; calls `std/cli-args.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Cli, ROOT, finish } from "nish/cli-args";
@@ -3108,7 +3102,7 @@ WebAssembly build always takes the portable code.
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
 the program wipes both:
 
-<!-- allow-panics: calls `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/hmac.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";

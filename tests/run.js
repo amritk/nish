@@ -11531,8 +11531,8 @@ if (dealtHere("runtimeCache")) {
     const programs = [
       ["examples/hello.ts", []],
       ["examples/argv.ts", ["7", "x"]],
-      ["examples/sets.ts", [], [ALLOW_PANICS]],
-      ["examples/wordcount.ts", [], [ALLOW_PANICS]],
+      ["examples/sets.ts", []],
+      ["examples/wordcount.ts", []],
       ["examples/multi/main.ts", [], [ALLOW_PANICS]],
     ]
     for (const profile of ["speed", "size"]) {

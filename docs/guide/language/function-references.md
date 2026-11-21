@@ -43,12 +43,10 @@ whichever function the field holds at that moment.
 
 ## Arrays, returns and comparison
 
-The examples from here on build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): some add and index with
+Some examples from here on build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they add and index with
 nothing bounding them, and bounding the operands and testing `i < xs.length`
-before an index builds those under the default; the `Map` one calls
-standard-library code that keeps panic sites no proof removes yet, and will
-build under the default once that code is made panic-free.
+before an index builds them under the default.
 
 A reference goes anywhere a value of its type can: a local, a field of a
 class or an interface, an array element, a return value, and a parameter
@@ -207,8 +205,7 @@ A `Map` value can be a reference, an array of them, or a nullable of either.
 A call through what `get` returns can reach every function of that type that
 any `Map` or array in the program holds, so it is a choice among all of them:
 
-<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 type Op = (x: i32) => i32;
 

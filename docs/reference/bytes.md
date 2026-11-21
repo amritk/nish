@@ -35,6 +35,7 @@ import {
   skipDigits,
   skipJsonPlain,
   skipJsonText,
+  tryCopyBytes,
 } from "nish/bytes";
 ```
 
@@ -226,6 +227,12 @@ The first index in `[from, to)` whose byte a JSON writer cannot copy as itself �
 <scalar-card title="skip​Json​Text" icon="phosphor/regular/function" href="#skipjsontext">
 
 `skipBlank` for the bytes a JSON string holds as themselves: printable ASCII other than `"` and `\`, and every well-formed UTF-8 sequence (RFC 3629 §4) that ends before `to`.
+
+</scalar-card>
+
+<scalar-card title="try​Copy​Bytes" icon="phosphor/regular/function" href="#trycopybytes">
+
+`copyBytes` that answers `false`, and writes nothing, where `copyBytes` panics: for a negative `count` or a range that does not lie inside its array.
 
 </scalar-card>
 
@@ -1183,5 +1190,59 @@ Where the scan stops, exclusive, clamped into `[0, b.length]`.
 The index of the first byte in the clamped range that is not in
   the run, or
   the clamped `to` when there is none.
+
+</scalar-field>
+
+### tryCopyBytes
+
+`copyBytes` that answers `false`, and writes nothing, where `copyBytes`
+panics: for a negative `count` or a range that does not lie inside its
+array. A caller a strict module reaches uses this one, so the out-of-range
+case is a value it handles rather than a panic site.
+
+```ts
+const tryCopyBytes: (
+  dst: u8[],
+  at: i32,
+  src: readonly u8[],
+  from: i32,
+  count: i32,
+) => boolean
+```
+
+<scalar-field name="dst" type="u8[]" required>
+
+The array written into; only `dst[at..at+count)` changes.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+Where in `dst` the first copied byte goes.
+
+</scalar-field>
+
+<scalar-field name="src" type="readonly u8[]" required>
+
+The array copied from, which may be `dst` itself.
+
+</scalar-field>
+
+<scalar-field name="from" type="i32" required>
+
+Where in `src` the copied bytes start.
+
+</scalar-field>
+
+<scalar-field name="count" type="i32" required>
+
+How many bytes to copy; zero copies nothing.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` once the bytes are copied, or `false` when either range
+  lies outside its array and nothing was written.
 
 </scalar-field>

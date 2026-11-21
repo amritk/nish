@@ -500,7 +500,9 @@ a new array of `end - start` elements.
 
 ### sliceAll
 
-A copy of the whole of `xs`: what `xs.slice()` compiles to.
+A copy of the whole of `xs`: what `xs.slice()` compiles to. It copies
+directly rather than through `slice`, whose range check can panic and
+which a whole copy never needs, so it cannot panic but out of memory.
 
 ```ts
 const sliceAll: <T>(xs: readonly T[]) => T[]

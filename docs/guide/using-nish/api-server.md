@@ -22,7 +22,7 @@ The examples on this page build with
 a call to them is refused by default until the standard library is made
 panic-free.
 
-<!-- allow-panics: calls `std/json.ts`, `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";

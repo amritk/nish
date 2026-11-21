@@ -16,6 +16,7 @@ import structInfoOf from "./emit-classes" -> function @structInfoOf
 import emitLibraryCopies from "./emit-map" -> function @emitLibraryCopies
 import libraryReach from "./emit-map" -> function @libraryReach
 import mapIntrinsicOf from "./emit-map" -> function @mapIntrinsicOf
+import noEntryOperand from "./emit-map" -> function @noEntryOperand
 import privateAbi from "./emit-result" -> function @privateAbi
 import emitEnumStringOf from "./emit-strings" -> function @emitEnumStringOf
 import internalErrorFor from "./ice" -> function @internalErrorFor
@@ -175,6 +176,17 @@ function jsonCallMethod(emitter: Emitter, receiver: StructInfo, name: string, se
   callee +5:34 jsonObjectType -> @jsonObjectType
   local +6:14 arg: string (const)
   callee +9:10 jsonCallSig -> @jsonCallSig
+function jsonNoEntry(emitter: Emitter, map: StructInfo, name: string): string -> @jsonNoEntry
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via noEntryOperand
+  escaping: name
+  calls: StructInfo.method noEntryOperand
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=noEntryOperand#0
+  pointer map: size=184 writesThrough=false captured=false passedTo=StructInfo.method#0
+  stackSites=0 stackLocals=0
+  local +0:9 sig: FunctionSig | null (const)
+  callee +0:15 StructInfo.method -> @StructInfo.method
+  callee +1:35 noEntryOperand -> @noEntryOperand
 function jsonCallSig(emitter: Emitter, sig: FunctionSig, operands: string[]): string -> @jsonCallSig
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvmAbi
@@ -1586,8 +1598,8 @@ function emitJsonEncodeUnionBody(emitter: Emitter, part: JsonPart): void -> @emi
 function emitJsonEncodeMapBody(emitter: Emitter, part: JsonPart): void -> @emitJsonEncodeMapBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonPartInfo
-  calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitJsonEncodeValue emitJsonStopIfFailed jsonBranch jsonCallMethod jsonPartInfo jsonPartValue nish_str_concat
-  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonPartValue#0 emitJsonStopIfFailed#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 emitJsonEncodeValue#0 jsonCallMethod#0 jsonCallMethod#0 jsonCallMethod#0
+  calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitJsonEncodeValue emitJsonStopIfFailed jsonBranch jsonCallMethod jsonNoEntry jsonPartInfo jsonPartValue nish_str_concat
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonPartValue#0 emitJsonStopIfFailed#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonNoEntry#0 jsonCallMethod#0 emitJsonEncodeValue#0 jsonCallMethod#0 jsonNoEntry#0 jsonCallMethod#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 jsonPartValue#1 emitJsonStopIfFailed#1 emitJsonEncodeValue#1
   stackSites=7 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -1618,15 +1630,17 @@ function emitJsonEncodeMapBody(emitter: Emitter, part: JsonPart): void -> @emitJ
   callee +16:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   local +17:9 key: string (const)
   callee +17:15 jsonCallMethod -> @jsonCallMethod
+  callee +17:73 jsonNoEntry -> @jsonNoEntry
   callee +18:3 jsonCallMethod -> @jsonCallMethod
   callee +19:3 emitJsonEncodeValue -> @emitJsonEncodeValue
-  callee +19:45 jsonCallMethod -> @jsonCallMethod
-  local +20:9 after: string (const)
-  callee +20:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +21:9 next: string (const)
-  callee +21:16 jsonCallMethod -> @jsonCallMethod
-  callee +22:3 IRFunction.emit -> @IRFunction.emit
-  callee +23:3 IRFunction.emit -> @IRFunction.emit
-  callee +24:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +25:3 jsonCallMethod -> @jsonCallMethod
-  callee +26:3 IRFunction.emit -> @IRFunction.emit
+  callee +23:5 jsonCallMethod -> @jsonCallMethod
+  callee +23:65 jsonNoEntry -> @jsonNoEntry
+  local +25:9 after: string (const)
+  callee +25:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +26:9 next: string (const)
+  callee +26:16 jsonCallMethod -> @jsonCallMethod
+  callee +27:3 IRFunction.emit -> @IRFunction.emit
+  callee +28:3 IRFunction.emit -> @IRFunction.emit
+  callee +29:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +30:3 jsonCallMethod -> @jsonCallMethod
+  callee +31:3 IRFunction.emit -> @IRFunction.emit

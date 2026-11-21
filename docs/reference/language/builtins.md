@@ -4410,12 +4410,11 @@ export const main = (): i32 => {
   and never hashes a key again (`map_growth`); a deleted key leaves a
   tombstone that later probes walk past, and setting it again appends a new
   entry (`map_delete_reinsert`); and a table whose entries are mostly dead
-  compacts in place instead of growing (`map_compaction`). A table holds at
-  most 2^24 - 1 entries, which is what a 24-bit index field holds and one fewer
-  than Node's 2^24: an insert at the cap first compacts
-  away dead entries, and when there are none it panics with
-  `Map maximum size exceeded` (or `Set …`) *(CLI only: the case takes 16 million
-  inserts)*.
+  compacts in place instead of growing (`map_compaction`). A table has no
+  entry cap of its own, so no insert panics: a bucket's index field is as wide
+  as the table's mask, and past 2^29 entries the bucket table would outgrow the
+  largest array, which stops the program as out of memory, as any allocation
+  that size does (Node's tables throw at 2^24).
 - **Asking about one key twice is one probe** ([wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md)
   §9.1). Three patterns keep the first probe's answer — the entry it found, or
   the empty bucket it stopped at and the key's hash — and write through it:

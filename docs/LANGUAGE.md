@@ -16698,10 +16698,13 @@ performance warning about the same check is not printed beside the error.
   scope as a plain compile does: each refuses a program that may panic with
   the same errors, exit 1, and runs or writes nothing; `--allow-panics`
   relaxes them the same way.
-- **The standard library is not yet panic-free**, so a module in the scope
-  cannot yet call what reaches a panic site in `std/` — `Map`, `Set`,
-  `split` and the `JSON` reads among them — without NL2458. Such a program
-  builds with `--allow-panics` until `std/` is proven.
+- **The standard library is not yet wholly panic-free.** `Map`, `Set`,
+  `std/array`, `std/sort`, `std/json` and most of `std/text` and `std/regex`
+  keep no panic site, so a module in the scope calls them freely. A call that
+  reaches one of the sites left — the typed `JSON` decoder (`std/json-typed`),
+  `JsonDocument.stringify` and `textOf`, `toFixed`, and the `std/net`,
+  `std/threads` and `std/crypto` modules among them — is NL2458, and such a
+  program builds with `--allow-panics` until that code is proven.
 
 ### The compatibility dialect
 

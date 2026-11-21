@@ -128,10 +128,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "overflow", "at": "std/bytes.ts:525:47", "proven": true },
-                { "kind": "overflow", "at": "std/bytes.ts:525:83", "proven": true },
-                { "kind": "panic", "at": "std/bytes.ts:526:5", "proven": false },
-                { "kind": "call", "at": "std/bytes.ts:528:3", "callee": "copyBytesWalk", "via": "overflow" }
+                { "kind": "panic", "at": "std/bytes.ts:526:5", "proven": false }
               ]
             },
             {
@@ -436,6 +433,16 @@
               "witnesses": {},
               "panics": [
                 { "kind": "call", "at": "std/bytes.ts:481:10", "callee": "skipJsonTextWalk", "via": "index" }
+              ]
+            },
+            {
+              "name": "tryCopyBytes",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/bytes.ts:545:47", "proven": true },
+                { "kind": "overflow", "at": "std/bytes.ts:545:83", "proven": true }
               ]
             }
           ]
