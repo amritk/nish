@@ -41890,6 +41890,18 @@ if (selects("ci-scope", "ci.yml")) {
 }
 
 if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // The train force-pushes release/next on every merge to main, so a run of
+  // the commit it replaced tests a release nobody can merge any more: the
+  // group for that ref cancels like a pull request's. The run it cancels is
+  // the one release-pr.yml dispatches there (`github.ref`), which a
+  // `pull_request` condition alone does not reach.
+  const cancelIf = /^ {2}cancel-in-progress: >-\n {4}(.*)$/m.exec(ciYmlText)?.[1] ?? ""
+  check(
+    "ci.yml: a newer push to release/next cancels the older commit's run",
+    cancelIf.startsWith("${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || ") &&
+      /^ {4}ci-\$\{\{ github\.workflow \}\}-.*\|\| github\.ref \}\}$/m.test(ciYmlText),
+    `cancel-in-progress: ${cancelIf || "(none)"}`
+  )
   // Each delegation is honest only while the job it names makes the check on
   // every run that could change its answer. Those jobs are scoped lanes
   // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so

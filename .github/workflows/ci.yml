@@ -154,16 +154,19 @@ env:
 # - Re-runs (a later attempt), so recovering an older run never cancels the
 #   tip's run.
 # Release CI proper is untouched: release.yml calls this workflow at the tag,
-# where `github.ref` is `refs/tags/v*`, and the Release PR's own runs are
-# `pull_request` runs like any other. A merge-queue run has a ref of its own
-# per queued entry, so it shares a group with nothing and the queue, not this
-# setting, decides when it is superseded. interop.yml uses the same rule.
+# where `github.ref` is `refs/tags/v*`. The Release PR's runs that
+# release-pr.yml dispatches at `release/next` (its `pull_request` runs wait for
+# approval) share the group `refs/heads/release/next` and cancel like a pull
+# request's: the train force-pushes that branch on every merge to main, so an
+# older run tests a release commit nobody can merge any more. A merge-queue run
+# has a ref of its own per queued entry, so it shares a group with nothing and
+# the queue, not this setting, decides when it is superseded. interop.yml uses the same rule.
 # `run_attempt` is a string in the `github` context, hence `'1'`.
 concurrency:
   group: >-
     ci-${{ github.workflow }}-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
   cancel-in-progress: >-
-    ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
+    ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
 jobs:
   # Which side jobs this run needs (docs/wp10-ci.md, "Scoped lanes"). One
