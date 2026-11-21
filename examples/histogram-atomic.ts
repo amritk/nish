@@ -1,7 +1,8 @@
-// Opt-out (`--allow-panics`): `ThreadScope.spawn` reaches the `panic` in
-// `slotOutOfRange` (std/threads.ts); this file keeps no site of its own.
-// Follow-up: make `spawn`'s slot store in `std/threads.ts` panic-free, then
-// build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): `AtomicI32Array`'s constructor and its
+// element methods reach their `array-length` and `index` sites in
+// std/threads.ts, which no caller's guard removes; this file keeps no site of
+// its own. Follow-up: let a caller prove an `AtomicI32Array` element in range
+// as it proves a `spawn` slot, then build this file without `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The

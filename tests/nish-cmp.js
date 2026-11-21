@@ -18151,6 +18151,26 @@ const DECLARED = [
     changelog: "short Postgres int columns without the overflow test",
     why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
   })),
+  // The std/ instruction benches compile against this tree's std/, which the
+  // seed's own std/ differs from or refuses.
+  ...["cli-args.ll", "std-cli-args.ll"].map((file) => ({
+    program: "bench/std-cli-args.ts",
+    file,
+    changelog: "std/ panic ratchet",
+    why: "a new instruction bench driving std/cli-args.ts: the reference compiles it against the seed's std/cli-args.ts, whose functions, hash key and `Cli` constructor differ from this tree's",
+  })),
+  {
+    program: "bench/std-json-typed.ts",
+    file: "exit",
+    changelog: "std/ panic ratchet",
+    why: "a new instruction bench driving std/json-typed.ts: the seed's std/json-typed.ts gives `Doc.origin` a non-literal initializer the seed refuses, so the reference exits 1 where the candidate compiles it",
+  },
+  {
+    program: "tests/link/spawn_slot_proven/main.ts",
+    file: "exit",
+    changelog: "caller-proven spawn slots",
+    why: "the candidate proves a `spawn` slot the caller's loop keeps in range and compiles the program under `--deny-panics`; the reference still counts std/threads.ts's slot check as a panic site and refuses it",
+  },
 ]
 
 /**
