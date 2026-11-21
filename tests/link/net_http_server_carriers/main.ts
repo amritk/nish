@@ -29,6 +29,7 @@ import { Wire, getOf, postOf } from "../net_http2/peer"
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Cat, h3ClientParams, h3ClientSettings, h3Frame, h3Section, h3Varint } from "../net_http3/peer"
 import { H2cClient, H2TlsClient, QuicClient, TURNS, h3Answer } from "./client"
 import { HANDLER_DROPPED, HANDLER_SENT } from "nish/net/handler"
+import { HttpServerRequest } from "nish/net/http-server"
 import { Rig, rigLimits } from "./rig"
 
 /** The HEADERS frame of an HTTP/3 request with these pseudo-headers, then `names`/`values`. */
@@ -202,7 +203,7 @@ const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.eqStr("404 as problem+json", `${missing.status} ${missing.body}`, `404 {"type":"about:blank","title":"Not Found","status":404}`)
 }
 
-/** The four trailer requests on streams 1, 3, 5 and 7 of `wire`, after the preface and SETTINGS. */
+/** The five trailer requests on streams 1, 3, 5, 7 and 9 of `wire`, after the preface and SETTINGS: the last a HEAD. */
 const trailerRequests = (wire: Wire): void => {
   const none: i32[] = []
   const noValues: i64[] = []
@@ -213,6 +214,7 @@ const trailerRequests = (wire: Wire): void => {
   wire.headers(n32(3), getOf("/trailers-bare"), H2_FLAG_END_STREAM)
   wire.headers(n32(5), getOf("/trailers-many"), H2_FLAG_END_STREAM)
   wire.headers(n32(7), getOf("/trailers-huge"), H2_FLAG_END_STREAM)
+  wire.headers(n32(9), [":method", "HEAD", ":scheme", "https", ":path", "/trailers", ":authority", "example.com"], H2_FLAG_END_STREAM)
 }
 
 /** What the trailer requests of `trailerRequests` read back as, on one carrier. */
@@ -223,24 +225,25 @@ const trailerFrames = (t: Suite, rig: Rig, carrier: string, frames: string): voi
   t.ok(`${carrier}: /trailers-bare: the head, then the trailer section, and no DATA`, frames.indexOf("HEADERS 3 :status=200 ") >= 0 && frames.indexOf(`HEADERS 3 end ${trailer}`) >= 0 && frames.indexOf("DATA 3 ") < 0)
   t.ok(`${carrier}: more trailer fields than maxResponseFields reset the stream`, frames.indexOf("RST_STREAM 5") >= 0 && frames.indexOf("HEADERS 5 end") < 0)
   t.ok(`${carrier}: a trailer section too large for the output resets the stream`, frames.indexOf("RST_STREAM 7") >= 0 && frames.indexOf("HEADERS 7 end") < 0)
+  t.ok(`${carrier}: a HEAD of /trailers: the head ends the stream, and no trailer section follows`, frames.indexOf("HEADERS 9 end :status=200 ") >= 0 && frames.indexOf(`HEADERS 9 end ${trailer}`) < 0 && frames.indexOf("DATA 9 ") < 0)
   const results: i32[] = rig.trailerResults
-  t.ok(`${carrier}: trailers answered SENT, SENT, DROPPED, SENT`, toI32(results.length) === 4 && results[0] === HANDLER_SENT && results[1] === HANDLER_SENT && results[2] === HANDLER_DROPPED && results[3] === HANDLER_SENT)
+  t.ok(`${carrier}: trailers answered SENT, SENT, DROPPED, SENT, SENT`, toI32(results.length) === 5 && results[0] === HANDLER_SENT && results[1] === HANDLER_SENT && results[2] === HANDLER_DROPPED && results[3] === HANDLER_SENT && results[4] === HANDLER_SENT)
 }
 
 /** Trailers over HTTP/2 over TLS and over h2c, each on a server of its own. */
 const trailerChecks = (t: Suite, key: Secret<u8[]>): void => {
-  const rig = new Rig(rigLimits(n32(16)), true, toI32(4))
+  const rig = new Rig(rigLimits(n32(32)), true, toI32(4))
   const h2 = new H2TlsClient(rig)
   t.ok("trailers: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
   trailerRequests(h2.wire)
   h2.flush(key, null, null)
-  trailerFrames(t, rig, "HTTP/2", h2.awaitFrames(n32(12), key, null, null))
-  const clear = new Rig(rigLimits(n32(16)), true, toI32(4))
+  trailerFrames(t, rig, "HTTP/2", h2.awaitFrames(n32(13), key, null, null))
+  const clear = new Rig(rigLimits(n32(32)), true, toI32(4))
   const c = new H2cClient(clear)
   t.ok("trailers: an h2c connection", c.connect(clear.h2.h2cPort))
   trailerRequests(c.wire)
   c.flush(key)
-  trailerFrames(t, clear, "h2c", c.awaitFrames(n32(12), key))
+  trailerFrames(t, clear, "h2c", c.awaitFrames(n32(13), key))
 }
 
 /** Whether a DATA frame in the joined `frames` carries END_STREAM. */
@@ -283,6 +286,35 @@ const trailerWindow = (t: Suite, key: Secret<u8[]>): void => {
   t.ok("then the trailer section with END_STREAM", next.indexOf("HEADERS 1 end grpc-status=0 grpc-message=ok") >= 0)
 }
 
+/** Trailers for a stream the client reset after the head answer HANDLER_DROPPED. */
+const trailerDropped = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(rigLimits(n32(4)), true, toI32(4))
+  const c = new H2cClient(rig)
+  t.ok("trailers after a reset: an h2c connection", c.connect(rig.h2.h2cPort))
+  const none: i32[] = []
+  const noValues: i64[] = []
+  c.wire.preface()
+  c.wire.settings(none, noValues)
+  c.wire.settingsAck()
+  c.wire.headers(n32(1), getOf("/trailers-hold"), H2_FLAG_END_STREAM)
+  c.flush(key)
+  const head: string = c.awaitFrames(n32(4), key)
+  t.ok("a GET of /trailers-hold: the head, and the stream left open", head.indexOf("HEADERS 1 :status=200 ") >= 0 && head.indexOf("HEADERS 1 end") < 0 && toI32(rig.streaming.length) === 1)
+  if (toI32(rig.streaming.length) !== 1) {
+    t.ok("once the client resets the stream, the held request reads hungUp", false)
+    t.ok("and trailers answers HANDLER_DROPPED", false)
+    return
+  }
+  const r: HttpServerRequest = rig.streaming[0]
+  c.wire.rst(n32(1), H2_CANCEL)
+  c.flush(key)
+  for (let turn: i32 = 0; turn < TURNS && !rig.h.hungUp(r); turn++) {
+    rig.step(n32(5), key, null, null)
+  }
+  t.ok("once the client resets the stream, the held request reads hungUp", rig.h.hungUp(r))
+  t.ok("and trailers answers HANDLER_DROPPED", rig.h.trailers(r, rig.trailerNames, rig.trailerValues) === HANDLER_DROPPED)
+}
+
 export const main = (): i32 => {
   const t = new Suite("http server carriers")
   const key: Secret<u8[]> = secret(leafPrivate())
@@ -296,6 +328,7 @@ export const main = (): i32 => {
   waitChecks(t, key)
   trailerChecks(t, key)
   trailerWindow(t, key)
+  trailerDropped(t, key)
   wipe(key)
   return t.done()
 }

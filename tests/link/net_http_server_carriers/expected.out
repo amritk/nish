@@ -37,17 +37,23 @@ PASS  HTTP/2: then the trailer section, a HEADERS frame with END_STREAM
 PASS  HTTP/2: /trailers-bare: the head, then the trailer section, and no DATA
 PASS  HTTP/2: more trailer fields than maxResponseFields reset the stream
 PASS  HTTP/2: a trailer section too large for the output resets the stream
-PASS  HTTP/2: trailers answered SENT, SENT, DROPPED, SENT
+PASS  HTTP/2: a HEAD of /trailers: the head ends the stream, and no trailer section follows
+PASS  HTTP/2: trailers answered SENT, SENT, DROPPED, SENT, SENT
 PASS  trailers: an h2c connection
 PASS  h2c: /trailers: its body, a DATA frame that does not end the stream
 PASS  h2c: then the trailer section, a HEADERS frame with END_STREAM
 PASS  h2c: /trailers-bare: the head, then the trailer section, and no DATA
 PASS  h2c: more trailer fields than maxResponseFields reset the stream
 PASS  h2c: a trailer section too large for the output resets the stream
-PASS  h2c: trailers answered SENT, SENT, DROPPED, SENT
+PASS  h2c: a HEAD of /trailers: the head ends the stream, and no trailer section follows
+PASS  h2c: trailers answered SENT, SENT, DROPPED, SENT, SENT
 PASS  trailers behind the window: an h2c connection
 PASS  a GET of /trailers-big: 200, the body waits for window, no trailers yet
 PASS  trailers answered SENT while the body waits
 PASS  the rest of the body, no DATA frame ending the stream
 PASS  then the trailer section with END_STREAM
-http server carriers: 52 passed, 0 failed, 0 skipped
+PASS  trailers after a reset: an h2c connection
+PASS  a GET of /trailers-hold: the head, and the stream left open
+PASS  once the client resets the stream, the held request reads hungUp
+PASS  and trailers answers HANDLER_DROPPED
+http server carriers: 58 passed, 0 failed, 0 skipped

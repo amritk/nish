@@ -30,6 +30,7 @@ const TRAILERS_BARE: i32 = 9
 const TRAILERS_BIG: i32 = 10
 const TRAILERS_MANY: i32 = 11
 const TRAILERS_HUGE: i32 = 12
+const TRAILERS_HOLD: i32 = 13
 
 /** `/big`'s body: more than the 65535 bytes of an HTTP/2 stream's first window. */
 export const RIG_BIG: i32 = 100000
@@ -93,6 +94,8 @@ export class Rig {
   hugeValues: u8[][]
   /** What `trailers` answered for each trailer route, in the order they came. */
   trailerResults: i32[]
+  /** `/trailers-hold`'s requests, started and held for the program to end with `trailers`. */
+  streaming: HttpServerRequest[]
 
   /** A server under `limits` with `slots` connections per listener: HTTP/1.1 and h2c, and HTTP/2 over TLS and HTTP/3 when `signed`. */
   constructor(limits: HttpServerLimits, signed: boolean, slots: i32) {
@@ -110,6 +113,7 @@ export class Rig {
     router.add("GET", "/trailers-big")
     router.add("GET", "/trailers-many")
     router.add("GET", "/trailers-huge")
+    router.add("GET", "/trailers-hold")
     this.h = new HttpServer(limits, router)
     this.signed = signed
     this.h2 = new RigH2()
@@ -152,6 +156,7 @@ export class Rig {
     this.hugeNames = [ascii("x-huge")]
     this.hugeValues = [huge]
     this.trailerResults = []
+    this.streaming = []
     this.text = ascii("text/plain")
     this.octets = ascii("application/octet-stream")
     this.hello = ascii("hello\n")
@@ -259,6 +264,10 @@ export class Rig {
       case TRAILERS_HUGE:
         h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
         this.trailerResults.push(h.trailers(r, this.hugeNames, this.hugeValues))
+        break
+      case TRAILERS_HOLD:
+        h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
+        this.streaming.push(r)
         break
       default:
         h.refuse(r)
