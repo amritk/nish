@@ -245,10 +245,14 @@ const trailerChecks = (t: Suite, key: Secret<u8[]>): void => {
 
 /** Whether a DATA frame in the joined `frames` carries END_STREAM. */
 const dataEnds = (frames: string): boolean => {
-  for (const frame of frames.split("; ")) {
-    if (frame.startsWith("DATA ") && frame.endsWith(" end")) {
+  let at: i32 = frames.indexOf("DATA ")
+  while (at >= 0) {
+    const stop: i32 = frames.indexOf("; ", at)
+    const frame: string = stop < 0 ? frames.substring(at) : frames.substring(at, stop)
+    if (frame.endsWith(" end")) {
       return true
     }
+    at = frames.indexOf("DATA ", at + 1)
   }
   return false
 }

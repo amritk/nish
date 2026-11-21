@@ -1,6 +1,6 @@
 // Trailers on an HTTP/3 response panic: the façade sends them on HTTP/2
 // only. The rig answers `GET /trailers` with a body and a trailer section.
-import { secret } from "nish:secret"
+import { secret, wipe } from "nish:secret"
 import { H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER, H3_FRAME_HEADERS } from "nish/net/http3-frame"
 import { QpackEncoder } from "nish/net/qpack"
 import { n32, n64 } from "../net_quic_frame/typed"
@@ -15,6 +15,7 @@ export const main = (): i32 => {
   const h3 = new QuicClient(rig)
   if (!h3.connect("h3", h3ClientParams(new H3Limits()), key)) {
     console.log("FAIL  no HTTP/3 connection")
+    wipe(key)
     return 0
   }
   h3.send(CLIENT_CONTROL, h3Cat([h3Varint(H3_STREAM_CONTROL), h3ClientSettings(n64(-1))]), false)
@@ -25,5 +26,6 @@ export const main = (): i32 => {
   h3.send(n64(0), h3Frame(H3_FRAME_HEADERS, h3Section(new QpackEncoder(), fields, values)), true)
   h3.turnUntil(key, n64(0), false)
   console.log("FAIL  the request was answered")
+  wipe(key)
   return 0
 }

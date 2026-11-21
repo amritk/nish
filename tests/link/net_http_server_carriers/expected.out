@@ -31,4 +31,23 @@ PASS  an h2c connection that never sends its preface is closed by prefaceTimeout
 PASS  one silent after its preface is closed by idleTimeout
 PASS  no TLS listener: an h2c connection
 PASS  wait serves it: /hello answered and every stream ended
-http server carriers: 33 passed, 0 failed, 0 skipped
+PASS  trailers: the TLS handshake
+PASS  HTTP/2: /trailers: its body, a DATA frame that does not end the stream
+PASS  HTTP/2: then the trailer section, a HEADERS frame with END_STREAM
+PASS  HTTP/2: /trailers-bare: the head, then the trailer section, and no DATA
+PASS  HTTP/2: more trailer fields than maxResponseFields reset the stream
+PASS  HTTP/2: a trailer section too large for the output resets the stream
+PASS  HTTP/2: trailers answered SENT, SENT, DROPPED, SENT
+PASS  trailers: an h2c connection
+PASS  h2c: /trailers: its body, a DATA frame that does not end the stream
+PASS  h2c: then the trailer section, a HEADERS frame with END_STREAM
+PASS  h2c: /trailers-bare: the head, then the trailer section, and no DATA
+PASS  h2c: more trailer fields than maxResponseFields reset the stream
+PASS  h2c: a trailer section too large for the output resets the stream
+PASS  h2c: trailers answered SENT, SENT, DROPPED, SENT
+PASS  trailers behind the window: an h2c connection
+PASS  a GET of /trailers-big: 200, the body waits for window, no trailers yet
+PASS  trailers answered SENT while the body waits
+PASS  the rest of the body, no DATA frame ending the stream
+PASS  then the trailer section with END_STREAM
+http server carriers: 52 passed, 0 failed, 0 skipped
