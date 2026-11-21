@@ -121,6 +121,48 @@
       "returns": "bytes"
     },
     {
+      "name": "hmacSha256Secret",
+      "params": [
+        {
+          "name": "key",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "hmacSha384Secret",
+      "params": [
+        {
+          "name": "key",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "hmacSha512Secret",
+      "params": [
+        {
+          "name": "key",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
       "name": "sha256",
       "module": "nish/crypto/sha256",
       "params": [
@@ -919,6 +961,53 @@
     },
     {
       "kind": "property",
+      "id": "P-SECRET-256",
+      "title": "hmacSha256Secret, given the key as a Secret, gives the tag hmacSha256 gives",
+      "covers": ["R-HMAC-SHA256"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        },
+        {
+          "name": "text",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 200
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "hmacSha256Secret",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "text"
+              }
+            ]
+          },
+          {
+            "call": "hmacSha256",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "text"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
       "id": "P-CONSTRUCTION-384",
       "title": "HMAC-SHA-384 of a key of at most 128 bytes is the RFC 2104 construction over SHA-384",
       "covers": ["R-HMAC-SHA384"],
@@ -1109,6 +1198,53 @@
                     "var": "key"
                   }
                 ]
+              },
+              {
+                "var": "text"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-SECRET-384",
+      "title": "hmacSha384Secret, given the key as a Secret, gives the tag hmacSha384 gives",
+      "covers": ["R-HMAC-SHA384"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 400
+        },
+        {
+          "name": "text",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 200
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "hmacSha384Secret",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "text"
+              }
+            ]
+          },
+          {
+            "call": "hmacSha384",
+            "args": [
+              {
+                "var": "key"
               },
               {
                 "var": "text"
@@ -1321,6 +1457,53 @@
     },
     {
       "kind": "property",
+      "id": "P-SECRET-512",
+      "title": "hmacSha512Secret, given the key as a Secret, gives the tag hmacSha512 gives",
+      "covers": ["R-HMAC-SHA512"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 400
+        },
+        {
+          "name": "text",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 200
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "hmacSha512Secret",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "text"
+              }
+            ]
+          },
+          {
+            "call": "hmacSha512",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "text"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
       "id": "P-TAG-LEN",
       "title": "the tags are 32, 48 and 64 bytes, the hash output, for any key and message",
       "covers": ["R-HMAC-SHA256", "R-HMAC-SHA384", "R-HMAC-SHA512"],
@@ -1432,19 +1615,7 @@
     },
     {
       "name": "hmacKeyedVerify",
-      "reason": "the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt (\"HmacKey: hmacKeyedVerify accepts the tag it made\")"
-    },
-    {
-      "name": "hmacSha256Secret",
-      "reason": "takes the key as a Secret<u8[]>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's nish:secret tests"
-    },
-    {
-      "name": "hmacSha384Secret",
-      "reason": "takes the key as a Secret<u8[]>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's nish:secret tests"
-    },
-    {
-      "name": "hmacSha512Secret",
-      "reason": "takes the key as a Secret<u8[]>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's nish:secret tests"
+      "reason": "the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt (\"HmacKey: hmacKeyedVerify accepts the tag it made\"); its message is a (data, off, len) /* window */, but its first parameter is the class HmacKey, which vector 0.6.0 refuses in a ts-interface block (\"HmacKey is not a ts-interface type; use u8[], string, boolean, i8, i16, i32, i64, u8, u16, u32, u64, f64, Secret<u8[]>, u16[], u32[], u64[], each optionally | null\"), and its tag is a (tag, tagAt) pair read in place, which neither a window nor an /* out CAP */ write declares"
     },
     {
       "name": "pbkdf2HmacSha256",
@@ -1476,7 +1647,7 @@
     },
     {
       "name": "hmacKeyedInto",
-      "reason": "writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt"
+      "reason": "writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt; its message is a /* window */ and its (out, at) an /* out CAP */ write, but its first parameter is the class HmacKey, which vector 0.6.0 refuses in a ts-interface block (as for hmacKeyedVerify), and it returns void where an /* out CAP */ write returns the end offset"
     },
     {
       "name": "hmacCopySha256",
