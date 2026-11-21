@@ -102,25 +102,30 @@ const jsonEqualSortedMembers = (doc: JsonDocument, v: i32, keys: string[]): i32[
     order.push(i)
     spare.push(i)
   }
-  // A document holds at most 2^22 values, so the widths below never come
-  // near overflowing.
+  // `lo`, `mid` and `width` all lie in `0..n` with `n` an `i32`, so each sum
+  // and double below is under 2^32 and cannot wrap in `u32`; past `n` it is
+  // clamped to `n`, as the merge needs.
   let width: i32 = 1
   while (width < n) {
     let lo: i32 = 0
     while (lo < n) {
-      const mid: i32 = lo + width < n ? lo + width : n
-      const hi: i32 = mid + width < n ? mid + width : n
+      const midWide: u32 = toU32(lo) + toU32(width)
+      const mid: i32 = midWide < toU32(n) ? toI32(midWide) : n
+      const hiWide: u32 = toU32(mid) + toU32(width)
+      const hi: i32 = hiWide < toU32(n) ? toI32(hiWide) : n
       let i: i32 = lo
       let j: i32 = mid
       for (let k: i32 = lo; k < hi; k++) {
         const left: i32 = jsonEqualAt(order, i)
         const right: i32 = jsonEqualAt(order, j)
-        const takeLeft: boolean =
-          i < mid && (j >= hi || !jsonEqualBefore(jsonEqualKeyAt(keys, right), jsonEqualKeyAt(keys, left)))
-        jsonEqualSetAt(spare, k, takeLeft ? left : right)
-        if (takeLeft) {
+        if (i < mid && (j >= hi || !jsonEqualBefore(jsonEqualKeyAt(keys, right), jsonEqualKeyAt(keys, left)))) {
+          jsonEqualSetAt(spare, k, left)
           i += 1
-        } else {
+        } else if (j < hi) {
+          // Always true here: `k - lo` members are taken, `(i - lo) + (j - mid)`
+          // of them, and `k < hi`, so a run whose left half is spent has a right
+          // member left.
+          jsonEqualSetAt(spare, k, right)
           j += 1
         }
       }
@@ -129,7 +134,8 @@ const jsonEqualSortedMembers = (doc: JsonDocument, v: i32, keys: string[]): i32[
     const done: i32[] = spare
     spare = order
     order = done
-    width = width * 2
+    const doubled: u32 = toU32(width) * 2
+    width = doubled < toU32(n) ? toI32(doubled) : n
   }
   return order
 }
@@ -156,10 +162,12 @@ export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): b
   const left: i32[] = [a]
   const right: i32[] = [b]
   while (left.length > 0) {
-    const x: i32 = jsonEqualAt(left, toI32(left.length) - 1)
-    const y: i32 = jsonEqualAt(right, toI32(right.length) - 1)
-    left.pop()
-    right.pop()
+    const x: i32 = left.pop()
+    // Never taken: the two stacks are pushed in pairs, so they empty together.
+    if (right.length < 1) {
+      return false
+    }
+    const y: i32 = right.pop()
     const kind: i32 = da.kind(x)
     if (kind === JSON_VALUE_NONE || kind !== db.kind(y)) {
       return false
@@ -238,11 +246,12 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
   const tasks: i32[] = [v]
   const keyStack: string[] = []
   while (tasks.length > 0) {
-    const x: i32 = jsonEqualAt(tasks, toI32(tasks.length) - 1)
-    tasks.pop()
+    const x: i32 = tasks.pop()
     if (x === JSON_EQUAL_KEY_TASK) {
-      jsonEqualPutText(out, jsonEqualKeyAt(keyStack, toI32(keyStack.length) - 1))
-      keyStack.pop()
+      // Each key task is pushed with its key, so the key stack holds one here.
+      if (keyStack.length > 0) {
+        jsonEqualPutText(out, keyStack.pop())
+      }
       continue
     }
     const kind: i32 = doc.kind(x)
@@ -258,8 +267,8 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
     } else if (kind === JSON_VALUE_ARRAY) {
       const n: i32 = doc.length(x)
       jsonEqualPut(out, `a${n}:`)
-      for (let i: i32 = n - 1; i >= 0; i--) {
-        tasks.push(doc.at(x, i))
+      for (let i: i32 = n; i > 0; i--) {
+        tasks.push(doc.at(x, i - 1))
       }
     } else {
       const n: i32 = doc.length(x)
@@ -267,8 +276,8 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
       const keys: string[] = []
       const order: i32[] = jsonEqualSortedMembers(doc, x, keys)
       // Pushed last member first, each value before its key, so the key pops first.
-      for (let i: i32 = n - 1; i >= 0; i--) {
-        const m: i32 = jsonEqualAt(order, i)
+      for (let i: i32 = n; i > 0; i--) {
+        const m: i32 = jsonEqualAt(order, i - 1)
         tasks.push(doc.at(x, m))
         tasks.push(JSON_EQUAL_KEY_TASK)
         keyStack.push(jsonEqualKeyAt(keys, m))
