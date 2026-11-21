@@ -101,6 +101,7 @@ import {
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import { cImport } from "./c-import"
+import { protoCommand } from "./proto-cli"
 import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
@@ -822,6 +823,10 @@ const commandMain = (): number => {
   // `nish c-import` writes a module from a C header (src/c-import.ts).
   if (process.argv[1] === "c-import") {
     return cImport(process.argv)
+  }
+  // `nish proto` writes message classes from a .proto file (src/proto-cli.ts).
+  if (process.argv[1] === "proto") {
+    return protoCommand(process.argv)
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()

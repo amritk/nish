@@ -1,0 +1,6 @@
+syntax = "proto3";
+message A {
+  oneof c {
+    map<string, int32> m = 1;
+  }
+}

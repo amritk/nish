@@ -1,0 +1,1 @@
+proto: refused/enum-value-twice.proto:4: refused: two values named E_ZERO in enum E

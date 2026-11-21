@@ -1,0 +1,5 @@
+syntax = "proto3";
+message A {
+  reserved "a";
+  int32 a = 1;
+}

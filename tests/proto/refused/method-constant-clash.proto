@@ -1,0 +1,6 @@
+syntax = "proto3";
+message A {}
+message S_GET {}
+service S {
+  rpc Get(A) returns (A);
+}

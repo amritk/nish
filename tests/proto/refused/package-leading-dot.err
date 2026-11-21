@@ -1,0 +1,1 @@
+proto: refused/package-leading-dot.proto:2: a package name may not start with a dot

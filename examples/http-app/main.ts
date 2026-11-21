@@ -6,7 +6,8 @@
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
-// SIGINT or SIGTERM.
+// SIGINT or SIGTERM. `--static <dir>` serves the files under `dir` at
+// `/static/` through `nish/net/static`.
 //
 //     build/nish --allow-panics examples/http-app/main.ts --link build/http-app
 //     build/http-app 8080 --max-notes 100 &
@@ -16,6 +17,10 @@
 //     curl -s localhost:8080/notes/1                         # {"id":1,"text":"milk"}
 //     curl -s -X DELETE localhost:8080/notes/1               # 204
 //     kill %1                                                # drains, then exits 0
+//
+//     build/http-app 8080 --static examples/http-app &
+//     curl -s localhost:8080/static/notes.ts                 # the file, with its ETag
+//     curl -s -r 0-9 localhost:8080/static/notes.ts          # its first ten bytes, 206
 //
 // On the first signal it stops accepting, answers what it holds and waits for
 // open connections to finish, for `--drain-ms` at most; a second signal stops
@@ -37,7 +42,7 @@ const NANOS_PER_MS: i64 = 1000000
 
 const usage = (error: string): i32 => {
   console.error(`http-app: ${error}`)
-  console.error("usage: http-app <port> [--max-notes <n>] [--drain-ms <ms>] [--quiet]")
+  console.error("usage: http-app <port> [--max-notes <n>] [--drain-ms <ms>] [--static <dir>] [--quiet]")
   console.error("  serves a JSON notes API on <port> until SIGINT or SIGTERM")
   return 2
 }
