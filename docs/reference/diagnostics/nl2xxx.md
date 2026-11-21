@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 813 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 814 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15702,4 +15702,40 @@ The message of an error contains:
 
 ```text
 ` again, which never ends (assign it in the constructor)
+```
+
+## NL2822
+
+The message of an error contains:
+
+```text
+…a view `lend` borrows is its spawner's memory, lent only while the task runs…
+```
+
+[`nl2822_lent_view_stored.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2822_lent_view_stored.ts):
+
+```ts
+// NL2822: a spawned task hands a view `lend` borrows to a callee that stores a pointer into it.
+import { lend, spawn } from "nish:async"
+
+class Box {
+  items: i32[] = []
+}
+
+const refill = (b: Box): void => {
+  b.items = [1]
+}
+
+async function task(b: Box): Promise<void> {
+  refill(lend(b))
+}
+
+export async function main(): Promise<i32> {
+  spawn(task(new Box()))
+  return 0
+}
+```
+
+```text
+`task` runs as a spawned task, in a region of its own that is freed when it ends, and hands `lend(b)` to `refill`, which stores into it: a view `lend` borrows is its spawner's memory, lent only while the task runs, so the task may read it and copy out of it but may not write a pointer into it, grow it, or keep it past its end; copy what it needs out instead
 ```

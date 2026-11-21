@@ -46,6 +46,7 @@ const ORIGIN_ROOT: i32 = 4
 const ORIGIN_PARENT: i32 = 5
 const ORIGIN_MIXED: i32 = 6
 const ORIGIN_CHILD_ROOT: i32 = 7
+const ORIGIN_LENT: i32 = 8
 const SPAWN_PIPED_FIRST_GROWN: i32 = 2
 struct RegionFinding (class) size=24 align=8 exported
   field program: CheckedProgram index=0 offset=0
@@ -87,6 +88,7 @@ struct RegionWalk (class) size=160 align=8
   method origin -> @RegionWalk.origin
   method identOrigin -> @RegionWalk.identOrigin
   method handedTo -> @RegionWalk.handedTo
+  method lentIn -> @RegionWalk.lentIn
   method callOrigin -> @RegionWalk.callOrigin
   method reaches -> @RegionWalk.reaches
   method arrowResult -> @RegionWalk.arrowResult
@@ -273,6 +275,10 @@ function notFreshMessage(fn: FunctionSig, ref: string, child: boolean): string -
   stackSites=0 stackLocals=0
   callee +0:45 fnName -> @fnName
 function childPlacementMessage(what: string): string -> @childPlacementMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function lentMessage(who: string, what: string): string -> @lentMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
@@ -528,8 +534,8 @@ function RegionWalk.typeOf(this: RegionWalk, node: Node): i32 -> @RegionWalk.typ
 function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.origin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.identOrigin
-  calls: RegionWalk.callOrigin RegionWalk.identOrigin RegionWalk.join RegionWalk.origin RegionWalk.typeOf isAssignmentOperator isCopied joinOrigin nish_panic_index nish_str_eq unwrapParens
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.identOrigin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.callOrigin#0
+  calls: RegionWalk.callOrigin RegionWalk.handedTo RegionWalk.identOrigin RegionWalk.join RegionWalk.lentIn RegionWalk.origin RegionWalk.typeOf isAssignmentOperator isCopied joinOrigin nish_panic_index nish_str_eq unwrapParens
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.identOrigin#0 RegionWalk.origin#0 RegionWalk.lentIn#0 RegionWalk.handedTo#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.join#0 RegionWalk.callOrigin#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 e: Node (const)
@@ -539,24 +545,26 @@ function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.ori
   local +4:11 kind: NodeKind (const)
   callee +9:14 RegionWalk.identOrigin -> @RegionWalk.identOrigin
   callee +18:14 RegionWalk.origin -> @RegionWalk.origin
-  local +25:11 out: i32 (let)
-  local +26:18 part: Node (const)
-  callee +27:15 joinOrigin -> @joinOrigin
-  callee +27:31 RegionWalk.origin -> @RegionWalk.origin
-  callee +32:14 RegionWalk.join -> @RegionWalk.join
-  callee +32:24 RegionWalk.origin -> @RegionWalk.origin
-  callee +32:52 RegionWalk.origin -> @RegionWalk.origin
-  callee +35:11 isAssignmentOperator -> @isAssignmentOperator
-  callee +36:16 RegionWalk.origin -> @RegionWalk.origin
-  local +39:13 left: i32 (const)
-  callee +39:20 RegionWalk.origin -> @RegionWalk.origin
-  local +40:13 right: i32 (const)
-  callee +40:21 RegionWalk.origin -> @RegionWalk.origin
-  local +41:13 either: i32 (const)
-  callee +41:39 joinOrigin -> @joinOrigin
-  callee +41:65 RegionWalk.join -> @RegionWalk.join
-  callee +42:31 joinOrigin -> @joinOrigin
-  callee +45:14 RegionWalk.callOrigin -> @RegionWalk.callOrigin
+  callee +23:14 RegionWalk.lentIn -> @RegionWalk.lentIn
+  callee +23:26 RegionWalk.handedTo -> @RegionWalk.handedTo
+  local +30:11 out: i32 (let)
+  local +31:18 part: Node (const)
+  callee +32:15 joinOrigin -> @joinOrigin
+  callee +32:31 RegionWalk.origin -> @RegionWalk.origin
+  callee +37:14 RegionWalk.join -> @RegionWalk.join
+  callee +37:24 RegionWalk.origin -> @RegionWalk.origin
+  callee +37:52 RegionWalk.origin -> @RegionWalk.origin
+  callee +40:11 isAssignmentOperator -> @isAssignmentOperator
+  callee +41:16 RegionWalk.origin -> @RegionWalk.origin
+  local +44:13 left: i32 (const)
+  callee +44:20 RegionWalk.origin -> @RegionWalk.origin
+  local +45:13 right: i32 (const)
+  callee +45:21 RegionWalk.origin -> @RegionWalk.origin
+  local +46:13 either: i32 (const)
+  callee +46:39 joinOrigin -> @joinOrigin
+  callee +46:65 RegionWalk.join -> @RegionWalk.join
+  callee +47:31 joinOrigin -> @joinOrigin
+  callee +50:14 RegionWalk.callOrigin -> @RegionWalk.callOrigin
 function RegionWalk.identOrigin(this: RegionWalk, e: Node): i32 -> @RegionWalk.identOrigin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.join
@@ -585,27 +593,41 @@ function RegionWalk.handedTo(this: RegionWalk, call: Node, callee: FunctionSig |
   local +7:11 receiver: Node | null (const)
   callee +7:22 methodReceiver -> @methodReceiver
   local +11:16 arg: Node (const)
+function RegionWalk.lentIn(this: RegionWalk, handed: Node[]): boolean -> @RegionWalk.lentIn [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RegionWalk.origin
+  calls: RegionWalk.origin unwrapParens
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.origin#0
+  pointer handed: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:16 arg: Node (const)
+  local +1:13 a: Node (const)
+  callee +1:17 unwrapParens -> @unwrapParens
+  callee +2:40 RegionWalk.origin -> @RegionWalk.origin
 function RegionWalk.callOrigin(this: RegionWalk, call: Node): i32 -> @RegionWalk.callOrigin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via RegionWalk.runsSpawnArrow
-  calls: RegionWalk.handedTo RegionWalk.joinHanded RegionWalk.reaches RegionWalk.runsSpawnArrow RegionWalk.typeOf StringSet.has capturesOf nish_panic_index regionRoleOf unwrapParens
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.runsSpawnArrow#0 RegionWalk.handedTo#0 RegionWalk.reaches#0 RegionWalk.joinHanded#0
+  sharedWrite: via RegionWalk.origin
+  calls: RegionWalk.handedTo RegionWalk.joinHanded RegionWalk.origin RegionWalk.reaches RegionWalk.runsSpawnArrow RegionWalk.typeOf StringSet.has capturesOf nish_panic_index nish_str_eq regionRoleOf unwrapParens
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.origin#0 RegionWalk.typeOf#0 RegionWalk.runsSpawnArrow#0 RegionWalk.handedTo#0 RegionWalk.reaches#0 RegionWalk.joinHanded#0
   pointer call: size=40 writesThrough=false captured=false passedTo=RegionWalk.typeOf#1 RegionWalk.handedTo#1
   stackSites=0 stackLocals=0
   local +0:11 callee: FunctionSig | null (const)
-  callee +1:28 regionRoleOf -> @regionRoleOf
-  callee +5:28 StringSet.has -> @StringSet.has
-  callee +5:74 RegionWalk.typeOf -> @RegionWalk.typeOf
-  local +11:9 out: i32 (let)
-  callee +11:34 RegionWalk.runsSpawnArrow -> @RegionWalk.runsSpawnArrow
-  local +14:11 answer: i32 (const)
-  callee +14:52 capturesOf -> @capturesOf
-  local +15:16 arg: Node (const)
-  callee +15:23 RegionWalk.handedTo -> @RegionWalk.handedTo
-  local +16:13 a: Node (const)
-  callee +16:17 unwrapParens -> @unwrapParens
-  callee +17:56 RegionWalk.reaches -> @RegionWalk.reaches
-  callee +21:13 RegionWalk.joinHanded -> @RegionWalk.joinHanded
+  local +4:13 args: Node[] (const)
+  local +5:13 lent: i32 (const)
+  callee +5:38 RegionWalk.origin -> @RegionWalk.origin
+  callee +10:28 regionRoleOf -> @regionRoleOf
+  callee +14:28 StringSet.has -> @StringSet.has
+  callee +14:74 RegionWalk.typeOf -> @RegionWalk.typeOf
+  local +20:9 out: i32 (let)
+  callee +20:34 RegionWalk.runsSpawnArrow -> @RegionWalk.runsSpawnArrow
+  local +23:11 answer: i32 (const)
+  callee +23:52 capturesOf -> @capturesOf
+  local +24:16 arg: Node (const)
+  callee +24:23 RegionWalk.handedTo -> @RegionWalk.handedTo
+  local +25:13 a: Node (const)
+  callee +25:17 unwrapParens -> @unwrapParens
+  callee +26:56 RegionWalk.reaches -> @RegionWalk.reaches
+  callee +30:13 RegionWalk.joinHanded -> @RegionWalk.joinHanded
 function RegionWalk.reaches(this: RegionWalk, arg: Node, answer: i32): boolean -> @RegionWalk.reaches [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: answer
@@ -708,21 +730,23 @@ function RegionWalk.store(this: RegionWalk, holder: i32, value: i32, at: Node, w
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.noteWrite
   escaping: holder value what
-  calls: RegionWalk.noteWrite RegionWalk.report RegionWalk.reportOuter mayBeRegion mayBeReleased regionToOuterMessage
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.noteWrite#0 RegionWalk.reportOuter#0 RegionWalk.reportOuter#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.report#0
-  pointer at: size=40 writesThrough=true captured=true passedTo=RegionWalk.reportOuter#1 RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.report#1
+  calls: RegionWalk.noteWrite RegionWalk.report RegionWalk.reportOuter lentMessage mayBeRegion mayBeReleased regionToOuterMessage
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.noteWrite#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.reportOuter#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.report#0
+  pointer at: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.report#1
   stackSites=0 stackLocals=0
   callee +0:5 RegionWalk.noteWrite -> @RegionWalk.noteWrite
-  callee +1:65 mayBeReleased -> @mayBeReleased
-  callee +2:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +3:44 mayBeReleased -> @mayBeReleased
+  callee +2:7 RegionWalk.report -> @RegionWalk.report
+  callee +2:23 lentMessage -> @lentMessage
+  callee +3:72 mayBeReleased -> @mayBeReleased
   callee +4:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +5:73 mayBeRegion -> @mayBeRegion
-  callee +6:7 RegionWalk.report -> @RegionWalk.report
-  callee +6:23 regionToOuterMessage -> @regionToOuterMessage
-  callee +10:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +12:9 RegionWalk.report -> @RegionWalk.report
-  callee +12:25 regionToOuterMessage -> @regionToOuterMessage
+  callee +5:44 mayBeReleased -> @mayBeReleased
+  callee +6:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +7:73 mayBeRegion -> @mayBeRegion
+  callee +8:7 RegionWalk.report -> @RegionWalk.report
+  callee +8:23 regionToOuterMessage -> @regionToOuterMessage
+  callee +12:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +14:9 RegionWalk.report -> @RegionWalk.report
+  callee +14:25 regionToOuterMessage -> @regionToOuterMessage
 function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit
@@ -850,9 +874,9 @@ function RegionWalk.visitArguments(this: RegionWalk, node: Node, handed: Node[],
 function RegionWalk.visitBuiltin(this: RegionWalk, node: Node, handed: Node[]): void -> @RegionWalk.visitBuiltin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit
-  calls: RegionWalk.noteAlias RegionWalk.origin RegionWalk.report RegionWalk.store RegionWalk.typeOf RegionWalk.visit RegionWalk.visitArguments arrayMethodName builtinNameOf growthMessage isCopied isResizeCall mayBeOuter methodReceiver nish_panic_index nish_str_concat nish_str_eq storesText textOf
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.visitArguments#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.typeOf#0 RegionWalk.noteAlias#0 RegionWalk.origin#0 RegionWalk.store#0 RegionWalk.origin#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitArguments#1 methodReceiver#0 isResizeCall#2 builtinNameOf#1 RegionWalk.report#1 arrayMethodName#2 RegionWalk.report#1 RegionWalk.store#3
+  calls: RegionWalk.noteAlias RegionWalk.origin RegionWalk.report RegionWalk.store RegionWalk.typeOf RegionWalk.visit RegionWalk.visitArguments arrayMethodName builtinNameOf growthMessage isCopied isResizeCall lentMessage mayBeOuter methodReceiver nish_panic_index nish_str_concat nish_str_eq storesText textOf
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.visitArguments#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.typeOf#0 RegionWalk.noteAlias#0 RegionWalk.origin#0 RegionWalk.store#0 RegionWalk.origin#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitArguments#1 methodReceiver#0 isResizeCall#2 builtinNameOf#1 RegionWalk.report#1 arrayMethodName#2 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.store#3
   pointer handed: size=0 writesThrough=false captured=false passedTo=RegionWalk.visitArguments#2
   stackSites=0 stackLocals=0
   callee +0:5 RegionWalk.visit -> @RegionWalk.visit
@@ -869,31 +893,38 @@ function RegionWalk.visitBuiltin(this: RegionWalk, node: Node, handed: Node[]): 
   callee +19:22 builtinNameOf -> @builtinNameOf
   local +20:15 text: string (const)
   callee +20:22 textOf -> @textOf
-  callee +21:9 RegionWalk.report -> @RegionWalk.report
-  callee +21:27 growthMessage -> @growthMessage
-  local +25:11 method: string (const)
-  callee +25:20 arrayMethodName -> @arrayMethodName
-  local +29:11 holder: i32 (const)
-  callee +29:20 RegionWalk.origin -> @RegionWalk.origin
-  callee +31:11 mayBeOuter -> @mayBeOuter
-  callee +32:9 RegionWalk.report -> @RegionWalk.report
-  callee +34:11 growthMessage -> @growthMessage
-  callee +34:46 textOf -> @textOf
-  local +40:18 arg: Node (const)
-  callee +41:14 isCopied -> @isCopied
-  callee +41:35 RegionWalk.typeOf -> @RegionWalk.typeOf
-  callee +42:11 RegionWalk.noteAlias -> @RegionWalk.noteAlias
-  callee +42:31 RegionWalk.origin -> @RegionWalk.origin
-  callee +43:11 RegionWalk.store -> @RegionWalk.store
-  callee +43:30 RegionWalk.origin -> @RegionWalk.origin
-  callee +43:54 storesText -> @storesText
+  local +21:15 what: string (const)
+  local +22:15 lent: boolean (const)
+  callee +22:22 RegionWalk.origin -> @RegionWalk.origin
+  callee +23:9 RegionWalk.report -> @RegionWalk.report
+  callee +23:34 lentMessage -> @lentMessage
+  callee +23:64 growthMessage -> @growthMessage
+  local +27:11 method: string (const)
+  callee +27:20 arrayMethodName -> @arrayMethodName
+  local +31:11 holder: i32 (const)
+  callee +31:20 RegionWalk.origin -> @RegionWalk.origin
+  callee +34:9 RegionWalk.report -> @RegionWalk.report
+  callee +34:27 lentMessage -> @lentMessage
+  callee +34:60 textOf -> @textOf
+  callee +37:11 mayBeOuter -> @mayBeOuter
+  callee +38:9 RegionWalk.report -> @RegionWalk.report
+  callee +40:11 growthMessage -> @growthMessage
+  callee +40:46 textOf -> @textOf
+  local +46:18 arg: Node (const)
+  callee +47:14 isCopied -> @isCopied
+  callee +47:35 RegionWalk.typeOf -> @RegionWalk.typeOf
+  callee +48:11 RegionWalk.noteAlias -> @RegionWalk.noteAlias
+  callee +48:31 RegionWalk.origin -> @RegionWalk.origin
+  callee +49:11 RegionWalk.store -> @RegionWalk.store
+  callee +49:30 RegionWalk.origin -> @RegionWalk.origin
+  callee +49:54 storesText -> @storesText
 function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSig, isNew: boolean): void -> @RegionWalk.judgeCallee [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.report
   escaping: node
-  calls: FactsTable.get FunctionFacts.pointerParamAt RegionWalk.arrowResult RegionWalk.handedTo RegionWalk.judgeTaskCallee RegionWalk.noteAlias RegionWalk.noteWrite RegionWalk.origin RegionWalk.receiverMayBeRegion RegionWalk.report RegionWalk.reportOuter RegionWalk.typeOf handsGrowthMessage handsRegionMessage handsText mayBeOuter mayBeReleased nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq noFactsMessage regionCalleeName unwrapParens
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.report#0 RegionWalk.handedTo#0 RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.typeOf#0 RegionWalk.noteWrite#0 RegionWalk.noteAlias#0 RegionWalk.reportOuter#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.receiverMayBeRegion#0 RegionWalk.reportOuter#0 RegionWalk.reportOuter#0 RegionWalk.judgeTaskCallee#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.handedTo#1 RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.receiverMayBeRegion#1 RegionWalk.reportOuter#1 RegionWalk.reportOuter#1 RegionWalk.judgeTaskCallee#1
+  calls: FactsTable.get FunctionFacts.pointerParamAt RegionWalk.arrowResult RegionWalk.handedTo RegionWalk.judgeTaskCallee RegionWalk.noteAlias RegionWalk.noteWrite RegionWalk.origin RegionWalk.receiverMayBeRegion RegionWalk.report RegionWalk.reportOuter RegionWalk.typeOf handsGrowthMessage handsRegionMessage handsText lentMessage mayBeOuter mayBeReleased nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq noFactsMessage regionCalleeName unwrapParens
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.report#0 RegionWalk.handedTo#0 RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.typeOf#0 RegionWalk.noteWrite#0 RegionWalk.noteAlias#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.receiverMayBeRegion#0 RegionWalk.reportOuter#0 RegionWalk.reportOuter#0 RegionWalk.judgeTaskCallee#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.handedTo#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.receiverMayBeRegion#1 RegionWalk.reportOuter#1 RegionWalk.reportOuter#1 RegionWalk.judgeTaskCallee#1
   pointer callee: size=224 writesThrough=false captured=false passedTo=noFactsMessage#1 RegionWalk.handedTo#2 regionCalleeName#0 RegionWalk.receiverMayBeRegion#2
   stackSites=1 stackLocals=1
   local +0:11 f: FunctionFacts | null (const)
@@ -922,23 +953,27 @@ function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSi
   callee +25:61 RegionWalk.typeOf -> @RegionWalk.typeOf
   callee +26:9 RegionWalk.noteWrite -> @RegionWalk.noteWrite
   callee +30:9 RegionWalk.noteAlias -> @RegionWalk.noteAlias
-  callee +34:22 mayBeReleased -> @mayBeReleased
-  callee +35:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +35:34 handsText -> @handsText
-  callee +39:11 mayBeOuter -> @mayBeOuter
-  callee +43:11 RegionWalk.report -> @RegionWalk.report
-  callee +43:29 handsGrowthMessage -> @handsGrowthMessage
-  callee +45:11 RegionWalk.report -> @RegionWalk.report
-  callee +47:13 handsRegionMessage -> @handsRegionMessage
-  callee +49:63 mayBeReleased -> @mayBeReleased
-  callee +50:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +50:34 handsText -> @handsText
-  callee +51:57 RegionWalk.receiverMayBeRegion -> @RegionWalk.receiverMayBeRegion
-  callee +53:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +53:34 handsText -> @handsText
-  callee +56:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +58:11 handsText -> @handsText
-  callee +63:7 RegionWalk.judgeTaskCallee -> @RegionWalk.judgeTaskCallee
+  local +43:17 which: string (const)
+  callee +44:11 RegionWalk.report -> @RegionWalk.report
+  callee +44:29 lentMessage -> @lentMessage
+  callee +44:51 handsText -> @handsText
+  callee +50:22 mayBeReleased -> @mayBeReleased
+  callee +51:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +51:34 handsText -> @handsText
+  callee +55:11 mayBeOuter -> @mayBeOuter
+  callee +59:11 RegionWalk.report -> @RegionWalk.report
+  callee +59:29 handsGrowthMessage -> @handsGrowthMessage
+  callee +61:11 RegionWalk.report -> @RegionWalk.report
+  callee +63:13 handsRegionMessage -> @handsRegionMessage
+  callee +65:63 mayBeReleased -> @mayBeReleased
+  callee +66:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +66:34 handsText -> @handsText
+  callee +67:57 RegionWalk.receiverMayBeRegion -> @RegionWalk.receiverMayBeRegion
+  callee +69:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +69:34 handsText -> @handsText
+  callee +72:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +74:11 handsText -> @handsText
+  callee +79:7 RegionWalk.judgeTaskCallee -> @RegionWalk.judgeTaskCallee
 function RegionWalk.receiverMayBeRegion(this: RegionWalk, call: Node, callee: FunctionSig, origins: i32[]): boolean -> @RegionWalk.receiverMayBeRegion [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: mayBeRegion methodReceiver
@@ -956,7 +991,7 @@ function RegionWalk.judgeTaskCallee(this: RegionWalk, node: Node, f: FunctionFac
   calls: FunctionFacts.pointerParamAt RegionWalk.report handsRegionMessage mayBeOuter mayBeRegion nish_panic_index nish_panic_overflow nish_str_concat textOf
   pointer this: size=160 writesThrough=false captured=false passedTo=RegionWalk.report#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1
-  pointer f: size=440 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
   pointer handed: size=0 writesThrough=true captured=false
   pointer origins: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -964,15 +999,16 @@ function RegionWalk.judgeTaskCallee(this: RegionWalk, node: Node, f: FunctionFac
   local +1:14 i: i32 (let)
   local +2:13 pp: PointerParamFacts | null (const)
   callee +2:44 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
-  callee +3:44 mayBeOuter -> @mayBeOuter
-  local +7:9 kept: i32 (let)
-  local +8:14 j: i32 (let)
-  local +9:13 o: i32 (const)
-  callee +10:72 mayBeRegion -> @mayBeRegion
-  local +15:13 into: string (const)
-  callee +15:43 textOf -> @textOf
-  callee +16:7 RegionWalk.report -> @RegionWalk.report
-  callee +16:25 handsRegionMessage -> @handsRegionMessage
+  local +4:13 writes: boolean (const)
+  callee +5:21 mayBeOuter -> @mayBeOuter
+  local +9:9 kept: i32 (let)
+  local +10:14 j: i32 (let)
+  local +11:13 o: i32 (const)
+  callee +12:72 mayBeRegion -> @mayBeRegion
+  local +17:13 into: string (const)
+  callee +17:43 textOf -> @textOf
+  callee +18:7 RegionWalk.report -> @RegionWalk.report
+  callee +18:25 handsRegionMessage -> @handsRegionMessage
 function isThreadSymbol(name: string, scopeName: string): boolean -> @isThreadSymbol
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

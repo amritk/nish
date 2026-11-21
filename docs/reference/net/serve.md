@@ -69,7 +69,7 @@ Serves HTTP/1.1 on `port` on every address, handing each request to `handle` in 
 
 <scalar-card title="Request" icon="phosphor/regular/cube" href="#request">
 
-A request, as `handle` reads it: the task's own copy of the head and body, valid for as long as the task runs.
+A request, as `handle` reads it: the server's parsed record, read in place (`lend` of `nish:async`), its head and body valid for as long as the task runs.
 
 </scalar-card>
 
@@ -100,18 +100,20 @@ of its own, as an `async` function: it awaits the loop's descriptor, so
 the program's other tasks run while no socket is ready. It routes each
 request at its head, gathers its body, and hands the whole request to
 `handle` in a task of its own, spawned with the request's slot; the
-task's allocations — the request it reads, the response it builds,
-whatever `handle` makes on the way — live in the task's region and go
-when it ends.
+task's allocations — the `Request` it reads through, the response it
+builds, whatever `handle` makes on the way — live in the task's region and
+go when it ends.
 
 </scalar-callout>
 
-<scalar-detail title="The task reads its own copy">
+<scalar-detail title="The task reads the request in place">
 
-Until it is answered, a request's head is
-the connection parser's own buffer, read in place. The task copies the
-head and body into its own memory before `handle` runs, as `spawn` runs it
-that far at once,
+Until it is answered, a request's
+head is the connection parser's own buffer, and the task reads it, its
+spans and its body where the server parsed them, with no copy: the record
+is lent to the task (`lend` of `nish:async`), which the compiler holds to
+reading it and writing numbers into it (NL2822). A connection that closes
+while the task runs leaves the buffers to the record until the task ends,
 and when `handle` answers it writes the status, the content type and the
 body back into the slot's fixed buffers, in bulk, and wakes the
 loop. The loop then sends the answer and frees the slot. Nothing the task
@@ -283,8 +285,9 @@ where the server counts what it did, the caller's
 
 ### Request
 
-A request, as `handle` reads it: the task's own copy of the head and body,
-valid for as long as the task runs.
+A request, as `handle` reads it: the server's parsed record, read in place
+(`lend` of `nish:async`), its head and body valid for as long as the task
+runs. Copy out what must outlive the task.
 
 ```ts
 class Request
@@ -293,7 +296,7 @@ class Request
 | Member | |
 | --- | --- |
 | `new Request(raw: HttpRequest)` | A request over `raw`, which it keeps. |
-| `raw: HttpRequest` | The request as the server parsed it, copied into the task: its spans, its head and its body. |
+| `raw: HttpRequest` | The request as the server parsed it, lent to the task: its spans, its head and its body. |
 | `route: i32` | The index `Router.add` answered for the route, or a negative `ROUTER_*` code. |
 | `header(name: string): string` | The value of the first header field named `name`. |
 | `method(): string` | The method. |

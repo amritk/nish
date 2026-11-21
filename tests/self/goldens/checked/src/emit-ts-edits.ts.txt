@@ -32,6 +32,7 @@ const HOST_HANDLE_ALIAS: string = "type HostHandle<K extends string> = (number &
 const SIGNAL_REFUSAL: string = "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement" [exported]
 const WAIT_REFUSAL: string = "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native"
 const CANCEL_REFUSAL: string = "--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native"
+const ASYNC_LEND_SPECIFIER: string = "nish:async"
 const REGION_REFUSAL: string = "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native" [exported]
 const INSTANCES_REFUSAL: string = "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"
 const UNTYPED_REFUSAL: string = "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type"
@@ -623,13 +624,30 @@ function propertyImports(walk: Walk, stmt: Node, edits: Edit[]): string -> @prop
   callee +0:16 new Edit -> @Edit.constructor
   callee +1:5 StringBuilder.add -> @StringBuilder.add
   callee +3:10 StringBuilder.toText -> @StringBuilder.toText
+function lendImports(walk: Walk, stmt: Node, edits: Edit[]): string -> @lendImports
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Edit.constructor StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
+  pointer walk: size=264 writesThrough=false captured=false
+  pointer stmt: size=40 writesThrough=false captured=false
+  pointer edits: size=0 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local -22:9 text: string (const)
+  local -21:9 sb: StringBuilder (const)
+  callee -21:14 new StringBuilder -> @StringBuilder.constructor
+  local -20:14 spec: Node (const)
+  local -16:11 exported: string (const)
+  local -12:9 end: i32 (let)
+  callee +0:16 new Edit -> @Edit.constructor
+  callee +1:5 StringBuilder.add -> @StringBuilder.add
+  callee +3:10 StringBuilder.toText -> @StringBuilder.toText
 function emitModule(walk: Walk, file: Node, edits: Edit[]): void -> @emitModule [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
-  calls: Edit.constructor Operands.constructor SourceFile.columnOf SourceFile.lineOf StringSet.has Walk.fail Walk.refuse changedText collectNames nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 propertyImports sourceOrder specifierStart
-  pointer walk: size=264 writesThrough=true captured=false passedTo=collectNames#0 propertyImports#0 specifierStart#0 Walk.fail#0 Walk.refuse#0 changedText#0
+  calls: Edit.constructor Operands.constructor SourceFile.columnOf SourceFile.lineOf StringSet.has Walk.fail Walk.refuse changedText collectNames lendImports nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 propertyImports sourceOrder specifierStart
+  pointer walk: size=264 writesThrough=true captured=false passedTo=collectNames#0 propertyImports#0 lendImports#0 specifierStart#0 Walk.fail#0 Walk.refuse#0 changedText#0
   pointer file: size=40 writesThrough=false captured=false passedTo=collectNames#1 sourceOrder#0
-  pointer edits: size=0 writesThrough=true captured=false passedTo=propertyImports#2
+  pointer edits: size=0 writesThrough=true captured=false passedTo=propertyImports#2 lendImports#2
   stackSites=1 stackLocals=1
   callee -19:3 collectNames -> @collectNames
   local -16:14 stmt: Node (const)
@@ -639,6 +657,7 @@ function emitModule(walk: Walk, file: Node, edits: Edit[]): void -> @emitModule 
   callee +0:24 new Edit -> @Edit.constructor
   local +4:13 values: string (const)
   callee +4:22 propertyImports -> @propertyImports
+  callee +4:59 lendImports -> @lendImports
   local +5:11 k: i32 (let)
   local +8:17 start: i32 (const)
   callee +8:25 specifierStart -> @specifierStart

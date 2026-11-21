@@ -2473,7 +2473,7 @@ function passedOnlyTo(f: FunctionFacts | null, name: string): string -> @passedO
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FunctionFacts.pointerParam StringSet.has nish_panic_index nish_panic_overflow nish_str_eq
-  pointer f: size=440 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   callee +0:21 StringSet.has -> @StringSet.has
   callee +0:49 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
