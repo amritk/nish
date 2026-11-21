@@ -1,0 +1,12 @@
+PASS  the parser has a head
+PASS  the lent request is answered
+PASS  park keeps a lent head out of the pool
+PASS  park leaves a lent head with the parser
+PASS  a restart gives the parser the spare
+PASS  after the restart the lent head is still in no pool
+PASS  the loan reads as ended by the restart
+PASS  the second lent request is answered
+PASS  a resting connection keeps its lent head
+PASS  the loan reads as held
+PASS  ending the loan parks the head
+http1 lend and park: 11 passed, 0 failed, 0 skipped

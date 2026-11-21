@@ -40,7 +40,7 @@ function emitsAsLoop(emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): 
   calls: Emitter.isLibraryCopy FunctionFacts.scopesAnyPass FunctionSig.definedIn FusionTable.roleOf releasesPerStep
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.isLibraryCopy#0 releasesPerStep#0
   pointer sig: size=224 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 Emitter.isLibraryCopy#1 releasesPerStep#1
-  pointer facts: size=440 writesThrough=false captured=false passedTo=releasesPerStep#2 FunctionFacts.scopesAnyPass#0
+  pointer facts: size=448 writesThrough=false captured=false passedTo=releasesPerStep#2 FunctionFacts.scopesAnyPass#0
   stackSites=0 stackLocals=0
   callee +0:5 FusionTable.roleOf -> @FusionTable.roleOf
   callee +1:6 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -53,7 +53,7 @@ function releasesPerStep(emitter: Emitter, sig: FunctionSig, facts: FunctionFact
   calls: FusionTable.partnerOf
   pointer emitter: size=424 writesThrough=false captured=false
   pointer sig: size=224 writesThrough=false captured=false
-  pointer facts: size=440 writesThrough=false captured=false
+  pointer facts: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 FusionTable.partnerOf -> @FusionTable.partnerOf
 function incomingName(name: string): string -> @incomingName [exported]

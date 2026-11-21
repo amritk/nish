@@ -10,6 +10,7 @@ import {
   cancel,
   cancelAfter,
   cancelled,
+  lend,
   readable,
   readableWithin,
   sleep,
@@ -64,6 +65,12 @@ Cancel a task `ms` milliseconds from now, unless it finishes first.
 <scalar-card title="cancelled" icon="phosphor/regular/function" href="#cancelled">
 
 Whether the running task has been cancelled.
+
+</scalar-card>
+
+<scalar-card title="lend" icon="phosphor/regular/function" href="#lend">
+
+Read `view`, an object or array its spawner owns, in place, without copying it into the task's region.
 
 </scalar-card>
 
@@ -574,6 +581,31 @@ const cancelled: () => boolean
 
 `true` once `cancel` was called on it, or its `cancelAfter`
   deadline passed.
+
+</scalar-field>
+
+### lend
+
+Read `view`, an object or array its spawner owns, in place, without
+copying it into the task's region. Inside a spawned task the view, and
+what is built from it, is lent only while the task runs: the task may
+read it, write numbers into it and copy out of it, but may not store a
+pointer into it, grow it, or keep it, its parts or what holds it past its
+end (NL2822). Outside a task, and under `--emit-ts`, it is the identity.
+
+```ts
+const lend: <T>(view: T) => T
+```
+
+<scalar-field name="view" type="T" required>
+
+The spawner's object or array the task reads.
+
+</scalar-field>
+
+<scalar-field name="returns" type="T">
+
+`view` itself.
 
 </scalar-field>
 

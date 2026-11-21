@@ -1,0 +1,1 @@
+stores `[lend(note)]` into `b.n`: a view `lend` borrows is its spawner's memory, lent only while the task runs

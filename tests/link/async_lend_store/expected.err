@@ -1,0 +1,1 @@
+main.ts:15:3: error: `keeps` runs as a spawned task, in a region of its own that is freed when it ends, and hands `lend(r)` to `remember`, which stores into it

@@ -23,6 +23,7 @@ const AWAIT_ALL_MAX: i32 = 8
 const AWAIT_ALL_FORM: string = "`awaitAll` is awaited into one name per call: `const [a, b] = await awaitAll(f(x), g(y))`, from two to eight calls"
 const AWAIT_SITE_MESSAGE: string = "`await` stands at the top of a statement — an expression statement, a declaration's initializer, a `return` or the right side of `=` — and not inside another expression, which would hold a value across the wait"
 const AWAIT_CALL_MESSAGE: string = "`await(...)` outside an `async` function is a call to a function named `await`, and there is none: `await` is written inside an `async` function, before its call, `await f(x)`" [exported]
+const LEND_SHAPE: string = "one object or array, its spawner's memory, which a task reads in place and answers as it was given"
 const AWAIT_PATTERN: string = "A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name"
 struct AwaitCycle (class) size=24 align=8 exported
   field fn: FunctionSig index=0 offset=0
@@ -239,6 +240,25 @@ function checkTaskCall(ctx: CheckContext, expr: Node, scope: Scope, what: string
   callee +10:20 checkExpression -> @checkExpression
   callee +15:16 CheckContext.errorType -> @CheckContext.errorType
   callee +15:35 taskCallArgumentMessage -> @taskCallArgumentMessage
+function checkLend(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkLend
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.errorType
+  calls: CheckContext.errorType TypeTable.isArray TypeTable.isStruct TypeTable.stripNull checkExpression nish_panic_index taskCallArgumentMessage
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkExpression#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  stackSites=0 stackLocals=0
+  local +0:9 args: Node[] (const)
+  callee +2:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +2:32 taskCallArgumentMessage -> @taskCallArgumentMessage
+  local +4:9 type: i32 (const)
+  callee +4:16 checkExpression -> @checkExpression
+  local +8:9 bare: i32 (const)
+  callee +8:16 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +9:8 TypeTable.isArray -> @TypeTable.isArray
+  callee +9:36 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +10:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +10:35 taskCallArgumentMessage -> @taskCallArgumentMessage
 function asyncBuiltinOf(imported: BuiltinExport): string -> @asyncBuiltinOf [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -247,40 +267,41 @@ function asyncBuiltinOf(imported: BuiltinExport): string -> @asyncBuiltinOf [exp
 function checkAsyncBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 -> @checkAsyncBuiltin [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.errorType FunctionSig.isCompileTime TypeTable.isResult TypeTable.typeName checkTakenCall checkTaskCall directCall directCallMessage insideAsync isKernelWait isSpawnable isTaskCall nish_panic_index nish_str_concat nish_str_eq outsideAsyncMessage recordRegionCall waitSiteMessage
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=checkTaskCall#0 CheckContext.errorType#0 CheckContext.errorType#0 insideAsync#0 CheckContext.errorType#0 CheckContext.errorType#0 checkTakenCall#0 CheckContext.errorType#0 isSpawnable#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=checkTaskCall#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 recordRegionCall#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkTaskCall#2 checkTakenCall#2
+  calls: CheckContext.errorType FunctionSig.isCompileTime TypeTable.isResult TypeTable.typeName checkLend checkTakenCall checkTaskCall directCall directCallMessage insideAsync isKernelWait isSpawnable isTaskCall nish_panic_index nish_str_concat nish_str_eq outsideAsyncMessage recordRegionCall waitSiteMessage
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=checkTaskCall#0 checkLend#0 CheckContext.errorType#0 CheckContext.errorType#0 insideAsync#0 CheckContext.errorType#0 CheckContext.errorType#0 checkTakenCall#0 CheckContext.errorType#0 isSpawnable#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=checkTaskCall#1 checkLend#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 recordRegionCall#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkTaskCall#2 checkLend#2 checkTakenCall#2
   pointer imported: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +1:9 what: string (const)
   callee +2:7 isTaskCall -> @isTaskCall
   callee +3:12 checkTaskCall -> @checkTaskCall
-  callee +6:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +8:7 isKernelWait -> @isKernelWait
+  callee +6:12 checkLend -> @checkLend
   callee +9:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +9:32 waitSiteMessage -> @waitSiteMessage
-  callee +11:8 insideAsync -> @insideAsync
+  callee +11:7 isKernelWait -> @isKernelWait
   callee +12:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +12:32 outsideAsyncMessage -> @outsideAsyncMessage
-  local +14:9 args: Node[] (const)
-  local +15:7 call: Node | null (let)
-  callee +17:12 directCall -> @directCall
-  callee +20:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +20:62 directCallMessage -> @directCallMessage
-  local +22:9 callee: FunctionSig | null (const)
-  callee +22:18 checkTakenCall -> @checkTakenCall
-  local +26:9 answer: i32 (const)
-  callee +27:51 TypeTable.isResult -> @TypeTable.isResult
-  callee +28:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +30:86 TypeTable.typeName -> @TypeTable.typeName
-  local +33:7 refused: i32 (let)
-  local +34:12 i: i32 (let)
-  callee +37:10 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee +37:38 isSpawnable -> @isSpawnable
-  callee +42:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +44:75 TypeTable.typeName -> @TypeTable.typeName
-  callee +48:3 recordRegionCall -> @recordRegionCall
+  callee +12:32 waitSiteMessage -> @waitSiteMessage
+  callee +14:8 insideAsync -> @insideAsync
+  callee +15:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +15:32 outsideAsyncMessage -> @outsideAsyncMessage
+  local +17:9 args: Node[] (const)
+  local +18:7 call: Node | null (let)
+  callee +20:12 directCall -> @directCall
+  callee +23:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +23:62 directCallMessage -> @directCallMessage
+  local +25:9 callee: FunctionSig | null (const)
+  callee +25:18 checkTakenCall -> @checkTakenCall
+  local +29:9 answer: i32 (const)
+  callee +30:51 TypeTable.isResult -> @TypeTable.isResult
+  callee +31:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +33:86 TypeTable.typeName -> @TypeTable.typeName
+  local +36:7 refused: i32 (let)
+  local +37:12 i: i32 (let)
+  callee +40:10 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +40:38 isSpawnable -> @isSpawnable
+  callee +45:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +47:75 TypeTable.typeName -> @TypeTable.typeName
+  callee +51:3 recordRegionCall -> @recordRegionCall
 function isSpawnable(ctx: CheckContext, type: i32): boolean -> @isSpawnable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type

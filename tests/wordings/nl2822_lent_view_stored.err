@@ -1,0 +1,1 @@
+`task` runs as a spawned task, in a region of its own that is freed when it ends, and hands `lend(b)` to `refill`, which stores into it: a view `lend` borrows is its spawner's memory, lent only while the task runs, so the task may read it and copy out of it but may not write a pointer into it, grow it, or keep it past its end; copy what it needs out instead

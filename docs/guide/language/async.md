@@ -418,6 +418,70 @@ export const main = async (): Promise<void> => {
 Each spawned task has memory of its own, which is given back when the task
 finishes, so a long-running program does not grow with every task it has run.
 
+## Reading a shared object in place with `lend`
+
+`lend(x)` from `nish:async` hands a callee, or a holder built around it,
+the very object the task was given, with no copy. The lent object stays its
+spawner's, lent only while the task runs: the task may read it, write
+numbers into it, and copy strings and numbers out of it. It may not keep the
+object: storing it in a field or array of the task's own, or pushing it into
+one, is refused, because a later write through that holder would reach the
+spawner's object.
+
+<!-- nish:ok -->
+```ts
+import { lend, sleep, spawn } from "nish:async";
+
+class Note {
+  counts: i32[] = [];
+  seen: i32 = 0;
+}
+
+const tally = (n: Note): i32 => n.counts.length;
+
+const read = async (note: Note): Promise<void> => {
+  note.seen = tally(lend(note));
+};
+
+export const main = async (): Promise<i32> => {
+  const note = new Note();
+  note.counts.push(3);
+  spawn(read(note));
+  await sleep(1);
+  console.log(`${note.seen}`); // 1
+  return 0;
+};
+```
+
+A callee that stores a pointer into the lent object, grows it, or answers
+something the task then stores into is refused (NL2822): what it stores
+lives in the task's memory, which is given back when the task ends, while
+the object is still its spawner's. `lend` takes one object or array; a
+number, `boolean`, enum or `string` is copied for the task anyway (NL2693).
+[`nish/net/serve`](../using-nish/async-server.md) reads each request this
+way.
+
+<!-- nish:err NL2822 -->
+```ts
+import { lend, spawn } from "nish:async";
+
+class Note {
+  bytes: u8[] = [];
+}
+
+const fill = (n: Note): void => {
+  n.bytes = [1, 2, 3];
+};
+
+const task = async (note: Note): Promise<void> => {
+  fill(lend(note));
+};
+
+export const main = async (): Promise<void> => {
+  spawn(task(new Note()));
+};
+```
+
 ## No recursion through `await`
 
 An awaited call's memory sits inside its caller's, so a function that awaits

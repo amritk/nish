@@ -272,6 +272,32 @@ export class PointerParamFacts {
    * passed here is not handed on, so its frame may still release it.
    */
   elementsFree: boolean
+  /**
+   * WP49 stage 6: the function stores a pointer value (anything but a
+   * number, a `boolean` or an `enum`; strings count) somewhere the parameter
+   * reaches, or grows an array it reaches, directly or via a callee
+   * (fixpoint). `writesReach` less its numeric stores: what a borrowed view
+   * (`lend` of `nish:async`) may not be handed, since a pointer kept in the
+   * spawner's record outlives the task that made it.
+   */
+  storesReach: boolean
+  /**
+   * WP49 stage 6: memory the parameter reaches may become memory the body
+   * cannot name: handed on with a pointer to come back or another pointer
+   * beside it, kept in a `let` or a value, or escaped (`noteLeak`). A module
+   * holds no pointer, so a store into memory of unknown origin can reach only
+   * these parameters (`markStores`).
+   */
+  leaks: boolean
+  /**
+   * Callees, by symbol and parameter index (0 is `this`), handed the memory
+   * with a pointer to come back that the walk does not follow: it leaks too
+   * when one of them may let that parameter out (`leaksNow`).
+   */
+  leaksVia: string[]
+  leaksViaAt: i32[]
+  /** `leaksVia` resolved in the table being propagated, `null` for a callee not in it (`FactGraph`). */
+  leaksViaFacts: (FunctionFacts | null)[]
 
   constructor(name: string, size: i32, align: i32) {
     this.name = name
@@ -289,6 +315,11 @@ export class PointerParamFacts {
     this.passedToIndices = []
     this.passedToFacts = []
     this.elementsFree = false
+    this.storesReach = false
+    this.leaks = false
+    this.leaksVia = []
+    this.leaksViaAt = []
+    this.leaksViaFacts = []
   }
 }
 
@@ -680,6 +711,8 @@ export class FunctionFacts {
   wholeReaches: ArgEdge[]
   /** Every slot this body writes, as a path (`MemPath`): what `composeArguments` turns into `writesReach`. */
   memWrites: MemPath[]
+  /** The `memWrites` that store a pointer or grow an array: what `composeArguments` turns into `storesReach`. */
+  ptrWrites: MemPath[]
   /**
    * The slots this body writes of an object of its own (`ROOT_OWN`), with the
    * store at `ownSlotSites` beside each: a shared write only where a
@@ -952,6 +985,7 @@ export class FunctionFacts {
     this.argEdges = []
     this.wholeReaches = []
     this.memWrites = []
+    this.ptrWrites = []
     this.ownSlotWrites = []
     this.ownSlotSites = []
     this.ownLocals = []
@@ -1205,6 +1239,23 @@ const argumentUse = (callee: FunctionSig, index: i32): ParamUse => {
   return result
 }
 
+/** The parameter index `arg` binds in `call` of `callee` (0 is `this`, `ParamUse.index`), or -1. */
+const boundParamIndex = (call: Node, callee: FunctionSig, arg: Node): i32 => {
+  const receiver = methodReceiver(call)
+  if (callee.owner !== null && receiver !== null && unwrapParens(receiver) === arg) {
+    return 0
+  }
+  const list = call.children[1].children
+  let i = 0
+  while (i < list.length) {
+    if (unwrapParens(list[i]) === arg) {
+      return callee.owner !== null ? i + 1 : i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
 /** The position of `node` in its `NodeKind.List` parent, which is the argument index. */
 const indexInList = (list: Node, node: Node): i32 => {
   let i = 0
@@ -1264,6 +1315,13 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       return classifyMemberUse(unit, table, parent)
     }
     if (parent.kind === NodeKind.List) {
+      // WP49 stage 6: `lend(p)` answers `p` itself, so what holds the call
+      // holds the parameter.
+      const owner = unit.parents.parentOf(parent)
+      if (owner !== null && owner.kind === NodeKind.Call && program.nodeBuiltins[owner.id] === "async.lend") {
+        node = owner
+        continue
+      }
       return classifyArgumentUse(unit, table, parent, node)
     }
     // `{ ...s }` copies each of `s`'s fields into the literal's object
@@ -2193,6 +2251,7 @@ class FactCollector {
         this.escapeParam(source.name)
         return
       }
+      pointer.leaks = true // the arrow is a value that holds it
       pointer.passedToCallees.push(target.sig.name)
       pointer.passedToIndices.push(target.index)
       const edge = new ArgEdge(
@@ -2226,6 +2285,7 @@ class FactCollector {
     this.facts.keptOutright.add(name)
     const pointer = this.facts.pointerParam(name)
     if (pointer !== null) {
+      pointer.leaks = true
       pointer.captured = true
       pointer.outlives = true
       pointer.writesThrough = true // an alias may be written through later
@@ -2396,6 +2456,36 @@ class FactCollector {
     this.noteSharedWrite(node)
   }
 
+  /**
+   * WP49 stage 6: a store of a value of `type` into the slots of `receiver`
+   * (`null` for unknown memory), or a growth of it with `type` -1: a pointer
+   * store (`FunctionFacts.ptrWrites`) unless the value is copied. A private
+   * array of this function's keeps it to itself.
+   */
+  notePointerStore(receiver: Node | null, type: i32): void {
+    if (type >= 0 && isScalarArgument(this.table, type)) {
+      return
+    }
+    if (receiver === null) {
+      this.facts.ptrWrites.push(new MemPath(ROOT_UNKNOWN, "", ""))
+      return
+    }
+    const e = unwrapParens(receiver)
+    if (this.privateArrayOf(e) !== null || this.isStackOwned(e)) {
+      return
+    }
+    this.facts.ptrWrites.push(this.pathOf(e))
+  }
+
+  /** The element type of the array `receiver` names, or -1 when it is not one. */
+  elementTypeOf(receiver: Node | null): i32 {
+    if (receiver === null) {
+      return -1
+    }
+    const type = this.unit.program.nodeTypes[unwrapParens(receiver).id]
+    return type >= 0 && this.table.isArray(type) ? this.table.refOf(type) : -1
+  }
+
   /** Where the memory `expr` names lives (`MemPath`). */
   pathOf(expr: Node): MemPath {
     return this.pathFrom(expr, 0)
@@ -2425,6 +2515,12 @@ class FactCollector {
       const read = this.readBackPath(e, depth)
       return read === null ? this.returnedPath(e, depth) : read
     }
+    if (e.kind === NodeKind.New && this.plainArguments(e)) {
+      // A fresh object built only from numbers, `boolean`s and strings holds
+      // no memory of the caller's, as a fresh `const` holds none: a callee that
+      // stores into it (`new Response(200).text(body)`) stores into none of it.
+      return new MemPath(ROOT_NONE, "", "")
+    }
     if (e.kind !== NodeKind.Ident) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
@@ -2440,6 +2536,18 @@ class FactCollector {
       return new MemPath(ROOT_NONE, "", "") // a number, a `boolean` or a string
     }
     return this.localPathAt(local, depth)
+  }
+
+  /** Whether every value argument of the `new` expression `e` is a number, a `boolean` or a string. */
+  plainArguments(e: Node): boolean {
+    const types = this.unit.program.nodeTypes
+    for (const arg of e.children[2].children) {
+      const t = types[unwrapParens(arg).id]
+      if (t < 0 || !this.isPlainValue(t)) {
+        return false
+      }
+    }
+    return true
   }
 
   /** What the `const` or `let` `local` resolves to (`resolveLocal`), cached. */
@@ -3166,8 +3274,215 @@ class FactCollector {
     this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, path)))
   }
 
+  /**
+   * WP49 stage 6: whether `node`, a name for memory a parameter reaches, lets
+   * that memory leave what the body can name (`PointerParamFacts.leaks`). A
+   * step below it, a store's target, a walk of it and a `const` alias keep it
+   * named; so does a call that returns no pointer and is handed no other one,
+   * or whose result the walk follows (`pathOf`). Anything else leaks it.
+   */
+  noteLeak(node: Node): void {
+    const k = node.kind
+    if (k !== NodeKind.Ident && k !== NodeKind.This && k !== NodeKind.Member && k !== NodeKind.Index) {
+      return
+    }
+    const program = this.unit.program
+    const parents = this.unit.parents
+    let at = node
+    let parent = parents.parentOf(at)
+    while (parent !== null && parent.kind === NodeKind.Paren) {
+      at = parent
+      parent = parents.parentOf(at)
+    }
+    if (parent === null) {
+      return
+    }
+    const pk = parent.kind
+    if (pk === NodeKind.Call && parent.children[0] === at) {
+      return // a callee, not a value
+    }
+    // A step below it is judged as the longer name, unless it is a method's receiver.
+    if ((pk === NodeKind.Member || pk === NodeKind.Index) && parent.children[0] === at) {
+      const above = parents.parentOf(parent)
+      if (
+        pk === NodeKind.Index ||
+        above === null ||
+        above.kind !== NodeKind.Call ||
+        above.children[0] !== parent
+      ) {
+        return
+      }
+    }
+    if (this.isPlainValue(program.nodeTypes[node.id])) {
+      return
+    }
+    const path = this.pathOf(node)
+    if (path.kind !== ROOT_PARAM) {
+      return
+    }
+    const pointer = this.facts.pointerParam(path.name)
+    if (pointer === null || pointer.leaks || this.keepsNamed(node, at, parent, pointer)) {
+      return
+    }
+    pointer.leaks = true
+  }
+
+  /** Whether `node`, reached through `at` under `parent`, stays a name the walk follows (`noteLeak`). */
+  keepsNamed(node: Node, at: Node, parent: Node, pointer: PointerParamFacts): boolean {
+    const program = this.unit.program
+    const pk = parent.kind
+    if (pk === NodeKind.Member && parent.children[0] === at) {
+      // `p.method(...)`: the receiver of the call around the callee.
+      const above = this.unit.parents.parentOf(parent)
+      return (
+        above !== null &&
+        above.kind === NodeKind.Call &&
+        above.children[0] === parent &&
+        this.callKeeps(above, node, pointer)
+      )
+    }
+    if (pk === NodeKind.Binary) {
+      const op = parent.text
+      if (op === "=" && parent.children[0] === at) {
+        return true
+      }
+      return op === "===" || op === "!==" || op === "==" || op === "!="
+    }
+    if (pk === NodeKind.Unary) {
+      return parent.text === "!"
+    }
+    if (pk === NodeKind.ForOf) {
+      return parent.children[1] === at
+    }
+    if (pk === NodeKind.VarDecl) {
+      const local: Local | null = program.nodeLocals[parent.id]
+      return local !== null && !local.mutable && parent.children[2] === at
+    }
+    if (pk === NodeKind.List) {
+      const above = this.unit.parents.parentOf(parent)
+      return (
+        above !== null &&
+        above.kind === NodeKind.Call &&
+        above.children[1] === parent &&
+        this.callKeeps(above, node, pointer)
+      )
+    }
+    return pk === NodeKind.ExprStmt
+  }
+
+  /**
+   * Whether `call`, handed `arg`, keeps what `arg` reaches named: a known
+   * callee whose result is no pointer, one the walk follows, one whose type
+   * cannot reach `arg`'s memory, or one that does not let `arg` out
+   * (`leaksVia`), and no other argument or receiver that is a pointer a callee
+   * could store it into (`typesMeet`).
+   */
+  callKeeps(call: Node, arg: Node, pointer: PointerParamFacts): boolean {
+    const program = this.unit.program
+    const callee = program.nodeCallees[call.id]
+    if (callee === null) {
+      return false
+    }
+    const result = program.nodeTypes[call.id]
+    if (
+      !this.isPlainValue(result) &&
+      this.pathOf(call).kind === ROOT_UNKNOWN &&
+      this.typesMeet(program.nodeTypes[unwrapParens(arg).id], result)
+    ) {
+      // The answer may hold the memory only if the callee lets its parameter out.
+      const at = boundParamIndex(call, callee, arg)
+      if (at < 0 || callee.body() === null) {
+        return false
+      }
+      pointer.leaksVia.push(callee.name)
+      pointer.leaksViaAt.push(at)
+    }
+    const receiver = methodReceiver(call)
+    if (receiver !== null && unwrapParens(receiver) !== arg && this.meetsArgument(receiver, arg)) {
+      return false
+    }
+    for (const other of call.children[1].children) {
+      if (unwrapParens(other) !== arg && this.meetsArgument(other, arg)) {
+        return false
+      }
+    }
+    return true
+  }
+
+  /** Whether `other`, beside `arg` in one call, is memory a callee could store what `arg` reaches into (`typesMeet`). */
+  meetsArgument(other: Node, arg: Node): boolean {
+    const types = this.unit.program.nodeTypes
+    return (
+      this.pointerArgument(other) &&
+      this.typesMeet(types[unwrapParens(other).id], types[unwrapParens(arg).id])
+    )
+  }
+
+  /**
+   * Whether values of types `a` and `b` may reach the same memory: some type
+   * reachable from one (itself, an element, a nullable's value, a `Result`
+   * arm or a field, followed down) is reachable from the other. Types are
+   * nominal, so memory of one class is never bound to a slot of another; a
+   * `Map`, a `Set`, a struct not found and any kind not followed reach
+   * anything.
+   */
+  typesMeet(a: i32, b: i32): boolean {
+    const left: i32[] = []
+    const right: i32[] = []
+    if (!this.reachedTypes(a, left) || !this.reachedTypes(b, right)) {
+      return true
+    }
+    for (const t of left) {
+      if (right.indexOf(t) >= 0) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /** Adds to `out` the pointer types a value of `from` reaches (`typesMeet`); false when that may be any. */
+  reachedTypes(from: i32, out: i32[]): boolean {
+    const table = this.table
+    if (from < 0) {
+      return false
+    }
+    const f = table.stripNull(from)
+    if (this.isPlainValue(f) || out.indexOf(f) >= 0) {
+      return true
+    }
+    out.push(f)
+    const kind = table.kindOf(f)
+    if (kind === K_ARRAY || kind === K_NULLABLE) {
+      return this.reachedTypes(table.refOf(f), out)
+    }
+    if (kind === K_RESULT) {
+      return this.reachedTypes(table.refOf(f), out) && this.reachedTypes(table.errOf(f), out)
+    }
+    if (kind !== K_STRUCT || this.isCollectionType(f)) {
+      return false
+    }
+    const info: StructInfo | null = this.unit.program.struct(table.nameOf(f))
+    if (info === null) {
+      return false
+    }
+    for (const field of info.fields) {
+      if (!this.reachedTypes(field.type, out)) {
+        return false
+      }
+    }
+    return true
+  }
+
+  /** Whether `e` hands a callee memory it could store into: a value that is no number, `boolean` or string. */
+  pointerArgument(e: Node): boolean {
+    return (
+      !this.isPlainValue(this.unit.program.nodeTypes[unwrapParens(e).id]) && this.pathOf(e).kind !== ROOT_NONE
+    )
+  }
+
   visit(node: Node): void {
     const program = this.unit.program
+    this.noteLeak(node)
     // WP29: an arrow argument is lifted into a function of its own, which has
     // facts of its own; its body is not this function's, and neither it nor a
     // function named as an argument is a value this function holds. What an
@@ -3431,14 +3746,17 @@ class FactCollector {
       ) {
         let held = unwrapParens(buffer)
         this.noteSlotWrite(call, held)
+        this.notePointerStore(held, -1)
         while (held.kind === NodeKind.Member) {
           held = unwrapParens(held.children[0])
           this.noteSlotWrite(call, held)
+          this.notePointerStore(held, -1)
         }
       }
       if (lentBuffer(this.table, callee, b)) {
         if (!this.table.isReadonlyArray(callee.paramTypes[b])) {
           this.noteSlotWrite(call, buffer)
+          this.notePointerStore(buffer, this.elementTypeOf(buffer))
         }
         const proven = hostFunction(callee)
           ? hostWindowProven(this.unit.program, this.table, call, b, this.known)
@@ -3667,6 +3985,7 @@ class FactCollector {
         // the one shared write a task may make.
         if (!this.initialisesThis(receiver) && !isGuardedAccess(program, table, node)) {
           this.noteSlotWrite(above, receiver)
+          this.notePointerStore(receiver, storedType(program, above, node))
         }
         if (above.text !== "=") {
           this.facts.readsMemory = true
@@ -3845,6 +4164,7 @@ class FactCollector {
       this.facts.effect = EFFECT_WRITE
       if (!isGuardedAccess(program, table, node.children[0])) {
         this.noteArrayWrite(node, node.children[0].children[0]) // a guarded one is R6's, as above
+        this.notePointerStore(node.children[0].children[0], storedType(program, node, node.children[0]))
       }
       // A compound store whose right side can resize the array checks its
       // index again after it (`emitElementAssignment`, CG-10), even where the
@@ -3875,6 +4195,7 @@ class FactCollector {
     if (method === "push") {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(call, methodReceiver(call))
+      this.notePointerStore(methodReceiver(call), -1)
       this.facts.resizesArray = true
       this.facts.callees.add("nish_array_grow")
       return
@@ -3902,6 +4223,7 @@ class FactCollector {
     if (method === "set" || method === "fill") {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(call, methodReceiver(call))
+      this.notePointerStore(methodReceiver(call), this.elementTypeOf(methodReceiver(call)))
       if (method === "set") {
         this.facts.readsMemory = true
         this.facts.callees.add("nish_panic_slice")
@@ -4039,7 +4361,9 @@ class FactCollector {
     const args = call.children[1].children
     for (let i = 0; i < args.length; i++) {
       if (isWrittenArgument(letters, i)) {
-        this.noteArrayWrite(call, args[i])
+        const arg = args[i]
+        this.noteArrayWrite(call, arg)
+        this.notePointerStore(arg, this.elementTypeOf(arg))
       }
     }
   }
@@ -4072,6 +4396,11 @@ class FactCollector {
       return
     }
     if (imported === "async.awaitAll") {
+      return
+    }
+    // WP49 stage 6: `lend(x)` is `x`. The argument is walked like any other
+    // operand; the call itself reads and writes nothing.
+    if (imported === "async.lend") {
       return
     }
     // WP49 stage 5: `await sleep(ms)` and the descriptor waits make a wait on
@@ -4495,6 +4824,16 @@ const STANCE_WRITES_DEEP: i32 = 3
 
 /** Keeps nothing of the parameter past the call, or what keeps it is a routed callee. */
 const STANCE_KEEPS_NONE: i32 = 0
+/**
+ * The type of the value assignment `store` writes into `target`: the
+ * target's, or the value's where the checker typed no target (a slot it only
+ * writes), never -1, which `notePointerStore` reads as a growth.
+ */
+const storedType = (program: CheckedProgram, store: Node, target: Node): i32 => {
+  const t = program.nodeTypes[target.id]
+  return t >= 0 || store.children.length < 2 ? t : program.nodeTypes[store.children[1].id]
+}
+
 /** Holds the parameter until a join inside the call: `captured`, and `outlives` as the walk found it. */
 const STANCE_KEEPS_JOINED: i32 = 1
 /** Holds the parameter past the call: `captured` and `outlives`. */
@@ -4572,6 +4911,9 @@ const applyParamStance = (pp: PointerParamFacts, stance: ParamStance): void => {
   if (stance.pollutes) {
     pp.polluted = true
   }
+  if (stance.writes >= STANCE_WRITES_REACH || stance.pollutes) {
+    pp.storesReach = true
+  }
 }
 
 /**
@@ -4586,7 +4928,12 @@ const applyStance = (facts: FunctionFacts, stance: BodilessStance): void => {
   facts.stanceStated = true
   let i = 0
   while (i < facts.pointerParams.length) {
-    applyParamStance(facts.pointerParams[i], i === 0 ? stance.first : stance.rest)
+    const own = i === 0 ? stance.first : stance.rest
+    applyParamStance(facts.pointerParams[i], own)
+    // Growth stores the new storage into what the parameter reaches.
+    if (stance.grows && own.writes >= STANCE_WRITES_SLOTS) {
+      facts.pointerParams[i].storesReach = true
+    }
     i = i + 1
   }
   if (stance.grows) {
@@ -5534,6 +5881,10 @@ const buildFactGraph = (facts: FactsTable, runtime: RuntimeTable): FactGraph => 
       for (const name of pp.passedToCallees) {
         pp.passedToFacts.push(reads.resolve(name))
       }
+      pp.leaksViaFacts = []
+      for (const name of pp.leaksVia) {
+        pp.leaksViaFacts.push(reads.resolve(name))
+      }
     }
     for (const edge of f.argEdges) {
       edge.target = reads.resolve(edge.callee)
@@ -5720,7 +6071,10 @@ const sameParams = (f: FunctionFacts, g: FunctionFacts): boolean => {
       a.writesDeep !== b.writesDeep ||
       a.keptInThis !== b.keptInThis ||
       a.polluted !== b.polluted ||
-      a.elementsFree !== b.elementsFree
+      a.elementsFree !== b.elementsFree ||
+      a.storesReach !== b.storesReach ||
+      a.leaks !== b.leaks ||
+      a.leaksVia.length !== b.leaksVia.length
     ) {
       return false
     }
@@ -5862,6 +6216,7 @@ const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
       let outlives = true
       let reach = true
       let deep = true
+      let stores = true
       if (g !== null) {
         const target = g.pointerParamAt(pp.passedToIndices[i])
         if (target !== null) {
@@ -5871,6 +6226,7 @@ const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
           outlives = target.outlives
           reach = target.writesReach
           deep = target.writesDeep
+          stores = target.storesReach
         }
       }
       // A routed instance (`markMapRoute`) has no body whose argument
@@ -5885,6 +6241,10 @@ const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
       }
       if (f.routed && deep && !pp.writesDeep) {
         pp.writesDeep = true
+        changed = true
+      }
+      if (f.routed && stores && !pp.storesReach) {
+        pp.storesReach = true
         changed = true
       }
       if (writes && !pp.writesThrough) {
@@ -6294,6 +6654,81 @@ const reachesForeign = (f: FunctionFacts, root: string, steps: string, below: bo
   return false
 }
 
+/**
+ * Whether memory `pp` reaches may be memory its function cannot name:
+ * `leaks`, or a callee in `leaksVia` that is not in the table, or whose own
+ * parameter may let it out (this, `depth` callees down; past 8, yes).
+ */
+const leaksNow = (pp: PointerParamFacts, depth: i32): boolean => {
+  if (pp.leaks || depth >= 8) {
+    return true
+  }
+  let i = 0
+  while (i < pp.leaksVia.length && i < pp.leaksViaAt.length) {
+    const g: FunctionFacts | null = i < pp.leaksViaFacts.length ? pp.leaksViaFacts[i] : null
+    const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(pp.leaksViaAt[i])
+    if (target === null || leaksNow(target, depth + 1)) {
+      return true
+    }
+    i = i + 1
+  }
+  return false
+}
+
+/**
+ * Mark the parameter `name` of `f` as stored into (`storesReach`), or, when
+ * `name` is "", every one memory of unknown origin may be (`leaks`); answers
+ * whether that moved anything.
+ */
+const storeName = (f: FunctionFacts, name: string): boolean => {
+  let changed = false
+  for (const pp of f.pointerParams) {
+    if ((name.length === 0 ? leaksNow(pp, 0) : pp.name === name) && !pp.storesReach) {
+      pp.storesReach = true
+      changed = true
+    }
+  }
+  return changed
+}
+
+/**
+ * A pointer store into, or growth of, what `path` names, made by `f` or by a
+ * callee it hands `path` to (`storesReach`): an object of `f`'s own counts for
+ * the parameters the active `DirtMark`s over it say it may be, at any depth.
+ */
+const markStores = (f: FunctionFacts, path: MemPath): boolean => {
+  if (path.kind === ROOT_PARAM) {
+    return f.pointerParam(path.name) !== null && storeName(f, path.name)
+  }
+  if (path.kind === ROOT_UNKNOWN) {
+    return storeName(f, "")
+  }
+  if (path.kind !== ROOT_OWN) {
+    return false
+  }
+  let changed = false
+  for (const d of f.dirt) {
+    if (!d.active || d.root !== path.name) {
+      continue
+    }
+    if (!stepsUnder(d.steps, path.steps, d.below) && !stepsUnder(path.steps, d.steps, false)) {
+      continue
+    }
+    if (d.unknown) {
+      if (storeName(f, "")) {
+        changed = true
+      }
+      continue
+    }
+    for (const name of d.params) {
+      if (storeName(f, name)) {
+        changed = true
+      }
+    }
+  }
+  return changed
+}
+
 /** A write into what `path` names, `deep` past its own slots, made by `f` or by a callee it hands `path` to. */
 const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
   if (path.kind === ROOT_PARAM) {
@@ -6312,7 +6747,7 @@ const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
 const valueClean = (f: FunctionFacts, value: ValueDesc): boolean =>
   value.params.length === 0 && !valueUnknown(f, value)
 
-/** Mark the parameter `name` of `f` as polluted, or every pointer parameter when `name` is ""; answers whether that moved anything. */
+/** Mark the parameter `name` of `f` as polluted, or every pointer parameter when `name` is "", and as stored into (`storeName`); answers whether that moved anything. */
 const polluteName = (f: FunctionFacts, name: string): boolean => {
   let changed = false
   for (const pp of f.pointerParams) {
@@ -6321,7 +6756,8 @@ const polluteName = (f: FunctionFacts, name: string): boolean => {
       changed = true
     }
   }
-  return changed
+  // A polluting store is a pointer store too, and the lent judgement reads only that.
+  return storeName(f, name) || changed
 }
 
 /** A callee may store memory not the caller's into what `path` names: pollute the parameter it is rooted at, or every one for an unknown root. */
@@ -6582,6 +7018,11 @@ const composeArguments = (f: FunctionFacts): boolean => {
       changed = true
     }
   }
+  for (const path of f.ptrWrites) {
+    if (markStores(f, path)) {
+      changed = true
+    }
+  }
   let w = 0
   while (w < f.ownSlotWrites.length) {
     const path = f.ownSlotWrites[w]
@@ -6600,6 +7041,10 @@ const composeArguments = (f: FunctionFacts): boolean => {
     const self: PointerParamFacts | null = g === null ? null : g.pointerParamAt(0)
     const writes = g === null || (g.sharedWrite && (self === null || self.writesReach))
     if (writes && callWrites(f, edge, false)) {
+      changed = true
+    }
+    const stores = g === null || (g.sharedWrite && (self === null || self.storesReach))
+    if (stores && markStores(f, edge.path)) {
       changed = true
     }
     const past = pastBelow(f, edge)
@@ -6627,6 +7072,9 @@ const composeArguments = (f: FunctionFacts): boolean => {
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     const reached = g === null || (target !== null && target.writesReach && g.sharedWrite)
     if (reached && callWrites(f, edge, target === null || target.writesDeep)) {
+      changed = true
+    }
+    if ((g === null || target === null || target.storesReach) && markStores(f, edge.path)) {
       changed = true
     }
     if (

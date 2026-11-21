@@ -1,0 +1,1 @@
+hands `lend(note)` to `fill`, which stores into it: a view `lend` borrows is its spawner's memory, lent only while the task runs
