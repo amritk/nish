@@ -81,6 +81,11 @@ const STATIC_MAX_FILE: i64 = 2147483647
 /** How many bytes one streamed read takes. */
 const STATIC_CHUNK: i32 = 65536
 
+/** The most cache entries `StaticLimits.maxEntries` may ask for. */
+const STATIC_MAX_ENTRIES: i32 = 4096
+/** The longest path span `StaticLimits.maxPath` may ask for. */
+const STATIC_MAX_PATH: i32 = 4096
+
 /** What `StaticFiles` holds and reads. */
 export class StaticLimits {
   /** How many files the cache keeps at once. */
@@ -416,27 +421,42 @@ export class StaticFiles {
   hand: i32 = 0
 
   /**
-   * A server of the files under `root`, which is resolved once, now.
+   * A server of the files under `root`, which is resolved once, now. Limits
+   * out of range (`maxEntries` or `maxPath` outside 1 to 4096, or a
+   * negative `maxCachedBytes`) leave the root empty, so every request is not
+   * found.
    * @param root the directory to serve
    * @param limits the cache and path limits
    */
   constructor(root: string, limits: StaticLimits) {
-    if (limits.maxEntries < 1 || limits.maxPath < 1 || limits.maxCachedBytes < 0) {
-      panic("StaticFiles: maxEntries and maxPath must be at least 1, and maxCachedBytes at least 0")
-    }
-    const real: string | null = realpathSync(root)
+    const ok: boolean =
+      limits.maxEntries >= 1 &&
+      limits.maxEntries <= STATIC_MAX_ENTRIES &&
+      limits.maxPath >= 1 &&
+      limits.maxPath <= STATIC_MAX_PATH &&
+      limits.maxCachedBytes >= 0
+    const real: string | null = ok ? realpathSync(root) : null
     this.root = real === null ? "" : real
     this.limits = limits
-    this.path = new Array<u8>(limits.maxPath + 16)
+    let entries: i32 = 1
+    let room: i32 = 17
+    const asked: i32 = limits.maxEntries
+    const longest: i32 = limits.maxPath
+    // Literal bounds, so the prover sees that the sum and product cannot overflow.
+    if (ok && asked <= 4096 && longest <= 4096 && asked >= 1 && longest >= 1) {
+      entries = asked
+      room = longest + 16
+    }
+    this.path = new Array<u8>(room)
+    this.keys = new Array<u8>(entries * room)
     this.etag = new Array<u8>(48)
     this.chunk = new Array<u8>(STATIC_CHUNK)
-    this.keys = new Array<u8>(limits.maxEntries * (limits.maxPath + 16))
-    this.keyLength = new Array<i32>(limits.maxEntries)
-    this.keyCoding = new Array<i32>(limits.maxEntries)
-    this.sizes = new Array<i64>(limits.maxEntries)
-    this.mtimes = new Array<f64>(limits.maxEntries)
+    this.keyLength = new Array<i32>(entries)
+    this.keyCoding = new Array<i32>(entries)
+    this.sizes = new Array<i64>(entries)
+    this.mtimes = new Array<f64>(entries)
     const slots: u8[][] = []
-    for (let k: i32 = 0; k < limits.maxEntries; k++) {
+    for (let k: i32 = 0; k < entries; k++) {
       this.keyLength[k] = -1
       slots.push(new Array<u8>(0))
     }
@@ -477,7 +497,7 @@ export class StaticFiles {
     const values: u8[][] = []
     this.staticFields(status, names, values)
     let sent: i32 = server.start(r, status, names, values, toI32(this.staticBodyLength(status)))
-    if (sent === HANDLER_SENT && status !== 304 && !head) {
+    if (sent === HANDLER_SENT && !head && this.staticBodyLength(status) > 0) {
       let pos: i64 = this.from
       while (sent === HANDLER_SENT && pos < this.to) {
         const n: i32 = this.staticFill(pos)
@@ -527,7 +547,7 @@ export class StaticFiles {
     const values: u8[][] = []
     this.staticFields(status, names, values)
     let sent: i32 = h.start(r, status, names, values, toI32(this.staticBodyLength(status)))
-    if (sent === HANDLER_SENT && status !== 304 && !head) {
+    if (sent === HANDLER_SENT && !head && this.staticBodyLength(status) > 0) {
       let pos: i64 = this.from
       while (sent === HANDLER_SENT && pos < this.to) {
         const n: i32 = this.staticFill(pos)
@@ -692,7 +712,8 @@ export class StaticFiles {
   /**
    * Reads `Accept-Encoding` into `qBr`, `qGzip` and `qIdentity`: `x-gzip` is
    * `gzip`, `*` stands for a coding the field does not name, the file as it
-   * is stays acceptable unless given q=0, and a malformed element is skipped.
+   * is stays acceptable unless given q=0 but ranks below any coding offered
+   * when the field does not name it, and a malformed element is skipped.
    * @internal Called by `staticResolve`.
    */
   staticAccept(head: u8[]): void {
@@ -757,7 +778,7 @@ export class StaticFiles {
     }
     this.qBr = br >= 0 ? br : star >= 0 ? star : 0
     this.qGzip = gzip >= 0 ? gzip : star >= 0 ? star : 0
-    this.qIdentity = identity >= 0 ? identity : star === 0 ? 0 : 1000
+    this.qIdentity = identity >= 0 ? identity : star >= 0 ? star : 1
   }
 
   /** The file's modification time in whole seconds, or -1 when it has none. @internal */

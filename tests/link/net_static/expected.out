@@ -1,0 +1,99 @@
+PASS  the server listens on every carrier, and the handler beside it
+PASS  .css: 200 as text/css; charset=utf-8
+PASS  .js: 200 as text/javascript; charset=utf-8
+PASS  .html: 200 as text/html; charset=utf-8
+PASS  .woff2: 200 as font/woff2
+PASS  .svg: 200 as image/svg+xml
+PASS  .webp: 200 as image/webp
+PASS  .json: 200 as application/json
+PASS  a directory serves its index.html
+PASS  a subdirectory's trailing slash serves its index.html
+PASS  a strong ETag, quoted, of the size and the modification time
+PASS  Last-Modified as an IMF-fixdate
+PASS  nosniff and byte ranges offered
+PASS  If-None-Match with the ETag: 304, no body, the ETag again
+PASS  If-None-Match in a list, weak: still 304
+PASS  If-None-Match: * is 304
+PASS  If-None-Match with another tag: 200
+PASS  If-Modified-Since the Last-Modified: 304
+PASS  If-Modified-Since long before: 200
+PASS  If-Modified-Since not a date: ignored, 200
+PASS  Range bytes=5-9: 206 with its Content-Range
+PASS  Range bytes=11-: to the end
+PASS  Range bytes=-2: the last two
+PASS  Range past the end is clamped
+PASS  a multipart Range is answered whole
+PASS  a Range in another unit is ignored
+PASS  If-Range with the ETag: the range
+PASS  If-Range with the date: the range
+PASS  If-Range with another tag: the whole file
+PASS  bad Range: a start past the end is 416 with bytes */size
+PASS  bad Range: not a number is 416
+PASS  bad Range: a last before the first is 416
+PASS  bad Range: an empty suffix is 416
+PASS  HEAD: the length and no body
+PASS  POST: 405 with Allow: GET, HEAD
+PASS  a file past the cache streams whole
+PASS  and by range across a read
+PASS  traversal refused: /static/../outside.txt is 404 and refused
+PASS  traversal refused: /static/sub/../../outside.txt is 404 and refused
+PASS  traversal refused: /static/%2e%2e/outside.txt is 404 and refused
+PASS  traversal refused: /static/%2E%2E%2Foutside.txt is 404 and refused
+PASS  traversal refused: /static/sub%2f..%2f..%2foutside.txt is 404 and refused
+PASS  traversal refused: /static/.secret is 404 and refused
+PASS  traversal refused: /static/%2esecret is 404 and refused
+PASS  traversal refused: /static/sub%5c..%5c..%5coutside.txt is 404 and refused
+PASS  traversal refused: /static/site.css%00.js is 404 and refused
+PASS  traversal refused: /static/sub//index.html is 404 and refused
+PASS  traversal refused: /static/%ZZ is 404 and refused
+PASS  a missing file is 404, not refused
+PASS  no Accept-Encoding: the file as it is, with Vary
+PASS  br offered: app.js.br as br, the type of app.js
+PASS  each variant has its own ETag
+PASS  gzip offered: app.js.gz as gzip
+PASS  and gzip's ETag differs from br's
+PASS  x-gzip counts as gzip
+PASS  the higher q wins: gzip;q=0.8 over br;q=0.5
+PASS  a tie goes to br
+PASS  br;q=0 refuses br
+PASS  identity preferred over a coding
+PASS  * covers br
+PASS  a range counts the coded bytes
+PASS  If-None-Match with br's ETag: 304 for br
+PASS  and 200 for the file as it is
+PASS  a file with no sibling is sent as it is
+PASS  data.json served, and cached
+PASS  again from the cache
+PASS  changed file: rewritten, the new bytes are served
+PASS  changed file: with a new ETag
+PASS  changed file: the old ETag no longer matches
+PASS  changed file: removed, it is not found
+PASS  HTTP/2 over TLS: the handshake, h2
+PASS  HTTP/2 over TLS: a GET of site.css, 200 as text/css with its body
+PASS  HTTP/2 over TLS: a range, 206 with its Content-Range
+PASS  HTTP/2 over TLS: If-None-Match, 304 with no body
+PASS  HTTP/2 over TLS: a traversal, 404
+PASS  h2c: a connection
+PASS  h2c: a GET of site.css, 200 as text/css with its body
+PASS  h2c: a range, 206 with its Content-Range
+PASS  h2c: If-None-Match, 304 with no body
+PASS  h2c: a traversal, 404
+PASS  HTTP/3: the handshake, h3
+PASS  HTTP/3: a GET of site.css, 200 as text/css with its body
+PASS  HTTP/3: a range, 206 with its Content-Range
+PASS  HTTP/3: If-None-Match, 304 with no body
+PASS  HTTP/3: a traversal, 404
+PASS  HTTP/3: app.js.br as br
+PASS  handler: a GET of site.css, 200 as text/css
+PASS  handler: a range, 206
+PASS  handler: If-None-Match, 304
+PASS  handler: bad Range, 416
+PASS  handler: app.js.gz as gzip
+PASS  handler: HEAD
+PASS  handler: a traversal, 404 and refused
+PASS  handler: a file past the cache streams whole
+PASS  limits out of range: no entries, nothing served
+PASS  limits out of range: a path past 4096, nothing served
+PASS  limits out of range: a negative cache, nothing served
+PASS  limits in range: the root resolves
+static files: 98 passed, 0 failed, 0 skipped
