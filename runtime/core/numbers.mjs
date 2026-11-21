@@ -250,7 +250,9 @@ export function convert(x, from, to) {
   // The hot paths of u64 arithmetic written over i64 (`toU64(a) * toU64(b)`)
   // stay in a function small enough for V8 to inline at the call: the two
   // 64-bit kinds reinterpret each other's bits, and a zext of an unsigned
-  // 32-bit-or-narrower value to u64 keeps the value as it is.
+  // 32-bit-or-narrower value to u64 keeps the value as it is. Keep it this
+  // small: answering the integer `number` cases here, inline or through a
+  // helper, made ct_asm_x25519 under --emit-ts 1.1x to 1.8x slower.
   if (typeof x === "bigint") {
     if (to === "u64") return BigInt.asUintN(64, x);
     if (to === "i64") return BigInt.asIntN(64, x);
