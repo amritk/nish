@@ -7,7 +7,9 @@ of a `u64` product from four 32×32 products in two places:
 product as the larger lever for X25519 (ten 26/25-bit limbs and 100 products
 per multiply, against fe51's 25) and for Poly1305.
 
-State and stages: [`docs/roadmap/wp41-mul-high.md`](roadmap/wp41-mul-high.md).
+State and stages: the parent issue
+[#2046](https://github.com/amritk/nish/issues/2046), specified by
+`.claude/plans/wp41-mul-high.plan.md`.
 
 ## The first measurement, and why it was declined
 
