@@ -4065,3 +4065,35 @@ Toolchains: Nish 0.42.0; Ubuntu clang version 18.1.3, OpenSSL 3.0.13 30 Jan 2024
 - Node has no portable column: node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off
 
 <!-- crypto:end -->
+
+<!-- http-steps:begin -->
+<a id="steps-on-a-route-bound-to-none-wp43-s5"></a>
+
+## Steps on a route bound to none (WP43 S5)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. WP43 S5 added steps that run before and after a route body (`Router.step`, `use`, and `before`, `after` and `field` on `HttpHandler` and `HttpServer`). `bench/http1-server.ts` binds no step, so it measures what a program that uses none pays for them: the loop's `before` and `after` calls, each a load of the route's step mask and a compare, and the larger request objects.
+
+| | |
+| --- | --- |
+| Date | 2026-11-21 |
+| nish | `build/nish` from `main` at 071ed014 for both sides, `--profile speed`; "main" is `bench/http1-server.ts` built against `main`'s `std/` at 071ed014, "head" against this branch's `std/` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores |
+| Runs | cachegrind `--cache-sim=no`, `NISH_SIMD=base`, glibc's string functions pinned by `GLIBC_TUNABLES`, the hash key fixed by preloading `bench/fixed-key.c`'s `getentropy`; each build and a byte-identical copy of it counted in 3 interleaved rounds |
+| Command | a driver kept out of the tree: build `bench/http1-server.ts` in a `main` worktree and in this branch with `--profile speed`, copy each binary, then for each round start each of the four under `valgrind --tool=cachegrind --cache-sim=no` as `app <port> 16 <requests>`, send `<requests>` requests one after another over one keep-alive connection, and read the `summary:` line once the server exits |
+
+The requests are `GET /plaintext` (answered `200`, 13 bytes) and `GET /id/42?name=x` (answered `200`, 4 bytes), each with only a `Host` field. Each cell is the whole process's instruction count, start-up included, as the three rounds' counts.
+
+| route | requests | head commit | main | main copy | head | head copy |
+| --- | ---: | --- | --- | --- | --- | --- |
+| `/plaintext` | 2,000 | ebe340ff | 13,629,059 13,630,684 13,629,059 | 13,629,015 13,629,015 13,630,640 | 13,634,451 13,632,826 13,632,826 | 13,632,810 13,632,810 13,634,435 |
+| `/id/42?name=x` | 2,000 | ebe340ff | 16,349,759 ×3 | 16,349,715 ×3 | 16,353,526 ×3 | 16,353,510 ×3 |
+| `/plaintext` | 4,000 | 53acc792 | 26,047,059 26,047,059 26,048,684 | 26,047,029 26,048,654 26,048,654 | 26,050,840 26,052,465 26,050,840 | 26,050,810 26,050,810 26,050,810 |
+| `/id/42?name=x` | 4,000 | 53acc792 | 31,487,759 31,489,752 31,489,752 | 31,487,729 31,487,729 31,489,722 | 31,491,540 31,493,533 31,493,533 | 31,491,510 31,493,503 31,493,503 |
+
+Read by each side's least count:
+
+- head costs 3,767 instructions more than main at 2,000 requests and 3,781 more at 4,000, the same on both routes. The gap grows by 14 instructions over 2,000 more requests, under 0.01 instructions a request; one binary's own count moves by up to 1,625 (`/plaintext`) and 1,993 (`/id`) between rounds, so the per-request difference is inside the noise.
+- The 3,767 to 3,781 instructions are paid once a process: the router's step tables and the larger request objects (`HttpServerRequest` grew from 176 to 200 bytes) are set up at start-up.
+- For scale, main's 2,000 requests more cost 12,418,000 instructions on `/plaintext` and 15,138,000 on `/id`, 6,209 and 7,569 a request.
+- The two runs measured different heads: 53acc792 only bounds a copy loop in the path that merges a step's added fields, which neither route takes.
+<!-- http-steps:end -->

@@ -320,3 +320,16 @@ ROUTE-14, HANDLER-14 and HANDLER-15, and HTTPSRV-14 and HTTPSRV-15.
   answers itself, to a malformed or oversized request, a timeout or a full
   pool, never reaches `take`, so no step is asked to read a request that was
   never read whole.
+
+### Measured
+
+[Steps on a route bound to none](BENCHMARKS.md#steps-on-a-route-bound-to-none-wp43-s5)
+counts `bench/http1-server.ts`, which binds no step, under cachegrind, built
+against `main`'s `std/` at 071ed014 and this stage's, each beside a
+byte-identical copy, in 3 interleaved rounds over one keep-alive connection.
+This stage costs 3,767 instructions more at 2,000 requests and 3,781 more at
+4,000, the same on `GET /plaintext` and `GET /id/42?name=x`: a start-up cost
+(the step tables and `HttpServerRequest`, 176 → 200 bytes), and under 0.01
+instructions a request, inside the 1,625 to 1,993 instructions one binary's
+count moves between rounds. A request costs main 6,209 instructions on
+`/plaintext` and 7,569 on `/id`.
