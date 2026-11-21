@@ -1,0 +1,45 @@
+PASS  the server listens: HTTP/2 over TLS, h2c and HTTP/1.1
+PASS  HTTP/2 over TLS: a handshake offering h2, the server's signature and Finished verified
+PASS  GetSum: 200, application/grpc, SumReply { result: 5 } length-prefixed, then grpc-status 0 in trailers
+PASS  an error with a message: a head, then grpc-status and the message percent-encoded
+PASS  an error without one: Trailers-Only
+PASS  the program saw the three calls; reply and fail each sent
+PASS  h2c: a connection to the cleartext listener
+PASS  GetSum over h2c: SumReply { result: 42 } and grpc-status 0
+PASS  content-type application/grpc+proto is a call too
+PASS  content-type text/plain: 415
+PASS  content-type application/grpc+json: 415
+PASS  a compressed message: UNIMPLEMENTED
+PASS  a length past maxMessage: RESOURCE_EXHAUSTED
+PASS  a length of 2^31, and of 2^32 - 1: RESOURCE_EXHAUSTED, not wrapped
+PASS  a length the body does not match: INTERNAL
+PASS  a body longer than its declared length: INTERNAL
+PASS  no length prefix: INTERNAL
+PASS  an unknown flag byte: INTERNAL
+PASS  a body of 1 byte, and of 4, shorter than the prefix: INTERNAL
+PASS  over h2c too, an error with a message: a head, then grpc-status and the message percent-encoded
+PASS  over h2c too, an error without one: Trailers-Only
+PASS  a CR, LF and NUL in grpc-message reach the peer as %0D, %0A and %00
+PASS  the program saw only the five well-formed calls
+PASS  deadlines: an h2c connection
+PASS  grpc-timeout 1n: DEADLINE_EXCEEDED before the program sees the call
+PASS  grpc-timeout 1S: answered
+PASS  grpc-timeout 99999999H: answered
+PASS  the held call is the program's, unanswered
+PASS  answering it after 50 ms
+PASS  reply sends DEADLINE_EXCEEDED, not the message
+PASS  grpc-timeout "100": INTERNAL
+PASS  grpc-timeout "S": INTERNAL
+PASS  grpc-timeout "1x": INTERNAL
+PASS  grpc-timeout "123456789S": INTERNAL
+PASS  grpc-timeout "-1S": INTERNAL
+PASS  grpc-timeout "+1S": INTERNAL
+PASS  grpc-timeout "": INTERNAL
+PASS  the program saw the held call and the three it answered, none malformed
+PASS  maxTimeout 60 ms: an h2c connection to a second server
+PASS  grpc-timeout 99999999H and none: both held by the program, neither refused
+PASS  answered after 120 ms, both are past maxTimeout
+PASS  reply sends DEADLINE_EXCEEDED for each: the cap is maxTimeout, not what was asked
+PASS  HTTP/1.1: a connection
+PASS  a gRPC call over it: 505
+grpc: 44 passed, 0 failed, 0 skipped
