@@ -40,6 +40,7 @@ const PANIC_FFI_NUL: i32 = 14 [exported]
 const PANIC_FFI_NULL: i32 = 15 [exported]
 const PANIC_FFI_LENGTH: i32 = 16 [exported]
 const PANIC_REGION: i32 = 17 [exported]
+const PANIC_SPAWN_SLOT: i32 = 18 [exported]
 const OUT_OF_SCOPE: string = "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
 struct PanicSite (class) size=56 align=8 exported
   field node: Node index=0 offset=0
@@ -154,7 +155,7 @@ function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicAt#0 mayPanicAt#0
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
   pointer sites: size=0 writesThrough=false captured=false
-  pointer f: size=448 writesThrough=false captured=false
+  pointer f: size=456 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 site: PanicSite (const)
   callee +1:9 isCallSite -> @isCallSite
@@ -166,7 +167,7 @@ function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f:
 function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean -> @mayPanicAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: FactsTable.indexOf
+  calls: FactsTable.indexOf nish_panic_index
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer may: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -179,7 +180,7 @@ function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[]
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sites: size=0 writesThrough=false captured=false
-  pointer f: size=448 writesThrough=false captured=false
+  pointer f: size=456 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 site: PanicSite (const)
   callee +1:9 panicsHere -> @panicsHere
@@ -197,7 +198,7 @@ function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[]
 function reachOf(facts: FactsTable, reach: PanicSite | null[], name: string): PanicSite | null -> @reachOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: FactsTable.indexOf
+  calls: FactsTable.indexOf nish_panic_index
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer reach: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -221,7 +222,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sig: size=224 writesThrough=false captured=false
-  pointer f: size=448 writesThrough=false captured=false
+  pointer f: size=456 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local -9:9 sites: PanicSite[] (const)
   local -8:9 named: StringSet (const)
@@ -418,9 +419,9 @@ function calledName(program: CheckedProgram, call: Node): string -> @calledName
 function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite): string -> @siteAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexAdvice
-  calls: calledName divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat nish_str_eq overflowAdvice rangeAdvice siteLocalName sliceAdvice unwrapBoundsParens
-  pointer program: size=928 writesThrough=true captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0 calledName#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 overflowAdvice#1
+  calls: calledName divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat nish_str_eq overflowAdvice rangeAdvice siteLocalName sliceAdvice spawnSlotAdvice unwrapBoundsParens
+  pointer program: size=928 writesThrough=true captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0 calledName#0 spawnSlotAdvice#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 overflowAdvice#1 spawnSlotAdvice#1
   pointer site: size=56 writesThrough=false captured=false passedTo=rangeAdvice#2
   stackSites=0 stackLocals=0
   local +0:9 node: Node (const)
@@ -437,6 +438,7 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   callee +36:14 overflowAdvice -> @overflowAdvice
   local +43:13 reader: string (const)
   callee +43:22 calledName -> @calledName
+  callee +59:14 spawnSlotAdvice -> @spawnSlotAdvice
 function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @indexAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexGuardAdvice
@@ -460,6 +462,23 @@ function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): str
   local +16:9 i: string (const)
   local +17:9 what: string (const)
   callee +22:22 indexGuardAdvice -> @indexGuardAdvice
+function spawnSlotAdvice(program: CheckedProgram, table: TypeTable, call: Node): string -> @spawnSlotAdvice
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via indexGuardAdvice
+  calls: indexGuardAdvice nish_panic_index nish_str_concat siteLocalName
+  pointer program: size=928 writesThrough=true captured=false passedTo=siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=indexGuardAdvice#1
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 args: Node[] (const)
+  local +1:9 holder: string (const)
+  callee +1:18 siteLocalName -> @siteLocalName
+  local +2:9 name: string (const)
+  callee +2:16 siteLocalName -> @siteLocalName
+  local +3:9 xs: string (const)
+  local +4:9 i: string (const)
+  local +5:9 what: string (const)
+  callee +9:63 indexGuardAdvice -> @indexGuardAdvice
 function vectorAdvice(program: CheckedProgram, call: Node, lanes: i32): string -> @vectorAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat nish_str_from_i32 siteLocalName

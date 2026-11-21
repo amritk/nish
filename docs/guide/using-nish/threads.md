@@ -450,6 +450,13 @@ export const main = (): i32 => {
   or an element of it counts as much as the object itself. So a `Map`, a
   `Set` or an array you make there is yours to fill and walk, and what you
   read back out of it is yours to write when you put it there fresh.
+- **`at` must be a slot of `dst`.** `spawn` checks it before it takes the
+  task and stops the program on one outside the array. The compiler proves
+  that check at your call as it would `dst[at]`: a spawn in a loop
+  `for (let i = 0; i < out.length; i++) s.spawn(task, i, out, i)`, or under a
+  guard `at >= 0 && at < out.length`, has its slot proven, and builds under
+  the no-panic default when its task cannot panic either
+  ([Panic sites](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites)).
 - **A task follows the rules of a parallel `f` above:** it writes nothing
   another thread can see (except through a `Mutex` or a `Channel`, below) and
   prints nothing (`console.log`, `console.error`, `write`, `writeError` and

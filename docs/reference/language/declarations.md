@@ -3467,6 +3467,9 @@ export const main = (): i32 => {
   `const` locals (below). `at` is checked at the spawn and
   again when the answer is stored; out of range is
   `spawn: destination index 3 is out of range for an array of 1 elements` and exit 1.
+  The call is a [`spawn-slot` panic site](semantics-decisions.md#panic-sites) of its caller, proven
+  as `dst[at]` would be, so a loop below `dst.length` lets a
+  [no-panic](semantics-decisions.md#the-no-panic-scope) module spawn into each slot.
 - **`s.spawn(entry, arg)` and `s.spawn(() => ...)` have no destination.** The
   task runs as any other does and its scope stores nothing when it joins, so
   `entry` answers `void`: it is seen through the guard of a

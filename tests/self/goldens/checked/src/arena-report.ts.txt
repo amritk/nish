@@ -126,7 +126,7 @@ function ArenaWalk.constructor(this: ArenaWalk, unit: AnalysisUnit, facts: Facts
   pointer unit: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
   pointer sig: size=224 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
-  pointer f: size=448 writesThrough=true captured=true
+  pointer f: size=456 writesThrough=true captured=true
   pointer table: size=168 writesThrough=true captured=true
   pointer drops: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -569,7 +569,7 @@ function findDrop(drops: CalleeDrops, sig: FunctionSig): DropOrigin | null -> @f
   callee +64:16 dropOf -> @dropOf
 function escapesIn(f: FunctionFacts, node: Node): boolean -> @escapesIn
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer f: size=448 writesThrough=false captured=false
+  pointer f: size=456 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 escaping: Node (const)
@@ -579,7 +579,7 @@ function freeCalls(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts, body
   calls: freeCalls freeIn nish_array_grow onEveryCall userCallee
   pointer unit: size=16 writesThrough=false captured=false passedTo=onEveryCall#0 freeIn#0 freeCalls#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=freeIn#1 freeCalls#1
-  pointer f: size=448 writesThrough=false captured=false passedTo=freeIn#2 freeCalls#2
+  pointer f: size=456 writesThrough=false captured=false passedTo=freeIn#2 freeCalls#2
   pointer body: size=40 writesThrough=false captured=false passedTo=onEveryCall#1 freeIn#3 freeCalls#3
   pointer node: size=40 writesThrough=true captured=true passedTo=userCallee#1 onEveryCall#2 freeIn#4
   pointer out: size=0 writesThrough=true captured=false passedTo=freeCalls#5
@@ -683,7 +683,7 @@ function freeIn(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts, body: N
   calls: ParentTable.parentOf boundedPasses childIndex endsAfter endsProgram isArenaUsing isLoopKind loopScopeOf
   pointer unit: size=16 writesThrough=false captured=false passedTo=boundedPasses#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=boundedPasses#1
-  pointer f: size=448 writesThrough=false captured=false passedTo=loopScopeOf#0
+  pointer f: size=456 writesThrough=false captured=false passedTo=loopScopeOf#0
   pointer body: size=40 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0

@@ -121,6 +121,8 @@ import {
   isLockMethod,
   isRegionEntry,
   isSpawnEntry,
+  isThreadsModule,
+  isVoidSpawn,
   parallelBodyOf,
   parallelRoleOf,
   recyclesPerElement,
@@ -196,6 +198,7 @@ import {
   PANIC_RANGE,
   PANIC_REGION,
   PANIC_SLICE,
+  PANIC_SPAWN_SLOT,
   PanicSite,
 } from "./panics"
 
@@ -936,6 +939,13 @@ export class FunctionFacts {
    * the build asks for them (`Options.recordsPanics`).
    */
   panicSites: PanicSite[]
+  /**
+   * #2126: this function is `std/threads.ts`'s `slotOutOfRange`, the slot check
+   * of a four-argument `spawn`, whose callers' proof is made at the spawn
+   * (`PANIC_SPAWN_SLOT`): `src/panics.ts` follows no call into it. Its own
+   * `panic` is still listed, at its own line.
+   */
+  callerProven: boolean
   /** `clearRecursiveWillReturn`'s visit number, from 1; 0 until the walk reaches this function. */
   cycleOrder: i32
   /** The lowest visit number this function reaches back to, in the same walk. */
@@ -1015,6 +1025,7 @@ export class FunctionFacts {
     this.hoistedHeaders = []
     this.hoistedScopeStarts = []
     this.panicSites = []
+    this.callerProven = false
     this.cycleOrder = 0
     this.cycleLow = 0
     this.onCycleStack = false
@@ -2208,9 +2219,14 @@ class FactCollector {
   /**
    * A call into `callee`, a candidate `call` site the resolution keeps when
    * the callee may panic; a `parallelMapInto` instance's is the length check
-   * its body makes before it divides the work.
+   * its body makes before it divides the work. A four-argument `spawn` also
+   * holds its slot check, proven where `src/bounds.ts` proves `dst[at]`
+   * would be (`PANIC_SPAWN_SLOT`).
    */
   noteCall(node: Node, callee: FunctionSig): void {
+    if (isSpawnEntry(callee) && !isVoidSpawn(callee)) {
+      this.noteSite(node, PANIC_SPAWN_SLOT, this.unit.program.nodeProvenIndex[node.id], "")
+    }
     this.noteSite(
       node,
       parallelRoleOf(callee) === PAR_MAP ? PANIC_PARALLEL_LENGTH : PANIC_CALL,
@@ -4526,6 +4542,7 @@ const collectStatedFacts = (
   // and proves no site, and a function that takes the analysis's table needs
   // none of its own; `isStackSite` reads past the end as false.
   const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
+  facts.callerProven = sig.sourceName === "slotOutOfRange" && isThreadsModule(program)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)

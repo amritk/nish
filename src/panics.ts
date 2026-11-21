@@ -98,6 +98,17 @@ export const PANIC_FFI_LENGTH: i32 = 16
  * reach it as a `call`.
  */
 export const PANIC_REGION: i32 = 17
+/**
+ * #2126: a four-argument `s.spawn(entry, arg, dst, at)`, whose task stores
+ * into `dst[at]` when its scope joins. `std/threads.ts` checks the slot in
+ * `spawn` and again in `storeResult`, by a call to `slotOutOfRange`, and a
+ * call into that function is not followed (`FunctionFacts.callerProven`):
+ * the check is this site's, at the spawn, proven as `dst[at]` would be there.
+ * The destination rules (docs/LANGUAGE.md, "Scoped tasks") keep the array's
+ * length from moving before the join, so a slot proven at the spawn holds at
+ * the store.
+ */
+export const PANIC_SPAWN_SLOT: i32 = 18
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -136,6 +147,8 @@ const panicKindName = (kind: i32): string => {
       return "ffi-length"
     case PANIC_REGION:
       return "region"
+    case PANIC_SPAWN_SLOT:
+      return "spawn-slot"
     default:
       return "oom"
   }
@@ -420,10 +433,13 @@ const callsMayPanic = (facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   return false
 }
 
-/** Whether the function called `name` may panic; false for a runtime symbol. */
+/**
+ * Whether the function called `name` may panic; false for a runtime symbol,
+ * and for a check its callers prove (`FunctionFacts.callerProven`).
+ */
 const mayPanicAt = (facts: FactsTable, may: boolean[], name: string): boolean => {
   const at = facts.indexOf(name)
-  return at >= 0 && at < may.length && may[at]
+  return at >= 0 && at < may.length && may[at] && !facts.list[at].callerProven
 }
 
 /**
@@ -473,10 +489,13 @@ const firstPanic = (
   return null
 }
 
-/** What the function called `name` can panic at first, or null: none, or a runtime symbol. */
+/**
+ * What the function called `name` can panic at first, or null: none, a
+ * runtime symbol, or a check its callers prove (`FunctionFacts.callerProven`).
+ */
 const reachOf = (facts: FactsTable, reach: (PanicSite | null)[], name: string): PanicSite | null => {
   const at = facts.indexOf(name)
-  return at >= 0 && at < reach.length ? reach[at] : null
+  return at >= 0 && at < reach.length && !facts.list[at].callerProven ? reach[at] : null
 }
 
 /** The facts of a function `--emit-panics` lists: one with a body, defined in `program`. */
@@ -858,6 +877,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "the array's length panics before the call: pass `toU64(buf.length)` of the buffer itself, which " +
         "needs no check"
       )
+    case PANIC_SPAWN_SLOT:
+      return spawnSlotAdvice(program, table, node)
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
@@ -901,6 +922,23 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
       : "this index is not proven to be in range here"
   // The guard NL9007 offers, or none where no spelling is credited.
   return `${what}: ${indexGuardAdvice(program, table, index, i, xs)}`
+}
+
+/**
+ * A four-argument `spawn` stores its task's answer into `dst[at]`, so its
+ * slot is proven as that index would be at the call (`PANIC_SPAWN_SLOT`).
+ */
+const spawnSlotAdvice = (program: CheckedProgram, table: TypeTable, call: Node): string => {
+  const args = call.children[1].children
+  const holder = siteLocalName(program, args[2])
+  const name = siteLocalName(program, args[3])
+  const xs = holder.length > 0 ? holder : "dst"
+  const i = name.length > 0 ? name : "at"
+  const what =
+    name.length > 0 && holder.length > 0
+      ? `\`${i}\` is not proven to be a slot of \`${xs}\` here`
+      : "this slot is not proven to be in its array here"
+  return `${what}, and \`spawn\` panics on one that is not: ${indexGuardAdvice(program, table, args[3], i, xs)}`
 }
 
 /**

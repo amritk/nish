@@ -148,6 +148,7 @@ import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementS
 import { Options } from "./options"
 import { isAsciiText } from "./strings"
 import { isSimdExport, simdSuffix, simdTypeLane } from "./nish-modules"
+import { isSpawnEntry, isVoidSpawn } from "./parallel"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import {
   DeclaredRange,
@@ -2862,6 +2863,19 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
 }
 
 /**
+ * `s.spawn(entry, arg, dst, at)`, the four-argument form, whose task stores
+ * into `dst[at]` when its scope joins: its slot is judged at the call as that
+ * index would be (`PANIC_SPAWN_SLOT` in `src/panics.ts`). The destination
+ * rules keep `dst` from changing length before the join.
+ */
+const isSlotSpawn = (ctx: CheckContext, call: Node): boolean => {
+  const target = ctx.program.nodeCallees[call.id]
+  return (
+    target !== null && isSpawnEntry(target) && !isVoidSpawn(target) && call.children[1].children.length === 4
+  )
+}
+
+/**
  * `r.unwrapOr(d)` or `r.expect(m)` on a `Result`, whose one argument
  * `src/emit-result.ts` evaluates on the `Err` path only, or "" for any other
  * call. The names are the checker's (`checkResultMethod` in `src/result.ts`);
@@ -3672,6 +3686,9 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     }
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
+    }
+    if (isSlotSpawn(ctx, e)) {
+      judge(walk, state, e, e.children[1].children[2], e.children[1].children[3], true)
     }
     const lanes = vectorAccessLanes(ctx.program, ctx.table, e)
     if (lanes > 0) {
@@ -4882,7 +4899,7 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
 /**
  * Whether `node` holds anything `judge`, `judgeClampBound`, `judgeRange`,
  * `judgeDivision` or `judgePop` is ever called on: an element access, a call
- * spelled `.charCodeAt(...)`, `.substring(...)` or `.pop()` whatever its
+ * spelled `.charCodeAt(...)`, `.substring(...)`, `.pop()` or `.spawn(...)` whatever its
  * receiver, a division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
@@ -4897,7 +4914,7 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
   if (node.kind === NodeKind.Call) {
     const callee = unwrapBoundsParens(node.children[0])
     const name = callee.kind === NodeKind.Member ? callee.text : ""
-    if (name === "charCodeAt" || name === "substring" || name === "pop") {
+    if (name === "charCodeAt" || name === "substring" || name === "pop" || name === "spawn") {
       return true
     }
   }

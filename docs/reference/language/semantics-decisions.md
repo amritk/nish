@@ -1475,6 +1475,15 @@ its `src`
 - *What proves it away:* nothing yet: the check is `std/threads.ts`'s own
   (`tests/link/panics_parallel_length`)
 
+**`spawn-slot`**: a four-argument `s.spawn(entry, arg, dst, at)` whose `at` is
+not a slot of `dst`, which `spawn` checks before it takes the task
+
+- *What proves it away:* what proves `dst[at]` in range at the call: a loop
+  below `dst.length` from 0, or a guard `at >= 0 && at < dst.length`
+  (`tests/link/spawn_slot_proven`, `tests/link/spawn_slot_unproven`). The
+  check itself stays in `std/threads.ts`; a call no longer reaches it, so the
+  site at the call is the only one the caller answers for
+
 **`ffi-nul`**: a `string` argument to a [`declare function`](declarations.md#calling-c) that
 holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
@@ -1674,6 +1683,39 @@ performance warning about the same check is not printed beside the error.
   `JsonDocument.stringify` and `textOf`, `toFixed`, and the `std/net`,
   `std/threads` and `std/crypto` modules among them — is NL2458, and such a
   program builds with `--allow-panics` until that code is proven.
+
+## Panics the standard library keeps
+
+**`std/` is not panic-free yet, and the number of its panic sites only
+falls.** `node tests/run.js std-panics` compiles every git-tracked `std/`
+module with `--emit-panics` and counts, per module and per kind, the sites the
+report leaves standing: not proven, not `allowed`, and not `call`, `oom` or
+`unchecked`. `tests/std-panics.json` holds those counts. A count that rises
+fails and names the new sites, a module that gains its first site fails, and
+a count that falls fails until the file is rewritten to it with
+`--update-std-panics`, so a fixed site cannot be traded for a new one.
+
+**An explicit `panic(...)` in `std/` stays only where the caller broke a
+contract the function's doc states**: an index or range outside an array the
+caller sized, a negative or oversized length, a call the doc rules out. A
+`Result` there would hand every caller that keeps the contract a failure it
+cannot meet, or would make the function answer a value it made up. Each such
+function is listed in the file's `kept` list with the reason, and its site
+must still be there and the reason non-empty.
+
+**Every other explicit panic is counted as one still to fix**, in
+`explicit.toFix`: a failure the caller cannot rule out — input read from a
+file, the network or the command line, a limit the input can reach — is
+answered with a `Result` or `null`, not a panic. A fix removes the failure or
+returns it; it does not hide the check behind `nish:unsafe` or a guard that
+answers a made-up value.
+
+**Kept means only that the ratchet accepts the site.** It is still a panic
+site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is
+refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
+caller in the scope calls the checked twin where there is one, or proves the
+contract at the call where the site is the caller's own, as a
+[`spawn-slot`](#panic-sites) is.
 
 ## The compatibility dialect
 

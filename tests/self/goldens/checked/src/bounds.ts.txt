@@ -24,6 +24,8 @@ import isAsciiText from "./strings" -> function @isAsciiText
 import isSimdExport from "./nish-modules" -> function @isSimdExport
 import simdSuffix from "./nish-modules" -> function @simdSuffix
 import simdTypeLane from "./nish-modules" -> function @simdTypeLane
+import isSpawnEntry from "./parallel" -> function @isSpawnEntry
+import isVoidSpawn from "./parallel" -> function @isVoidSpawn
 import Local from "./symbols" -> struct Local
 import STORAGE_LOCAL from "./symbols" -> const STORAGE_LOCAL
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
@@ -1642,6 +1644,15 @@ function isCharCodeAt(ctx: CheckContext, call: Node): boolean -> @isCharCodeAt
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
   callee +0:18 unwrapBoundsParens -> @unwrapBoundsParens
+function isSlotSpawn(ctx: CheckContext, call: Node): boolean -> @isSlotSpawn
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isSpawnEntry isVoidSpawn nish_panic_index
+  pointer ctx: size=448 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 target: FunctionSig | null (const)
+  callee +2:24 isSpawnEntry -> @isSpawnEntry
+  callee +2:49 isVoidSpawn -> @isVoidSpawn
 function lazyResultMethod(ctx: CheckContext, call: Node): string -> @lazyResultMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq unwrapBoundsParens
@@ -2048,9 +2059,9 @@ function walkArgument(walk: BoundsWalk, state: State, arg: Node, callee: Functio
 function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walkOperands
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkExpression
-  calls: SliceStart.constructor addFacts applyAssignment applyCallEffects applyDecrement callsNothing cloneState conditionFacts copyInto forgetCallEffects forgetPathsThrough intersect isArrayPop isCharCodeAt isSliceCall isSubstringCall judge judgeClampBound judgeOverflow judgePop judgeSliceBound judgeVectorAccess lazyResultMethod lengthHolder localOf nish_panic_index nish_panic_overflow nish_str_eq noteCallSite unwrapBoundsParens vectorAccessLanes walkArgument walkBinary walkExpression writesLocal
-  pointer walk: size=200 writesThrough=true captured=false passedTo=walkExpression#0 walkExpression#0 judge#0 walkExpression#0 walkExpression#0 walkExpression#0 forgetCallEffects#0 walkArgument#0 judgeSliceBound#0 judgeClampBound#0 judge#0 judgeVectorAccess#0 judgePop#0 noteCallSite#0 applyCallEffects#0 walkArgument#0 applyCallEffects#0 walkBinary#0 walkExpression#0 conditionFacts#0 walkExpression#0 walkExpression#0 walkExpression#0 judgeOverflow#0 forgetPathsThrough#0 applyAssignment#0 applyDecrement#0 walkExpression#0
-  pointer state: size=120 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 cloneState#0 copyInto#0 intersect#0 forgetCallEffects#1 walkArgument#1 judgeSliceBound#1 judgeClampBound#1 judge#1 judgeVectorAccess#1 judgePop#1 noteCallSite#1 applyCallEffects#1 walkArgument#1 applyCallEffects#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 judgeOverflow#1 forgetPathsThrough#1 applyAssignment#1 applyDecrement#1 walkExpression#1
+  calls: SliceStart.constructor addFacts applyAssignment applyCallEffects applyDecrement callsNothing cloneState conditionFacts copyInto forgetCallEffects forgetPathsThrough intersect isArrayPop isCharCodeAt isSliceCall isSlotSpawn isSubstringCall judge judgeClampBound judgeOverflow judgePop judgeSliceBound judgeVectorAccess lazyResultMethod lengthHolder localOf nish_panic_index nish_panic_overflow nish_str_eq noteCallSite unwrapBoundsParens vectorAccessLanes walkArgument walkBinary walkExpression writesLocal
+  pointer walk: size=200 writesThrough=true captured=false passedTo=walkExpression#0 walkExpression#0 judge#0 walkExpression#0 walkExpression#0 walkExpression#0 forgetCallEffects#0 walkArgument#0 judgeSliceBound#0 judgeClampBound#0 judge#0 judge#0 judgeVectorAccess#0 judgePop#0 noteCallSite#0 applyCallEffects#0 walkArgument#0 applyCallEffects#0 walkBinary#0 walkExpression#0 conditionFacts#0 walkExpression#0 walkExpression#0 walkExpression#0 judgeOverflow#0 forgetPathsThrough#0 applyAssignment#0 applyDecrement#0 walkExpression#0
+  pointer state: size=120 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 cloneState#0 copyInto#0 intersect#0 forgetCallEffects#1 walkArgument#1 judgeSliceBound#1 judgeClampBound#1 judge#1 judge#1 judgeVectorAccess#1 judgePop#1 noteCallSite#1 applyCallEffects#1 walkArgument#1 applyCallEffects#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 judgeOverflow#1 forgetPathsThrough#1 applyAssignment#1 applyDecrement#1 walkExpression#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=1 stackLocals=0
   local +0:9 ctx: CheckContext (const)
@@ -2088,45 +2099,47 @@ function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walk
   callee +62:11 judgeClampBound -> @judgeClampBound
   callee +66:9 isCharCodeAt -> @isCharCodeAt
   callee +67:7 judge -> @judge
-  local +69:11 lanes: i32 (const)
-  callee +69:19 vectorAccessLanes -> @vectorAccessLanes
-  callee +71:7 judgeVectorAccess -> @judgeVectorAccess
-  callee +73:9 isArrayPop -> @isArrayPop
-  callee +74:7 judgePop -> @judgePop
-  callee +76:9 callsNothing -> @callsNothing
-  callee +82:7 noteCallSite -> @noteCallSite
-  callee +87:5 applyCallEffects -> @applyCallEffects
-  local +92:11 target: FunctionSig | null (const)
-  local +93:9 at: i32 (let)
-  local +94:16 arg: Node (const)
-  callee +95:7 walkArgument -> @walkArgument
-  callee +98:5 applyCallEffects -> @applyCallEffects
-  callee +103:5 walkBinary -> @walkBinary
-  callee +108:5 walkExpression -> @walkExpression
-  local +109:11 facts: ConditionFacts (const)
-  callee +109:19 conditionFacts -> @conditionFacts
-  local +110:11 whenTrue: State (const)
-  callee +110:22 cloneState -> @cloneState
-  callee +111:5 addFacts -> @addFacts
-  callee +112:5 walkExpression -> @walkExpression
-  local +113:11 whenFalse: State (const)
-  callee +113:23 cloneState -> @cloneState
+  callee +69:9 isSlotSpawn -> @isSlotSpawn
+  callee +70:7 judge -> @judge
+  local +72:11 lanes: i32 (const)
+  callee +72:19 vectorAccessLanes -> @vectorAccessLanes
+  callee +74:7 judgeVectorAccess -> @judgeVectorAccess
+  callee +76:9 isArrayPop -> @isArrayPop
+  callee +77:7 judgePop -> @judgePop
+  callee +79:9 callsNothing -> @callsNothing
+  callee +85:7 noteCallSite -> @noteCallSite
+  callee +90:5 applyCallEffects -> @applyCallEffects
+  local +95:11 target: FunctionSig | null (const)
+  local +96:9 at: i32 (let)
+  local +97:16 arg: Node (const)
+  callee +98:7 walkArgument -> @walkArgument
+  callee +101:5 applyCallEffects -> @applyCallEffects
+  callee +106:5 walkBinary -> @walkBinary
+  callee +111:5 walkExpression -> @walkExpression
+  local +112:11 facts: ConditionFacts (const)
+  callee +112:19 conditionFacts -> @conditionFacts
+  local +113:11 whenTrue: State (const)
+  callee +113:22 cloneState -> @cloneState
   callee +114:5 addFacts -> @addFacts
   callee +115:5 walkExpression -> @walkExpression
-  callee +116:5 copyInto -> @copyInto
-  callee +116:21 intersect -> @intersect
-  local +121:11 operand: Node (const)
-  callee +122:5 walkExpression -> @walkExpression
-  callee +124:5 judgeOverflow -> @judgeOverflow
-  local +128:11 field: Node (const)
-  callee +128:19 unwrapBoundsParens -> @unwrapBoundsParens
-  callee +130:7 forgetPathsThrough -> @forgetPathsThrough
-  local +133:11 v: Local | null (const)
-  callee +133:15 localOf -> @localOf
-  callee +138:7 applyAssignment -> @applyAssignment
-  callee +140:7 applyDecrement -> @applyDecrement
-  local +149:14 child: Node (const)
-  callee +150:5 walkExpression -> @walkExpression
+  local +116:11 whenFalse: State (const)
+  callee +116:23 cloneState -> @cloneState
+  callee +117:5 addFacts -> @addFacts
+  callee +118:5 walkExpression -> @walkExpression
+  callee +119:5 copyInto -> @copyInto
+  callee +119:21 intersect -> @intersect
+  local +124:11 operand: Node (const)
+  callee +125:5 walkExpression -> @walkExpression
+  callee +127:5 judgeOverflow -> @judgeOverflow
+  local +131:11 field: Node (const)
+  callee +131:19 unwrapBoundsParens -> @unwrapBoundsParens
+  callee +133:7 forgetPathsThrough -> @forgetPathsThrough
+  local +136:11 v: Local | null (const)
+  callee +136:15 localOf -> @localOf
+  callee +141:7 applyAssignment -> @applyAssignment
+  callee +143:7 applyDecrement -> @applyDecrement
+  local +152:14 child: Node (const)
+  callee +153:5 walkExpression -> @walkExpression
 function storesBackRange(ctx: CheckContext, node: Node): boolean -> @storesBackRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged isBoundsAssignment nish_panic_index nish_str_eq

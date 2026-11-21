@@ -6686,9 +6686,9 @@ if (dealtHere("performance")) {
 // fall fails until the baseline is rewritten to it
 // (`node tests/run.js std-panics --update-std-panics`), so a fixed site cannot
 // be traded for a new one. Its `kept` list names the explicit `panic(...)`
-// sites that stay, by function, with the reason (`docs/LANGUAGE.md`,
-// "Panics"); the explicit sites of every other function are the ones still to
-// fix, and both counts are pinned.
+// sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
+// the standard library keeps"); the explicit sites of every other function
+// are the ones still to fix, and both counts are pinned.
 const UPDATE_STD_PANICS = process.argv.includes("--update-std-panics")
 if (dealtHere("stdPanics")) {
   const baselineName = "tests/std-panics.json"
@@ -6794,7 +6794,7 @@ if (dealtHere("stdPanics")) {
   check(
     `std-panics: no std/ module has more panic sites of a kind than ${baselineName} allows (${sites.size} today: ${perKind})`,
     unreported.length === 0 && rises.length === 0,
-    `${rises.join("\n")}\nProve the new site away, or return a Result where the failure is real (docs/LANGUAGE.md, "Panics").`
+    `${rises.join("\n")}\nProve the new site away, or return a Result where the failure is real (docs/LANGUAGE.md, "Panics the standard library keeps").`
   )
   check(
     `std-panics: no std/ module gains its first panic site`,
