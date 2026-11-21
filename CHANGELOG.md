@@ -16,6 +16,47 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-21
+
+### Added
+
+- net: Add nish/net/protobuf, protobuf's wire format, with its security record ([#2106](https://github.com/amritk/nish/pull/2106))
+- runtime: Trailers on the nish/net/http-server façade's HTTP/2 answers ([#2110](https://github.com/amritk/nish/pull/2110))
+
+### Fixed
+
+- runtime: Make std/ panic-free for strict modules ([#2103](https://github.com/amritk/nish/pull/2103))
+
+### Performance
+
+- runtime: Read emit-ts strings without re-encoding them per byte ([#2108](https://github.com/amritk/nish/pull/2108))
+
+### Documentation
+
+- Record the cookbook regen check and nish-cmp --no-sidecars for wasm32 in CLAUDE.md ([#1752](https://github.com/amritk/nish/pull/1752))
+- Plan WP74 to WP79, the std and toolchain gaps a generated API CLI meets ([#2098](https://github.com/amritk/nish/pull/2098))
+- Check a record's cited checks and figures against their source before the PR ([#1719](https://github.com/amritk/nish/pull/1719))
+
+### Tests
+
+- std: Pin vector 0.6.0 and regenerate the spec tests ([#2109](https://github.com/amritk/nish/pull/2109))
+- std: Cover the HMAC and HKDF Secret exports in their RFC contracts ([#2112](https://github.com/amritk/nish/pull/2112))
+- std: State the PBKDF2 and SCRAM laws and record why their vectors keep commands ([#2113](https://github.com/amritk/nish/pull/2113))
+- std: Record why the RFC 8439 quarter-round positions stay uncited ([#2111](https://github.com/amritk/nish/pull/2111))
+- std: Specify base64 and base64url from RFC 4648 ([#2114](https://github.com/amritk/nish/pull/2114))
+- std: Specify P-256 ECDSA signing from RFC 6979 ([#2116](https://github.com/amritk/nish/pull/2116))
+- std: Specify SHA-1 and SHA-2 from RFC 6234 ([#2115](https://github.com/amritk/nish/pull/2115))
+
+### CI
+
+- Delete the Release PR's runs that wait for approval ([#2099](https://github.com/amritk/nish/pull/2099))
+- Report the dispatched CI gate as a ci-gate commit status ([#2101](https://github.com/amritk/nish/pull/2101))
+
+### Internal
+
+- Name break-web's build as a --help input, and refresh apt before the compiler-rt install ([#1806](https://github.com/amritk/nish/pull/1806))
+
+
 ## [0.44.0] - 2026-11-21
 
 ### Breaking changes
@@ -2196,3 +2237,4 @@ file per release, and each release's notes and downloads are on the
 [0.42.0]: https://github.com/amritk/nish/releases/tag/v0.42.0
 [0.43.0]: https://github.com/amritk/nish/releases/tag/v0.43.0
 [0.44.0]: https://github.com/amritk/nish/releases/tag/v0.44.0
+[0.45.0]: https://github.com/amritk/nish/releases/tag/v0.45.0
