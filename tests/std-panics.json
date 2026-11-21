@@ -6,8 +6,8 @@
   ],
   "total": 9584,
   "explicit": {
-    "kept": 0,
-    "toFix": 462
+    "kept": 412,
+    "toFix": 50
   },
   "modules": {
     "std/base64.ts": {
@@ -674,5 +674,1491 @@
       "slice": 3
     }
   },
-  "kept": []
+  "kept": [
+    {
+      "module": "std/base64.ts",
+      "function": "base64EncodedLength",
+      "reason": "n must be non-negative and at most 1,610,612,733 per the doc; a caller-supplied size contract"
+    },
+    {
+      "module": "std/base64.ts",
+      "function": "base64EncodeInto",
+      "reason": "source range must lie inside src and the encoding must fit dst from at; caller-sized buffers, checked before writing"
+    },
+    {
+      "module": "std/bytes.ts",
+      "function": "copyBytes",
+      "reason": "the copy range must lie inside both arrays; a documented precondition, with tryCopyBytes available for checked copies"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.addCommand",
+      "reason": "command name, parent and duplicates are declaration-time choices the program fixes statically; a bad declaration is a bug"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.addFlag",
+      "reason": "flag must not clash with reserved or existing flags; a static declaration-time precondition of the program"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.alias",
+      "reason": "alias must be a valid, non-clashing command name on a non-root command; a static declaration choice"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.argument",
+      "reason": "argument spec must be <name> or [name], on a non-group, in a valid order; a static declaration contract"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.checkArgument",
+      "reason": "argument handle must be one this Cli returned; handles come from declarations, not from argv"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.checkCommand",
+      "reason": "command handle must be one this Cli returned; handles are program-declared, not parsed from argv"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.checkFlag",
+      "reason": "flag handle must be one this Cli returned; handles come from declarations, not from argv"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.command",
+      "reason": "command id must be non-negative and unique; both are static declaration choices of the program"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.defaultValue",
+      "reason": "only a value-taking, non-required flag can have a default; a static declaration contract"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.negatable",
+      "reason": "only a plain boolean flag can be negated and the --no- name must be free; a static declaration contract"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.repeatable",
+      "reason": "only a value-taking flag can repeat; a static declaration contract"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.required",
+      "reason": "required flag must not be on a group or have a default; a static declaration contract"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "editDistance",
+      "reason": "internal invariant: the caller passes three scratch rows each at least as long as the word; a correct program never violates it"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "FlagSpec.constructor",
+      "reason": "flag spec is a static declaration literal in the program; a malformed spec string is a programmer error caught at startup"
+    },
+    {
+      "module": "std/cli-flags.ts",
+      "function": "FlagTable.command",
+      "reason": "Command path must have words without a leading dash and be unique; declared statically by the program"
+    },
+    {
+      "module": "std/cli-flags.ts",
+      "function": "FlagTable.declare",
+      "reason": "Flag names must be well-formed, unique and not clash with --no-x; the declarations are static program text"
+    },
+    {
+      "module": "std/cli-flags.ts",
+      "function": "ParsedFlags.exitUsage",
+      "reason": "Must only be called after a failed parse; the caller checks ok first, so a call on success is a bug"
+    },
+    {
+      "module": "std/cli-flags.ts",
+      "function": "ParsedFlags.has",
+      "reason": "The name must be a flag the table declares; a static literal chosen by the caller"
+    },
+    {
+      "module": "std/cli-flags.ts",
+      "function": "ParsedFlags.slot",
+      "reason": "Reading a flag the table never declared, or of another kind, is a program bug; the name is a static literal"
+    },
+    {
+      "module": "std/compress/checksum.ts",
+      "function": "checksumWindow",
+      "reason": "buf[off, off+len) must lie inside buf; a caller-controlled bounds contract"
+    },
+    {
+      "module": "std/compress/checksum.ts",
+      "function": "Crc32.update",
+      "reason": "Window must lie inside buf; the table-size check is an internal invariant after construction"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "deflateCanonical",
+      "reason": "scratch tables must be at least as large as the symbol count; sizes are fixed by the compressor's own allocation"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "deflateLengths",
+      "reason": "alphabet size and scratch arrays must meet fixed minimums; sizes are set statically by the compressor"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "deflateMatchLength",
+      "reason": "a < b and b+max must lie inside src, which the caller has checked; internal precondition"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.addLiteral",
+      "reason": "internal invariant: token buffer has room and literal is a byte; the block flush keeps it so"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.addMatch",
+      "reason": "internal invariant: token buffer has room and the match is within the format; the caller flushes blocks first"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.buildRle",
+      "reason": "hlit/hdist and scratch sizes are bounded by the format and the constructor's allocations; internal invariant"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.collectGreedy",
+      "reason": "internal invariant: all tables are their allocated sizes, fixed by the constructor"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.compressRange",
+      "reason": "start/end/histStart must be a valid range inside src; the caller computes it, internal precondition"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.constructor",
+      "reason": "level must be 0 to 9; the doc forbids others and the caller picks the level statically"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.insert",
+      "reason": "internal invariant: head and prev tables are their fixed sizes, allocated by the constructor"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.longest",
+      "reason": "internal invariant: hash tables are their fixed sizes and p+4<=end, which the caller checks"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.writeBlock",
+      "reason": "internal invariant: a code-length symbol is 0 to 18 by construction of the RLE builder"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Deflater.writeSymbols",
+      "reason": "internal invariant: symbol tables are their fixed sizes and the token count fits the token buffer"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "deflateRoom",
+      "reason": "internal invariant: a block's size was checked against the room before writing, so this never fires on any input"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "deflateWindow",
+      "reason": "buf[off..off+len) must lie inside buf; the caller computes the window, so a Result would carry a made-up error"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "FixedDeflater.compress",
+      "reason": "internal invariant: its tables are exactly their fixed sizes, allocated by its constructor"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "inflateDouble",
+      "reason": "internal invariant: 2*end must be within the table; table size is derived from the validated code lengths"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.build",
+      "reason": "internal invariants on table scratch and code layout; malformed stream lengths return error codes before these, so no untrusted input reaches them"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.constructor",
+      "reason": "internal invariant: the fixed Huffman code is a constant and always builds"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.decompress",
+      "reason": "src/out windows must lie inside their arrays and limit must be non-negative; caller-controlled arguments, stream errors return codes"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.fill",
+      "reason": "inPos and end must lie within src; the caller (inflate) has validated the window, internal precondition"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.huffman",
+      "reason": "internal invariant: decode tables are their enough-sized lengths, fixed by construction"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.inflate",
+      "reason": "input and output windows must lie inside their arrays; the caller computes them, and malformed streams return DEFLATE_ERR codes"
+    },
+    {
+      "module": "std/compress/deflate.ts",
+      "function": "Inflater.readDynamic",
+      "reason": "window inside src and the code-length table at its fixed size; internal invariants, stream errors return codes"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipDecompressor.decompress",
+      "reason": "limit must be non-negative; a static argument, not derived from the compressed bytes"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipReader.commit",
+      "reason": "n must be 0..inputRoom(); the caller reports bytes it copied into the room it was given"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipReader.constructor",
+      "reason": "limit must be non-negative; a static argument fixed by the caller"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipReader.read",
+      "reason": "max must be at least 1; the caller chooses the output room statically"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "gzipWindow",
+      "reason": "buf[off, off+len) must lie inside buf; a caller-controlled bounds contract"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipWriter.finish",
+      "reason": "Not callable twice; the block-larger-than-bound panics are internal invariants after the room check"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipWriter.flush",
+      "reason": "Not callable after finish; the block-bound panic is an internal unreachable invariant after the room check"
+    },
+    {
+      "module": "std/compress/gzip.ts",
+      "function": "GzipWriter.write",
+      "reason": "Not callable after finish, and the block-bound check is an internal invariant after the room check"
+    },
+    {
+      "module": "std/compress/zlib.ts",
+      "function": "ZlibDecompressor.decompress",
+      "reason": "src and out windows inside their buffers and limit must be non-negative; caller-controlled, and bad compressed data returns codes"
+    },
+    {
+      "module": "std/compress/zlib.ts",
+      "function": "zlibWindow",
+      "reason": "the window must lie inside the buffer; the caller controls off and len, and bad compressed data returns error codes"
+    },
+    {
+      "module": "std/crypto/base64url.ts",
+      "function": "base64StdPadDecodedLength",
+      "reason": "the start/length range must lie inside text, as documented; malformed base64 content returns -1 instead"
+    },
+    {
+      "module": "std/crypto/base64url.ts",
+      "function": "base64StdPadEncode",
+      "reason": "input array must be at most 2^31 - 1 bytes, as documented; the length is the caller's own data bound"
+    },
+    {
+      "module": "std/crypto/base64url.ts",
+      "function": "base64StdPadEncodeInto",
+      "reason": "range must lie inside data and the text must fit out from at, as documented; the caller sizes both buffers"
+    },
+    {
+      "module": "std/crypto/base64url.ts",
+      "function": "base64urlEncode",
+      "reason": "input array must be at most 2^31 - 1 bytes, as documented; the length is the caller's own data bound"
+    },
+    {
+      "module": "std/crypto/ed25519.ts",
+      "function": "ed25519Sign",
+      "reason": "message must be at most 2^31 - 1 bytes, as documented, so the signature is never of a silent prefix; the caller bounds it"
+    },
+    {
+      "module": "std/crypto/ed25519.ts",
+      "function": "ed25519Verify",
+      "reason": "message must be at most 2^31 - 1 bytes, as documented; a wrong-length key or signature returns false instead"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfCheckHash",
+      "reason": "hashLength must be 32 or 48, the algorithm choice made statically by the caller"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfCheckOutput",
+      "reason": "out[at..at+length) must be a window inside out; the caller sizes its own output buffer"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfExpandLabelInto",
+      "reason": "hash length, label/context/length ranges, prk at least HashLen and output window are documented preconditions fixed by the caller's protocol"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfExpandLabelSha256",
+      "reason": "prk must be at least 32 bytes and label/context/length in documented ranges; fixed by the caller's TLS key schedule"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfExpandLabelSha256Secret",
+      "reason": "secret must be at least 32 bytes with documented label/context/length ranges; fixed by the caller's key schedule"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfExpandLabelSha384",
+      "reason": "prk must be at least 48 bytes and label/context/length in documented ranges; fixed by the caller's key schedule"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfExpandLabelSha384Secret",
+      "reason": "secret must be at least 48 bytes with documented label/context/length ranges; fixed by the caller's key schedule"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfExtractInto",
+      "reason": "hash length 32/48 and output window must be valid; the ikm over 2^31-1 bytes case cannot occur for an array"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfHeldDerive",
+      "reason": "hash length must be 32/48 and the held secret at least that long; both fixed by the caller's algorithm choice"
+    },
+    {
+      "module": "std/crypto/hkdf.ts",
+      "function": "hkdfLabel",
+      "reason": "length 0..255, label 1..249 bytes, context at most 255 bytes per the module docs; all fixed by the caller's protocol constants"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "hmacCheckKey",
+      "reason": "Key longer than 2^31-1 bytes cannot be a real array on a correct program; guard against length saturation, not input data"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "HmacKey.constructor",
+      "reason": "hash must be HMAC_SHA256/384/512; the algorithm is chosen statically by the caller"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "hmacKeyedInto",
+      "reason": "Key must be live and message and tag windows inside their arrays; the tag size is fixed by the key's algorithm"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "hmacKeyedVerify",
+      "reason": "Message window must lie inside data; the caller controls the window statically"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "hmacSha256",
+      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "HmacSha256.digestInto",
+      "reason": "Tag window must lie inside out; the 32-byte output size is fixed by the algorithm"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "HmacSha256Scratch.begin",
+      "reason": "Key window must lie inside the key array; caller-controlled bounds contract"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "HmacSha256Scratch.finishInto",
+      "reason": "32-byte tag window must lie inside out; size fixed by the algorithm"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "hmacSha384",
+      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "HmacSha384Scratch.begin",
+      "reason": "Key window must lie inside the key array; caller-controlled bounds contract"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "HmacSha384Scratch.finishInto",
+      "reason": "48-byte tag window must lie inside out; size fixed by the algorithm"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
+      "function": "hmacSha512",
+      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
+    },
+    {
+      "module": "std/crypto/jwt.ts",
+      "function": "JwtVerifier.constructor",
+      "reason": "maxToken must be in [16, JWT_MAX_TOKEN_LIMIT]; a configured buffer size chosen by the caller"
+    },
+    {
+      "module": "std/crypto/p256.ts",
+      "function": "p256HmacInto",
+      "reason": "Internal helper: key, message and block must lie within SHA-256 block bounds; fixed by the P-256 algorithm"
+    },
+    {
+      "module": "std/crypto/p256.ts",
+      "function": "p256SignSha256Into",
+      "reason": "Message window and the fixed 64-byte signature window must lie inside their arrays; caller bounds contract"
+    },
+    {
+      "module": "std/crypto/scram.ts",
+      "function": "scramClientProofExposed",
+      "reason": "internal invariant: HMAC-SHA-256 always returns 32 bytes, so the length guard is unreachable"
+    },
+    {
+      "module": "std/crypto/sha1.ts",
+      "function": "sha1",
+      "reason": "Message over 2^31-1 bytes is unrepresentable in a correct program; length-saturation guard, documented"
+    },
+    {
+      "module": "std/crypto/sha1.ts",
+      "function": "Sha1.digestInto",
+      "reason": "Message and 20-byte digest windows must lie inside their arrays and buffers be at most 2^31-1 bytes; caller bounds contract"
+    },
+    {
+      "module": "std/crypto/sha1.ts",
+      "function": "sha1Compress",
+      "reason": "Internal helper: the 64-byte block must lie inside the buffer; the else branch is an unreachable invariant"
+    },
+    {
+      "module": "std/crypto/sha256.ts",
+      "function": "sha256",
+      "reason": "a message over 2^31-1 bytes cannot exist in a u8[]; unreachable length invariant"
+    },
+    {
+      "module": "std/crypto/sha256.ts",
+      "function": "Sha256.copy",
+      "reason": "copy is invalid after digest, and the state arrays are always eight words; call-order contract plus internal invariant"
+    },
+    {
+      "module": "std/crypto/sha256.ts",
+      "function": "Sha256.digestInto",
+      "reason": "digest at most once, and the 32-byte window must lie inside out; caller-controlled preconditions"
+    },
+    {
+      "module": "std/crypto/sha256.ts",
+      "function": "Sha256.update",
+      "reason": "no update after digest, and the window must lie inside data; caller-controlled preconditions"
+    },
+    {
+      "module": "std/crypto/sha256.ts",
+      "function": "sha256Compress",
+      "reason": "internal invariant: the block and hash state always lie inside their buffers, so the else branch is unreachable"
+    },
+    {
+      "module": "std/crypto/sha512.ts",
+      "function": "sha384",
+      "reason": "array over 2^31-1 bytes cannot exist as an i32-indexed array; guard is a type-width invariant"
+    },
+    {
+      "module": "std/crypto/sha512.ts",
+      "function": "sha512",
+      "reason": "array over 2^31-1 bytes cannot exist as an i32-indexed array; guard is a type-width invariant"
+    },
+    {
+      "module": "std/crypto/sha512.ts",
+      "function": "Sha512Engine.absorb",
+      "reason": "no update after digest and the window must lie inside data; call-order and window contracts of the caller"
+    },
+    {
+      "module": "std/crypto/sha512.ts",
+      "function": "Sha512Engine.finish",
+      "reason": "digest may be taken once; a second call is a caller call-order violation"
+    },
+    {
+      "module": "std/net/buffer-pool.ts",
+      "function": "BufferPool.constructor",
+      "reason": "size must be above 0 and ceiling at least 1; both are static sizing choices of the program"
+    },
+    {
+      "module": "std/net/buffer-pool.ts",
+      "function": "bufferPoolCheckGive",
+      "reason": "give-back must be a pool-sized buffer, used within 0 to size, with one lent; the borrower's own mistakes"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsCommentCut",
+      "reason": "the window must lie inside b; the caller derives it from the file length, not from file content"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsConfigCheckWindow",
+      "reason": "bytes[off, off+len) must lie inside bytes; the caller computes the window"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsFallbackServers",
+      "reason": "servers must hold two 18-byte addresses; the array is allocated by the config's own constructor"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsHostsFind",
+      "reason": "qtype must be A or AAAA, port 16 bits, out room for max addresses; all documented caller-chosen arguments"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsLineEnd",
+      "reason": "the window must lie inside b; the caller derives it from the file length, not from file content"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsOption",
+      "reason": "the window must lie inside b; option values are clamped rather than rejected, so file content cannot panic it"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsParseAddressVia",
+      "reason": "window, out offset, 16-bit port and 16-byte scratch are caller-supplied sizes; bad address text returns false"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsParseIpv4",
+      "reason": "the window must lie inside b; a malformed address in the text returns false, only a bad window panics"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsParseIpv6",
+      "reason": "the window must lie inside b; a malformed address in the text returns false, only a bad window panics"
+    },
+    {
+      "module": "std/net/dns-config.ts",
+      "function": "dnsWordEnd",
+      "reason": "the window must lie inside b; the caller derives it from the file length, not from file content"
+    },
+    {
+      "module": "std/net/dns-message.ts",
+      "function": "dnsBuildQuery",
+      "reason": "the query id must fit 16 bits; the caller chooses it, and name problems already return DNS_ERR codes"
+    },
+    {
+      "module": "std/net/dns-message.ts",
+      "function": "dnsCheckLength",
+      "reason": "the length must lie within the array; the caller controls it, and the packet's bytes do not affect it"
+    },
+    {
+      "module": "std/net/dns-message.ts",
+      "function": "dnsParseReply",
+      "reason": "lengths within their arrays, port 16 bits, and the query must be one dnsBuildQuery wrote; reply bytes return DNS_ERR codes"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.cancel",
+      "reason": "lookup must be a lookup in progress, a handle start gave the caller"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.constructor",
+      "reason": "maxLookups must be 1 to 64; a statically chosen capacity"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.nextOutgoing",
+      "reason": "id must be 0..0xFFFF and out/to/meta must meet documented minimum sizes; caller-allocated buffers"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.receive",
+      "reason": "q must be a query the resolver handed out, len inside buf, from at least 18 bytes; datagram contents are handled as malformed, not panics"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.receiveStream",
+      "reason": "q must be a query handed out and len inside buf; stream contents from the peer are handled without panic"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.result",
+      "reason": "lookup must be a slot start returned and out/ttls must have documented room; caller's own handles and buffers"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.settle",
+      "reason": "lookup must be a lookup in progress, a handle start gave the caller"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "DnsResolver.start",
+      "reason": "port must be 16 bits; chosen by the caller, a full slot table returns DNS_RESOLVE_BUSY instead"
+    },
+    {
+      "module": "std/net/dns-resolver.ts",
+      "function": "dnsResolverCheckQuery",
+      "reason": "q must be a query index the resolver handed out via nextOutgoing; a caller-held handle"
+    },
+    {
+      "module": "std/net/dns.ts",
+      "function": "DnsClient.constructor",
+      "reason": "tokenBase must be non-negative; chosen by the caller"
+    },
+    {
+      "module": "std/net/dns.ts",
+      "function": "DnsClient.ready",
+      "reason": "token must be one the client owns; the caller filters tokens with owns() before calling"
+    },
+    {
+      "module": "std/net/dns.ts",
+      "function": "dnsLookupWith",
+      "reason": "out and ttls must have room for DNS_RESOLVE_MAX_ADDRESSES; caller-allocated buffers"
+    },
+    {
+      "module": "std/net/fetch.ts",
+      "function": "HttpBodyReader.read",
+      "reason": "the off/n window must lie inside buf, as documented; the caller owns the buffer and sizes; network errors return codes"
+    },
+    {
+      "module": "std/net/grpc.ts",
+      "function": "GrpcServer.constructor",
+      "reason": "maxMessage must be 0 to 2^30 and maxTimeout at least 1; static limits the program sets"
+    },
+    {
+      "module": "std/net/grpc.ts",
+      "function": "GrpcServer.fail",
+      "reason": "status must be 1 to 16, as documented; the handler picks the status in code"
+    },
+    {
+      "module": "std/net/grpc.ts",
+      "function": "GrpcServer.reply",
+      "reason": "reply window must lie inside buf with len at most 2^30 - 5, as documented; the caller owns the reply buffer"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpHandler.end",
+      "reason": "end requires a started response and the full declared body length written; a caller sequencing contract"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpHandler.put",
+      "reason": "write requires a started response, an in-buffer window and no more than the declared length; all caller-controlled preconditions"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpHandler.sendJson",
+      "reason": "sendJson requires a value begun with json() first; a caller sequencing contract"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpHandler.take",
+      "reason": "take is documented to be called only when ready() is true; calling it otherwise is a caller ordering error"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpHandler.watch",
+      "reason": "id must be 0 to HANDLER_MAX_WATCHED - 1; a static choice of the program"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpRequest.checkParam",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "hpackCheckWindow",
+      "reason": "[off, off+len) must lie inside buf; the window is the caller's"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "hpackDecodeInteger",
+      "reason": "prefixBits must be 1 to 8, chosen statically by the decoder; peer bytes yield error codes, not panics"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "HpackDecoder.constructor",
+      "reason": "maxHeaderListSize must be non-negative; a configured limit chosen by the caller"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "HpackDecoder.setSettingsLimit",
+      "reason": "the acknowledged SETTINGS limit must be non-negative; the program's own setting"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "hpackEncodeInteger",
+      "reason": "prefixBits must be 1 to 8 and value non-negative; both are the encoder program's own choice"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "HpackEncoder.encodeField",
+      "reason": "indexing must be one of the three HPACK_INDEX_* modes; chosen statically by the caller"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "HpackTable.constructor",
+      "reason": "maxSize must be non-negative; a configured size chosen by the caller"
+    },
+    {
+      "module": "std/net/hpack.ts",
+      "function": "HpackTable.resize",
+      "reason": "maxSize must be non-negative; peer size updates are decoded as non-negative integers and checked before reaching here"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "httpAcceptEncoding",
+      "reason": "the start/end window must lie inside buf, as documented; the caller computes it from its own parse"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "HttpCompressor.compress",
+      "reason": "the off/len window must lie inside body, as documented; the caller owns both"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "HttpCompressor.compressAnyway",
+      "reason": "the off/len window must lie inside body, as documented; the caller owns both"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "HttpCompressor.constructor",
+      "reason": "minLength must be non-negative and maxLength at least minLength; static configuration"
+    },
+    {
+      "module": "std/net/http-compress.ts",
+      "function": "httpSegments",
+      "reason": "segment size must be above 0, as documented; the caller picks it"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.carry",
+      "reason": "a carrier refusal of body bytes beyond the declared length is an internal invariant after the caller's length checks"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.checkHttp2",
+      "reason": "maxHeaderListSize within limits.maxHead, no extended CONNECT, slots at least 1; static listener configuration contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.end",
+      "reason": "response must be started and the declared body length fully written; the caller controls its own response framing"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.h1Of",
+      "reason": "an HTTP/1.1 listener must have been configured; unreachable invariant for a request of that kind"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.h2cOf",
+      "reason": "an h2c listener must have been configured; unreachable invariant for a request of that kind"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.h2Of",
+      "reason": "an HTTP/2 TLS listener must have been configured; unreachable invariant for a request of that kind"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.h3Of",
+      "reason": "an HTTP/3 listener must have been configured; unreachable invariant for a request of that kind"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.listenH2c",
+      "reason": "an h2c listener may be configured only once; the caller controls its setup sequence statically"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.listenHttp1",
+      "reason": "one HTTP/1.1 listener only, config caps within limits.maxHead/maxFields, slots at least 1; all static setup contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.listenHttp2Tls",
+      "reason": "an HTTP/2 over TLS listener may be configured only once; the caller controls its setup sequence"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.listenHttp3",
+      "reason": "single HTTP/3 listener, field section size within maxHead, no webtransport sessions, slots at least 1; static configuration contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.own",
+      "reason": "the request must belong to this server; passing another server's request is a caller bug"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.sendJson",
+      "reason": "a json() value must have been begun before sendJson; a static call-order contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.take",
+      "reason": "take may be called only when ready() is true; the caller checks ready() first"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.wait",
+      "reason": "TLS or QUIC listeners must use waitSigned instead of wait; a static API-choice contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.watch",
+      "reason": "watch id must be within 0..HANDLER_MAX_WATCHED-1; ids are statically assigned by the caller"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.write",
+      "reason": "response must be started, window inside buf, and bytes within the declared length; all caller-controlled preconditions"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "httpServerLimit",
+      "reason": "limits.<name> must lie within the documented low..high; limits are a static caller configuration"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServerRequest.checkParam",
+      "reason": "param index k must be below the route's parameter count; the route pattern is static, so the caller controls it"
+    },
+    {
+      "module": "std/net/http1-client-codec.ts",
+      "function": "Http1ResponseParser.feed",
+      "reason": "The off/len window must lie inside data; the caller reports bytes it read into that buffer"
+    },
+    {
+      "module": "std/net/http1-codec.ts",
+      "function": "http1Chunk",
+      "reason": "the window must lie inside data; the caller controls off and len"
+    },
+    {
+      "module": "std/net/http1-codec.ts",
+      "function": "Http1Parser.feed",
+      "reason": "the window must lie inside data; the caller controls off and len, and the panic does not depend on the bytes"
+    },
+    {
+      "module": "std/net/http1-codec.ts",
+      "function": "http1WriteChunk",
+      "reason": "the window must lie inside data; the caller controls off and len"
+    },
+    {
+      "module": "std/net/http1-server.ts",
+      "function": "Http1Connection.respondEncoded",
+      "reason": "internal invariant: the body write was checked to fit, so a short write is unreachable"
+    },
+    {
+      "module": "std/net/http1-server.ts",
+      "function": "http1ServerCheckCap",
+      "reason": "Http1Config caps must lie within the documented low..high; a static caller configuration"
+    },
+    {
+      "module": "std/net/http1-server.ts",
+      "function": "http1ServerCheckWindow",
+      "reason": "the window must lie inside its buffer; the caller controls off and len"
+    },
+    {
+      "module": "std/net/http2-cleartext.ts",
+      "function": "Http2CleartextServer.constructor",
+      "reason": "size must be at least 1 and prefaceTimeout at least 1 ms; static server configuration"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2FrameCheckStream",
+      "reason": "stream id must be 0 to 2^31 - 1; the writer's caller picks it"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2FrameCheckWindow",
+      "reason": "the window must lie inside the buffer; the offsets are the caller's own, not peer data"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2FrameWritePadded",
+      "reason": "padding must be at most 255 and the source window inside its buffer; the caller sets both"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteContinuation",
+      "reason": "CONTINUATION is never sent on stream 0; the caller chooses the stream"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteData",
+      "reason": "DATA is never sent on stream 0; the caller chooses the stream"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteHeader",
+      "reason": "frame length 0 to the frame limit, non-negative offset and valid stream id are the writer caller's documented preconditions"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteHeaders",
+      "reason": "HEADERS is never sent on stream 0; the caller chooses the stream"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WritePriority",
+      "reason": "stream non-zero and distinct from dependency, weight 1 to 256, as the doc states; the caller chooses these"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WritePushPromise",
+      "reason": "stream and promised ids must be non-zero; the caller chooses them"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteRstStream",
+      "reason": "RST_STREAM stream id must be non-zero, as the doc comment states; the caller chooses it"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteSettings",
+      "reason": "ids and values lists must match in length and hold values http2SettingError accepts; the doc states it and the settings are the caller's own"
+    },
+    {
+      "module": "std/net/http2-frame.ts",
+      "function": "http2WriteWindowUpdate",
+      "reason": "increment must be 1 to 2^31 - 1, as the doc comment states; the caller computes it"
+    },
+    {
+      "module": "std/net/http2.ts",
+      "function": "http2CheckCap",
+      "reason": "a connection cap must lie in its documented range; caps are static configuration"
+    },
+    {
+      "module": "std/net/http2.ts",
+      "function": "http2CheckWindow",
+      "reason": "the window must lie inside buf; the offsets are the caller's own, not peer data"
+    },
+    {
+      "module": "std/net/http2.ts",
+      "function": "Http2Connection.received",
+      "reason": "n must not exceed the room inputTail gave; the carrier read into exactly that room"
+    },
+    {
+      "module": "std/net/http3-frame.ts",
+      "function": "h3CheckWindow",
+      "reason": "buf[off, off+len) must lie inside buf; the doc calls a window outside its buffer the program's mistake"
+    },
+    {
+      "module": "std/net/http3-server.ts",
+      "function": "Http3Server.constructor",
+      "reason": "slot count must be 1 to 65536 and idle/head timeouts at least 1; static server configuration"
+    },
+    {
+      "module": "std/net/http3.ts",
+      "function": "http3CheckCap",
+      "reason": "a configuration cap must lie in its documented range; the caller's static config choice"
+    },
+    {
+      "module": "std/net/http3.ts",
+      "function": "Http3Connection.constructor",
+      "reason": "config caps, QUIC stream limits, connection window and datagram setting must be mutually consistent; all the program's static configuration"
+    },
+    {
+      "module": "std/net/http3.ts",
+      "function": "Http3Connection.share",
+      "reason": "shared pool buffer sizes must equal bodyChunk and maxFieldSectionSize; set up by the server at build time"
+    },
+    {
+      "module": "std/net/outbound.ts",
+      "function": "outboundAddressPublic",
+      "reason": "sixteen address bytes must fit at off in addr; the caller controls the offset"
+    },
+    {
+      "module": "std/net/outbound.ts",
+      "function": "outboundFilter",
+      "reason": "count records must fit in addresses; the caller controls count against the array it passes"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncAnswer",
+      "reason": "internal ordering invariant: the answer is read only after pgAsyncTurn for the same ticket"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncCheckCaps",
+      "reason": "pool caps must lie inside documented ranges; they are static configuration the program sets"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "PgAsyncPool.constructor",
+      "reason": "pool size must be 1 to PG_ASYNC_MAX_SIZE; the size is a static choice of the program"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "PgAsyncResult.cell",
+      "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncSeat",
+      "reason": "statement must be one pgAsyncPrepare registered and pool.depth in range; both are the caller's static setup"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncSeatOf",
+      "reason": "ticket must be a current seat claim from pgAsyncSeat; an API-ordering contract"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncSlot",
+      "reason": "ticket must be a current claim as returned by pgAsyncSeat; an API-ordering contract"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.attach",
+      "reason": "at most 8 batchers and 256 statements, no NUL in name or SQL, attached after the pool connects; static caller registration contract"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.batcher",
+      "reason": "batcher id must be one attached earlier; an internal invariant of ids the carrier issued"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.connection",
+      "reason": "connection() may be called only after a query had one; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.next",
+      "reason": "next() must not be called before send() ends PG_CARRIER_BUILD; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.request",
+      "reason": "request() is valid only while the query has a request; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.send",
+      "reason": "send() requires an open PG_CARRIER_BUILD; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatchClock.constructor",
+      "reason": "Clock settings have documented ranges chosen statically by the caller"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatchClock.started",
+      "reason": "size must be 1..waiting and at most maxCount; the caller reports the batch it took"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatchClock.startsFor",
+      "reason": "reason must be one of the PG_CLOCK_* constants; a static argument"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatcher.addInt",
+      "reason": "Call must match the batcher's declared key type (int8); the caller fixes it at construction"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatcher.addText",
+      "reason": "Key type must be text and the start/length window must lie inside bytes; caller-controlled contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatcher.constructor",
+      "reason": "PgBatchConfig keyType, names and caps have documented ranges fixed by the caller's static configuration"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatcher.quietRun",
+      "reason": "Call-order contract: accessor must be called only after next(run) answered PG_BATCH_NONE"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatcher.run",
+      "reason": "Internal: the run handle must be one take gave; documented as a panic on a handle take cannot give"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatcher.takeDue",
+      "reason": "The clock must mirror this batcher's queue; a caller wiring contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatchTurns.constructor",
+      "reason": "size must be 1..1024; fixed statically by the caller as the connection count"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatchTurns.finished",
+      "reason": "Slot must be in range and hold a batch; caller sequencing contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgBatchTurns.free",
+      "reason": "Slot must be in range and hold no batch; caller sequencing contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "pgCheckConfig",
+      "reason": "PgConfig user, caps and startup parameters are program-written settings fixed by the caller; the doc says a bad config is the program's mistake"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.arrayElement",
+      "reason": "The element's start/length window must lie inside bytes; a caller-controlled bounds contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.arrayEnd",
+      "reason": "Call-order contract: arrayEnd requires an open array"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.arrayOpen",
+      "reason": "Call-order contract: array elements need an open text array of the matching kind"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.arrayStart",
+      "reason": "Call-order contract: arrayStart must not be called while an array is already open"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.binaryArrayOpen",
+      "reason": "Call-order contract: binary array elements need an open binary array"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.binaryArrayStart",
+      "reason": "Element OID must be int4 or int8 and no array may be open; both are fixed by the caller's code"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.bindEnd",
+      "reason": "Call-order contract: bindEnd must not be called while an array parameter is open"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.constructor",
+      "reason": "Nonce must be at least 18 bytes and tls must be disabled for the bare connection; both are fixed by the caller's setup"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.noArrayOpen",
+      "reason": "Call-order contract: no parameter may be added while an array parameter is open; a static caller sequencing bug"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.paramIntArray",
+      "reason": "The start/count window must lie inside values; the caller controls the window statically"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.receive",
+      "reason": "The source window must lie inside src; a caller-computed bounds contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.received",
+      "reason": "n must be 0..inputRoom(); the caller reports bytes it read into the room it was given"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgConnection.sent",
+      "reason": "n must be 0..queued output bytes; the caller reports a write count bounded by what it was offered"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "pgFind",
+      "reason": "Internal search helper: from/end must lie inside the buffer; internal callers pass bounds they computed"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "pgIntWindow",
+      "reason": "values[start, start+count) must lie inside values; the window is the caller's static argument contract"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgPool.connect",
+      "reason": "Must be called on a slot that wanted() answered, before dispose, with TLS only via a carrier; all caller sequencing"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgPool.connection",
+      "reason": "Slot must be in range and hold a connection; the caller learns that from the pool's own state answers"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "PgPool.constructor",
+      "reason": "Pool size, queue size and maxInFlight are documented fixed ranges chosen statically by the caller"
+    },
+    {
+      "module": "std/net/postgres.ts",
+      "function": "pgPutDecimal",
+      "reason": "Internal helper: the output window must lie inside out; the caller computes n from pgDecimalLength, so a violation is a bug"
+    },
+    {
+      "module": "std/net/qpack.ts",
+      "function": "qpackCheckWindow",
+      "reason": "the window must lie inside buf; the offsets are the caller's own"
+    },
+    {
+      "module": "std/net/qpack.ts",
+      "function": "QpackDecoder.constructor",
+      "reason": "field-section limit must be non-negative, as documented; a static configuration value"
+    },
+    {
+      "module": "std/net/qpack.ts",
+      "function": "qpackPushInteger",
+      "reason": "value must be 0 to 2^62 - 1 with a 1 to 8 bit prefix, as the doc says; both are the program's choice"
+    },
+    {
+      "module": "std/net/quic-listener.ts",
+      "function": "QuicListener.handleWindow",
+      "reason": "the at/len window must lie inside the datagram array; the caller's own receive-buffer bookkeeping"
+    },
+    {
+      "module": "std/net/quic-stream.ts",
+      "function": "QuicStreamPools.lend",
+      "reason": "the receive reserve must be primed before packet handling; a call-order contract on the internal caller"
+    },
+    {
+      "module": "std/net/quic-stream.ts",
+      "function": "QuicStreams.borrowRecv",
+      "reason": "pools must be primed before a packet is handled; internal call-order invariant"
+    },
+    {
+      "module": "std/net/quic-stream.ts",
+      "function": "QuicStreams.share",
+      "reason": "pool buffer size must equal bufferSize; set up statically by the server"
+    },
+    {
+      "module": "std/net/quic.ts",
+      "function": "quicWorkerCheck",
+      "reason": "workerIndex and workerCount must satisfy 0 <= k < n <= QUIC_WORKER_MAX; a static caller configuration"
+    },
+    {
+      "module": "std/net/router.ts",
+      "function": "routerDecode",
+      "reason": "the start..end range must lie inside target; the caller controls it, and bad escapes return ROUTER_BAD_ESCAPE"
+    },
+    {
+      "module": "std/net/router.ts",
+      "function": "routerLimit",
+      "reason": "RouterLimits fields must lie within the documented low..high; limits are a static caller configuration"
+    },
+    {
+      "module": "std/net/router.ts",
+      "function": "routerNoRoute",
+      "reason": "the route index must be in the table; the route ids are static caller values"
+    },
+    {
+      "module": "std/net/router.ts",
+      "function": "routerOutside",
+      "reason": "the match range must lie inside its buffer; a caller precondition of Router.match"
+    },
+    {
+      "module": "std/net/serve.ts",
+      "function": "Response.bytes",
+      "reason": "The off/len body window must lie inside buf; the handler controls it statically"
+    },
+    {
+      "module": "std/net/serve.ts",
+      "function": "serveFields",
+      "reason": "ServeLimits.server is a program-written config string that must hold no control bytes"
+    },
+    {
+      "module": "std/net/tls/schedule.ts",
+      "function": "tlsHeldCheck",
+      "reason": "hash length must be 32 or 48 and the secret exactly that long; fixed by the caller's cipher-suite choice"
+    },
+    {
+      "module": "std/net/tls/ticket.ts",
+      "function": "TlsTicketStrikes.constructor",
+      "reason": "capacity must be at least 1; a configured table size chosen by the caller"
+    },
+    {
+      "module": "std/net/upstream.ts",
+      "function": "Upstream.constructor",
+      "reason": "caps at least 1 and watch ids inside 0..HANDLER_MAX_WATCHED; static limits, and an unusable origin is already an error field"
+    },
+    {
+      "module": "std/net/upstream.ts",
+      "function": "Upstream.release",
+      "reason": "release only a call that take handed back and that is not yet released; a call-order contract"
+    },
+    {
+      "module": "std/net/upstream.ts",
+      "function": "Upstream.take",
+      "reason": "take may be called only when ready() is true; the caller checks ready() first"
+    },
+    {
+      "module": "std/net/url.ts",
+      "function": "urlCheckWindow",
+      "reason": "bytes[off, off+len) must lie inside bytes; a caller-controlled bounds contract"
+    },
+    {
+      "module": "std/net/url.ts",
+      "function": "urlDecodeRun",
+      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content"
+    },
+    {
+      "module": "std/net/websocket.ts",
+      "function": "websocketFrame",
+      "reason": "the window must lie inside payload, and the payload is under 2^31-1 bytes; caller-controlled preconditions"
+    },
+    {
+      "module": "std/net/websocket.ts",
+      "function": "websocketIsUtf8",
+      "reason": "the window must lie inside buf; the caller controls off and len"
+    },
+    {
+      "module": "std/net/websocket.ts",
+      "function": "websocketWriteFrame",
+      "reason": "the window must lie inside payload, and the payload is under 2^31-1 bytes; caller-controlled preconditions"
+    },
+    {
+      "module": "std/net/websocket.ts",
+      "function": "WsDecoder.feed",
+      "reason": "the window must lie inside data; the caller controls off and len, and the panic does not depend on the bytes"
+    },
+    {
+      "module": "std/net/webtransport.ts",
+      "function": "WebTransport.constructor",
+      "reason": "The Http3Connection must have webtransportSessions above 0 and caps in range; static setup chosen by the caller"
+    },
+    {
+      "module": "std/net/webtransport.ts",
+      "function": "webtransportCheckCap",
+      "reason": "A WebTransport cap must lie in its documented range; the doc calls it the program's mistake, fixed statically"
+    },
+    {
+      "module": "std/random.ts",
+      "function": "Rng.nextInt",
+      "reason": "lo must not exceed hi, per the doc; both bounds are chosen by the caller"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "initMpscRing",
+      "reason": "slots must be a power of two from 2 and slotBytes a multiple of 8; static caller choices"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "initSpscRing",
+      "reason": "capacity must be a power of two from 8; the capacity is a static caller choice"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "MpscRing.tryPush",
+      "reason": "record length must be 0..slotBytes; the slot size is fixed by the caller"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "ringCheckPlace",
+      "reason": "ring base must be a multiple of 64 and the ring must fit its region; static layout chosen by the caller"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "SpscRing.commit",
+      "reason": "commit length must be 0..n of the reserved window; the caller controls it"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "SpscRing.endReservation",
+      "reason": "commit or abandon requires an open reservation; a call-order contract stated in the doc"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "SpscRing.notPeeked",
+      "reason": "pops are forbidden while peek has a record lent; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "SpscRing.release",
+      "reason": "release requires a record lent by peek; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "SpscRing.reserve",
+      "reason": "no open reservation and n within 1..half the ring less 4; the ring size and n are static caller choices"
+    },
+    {
+      "module": "std/sync/ring.ts",
+      "function": "SpscRing.tryPush",
+      "reason": "no open reservation, and the record length must fit the ring capacity; both are caller-controlled preconditions in the doc"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "pixelsCheckImageId",
+      "reason": "kitty image id must be 1 or more, 0 meaning no id; the caller chooses it"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "pixelsCheckSize",
+      "reason": "width and height must be non-negative with product at most 2^31 - 1; the caller chooses the framebuffer size"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "scaleFramebuffer",
+      "reason": "divisor must be 1 or more, as documented; the caller chooses it"
+    },
+    {
+      "module": "std/term.ts",
+      "function": "KeyDecoder.keep",
+      "reason": "Internal invariant: the decoder never reports using more bytes than it was given; unreachable"
+    },
+    {
+      "module": "std/term.ts",
+      "function": "Screen.flush",
+      "reason": "Internal invariant: the Screen's cell buffers are all sized to its dimensions at construction"
+    },
+    {
+      "module": "std/term.ts",
+      "function": "termBytesText",
+      "reason": "Internal invariant: the byte count n never exceeds the buffer; the guard only proves the index in range"
+    },
+    {
+      "module": "std/term.ts",
+      "function": "termDecodeEvents",
+      "reason": "Internal invariant: the decode index never steps back; unreachable guard that proves the index in range"
+    },
+    {
+      "module": "std/term.ts",
+      "function": "termDecodeKeys",
+      "reason": "Internal invariant: the decode index never steps back; unreachable guard that proves the index in range"
+    },
+    {
+      "module": "std/text.ts",
+      "function": "toFixed",
+      "reason": "digits must be 0 to 100, as documented; it is almost always a literal the caller chose"
+    },
+    {
+      "module": "std/threads.ts",
+      "function": "dstTooShort",
+      "reason": "parallelMapInto dst must be at least as long as src; array lengths are the caller's"
+    },
+    {
+      "module": "std/threads.ts",
+      "function": "scopeWithStack",
+      "reason": "stack bytes must be at least 131,072; a size the program chooses, a constant is a compile error"
+    },
+    {
+      "module": "std/threads.ts",
+      "function": "slotOutOfRange",
+      "reason": "a task's destination index must lie inside its array; chosen by the spawning caller"
+    },
+    {
+      "module": "std/yaml.ts",
+      "function": "parseYamlWith",
+      "reason": "options.maxDepth must be 1 to 1000; the caller sets it statically, and the YAML text itself yields diagnostics"
+    }
+  ]
 }
