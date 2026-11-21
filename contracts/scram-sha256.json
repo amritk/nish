@@ -4,7 +4,7 @@
   "source": {
     "title": "nish/crypto/scram — the SCRAM-SHA-256 client computation",
     "main": "scram-sha256",
-    "sha256": "6019bba821145f0045359b5ae3ab652118b0588e79cf7a07af08f0c377652341"
+    "sha256": "23fdd4a6d8ac83ffd3cd75c1172914cb1417144ac30d722756f9916bb9263a41"
   },
   "sources": [
     {

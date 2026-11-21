@@ -47,9 +47,10 @@ from a command that `spec check --run-sources` runs:
 
 The iteration counts 4096 (S1) and 0 (S4) carry no label. vector 0.6.0
 checks a labelled argument of a command-sourced or cross-referenced vector
-against this profile's own Test Vectors section, finds the same password and
-the same label on two rows there, and refuses: "nothing pairs a printed
-string with one of several labelled values". The integer is left bare, and
+against this profile's own Test Vectors section. There `i` is printed more
+than once, since S2's and S3's AuthMessage holds `i=4096`, and with
+"pencil" on the same rows vector refuses: "nothing pairs a printed string
+with one of several labelled values". The integer is left bare, and
 `spec check` warns that it has no label to find it by.
 
 The arguments are the exchange's: the password 'pencil', the salt the server
