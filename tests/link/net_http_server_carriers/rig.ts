@@ -6,6 +6,7 @@
 import { Secret } from "nish:secret"
 import { netLocalPort, tcpListen, udpBind } from "nish:net"
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
+import { HTTP1_CHUNKED } from "nish/net/http1-codec"
 import { Http1Config } from "nish/net/http1-server"
 import { Http2Config } from "nish/net/http2"
 import { H2_ALPN } from "nish/net/http2-tls"
@@ -24,6 +25,12 @@ const SLOW: i32 = 4
 const DEFER: i32 = 5
 const ALT: i32 = 6
 const MANY: i32 = 7
+const TRAILERS: i32 = 8
+const TRAILERS_BARE: i32 = 9
+const TRAILERS_BIG: i32 = 10
+const TRAILERS_MANY: i32 = 11
+const TRAILERS_HUGE: i32 = 12
+const TRAILERS_HOLD: i32 = 13
 
 /** `/big`'s body: more than the 65535 bytes of an HTTP/2 stream's first window. */
 export const RIG_BIG: i32 = 100000
@@ -40,6 +47,9 @@ export const RIG_ALT: string = `h3=":443"`
 
 /** How many fields `/many` starts its response with: the default `maxResponseFields`, so the server's own push it past. */
 export const RIG_MANY: i32 = 32
+
+/** `/trailers-huge`'s trailer value: longer than an HTTP/2 connection's whole output buffer. */
+export const RIG_HUGE: i32 = 70000
 
 /** A server's limits with a pool of `requests` requests. */
 export const rigLimits = (requests: i32): HttpServerLimits => {
@@ -73,6 +83,19 @@ export class Rig {
   kept: i64 = 0
   /** What `start` answered for the last `/many`, or 1 before one came. */
   manyResult: i32 = 1
+  /** The trailer section of `/trailers`, `/trailers-bare` and `/trailers-big`: `grpc-status: 0`, `grpc-message: ok`. */
+  trailerNames: u8[][]
+  trailerValues: u8[][]
+  /** One more trailer field than `maxResponseFields` admits, for `/trailers-many`. */
+  overNames: u8[][]
+  overValues: u8[][]
+  /** A trailer value too long for the output buffer, for `/trailers-huge`. */
+  hugeNames: u8[][]
+  hugeValues: u8[][]
+  /** What `trailers` answered for each trailer route, in the order they came. */
+  trailerResults: i32[]
+  /** `/trailers-hold`'s requests, started and held for the program to end with `trailers`. */
+  streaming: HttpServerRequest[]
 
   /** A server under `limits` with `slots` connections per listener: HTTP/1.1 and h2c, and HTTP/2 over TLS and HTTP/3 when `signed`. */
   constructor(limits: HttpServerLimits, signed: boolean, slots: i32) {
@@ -85,6 +108,12 @@ export class Rig {
     router.add("GET", "/defer")
     router.add("GET", "/alt")
     router.add("GET", "/many")
+    router.add("GET", "/trailers")
+    router.add("GET", "/trailers-bare")
+    router.add("GET", "/trailers-big")
+    router.add("GET", "/trailers-many")
+    router.add("GET", "/trailers-huge")
+    router.add("GET", "/trailers-hold")
     this.h = new HttpServer(limits, router)
     this.signed = signed
     this.h2 = new RigH2()
@@ -112,6 +141,22 @@ export class Rig {
       this.manyNames.push(ascii(`x-${k}`))
       this.manyValues.push(ascii("1"))
     }
+    this.trailerNames = [ascii("grpc-status"), ascii("grpc-message")]
+    this.trailerValues = [ascii("0"), ascii("ok")]
+    this.overNames = []
+    this.overValues = []
+    for (let k: i32 = 0; k <= limits.maxResponseFields; k++) {
+      this.overNames.push(ascii(`x-${k}`))
+      this.overValues.push(ascii("1"))
+    }
+    const huge: u8[] = new Array<u8>(RIG_HUGE)
+    for (let k: i32 = 0; k < RIG_HUGE; k++) {
+      huge[k] = 97
+    }
+    this.hugeNames = [ascii("x-huge")]
+    this.hugeValues = [huge]
+    this.trailerResults = []
+    this.streaming = []
     this.text = ascii("text/plain")
     this.octets = ascii("application/octet-stream")
     this.hello = ascii("hello\n")
@@ -197,6 +242,32 @@ export class Rig {
         if (this.manyResult === 0) {
           h.end(r)
         }
+        break
+      case TRAILERS:
+        h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
+        h.write(r, this.hello, ZERO, toI32(this.hello.length))
+        this.trailerResults.push(h.trailers(r, this.trailerNames, this.trailerValues))
+        break
+      case TRAILERS_BARE:
+        h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
+        this.trailerResults.push(h.trailers(r, this.trailerNames, this.trailerValues))
+        break
+      case TRAILERS_BIG:
+        h.start(r, 200, this.altNames, this.altValues, RIG_BIG)
+        h.write(r, this.big, ZERO, RIG_BIG)
+        this.trailerResults.push(h.trailers(r, this.trailerNames, this.trailerValues))
+        break
+      case TRAILERS_MANY:
+        h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
+        this.trailerResults.push(h.trailers(r, this.overNames, this.overValues))
+        break
+      case TRAILERS_HUGE:
+        h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
+        this.trailerResults.push(h.trailers(r, this.hugeNames, this.hugeValues))
+        break
+      case TRAILERS_HOLD:
+        h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
+        this.streaming.push(r)
         break
       default:
         h.refuse(r)

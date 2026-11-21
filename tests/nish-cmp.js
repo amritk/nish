@@ -10064,6 +10064,17 @@ const proverReadsDeclared = () => [
   },
 ]
 
+/** The changelog words of WP72 S2, which ends an HTTP/2 answer of nish/net/http-server with trailers. */
+const SERVER_TRAILERS = "Trailers on the nish/net/http-server façade's HTTP/2 answers"
+/** WP72 S2's negatives call `HttpServer.trailers`, which the seed's std/net does not have. */
+const serverTrailersDeclared = () =>
+  ["after_end", "ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
+    program: `tests/link/net_http_server_trailers_${name}/main.ts`,
+    file: "exit",
+    changelog: SERVER_TRAILERS,
+    why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
+  }))
+
 // The std/ modules a strict module calls (Map and Set, text, JSON, array,
 // regex, bytes) prove or drop their panic sites under this PR's subject.
 const STD_PANIC_FREE = "std/ panic-free for strict modules"
@@ -10074,6 +10085,7 @@ const stdPanicFree = (why, filesByProgram) =>
 
 const DECLARED = [
   ...proverReadsDeclared(),
+  ...serverTrailersDeclared(),
   ...stdPanicFree(
     "Map and Set probe until a bucket answers instead of counting steps, and rebuild a small table into a fresh u16-sized array, so the inlined table walk changes",
     {
