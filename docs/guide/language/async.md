@@ -428,6 +428,7 @@ object: storing it in a field or array of the task's own, or pushing it into
 one, is refused, because a later write through that holder would reach the
 spawner's object.
 
+<!-- nish:ok -->
 ```ts
 import { lend, sleep, spawn } from "nish:async";
 
