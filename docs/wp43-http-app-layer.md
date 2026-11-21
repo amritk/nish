@@ -286,3 +286,37 @@ spawn to first answer, over 20 starts each:
 
 The handler's median sits inside the carrier's spread, so it starts no
 slower; it is not claimed as faster.
+
+## Stage 5: steps before and after a route body
+
+Stage 5 of §4 is built, on `nish/net/router`, `nish/net/handler` and
+`nish/net/http-server`, so one program's steps run the same over HTTP/1.1,
+HTTP/2 and HTTP/3. The guide sections are "Steps before and after a route"
+in [An API server](guide/using-nish/api-server.md),
+[One server for HTTP/1.1, 2 and 3](guide/using-nish/http-server.md) and
+[Routing requests](guide/using-nish/http-router.md); the security rows are
+ROUTE-14, HANDLER-14 and HANDLER-15, and HTTPSRV-14 and HTTPSRV-15.
+
+### Decisions
+
+- **A step is an id the router hands out, bound per route.**
+  `Router.step()` answers the next id, up to `ROUTER_MAX_STEPS` (31);
+  `use(route, step)` binds it to a route, or to `ROUTER_NOT_FOUND` or
+  `ROUTER_METHOD_NOT_ALLOWED` for the misses. A route's steps are one `i32`
+  bitmask, so "which steps does this route run" is one array load.
+- **Steps are pulled, as requests are.** The program's loop calls
+  `before(r)` and switches on the id it answers, lowest first, until it
+  answers `HANDLER_NEXT`; then the route body; then `after(r)` hands back the
+  steps that ran, highest first. No closure or interface is called, so a
+  step's code is the program's own `case`, inlined where it is written, and
+  a route with no step pays the load of its mask and one compare.
+- **What a step may change:** it reads the request; it may answer it in the
+  body's place (`before` and `after` then answer `HANDLER_ANSWERED`, and the
+  body never runs), and it may add up to `HANDLER_MAX_ADDED` (16) answer
+  fields with `field`, which go out with whatever answer the request gets,
+  a refusal included, through the carrier's own outgoing checks. It cannot
+  rewrite the request or the route.
+- **The server's own answers run no step.** What the carrier or the pool
+  answers itself, to a malformed or oversized request, a timeout or a full
+  pool, never reaches `take`, so no step is asked to read a request that was
+  never read whole.

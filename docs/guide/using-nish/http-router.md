@@ -249,6 +249,42 @@ before you use it as a file name.
 
 <a id="from-http11-http2-and-http3" style="scroll-margin-top: 65px"></a>
 
+## Steps before and after a route
+
+A table can also say which *steps* run around a route: shared work, such as
+checking a token, that you write once. `router.step()` names a step and
+answers its id, 0 for the first, or `ROUTER_FULL` once the table names
+`ROUTER_MAX_STEPS` (31). `router.use(route, step)` binds it to a route `add`
+answered, or to `ROUTER_NOT_FOUND` or `ROUTER_METHOD_NOT_ALLOWED`, the
+requests no route answers. Binding a step twice binds it once; a route or a
+step the table does not hold panics.
+
+<!-- allow-panics: calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router";
+
+export const main = (): i32 => {
+  const router = new Router(new RouterLimits());
+  const home: i32 = router.add("GET", "/");
+  const admin: i32 = router.add("GET", "/admin");
+  const auth: i32 = router.step();
+  const log: i32 = router.step();
+  router.use(admin, auth);
+  router.use(home, log);
+  router.use(admin, log);
+  router.use(ROUTER_NOT_FOUND, log);
+  console.log(`${router.steps(home)} ${router.steps(admin)} ${router.steps(ROUTER_NOT_FOUND)}`);
+  return 0;
+};
+```
+
+`router.steps(route)` answers a route's steps as one bit each, here `2 3 2`.
+You rarely call it: [`nish/net/handler`](api-server.md#steps-before-and-after-a-route)
+and [`nish/net/http-server`](http-server.md#steps-before-and-after-a-route)
+read it and hand your program each step's id, before the route body and
+after it.
+
 ## From HTTP/1.1, HTTP/2 and HTTP/3
 
 `match` takes the method and the target as windows into arrays you already

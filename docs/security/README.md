@@ -294,7 +294,7 @@ the record that found it. The notes below the table name each such finding.
     `user:@` writes back as `user@`, an empty http path stays empty, the
     URL parser leaves the input's length to its caller, and a host's
     trailing dot is kept, so `a.com.` is its own origin.
-13. ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, checked
+13. ROUTE-1 to ROUTE-7, and ROUTE-10 to ROUTE-14, are the shapes an attacker's target can take, checked
     and found to hold, and are not findings. ROUTE-8 (Low), dot segments
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
     decoded, are accepted, with the reason in their record, and are not

@@ -241,6 +241,45 @@ length and connection fields itself. A status outside 200 to 599, more or
 less body than the length said, a request answered twice, or one answered
 through another server, panics, as a bug in your program.
 
+## Steps before and after a route
+
+A [`Router`](http-router.md#steps-before-and-after-a-route) can bind *steps*
+to its routes: work such as checking a token or tagging an answer that many
+routes share. The server hands them out the same way on every version, so one
+loop serves HTTP/1.1, HTTP/2 and HTTP/3:
+
+```ts
+let s: i32 = server.before(r);
+while (s >= 0) {
+  if (s === AUTH && r.header("authorization") === HANDLER_ABSENT) {
+    server.problem(r, 401, "Unauthorized", "send a token");
+  }
+  s = server.before(r);
+}
+if (s === HANDLER_NEXT) {
+  let a: i32 = server.after(r);
+  while (a >= 0) {
+    if (a === SERVED) {
+      server.field(r, servedBy, name);
+    }
+    a = server.after(r);
+  }
+  // the route body: switch (r.route) { ... }
+}
+```
+
+`server.before(r)` answers the next step bound to `r.route`, lowest id
+first, then `HANDLER_NEXT`, or `HANDLER_ANSWERED` once a step has answered.
+`server.after(r)` hands out the steps that ran, highest id first, while the
+answer is still to send. A step answers the request, and then no route body
+and no later step runs, or it adds a field with `server.field(r, name,
+value)`. Added fields follow the answer's own on every version, count against
+`maxResponseFields`, and are kept by reference until the answer starts; more
+than `HANDLER_MAX_ADDED` (16) panics. A route bound to no step gets
+`HANDLER_NEXT` at once. Only a request `take` hands over runs steps, never an
+answer the server sends itself. [An API server](api-server.md#steps-before-and-after-a-route)
+has a whole program that uses them.
+
 ## Limits
 
 `HttpServerLimits` holds what the server refuses past. Each listener checks
