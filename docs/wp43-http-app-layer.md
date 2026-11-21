@@ -328,7 +328,7 @@ counts `bench/http1-server.ts`, which binds no step, under cachegrind, built
 against `main`'s `std/` at 071ed014 and this stage's, each beside a
 byte-identical copy, in 3 interleaved rounds over one keep-alive connection.
 This stage costs 3,767 instructions more at 2,000 requests and 3,781 more at
-4,000, the same on `GET /plaintext` and `GET /id/42?name=x`: a start-up cost
+4,000 (3,795 and 3,781 between the copies), the same on `GET /plaintext` and `GET /id/42?name=x`: a start-up cost
 (the step tables and `HttpServerRequest`, 176 → 200 bytes), and under 0.01
 instructions a request, inside the 1,625 to 1,993 instructions one binary's
 count moves between rounds. A request costs main 6,209 instructions on

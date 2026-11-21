@@ -4092,8 +4092,8 @@ The requests are `GET /plaintext` (answered `200`, 13 bytes) and `GET /id/42?nam
 
 Read by each side's least count:
 
-- head costs 3,767 instructions more than main at 2,000 requests and 3,781 more at 4,000, the same on both routes. The gap grows by 14 instructions over 2,000 more requests, under 0.01 instructions a request; one binary's own count moves by up to 1,625 (`/plaintext`) and 1,993 (`/id`) between rounds, so the per-request difference is inside the noise.
-- The 3,767 to 3,781 instructions are paid once a process: the router's step tables and the larger request objects (`HttpServerRequest` grew from 176 to 200 bytes) are set up at start-up.
+- head costs 3,767 instructions more than main at 2,000 requests and 3,781 more at 4,000, the same on both routes; their copies differ by 3,795 and 3,781. The gap moves by 14 instructions over 2,000 more requests, up in one pair and down in the other, under 0.01 instructions a request; one binary's own count moves by up to 1,625 (`/plaintext`) and 1,993 (`/id`) between rounds, so the per-request difference is inside the noise.
+- The 3,767 to 3,795 instructions are paid once a process: the router's step tables and the larger request objects (`HttpServerRequest` grew from 176 to 200 bytes) are set up at start-up.
 - For scale, main's 2,000 requests more cost 12,418,000 instructions on `/plaintext` and 15,138,000 on `/id`, 6,209 and 7,569 a request.
 - The two runs measured different heads: 53acc792 only bounds a copy loop in the path that merges a step's added fields, which neither route takes.
 <!-- http-steps:end -->
