@@ -1990,7 +1990,9 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
  */
 const jsonWriterPutDigits = (w: JsonWriter, v: i32, suffix: i32): boolean => {
   const ten: u32 = 10
-  let rest: u32 = v < 0 ? toU32(0) - toU32(v) : toU32(v)
+  // `~v` is `-v - 1`, which is never negative for a negative `v`, so the
+  // magnitude is found without a wrap, the same natively and under Node.
+  let rest: u32 = v < 0 ? toU32(~v) + 1 : toU32(v)
   let digits: i32 = 1
   let bound: u32 = ten
   while (digits < JSON_I32_DIGITS && rest >= bound) {
@@ -2039,7 +2041,8 @@ const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
   // The digits are counted against powers of ten, so the count costs a
   // compare and a multiply per digit, not a divide.
   const ten: u64 = toU64(10)
-  let rest: u64 = v < 0 ? toU64(0) - toU64(v) : toU64(v)
+  // `~v` is `-v - 1`, never negative for a negative `v`: no wrap, as above.
+  let rest: u64 = v < 0 ? toU64(~v) + toU64(1) : toU64(v)
   let digits: i32 = 1
   let bound: u64 = ten
   while (digits < JSON_I64_DIGITS && rest >= bound) {
