@@ -72,10 +72,13 @@ and does not return while it serves. It answers 0 once it stops (see
 
 ## Reading a request
 
-A `Request` is the task's own copy of the request, made before your function
-runs: reading it never touches another request's memory, and it stays
-readable to the end of the task, even after the client hangs up and another
-client's connection takes its place.
+A `Request` reads the server's parsed request in place, with no copy: the
+server lends it to your task (`lend` of `nish:async`) and takes it back when
+the task ends. Reading it never touches another request's memory, and it
+stays readable to the end of the task, even after the client hangs up and
+another client's connection takes its place. Copy out what must outlive the
+task; the compiler refuses a handler that stores the request itself
+somewhere that does.
 
 | Member | What it gives |
 | --- | --- |
