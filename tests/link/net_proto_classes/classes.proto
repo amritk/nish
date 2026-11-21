@@ -61,6 +61,7 @@ message All {
     Inner again = 2;
   }
   Inner inner = 36;
+  optional Leaf ol = 37;
   uint32 far = 536870911;
 }
 

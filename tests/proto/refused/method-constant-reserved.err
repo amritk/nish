@@ -1,0 +1,1 @@
+proto: refused/method-constant-reserved.proto:3: refused: method Ok of service Proto, whose constant PROTO_OK the module would not compile with

@@ -4,7 +4,14 @@
 // and each service method's path as a constant. The text depends only on the
 // file, its name and the command, so the output is byte-deterministic.
 
-import { methodConstant, ProtoField, ProtoFile, ProtoLabel, ProtoMessage, ProtoScalar } from "./proto-parse"
+import {
+  addMethodConstant,
+  ProtoField,
+  ProtoFile,
+  ProtoLabel,
+  ProtoMessage,
+  ProtoScalar,
+} from "./proto-parse"
 import { StringBuilder } from "./strings"
 
 /** The Nish type a field's values have. */
@@ -342,7 +349,9 @@ class ProtoEmitter {
       const d = defaultOf(f.type)
       this.line(1, `${f.name}: ${t} = ${d.startsWith("to") ? "0" : d}`)
     }
-    if (f.label === ProtoLabel.Optional) {
+    // A message field's presence is `!== null`, as protoc has it, so only a
+    // scalar gets a `has_` flag.
+    if (f.label === ProtoLabel.Optional && f.type !== ProtoScalar.Message) {
       this.line(1, `has_${f.name}: boolean = false`)
     }
   }
@@ -517,11 +526,13 @@ const byNumber = (msg: ProtoMessage): i32[] => {
   for (let i = 0; i < msg.fields.length; i++) {
     order.push(i)
     let at = order.length - 1
-    while (at > 0 && msg.fields[order[at - 1]].number > msg.fields[i].number) {
+    while (at > 0 && at < order.length && msg.fields[order[at - 1]].number > msg.fields[i].number) {
       order[at] = order[at - 1]
       at--
     }
-    order[at] = i
+    if (at >= 0 && at < order.length) {
+      order[at] = i
+    }
   }
   return order
 }
@@ -581,9 +592,9 @@ export const emitProto = (file: ProtoFile, source: string, digest: string, comma
       const s = file.services[i]
       const prefix = file.pkg.length > 0 ? `/${file.pkg}.${s.name}/` : `/${s.name}/`
       for (let k = 0; k < s.methods.length; k++) {
-        head.add(
-          `export const ${methodConstant(s.name, s.methods[k])}: string = "${prefix}${s.methods[k]}"\n`
-        )
+        head.add("export const ")
+        addMethodConstant(head, s.name, s.methods[k])
+        head.add(`: string = "${prefix}${s.methods[k]}"\n`)
       }
     }
   }

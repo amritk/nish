@@ -115,7 +115,7 @@ export const lexProto = (text: string): ProtoToken[] => {
         if (d === 10) {
           break
         }
-        if (d === 92 && i + 1 < text.length) {
+        if (d === 92 && i + 1 < text.length && at(text, i + 1) !== 10) {
           value.addChar(d)
           i++
         }

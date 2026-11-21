@@ -242,12 +242,11 @@ const isProtoReserved = (name: string): boolean =>
   isProtoKeyword(name) || GLOBALS.indexOf(` ${name} `) >= 0 || name.startsWith("PROTO_")
 
 /**
- * `name` in upper snake case, for a method path's constant: an `_` before an
- * upper-case letter that follows a lower-case letter or a digit, or that
- * starts a word after a run of capitals (`HTTPServer` is `HTTP_SERVER`).
+ * Adds `name` to `out` in upper snake case, for a method path's constant: an
+ * `_` before an upper-case letter that follows a lower-case letter or a digit,
+ * or that starts a word after a run of capitals (`HTTPServer` is `HTTP_SERVER`).
  */
-const upperSnake = (name: string): string => {
-  const out = new StringBuilder()
+const addUpperSnake = (out: StringBuilder, name: string): void => {
   for (let i = 0; i < name.length; i++) {
     const c = name.charCodeAt(i)
     const upper = c >= 65 && c <= 90
@@ -261,12 +260,24 @@ const upperSnake = (name: string): string => {
     }
     out.addChar(c >= 97 && c <= 122 ? c - 32 : c)
   }
-  return out.toText()
+}
+
+/**
+ * Adds the constant a service method's path is emitted as to `out`, written
+ * in place so a loop over the methods allocates nothing for it.
+ */
+export const addMethodConstant = (out: StringBuilder, service: string, method: string): void => {
+  addUpperSnake(out, service)
+  out.addChar(95)
+  addUpperSnake(out, method)
 }
 
 /** The constant a service method's path is emitted as. */
-export const methodConstant = (service: string, method: string): string =>
-  `${upperSnake(service)}_${upperSnake(method)}`
+const methodConstant = (service: string, method: string): string => {
+  const out = new StringBuilder()
+  addMethodConstant(out, service, method)
+  return out.toText()
+}
 
 /** The parser's state: the tokens, the cursor and the file it fills. */
 class ProtoParser {
@@ -519,6 +530,7 @@ class ProtoParser {
         this.refuse("extend (proto2 only)", t.line)
       } else {
         this.expected("a message, enum, service, option or package", t)
+        return
       }
     }
   }
@@ -600,13 +612,13 @@ class ProtoParser {
       }
       if (this.isPunct(";")) {
         this.advance()
-      } else if (this.isWord("message") && this.peek2().kind === ProtoTok.Ident) {
+      } else if (this.isWord("message") && this.peek2().kind === ProtoTok.Ident && !this.isFieldStart()) {
         this.advance()
         this.parseMessage(full, emitted, depth + 1)
-      } else if (this.isWord("enum") && this.peek2().kind === ProtoTok.Ident) {
+      } else if (this.isWord("enum") && this.peek2().kind === ProtoTok.Ident && !this.isFieldStart()) {
         this.advance()
         this.parseEnum(full, emitted)
-      } else if (this.isWord("oneof") && this.peek2().kind === ProtoTok.Ident) {
+      } else if (this.isWord("oneof") && this.peek2().kind === ProtoTok.Ident && !this.isFieldStart()) {
         this.advance()
         this.parseOneof(msg)
       } else if (this.isWord("reserved") && !this.isFieldStart()) {
@@ -752,6 +764,16 @@ class ProtoParser {
     msg.fields.push(field)
   }
 
+  /** Whether a field of `msg` belongs to oneof `index`. */
+  hasMember(msg: ProtoMessage, index: i32): boolean {
+    for (let i = 0; i < msg.fields.length; i++) {
+      if (msg.fields[i].oneof === index) {
+        return true
+      }
+    }
+    return false
+  }
+
   /** `oneof name { ... }`, the keyword already read. */
   parseOneof(msg: ProtoMessage): void {
     const line = this.peek().line
@@ -775,6 +797,10 @@ class ProtoParser {
         return
       }
       if (this.isPunct("}")) {
+        if (!this.hasMember(msg, index)) {
+          this.refuse(`oneof ${name} with no fields`, line)
+          return
+        }
         this.advance()
         return
       }
@@ -818,6 +844,10 @@ class ProtoParser {
             return
           }
         }
+      }
+      if (from < toI64(1) || to < from) {
+        this.refuse("a reserved range that is empty or starts below 1", this.peek().line)
+        return
       }
       msg.reservedFrom.push(from > toI64(MAX_FIELD) ? MAX_FIELD : toI32(from))
       msg.reservedTo.push(to > toI64(MAX_FIELD) ? MAX_FIELD : toI32(to))
@@ -972,6 +1002,7 @@ class ProtoParser {
         this.parseMethod(s)
       } else {
         this.expected("rpc", t)
+        return
       }
     }
   }
@@ -1032,7 +1063,7 @@ class ProtoParser {
     if (!this.expect("(", `after method ${method}`)) {
       return ""
     }
-    if (this.isWord("stream") && this.peek2().kind !== ProtoTok.Punct) {
+    if (this.isWord("stream") && this.peek2().text !== ")") {
       this.refuse(`stream in method ${method} (only unary methods are supported)`, this.peek().line)
       return ""
     }
@@ -1107,6 +1138,13 @@ const checkFile = (p: ProtoParser): void => {
     const svc = file.services[i]
     for (let k = 0; k < svc.methods.length; k++) {
       const constant = methodConstant(svc.name, svc.methods[k])
+      if (isProtoReserved(constant)) {
+        p.refuse(
+          `method ${svc.methods[k]} of service ${svc.name}, whose constant ${constant} the module would not compile with`,
+          svc.line
+        )
+        return
+      }
       if (!names.add(constant)) {
         p.refuse(
           `method ${svc.methods[k]} of service ${svc.name}, whose constant ${constant} the module already has`,
@@ -1119,6 +1157,13 @@ const checkFile = (p: ProtoParser): void => {
   for (let i = 0; i < file.enums.length; i++) {
     const e = file.enums[i]
     for (let k = 0; k < e.values.length; k++) {
+      if (isProtoReserved(`${e.name}_${e.values[k]}`)) {
+        p.refuse(
+          `the enum value ${e.values[k]}, whose constant ${e.name}_${e.values[k]} the module would not compile with`,
+          e.line
+        )
+        return
+      }
       if (!names.add(`${e.name}_${e.values[k]}`)) {
         p.refuse(
           `the enum value ${e.values[k]}, whose constant ${e.name}_${e.values[k]} the module already has`,

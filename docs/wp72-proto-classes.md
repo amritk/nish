@@ -38,7 +38,7 @@ all in Nish-0, dispatched from `src/compile.ts` beside `c-import`.
 | `enum` | an `i32` constant per value, `<Enum>_<VALUE>`; the field is `i32`, so an unknown value read is kept as its number |
 | a message field | `C \| null` |
 | `repeated T` | `T[]`; scalars written packed, read packed or unpacked |
-| `optional` scalar | the field plus a `has_<field>: boolean` presence flag |
+| `optional` scalar | the field plus a `has_<field>: boolean` presence flag (an `optional` message has none: it is present when not `null`) |
 | `map<K, V>`, `K` an integer type, `bool` or `string` | `Map<K, V>`, the key in its own Nish type |
 | `oneof` | each member an ordinary field, plus `<oneof>_case: i32`, the set member's number or 0 |
 | `service` | each method's path as a string constant, `/<package>.<Service>/<Method>` |
@@ -140,8 +140,9 @@ export class SumRequest {
 - The header names the generator, the source file's base name and the SHA-256
   of its bytes, and the command that regenerates it, and a third line lists
   any file options it ignored. Output is
-  byte-deterministic: no time, no absolute path, no map iteration order that
-  is not declaration order.
+  byte-deterministic: no time, no path but the two the command line gave (an
+  absolute one only when it gave one), no map iteration order that is not
+  declaration order.
 
 ## 5. The command
 

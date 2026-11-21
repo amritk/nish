@@ -83,6 +83,7 @@ msg.field.add(name="rleaf", number=23, type=F.TYPE_MESSAGE, type_name=".wire.v1.
 msg.oneof_decl.add(name="choice")
 msg.oneof_decl.add(name="_oi")
 msg.oneof_decl.add(name="_os")
+msg.oneof_decl.add(name="_ol")
 msg.field.add(name="oi", number=27, type=F.TYPE_INT32, label=F.LABEL_OPTIONAL, oneof_index=1, proto3_optional=True)
 msg.field.add(name="os", number=28, type=F.TYPE_STRING, label=F.LABEL_OPTIONAL, oneof_index=2, proto3_optional=True)
 for name, number, key, value, value_type in [
@@ -100,6 +101,7 @@ inner = msg.nested_type.add(name="Inner")
 inner.field.add(name="colors", number=1, type=F.TYPE_ENUM, type_name=".wire.v1.Color", label=F.LABEL_REPEATED)
 inner.field.add(name="again", number=2, type=F.TYPE_MESSAGE, type_name=".wire.v1.All.Inner", label=F.LABEL_OPTIONAL)
 msg.field.add(name="inner", number=36, type=F.TYPE_MESSAGE, type_name=".wire.v1.All.Inner", label=F.LABEL_OPTIONAL)
+msg.field.add(name="ol", number=37, type=F.TYPE_MESSAGE, type_name=".wire.v1.Leaf", label=F.LABEL_OPTIONAL, oneof_index=3, proto3_optional=True)
 msg.field.add(name="far", number=536870911, type=F.TYPE_UINT32, label=F.LABEL_OPTIONAL)
 
 unpacked = fdp.message_type.add(name="Unpacked")
@@ -137,7 +139,8 @@ def summary(m):
     leaf = chain(m, "leaf", "child")
     inner = chain(m, "inner", "again")
     return (
-        f"oi={int(m.HasField('oi'))}:{m.oi} os={int(m.HasField('os'))} case={CASES[m.WhichOneof('choice')]} "
+        f"i32={m.i32} s64={m.s64} u32={m.u32} oi={int(m.HasField('oi'))}:{m.oi} os={int(m.HasField('os'))} "
+        f"ol={int(m.HasField('ol'))} case={CASES[m.WhichOneof('choice')]} "
         f"color={m.color} leaf={leaf} inner={inner} repeated={reps} maps={maps}"
     )
 
@@ -253,6 +256,8 @@ VECTORS = [
     vector("packed run split in two", data=ser(build(ri=[1, 2])) + ser(build(ri=[3]))),
     vector("repeated strings bytes and messages", build(rstr=["x", "yy"], rby=[b"\x00", b""])),
     vector("optional set to zero is written", build(oi=0, os="")),
+    vector("optional message present at its defaults", with_(All(), lambda m: m.ol.SetInParent())),
+    vector("optional message with a field", with_(All(), lambda m: m.ol.CopyFrom(Leaf(a=2)))),
     vector("map string to int32", build(ms={"k": 7})),
     vector("map entry at its defaults", build(ms={"": 0})),
     vector("map int64 to message", build(ml={-9: (4, "v")})),
@@ -275,6 +280,9 @@ VECTORS = [
     vector("past the depth limit", data=nested_bytes(101), ok=False),
     vector("truncated length", data=tag(14, 2) + varint(5) + b"ab", ok=False),
     vector("packed length past the field", data=tag(18, 2) + varint(9) + varint(1), ok=False),
+    vector("truncated varint", data=tag(1, 0) + b"\x80", ok=False),
+    vector("truncated fixed64", data=tag(10, 1) + b"\x01\x02", ok=False),
+    vector("length past the end of a nested message", data=tag(17, 2) + varint(3) + tag(2, 2) + varint(9) + b"a", ok=False),
     vector("bad map entry", data=tag(29, 2) + varint(3) + tag(1, 2) + varint(7), ok=False),
 ]
 

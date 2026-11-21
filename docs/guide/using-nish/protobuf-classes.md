@@ -155,7 +155,7 @@ reads a call's request and `encode` writes its reply.
 | an enum | `i32`, and an `i32` constant per value |
 | a message | `C \| null`, `null` until it is set or read |
 | `repeated T` | `T[]` |
-| `optional T` | the field, and a `has_<field>: boolean` |
+| `optional T` | the field, and for a scalar a `has_<field>: boolean`; a message is present when it is not `null` |
 | `map<K, V>` | `Map<K, V>`; `K` is an integer type, `bool` or `string` |
 | a `oneof` | each member a field, and `<oneof>_case: i32` |
 | a service | a `string` constant per method, holding its path |
@@ -228,10 +228,18 @@ proto: calc.proto:1: refused: proto2 syntax (only proto3 is supported)
 - a map key of `float`, `double`, `bytes`, an enum or a message, a map of a
   map, and a `repeated`, `map` or `optional` field inside a `oneof`;
 - an enum with no values, a first value that is not 0, two values with one
-  number, a value outside `int32`, `reserved` in an enum, or an enum option;
+  number, a value outside `int32`, or an enum option; `reserved` in an enum is
+  refused too, even where protoc accepts it, so write its numbers and names in
+  a comment instead;
+- a second `package` statement, a package name that starts with a dot, and
+  messages nested more than 32 deep;
+- an empty `oneof`, and a `reserved` range that is backwards or starts
+  below 1;
 - two declarations with one name in one scope, and a name that would clash in
   the module: a keyword, `encode` or `decode`, a `has_` or `_case` name
-  another field already takes, or two constants with one name.
+  another field already takes, two constants with one name, or an enum value
+  or service method whose constant would start with `PROTO_`, the prefix of
+  the names the module imports from `nish/net/protobuf`.
 
 ## Exit codes
 

@@ -1343,6 +1343,16 @@ const protobufModule = () =>
     why: "the program tests nish/net/protobuf, which is new in this release, so the seed's standard library has no such module and refuses it",
   }))
 
+/** The changelog words of the stage that adds `nish proto`. */
+const PROTO_CLASSES = "nish proto writes message classes from a .proto file"
+const protoClasses = () =>
+  ["net_proto_classes"].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: PROTO_CLASSES,
+    why: "the program imports classes nish proto generates, which read and write through nish/net/protobuf, new in this release, so the seed's standard library has no such module and refuses it",
+  }))
+
 /** The changelog words of the stage that adds nish/net/grpc. */
 const GRPC_MODULE =
   "Add nish/net/grpc, unary gRPC calls on the HTTP/2 listeners, with its security record (WP72 S3)"
@@ -10239,6 +10249,7 @@ const DECLARED = [
   ),
   ...scramModule(),
   ...protobufModule(),
+  ...protoClasses(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",

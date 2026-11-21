@@ -34,7 +34,8 @@ const summary = (m: All): string => {
   const maps = m.ms.size + m.ml.size + m.mu.size + m.mb.size
   const oi = m.has_oi ? 1 : 0
   const os = m.has_os ? 1 : 0
-  return `oi=${oi}:${m.oi} os=${os} case=${m.choice_case} color=${m.color} leaf=${leafDepth(m.leaf)} inner=${innerDepth(m.inner)} repeated=${repeated} maps=${maps}`
+  const ol = m.ol !== null ? 1 : 0
+  return `i32=${m.i32} s64=${m.s64} u32=${m.u32} oi=${oi}:${m.oi} os=${os} ol=${ol} case=${m.choice_case} color=${m.color} leaf=${leafDepth(m.leaf)} inner=${innerDepth(m.inner)} repeated=${repeated} maps=${maps}`
 }
 
 /** Whether `a` and `b` hold the same bytes. */

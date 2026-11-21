@@ -44,10 +44,17 @@ const protoArgs = (argv: string[]): ProtoArgs => {
       return args
     }
     if (arg === "-o") {
-      if (i + 1 >= argv.length) {
+      let value = ""
+      if (i >= 0 && i + 1 < argv.length) {
+        value = argv[i + 1]
+      }
+      if (value.length === 0 || value.startsWith("-")) {
         return protoUsage(args, "-o needs a value")
       }
-      args.out = argv[i + 1]
+      if (args.out.length > 0) {
+        return protoUsage(args, "one -o at most")
+      }
+      args.out = value
       i += 2
     } else if (arg === "--check") {
       args.check = true

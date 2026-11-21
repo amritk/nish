@@ -64,6 +64,7 @@ function lexProto(text: string): ProtoToken[] -> @lexProto [exported]
   callee +55:21 new StringBuilder -> @StringBuilder.constructor
   local +57:11 closed: boolean (let)
   local +59:15 d: i32 (const)
+  callee +68:48 at -> @at
   callee +69:11 StringBuilder.addChar -> @StringBuilder.addChar
   callee +72:9 StringBuilder.addChar -> @StringBuilder.addChar
   callee +72:23 at -> @at

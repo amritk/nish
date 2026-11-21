@@ -1,36 +1,41 @@
-PASS  empty: 0 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  every field kind: 298 bytes, oi=1:-3 os=1 case=34 color=1 leaf=2 inner=2 repeated=24 maps=0
-PASS  scalar maxima: 47 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  negative int32 takes ten bytes: 11 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  float subnormal and double infinity: 14 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  a two-byte string length: 303 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  enum value the schema names: 3 bytes, oi=0:0 os=0 case=0 color=1 leaf=0 inner=0 repeated=0 maps=0
-PASS  negative enum value: 12 bytes, oi=0:0 os=0 case=0 color=-2 leaf=0 inner=0 repeated=0 maps=0
-PASS  enum value the schema does not name: 4 bytes, oi=0:0 os=0 case=0 color=12345 leaf=0 inner=0 repeated=0 maps=0
-PASS  nested message three deep: 13 bytes, oi=0:0 os=0 case=0 color=0 leaf=3 inner=0 repeated=0 maps=0
-PASS  packed repeated: 83 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=14 maps=0
-PASS  unpacked repeated reads and writes packed: 83 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=14 maps=0
-PASS  packed run split in two: 6 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=3 maps=0
-PASS  repeated strings bytes and messages: 16 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=4 maps=0
-PASS  optional set to zero is written: 6 bytes, oi=1:0 os=1 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  map string to int32: 8 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
-PASS  map entry at its defaults: 7 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
-PASS  map int64 to message: 21 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
-PASS  map uint32 to string: 14 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
-PASS  map bool to bytes: 9 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
-PASS  map key repeated keeps the last: 8 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
-PASS  oneof int32 zero is written: 3 bytes, oi=0:0 os=0 case=33 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  oneof string: 4 bytes, oi=0:0 os=0 case=34 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  oneof empty message: 3 bytes, oi=0:0 os=0 case=35 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  oneof last member wins: 7 bytes, oi=0:0 os=0 case=34 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  message field merges: 8 bytes, oi=0:0 os=0 case=0 color=0 leaf=1 inner=0 repeated=0 maps=0
-PASS  nested message in a nested message: 10 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=3 repeated=0 maps=0
-PASS  largest field number: 10 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  unknown fields are dropped: 2 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  a wrong wire type is skipped: 2 bytes, oi=0:0 os=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
-PASS  one hundred nested messages: 237 bytes, oi=0:0 os=0 case=0 color=0 leaf=100 inner=0 repeated=0 maps=0
+PASS  empty: 0 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  every field kind: 298 bytes, i32=-2147483648 s64=9223372036854775807 u32=4294967295 oi=1:-3 os=1 ol=0 case=34 color=1 leaf=2 inner=2 repeated=24 maps=0
+PASS  scalar maxima: 47 bytes, i32=2147483647 s64=-9223372036854775808 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  negative int32 takes ten bytes: 11 bytes, i32=-1 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  float subnormal and double infinity: 14 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  a two-byte string length: 303 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  enum value the schema names: 3 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=1 leaf=0 inner=0 repeated=0 maps=0
+PASS  negative enum value: 12 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=-2 leaf=0 inner=0 repeated=0 maps=0
+PASS  enum value the schema does not name: 4 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=12345 leaf=0 inner=0 repeated=0 maps=0
+PASS  nested message three deep: 13 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=3 inner=0 repeated=0 maps=0
+PASS  packed repeated: 83 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=14 maps=0
+PASS  unpacked repeated reads and writes packed: 83 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=14 maps=0
+PASS  packed run split in two: 6 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=3 maps=0
+PASS  repeated strings bytes and messages: 16 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=4 maps=0
+PASS  optional set to zero is written: 6 bytes, i32=0 s64=0 u32=0 oi=1:0 os=1 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  optional message present at its defaults: 3 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=1 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  optional message with a field: 5 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=1 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  map string to int32: 8 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
+PASS  map entry at its defaults: 7 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
+PASS  map int64 to message: 21 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
+PASS  map uint32 to string: 14 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
+PASS  map bool to bytes: 9 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
+PASS  map key repeated keeps the last: 8 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=1
+PASS  oneof int32 zero is written: 3 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=33 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  oneof string: 4 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=34 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  oneof empty message: 3 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=35 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  oneof last member wins: 7 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=34 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  message field merges: 8 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=1 inner=0 repeated=0 maps=0
+PASS  nested message in a nested message: 10 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=3 repeated=0 maps=0
+PASS  largest field number: 10 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  unknown fields are dropped: 2 bytes, i32=1 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  a wrong wire type is skipped: 2 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=0 inner=0 repeated=0 maps=0
+PASS  one hundred nested messages: 237 bytes, i32=0 s64=0 u32=0 oi=0:0 os=0 ol=0 case=0 color=0 leaf=100 inner=0 repeated=0 maps=0
 PASS  past the depth limit: refused
 PASS  truncated length: refused
 PASS  packed length past the field: refused
+PASS  truncated varint: refused
+PASS  truncated fixed64: refused
+PASS  length past the end of a nested message: refused
 PASS  bad map entry: refused
 all vectors pass

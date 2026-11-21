@@ -48360,6 +48360,7 @@ if (!only || "proto".includes(only)) {
   fs.rmSync(protoDir, { recursive: true, force: true })
   fs.mkdirSync(protoDir, { recursive: true })
   const fixtures = path.join(root, "tests", "proto")
+  // strict: `nish proto` is no compile, and `--allow-panics` would be read as its argument
   const proto = (args, cwd) => spawnSync(NISH, ["proto", ...args], { cwd: cwd ?? protoDir, encoding: "utf8" })
   const goldens = spawnSync(process.execPath, [path.join(fixtures, "goldens.js"), "--nish", NISH], {
     encoding: "utf8",
@@ -48378,6 +48379,7 @@ if (!only || "proto".includes(only)) {
     fs.copyFileSync(path.join(fixtures, golden), module)
     const out = path.join(protoDir, `${name}-ll`)
     fs.mkdirSync(out, { recursive: true })
+    // strict: the check is that a generated module compiles under the default panic rule
     const run = spawnSync(NISH, [module, "-o", `${out}${path.sep}`], { encoding: "utf8" })
     check(`proto: the ${name} module compiles under the default panic rule`, run.status === 0, shown(run))
   }
@@ -48441,6 +48443,8 @@ if (!only || "proto".includes(only)) {
     [[], "no .proto file given"],
     [["in.proto"], "no output file given (-o)"],
     [["in.proto", "-o"], "-o needs a value"],
+    [["in.proto", "-o", "--check"], "-o needs a value"],
+    [["in.proto", "-o", "a.ts", "-o", "b.ts"], "one -o at most"],
     [["in.proto", "--bogus", "-o", "new.ts"], "unknown flag --bogus"],
     [["in.proto", "other.proto", "-o", "new.ts"], "one .proto file at most"],
     [["missing.proto", "-o", "new.ts"], "cannot read missing.proto"],

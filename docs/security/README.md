@@ -79,7 +79,7 @@ the record that found it. The notes below the table name each such finding.
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
 | Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
-| Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts`; `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-emit.ts`, `src/proto-cli.ts` and the `decode` methods they write | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC unary calls | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | **Total** ⁸ | | | **3 / 19 / 104 / 223** | **0 / 0 / 3 / 42** |
 
