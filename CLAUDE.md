@@ -71,7 +71,11 @@ numbers, not descriptors), and each route, figure and command against what
 was run. Every `docs/BENCHMARKS.md` table names the commit whose bench code
 produced it and claims only the fields that version prints. A per-second
 maximum is quoted as a maximum, never as a typical cost. Each "up to",
-"every" or "lower than" is checked against the table it summarises.
+"every" or "lower than" is checked against the table it summarises. A PR that
+adds to those files or to a WP design note greps every `check(...)` string it
+cites in `tests/run.js`, recomputes every figure from its source (the budget
+constant, the script's printed output, the recorded run), and states in its
+body how many it checked.
 
 **A bench side is the code it names.** A side called an existing copy calls
 the shipped function itself, with its callers' argument types and input
