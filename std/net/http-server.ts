@@ -1949,9 +1949,11 @@ export class HttpServer {
   // ---- Requests -------------------------------------------------------------------
 
   /**
-   * Whether a whole request is waiting for `take`. Requests whose connection
-   * or stream closed while queued are handed back here.
-   * @returns true when `take` will give out a request whose connection is still open
+   * Whether a request is waiting for `take`: a whole one, the head of a
+   * `streaming` one, or a streaming one the program holds coming back with
+   * a piece, its end or a reset. Requests whose connection or stream closed
+   * while first queued are handed back here, unseen.
+   * @returns true when `take` will give out a request
    */
   ready(): boolean {
     while (this.queueCount > 0) {
@@ -1968,8 +1970,10 @@ export class HttpServer {
   }
 
   /**
-   * The next whole request, of any version, which the program now owes an
-   * answer. Panics when none is `ready`.
+   * The next request, of any version, which the program now owes an answer;
+   * a `streaming` request it already holds comes out again each time more
+   * of its body, its end or a reset arrives, at most once per wait. Panics
+   * when none is `ready`.
    * @returns the oldest queued request, the program's until it answers it
    */
   take(): HttpServerRequest {

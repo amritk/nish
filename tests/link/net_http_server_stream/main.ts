@@ -4,7 +4,9 @@
 //
 //   1. A body of 300000 bytes on `/upload`, sent no faster than the window
 //      the server gives: read in pieces, never more than one stream window
-//      held and the body array never longer, and answered with its length.
+//      held and the body array never longer, and answered with its length;
+//      then 800000 more on a second stream of the same connection, past
+//      the connection's window of 1048576, which only arrival credits.
 //   2. A body ended by a trailer section rather than END_STREAM on DATA.
 //   3. A peer that ignores the window on `/lazy`, which never consumes:
 //      RST_STREAM FLOW_CONTROL_ERROR, and the request comes back hung up.
@@ -76,6 +78,9 @@ const carrier = (t: Suite, rig: StreamRig, key: Secret<u8[]>, tls: boolean): voi
   t.ok(`${name}: never more than one stream window held`, rig.maxHeld > 0 && rig.maxHeld <= WINDOW)
   t.ok(`${name}: the body array never longer than the window`, rig.maxArray > 0 && rig.maxArray <= WINDOW)
   t.ok(`${name}: the stream window credited as the program consumed`, up.text().indexOf("WINDOW_UPDATE 1 ") >= 0)
+  up.open(toI32(3), "/upload", toI32(800000), key)
+  t.ok(`${name}: 800000 more on the connection, past its window`, up.body(toI32(3), toI32(800000), true, key))
+  t.ok(`${name}: the connection window credited as streamed bodies arrived`, up.awaitFrame(`DATA 3 6 "800000"`, key))
   up.close()
 
   const trailed = connected(t, rig, key, tls, name, "a body ended by trailers")

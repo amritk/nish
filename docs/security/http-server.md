@@ -10,7 +10,7 @@ stream, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the HTTP application layer
 starts from evidence.
 
-Anchors are function names in `std/net/http-server.ts` at `67e1b333`, the
+Anchors are function names in `std/net/http-server.ts` at `1de1312d`, the
 last commit to change it on the head that merges this record.
 
 **Result.** The façade parses nothing itself. A request's bytes are read by
@@ -32,21 +32,31 @@ A trailer section on an HTTP/2 answer passes the same outgoing-field check
 as a head and is bounded by `maxResponseFields` and the connection's output
 (HTTPSRV-13).
 
-One finding was fixed in review: a stream reset while its answer was still
-flushing kept its request out of the pool for good (HTTPSRV-12, Medium).
+A route marked with `streamBody` takes its HTTP/2 body in pieces: the
+request is handed over at its head, and the stream's receive window is
+credited only as the program consumes, so what one streamed request holds
+unconsumed is bounded by one stream window, not by `maxBody`
+(HTTPSRV-14). A reset, a lost connection or an early answer hands such a
+request back or ends its stream (HTTPSRV-16).
+
+Two findings were fixed in review: a stream reset while its answer was still
+flushing kept its request out of the pool for good (HTTPSRV-12, Medium), and
+an h2c peer that closed its connection part way through a streamed body left
+the request with the program, never handed back (HTTPSRV-15, Medium).
 One is left open: the cap that keeps one connection from taking the pool is
 per connection, not per peer, so a client with many connections can still
 fill it (HTTPSRV-6, Low).
 Two properties are the program's and are accepted: how long it holds a
 request it took (HTTPSRV-8) and what it does with a decoded parameter
 (HTTPSRV-9). So is the nature of h2c, which nothing protects on the wire
-(HTTPSRV-11).
+(HTTPSRV-11), and the deadline of a streamed body, which `bodyTimeout` does
+not keep once the program has the request (HTTPSRV-17).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`); the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
+| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`streamBody`, `consume`, `listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`, `streamsBody`, `requeue`, `unqueue`, `h2Piece`, `h2Ended`); the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
 
 Out of scope, each with its own record: the carriers
 (`std/net/http1-server.ts`, `std/net/http2*.ts`, `std/net/http3*.ts`,
@@ -77,10 +87,11 @@ checking `r.version === 2` can be panicked by any client (HTTPSRV-13).
 
 ## Findings
 
-Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7, HTTPSRV-10 and HTTPSRV-13 are the shapes an
-attacker's traffic can take, each checked and found to hold. HTTPSRV-6 is
-open. HTTPSRV-8, HTTPSRV-9 and HTTPSRV-11 are accepted. HTTPSRV-12 was
-fixed in review, with a test that failed before the fix.
+Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7, HTTPSRV-10, HTTPSRV-13, HTTPSRV-14 and
+HTTPSRV-16 are the shapes an attacker's traffic can take, each checked and
+found to hold. HTTPSRV-6 is open. HTTPSRV-8, HTTPSRV-9, HTTPSRV-11 and
+HTTPSRV-17 are accepted. HTTPSRV-12 and HTTPSRV-15 were fixed in review, each
+with a test that failed before the fix.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -97,6 +108,10 @@ fixed in review, with a test that failed before the fix.
 | HTTPSRV-11 | Medium | `listenH2c` | An h2c connection is neither encrypted nor authenticated: anyone on the path reads and rewrites every request and answer. | **Accepted.** That is what h2c is; the guide page says to serve it only behind a proxy that ends TLS, or on a trusted network. The façade adds nothing on top that would claim otherwise: `r.secure` is false and no Alt-Svc is sent (HTTPSRV-7). |
 | HTTPSRV-12 | Medium | `h2Close`, `h3Clear`, `release`, `drop` | A stream reset while its answer was still flushing left its request outside the pool for good, so a client that reset enough streams emptied the pool and every later stream was refused. | **Fixed.** A reset now hands back a request in any state the program no longer holds (commit `2fa11bf`). `link/net_http_server_carriers` pins it with a pool of one: "the reset handed the request back: the next stream is answered, not refused", which failed before the fix. |
 | HTTPSRV-13 | Medium if it failed | `trailers`, `push`, `carryTrailers` | A trailer section the program ends an HTTP/2 answer with must not split the answer or smuggle a field the head could not carry, must not grow past `maxResponseFields` or the connection's output, and must not be sent on a carrier that has no trailers in the façade (HTTP/1.1, HTTP/3). | **Holds.** `trailers` runs the same `httpFieldsCheckOutgoing` as a head, so a name that is not a lowercase token (a pseudo-field included), a connection-specific field, or a value with CR, LF or NUL panics before anything is written. More fields than `maxResponseFields` reset the stream and answer `HANDLER_DROPPED`, on a HEAD, 204 or 304 answer too, since the count is checked before a quiet answer's trailers are set aside; a section larger than the connection's output buffer answers `HANDLER_SENT`, is `H2_INVALID` from `Http2Connection.writeTrailers` when it comes to be sent, and `carryTrailers` resets the stream. On HTTP/1.1 and HTTP/3 the call panics, and that panic is the program's to avoid: the peer picks the version, so a handler that does not check `r.version === 2` first is panicked by any HTTP/1.1 or HTTP/3 client. `trailers` keeps the caller's `names` and `values` arrays and `carryTrailers` reads them when it sends, which can be after the call returns; a program that reuses one pair across requests sends what they hold then. The section goes only after the body's last byte, as one HEADERS frame with END_STREAM, and a HEAD, 204 or 304 answer, whose head ended the stream, sends none. A call after `end`, or after an earlier `trailers`, finds the answer no longer streaming and panics; `net_http_server_trailers_after_end` pins the first. |
+| HTTPSRV-14 | High if it failed | `streamBody`, `h2Event`, `h2Piece`, `consume`; `Http2Connection.hold`, `consumeBody` | A streamed body is read past `maxBody`, so what the server holds of it must be bounded some other way, and a route's mark must not lift `maxBody` where nothing else bounds the body. | **Holds.** A request is streamed only on HTTP/2, only when its route is marked and its head did not end the stream; `h2Event` then calls `Http2Connection.hold`, after which the stream's DATA credits the connection's window on arrival but the stream's own only through `consumeBody`, which `consume` calls with the bytes the program hands back and which credits no more than the stream was sent (`owed`). A peer that sends past the window it was given gets RST_STREAM FLOW_CONTROL_ERROR from the carrier, so the bytes a streamed request holds unconsumed never pass the stream window, `max(initialWindowSize, 65535)` of the listener's `Http2Config`, which the program sets. The array is the pool entry's own: `admit` reserves for a declared length as for any request, under HTTPSRV-2's tiers, and `h2Piece`, when a piece does not fit, grows it by doubling from 64 bytes but never past the window, nor past what the piece needs. So a streamed request adds nothing to HTTPSRV-2's bound but an array of at most one window: per pool entry, the larger of the two. The total a streamed body may reach is not bounded: the program reads it as it comes. A declared length past `maxBody` is still 413 on an unmarked route, as is DATA past it; HTTP/1.1 and HTTP/3 ignore the mark and keep the whole body under `maxBody`. `link/net_http_server_stream` pins it on HTTP/2 over TLS and on h2c with a `maxBody` of 1000 and a body of 300000 bytes: "never more than one stream window held", "the body array never longer than the window", "one byte past the window resets the stream FLOW_CONTROL_ERROR", "no WINDOW_UPDATE for a stream nothing consumed", "a declared length past maxBody is still 413", and "HTTP/1.1: a body past maxBody is 413 on a marked route". |
+| HTTPSRV-15 | Medium | `h2Serve`, `h2Ended` | An h2c peer that closed its connection part way through a streamed body left the request with the program, waiting for a piece that would never come: the connection lingers while its streams are open, so no generation moved and nothing handed the request back, and its pool entry stayed taken for as long as the program waited. | **Fixed.** When an HTTP/2 connection's input has ended, `h2Ended` marks each streamed request on it whose body has not ended hung up and hands it back to the program once (commit `1de1312`). `link/net_http_server_stream` pins it: "h2c: a body whose connection closed comes back hung up", which failed before the fix, "and its answer is dropped"; the same two pass over TLS. |
+| HTTPSRV-16 | High if it failed | `h2Piece`, `requeue`, `unqueue`, `release`, `ready` | A streamed request whose stream is reset or whose connection is lost must reach the program again as hung up, and its answer must go nowhere (HTTPSRV-3); one answered before its body ended must not keep the peer sending into nothing; and a request queued twice must not be taken twice or outlive its release in the queue. | **Holds.** `h2Piece` marks a reset, drops the request (HTTPSRV-3) and queues it again through `requeue`, which queues a request the program holds at most once until `take` hands it over; `release` takes a second place out of the queue (`unqueue`), so a request answered while queued again is not taken after it is free. A request reset before the program first took it is released by `ready` unseen, as a whole-body one is. An answer before the body ends is followed by RST_STREAM NO_ERROR (RFC 9113 §8.1); with no room in the output for that frame the stream stays held, so the peer stops at the window. DATA for a streamed request already answered and still flushing is credited back at once. `link/net_http_server_stream` pins it on both carriers: "a cancelled body comes back hung up", "the unconsumed request comes back hung up", each "and its answer is dropped", "the answer goes out with the body unfinished", "then RST_STREAM NO_ERROR for the rest". |
+| HTTPSRV-17 | Low | `late`, `take` | `bodyTimeout` runs only while the server reads a body; a streamed request is the program's from its head, so a peer that sends its head and then nothing holds a pool entry, and up to one stream window, for as long as the program waits. | **Accepted**, as HTTPSRV-8: how long the program waits for a piece is its decision. The guide page says to keep a deadline of its own for each streamed request and to answer one that misses it (a 408, say), after which the server resets the rest of its stream with NO_ERROR, as for any early answer (HTTPSRV-16). |
 
 ## Properties verified
 

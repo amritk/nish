@@ -518,7 +518,10 @@ length runs in bounded memory.
   stream, or the connection closes or times out, the request is yielded
   once more with `hungUp(r)` true. The program answers it as it answers any
   hung-up request (`send` and `end` answer `HANDLER_DROPPED`, `refuse`
-  releases it). The bytes it held are released with it.
+  releases it). The bytes it held are released with it. An h2c peer's end
+  of file counts as connection loss here, though the connection lingers
+  while its streams are open. A request reset before the program first
+  took it is released by `ready()` unseen, as a whole-body request is.
 - **Our side giving up.** When the program answers (`end`, `send`,
   `refuse`) before the body has ended, the façade resets the stream with
   NO_ERROR once the response is complete, as RFC 9113 §8.1 allows, so the

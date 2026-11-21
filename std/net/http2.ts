@@ -1398,8 +1398,10 @@ export class Http2Connection {
     s.recvWindow = s.recvWindow - toI64(size)
     s.received = received
     if (s.held && !end) {
-      // The padding is never handed over, so only the body waits for `consumeBody`.
-      this.credit(s, size - f.contentLength)
+      // The connection takes the whole frame back on arrival, as for every
+      // stream; the stream only its padding, its body waiting for `consumeBody`.
+      this.credit(null, size)
+      this.creditStream(s, size - f.contentLength)
       s.owed = s.owed + f.contentLength
     } else {
       this.credit(end ? null : s, size)

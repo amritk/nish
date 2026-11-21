@@ -6,6 +6,8 @@ PASS  h2c: the request was first taken streaming, its body not ended
 PASS  h2c: never more than one stream window held
 PASS  h2c: the body array never longer than the window
 PASS  h2c: the stream window credited as the program consumed
+PASS  h2c: 800000 more on the connection, past its window
+PASS  h2c: the connection window credited as streamed bodies arrived
 PASS  h2c: a body ended by trailers: connected
 PASS  h2c: 20000 bytes sent, END_STREAM left to the trailers
 PASS  h2c: the trailers end the body
@@ -35,6 +37,8 @@ PASS  HTTP/2 over TLS: the request was first taken streaming, its body not ended
 PASS  HTTP/2 over TLS: never more than one stream window held
 PASS  HTTP/2 over TLS: the body array never longer than the window
 PASS  HTTP/2 over TLS: the stream window credited as the program consumed
+PASS  HTTP/2 over TLS: 800000 more on the connection, past its window
+PASS  HTTP/2 over TLS: the connection window credited as streamed bodies arrived
 PASS  HTTP/2 over TLS: a body ended by trailers: connected, the server's signature and Finished verified
 PASS  HTTP/2 over TLS: 20000 bytes sent, END_STREAM left to the trailers
 PASS  HTTP/2 over TLS: the trailers end the body
@@ -61,5 +65,5 @@ PASS  HTTP/1.1: /upload answered
 PASS  HTTP/1.1: with the whole body
 PASS  HTTP/1.1: taken whole, not streaming
 PASS  HTTP/1.1: a body past maxBody is 413 on a marked route
-http server stream: 63 passed, 0 failed, 0 skipped
+http server stream: 67 passed, 0 failed, 0 skipped
 

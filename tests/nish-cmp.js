@@ -18151,6 +18151,27 @@ const DECLARED = [
     changelog: "short Postgres int columns without the overflow test",
     why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
   })),
+  // WP72 S6a: a route marked `streamBody` takes its HTTP/2 body in pieces.
+  // `Http2Stream` gains `held` and `owed`, so its struct moves in the header
+  // of a program that links nish/net/http2 itself; the new probe calls
+  // `HttpServer.streamBody`, which the seed's façade lacks.
+  ...[
+    "tests/link/net_http2/main.ts",
+    "tests/link/net_http2_bad_idle/main.ts",
+    "tests/link/net_http2_bad_timeout/main.ts",
+    "tests/link/net_http2_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "request bodies on the façade's HTTP/2 listeners",
+    why: "`Http2Stream` gains its `held` and `owed` fields, so its struct and every struct after it in the header move (WP72 S6a)",
+  })),
+  {
+    program: "tests/link/net_http_server_stream/main.ts",
+    file: "exit",
+    changelog: "request bodies on the façade's HTTP/2 listeners",
+    why: "a probe new with this change: it calls `HttpServer.streamBody`, which the 0.42.0 seed's façade lacks, so the seed refuses it (WP72 S6a)",
+  },
 ]
 
 /**
