@@ -1,0 +1,3615 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc4648-base64",
+  "source": {
+    "rfc": 4648,
+    "title": "The Base64 Data Encodings: base64 and base64url",
+    "sha256": "84e14418f795d503be5f34bf23ce4ebaa119e9ec7c9f667d8caeb111385b178f"
+  },
+  "sources": [
+    {
+      "id": "rfc4648",
+      "rfc": 4648,
+      "file": "rfcs/rfc4648.txt",
+      "sha256": "84e14418f795d503be5f34bf23ce4ebaa119e9ec7c9f667d8caeb111385b178f"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/base64url"
+  },
+  "requirements": [
+    {
+      "id": "R-NO-LF",
+      "section": "3.1",
+      "level": "MUST NOT",
+      "quote": "Implementations MUST NOT add line feeds to base-encoded data unless the specification referring to this document explicitly directs base encoders to add line feeds after a specific number of characters."
+    },
+    {
+      "id": "R-PAD",
+      "section": "3.2",
+      "level": "MUST",
+      "quote": "Implementations MUST include appropriate pad characters at the end of encoded data unless the specification referring to this document explicitly states otherwise."
+    },
+    {
+      "id": "R-REJECT",
+      "section": "3.3",
+      "level": "MUST",
+      "quote": "Implementations MUST reject the encoded data if it contains characters outside the base alphabet when interpreting base-encoded data, unless the specification referring to this document explicitly states otherwise."
+    },
+    {
+      "id": "R-PAD-BITS",
+      "section": "3.5",
+      "level": "MUST",
+      "quote": "These pad bits MUST be set to zero by conforming encoders, which is described in the descriptions on padding below."
+    },
+    {
+      "id": "R-CANONICAL",
+      "section": "3.5",
+      "level": "MAY",
+      "quote": "In some environments, the alteration is critical and therefore decoders MAY chose to reject an encoding if the pad bits have not been set to zero."
+    },
+    {
+      "id": "R-GROUPS",
+      "section": "4",
+      "level": "DEFINITION",
+      "quote": "The encoding process represents 24-bit groups of input bits as output strings of 4 encoded characters."
+    },
+    {
+      "id": "R-ALPHABET",
+      "section": "4",
+      "level": "DEFINITION",
+      "quote": "Each 6-bit group is used as an index into an array of 64 printable characters."
+    },
+    {
+      "id": "R-PAD-CHAR",
+      "section": "4",
+      "level": "DEFINITION",
+      "quote": "Padding at the end of the data is performed using the '=' character."
+    },
+    {
+      "id": "R-CASES",
+      "section": "4",
+      "level": "DEFINITION",
+      "quote": "Since all base 64 input is an integral number of octets, only the following cases can arise:"
+    },
+    {
+      "id": "R-URL",
+      "section": "5",
+      "level": "DEFINITION",
+      "quote": "This encoding is technically identical to the previous one, except for the 62:nd and 63:rd alphabet character, as indicated in Table 2."
+    }
+  ],
+  "functions": [
+    {
+      "name": "base64urlEncode",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "string"
+    },
+    {
+      "name": "base64urlDecode",
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "base64StdPadEncode",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "string"
+    },
+    {
+      "name": "base64StdPadEncodeInto",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes",
+          "form": "window"
+        }
+      ],
+      "returns": "bytes",
+      "out": {
+        "at": 1,
+        "capacity": "2 * data.length + 4"
+      }
+    },
+    {
+      "name": "base64StdPadDecodedLength",
+      "params": [
+        {
+          "name": "text",
+          "type": "bytes",
+          "form": "window"
+        }
+      ],
+      "returns": "i32"
+    },
+    {
+      "name": "base64StdPadDecode",
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "base64EncodedLength",
+      "module": "nish/base64",
+      "params": [
+        {
+          "name": "n",
+          "type": "i32"
+        }
+      ],
+      "returns": "i32"
+    },
+    {
+      "name": "base64EncodeInto",
+      "module": "nish/base64",
+      "params": [
+        {
+          "name": "src",
+          "type": "bytes",
+          "form": "window"
+        }
+      ],
+      "returns": "bytes",
+      "out": {
+        "at": 1,
+        "capacity": "2 * src.length + 4"
+      }
+    },
+    {
+      "name": "base64Encode",
+      "module": "nish/base64",
+      "params": [
+        {
+          "name": "bytes",
+          "type": "bytes"
+        }
+      ],
+      "returns": "string"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "ENC-0",
+      "title": "BASE64(\"\") = \"\"",
+      "covers": ["R-GROUPS", "R-PAD"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": ""
+        }
+      ],
+      "expect": {
+        "str": ""
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "ENC-1",
+      "title": "BASE64(\"f\") = \"Zg==\"",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": "f"
+        }
+      ],
+      "expect": {
+        "str": "Zg=="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "ENC-2",
+      "title": "BASE64(\"fo\") = \"Zm8=\"",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": "fo"
+        }
+      ],
+      "expect": {
+        "str": "Zm8="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "ENC-3",
+      "title": "BASE64(\"foo\") = \"Zm9v\"",
+      "covers": ["R-GROUPS", "R-ALPHABET"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": "foo"
+        }
+      ],
+      "expect": {
+        "str": "Zm9v"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "ENC-4",
+      "title": "BASE64(\"foob\") = \"Zm9vYg==\"",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": "foob"
+        }
+      ],
+      "expect": {
+        "str": "Zm9vYg=="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "ENC-5",
+      "title": "BASE64(\"fooba\") = \"Zm9vYmE=\"",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": "fooba"
+        }
+      ],
+      "expect": {
+        "str": "Zm9vYmE="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "ENC-6",
+      "title": "BASE64(\"foobar\") = \"Zm9vYmFy\"",
+      "covers": ["R-GROUPS", "R-ALPHABET"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncode",
+      "args": [
+        {
+          "ascii": "foobar"
+        }
+      ],
+      "expect": {
+        "str": "Zm9vYmFy"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-0",
+      "title": "BASE64(\"\") = \"\", into a buffer",
+      "covers": ["R-GROUPS", "R-PAD"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": ""
+        }
+      ],
+      "expect": {
+        "ascii": ""
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-1",
+      "title": "BASE64(\"f\") = \"Zg==\", into a buffer",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": "f"
+        }
+      ],
+      "expect": {
+        "ascii": "Zg=="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-2",
+      "title": "BASE64(\"fo\") = \"Zm8=\", into a buffer",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": "fo"
+        }
+      ],
+      "expect": {
+        "ascii": "Zm8="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-3",
+      "title": "BASE64(\"foo\") = \"Zm9v\", into a buffer",
+      "covers": ["R-GROUPS", "R-ALPHABET"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": "foo"
+        }
+      ],
+      "expect": {
+        "ascii": "Zm9v"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-4",
+      "title": "BASE64(\"foob\") = \"Zm9vYg==\", into a buffer",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": "foob"
+        }
+      ],
+      "expect": {
+        "ascii": "Zm9vYg=="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-5",
+      "title": "BASE64(\"fooba\") = \"Zm9vYmE=\", into a buffer",
+      "covers": ["R-GROUPS", "R-PAD", "R-PAD-BITS"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": "fooba"
+        }
+      ],
+      "expect": {
+        "ascii": "Zm9vYmE="
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "INTO-6",
+      "title": "BASE64(\"foobar\") = \"Zm9vYmFy\", into a buffer",
+      "covers": ["R-GROUPS", "R-ALPHABET"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadEncodeInto",
+      "args": [
+        {
+          "ascii": "foobar"
+        }
+      ],
+      "expect": {
+        "ascii": "Zm9vYmFy"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-0",
+      "title": "BASE64(\"\") = \"\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": ""
+        }
+      ],
+      "expect": {
+        "ascii": ""
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-1",
+      "title": "BASE64(\"f\") = \"Zg==\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": "Zg=="
+        }
+      ],
+      "expect": {
+        "ascii": "f"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-2",
+      "title": "BASE64(\"fo\") = \"Zm8=\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": "Zm8="
+        }
+      ],
+      "expect": {
+        "ascii": "fo"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-3",
+      "title": "BASE64(\"foo\") = \"Zm9v\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": "Zm9v"
+        }
+      ],
+      "expect": {
+        "ascii": "foo"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-4",
+      "title": "BASE64(\"foob\") = \"Zm9vYg==\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": "Zm9vYg=="
+        }
+      ],
+      "expect": {
+        "ascii": "foob"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-5",
+      "title": "BASE64(\"fooba\") = \"Zm9vYmE=\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": "Zm9vYmE="
+        }
+      ],
+      "expect": {
+        "ascii": "fooba"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "DEC-6",
+      "title": "BASE64(\"foobar\") = \"Zm9vYmFy\", decoded",
+      "covers": ["R-GROUPS", "R-CASES"],
+      "source": {
+        "cite": {
+          "section": "10"
+        }
+      },
+      "call": "base64StdPadDecode",
+      "args": [
+        {
+          "str": "Zm9vYmFy"
+        }
+      ],
+      "expect": {
+        "ascii": "foobar"
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-LENGTH",
+      "title": "the standard encoding of n bytes is 4 * ceil(n / 3) characters",
+      "covers": ["R-NO-LF", "R-PAD"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              {
+                "int": 3
+              },
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "call": "base64StdPadEncode",
+                    "args": [
+                      {
+                        "var": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "int": 4
+              },
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "b"
+                      }
+                    ]
+                  },
+                  {
+                    "op": "%",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          {
+                            "int": 3
+                          },
+                          {
+                            "op": "%",
+                            "args": [
+                              {
+                                "op": "len",
+                                "args": [
+                                  {
+                                    "var": "b"
+                                  }
+                                ]
+                              },
+                              {
+                                "int": 3
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "int": 3
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-LENGTH",
+      "title": "the URL encoding of n bytes is ceil(4 * n / 3) characters, with no padding",
+      "covers": ["R-NO-LF"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "*",
+            "args": [
+              {
+                "int": 3
+              },
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "call": "base64urlEncode",
+                    "args": [
+                      {
+                        "var": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "int": 4
+                  },
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "b"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "%",
+                "args": [
+                  {
+                    "op": "-",
+                    "args": [
+                      {
+                        "int": 3
+                      },
+                      {
+                        "op": "%",
+                        "args": [
+                          {
+                            "op": "*",
+                            "args": [
+                              {
+                                "int": 4
+                              },
+                              {
+                                "op": "len",
+                                "args": [
+                                  {
+                                    "var": "b"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "int": 3
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "int": 3
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-PAD",
+      "title": "the standard encoding ends in as many \"=\" as the final group is short of three bytes",
+      "covers": ["R-PAD"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "e",
+            "value": {
+              "call": "base64StdPadEncode",
+              "args": [
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          },
+          {
+            "name": "p",
+            "value": {
+              "op": "%",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "int": 3
+                    },
+                    {
+                      "op": "%",
+                      "args": [
+                        {
+                          "op": "len",
+                          "args": [
+                            {
+                              "var": "b"
+                            }
+                          ]
+                        },
+                        {
+                          "int": 3
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "int": 3
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "slice",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "var": "e"
+                        }
+                      ]
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "strLen",
+                          "args": [
+                            {
+                              "var": "e"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "p"
+                        }
+                      ]
+                    },
+                    {
+                      "op": "strLen",
+                      "args": [
+                        {
+                          "var": "e"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "slice",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "str": "=="
+                        }
+                      ]
+                    },
+                    {
+                      "int": 0
+                    },
+                    {
+                      "var": "p"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "!=",
+              "args": [
+                {
+                  "op": "charAt",
+                  "args": [
+                    {
+                      "var": "e"
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "op": "strLen",
+                              "args": [
+                                {
+                                  "var": "e"
+                                }
+                              ]
+                            },
+                            {
+                              "var": "p"
+                            }
+                          ]
+                        },
+                        {
+                          "int": 1
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "str": "="
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-ENCODED-LENGTH",
+      "title": "base64EncodedLength(n) is the length of the standard encoding of n bytes",
+      "covers": ["R-NO-LF", "R-PAD"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "base64EncodedLength",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "b"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "strLen",
+            "args": [
+              {
+                "call": "base64StdPadEncode",
+                "args": [
+                  {
+                    "var": "b"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-OTHER",
+      "title": "a character outside the standard alphabet, whitespace included, anywhere, is refused",
+      "covers": ["R-REJECT"],
+      "forall": [
+        {
+          "name": "a",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        },
+        {
+          "name": "x",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 1,
+          "alphabet": [
+            " ",
+            "\t",
+            "\n",
+            "\r",
+            "!",
+            "\"",
+            "#",
+            "$",
+            "%",
+            "&",
+            "'",
+            "(",
+            ")",
+            "*",
+            ",",
+            "-",
+            ".",
+            ":",
+            ";",
+            "<",
+            ">",
+            "?",
+            "@",
+            "[",
+            "\\",
+            "]",
+            "^",
+            "_",
+            "`",
+            "{",
+            "|",
+            "}",
+            "~"
+          ]
+        },
+        {
+          "name": "z",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        }
+      ],
+      "where": {
+        "op": "==",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "a"
+                      },
+                      {
+                        "op": "strConcat",
+                        "args": [
+                          {
+                            "var": "x"
+                          },
+                          {
+                            "var": "z"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "base64StdPadDecode",
+                "args": [
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "a"
+                      },
+                      {
+                        "op": "strConcat",
+                        "args": [
+                          {
+                            "var": "x"
+                          },
+                          {
+                            "var": "z"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "base64StdPadDecodedLength",
+                "args": [
+                  {
+                    "op": "utf8",
+                    "args": [
+                      {
+                        "op": "strConcat",
+                        "args": [
+                          {
+                            "var": "a"
+                          },
+                          {
+                            "op": "strConcat",
+                            "args": [
+                              {
+                                "var": "x"
+                              },
+                              {
+                                "var": "z"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": -1
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 128
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-OTHER",
+      "title": "a character outside the URL alphabet, \"+\", \"/\", \"=\" and whitespace included, anywhere, is refused",
+      "covers": ["R-REJECT"],
+      "forall": [
+        {
+          "name": "a",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "-",
+            "_"
+          ]
+        },
+        {
+          "name": "x",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 1,
+          "alphabet": [
+            " ",
+            "\t",
+            "\n",
+            "\r",
+            "!",
+            "\"",
+            "#",
+            "$",
+            "%",
+            "&",
+            "'",
+            "(",
+            ")",
+            "*",
+            "+",
+            ",",
+            ".",
+            "/",
+            ":",
+            ";",
+            "<",
+            "=",
+            ">",
+            "?",
+            "@",
+            "[",
+            "\\",
+            "]",
+            "^",
+            "`",
+            "{",
+            "|",
+            "}",
+            "~"
+          ]
+        },
+        {
+          "name": "z",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "-",
+            "_"
+          ]
+        }
+      ],
+      "where": {
+        "op": "!=",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "a"
+                      },
+                      {
+                        "op": "strConcat",
+                        "args": [
+                          {
+                            "var": "x"
+                          },
+                          {
+                            "var": "z"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 1
+          }
+        ]
+      },
+      "assert": {
+        "op": "isNull",
+        "args": [
+          {
+            "call": "base64urlDecode",
+            "args": [
+              {
+                "op": "strConcat",
+                "args": [
+                  {
+                    "var": "a"
+                  },
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "z"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 128
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-CANONICAL",
+      "title": "a standard text whose last character carries nonzero pad bits is refused: every text decoded re-encodes to itself",
+      "covers": ["R-PAD-BITS", "R-CANONICAL"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 32
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 1,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        }
+      ],
+      "where": {
+        "op": "!=",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "b"
+                  }
+                ]
+              },
+              {
+                "int": 3
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "let": [
+          {
+            "name": "e",
+            "value": {
+              "call": "base64StdPadEncode",
+              "args": [
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          },
+          {
+            "name": "p",
+            "value": {
+              "op": "%",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "int": 3
+                    },
+                    {
+                      "op": "%",
+                      "args": [
+                        {
+                          "op": "len",
+                          "args": [
+                            {
+                              "var": "b"
+                            }
+                          ]
+                        },
+                        {
+                          "int": 3
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "int": 3
+                }
+              ]
+            }
+          },
+          {
+            "name": "t",
+            "value": {
+              "op": "strConcat",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "op": "ascii",
+                      "args": [
+                        {
+                          "op": "slice",
+                          "args": [
+                            {
+                              "op": "utf8",
+                              "args": [
+                                {
+                                  "var": "e"
+                                }
+                              ]
+                            },
+                            {
+                              "int": 0
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    {
+                                      "op": "strLen",
+                                      "args": [
+                                        {
+                                          "var": "e"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "var": "p"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "int": 1
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "strConcat",
+                  "args": [
+                    {
+                      "var": "c"
+                    },
+                    {
+                      "op": "unwrap",
+                      "args": [
+                        {
+                          "op": "ascii",
+                          "args": [
+                            {
+                              "op": "slice",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "e"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "-",
+                                  "args": [
+                                    {
+                                      "op": "strLen",
+                                      "args": [
+                                        {
+                                          "var": "e"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "var": "p"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "strLen",
+                                  "args": [
+                                    {
+                                      "var": "e"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "d",
+            "value": {
+              "call": "base64StdPadDecode",
+              "args": [
+                {
+                  "var": "t"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "or",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "isNull",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "op": "==",
+                  "args": [
+                    {
+                      "call": "base64StdPadDecodedLength",
+                      "args": [
+                        {
+                          "op": "utf8",
+                          "args": [
+                            {
+                              "var": "t"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "int": -1
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "==",
+                  "args": [
+                    {
+                      "call": "base64StdPadEncode",
+                      "args": [
+                        {
+                          "op": "unwrap",
+                          "args": [
+                            {
+                              "var": "d"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "var": "t"
+                    }
+                  ]
+                },
+                {
+                  "op": "==",
+                  "args": [
+                    {
+                      "call": "base64StdPadDecodedLength",
+                      "args": [
+                        {
+                          "op": "utf8",
+                          "args": [
+                            {
+                              "var": "t"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "len",
+                      "args": [
+                        {
+                          "op": "unwrap",
+                          "args": [
+                            {
+                              "var": "d"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 192
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-CANONICAL",
+      "title": "a URL text whose last character carries nonzero pad bits is refused: every text decoded re-encodes to itself",
+      "covers": ["R-PAD-BITS", "R-CANONICAL"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 32
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 1,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "-",
+            "_"
+          ]
+        }
+      ],
+      "where": {
+        "op": "!=",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "b"
+                  }
+                ]
+              },
+              {
+                "int": 3
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "let": [
+          {
+            "name": "e",
+            "value": {
+              "call": "base64urlEncode",
+              "args": [
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          },
+          {
+            "name": "t",
+            "value": {
+              "op": "strConcat",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "op": "ascii",
+                      "args": [
+                        {
+                          "op": "slice",
+                          "args": [
+                            {
+                              "op": "utf8",
+                              "args": [
+                                {
+                                  "var": "e"
+                                }
+                              ]
+                            },
+                            {
+                              "int": 0
+                            },
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "strLen",
+                                  "args": [
+                                    {
+                                      "var": "e"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "int": 1
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "var": "c"
+                }
+              ]
+            }
+          },
+          {
+            "name": "d",
+            "value": {
+              "call": "base64urlDecode",
+              "args": [
+                {
+                  "var": "t"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "or",
+          "args": [
+            {
+              "op": "isNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "base64urlEncode",
+                  "args": [
+                    {
+                      "op": "unwrap",
+                      "args": [
+                        {
+                          "var": "d"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "var": "t"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 192
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-ROUND-TRIP",
+      "title": "the standard decoding of the standard encoding of b is b",
+      "covers": ["R-GROUPS", "R-ALPHABET"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "d",
+            "value": {
+              "call": "base64StdPadDecode",
+              "args": [
+                {
+                  "call": "base64StdPadEncode",
+                  "args": [
+                    {
+                      "var": "b"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 128
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-DECODED-LENGTH",
+      "title": "base64StdPadDecodedLength of the standard encoding of b is the length of b",
+      "covers": ["R-GROUPS"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "base64StdPadDecodedLength",
+            "args": [
+              {
+                "op": "utf8",
+                "args": [
+                  {
+                    "call": "base64StdPadEncode",
+                    "args": [
+                      {
+                        "var": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "len",
+            "args": [
+              {
+                "var": "b"
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-ENCODE-INTO",
+      "title": "base64StdPadEncodeInto writes the bytes of the standard encoding",
+      "covers": ["R-GROUPS", "R-ALPHABET", "R-PAD-CHAR"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "base64StdPadEncodeInto",
+            "args": [
+              {
+                "var": "b"
+              }
+            ]
+          },
+          {
+            "op": "utf8",
+            "args": [
+              {
+                "call": "base64StdPadEncode",
+                "args": [
+                  {
+                    "var": "b"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-BASE64-ENCODE",
+      "title": "base64Encode is the standard encoding",
+      "covers": ["R-GROUPS", "R-ALPHABET", "R-PAD-CHAR"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "base64Encode",
+            "args": [
+              {
+                "var": "b"
+              }
+            ]
+          },
+          {
+            "call": "base64StdPadEncode",
+            "args": [
+              {
+                "var": "b"
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-BASE64-ENCODE-INTO",
+      "title": "base64EncodeInto writes the bytes of the standard encoding",
+      "covers": ["R-GROUPS", "R-ALPHABET", "R-PAD-CHAR"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "base64EncodeInto",
+            "args": [
+              {
+                "var": "b"
+              }
+            ]
+          },
+          {
+            "op": "utf8",
+            "args": [
+              {
+                "call": "base64StdPadEncode",
+                "args": [
+                  {
+                    "var": "b"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-LENGTH-1",
+      "title": "a standard text whose length is not a multiple of four is refused",
+      "covers": ["R-CASES"],
+      "forall": [
+        {
+          "name": "t",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 35,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        }
+      ],
+      "where": {
+        "op": "!=",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "var": "t"
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "base64StdPadDecode",
+                "args": [
+                  {
+                    "var": "t"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "base64StdPadDecodedLength",
+                "args": [
+                  {
+                    "op": "utf8",
+                    "args": [
+                      {
+                        "var": "t"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": -1
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-MISPLACED-PAD",
+      "title": "a standard text with \"=\" anywhere but its last two characters, or \"=\" before a non-pad character, is refused",
+      "covers": ["R-CASES", "R-PAD-CHAR"],
+      "forall": [
+        {
+          "name": "t",
+          "type": "string",
+          "minLen": 4,
+          "maxLen": 32,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        },
+        {
+          "name": "i",
+          "type": "i32",
+          "min": 0,
+          "max": 31
+        }
+      ],
+      "where": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "%",
+                "args": [
+                  {
+                    "op": "strLen",
+                    "args": [
+                      {
+                        "var": "t"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 4
+                  }
+                ]
+              },
+              {
+                "int": 0
+              }
+            ]
+          },
+          {
+            "op": "<=",
+            "args": [
+              {
+                "var": "i"
+              },
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "strLen",
+                    "args": [
+                      {
+                        "var": "t"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "assert": {
+        "let": [
+          {
+            "name": "s",
+            "value": {
+              "op": "strConcat",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "op": "ascii",
+                      "args": [
+                        {
+                          "op": "slice",
+                          "args": [
+                            {
+                              "op": "utf8",
+                              "args": [
+                                {
+                                  "var": "t"
+                                }
+                              ]
+                            },
+                            {
+                              "int": 0
+                            },
+                            {
+                              "var": "i"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "strConcat",
+                  "args": [
+                    {
+                      "str": "="
+                    },
+                    {
+                      "op": "unwrap",
+                      "args": [
+                        {
+                          "op": "ascii",
+                          "args": [
+                            {
+                              "op": "slice",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "t"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "+",
+                                  "args": [
+                                    {
+                                      "var": "i"
+                                    },
+                                    {
+                                      "int": 1
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "strLen",
+                                  "args": [
+                                    {
+                                      "var": "t"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "isNull",
+              "args": [
+                {
+                  "call": "base64StdPadDecode",
+                  "args": [
+                    {
+                      "var": "s"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "base64StdPadDecodedLength",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "var": "s"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "int": -1
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 128
+    },
+    {
+      "kind": "property",
+      "id": "P-STD-THREE-PADS",
+      "title": "a standard text ending in \"===\" is refused",
+      "covers": ["R-CASES"],
+      "forall": [
+        {
+          "name": "t",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 28,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 1,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        }
+      ],
+      "where": {
+        "op": "==",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "var": "t"
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "let": [
+          {
+            "name": "s",
+            "value": {
+              "op": "strConcat",
+              "args": [
+                {
+                  "var": "t"
+                },
+                {
+                  "op": "strConcat",
+                  "args": [
+                    {
+                      "var": "c"
+                    },
+                    {
+                      "str": "==="
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "isNull",
+              "args": [
+                {
+                  "call": "base64StdPadDecode",
+                  "args": [
+                    {
+                      "var": "s"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "base64StdPadDecodedLength",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "var": "s"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "int": -1
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-FROM-STD",
+      "title": "the URL encoding is the standard one with \"+\" and \"/\" as \"-\" and \"_\" and the padding dropped",
+      "covers": ["R-URL", "R-PAD"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 48
+        },
+        {
+          "name": "i",
+          "type": "i32",
+          "min": 0,
+          "max": 63
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "s",
+            "value": {
+              "call": "base64StdPadEncode",
+              "args": [
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          },
+          {
+            "name": "u",
+            "value": {
+              "call": "base64urlEncode",
+              "args": [
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          },
+          {
+            "name": "c",
+            "value": {
+              "op": "charAt",
+              "args": [
+                {
+                  "var": "s"
+                },
+                {
+                  "var": "i"
+                }
+              ]
+            }
+          },
+          {
+            "name": "d",
+            "value": {
+              "op": "charAt",
+              "args": [
+                {
+                  "var": "u"
+                },
+                {
+                  "var": "i"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "slice",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "var": "s"
+                        }
+                      ]
+                    },
+                    {
+                      "op": "strLen",
+                      "args": [
+                        {
+                          "var": "u"
+                        }
+                      ]
+                    },
+                    {
+                      "op": "strLen",
+                      "args": [
+                        {
+                          "var": "s"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "slice",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "str": "=="
+                        }
+                      ]
+                    },
+                    {
+                      "int": 0
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "strLen",
+                          "args": [
+                            {
+                              "var": "s"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "strLen",
+                          "args": [
+                            {
+                              "var": "u"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "implies",
+              "args": [
+                {
+                  "op": "<",
+                  "args": [
+                    {
+                      "var": "i"
+                    },
+                    {
+                      "op": "strLen",
+                      "args": [
+                        {
+                          "var": "u"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "!=",
+                          "args": [
+                            {
+                              "var": "c"
+                            },
+                            {
+                              "str": "+"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "!=",
+                          "args": [
+                            {
+                              "var": "c"
+                            },
+                            {
+                              "str": "/"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "!=",
+                          "args": [
+                            {
+                              "var": "c"
+                            },
+                            {
+                              "str": "="
+                            }
+                          ]
+                        },
+                        {
+                          "op": "==",
+                          "args": [
+                            {
+                              "var": "c"
+                            },
+                            {
+                              "var": "d"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            {
+                              "var": "c"
+                            },
+                            {
+                              "str": "+"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "==",
+                          "args": [
+                            {
+                              "var": "d"
+                            },
+                            {
+                              "str": "-"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "==",
+                          "args": [
+                            {
+                              "var": "c"
+                            },
+                            {
+                              "str": "/"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "==",
+                          "args": [
+                            {
+                              "var": "d"
+                            },
+                            {
+                              "str": "_"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 192
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-ROUND-TRIP",
+      "title": "the URL decoding of the URL encoding of b is b",
+      "covers": ["R-URL"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 96
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "d",
+            "value": {
+              "call": "base64urlDecode",
+              "args": [
+                {
+                  "call": "base64urlEncode",
+                  "args": [
+                    {
+                      "var": "b"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 128
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-LENGTH-1",
+      "title": "a URL text of length 1 modulo 4 is refused",
+      "covers": ["R-URL", "R-CASES"],
+      "forall": [
+        {
+          "name": "t",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 37,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "-",
+            "_"
+          ]
+        }
+      ],
+      "where": {
+        "op": "==",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "var": "t"
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 1
+          }
+        ]
+      },
+      "assert": {
+        "op": "isNull",
+        "args": [
+          {
+            "call": "base64urlDecode",
+            "args": [
+              {
+                "var": "t"
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-URL-PADDED",
+      "title": "a URL text with \"=\" anywhere, padding included, is refused",
+      "covers": ["R-URL", "R-PAD"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "base64urlDecode",
+                "args": [
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "call": "base64urlEncode",
+                        "args": [
+                          {
+                            "var": "b"
+                          }
+                        ]
+                      },
+                      {
+                        "str": "="
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "base64urlDecode",
+                "args": [
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "call": "base64urlEncode",
+                        "args": [
+                          {
+                            "var": "b"
+                          }
+                        ]
+                      },
+                      {
+                        "str": "=="
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    }
+  ]
+}
