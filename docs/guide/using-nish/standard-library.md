@@ -213,7 +213,7 @@ shown).
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, trust anchors, base64url, bcrypt |
-| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket (both sides of its handshake), an HTTP router, a PostgreSQL client |
+| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket (both sides of its handshake), an HTTP router, static files, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
 | [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
@@ -3245,6 +3245,12 @@ subprotocol. [WebSocket](websocket.md) shows both.
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
 shows it.
+
+`nish/net/static` serves the files under one directory through
+`nish/net/http-server` or `nish/net/handler`: a content type per extension,
+an ETag and a Last-Modified, one byte range, precompressed `.br` and `.gz`
+siblings, and every path that would leave the directory refused;
+[Static files](static-files.md) shows it.
 
 `nish/net/handler` is a request and response layer over `Http1Server`: an
 `HttpHandler` accepts, reads and routes, and your loop takes whole requests

@@ -6,7 +6,9 @@
 //   2. The API: health, create (201), list, show, delete (204), a full store
 //      (507), a body without "text" (400), an unknown id (404), and 404 and
 //      405 problems from the router.
-//   3. The stop: a drain closes the idle client and the handler holds no
+//   3. `--static`: a file of this directory, a range of it, its ETag giving
+//      304, a traversal and a missing file 404, and 404 without `--static`.
+//   4. The stop: a drain closes the idle client and the handler holds no
 //      connection.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
@@ -163,6 +165,9 @@ export const main = (): i32 => {
   check(tally, "a missing port is a usage error", configure(["http-app", "--quiet"]).error === "a port is required")
   check(tally, "a flag without its number is a usage error", configure(["http-app", "80", "--max-notes"]).error === "--max-notes takes a number")
   check(tally, "a port out of range is refused", configure(["http-app", "70000"]).error !== "")
+  const served = configure(["http-app", "8080", "--static", "tests/link/net_http_app", "--quiet"])
+  check(tally, "--static takes its directory", served.error === "" && served.staticDir === "tests/link/net_http_app")
+  check(tally, "--static without one is a usage error", configure(["http-app", "80", "--static"]).error === "--static takes a directory")
 
   const listener: i32 = tcpListen("127.0.0.1", NONE, 64)
   const h = new HttpHandler(new HandlerLimits(), listener, appRoutes())
@@ -183,6 +188,18 @@ export const main = (): i32 => {
   check(c, "an id that is not a number is 404", exchange(app, c, "DELETE /notes/x HTTP/1.1\r\nHost: t\r\n\r\n") && c.status === 404)
   check(c, "an unknown path is 404", exchange(app, c, "GET /nowhere HTTP/1.1\r\nHost: t\r\n\r\n") && c.status === 404)
   check(c, "a method the path does not take is 405 with its Allow", exchange(app, c, "PUT /notes HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n") && c.status === 405 && c.head.indexOf("allow: GET, POST") >= 0)
+  check(c, "without --static, /static/ is 404", exchange(app, c, "GET /static/expected.code HTTP/1.1\r\nHost: t\r\n\r\n") && c.status === 404)
+
+  const files = new App(h, served)
+  check(c, "--static: a file of the directory, 200", exchange(files, c, "GET /static/expected.code HTTP/1.1\r\nHost: t\r\n\r\n") && c.status === 200 && c.body === "0\n")
+  const tagAt: i32 = c.head.indexOf("etag: ")
+  const tagEnd: i32 = tagAt < 0 ? -1 : c.head.indexOf("\r\n", tagAt)
+  const etag: string = tagAt < 0 || tagEnd < 0 ? "" : c.head.slice(tagAt + 6, tagEnd)
+  check(c, "--static: with a quoted ETag", etag.length > 2 && etag.startsWith("\""))
+  check(c, "--static: If-None-Match with it is 304", exchange(files, c, `GET /static/expected.code HTTP/1.1\r\nHost: t\r\nIf-None-Match: ${etag}\r\n\r\n`) && c.status === 304 && c.body === "")
+  check(c, "--static: a range is 206", exchange(files, c, "GET /static/main.ts HTTP/1.1\r\nHost: t\r\nRange: bytes=0-1\r\n\r\n") && c.status === 206 && c.body === "//")
+  check(c, "--static: a traversal is 404", exchange(files, c, "GET /static/../expected.code HTTP/1.1\r\nHost: t\r\n\r\n") && c.status === 404)
+  check(c, "--static: a missing file is 404", exchange(files, c, "GET /static/nowhere HTTP/1.1\r\nHost: t\r\n\r\n") && c.status === 404)
 
   h.drain()
   const deadline: i64 = monotonicNanos() + FIVE_SECONDS

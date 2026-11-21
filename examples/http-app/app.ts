@@ -1,10 +1,12 @@
 // The notes API of `examples/http-app`: its configuration, its routes and how
 // it answers each one, apart from `main` so that `tests/link/net_http_app`
-// drives the same code over loopback.
+// drives the same code over loopback. With `--static <dir>` it also serves the
+// files under `dir` at `/static/`, through `nish/net/static`.
 import { JsonWriter, jsonField } from "nish/json"
 import { HttpHandler, HttpRequest } from "nish/net/handler"
 import { http1Text } from "nish/net/http1-codec"
 import { ROUTER_METHOD_NOT_ALLOWED, Router, RouterLimits } from "nish/net/router"
+import { STATIC_NOT_FOUND, StaticFiles, StaticLimits } from "nish/net/static"
 import { Notes } from "./notes"
 
 // The routes, in the order they are added.
@@ -13,6 +15,7 @@ const LIST: i32 = 1
 const CREATE: i32 = 2
 const SHOW: i32 = 3
 const REMOVE: i32 = 4
+const FILES: i32 = 5
 
 // The statuses it answers.
 const OK: i32 = 200
@@ -31,6 +34,8 @@ export class Config {
   maxNotes: i32 = 1000
   drainMs: i32 = 5000
   quiet: boolean = false
+  /** The directory `--static` serves at `/static/`, or `""` for none. */
+  staticDir: string = ""
   error: string = ""
 }
 
@@ -59,6 +64,13 @@ export const configure = (args: string[]): Config => {
     const arg: string = args[k]
     if (arg === "--quiet") {
       config.quiet = true
+    } else if (arg === "--static") {
+      if (k + 1 < toI32(args.length) && args[k + 1] !== "") {
+        config.staticDir = args[k + 1]
+      } else {
+        config.error = "--static takes a directory"
+      }
+      k += 1
     } else if (arg === "--max-notes" || arg === "--drain-ms") {
       const value: i32 = k + 1 < toI32(args.length) ? decimal(args[k + 1]) : -1
       if (value < 0) {
@@ -101,11 +113,16 @@ export class App {
   h: HttpHandler
   notes: Notes
   quiet: boolean = false
+  /** What `--static` serves, or null without it. */
+  files: StaticFiles | null = null
 
   constructor(h: HttpHandler, config: Config) {
     this.h = h
     this.notes = new Notes(config.maxNotes)
     this.quiet = config.quiet
+    if (config.staticDir !== "") {
+      this.files = new StaticFiles(config.staticDir, new StaticLimits())
+    }
   }
 
   /** Answers `req` and logs it. */
@@ -183,6 +200,18 @@ export class App {
         }
         h.empty(req, NO_CONTENT)
         return NO_CONTENT
+      case FILES: {
+        const files: StaticFiles | null = this.files
+        // A path it refuses, a file that is not there, or no `--static`: 404.
+        if (
+          files !== null &&
+          files.serveHandler(h, req, req.paramStart(ZERO), req.paramEnd(ZERO)) !== STATIC_NOT_FOUND
+        ) {
+          return files.status
+        }
+        h.refuse(req)
+        return NOT_FOUND
+      }
       default: {
         // NOT_FOUND, or METHOD_NOT_ALLOWED with the `Allow` of the methods the path takes.
         const status: i32 = req.route === ROUTER_METHOD_NOT_ALLOWED ? METHOD_NOT_ALLOWED : NOT_FOUND
@@ -209,5 +238,6 @@ export const appRoutes = (): Router => {
   router.add("POST", "/notes")
   router.add("GET", "/notes/:id")
   router.add("DELETE", "/notes/:id")
+  router.add("GET", "/static/*")
   return router
 }
