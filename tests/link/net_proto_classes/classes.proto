@@ -1,0 +1,70 @@
+// The schema tests/link/net_proto_classes round-trips: every field kind
+// `nish proto` writes a class for. vectors.py builds the same schema in code
+// for the reference implementation; classes.ts is this file's module:
+//   nish proto classes.proto -o classes.ts
+syntax = "proto3";
+
+package wire.v1;
+
+enum Color {
+  COLOR_RED = 0;
+  COLOR_GREEN = 1;
+  COLOR_NEG = -2;
+}
+
+message Leaf {
+  int32 a = 1;
+  string s = 2;
+  Leaf child = 3;
+}
+
+message All {
+  int32 i32 = 1;
+  sint32 s32 = 2;
+  sfixed32 sf32 = 3;
+  uint32 u32 = 4;
+  fixed32 f32 = 5;
+  int64 i64 = 6;
+  sint64 s64 = 7;
+  sfixed64 sf64 = 8;
+  uint64 u64 = 9;
+  fixed64 f64 = 10;
+  float fl = 11;
+  double db = 12;
+  bool b = 13;
+  string str = 14;
+  bytes by = 15;
+  Color color = 16;
+  Leaf leaf = 17;
+  repeated int32 ri = 18;
+  repeated sint64 rs = 19;
+  repeated double rd = 20;
+  repeated string rstr = 21;
+  repeated bytes rby = 22;
+  repeated Leaf rleaf = 23;
+  repeated bool rb = 24;
+  repeated fixed32 rf = 25;
+  repeated Color rc = 26;
+  optional int32 oi = 27;
+  optional string os = 28;
+  map<string, int32> ms = 29;
+  map<int64, Leaf> ml = 30;
+  map<uint32, string> mu = 31;
+  map<bool, bytes> mb = 32;
+  oneof choice {
+    int32 ci = 33;
+    string cs = 34;
+    Leaf cl = 35;
+  }
+  message Inner {
+    repeated Color colors = 1;
+    Inner again = 2;
+  }
+  Inner inner = 36;
+  uint32 far = 536870911;
+}
+
+service Probe {
+  rpc Get(Leaf) returns (All);
+  rpc PutAll(All) returns (Leaf);
+}
