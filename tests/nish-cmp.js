@@ -16911,6 +16911,26 @@ const DECLARED = [
     changelog: STRING_ENUMS,
     why: "the program declares an enum whose members are strings, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
+  // WP41 S1: the `mulHigh` builtin, which the seed does not have.
+  ...[
+    "tests/cases/mul_high_aarch64.ts",
+    "tests/cases/mul_high_basic.ts",
+    "tests/cases/mul_high_native.ts",
+    "tests/cases/mul_high_wasm32.ts",
+    "docs/cookbook/builtin-mul-high-wasm32.ts",
+    "docs/cookbook/builtin-mul-high.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "mulHigh builtin for the 64×64→128 high product",
+    why: "the program calls `mulHigh` or `mulHighIsNative`, which the seed refuses as an unknown function, so only the candidate compiles it",
+  })),
+  {
+    program: "tests/link/json_enum_string/main.ts",
+    file: "json-tokenizer.ll",
+    changelog: "mulHigh builtin for the 64×64→128 high product",
+    why: "nish/json-tokenizer's Eisel–Lemire path takes its high products from `mulHigh`, a widening i128 multiply, where the seed's std/ built each from four 32-bit products in `jsonTokMulHigh`, so the module loses that function and renumbers its values",
+  },
   ...[
     "tests/cases/destructure_array.ts",
     "tests/cases/destructure_empty.ts",

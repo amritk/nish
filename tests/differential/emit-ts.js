@@ -142,6 +142,8 @@ export const HOST = [
   // The native arena's counters; Node has a collector and no arena to count.
   ["arenaUsed", /\barenaUsed\b/, "source"],
   ["arenaMark", /\barenaMark\b/, "source"],
+  // Whether the target multiplies 64 by 64 into 128 bits natively; Node's BigInt reading answers false.
+  ["mulHighIsNative", /\bmulHighIsNative\b/, "source"],
   // A child is reaped by the event loop, which a synchronous wait never returns to.
   ["spawn", /`spawn` has no synchronous reading under Node/, "stderr"],
   ["waitPid", /`waitPid` has no synchronous reading under Node/, "stderr"],

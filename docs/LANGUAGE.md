@@ -10343,6 +10343,53 @@ under Node, as all 64-bit arithmetic is ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md))
 a bare `u64` literal is a `number` there, and mixing one with a BigInt throws a
 `TypeError` rather than comparing the two and answering zero.
 
+### The high product: `mulHigh` and `mulHighIsNative`
+
+`a * b` on two `u64`s keeps the low 64 bits of the product. Field arithmetic
+over 64-bit limbs and a decimal parser's power-of-ten scaling also need the top
+64 bits, and building them from four 32×32 products costs a native target four
+multiplies where its hardware has one (WP41,
+[`docs/wp41-mul-high.md`](wp41-mul-high.md)).
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `mulHigh(a: u64, b: u64): u64` | the top 64 bits of `a * b` computed in 128 bits; with `a * b` for the low half, the whole product | none | `mul_high_basic`, `mul_high_native`, `mul_high_aarch64`, `mul_high_wasm32`; `mul_high_reject_operand`, `mul_high_reject_signed`, `mul_high_reject_number`, `mul_high_reject_arity` |
+| `mulHighIsNative(): boolean` | `true` where `mulHigh` is one instruction (x86-64, AArch64), `false` on wasm32 and under Node; a constant of the build | none | `mul_high_native`, `mul_high_aarch64`, `mul_high_wasm32` |
+
+- **`u64` operands only**, because the product is defined on the unsigned
+  64-bit value: anything else, a `u32`, an `i64`, a `number` or a ranged
+  integer, is `` `mulHigh` takes u64 operands (convert with toU64), got u32 ``
+  (NL2823, `tests/link/mul_high_reject_operand`). A bare numeric literal is
+  read as a `u64`, so `mulHigh(x, 3)` works. The call takes exactly two
+  arguments, and `mulHighIsNative` none.
+- **The lowering on a 64-bit target is one multiply**: `zext` both operands to
+  `i128`, `mul i128`, `lshr` by 64 and `trunc`, which LLVM selects as one
+  `mul` (or `mulx`) on x86-64 and one `umulh` on AArch64, with no call;
+  `tests/run.js` reads both machine codes (`mul_high_native`,
+  `mul_high_aarch64`). [IR_COOKBOOK.md](IR_COOKBOOK.md#mulhigh) shows the IR.
+- **On wasm32 it is four 32×32 products and their carries, inline**: wasm has
+  no wide multiply, and an `i128` multiply there is a call to compiler-rt's
+  `__multi3`, so the IR holds no `i128` at all. `tests/run.js` checks that
+  `mul_high_basic`'s wasm32 IR has no `i128` and its machine code no
+  `__multi3`; that `std/crypto/p256.ts`'s wasm32 IR and machine code have
+  neither; and that `std/json-tokenizer.ts`'s IR has no `i128` and its
+  `jsonTokEiselLemire`, the caller of `mulHigh`, no `__multi3` (its checked
+  `i64` multiply elsewhere is a `__multi3` call on wasm32). It runs the `--profile wasi` build of
+  `mul_high_basic` against its native output, and that of `mul_high_wasm32`
+  against the line it must print, `18446744073709551614 false`.
+- **Neither lowering branches on its operands**, so a secret is a fine operand:
+  `tests/run.js` holds `mul_high_native`'s and `mul_high_aarch64`'s `high` to
+  `tests/ct-asm.js` with both operands secret.
+- **The answer is pinned twice**: `mul_high_basic` prints edge pairs and folds
+  10^6 seeded pairs, each held to a four-product reference in Nish, and
+  `tests/run.js` recomputes `mul_high_basic.out` with BigInt from the same
+  seed.
+- **Under Node** (`--emit-ts`, `runtime/nish.mjs`) `mulHigh` is
+  `(a * b) >> 64n` on BigInts and `mulHighIsNative()` is `false`; a `number`
+  operand throws a `TypeError` rather than answering from a double
+  (`tests/emit-ts/numbers/mulhigh`, and the `runtime/nish.mjs` check in
+  `tests/run.js`).
+
 ### Wiping a secret: `secureZero`
 
 A key, a secret scalar or another secret intermediate has to be cleared once it

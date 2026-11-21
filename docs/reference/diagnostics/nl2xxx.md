@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 814 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 815 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15738,4 +15738,12 @@ export async function main(): Promise<i32> {
 
 ```text
 `task` runs as a spawned task, in a region of its own that is freed when it ends, and hands `lend(b)` to `refill`, which stores into it: a view `lend` borrows is its spawner's memory, lent only while the task runs, so the task may read it and copy out of it but may not write a pointer into it, grow it, or keep it past its end; copy what it needs out instead
+```
+
+## NL2823
+
+The message of an error contains:
+
+```text
+` takes u64 operands (convert with toU64), got …
 ```

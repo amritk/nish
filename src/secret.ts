@@ -2094,7 +2094,7 @@ class ReferenceScan {
     }
     // An identifier builtin keeps nothing it is handed but for `Ok` and
     // `Err`, whose `Result` holds it (`handsOn` follows those, so they never
-    // reach here): the rest — `ctSelect`, `ctEq`, `parseInt`, `parseFloat`,
+    // reach here): the rest — `ctSelect`, `ctEq`, `mulHigh`, `parseInt`, `parseFloat`,
     // `Number`, the file, process and environment builtins, `write`,
     // `panic`, `secureZero`, `arena`, `crypto.getRandomValues`, `nish:net` —
     // read it or write it and return, or copy it into what they answer. A
