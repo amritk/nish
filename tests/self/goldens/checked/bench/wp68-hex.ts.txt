@@ -115,7 +115,7 @@ function unitsGuarded(buf: i32[]): i64 -> @unitsGuarded
 function measure(title: string, symbols: i32[], mask: u32): i32 -> @measure
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_print report sumChainA sumChainB sumLower sumMask sumTable
+  calls: least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print report sumChainA sumChainB sumLower sumMask sumTable
   pointer symbols: size=0 writesThrough=false captured=false
   stackSites=3 stackLocals=3
   local +0:9 buf: u8[] (const)
@@ -143,7 +143,7 @@ function measure(title: string, symbols: i32[], mask: u32): i32 -> @measure
 function measureUnits(title: string, symbols: i32[], mask: u32): i32 -> @measureUnits
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_print report unitsChainA unitsChainB unitsGuarded unitsLower unitsMask
+  calls: least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print report unitsChainA unitsChainB unitsGuarded unitsLower unitsMask
   pointer symbols: size=0 writesThrough=false captured=false
   stackSites=3 stackLocals=3
   local +0:9 buf: i32[] (const)

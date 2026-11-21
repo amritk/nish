@@ -59,6 +59,7 @@ import regionNewMessage from "./region-rules" -> function @regionNewMessage
 import EnumInfo from "./program" -> struct EnumInfo
 import FieldInfo from "./program" -> struct FieldInfo
 import FunctionSig from "./program" -> struct FunctionSig
+import CheckedProgram from "./program" -> struct CheckedProgram
 import ROLE_CONSTRUCTOR from "./program" -> const ROLE_CONSTRUCTOR
 import SpreadCopy from "./program" -> struct SpreadCopy
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
@@ -71,11 +72,14 @@ import T_BOOL from "./types" -> const T_BOOL
 import T_ERROR from "./types" -> const T_ERROR
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
+import TypeTable from "./types" -> struct TypeTable
 const ITERATOR_STORED: string = " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`"
 const ITERATOR_ARGUMENT: string = " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`"
 const ITERATOR_RETURNED: string = " cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used"
 const ITERATOR_ELSEWHERE: string = " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version"
 const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith"
+const CHAR_CODE_TOP: i32 = 255
+const CLZ32_TOP: i32 = 32 [exported]
 function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope): boolean -> @isValueReceiver [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.capturesOuter CheckedProgram.builtinImport CheckedProgram.constant Scope.lookup
@@ -887,6 +891,18 @@ function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
   callee +0:16 checkExpression -> @checkExpression
   callee +5:5 CheckContext.error -> @CheckContext.error
   callee +5:75 TypeTable.typeName -> @TypeTable.typeName
+function builtinAnswerTop(program: CheckedProgram, table: TypeTable, call: Node): i32 -> @builtinAnswerTop [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.baseOf nish_panic_index nish_str_eq
+  pointer program: size=928 writesThrough=false captured=false
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +4:9 receiver: Node (const)
+  local +5:9 type: i32 (const)
+  callee +6:52 TypeTable.baseOf -> @TypeTable.baseOf
+  local +9:9 isMath: boolean (const)
 function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkStringMethod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity

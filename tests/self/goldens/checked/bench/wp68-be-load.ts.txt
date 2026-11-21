@@ -50,7 +50,7 @@ function sumSide(buf: u8[], side: i32): i64 -> @sumSide
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
-  calls: least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_overflow report sumSide
+  calls: least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_overflow report sumSide
   stackSites=3 stackLocals=3
   local +0:9 buf: u8[] (const)
   local +1:7 x: u32 (let)

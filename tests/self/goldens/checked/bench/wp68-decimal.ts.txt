@@ -120,7 +120,7 @@ function json64(buf: u8[], at: i32, v: i64): i32 -> @json64
 function clientDigits(n: i64): i32 -> @clientDigits
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
-  calls: nish_panic_div nish_panic_overflow
+  calls: nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:7 digits: i32 (let)
   local +1:7 v: i64 (let)
@@ -128,7 +128,7 @@ function client(out: u8[], at: i32, n: i64): i32 -> @client
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: n
-  calls: clientDigits nish_panic_div nish_panic_overflow
+  calls: clientDigits nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -3:9 digits: i32 (const)
@@ -289,7 +289,7 @@ function measureWide(out: u8[]): i32 -> @measureWide
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via measureNarrow
-  calls: measureNarrow measureWide nish_arena_mark nish_arena_release nish_panic nish_panic_overflow
+  calls: measureNarrow measureWide nish_arena_mark nish_arena_release nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:9 narrow: i32 (const)

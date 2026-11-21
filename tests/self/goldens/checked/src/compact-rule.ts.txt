@@ -58,7 +58,7 @@ function LayoutModule.constructor(this: LayoutModule, program: CheckedProgram, s
   pointer program: size=928 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CallNode.constructor(this: CallNode, key: string, program: CheckedProgram, owner: StructInfo | null, body: Node): void -> @CallNode.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: body key owner program
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
@@ -73,7 +73,7 @@ function MadeSite.constructor(this: MadeSite, key: string, fn: i32, inLoop: bool
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function CallGraph.constructor(this: CallGraph): void -> @CallGraph.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -247,7 +247,7 @@ function collectInstances(modules: LayoutModule[], into: StructInfo[], homes: i3
 function collectClasses(m: i32, program: CheckedProgram, instances: StructInfo[], homes: i32[], into: StructInfo[]): void -> @collectClasses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_array_grow nish_panic_index nish_panic_overflow reportable
+  calls: nish_array_grow nish_panic_overflow reportable
   pointer program: size=928 writesThrough=false captured=false
   pointer instances: size=0 writesThrough=false captured=false
   pointer homes: size=0 writesThrough=false captured=false

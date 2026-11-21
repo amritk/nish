@@ -89,9 +89,8 @@ function secretDivide(a: u32, secret: u32): u32 -> @secretDivide [exported]
   calls: nish_panic_div
   stackSites=0 stackLocals=0
 function leakyBaseRead(out: u32[], table: u32[], c: i32, digit: u32): void -> @leakyBaseRead [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   pointer table: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0

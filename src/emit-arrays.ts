@@ -76,6 +76,7 @@ import {
   ARRAY_STRUCT,
   intBits,
   isFloat,
+  isInteger,
   isUnsigned,
   T_BOOL,
   T_F64,
@@ -1295,19 +1296,31 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
  *     The compare is the same unsigned one, so a negative `n` fails it.
  *
  * A narrower unsigned cannot reach any of those, and a literal is in range
- * when it is at most 2^31 - 1. A ranged local is read as an `i32` (WP31), so
- * it is checked as one whatever its range.
+ * when it is at most 2^31 - 1. So is a named integer constant, `constant` (the
+ * `nodeConstants` entry of `n`), whose folded value is in `[0, 2^31 - 1]`: it
+ * is one value for the whole program, as a literal is. A ranged local is read
+ * as an `i32` (WP31), so it is checked as one whatever its range.
  * `collectArrayFacts` in `src/attributes.ts` asks the same question, because
  * the check is a call to a `noreturn` panic.
  */
 export const newArrayLengthChecked = (
   length: Node,
   type: i32,
+  constant: ConstInfo | null,
   numberMode: i32,
   table: TypeTable
 ): boolean => {
   const literal = unwrapParens(length)
   if (literal.kind === NodeKind.Number && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
+    return false
+  }
+  if (
+    constant !== null &&
+    constant.folded &&
+    isInteger(constant.type) &&
+    constant.intValue >= toI64(0) &&
+    constant.intValue <= toI64(I32_MAX)
+  ) {
     return false
   }
   if (table.isRanged(type)) {
@@ -1348,7 +1361,8 @@ const emitLengthCheck = (emitter: Emitter, ok: string): void => {
 /** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
 const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
   const type = emitter.typeOf(length)
-  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode, emitter.table)) {
+  const constant = emitter.program.nodeConstants[unwrapParens(length).id]
+  if (!newArrayLengthChecked(length, type, constant, emitter.opts.numberMode, emitter.table)) {
     return emitIndex(emitter, length)
   }
   const fn = emitter.fn

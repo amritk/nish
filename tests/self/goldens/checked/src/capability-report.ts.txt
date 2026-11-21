@@ -99,7 +99,7 @@ function programCapabilities(compilation: Compilation, facts: FactsTable): i32 -
 function sortTogether(keys: string[], ties: string[], order: i32[]): void -> @sortTogether
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: compareStrings nish_panic_index
+  calls: compareStrings
   pointer keys: size=0 writesThrough=true captured=false
   pointer ties: size=0 writesThrough=true captured=false
   pointer order: size=0 writesThrough=true captured=false
@@ -122,7 +122,7 @@ function pushNames(out: string[], mask: i32): void -> @pushNames
   local -4:7 c: i32 (let)
   callee +3:16 capabilityName -> @capabilityName
 function FunctionIndex.constructor(this: FunctionIndex): void -> @FunctionIndex.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0

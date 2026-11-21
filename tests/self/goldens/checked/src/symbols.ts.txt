@@ -73,7 +73,7 @@ function unknownOrigin(expr: Node): TypeOrigin -> @unknownOrigin [exported]
   local +0:9 origin: TypeOrigin (const)
   callee +0:18 new TypeOrigin -> @TypeOrigin.constructor
 function Scope.constructor(this: Scope, parent: Scope | null): void -> @Scope.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: parent
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=56 writesThrough=true captured=false
@@ -81,7 +81,7 @@ function Scope.constructor(this: Scope, parent: Scope | null): void -> @Scope.co
   stackSites=0 stackLocals=0
   callee +0:18 new StringMap -> @StringMap.constructor
 function Scope.child(this: Scope): Scope -> @Scope.child [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
   calls: Scope.constructor nish_alloc_struct
   pointer this: size=56 writesThrough=true captured=true passedTo=Scope.constructor#1
   stackSites=0 stackLocals=0

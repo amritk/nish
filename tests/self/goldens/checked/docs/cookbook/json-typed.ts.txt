@@ -1729,7 +1729,7 @@ function jsonEncodeU64(w: JsonWriter, v: u64): void -> @nish.jsonEncodeU64 [expo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.raw
   escaping: v
-  calls: nish.JsonWriter.raw nish_panic_div nish_panic_overflow
+  calls: nish.JsonWriter.raw nish_panic_overflow
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.raw#0
   stackSites=1 stackLocals=1
   local +0:9 ten: u64 (const)
@@ -2253,7 +2253,7 @@ function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_index nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
   callee -5:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail

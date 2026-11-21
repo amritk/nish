@@ -809,7 +809,10 @@ leaves the IR unchanged.
   `nish run` and `--fix` take it too
   ([The compatibility dialect](compat.md)).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
-  error, and `--emit-panics <file.json>` lists them all. A call to
+  error, and `--emit-panics <file.json>` lists them all. The proof reads a
+  test that reaches the site, a `const` bound to an integer literal (never a
+  `let`), a mask `x & 255` or shift `x >>> 8`, the byte `charCodeAt`
+  answers, and a loop counting down from `s.length` under `end > 0`. A call to
   `readCString` or `readStruct` from `nish:unsafe` is refused there: each
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
   removes

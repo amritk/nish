@@ -1,1 +1,1 @@
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:232:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `split` may panic: it reaches the `panic` site at std/text.ts:289:5, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope

@@ -453,7 +453,7 @@ function segments(buf: u8[], side: i32): i64 -> @segments
   callee +16:12 wordSkip -> @wordSkip
 function text(wide: u32): u8[] -> @text
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_overflow
+  calls: nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 buf: u8[] (const)
   local +1:7 x: u32 (let)
@@ -477,7 +477,7 @@ function breakAt(buf: u8[], at0: i32, which: i32): i32 -> @breakAt
 function measure(title: string, buf: u8[]): i32 -> @measure
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: breakAt least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_print report segments
+  calls: breakAt least nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print report segments
   pointer buf: size=0 writesThrough=true captured=false passedTo=breakAt#0 segments#0
   stackSites=3 stackLocals=3
   local -26:9 names: string[] (const)

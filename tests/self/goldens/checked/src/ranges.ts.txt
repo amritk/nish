@@ -143,7 +143,7 @@ function keepReturn(tables: RangeTables, bodies: RangeBody[], at: i32, walk: Bou
   calls: RangeTables.returnOf RangeTables.setReturn gatheredReturn nish_panic_overflow sameReturn
   pointer tables: size=64 writesThrough=false captured=false passedTo=RangeTables.returnOf#0 RangeTables.setReturn#0
   pointer bodies: size=0 writesThrough=true captured=false
-  pointer walk: size=184 writesThrough=false captured=false passedTo=gatheredReturn#0
+  pointer walk: size=200 writesThrough=false captured=false passedTo=gatheredReturn#0
   stackSites=0 stackLocals=0
   local -8:9 body: RangeBody (const)
   local -4:7 next: ReturnSummary | null (let)
