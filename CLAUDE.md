@@ -137,7 +137,11 @@ new positive `tests/cases/*` is registered with
 `scalar.config.json`) moves with any change to `std/`, `runtime/nish.d.ts` or
 `docs/LANGUAGE.md`: rewrite it with `node scripts/gen-reference.mjs`; CI's
 `--check` fails on a stale, extra or hand-edited page
-([`docs/README.md`](docs/README.md#the-library-reference)).
+([`docs/README.md`](docs/README.md#the-library-reference)). A change to
+`nish --help` text regenerates `examples/break-web/help.ts` and
+`docs/site/break/` with `node examples/break-web/build.mjs` in the same PR:
+the break-web checks in the `test` shards pin both against the compiler's
+`--help`.
 
 **The emit-ts known list is Node-version-specific.** Regenerate
 `tests/differential/emit-ts-known.txt` only under the Node that
@@ -157,6 +161,13 @@ the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
 A builtin whose answer changes greps its old answer across
 `docs/LANGUAGE.md`, `docs/guide/` and `runtime/nish.d.ts`. A security record
 whose counts change updates its row in `docs/security/README.md`.
+
+**A sweep of "every site" lands with a check that fails on a missed one.**
+A change that must reach every compile of a program, every call of a helper
+or every guide sentence about a behaviour proves it with a check that fails
+on a missed site, not with a grep: multi-line calls, other variable names,
+the Nish-written harnesses in `tests/nish/`, Dockerfiles and guide prose all
+count.
 
 ## Spending tokens
 
