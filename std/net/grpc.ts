@@ -92,6 +92,12 @@ export const GRPC_ANSWERED: i32 = 0
 
 /** The length prefix: one compressed-flag byte and a four-byte big-endian length. */
 const GRPC_PREFIX: i32 = 5
+/** The HTTP status of every answer that reaches gRPC's own framing. */
+const GRPC_HTTP_OK: i32 = 200
+/** The HTTP status of a call over HTTP/1.1 or HTTP/3. */
+const GRPC_HTTP_VERSION_NOT_SUPPORTED: i32 = 505
+/** The HTTP status of a request whose `content-type` is not gRPC's. */
+const GRPC_HTTP_UNSUPPORTED_MEDIA_TYPE: i32 = 415
 /** The most digits `grpc-timeout` may carry before its unit. */
 const GRPC_TIMEOUT_DIGITS: i32 = 8
 const GRPC_NANOS_PER_MS: i64 = 1000000
@@ -164,14 +170,14 @@ export class GrpcServer {
    */
   call(r: HttpServerRequest): i32 {
     if (r.version !== 2) {
-      this.server.empty(r, 505)
+      this.server.empty(r, GRPC_HTTP_VERSION_NOT_SUPPORTED)
       return GRPC_ANSWERED
     }
     if (
       !r.headerIs("content-type", "application/grpc") &&
       !r.headerIs("content-type", "application/grpc+proto")
     ) {
-      this.server.empty(r, 415)
+      this.server.empty(r, GRPC_HTTP_UNSUPPORTED_MEDIA_TYPE)
       return GRPC_ANSWERED
     }
     const timeout: i64 = this.timeout(r)
@@ -231,7 +237,7 @@ export class GrpcServer {
     if (this.expired(r)) {
       return this.only(r, GRPC_DEADLINE_EXCEEDED)
     }
-    const sent: i32 = this.server.start(r, 200, this.contentType, this.grpcType, GRPC_PREFIX + len)
+    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, GRPC_PREFIX + len)
     if (sent !== HANDLER_SENT) {
       return sent
     }
@@ -240,7 +246,7 @@ export class GrpcServer {
     this.prefix[2] = toU8((len >> 16) & 255)
     this.prefix[3] = toU8((len >> 8) & 255)
     this.prefix[4] = toU8(len & 255)
-    if (this.server.write(r, this.prefix, 0, GRPC_PREFIX) !== HANDLER_SENT) {
+    if (this.server.write(r, this.prefix, toI32(0), GRPC_PREFIX) !== HANDLER_SENT) {
       this.server.end(r)
       return HANDLER_DROPPED
     }
@@ -273,7 +279,7 @@ export class GrpcServer {
     if (message.length === 0) {
       return this.only(r, status)
     }
-    const sent: i32 = this.server.start(r, 200, this.contentType, this.grpcType, HTTP1_CHUNKED)
+    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, HTTP1_CHUNKED)
     if (sent !== HANDLER_SENT) {
       return sent
     }
@@ -284,7 +290,7 @@ export class GrpcServer {
 
   /** Answers `r` with `status` in the Trailers-Only form: one HEADERS frame that ends the stream. */
   private only(r: HttpServerRequest, status: i32): i32 {
-    return this.server.start(r, 200, this.onlyNames, this.onlyValues[status], 0)
+    return this.server.start(r, GRPC_HTTP_OK, this.onlyNames, this.onlyValues[status], toI32(0))
   }
 
   /** The decimal bytes of `status`, from the Trailers-Only table. */
@@ -372,7 +378,7 @@ const grpcPercentEncode = (message: string): u8[] => {
   const out: u8[] = []
   const hex: string = "0123456789ABCDEF"
   for (let k: i32 = 0; k < toI32(message.length); k++) {
-    const b: i32 = message.charCodeAt(k) & 255
+    const b: i32 = toI32(message.charCodeAt(k)) & toI32(255)
     if (b < 32 || b > 126 || b === 37) {
       out.push(toU8(37))
       out.push(toU8(hex.charCodeAt(b >> 4)))
