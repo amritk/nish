@@ -9,6 +9,9 @@
 //      which still carries the field `id` added; the body never runs.
 //   3. `/guarded` with one: 200, the id, no `x-tag`.
 //   4. `/hello`, bound to no step: neither field.
+//   5. `/sized`: `size` adds `alt-svc`, and on HTTP/2 and HTTP/3
+//      `content-length`, which the server adds itself when the answer has
+//      none; each goes out once, the step's.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { netAddress, netRead, netWrite, tcpConnect } from "nish:net"
@@ -77,6 +80,17 @@ const h3Get = (path: string, names: string[], values: string[]): u8[] => {
   return h3Frame(H3_FRAME_HEADERS, h3Section(new QpackEncoder(), allNames, allValues))
 }
 
+/** How many times `part` occurs in `text`. */
+const occurrences = (text: string, part: string): i32 => {
+  let n: i32 = 0
+  let at: i32 = text.indexOf(part)
+  while (at >= 0) {
+    n = n + 1
+    at = text.indexOf(part, at + toI32(part.length))
+  }
+  return n
+}
+
 const h1Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   const stepped: string = h1Get(rig, key, "/stepped", "")
   t.ok("HTTP/1.1 /stepped: 200 with x-request-id 0 and x-tag", stepped.indexOf("HTTP/1.1 200 ") === 0 && stepped.indexOf("\r\nx-request-id: 0\r\n") > 0 && stepped.indexOf("\r\nx-tag: on\r\n") > 0)
@@ -89,6 +103,9 @@ const h1Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.eqStr("HTTP/1.1 /guarded allowed: id, auth, the body", rig.ran, "id auth body")
   const plain: string = h1Get(rig, key, "/hello", "")
   t.ok("HTTP/1.1 /hello, bound to no step: 200 with neither field", plain.indexOf("HTTP/1.1 200 ") === 0 && plain.indexOf("x-request-id") < 0 && plain.indexOf("x-tag") < 0)
+  const sized: string = h1Get(rig, key, "/sized", "")
+  t.ok("HTTP/1.1 /sized: 200 with the step's alt-svc", sized.indexOf("HTTP/1.1 200 ") === 0 && sized.indexOf("\r\nalt-svc: clear\r\n") > 0)
+  t.eqI32("HTTP/1.1 /sized: one alt-svc, the server adds none beside the step's", occurrences(sized, "\r\nalt-svc:"), 1)
 }
 
 const h2cChecks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
@@ -110,6 +127,10 @@ const h2cChecks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   const allowed: string = h2cUntil(c, key, "DATA 5 0 \"\" end")
   t.ok("h2c /guarded with authorization: 200 with x-request-id 5", allowed.indexOf("HEADERS 5 :status=200 ") >= 0 && allowed.indexOf("x-request-id=5") >= 0)
   t.eqStr("h2c /guarded allowed: id, auth, the body", rig.ran, "id auth body")
+  c.wire.headers(n32(7), getOf("/sized"), H2_FLAG_END_STREAM)
+  const sized: string = h2cUntil(c, key, "DATA 7 0 \"\" end")
+  t.ok("h2c /sized: 200 with the step's content-length", sized.indexOf("HEADERS 7 :status=200 ") >= 0 && sized.indexOf("content-length=6") >= 0)
+  t.eqI32("h2c /sized: one content-length, the server adds none beside the step's", occurrences(sized, "content-length="), 1)
 }
 
 const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
@@ -138,6 +159,11 @@ const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.ok("HTTP/3 /hello answered and ended", h3.turnUntil(key, n64(12), false))
   const plain = h3Answer(h3.stream(n64(12)))
   t.ok("HTTP/3 /hello, bound to no step: 200 with neither field", plain.status === "200" && plain.fields.indexOf("x-request-id") < 0 && plain.fields.indexOf("x-tag") < 0)
+  h3.send(n64(16), h3Get("/sized", noNames, noNames), true)
+  t.ok("HTTP/3 /sized answered and ended", h3.turnUntil(key, n64(16), false))
+  const sized = h3Answer(h3.stream(n64(16)))
+  t.ok("HTTP/3 /sized: 200 with the step's content-length", sized.status === "200" && sized.fields.indexOf("content-length=6") >= 0)
+  t.eqI32("HTTP/3 /sized: one content-length, the server adds none beside the step's", occurrences(sized.fields, "content-length="), 1)
 }
 
 export const main = (): i32 => {

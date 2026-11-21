@@ -34,6 +34,7 @@ const TRAILERS_HUGE: i32 = 12
 const TRAILERS_HOLD: i32 = 13
 const STEPPED: i32 = 14
 const GUARDED: i32 = 15
+const SIZED: i32 = 16
 
 /** `/big`'s body: more than the 65535 bytes of an HTTP/2 stream's first window. */
 export const RIG_BIG: i32 = 100000
@@ -103,10 +104,13 @@ export class Rig {
    * The steps `Router.use` binds to `/stepped` and `/guarded` alone, so no
    * other route runs one: `id` adds `x-request-id`, `auth` refuses a request
    * with no `authorization` field with 401, and `tag` adds `x-tag` after the body.
+   * `size`, bound to `/sized` alone, adds the fields the server adds itself:
+   * `alt-svc: clear`, and on HTTP/2 and HTTP/3 `content-length: 6`.
    */
   id: i32 = 0
   auth: i32 = 0
   tag: i32 = 0
+  size: i32 = 0
   /** How many requests `id` has named, the number in its `x-request-id`. */
   named: i32 = 0
   /** What the steps of the last stepped request did, in order: `id`, `auth`, `body`, `tag`. */
@@ -114,6 +118,10 @@ export class Rig {
   idName: u8[]
   tagName: u8[]
   tagValue: u8[]
+  altName: u8[]
+  clearValue: u8[]
+  lengthName: u8[]
+  sixValue: u8[]
 
   /** A server under `limits` with `slots` connections per listener: HTTP/1.1 and h2c, and HTTP/2 over TLS and HTTP/3 when `signed`. */
   constructor(limits: HttpServerLimits, signed: boolean, slots: i32) {
@@ -134,13 +142,16 @@ export class Rig {
     router.add("GET", "/trailers-hold")
     router.add("GET", "/stepped")
     router.add("GET", "/guarded")
+    router.add("GET", "/sized")
     this.id = router.step()
     this.auth = router.step()
     this.tag = router.step()
+    this.size = router.step()
     router.use(STEPPED, this.id)
     router.use(STEPPED, this.tag)
     router.use(GUARDED, this.id)
     router.use(GUARDED, this.auth)
+    router.use(SIZED, this.size)
     this.h = new HttpServer(limits, router)
     this.signed = signed
     this.h2 = new RigH2()
@@ -191,6 +202,10 @@ export class Rig {
     this.idName = ascii("x-request-id")
     this.tagName = ascii("x-tag")
     this.tagValue = ascii("on")
+    this.altName = ascii("alt-svc")
+    this.clearValue = ascii("clear")
+    this.lengthName = ascii("content-length")
+    this.sixValue = ascii("6")
   }
 
   /** One turn of the server's loop, at most `wait` ms, signing with `key` when `signed`, then an answer to every request it took. */
@@ -251,6 +266,11 @@ export class Rig {
         this.ran = `${this.ran}auth `
         if (r.header("authorization") === HANDLER_ABSENT) {
           h.problem(r, 401, "Unauthorized", "")
+        }
+      } else if (s === this.size) {
+        h.field(r, this.altName, this.clearValue)
+        if (r.version !== 1) {
+          h.field(r, this.lengthName, this.sixValue)
         }
       }
       s = h.before(r)
@@ -332,6 +352,7 @@ export class Rig {
         break
       case STEPPED:
       case GUARDED:
+      case SIZED:
         h.send(r, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
         break
       default:

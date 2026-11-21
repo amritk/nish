@@ -1262,8 +1262,8 @@ export class HttpHandler {
    * and may answer it — `refuse`, `problem`, `empty` or any other answer —
    * or add answer fields with `field`; call `before` again straight after
    * each step, before the next `take`, until it answers a negative code.
-   * Only a request `take` handed over runs steps: the answers the handler
-   * sends itself (400, 408, 413, 431, 503) run none.
+   * Only a request `take` handed over runs steps: what the handler answers
+   * itself, to a bad request, a timeout or a full pool, runs none.
    *
    *     let s = handler.before(req)
    *     while (s >= 0) { switch (s) { case AUTH: ... } s = handler.before(req) }

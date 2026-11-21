@@ -125,7 +125,7 @@ port, or `HttpServerLimits.altSvcPort` when a proxy in front of you
 publishes another. With `altSvcMaxAge` 0 every HTTP/1.1 and HTTP/2
 over TLS response says `alt-svc: clear` instead, so clients forget an
 earlier advertisement. A
-response whose fields already name an `alt-svc` keeps yours. An HTTP/3
+response whose fields, or a step's, already name an `alt-svc` keeps yours. An HTTP/3
 response carries none.
 
 ### Cleartext HTTP/2

@@ -2223,7 +2223,8 @@ export class HttpServer {
   /**
    * Gathers the response's fields into `outNames` and `outValues`: the
    * program's, then those `field` added, then Alt-Svc and content-length
-   * where they are owed and the program gave none. False when that is more than `maxResponseFields`.
+   * where they are owed and neither the program nor a step gave one. False
+   * when that is more than `maxResponseFields`.
    */
   private outFields(r: HttpServerRequest, names: u8[][], values: u8[][], bodyLength: i32): boolean {
     const given: i32 = toI32(names.length)
@@ -2234,12 +2235,14 @@ export class HttpServer {
       altSvc !== null &&
       r.kind !== HTTP_SERVER_H3 &&
       (r.kind !== HTTP_SERVER_H2 || r.secure) &&
-      !this.hasField(names, this.altSvcName)
+      !this.hasField(names, given, this.altSvcName) &&
+      !this.hasField(r.addedNames, r.added, this.altSvcName)
     const addLength: boolean =
       r.kind !== HTTP_SERVER_H1 &&
       !r.quiet &&
       bodyLength >= 0 &&
-      !this.hasField(names, this.contentLengthName)
+      !this.hasField(names, given, this.contentLengthName) &&
+      !this.hasField(r.addedNames, r.added, this.contentLengthName)
     const added: i32 = r.added
     const count: i32 = given + added + (addAlt ? 1 : 0) + (addLength ? 1 : 0)
     if (count > this.maxResponseFields) {
@@ -2301,9 +2304,9 @@ export class HttpServer {
     return true
   }
 
-  /** Whether `names` holds `name`, in any case. */
-  private hasField(names: u8[][], name: u8[]): boolean {
-    for (let k: i32 = 0; k < toI32(names.length); k++) {
+  /** Whether `names[0 .. count)` holds `name`, in any case. */
+  private hasField(names: u8[][], count: i32, name: u8[]): boolean {
+    for (let k: i32 = 0; k < count && k < toI32(names.length); k++) {
       const have: u8[] = names[k]
       if (toI32(have.length) === toI32(name.length)) {
         let same: boolean = true
