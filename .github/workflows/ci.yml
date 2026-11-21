@@ -2229,6 +2229,10 @@ jobs:
       - lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      # The commit status below, on a dispatched run only.
+      statuses: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -2236,8 +2240,33 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Every selected job succeeded
+        id: gate
         env:
           NEEDS: ${{ toJSON(needs) }}
           EXPECT_SKIP: >-
             ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
         run: node scripts/ci-scope.mjs --gate
+
+      # A pull request's required checks count only check runs from push,
+      # pull_request and a few other events, never from workflow_dispatch, so
+      # the gate's own check on a dispatched run (the Release PR's, from
+      # release-pr.yml) leaves the PR "Waiting for status to be reported". A
+      # commit status counts whatever made it, so a dispatched run also reports
+      # the gate's outcome as a `ci-gate` status on the commit it tested.
+      - name: Report the gate as a commit status
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.gate.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$OUTCOME" = "success" ]; then
+            state=success
+            description="Every selected job succeeded"
+          else
+            state=failure
+            description="A selected job failed or was cancelled"
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" -f context=ci-gate \
+            -f description="$description" -f target_url="$RUN_URL" > /dev/null
