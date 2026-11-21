@@ -1,0 +1,5 @@
+syntax = "proto3";
+enum PROTO {
+  ZERO = 0;
+  OK = 1;
+}

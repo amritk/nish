@@ -1,0 +1,51 @@
+// Nested messages and enums, maps, oneofs, reserved ranges and a service.
+syntax = 'proto3';
+
+enum Color {
+  COLOR_UNSPECIFIED = 0;
+  COLOR_RED = 1;
+  COLOR_GREEN = 2;
+  COLOR_NEGATIVE = -1;
+}
+
+message Shape {
+  reserved 4, 9 to 11, 20 to max;
+  reserved "old_name";
+
+  enum Kind {
+    KIND_UNKNOWN = 0;
+    KIND_CIRCLE = 1;
+  }
+
+  message Point {
+    sint32 x = 1;
+    sint32 y = 2;
+  }
+
+  Kind kind = 1;
+  Color color = 2;
+  Point origin = 3;
+  repeated Point path = 5;
+  repeated Color palette = 6;
+  map<string, int32> tags = 7;
+  map<int64, Point> points = 8;
+  map<bool, string> switches = 12;
+  map<uint32, Color> colors = 13;
+
+  oneof size {
+    double radius = 14;
+    Point corner = 15;
+    string named = 16;
+    Color tint = 17;
+  }
+
+  .Shape.Point anchor = 18;
+  Shape child = 19;
+}
+
+message Empty {}
+
+service Drawing {
+  rpc Draw(Shape) returns (Empty);
+  rpc Measure(.Shape) returns (Shape.Point) {}
+}

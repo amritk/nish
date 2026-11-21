@@ -1,0 +1,1 @@
+proto: refused/method-stream-dotted.proto:5: refused: stream in method Go (only unary methods are supported)

@@ -1,0 +1,1 @@
+proto: refused/nesting-too-deep.proto:34: refused: message nesting deeper than 32

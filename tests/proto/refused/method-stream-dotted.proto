@@ -1,0 +1,6 @@
+syntax = "proto3";
+package pkg;
+message Req {}
+service S {
+  rpc Go(stream .pkg.Req) returns (Req);
+}

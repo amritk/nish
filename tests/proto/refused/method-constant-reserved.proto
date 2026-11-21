@@ -1,0 +1,5 @@
+syntax = "proto3";
+message R {}
+service Proto {
+  rpc Ok(R) returns (R);
+}
