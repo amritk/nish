@@ -31,6 +31,8 @@ PASS  bad Range: a start past the end is 416 with bytes */size
 PASS  bad Range: not a number is 416
 PASS  bad Range: a last before the first is 416
 PASS  bad Range: an empty suffix is 416
+PASS  bad Range: a number of 19 digits is 416
+PASS  bad Range: any range of an empty file is 416 with bytes */0
 PASS  HEAD: the length and no body
 PASS  POST: 405 with Allow: GET, HEAD
 PASS  a file past the cache streams whole
@@ -99,4 +101,4 @@ PASS  limits out of range: a path past 4096, nothing served
 PASS  limits out of range: a negative cache, nothing served
 PASS  limits out of range: a cache past 2^30, nothing served
 PASS  limits in range: the root resolves
-static files: 101 passed, 0 failed, 0 skipped
+static files: 103 passed, 0 failed, 0 skipped

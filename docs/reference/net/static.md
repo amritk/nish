@@ -87,7 +87,8 @@ With
 is sent `name.br` or `name.gz` when that file exists beside `name`, with a
 `Content-Encoding`, the base name's content type and an ETag of its own.
 Codings are weighed by their q-values; a tie goes to `br`, then `gzip`,
-then the file as it is. With it on, every answer says `Vary: Accept-Encoding`.
+then the file as it is. With it on, every file it sends, and every 304,
+says `Vary: Accept-Encoding`.
 
 </scalar-detail>
 
@@ -100,8 +101,8 @@ IMF-fixdate form at or after the file's second answers 304, and another
 date form is ignored. One `bytes=` range answers 206 with its
 `Content-Range`; more than one sends the whole file; a malformed or
 unsatisfiable one answers 416. `If-Range` keeps the range only for an
-equal strong ETag or the exact Last-Modified date. A range on a coded
-variant counts the coded bytes.
+equal strong ETag, or the exact Last-Modified date of a file unchanged
+for a second or more. A range on a coded variant counts the coded bytes.
 
 </scalar-detail>
 
