@@ -2,7 +2,7 @@
 
 # nish/net/http-compress
 
-Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a request's `Accept-Encoding` and compressing a body with `Content-Encoding: gzip`, for any of the three servers.
+Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a request's `Accept-Encoding` and compressing a body with `Content-Encoding: gzip` or `deflate`, for any of the three servers.
 
 ```ts
 import {
@@ -35,13 +35,13 @@ import {
 
 ```ts example.ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
-import { HTTP_OFFER_GZIP, HttpCompressor, httpAcceptEncoding } from "nish/net/http-compress";
+import { HTTP_OFFER_DEFLATE, HTTP_OFFER_GZIP, HttpCompressor, httpAcceptEncoding } from "nish/net/http-compress";
 
 const enc = new HttpCompressor(DEFLATE_FAST, 1024, 65536); // once per thread
 // HTTP/1.1, in one call:
 conn.respondEncoded(200, names, values, body, 0, n, enc, conn.acceptEncoding());
 // HTTP/2 or HTTP/3, by hand:
-const coding: i32 = httpAcceptEncoding(value, 0, toI32(value.length), HTTP_OFFER_GZIP);
+const coding: i32 = httpAcceptEncoding(value, 0, toI32(value.length), HTTP_OFFER_GZIP | HTTP_OFFER_DEFLATE);
 const m: i32 = enc.compress(coding, body, 0, n);
 if (m >= 0) {
   enc.addFields(names, values);
@@ -80,7 +80,7 @@ The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
 
 <scalar-card title="Http​Compressor" icon="phosphor/regular/cube" href="#httpcompressor">
 
-Compresses response bodies with gzip into a buffer of its own, and builds the response fields that say so.
+Compresses response bodies with gzip or deflate into a buffer of its own, and builds the response fields that say so.
 
 </scalar-card>
 
@@ -90,8 +90,8 @@ Compresses response bodies with gzip into a buffer of its own, and builds the re
 
 Nothing here runs unless the program asks: it decides which
 responses to compress, and `HttpCompressor` declines any body shorter than
-its `minLength`, longer than its `maxLength`, or that gzip would not make
-smaller, answering -1 so the program sends the bytes as they are.
+its `minLength`, longer than its `maxLength`, or that compressing would not
+make smaller, answering -1 so the program sends the bytes as they are.
 
 </scalar-detail>
 
@@ -109,7 +109,7 @@ the server read from the socket, else `HTTP_DEFAULT_MSS`, 1448): a
 After each call `decision` says why (`HTTP_COMPRESS_SENT`, `_NOT_ACCEPTED`,
 `_TOO_SMALL`, `_TOO_LARGE`, `_TOO_LITTLE_SAVED`, `_NO_FEWER_SEGMENTS`), for a
 program to count. A response whose identity form already fits one segment is
-`_NO_FEWER_SEGMENTS` without running gzip at all, as no compression could
+`_NO_FEWER_SEGMENTS` without running an encoder at all, as no compression could
 take fewer.
 
 </scalar-detail>
@@ -124,14 +124,27 @@ the `GzipCompressor` at the level given; `encoder` forces either one.
 
 </scalar-detail>
 
+<scalar-detail title="Two codings">
+
+`gzip` (RFC 1952) and `deflate`, which HTTP means as the
+zlib format (RFC 1950, RFC 9110 §8.4.1.2), are the same DEFLATE stream in
+different framing. A deflate body is written by the same two encoders as a
+gzip member and reframed in place: the 10-byte gzip header becomes the
+2-byte zlib header, and the CRC-32 and length trailer an Adler-32, 12 bytes
+shorter in all. So the compressor holds one set of tables for both, at the
+cost of a CRC-32 it computes and drops on each deflate body.
+
+</scalar-detail>
+
 <scalar-detail title="`Vary: Accept-Encoding`">
 
 **`Vary: Accept-Encoding`** (with `vary`, on by default) goes on every
 response whose coding depended on the request: one sent compressed, and
-one sent as it is because the request did not accept gzip. A body that is
-too small, too large or did not pay is sent the same to every client, so
-it carries no `Vary`. A request that refuses identity (`identity;q=0`)
-and accepts gzip is sent gzip whatever the policy (`compressAnyway`).
+one sent as it is because the request did not accept the coding offered. A
+body that is too small, too large or did not pay is sent the same to every
+client, so it carries no `Vary`. A request that refuses identity
+(`identity;q=0`) and accepts gzip or deflate is sent it whatever the policy
+(`compressAnyway`).
 
 </scalar-detail>
 
@@ -159,9 +172,6 @@ nothing.
 `HttpCompressor` holds a `GzipCompressor`, a `GzipFixedCompressor`, an
 output buffer of `compressBound(maxLength)` bytes and
 the field arrays `addFields` fills, all built once.
-`HTTP_CODING_DEFLATE` (zlib framing) is negotiated but not produced: a
-client that accepts only `deflate` is sent identity, which every client
-reads.
 
 </scalar-detail>
 
@@ -302,7 +312,7 @@ how many segments the bytes fill, the last one possibly partial;
 
 ### HttpCompressor
 
-Compresses response bodies with gzip into a buffer of its own, and builds
+Compresses response bodies with gzip or deflate into a buffer of its own, and builds
 the response fields that say so. One per thread; allocated once.
 
 ```ts
@@ -324,15 +334,15 @@ class HttpCompressor
 | `segmentMode: boolean` | Whether `respondEncoded` also sends the compressed response only when, head included, it takes fewer TCP segments of `mss` bytes than the body as it is; off by default. Segments are the connection's own `mss` if the program set it, else this compressor's `mss` if set, else the socket's MSS the server read on accept, else `HTTP_DEFAULT_MSS`. |
 | `readonly values: u8[][]` | The value of each field in `names`, at the same index; pass both to `respond`. |
 | `vary: boolean` | Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which a cache needs whenever the same resource may be sent either way. On by default; turn it off when the program sets its own `Vary`. |
-| `addFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields followed by `Content-Encoding: gzip` and, when `vary`, `Vary: Accept-Encoding`. The arrays are reused, so after the first few calls this allocates nothing; they hold until the next call. |
-| `compress(coding: i32, body: u8[], off: i32, len: i32): i32` | Compresses `body[off .. off + len)` into `output` when the length is in `[minLength, maxLength]`, `coding` is `HTTP_CODING_GZIP` and gzip saves what `minSaving` and `minSavingPercent` ask; answers the compressed length, or -1 to send the body as it is, and sets `decision` either way. `encoder` picks the encoder; the fixed-Huffman one stops as soon as its output passes what would be kept. A window outside `body` panics. |
-| `compressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32` | `compress` for a client that refuses identity (`httpIdentityRefused`): gzip whatever the body's length, the saving or the segments, so long as it is no longer than `maxLength`. Answers the compressed length, or -1 when `coding` is not gzip or the body is too long (sent as it is, which RFC 9110 §12.5.3 allows). |
+| `addFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields followed by `Content-Encoding` naming the coding of the last body `compress` or `compressAnyway` sent (`gzip` before any) and, when `vary`, `Vary: Accept-Encoding`. The arrays are reused, so after the first few calls this allocates nothing; they hold until the next call. |
+| `compress(coding: i32, body: u8[], off: i32, len: i32): i32` | Compresses `body[off .. off + len)` into `output` when the length is in `[minLength, maxLength]`, `coding` is `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE` and compressing saves what `minSaving` and `minSavingPercent` ask; answers the compressed length, or -1 to send the body as it is, and sets `decision` either way. `encoder` picks the encoder; the fixed-Huffman one stops as soon as its output passes what would be kept. A window outside `body` panics. |
+| `compressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32` | `compress` for a client that refuses identity (`httpIdentityRefused`): gzip or deflate whatever the body's length, the saving or the segments, so long as it is no longer than `maxLength`. Answers the compressed length, or -1 when `coding` is neither gzip nor deflate or the body is too long (sent as it is, which RFC 9110 §12.5.3 allows). |
 | `fewerSegments(identityBytes: i32, encodedBytes: i32, mss: i32): boolean` | `segmentMode`'s rule, for a response of `identityBytes` bytes sent as it is or `encodedBytes` compressed, heads included, at `mss` bytes a segment (`this.mss` when 0 or less, and `HTTP_DEFAULT_MSS` when both are, as `segmentSize` reads it): whether the compressed one takes fewer segments. When it does not, `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS`. `respondEncoded` calls it; a program driving HTTP/2 or HTTP/3 by hand may with its own head sizes. |
-| `http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32` | The bytes of the HTTP/1.1 head a `length`-byte body sent as it is would get, from `encodedHead`, that of the same response sent compressed as `encodedLength` bytes with the fields `addFields` built: less `Content-Encoding: gzip`, less `Vary` (a body the segment count kept as it is would go out so to any client), and the other `Content-Length`. |
+| `http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32` | The bytes of the HTTP/1.1 head a `length`-byte body sent as it is would get, from `encodedHead`, that of the same response sent compressed as `encodedLength` bytes with the fields `addFields` built: less `Content-Encoding` and its value, less `Vary` (a body the segment count kept as it is would go out so to any client), and the other `Content-Length`. |
 | `identityFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields and, when `vary` and the last decision `varies`, `Vary: Accept-Encoding`: the fields of a body sent as it is from a resource that is sometimes compressed. |
 | `leastSaving(len: i32): i32` | The bytes a compressed `len`-byte body must save: `minSaving` and `minSavingPercent`, at least 1. |
-| `oneSegment(coding: i32, len: i32, mss: i32): boolean` | `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte body that `compress` would try (its length in `[minLength, maxLength]` and `coding` gzip) is no longer than one segment of `mss` bytes (as `fewerSegments` reads it). Sent as it is, such a response takes one segment once its head fits beside it, and no compression takes fewer, so `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks the head: when it does not fit, the caller goes on to `compress`, which decides again. Anything else answers false and leaves `decision` alone. |
-| `varies(): boolean` | Whether the last decision depended on the request's `Accept-Encoding`, so the response needs `Vary: Accept-Encoding`: a body sent compressed, or one sent as it is because the client did not take gzip. A body the lengths or the saving kept as it is would go out the same to any client. |
+| `oneSegment(coding: i32, len: i32, mss: i32): boolean` | `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte body that `compress` would try (its length in `[minLength, maxLength]` and `coding` gzip or deflate) is no longer than one segment of `mss` bytes (as `fewerSegments` reads it). Sent as it is, such a response takes one segment once its head fits beside it, and no compression takes fewer, so `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks the head: when it does not fit, the caller goes on to `compress`, which decides again. Anything else answers false and leaves `decision` alone. |
+| `varies(): boolean` | Whether the last decision depended on the request's `Accept-Encoding`, so the response needs `Vary: Accept-Encoding`: a body sent compressed, or one sent as it is because the client took neither gzip nor deflate. A body the lengths or the saving kept as it is would go out the same to any client. |
 
 ## Limits
 
@@ -394,7 +404,7 @@ Nothing offered is acceptable, identity included (§12.5.3: 406, or identity any
 
 `HTTP_COMPRESS_NOT_ACCEPTED: i32`
 
-The client did not accept gzip, so the body went as it is; the default before any decision.
+The coding passed was neither gzip nor deflate, so the body went as it is; the default before any decision.
 
 </scalar-card>
 
@@ -412,8 +422,8 @@ Under `segmentMode`, compressing would not have saved a TCP segment.
 
 What `HttpCompressor.compress` (and `respondEncoded`'s segment check) last
 decided, in `HttpCompressor.decision`, for a program to count: the body
-went out compressed; the client did not take gzip; it was shorter than
-`minLength`; longer than `maxLength`; gzip did not save `minSaving` bytes
+went out compressed; the client took neither gzip nor deflate; it was shorter than
+`minLength`; longer than `maxLength`; compressing did not save `minSaving` bytes
 and `minSavingPercent` percent; or the compressed response would not have
 taken fewer TCP segments (`segmentMode`), which includes an identity
 response that already fits one segment, decided without compressing.
@@ -432,7 +442,7 @@ The body was longer than `maxLength`, more than `output` was sized for.
 
 `HTTP_COMPRESS_TOO_LITTLE_SAVED: i32`
 
-Gzip ran but did not save `minSaving` bytes and `minSavingPercent` percent,
+An encoder ran but did not save `minSaving` bytes and `minSavingPercent` percent,
 or the saving asked for was the whole body, so no encoder ran.
 
 </scalar-card>
@@ -477,7 +487,7 @@ Always the `GzipCompressor` at the constructor's level, whatever the body's leng
 
 `HTTP_OFFER_DEFLATE: i32`
 
-The `offered` bit for deflate, which is negotiated but never produced here.
+The `offered` bit for deflate, which `HttpCompressor` sends in the zlib format.
 
 </scalar-card>
 

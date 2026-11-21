@@ -600,7 +600,10 @@ export class HttpCompressor {
       // A gzip member `HTTP_ZLIB_SHORTER` bytes over `keep` still makes a deflate body that fits.
       let room: i32 = keep
       if (deflate) {
-        room = keep < toI32(this.output.length) - HTTP_ZLIB_SHORTER ? keep + HTTP_ZLIB_SHORTER : toI32(this.output.length)
+        room =
+          keep < toI32(this.output.length) - HTTP_ZLIB_SHORTER
+            ? keep + HTTP_ZLIB_SHORTER
+            : toI32(this.output.length)
       }
       n = fixed
         ? this.fixed.compress(body, off, len, this.output, toI32(0), room)
@@ -781,7 +784,8 @@ export class HttpCompressor {
    *   uncompressed
    */
   http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32 {
-    let head: i32 = encodedHead - HTTP1_GZIP_FIELD_BYTES + toI32(this.gzipValue.length) - toI32(this.codingValue.length)
+    let head: i32 =
+      encodedHead - HTTP1_GZIP_FIELD_BYTES + toI32(this.gzipValue.length) - toI32(this.codingValue.length)
     if (this.vary) {
       head -= toI32(this.varyName.length) + toI32(this.acceptEncodingValue.length) + 4
     }
