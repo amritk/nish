@@ -1907,7 +1907,7 @@ const handlerWithAdded = (byLength: u8[][][], given: u8[][], added: u8[][], coun
     byLength.push(made)
   }
   const out: u8[][] = byLength[length]
-  for (let k: i32 = 0; k < have && k < toI32(out.length); k++) {
+  for (let k: i32 = 0; k < toI32(given.length) && k < toI32(out.length); k++) {
     out[k] = given[k]
   }
   for (let k: i32 = 0; k < count && k < toI32(added.length); k++) {
