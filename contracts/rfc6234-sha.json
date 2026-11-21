@@ -1,0 +1,631 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc6234-sha",
+  "source": {
+    "rfc": 6234,
+    "title": "SHA-384 and SHA-512",
+    "sha256": "8f39f02a57bfd1da15634706724a585766e6223f77ecdaf243cad16cd3a1aa1b"
+  },
+  "sources": [
+    {
+      "id": "rfc6234-sha",
+      "path": "../specs/rfc6234-sha.xml",
+      "sha256": "c9fc92dd66ba8b5f12ca6ced6093fce24de0c4321fe73a16227c2f37f22c452a"
+    },
+    {
+      "id": "rfc6234",
+      "rfc": 6234,
+      "file": "rfcs/rfc6234.txt",
+      "sha256": "8f39f02a57bfd1da15634706724a585766e6223f77ecdaf243cad16cd3a1aa1b"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/sha512"
+  },
+  "requirements": [
+    {
+      "id": "R-DIGEST",
+      "section": "1",
+      "level": "DEFINITION",
+      "quote": "When a message of any length < 2^64 bits (for SHA-224 and SHA-256) or < 2^128 bits (for SHA-384 and SHA-512) is input to one of these algorithms, the result is an output called a message digest."
+    },
+    {
+      "id": "R-SHA512-OUT",
+      "section": "6.4",
+      "level": "DEFINITION",
+      "quote": "For SHA-512, this is the concatenation of all of H(N)0, H(N)1, through H(N)7."
+    },
+    {
+      "id": "R-SHA384-OUT",
+      "section": "6.4",
+      "level": "DEFINITION",
+      "quote": "For SHA-384, this is the concatenation of H(N)0, H(N)1, through H(N)5."
+    },
+    {
+      "id": "R-SHA384-IV",
+      "section": "6.3",
+      "level": "DEFINITION",
+      "quote": "For SHA-384, the initial hash value, H(0), consists of the following eight 64-bit words, in hex."
+    },
+    {
+      "id": "R-SHA256-OUT",
+      "section": "6.2",
+      "level": "DEFINITION",
+      "quote": "For SHA-256, this is the concatenation of all of H(N)0, H(N)1, through H(N)7."
+    },
+    {
+      "id": "R-DRIVER",
+      "section": "8.5",
+      "level": "DEFINITION",
+      "quote": "The following code is a main program test driver to exercise the code in sha1.c, sha224-256.c, sha384-512.c, hmac.c, and hkdf.c."
+    },
+    {
+      "id": "R-ASCII",
+      "section": "8.5",
+      "level": "DEFINITION",
+      "quote": "Note that the tests assume that character values are as in [US-ASCII] and a run time check warns if the code appears to have been compiled with some other character system."
+    }
+  ],
+  "exclusions": [
+    {
+      "section": "8.1.1",
+      "quote": "IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
+      "reason": "a term of the licence on the RFC's C code, which nish does not copy; no behaviour of a hash function can satisfy or violate it"
+    }
+  ],
+  "functions": [
+    {
+      "name": "sha512",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "sha384",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "sha256",
+      "module": "nish/crypto/sha256",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "sha1",
+      "module": "nish/crypto/sha1",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "SHA-384-1",
+      "title": "RFC 6234 §8.5: SHA-384 test 1, \"abc\", one block",
+      "covers": ["R-SHA384-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha384(b\"abc\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha384",
+      "args": [
+        {
+          "ascii": "abc"
+        }
+      ],
+      "expect": {
+        "hex": "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-384-2",
+      "title": "RFC 6234 §8.5: SHA-384 test 2, the two-block string",
+      "covers": ["R-SHA384-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha384(b\"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha384",
+      "args": [
+        {
+          "ascii": "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+        }
+      ],
+      "expect": {
+        "hex": "09330c33f71147e83d192fc782cd1b4753111b173b3b05d22fa08086e3b0f712fcc7c71a557e2db966c3e9fa91746039"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-384-4",
+      "title": "RFC 6234 §8.5: SHA-384 test 4, 640 bytes, ten copies of a 64-byte string",
+      "covers": ["R-SHA384-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha384(b\"0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha384",
+      "args": [
+        {
+          "ascii": "0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567"
+        }
+      ],
+      "expect": {
+        "hex": "2fc64a4f500ddb6828f6a3430b8dd72a368eb7f3a8322a70bc84275b9c0b3ab00d27a5cc3c2d224aa6b61a0d79fb4596"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-384-6",
+      "title": "RFC 6234 §8.5: SHA-384 test 6, one byte",
+      "covers": ["R-SHA384-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha384(bytes.fromhex(\"b9\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha384",
+      "args": [
+        {
+          "hex": "b9"
+        }
+      ],
+      "expect": {
+        "hex": "bc8089a19007c0b14195f4ecc74094fec64f01f90929282c2fb392881578208ad466828b1c6c283d2722cf0ad1ab6938"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-384-8",
+      "title": "RFC 6234 §8.5: SHA-384 test 8, 16 bytes",
+      "covers": ["R-SHA384-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha384(bytes.fromhex(\"a41c497779c0375ff10a7f4e08591739\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha384",
+      "args": [
+        {
+          "hex": "a41c497779c0375ff10a7f4e08591739"
+        }
+      ],
+      "expect": {
+        "hex": "c9a68443a005812256b8ec76b00516f0dbb74fab26d665913f194b6ffb0e91ea9967566b58109cbc675cc208e4c823f7"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-384-10",
+      "title": "RFC 6234 §8.5: SHA-384 test 10, 227 bytes",
+      "covers": ["R-SHA384-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha384(bytes.fromhex(\"399669e28f6b9c6dbcbb6912ec10ffcf74790349b7dc8fbe4a8e7b3b5621db0f3e7dc87f823264bbe40d1811c9ea2061e1c84ad10a23fac1727e7202fc3f5042e6bf58cba8a2746e1f64f9b9ea352c711507053cf4e5339d52865f25cc22b5e87784a12fc961d66cb6e89573199a2ce6565cbdf13dca403832cfcb0e8b7211e83af32a11ac17929ff1c073a51cc027aaedeff85aad7c2b7c5a803e2404d96d2a77357bda1a6daeed17151cb9bc5125a422e941de0ca0fc5011c23ecffefdd09676711cf3db0a3440720e1615c1f22fbc3c721de521e1b99ba1bd5577408642147ed096\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha384",
+      "args": [
+        {
+          "hex": "399669e28f6b9c6dbcbb6912ec10ffcf74790349b7dc8fbe4a8e7b3b5621db0f3e7dc87f823264bbe40d1811c9ea2061e1c84ad10a23fac1727e7202fc3f5042e6bf58cba8a2746e1f64f9b9ea352c711507053cf4e5339d52865f25cc22b5e87784a12fc961d66cb6e89573199a2ce6565cbdf13dca403832cfcb0e8b7211e83af32a11ac17929ff1c073a51cc027aaedeff85aad7c2b7c5a803e2404d96d2a77357bda1a6daeed17151cb9bc5125a422e941de0ca0fc5011c23ecffefdd09676711cf3db0a3440720e1615c1f22fbc3c721de521e1b99ba1bd5577408642147ed096"
+        }
+      ],
+      "expect": {
+        "hex": "4f440db1e6edd2899fa335f09515aa025ee177a79f4b4aaf38e42b5c4de660f5de8fb2a5b2fbd2a3cbffd20cff1288c0"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-512-1",
+      "title": "RFC 6234 §8.5: SHA-512 test 1, \"abc\", one block",
+      "covers": ["R-SHA512-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha512(b\"abc\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha512",
+      "args": [
+        {
+          "ascii": "abc"
+        }
+      ],
+      "expect": {
+        "hex": "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-512-2",
+      "title": "RFC 6234 §8.5: SHA-512 test 2, the two-block string",
+      "covers": ["R-SHA512-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha512(b\"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha512",
+      "args": [
+        {
+          "ascii": "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+        }
+      ],
+      "expect": {
+        "hex": "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-512-4",
+      "title": "RFC 6234 §8.5: SHA-512 test 4, 640 bytes, ten copies of a 64-byte string",
+      "covers": ["R-SHA512-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha512(b\"0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha512",
+      "args": [
+        {
+          "ascii": "0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567"
+        }
+      ],
+      "expect": {
+        "hex": "89d05ba632c699c31231ded4ffc127d5a894dad412c0e024db872d1abd2ba8141a0f85072a9be1e2aa04cf33c765cb510813a39cd5a84c4acaa64d3f3fb7bae9"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-512-6",
+      "title": "RFC 6234 §8.5: SHA-512 test 6, one byte",
+      "covers": ["R-SHA512-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha512(bytes.fromhex(\"d0\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha512",
+      "args": [
+        {
+          "hex": "d0"
+        }
+      ],
+      "expect": {
+        "hex": "9992202938e882e73e20f6b69e68a0a7149090423d93c81bab3f21678d4aceeee50e4e8cafada4c85a54ea8306826c4ad6e74cece9631bfa8a549b4ab3fbba15"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-512-8",
+      "title": "RFC 6234 §8.5: SHA-512 test 8, 16 bytes",
+      "covers": ["R-SHA512-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha512(bytes.fromhex(\"8d4e3c0e3889191491816e9d98bff0a0\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha512",
+      "args": [
+        {
+          "hex": "8d4e3c0e3889191491816e9d98bff0a0"
+        }
+      ],
+      "expect": {
+        "hex": "cb0b67a4b8712cd73c9aabc0b199e9269b20844afb75acbdd1c153c9828924c3ddedaafe669c5fdd0bc66f630f6773988213eb1b16f517ad0de4b2f0c95c90f8"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-512-10",
+      "title": "RFC 6234 §8.5: SHA-512 test 10, 227 bytes",
+      "covers": ["R-SHA512-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha512(bytes.fromhex(\"a55f20c411aad132807a502d65824e31a2305432aa3d06d3e282a8d84e0de1de6974bf495469fc7f338f8054d58c26c49360c3e87af56523acf6d89d03e56ff2f868002bc3e431edc44df2f0223d4bb3b243586e1a7d924936694fcbbaf88d9519e4eb50a644f8e4f95eb0ea95bc4465c8821aacd2fe15ab4981164bbb6dc32f969087a145b0d9cc9c67c22b763299419cc4128be9a077b3ace634064e6d99283513dc06e7515d0d73132e9a0dc6d3b1f8b246f1a98a3fc72941b1e3bb2098e8bf16f268d64f0b0f4707fe1ea1a1791ba2f3c0c758e5f551863a96c949ad47d7fb40d2\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha",
+      "call": "sha512",
+      "args": [
+        {
+          "hex": "a55f20c411aad132807a502d65824e31a2305432aa3d06d3e282a8d84e0de1de6974bf495469fc7f338f8054d58c26c49360c3e87af56523acf6d89d03e56ff2f868002bc3e431edc44df2f0223d4bb3b243586e1a7d924936694fcbbaf88d9519e4eb50a644f8e4f95eb0ea95bc4465c8821aacd2fe15ab4981164bbb6dc32f969087a145b0d9cc9c67c22b763299419cc4128be9a077b3ace634064e6d99283513dc06e7515d0d73132e9a0dc6d3b1f8b246f1a98a3fc72941b1e3bb2098e8bf16f268d64f0b0f4707fe1ea1a1791ba2f3c0c758e5f551863a96c949ad47d7fb40d2"
+        }
+      ],
+      "expect": {
+        "hex": "c665befb36da189d78822d10528cbf3b12b3eef726039909c1a16a270d48719377966b957a878e720584779a62825c18da26415e49a7176a894e7510fd1451f5"
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-LEN-512",
+      "title": "sha512 gives 64 bytes for any message",
+      "covers": ["R-DIGEST", "R-SHA512-OUT"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "call": "sha512",
+                "args": [
+                  {
+                    "var": "m"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 64
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-LEN-384",
+      "title": "sha384 gives 48 bytes for any message",
+      "covers": ["R-DIGEST", "R-SHA384-OUT"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "call": "sha384",
+                "args": [
+                  {
+                    "var": "m"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 48
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-LEN-ALL",
+      "title": "on one message sha384, sha256 and sha1 give 48, 32 and 20 bytes",
+      "covers": ["R-DIGEST", "R-SHA384-OUT", "R-SHA256-OUT"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "call": "sha384",
+                    "args": [
+                      {
+                        "var": "m"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 48
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "call": "sha256",
+                    "args": [
+                      {
+                        "var": "m"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 32
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "call": "sha1",
+                    "args": [
+                      {
+                        "var": "m"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 20
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-384-IV",
+      "title": "SHA-384 starts from its own initial hash value, so it is not SHA-512 cut to 48 bytes",
+      "covers": ["R-SHA384-IV"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "!=",
+        "args": [
+          {
+            "call": "sha384",
+            "args": [
+              {
+                "var": "m"
+              }
+            ]
+          },
+          {
+            "op": "slice",
+            "args": [
+              {
+                "call": "sha512",
+                "args": [
+                  {
+                    "var": "m"
+                  }
+                ]
+              },
+              {
+                "int": 0
+              },
+              {
+                "int": 48
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-CHUNK",
+      "title": "the digest depends on every byte: appending one byte changes it",
+      "covers": ["R-DIGEST"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        },
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 1
+        }
+      ],
+      "assert": {
+        "op": "!=",
+        "args": [
+          {
+            "call": "sha512",
+            "args": [
+              {
+                "var": "m"
+              }
+            ]
+          },
+          {
+            "call": "sha512",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "var": "m"
+                  },
+                  {
+                    "var": "b"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "outOfScope": [
+    {
+      "name": "Sha512",
+      "reason": "the streaming form of sha512; a vector row and a property here call only functions, so the classes are left to nish's own tests (tests/run.js)"
+    },
+    {
+      "name": "Sha384",
+      "reason": "the streaming form of sha384; a vector row and a property here call only functions, so the classes are left to nish's own tests (tests/run.js)"
+    },
+    {
+      "name": "SHA512_SIZE",
+      "reason": "a constant, not a function; the properties test the digest length it names"
+    },
+    {
+      "name": "SHA384_SIZE",
+      "reason": "a constant, not a function; the properties test the digest length it names"
+    },
+    {
+      "name": "SHA512_BLOCK",
+      "reason": "a constant, not a function; it names the block size the two-block vectors cross"
+    }
+  ]
+}
