@@ -9,7 +9,7 @@ test that pins each property. It is written with the code rather than after
 an audit, so that the audit of the HTTP application layer starts from
 evidence.
 
-Anchors are function names in `std/net/static.ts` at `db7d9d13`, the last
+Anchors are function names in `std/net/static.ts` at `c1321824`, the last
 commit to change it on the head that merges this record.
 
 **Result.** A request path is served only when it decodes cleanly, has no
