@@ -183,10 +183,13 @@ Releases ride a train; nothing is published from a developer machine.
    pushes `release/next` with the default `GITHUB_TOKEN`, whose `pull_request`
    runs wait as `action_required` until a maintainer approves them, so it also
    dispatches `ci.yml` and `pr-title.yml` at `release/next`. A dispatched run
-   needs no approval and reports its checks on the pull request's head commit;
-   the waiting `pull_request` runs can be left unapproved. A dispatched title
-   check reads the commit's subject, which the job also uses as the title, and
-   fails on any branch but `release/next`.
+   needs no approval and reports its checks on the pull request's head commit.
+   GitHub refuses the merge while any run at the head waits for approval,
+   required or not, so the job then deletes the waiting `pull_request` runs
+   (for a minute after the push, as they appear). A run it cannot delete is
+   named in a warning, and approving or deleting it by hand clears the merge.
+   A dispatched title check reads the commit's subject, which the job also
+   uses as the title, and fails on any branch but `release/next`.
 
 2. **Merge the Release pull request.** That is the act of releasing, and it is
    a human's decision. The workflow sees `changelog/<version>.json` without a
