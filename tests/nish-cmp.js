@@ -10133,6 +10133,20 @@ const DECLARED = [
     }
   ),
   ...stdPanicFree(
+    "the emit-ts strings bench loads YAML into a JsonDocument and parses JSON, so it moves with the guarded readers of std/json, its tokenizer and value modules, std/yaml-json and nish/bytes, and with the declarations and field ranges main.ll and main.h take from them",
+    {
+      "bench/emit-ts-strings/main.ts": [
+        "bytes.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "yaml-json.ll",
+      ],
+    }
+  ),
+  ...stdPanicFree(
     "std/text's indexOfAny walks its input under guards the prover reads, so the scan inlined into the program changes",
     Object.fromEntries(
       [
