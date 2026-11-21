@@ -169,15 +169,16 @@ both runs.
   `nish/compress/deflate`), pinned by `tests/link/std_http_compress`;
   `deflate` as a coding and request bodies with a decompression-bomb limit
   are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
-- **Stage 5, middleware** *(open question)*: steps a program registers to run
-  before and after its route bodies (a request id, a check on a header, a
-  field added to every answer). Nothing in `std/net` has one today. HttpArena
+- **Stage 5, middleware:** steps a program registers to run before and
+  after its route bodies (a request id, a check on a header, a field added to
+  every answer). Built on `nish/net/router`, `nish/net/handler` and
+  `nish/net/http-server`; what a step may change and what a route bound to no
+  step pays are decided and measured in
+  [Stage 5](#stage-5-steps-before-and-after-a-route-body). HttpArena
   scores a framework entry's completeness on routing, middleware, request and
   response, and takes 2.5% off a family's score for each the entry declares
   missing
-  ([composite score](https://www.http-arena.com/docs/scoring/composite-score/));
-  the open part is what a step may change and whether a route that uses no
-  step pays for it.
+  ([composite score](https://www.http-arena.com/docs/scoring/composite-score/)).
 - **The example server:** `examples/http-app`, with logging, configuration and
   graceful shutdown, is built (§5).
 
@@ -308,14 +309,20 @@ ROUTE-14, HANDLER-14 and HANDLER-15, and HTTPSRV-14 and HTTPSRV-15.
   `before(r)` and switches on the id it answers, lowest first, until it
   answers `HANDLER_NEXT`; then the route body; then `after(r)` hands back the
   steps that ran, highest first. No closure or interface is called, so a
-  step's code is the program's own `case`, inlined where it is written, and
-  a route with no step pays the load of its mask and one compare.
+  step's code is the program's own `case`, inlined where it is written. On
+  a route with no step, `before` compares the request's state, marks it
+  stepped, reads the route's mask through `Router.steps` (a bounds compare
+  and a load) and answers `HANDLER_NEXT` on 0; `after` compares the state,
+  reads `stepped` and the ran mask, and answers `HANDLER_NEXT`. A program
+  that never calls them pays neither.
 - **What a step may change:** it reads the request; it may answer it in the
   body's place (`before` and `after` then answer `HANDLER_ANSWERED`, and the
   body never runs), and it may add up to `HANDLER_MAX_ADDED` (16) answer
   fields with `field`, which go out with whatever answer the request gets,
-  a refusal included, through the carrier's own outgoing checks. It cannot
-  rewrite the request or the route.
+  a refusal included, through the carrier's own outgoing checks. Nothing
+  more is offered: a step that writes the request's public fields (`route`,
+  `state`) breaks the handler's contract, and no check stops it, so "a step
+  does not rewrite the request or the route" holds by convention only.
 - **The server's own answers run no step.** What the carrier or the pool
   answers itself, to a malformed or oversized request, a timeout or a full
   pool, never reaches `take`, so no step is asked to read a request that was
@@ -324,12 +331,20 @@ ROUTE-14, HANDLER-14 and HANDLER-15, and HTTPSRV-14 and HTTPSRV-15.
 ### Measured
 
 [Steps on a route bound to none](BENCHMARKS.md#steps-on-a-route-bound-to-none-wp43-s5)
-counts `bench/http1-server.ts`, which binds no step, under cachegrind, built
-against `main`'s `std/` at 071ed014 and this stage's, each beside a
-byte-identical copy, in 3 interleaved rounds over one keep-alive connection.
-This stage costs 3,767 instructions more at 2,000 requests and 3,781 more at
-4,000 (3,795 and 3,781 between the copies), the same on `GET /plaintext` and `GET /id/42?name=x`: a start-up cost
-(the step tables and `HttpServerRequest`, 176 → 200 bytes), and under 0.01
-instructions a request, inside the 1,625 to 1,993 instructions one binary's
-count moves between rounds. A request costs main 6,209 instructions on
-`/plaintext` and 7,569 on `/id`.
+counts `bench/http1-server.ts`, which binds no step and whose loop calls
+neither `before` nor `after`, under cachegrind, built against `main`'s `std/`
+at 071ed014 and this stage's, each beside a byte-identical copy, in 3
+interleaved rounds over one keep-alive connection. This stage costs 3,767
+instructions more at 2,000 requests and 3,781 more at 4,000 (3,795 and 3,781
+between the copies), the same on `GET /plaintext` and `GET /id/42?name=x`: a
+start-up cost (the step tables and `HttpServerRequest`, 176 → 200 bytes), and
+under 0.01 instructions a request, inside the 1,625 to 1,993 instructions one
+binary's count moves between rounds. A request costs main 6,209 instructions
+on `/plaintext` and 7,569 on `/id`.
+
+A second run adds a side, a copy of the bench at 082ebba1 the driver patched
+and kept out of the tree, whose loop calls `HttpHandler.before` and `after`
+on every request, on routes bound to no step. That pair costs 25.0 to 26.8
+instructions a request over the unpatched bench, about 0.4% of a
+`/plaintext` request and 0.3% of an `/id` one; `HttpServer`'s pair, the same
+code on its own request type, was not run.

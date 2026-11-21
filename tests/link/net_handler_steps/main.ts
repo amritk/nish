@@ -6,6 +6,8 @@
 //   - `AUTH` runs on `/admin` alone and refuses with 401 a request with no
 //     `authorization` field, so neither the route body nor `TAG` runs.
 //   - `TAG` runs on `/` and `/admin` and adds `x-tag` after the body.
+//   - `LATE` runs on `/late` alone, after its body, and answers 503 in the
+//     body's place, so the after-steps below it do not run.
 //
 // The log of each request names its steps in the order they ran: before-steps
 // lowest id first, after-steps the reverse. `/plain` is bound to no step: it
@@ -15,7 +17,6 @@ import { copyBytes } from "nish/bytes"
 import {
   HANDLER_ABSENT,
   HANDLER_ANSWERED,
-  HANDLER_NEXT,
   HandlerLimits,
   HttpHandler,
   HttpRequest,
@@ -42,6 +43,7 @@ import { ascii, ZERO } from "../net_tls_record_common/bytes"
 const HOME: i32 = 0
 const ADMIN: i32 = 1
 const PLAIN: i32 = 2
+const LATE: i32 = 3
 
 const FIVE_SECONDS: i64 = 5000000000
 /** How many request ids the program cycles through, made before the first request. */
@@ -55,6 +57,7 @@ class App {
   id: i32 = 0
   auth: i32 = 0
   tag: i32 = 0
+  late: i32 = 0
   text: u8[]
   hello: u8[]
   idName: u8[]
@@ -73,9 +76,11 @@ class App {
     router.add("GET", "/")
     router.add("GET", "/admin")
     router.add("GET", "/plain")
+    router.add("GET", "/late")
     this.id = router.step()
     this.auth = router.step()
     this.tag = router.step()
+    this.late = router.step()
     router.use(HOME, this.id)
     router.use(ADMIN, this.id)
     router.use(ROUTER_NOT_FOUND, this.id)
@@ -83,6 +88,8 @@ class App {
     router.use(ADMIN, this.auth)
     router.use(HOME, this.tag)
     router.use(ADMIN, this.tag)
+    router.use(LATE, this.id)
+    router.use(LATE, this.late)
     const limits = new HandlerLimits()
     limits.slots = 4
     const listener: i32 = tcpListen("127.0.0.1", 0, 16)
@@ -142,6 +149,8 @@ class App {
       this.note("a", a)
       if (a === this.tag) {
         h.field(req, this.tagName, this.tagValue)
+      } else if (a === this.late) {
+        h.problem(req, 503, "Service Unavailable", "")
       }
       a = h.after(req)
     }
@@ -152,6 +161,7 @@ class App {
       case HOME:
       case ADMIN:
       case PLAIN:
+      case LATE:
         h.send(req, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
         break
       default:
@@ -316,7 +326,8 @@ export const main = (): i32 => {
   t.eqStr("its steps run lowest first before the body, the reverse after", app.log.join(" "), "b0 b2 body a2 a0")
   t.ok("ID's field is in the answer", headHas(c, "\r\nx-request-id: r0\r\n"))
   t.ok("and so is TAG's, added after the body", headHas(c, "\r\nx-tag: on\r\n"))
-  t.ok("after the body's own fields", find(c.buf, ZERO, c.bodyStart, "content-type") < find(c.buf, ZERO, c.bodyStart, "x-request-id"))
+  const typeAt: i32 = find(c.buf, ZERO, c.bodyStart, "content-type")
+  t.ok("after the body's own fields", typeAt >= 0 && typeAt < find(c.buf, ZERO, c.bodyStart, "x-request-id"))
 
   t.ok("GET /admin with no authorization is refused 401", ask(app, c, "GET", "/admin", "") && c.status === 401)
   t.eqStr("by AUTH, so neither the body nor an after-step runs", app.log.join(" "), "b0 b1")
@@ -339,6 +350,10 @@ export const main = (): i32 => {
   t.ok("nor carries a field it did not name", !headHas(c, "x-request-id") && !headHas(c, "x-tag"))
 
   t.ok("a field added to one request is not on the next", ask(app, c, "GET", "/plain", "") && !headHas(c, "x-request-id"))
+
+  t.ok("GET /late is answered 503 by its after-step", ask(app, c, "GET", "/late", "") && c.status === 503)
+  t.eqStr("so the after-step below it does not run", app.log.join(" "), "b0 b3 body a3")
+  t.ok("and the 503 carries ID's field, not the body's answer", headHas(c, "\r\nx-request-id: r5\r\n") && !headHas(c, "text/plain"))
 
   // A warm connection: stepped and plain requests leave the arena as it was.
   // The requests are made once, and a hundred rounds warm the pool first.

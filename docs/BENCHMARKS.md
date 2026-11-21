@@ -4071,7 +4071,7 @@ Toolchains: Nish 0.42.0; Ubuntu clang version 18.1.3, OpenSSL 3.0.13 30 Jan 2024
 
 ## Steps on a route bound to none (WP43 S5)
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. WP43 S5 added steps that run before and after a route body (`Router.step`, `use`, and `before`, `after` and `field` on `HttpHandler` and `HttpServer`). `bench/http1-server.ts` binds no step, so it measures what a program that uses none pays for them: the loop's `before` and `after` calls, each a load of the route's step mask and a compare, and the larger request objects.
+Not measured by `bench/run.mjs`, which carries this section over unchanged. WP43 S5 added steps that run before and after a route body (`Router.step`, `use`, and `before`, `after` and `field` on `HttpHandler` and `HttpServer`). `bench/http1-server.ts` binds no step and its loop calls neither `before` nor `after`, so the first table measures what a program that uses no step and never asks for one pays: the larger request objects and the router's step tables. The second table adds a side whose loop asks for steps on every request, on routes bound to none, so it measures what the `before` and `after` calls themselves cost there.
 
 | | |
 | --- | --- |
@@ -4096,4 +4096,23 @@ Read by each side's least count:
 - The 3,767 to 3,795 instructions are paid once a process: the router's step tables and the larger request objects (`HttpServerRequest` grew from 176 to 200 bytes) are set up at start-up.
 - For scale, main's 2,000 requests more cost 12,418,000 instructions on `/plaintext` and 15,138,000 on `/id`, 6,209 and 7,569 a request.
 - The two runs measured different heads: 53acc792 only bounds a copy loop in the path that merges a step's added fields, which neither route takes.
+
+### A loop that asks for steps
+
+The "loop" side is `bench/http1-server.ts` at 082ebba1 with its `run` changed by the driver, a copy kept out of the tree: before `this.answer(r)` it calls `this.h.before(r)` until it returns a negative, and on `HANDLER_NEXT` calls `this.h.after(r)` until it returns a negative, then answers. Neither route is bound to a step, so each request runs one `before` and one `after`, each answering `HANDLER_NEXT` at once. It measures `HttpHandler`'s pair only; `HttpServer`'s `before` and `after` are the same code on its own request type and were not run. The other sides and every setting are as above, with "head" `bench/http1-server.ts` unchanged at 082ebba1; the six binaries are counted in 3 interleaved rounds.
+
+| route | requests | head commit | main | main copy | head | head copy | loop | loop copy |
+| --- | ---: | --- | --- | --- | --- | --- | --- | --- |
+| `/plaintext` | 2,000 | 082ebba1 | 13,629,045 ×3 | 13,629,029 ×3 | 13,632,840 ×3 | 13,634,421 ×3 | 13,684,840 ×3 | 13,684,796 ×3 |
+| `/id/42?name=x` | 2,000 | 082ebba1 | 16,349,745 16,349,745 16,351,738 | 16,349,729 16,351,722 16,349,729 | 16,353,540 16,353,540 16,355,533 | 16,355,489 16,353,496 16,353,496 | 16,405,540 16,407,533 16,407,533 | 16,405,496 ×3 |
+| `/plaintext` | 4,000 | 082ebba1 | 26,047,045 ×3 | 26,047,029 ×3 | 26,052,465 26,052,465 26,050,840 | 26,052,421 26,052,421 26,050,796 | 26,156,465 ×3 | 26,154,796 26,156,421 26,156,421 |
+| `/id/42?name=x` | 4,000 | 082ebba1 | 31,487,745 ×3 | 31,489,722 31,489,722 31,488,032 | 31,493,533 ×3 | 31,493,489 31,491,496 31,493,489 | 31,597,533 31,595,540 31,597,533 | 31,597,489 31,595,496 31,595,496 |
+
+Read by each side's least count:
+
+- loop costs 52,000 instructions more than head at 2,000 requests on both routes; loop copy costs 50,375 (`/plaintext`) and 52,000 (`/id`) more than head copy.
+- At 4,000 requests loop costs 105,625 (`/plaintext`) and 102,007 (`/id`) more than head, and loop copy 104,000 more than head copy on both routes.
+- So the 2,000 requests more add 53,625 and 50,007 to loop's gap over head, and 53,625 and 52,000 to the copies' gap: 25.0 to 26.8 instructions a request for one `before` and one `after` on a route bound to no step. The spread is one round's move, 1,625 and 1,993 instructions, as in the first table.
+- For scale, head's 2,000 requests more cost 12,418,000 instructions on `/plaintext` and 15,139,993 on `/id`, 6,209 and 7,570 a request, so the pair adds about 0.4% on `/plaintext` and 0.3% on `/id`.
+- head against main in this run: 3,795 more at 2,000 requests on both routes, 3,795 (`/plaintext`) and 5,788 (`/id`) at 4,000; the copies 5,392 (`/plaintext`) and 3,767 (`/id`) at 2,000 and 3,767 and 3,464 at 4,000. That is the first table's once-a-process cost plus one round's move, none of it a request's.
 <!-- http-steps:end -->

@@ -198,6 +198,8 @@ export const main = (): i32 => {
       if (s !== HANDLER_NEXT) {
         continue; // a step answered it
       }
+      // the route body chooses its answer; it is sent after the steps
+      const found: boolean = req.route === HELLO || req.route === ADMIN;
       let a: i32 = h.after(req);
       while (a >= 0) {
         if (a === SERVED) {
@@ -205,13 +207,13 @@ export const main = (): i32 => {
         }
         a = h.after(req);
       }
-      switch (req.route) {
-        case HELLO:
-        case ADMIN:
-          h.send(req, 200, text, hello, 0, toI32(hello.length));
-          break;
-        default:
-          h.refuse(req);
+      if (a !== HANDLER_NEXT) {
+        continue; // an after-step answered it
+      }
+      if (found) {
+        h.send(req, 200, text, hello, 0, toI32(hello.length));
+      } else {
+        h.refuse(req);
       }
     }
   }
@@ -228,8 +230,10 @@ run. Or it adds a field to the answer with `h.field(req, name, value)`, sent
 after the answer's own fields, whichever answer the body sends; at most
 `HANDLER_MAX_ADDED` (16) to one answer, and a 17th panics. The handler keeps
 `name` and `value` by reference until the answer starts, so give it arrays
-you do not change before then. A route bound to no step answers
-`HANDLER_NEXT` at once from both calls, and the loop costs it nothing else.
+you do not change before then. An after-step may also answer in
+the body's place; `after` then answers `HANDLER_ANSWERED`, so send the body's
+answer only on `HANDLER_NEXT`. A route bound to no step answers `HANDLER_NEXT`
+at once from both calls.
 Only a request `take` hands over runs steps: the answers the handler sends
 itself, to a malformed or oversized request, a timeout or a full pool, run
 none.

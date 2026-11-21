@@ -131,6 +131,9 @@ const h2cChecks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   const sized: string = h2cUntil(c, key, "DATA 7 0 \"\" end")
   t.ok("h2c /sized: 200 with the step's content-length", sized.indexOf("HEADERS 7 :status=200 ") >= 0 && sized.indexOf("content-length=6") >= 0)
   t.eqI32("h2c /sized: one content-length, the server adds none beside the step's", occurrences(sized, "content-length="), 1)
+  c.wire.headers(n32(9), getOf("/hello"), H2_FLAG_END_STREAM)
+  const plain: string = h2cUntil(c, key, "DATA 9 0 \"\" end")
+  t.ok("h2c /hello, bound to no step: 200 with neither field", plain.indexOf("HEADERS 9 :status=200 ") >= 0 && plain.indexOf("x-request-id") < 0 && plain.indexOf("x-tag") < 0)
 }
 
 const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {

@@ -247,8 +247,6 @@ a/b.txt, 7 bytes
 A decoded parameter can hold any byte, `/`, `..` and NUL among them. Check it
 before you use it as a file name.
 
-<a id="from-http11-http2-and-http3" style="scroll-margin-top: 65px"></a>
-
 ## Steps before and after a route
 
 A table can also say which *steps* run around a route: shared work, such as
@@ -284,6 +282,8 @@ You rarely call it: [`nish/net/handler`](api-server.md#steps-before-and-after-a-
 and [`nish/net/http-server`](http-server.md#steps-before-and-after-a-route)
 read it and hand your program each step's id, before the route body and
 after it.
+
+<a id="from-http11-http2-and-http3" style="scroll-margin-top: 65px"></a>
 
 ## From HTTP/1.1, HTTP/2 and HTTP/3
 

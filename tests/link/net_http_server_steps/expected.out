@@ -15,6 +15,7 @@ PASS  h2c /guarded with authorization: 200 with x-request-id 5
 PASS  h2c /guarded allowed: id, auth, the body
 PASS  h2c /sized: 200 with the step's content-length
 PASS  h2c /sized: one content-length, the server adds none beside the step's
+PASS  h2c /hello, bound to no step: 200 with neither field
 PASS  HTTP/3: the handshake, ALPN h3
 PASS  HTTP/3 /stepped answered and ended
 PASS  HTTP/3 /stepped: 200 with x-request-id 6 and x-tag
@@ -31,4 +32,4 @@ PASS  HTTP/3 /sized answered and ended
 PASS  HTTP/3 /sized: 200 with the step's content-length
 PASS  HTTP/3 /sized: one content-length, the server adds none beside the step's
 PASS  nine requests named, one per stepped request
-http server steps: 33 passed, 0 failed, 0 skipped
+http server steps: 34 passed, 0 failed, 0 skipped

@@ -257,6 +257,7 @@ while (s >= 0) {
   s = server.before(r);
 }
 if (s === HANDLER_NEXT) {
+  // the route body chooses its answer here, without sending it
   let a: i32 = server.after(r);
   while (a >= 0) {
     if (a === SERVED) {
@@ -264,7 +265,9 @@ if (s === HANDLER_NEXT) {
     }
     a = server.after(r);
   }
-  // the route body: switch (r.route) { ... }
+  if (a === HANDLER_NEXT) {
+    // send the body's answer: switch (r.route) { ... }
+  }
 }
 ```
 
@@ -272,7 +275,8 @@ if (s === HANDLER_NEXT) {
 first, then `HANDLER_NEXT`, or `HANDLER_ANSWERED` once a step has answered.
 `server.after(r)` hands out the steps that ran, highest id first, while the
 answer is still to send. A step answers the request, and then no route body
-and no later step runs, or it adds a field with `server.field(r, name,
+and no later step runs (an after-step answers in the body's place, so `after`
+answers `HANDLER_ANSWERED` and the body's answer is not sent), or it adds a field with `server.field(r, name,
 value)`. Added fields follow the answer's own on every version, count against
 `maxResponseFields`, and are kept by reference until the answer starts; more
 than `HANDLER_MAX_ADDED` (16) panics. A route bound to no step gets
