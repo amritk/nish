@@ -10981,6 +10981,14 @@ const DECLARED = [
     changelog: "a guarded nish:simd access as a proven panic site",
     why: "the program is built with --deny-panics and the `loadU8x16` and `store` in its `simd_mask` dependency are guarded, which the candidate records as proven sites; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
   },
+  // WP43 S3: `nish/net/static` is a new module, so the 0.42.0 seed refuses
+  // every program that imports it, the http-app example's `--static` included.
+  ...["examples/http-app/main.ts", "tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "nish/net/static with MIME types, ETag, Range and traversal refused",
+    why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
+  })),
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
   {
