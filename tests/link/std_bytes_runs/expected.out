@@ -17,3 +17,6 @@ copy window: 0 5 6 7
 copy up: 1 2 1 2 3 4 5 6
 copy down: 3 4 5 6 7 8 7 8
 copy none: 3 4 5 6 7 8 7 8
+try up: true 1 2 1 2 3 4 5 6
+try down: true 1 2 3 4 5 6 5 6
+try refused: false false false false false false 1 2 3 4 5 6 5 6

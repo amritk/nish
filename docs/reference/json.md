@@ -244,8 +244,8 @@ stop at the same member.
 
 The answer is a fresh array and the only allocation besides the values. Each
 value is stored into it by a plain `values[k] = text` statement, and the
-array is only stored into, tested and returned, so the values travel with the
-array: the call lets nothing else out (LANGUAGE.md, "Memory model", a value
+array is only pushed and stored into, tested and returned, so the values
+travel with the array: the call lets nothing else out (LANGUAGE.md, "Memory model", a value
 stored into an array that is returned with it). A loop calling this keeps its
 per-pass release on a line older than the pass, as `jsonField`'s does, and a
 `using a = arena()` block may hold the call.
@@ -284,9 +284,9 @@ one value per name, in the order of `names`, each `null` when that
 ### jsonStringifyString
 
 `s` as `JSON.stringify(s)` writes it — quoted, with the escapes
-`JsonWriter.string` writes — as a string. A thin layer on the writer: it
-sizes a buffer to fit exactly, writes into it and reads it back. A string
-with nothing to escape skips the writer and is only quoted.
+`JsonWriter.string` writes — as a string. A string with nothing to escape
+is only quoted; otherwise the runs between escapes are copied out whole and
+joined with the escapes.
 
 ```ts
 const jsonStringifyString: (s: string) => string
@@ -361,7 +361,7 @@ class JsonWriter
 | `key(name: string): void` | The next member's key, with the comma before it and the colon after it. |
 | `keyBytes(bytes: u8[], off: i32, len: i32): void` | `key` for a name held as bytes, `bytes[off .. off + len)`, escaped exactly as `key` escapes a string of those bytes, and allocating nothing: what a caller that keeps its text in a byte buffer, such as `nish/json-value`'s `JsonDocument`, writes without making a string per key. A window outside `bytes` is `JSON_WRITE_BAD_WINDOW`, checked once, before anything is written. |
 | `nullValue(): void` | `null`. The method is not named `null`, which the parser refuses as a member name. |
-| `raw(bytes: u8[], off: i32, len: i32): void` | `bytes[off .. off + len)`, copied as it is and counted as one value: a fragment the caller encoded already, such as a cached object. Nothing in it is checked, so a fragment that is not one whole JSON value makes a text that is not JSON either. The bytes are copied in one move (`copyBytes`), as if all were read before any was written, so a window of the writer's own buffer comes out as it was. In an indented text the fragment goes in where a value would, after its line break and indent, but its own bytes are not re-indented: an object fragment stays on one line, where `JSON.stringify` would spread it out. |
+| `raw(bytes: u8[], off: i32, len: i32): void` | `bytes[off .. off + len)`, copied as it is and counted as one value: a fragment the caller encoded already, such as a cached object. Nothing in it is checked, so a fragment that is not one whole JSON value makes a text that is not JSON either. The bytes are copied in one move (`tryCopyBytes`), as if all were read before any was written, so a window of the writer's own buffer comes out as it was. In an indented text the fragment goes in where a value would, after its line break and indent, but its own bytes are not re-indented: an object fragment stays on one line, where `JSON.stringify` would spread it out. |
 | `reset(buf: u8[], start: i32): void` | Starts a new text at `buf[start ..)`, forgetting everything the last one wrote and every error it hit: what a server calls once per response, on the buffer it reuses. A `start` outside `buf` is `JSON_WRITE_BAD_WINDOW`. |
 | `setIndent(spaces: i32): void` | Indents the text by `spaces` spaces a level, as `JSON.stringify(v, null, spaces)` does: each member and element on a line of its own, one space after a key's colon, and an empty `{}` or `[]` left on one line. `spaces` is clamped to 10 as `JSON.stringify` clamps it, and below 1 is the minified text, the default. A mode that `reset` keeps; set it before the text, since a change in the middle of one applies from the next byte. |
 | `setIndentTab(): void` | Indents the text by one tab a level, as `JSON.stringify(v, null, "\t")` does. |

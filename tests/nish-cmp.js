@@ -10044,8 +10044,147 @@ const proverReadsDeclared = () => [
   },
 ]
 
+// The std/ modules a strict module calls (Map and Set, text, JSON, array,
+// regex, bytes) prove or drop their panic sites under this PR's subject.
+const STD_PANIC_FREE = "std/ panic-free for strict modules"
+const stdPanicFree = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
+  )
+
 const DECLARED = [
   ...proverReadsDeclared(),
+  ...stdPanicFree(
+    "Map and Set probe until a bucket answers instead of counting steps, and rebuild a small table into a fresh u16-sized array, so the inlined table walk changes",
+    {
+      "docs/cookbook/map-foreach.ts": ["map-foreach.ll"],
+      "docs/cookbook/map-iter.ts": ["map-iter.ll"],
+      "tests/link/map_walk_two_modules/main.ts": ["walker.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/array's sliceAll, what `xs.slice()` compiles to, copies directly instead of through slice's range check, so the copy changes",
+    {
+      "tests/cases/arr_slice.ts": ["arr_slice.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/text's indexOfAny walks its input under guards the prover reads, so the scan changes",
+    {
+      "bench/index-of-any.ts": ["index-of-any.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/regex compiles and matches with guarded indexes and Results in place of panics, so its code and its classes change",
+    {
+      "bench/regex/main.ts": ["main.h", "main.ll"],
+      "tests/link/caps_dep_std_not_refused/main.ts": ["main.h"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/json's reader, tokenizer and writer guard every index and grow their buffers without a computed array length, so json.ll changes",
+    Object.fromEntries(
+      [
+        "net_handler_rest_close",
+        "net_http_server",
+        "net_http_server_bad_limit",
+        "net_http_server_bad_param",
+        "net_http_server_bad_watch",
+        "net_http_server_caps",
+        "net_http_server_carriers",
+        "net_http_server_end_short",
+        "net_http_server_end_unstarted",
+        "net_http_server_foreign",
+        "net_http_server_h1_fields",
+        "net_http_server_h1_head",
+        "net_http_server_h1_slots",
+        "net_http_server_h1_twice",
+        "net_http_server_h2_connect",
+        "net_http_server_h2_head",
+        "net_http_server_h2_refused",
+        "net_http_server_h2_slots",
+        "net_http_server_h2_twice",
+        "net_http_server_h2c",
+        "net_http_server_h3_head",
+        "net_http_server_h3_slots",
+        "net_http_server_h3_twice",
+        "net_http_server_h3_webtransport",
+        "net_http_server_lifecycle",
+        "net_http_server_matrix",
+        "net_http_server_start_fields",
+        "net_http_server_start_length",
+        "net_http_server_start_refused",
+        "net_http_server_start_status",
+        "net_http_server_start_twice",
+        "net_http_server_take_none",
+        "net_http_server_timeouts",
+        "net_http_server_unbegun",
+        "net_http_server_wait_tls",
+        "net_http_server_write_long",
+        "net_http_server_write_unstarted",
+        "net_http_server_write_window",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]])
+    )
+  ),
+  ...stdPanicFree(
+    "the program decodes JSON into class fields, so it moves with std/json's guarded reader (json.ll, and the declarations and field ranges main.ll and main.h take from it) and with nish/bytes' guarded reads (bytes.ll)",
+    {
+      "tests/link/cls_field_init_json/main.ts": ["bytes.ll", "json.ll", "main.h", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/text's indexOfAny walks its input under guards the prover reads, so the scan inlined into the program changes",
+    Object.fromEntries(
+      [
+        "std_text_index_of_any",
+        "std_text_index_of_any_empty_set",
+        "std_text_index_of_any_long_set",
+        "std_text_index_of_any_non_ascii_offset",
+        "std_text_index_of_any_non_ascii_set",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll"]])
+    )
+  ),
+  ...stdPanicFree(
+    "std/text's case helpers index under guards instead of panicking, so the inlined code and the classes it declares change",
+    {
+      "tests/link/std_text_camel_case/main.ts": ["main.h", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/regex compiles and matches with guarded indexes and Results in place of panics, so the program's matching code and its classes change",
+    {
+      "tests/link/std_regex/main.ts": ["suite.ll"],
+      "tests/link/std_regex_f64/main.ts": ["suite.ll"],
+      "tests/link/std_regex_node/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_regex_unicode/main.ts": ["main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/json's writer guards every index and grows its buffer without a computed array length, so the formatter, its unit table and the classes they declare change",
+    {
+      "tests/link/std_json_format/main.ts": ["json-format.ll", "main.h", "units.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "the program calls nish/bytes' new tryCopyBytes, or reaches it through std/json, which now copies with that Result form in place of a panicking copy; the seed's nish/bytes does not export it, so the seed refuses the program",
+    Object.fromEntries(
+      [
+        "std_bytes_runs",
+        "std_json",
+        "std_json_tokenizer",
+        "std_text_f64",
+        "std_yaml_conformance",
+        "std_yaml_write",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["exit"]])
+    )
+  ),
+  ...stdPanicFree(
+    "the example drops its --allow-panics opt-out now that the Map and Set calls it makes cannot panic, so the seed, whose collections still can, refuses it as a strict module",
+    {
+      "examples/sets.ts": ["exit"],
+      "examples/wordcount.ts": ["exit"],
+    }
+  ),
   ...scramModule(),
   {
     program: "tests/cases/cls_field_init.ts",

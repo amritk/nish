@@ -1,7 +1,8 @@
-// `indexOfAny` refuses a set with a byte that is not ASCII: natively it would
-// be one byte of a multi-byte sequence and under Node a UTF-16 unit, and the
-// two readings would find different things (docs/LANGUAGE.md, "Byte search").
-// `tests/run.js` holds the native run and the run under Node to the same message.
+// `indexOfAny` with a non-ASCII set: natively each byte of `"é"` is a member
+// and under Node its UTF-16 unit is; here both find the `é`, at a byte offset
+// natively and a unit offset under Node, which agree since only ASCII precedes
+// it (docs/LANGUAGE.md, "Byte search"). `tests/run.js` holds the native run
+// and the run under Node to the same output.
 import { indexOfAny } from "nish/text";
 
 export const main = (): number => {
