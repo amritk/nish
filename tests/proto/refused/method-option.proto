@@ -1,0 +1,7 @@
+syntax = "proto3";
+message A {}
+service S {
+  rpc Get(A) returns (A) {
+    option deprecated = true;
+  }
+}

@@ -1,0 +1,5 @@
+syntax = "proto3";
+enum E {
+  option allow_alias = true;
+  E_ZERO = 0;
+}

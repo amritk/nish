@@ -10,7 +10,7 @@ stream, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the HTTP application layer
 starts from evidence.
 
-Anchors are function names in `std/net/http-server.ts` at `67e1b333`, the
+Anchors are function names in `std/net/http-server.ts` at `983f4398`, the
 last commit to change it on the head that merges this record.
 
 **Result.** The façade parses nothing itself. A request's bytes are read by
@@ -37,16 +37,17 @@ flushing kept its request out of the pool for good (HTTPSRV-12, Medium).
 One is left open: the cap that keeps one connection from taking the pool is
 per connection, not per peer, so a client with many connections can still
 fill it (HTTPSRV-6, Low).
-Two properties are the program's and are accepted: how long it holds a
-request it took (HTTPSRV-8) and what it does with a decoded parameter
-(HTTPSRV-9). So is the nature of h2c, which nothing protects on the wire
-(HTTPSRV-11).
+Three properties are the program's and are accepted: how long it holds a
+request it took (HTTPSRV-8), what it does with a decoded parameter
+(HTTPSRV-9), and whether its loop runs the steps a route is bound to before
+the route body (HTTPSRV-15). So is the nature of h2c, which nothing protects
+on the wire (HTTPSRV-11).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`); the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
+| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `before`, `after`, `field`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`); the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
 
 Out of scope, each with its own record: the carriers
 (`std/net/http1-server.ts`, `std/net/http2*.ts`, `std/net/http3*.ts`,
@@ -77,10 +78,10 @@ checking `r.version === 2` can be panicked by any client (HTTPSRV-13).
 
 ## Findings
 
-Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7, HTTPSRV-10 and HTTPSRV-13 are the shapes an
+Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7, HTTPSRV-10, HTTPSRV-13 and HTTPSRV-14 are the shapes an
 attacker's traffic can take, each checked and found to hold. HTTPSRV-6 is
-open. HTTPSRV-8, HTTPSRV-9 and HTTPSRV-11 are accepted. HTTPSRV-12 was
-fixed in review, with a test that failed before the fix.
+open. HTTPSRV-8, HTTPSRV-9, HTTPSRV-11 and HTTPSRV-15 are accepted. HTTPSRV-12 and
+HTTPSRV-16 were fixed in review, each with a test that failed before the fix.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -97,6 +98,9 @@ fixed in review, with a test that failed before the fix.
 | HTTPSRV-11 | Medium | `listenH2c` | An h2c connection is neither encrypted nor authenticated: anyone on the path reads and rewrites every request and answer. | **Accepted.** That is what h2c is; the guide page says to serve it only behind a proxy that ends TLS, or on a trusted network. The façade adds nothing on top that would claim otherwise: `r.secure` is false and no Alt-Svc is sent (HTTPSRV-7). |
 | HTTPSRV-12 | Medium | `h2Close`, `h3Clear`, `release`, `drop` | A stream reset while its answer was still flushing left its request outside the pool for good, so a client that reset enough streams emptied the pool and every later stream was refused. | **Fixed.** A reset now hands back a request in any state the program no longer holds (commit `2fa11bf`). `link/net_http_server_carriers` pins it with a pool of one: "the reset handed the request back: the next stream is answered, not refused", which failed before the fix. |
 | HTTPSRV-13 | Medium if it failed | `trailers`, `push`, `carryTrailers` | A trailer section the program ends an HTTP/2 answer with must not split the answer or smuggle a field the head could not carry, must not grow past `maxResponseFields` or the connection's output, and must not be sent on a carrier that has no trailers in the façade (HTTP/1.1, HTTP/3). | **Holds.** `trailers` runs the same `httpFieldsCheckOutgoing` as a head, so a name that is not a lowercase token (a pseudo-field included), a connection-specific field, or a value with CR, LF or NUL panics before anything is written. More fields than `maxResponseFields` reset the stream and answer `HANDLER_DROPPED`, on a HEAD, 204 or 304 answer too, since the count is checked before a quiet answer's trailers are set aside; a section larger than the connection's output buffer answers `HANDLER_SENT`, is `H2_INVALID` from `Http2Connection.writeTrailers` when it comes to be sent, and `carryTrailers` resets the stream. On HTTP/1.1 and HTTP/3 the call panics, and that panic is the program's to avoid: the peer picks the version, so a handler that does not check `r.version === 2` first is panicked by any HTTP/1.1 or HTTP/3 client. `trailers` keeps the caller's `names` and `values` arrays and `carryTrailers` reads them when it sends, which can be after the call returns; a program that reuses one pair across requests sends what they hold then. The section goes only after the body's last byte, as one HEADERS frame with END_STREAM, and a HEAD, 204 or 304 answer, whose head ended the stream, sends none. A call after `end`, or after an earlier `trailers`, finds the answer no longer streaming and panics; `net_http_server_trailers_after_end` pins the first. |
+| HTTPSRV-14 | Medium if it failed | `before`, `after`, `field`, `admit`, `start`, `outFields` | A step (WP43 stage 5) must run only for the route `Router.use` bound it to, on every version; a step that answers a request must stop the route body and every later step; and a field a step adds must not reach another request's answer, split the head, set a field the carrier reserves, or grow an answer without bound. | **Holds.** `before` and `after` run the same algorithm as the handler's (HANDLER-14), with an `own` check in front, over the request the façade laid out, so a request on HTTP/1.1, h2c or HTTP/3 runs the same steps in the same order. `admit` clears `stepped` and `added` for every request it lays out, whichever carrier read it. `field` keeps at most `HANDLER_MAX_ADDED` (16) fields and a seventeenth panics (`tests/link/net_http_server_steps_full`). `outFields` puts the added fields beside the answer's own, counts them against `maxResponseFields` (an answer over it is dropped as one the program gave too many fields is: the HTTP/1.1 connection ends, the HTTP/2 or HTTP/3 stream is reset), and hands them to the carrier's `respond`, so they meet the checks the program's own fields meet: on HTTP/1.1 a reserved name or a value holding CR LF is `H1_INVALID` and `start` panics before a byte of the head is written (`tests/link/net_http_server_steps_split`); on HTTP/2 and HTTP/3 the field-section checks of HTTPSRV-13 apply. Of those paths only the HTTP/1.1 CR LF refusal is run by a test; the count against `maxResponseFields` and the h2 and h3 refusals of a step's reserved or invalid field hold by reading `outFields` and the carriers' `respond`, and no test drives a step's fields over the cap or a bad step field on h2c or HTTP/3. The answers a carrier or the façade sends itself, to a malformed or oversized request, a timeout or a full pool, never reach `take`, so they run no step. |
+| HTTPSRV-15 | Low | `before`, `after` | A step runs only when the program's loop calls `before` and acts on what it answers, so a loop that skips it runs the route body unguarded. | **Accepted**, as HANDLER-15: steps are pulled and the loop is the program's. `before` and `after` here run the same algorithm as the handler's pair, with an `own` check in front; their cost was not measured (HANDLER-15 states the handler's), and a loop that calls neither pays nothing per request for them. The guide page (`docs/guide/using-nish/http-server.md`, "Steps before and after a route") shows the one to copy. |
+| HTTPSRV-16 | Medium | `outFields` | A field a step adds must not be sent twice: the server adds `content-length` on HTTP/2 and HTTP/3, and `alt-svc` on HTTP/1.1 and HTTP/2 over TLS, only when the answer carries none. Before the fix `outFields` looked only at the program's own fields, so a step that added either one sent the answer with two of it (two `content-length`s on an HTTP/2 or HTTP/3 stream, which a client must treat as malformed and an intermediary may read two ways). | **Fixed.** `outFields` now looks for the name among the step's added fields too, and adds its own only when neither gave one. `link/net_http_server_steps` pins it on the route `/sized`, whose step adds both: "HTTP/1.1 /sized: one alt-svc, the server adds none beside the step's", "h2c /sized: one content-length, the server adds none beside the step's" and "HTTP/3 /sized: one content-length, the server adds none beside the step's", the three of which failed before the fix. |
 
 ## Properties verified
 
@@ -173,6 +177,23 @@ uppercase name), `net_http_server_trailers_unstarted`,
 `net_http_server_trailers_ended` (a head that declared a length of 0),
 `net_http_server_trailers_short` (a body short of its declared length) and
 `net_http_server_trailers_after_end` (a call after `end`).
+
+**Steps** (HTTPSRV-14): lines of `tests/link/net_http_server_steps/expected.out`,
+which `link/net_http_server_steps: exits with 0 and stdout matches expected.out`
+compares byte for byte, on HTTP/1.1, h2c and HTTP/3 in turn: "HTTP/1.1
+/stepped: 200 with x-request-id 0 and x-tag", "HTTP/1.1 /stepped: id, the
+body, then tag", "HTTP/1.1 /guarded with no authorization: 401 carrying
+x-request-id 1, no x-tag", "HTTP/1.1 /guarded refused: the body never ran",
+"HTTP/1.1 /hello, bound to no step: 200 with neither field", the same for
+h2c ("h2c /guarded refused: the body never ran", "h2c /hello, bound to no
+step: 200 with neither field") and HTTP/3 ("HTTP/3
+/hello, bound to no step: 200 with neither field"), and "nine requests
+named, one per stepped request". A seventeenth field panics
+(`link/net_http_server_steps_full`, which prints "16 fields added" first and
+exits 1), and a step's value holding CR LF makes `start` panic before the
+head is written (`link/net_http_server_steps_split`, which exits 1 with the
+carrier's refusal on stderr). `tests/link/net_handler_steps_split` pins the
+same refusal through `nish/net/handler`.
 
 A pipeline of HTTP/1.1 requests behind a held one must not grow the stack
 per request. `tests/run.js` runs `tests/link/net_http_server/deep.ts` under

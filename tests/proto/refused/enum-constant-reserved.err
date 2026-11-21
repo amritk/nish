@@ -1,0 +1,1 @@
+proto: refused/enum-constant-reserved.proto:2: refused: the enum value ZERO, whose constant PROTO_ZERO the module would not compile with

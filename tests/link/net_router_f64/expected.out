@@ -190,4 +190,17 @@ PASS  the same route with a query past the longest
 PASS  is answered by the tree
 PASS  a table grown past them files the ninth (17 of 17)
 PASS  and all nine still answer their own index
-router: 192 passed, 0 failed, 0 skipped
+PASS  a table with no step binds none to a route
+PASS  nor to the requests no route matches
+PASS  steps are named 0, 1, 2 in the order asked for
+PASS  a route answers one bit per step bound to it, a step bound twice once
+PASS  a route bound to one step answers its bit alone
+PASS  405 answers the steps bound to ROUTER_METHOD_NOT_ALLOWED
+PASS  404 answers the steps bound to ROUTER_NOT_FOUND
+PASS  any other code answers the same as 404
+PASS  an index past the table answers no step
+PASS  a route added after the steps starts bound to none
+PASS  31 steps fit, the last named 30
+PASS  one more is refused with ROUTER_FULL
+PASS  the highest step's bit keeps the set positive
+router: 205 passed, 0 failed, 0 skipped

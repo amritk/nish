@@ -26429,7 +26429,7 @@ if (dealtHere("cliChecks")) {
       "zlib-each":
         "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
       "request-slot":
-        "std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 176 → 176 bytes",
+        "std/net/http-server.ts:227:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
     }
     for (const [base, want] of Object.entries(holderWant)) {
       const file = `tests/layout/compact-bench/${base}.ts`
@@ -48716,6 +48716,129 @@ export function main(): i32 {
       `c-import: each of the ${declared.size} functions clang finds in sqlite3.h is bound or listed as not bound`,
       sqliteAst.status === 0 && declared.size > 200 && silent.length === 0,
       `${sqliteAst.stderr.slice(0, 2000)}silent: ${silent.join(", ")}`
+    )
+  }
+}
+
+// ---- WP72 S5: `nish proto` writes message classes from a .proto file --------
+// `tests/proto/goldens.js` holds each `.proto` there to its module and each
+// `tests/proto/refused/*.proto` to the one line it is refused with (exit 1,
+// nothing written); here it runs against the compiler under test. Each golden
+// module compiles under the default panic rule, the link test's checked-in
+// classes are current, and the command line is held to its exit statuses: 0
+// written or current, 1 refused or stale, 2 usage. These spawn `NISH` itself,
+// not `spawnNish`: `proto` is no compile, and `-o out.ts` would otherwise get
+// `--allow-panics`. The classes' round trip against Python's protobuf is
+// `tests/link/net_proto_classes`.
+if (!only || "proto".includes(only)) {
+  const protoDir = path.join(buildDir, "proto")
+  fs.rmSync(protoDir, { recursive: true, force: true })
+  fs.mkdirSync(protoDir, { recursive: true })
+  const fixtures = path.join(root, "tests", "proto")
+  // strict: `nish proto` is no compile, and `--allow-panics` would be read as its argument
+  const proto = (args, cwd) => spawnSync(NISH, ["proto", ...args], { cwd: cwd ?? protoDir, encoding: "utf8" })
+  const goldens = spawnSync(process.execPath, [path.join(fixtures, "goldens.js"), "--nish", NISH], {
+    encoding: "utf8",
+  })
+  check(
+    "proto: every tests/proto file writes its golden module, and every refused one its line",
+    goldens.status === 0,
+    shown(goldens)
+  )
+
+  // A generated module is a library a deny-panics program may import: it
+  // compiles with no `--allow-panics`.
+  for (const golden of fs.readdirSync(fixtures).filter((f) => f.endsWith(".ts.expected"))) {
+    const name = golden.slice(0, -".ts.expected".length)
+    const module = path.join(protoDir, `${name}.ts`)
+    fs.copyFileSync(path.join(fixtures, golden), module)
+    const out = path.join(protoDir, `${name}-ll`)
+    fs.mkdirSync(out, { recursive: true })
+    // strict: the check is that a generated module compiles under the default panic rule
+    const run = spawnSync(NISH, [module, "-o", `${out}${path.sep}`], { encoding: "utf8" })
+    check(`proto: the ${name} module compiles under the default panic rule`, run.status === 0, shown(run))
+  }
+
+  const classes = proto(
+    ["classes.proto", "-o", "classes.ts", "--check"],
+    path.join(root, "tests", "link", "net_proto_classes")
+  )
+  check(
+    "proto: tests/link/net_proto_classes/classes.ts is what nish proto writes (--check exits 0)",
+    classes.status === 0 && classes.stderr === "",
+    shown(classes)
+  )
+
+  const input = path.join(protoDir, "in.proto")
+  const text = 'syntax = "proto3";\nmessage A {\n  int32 a = 1;\n}\n'
+  fs.writeFileSync(input, text)
+  const write = proto(["in.proto", "-o", "out.ts"])
+  const outFile = path.join(protoDir, "out.ts")
+  const written = fs.existsSync(outFile) ? fs.readFileSync(outFile, "utf8") : ""
+  check(
+    "proto: a file is written, exit 0, and its Regenerate line is the command that wrote it",
+    write.status === 0 && written.includes("\n// Regenerate: nish proto in.proto -o out.ts\n"),
+    shown(write)
+  )
+  const current = proto(["in.proto", "-o", "out.ts", "--check"])
+  check("proto: --check on the module it would write exits 0", current.status === 0, shown(current))
+  fs.writeFileSync(input, text.replace("int32 a = 1", "int64 a = 1"))
+  const stale = proto(["in.proto", "-o", "out.ts", "--check"])
+  check(
+    "proto: --check on a module the .proto has moved past exits 1, says so and leaves it alone",
+    stale.status === 1 &&
+      stale.stderr === "proto: out.ts is stale; regenerate it\n" &&
+      fs.readFileSync(outFile, "utf8") === written,
+    shown(stale)
+  )
+  const missing = proto(["in.proto", "-o", "missing.ts", "--check"])
+  check(
+    "proto: --check on a module that is not there exits 1 and writes nothing",
+    missing.status === 1 && !fs.existsSync(path.join(protoDir, "missing.ts")),
+    shown(missing)
+  )
+  fs.writeFileSync(input, "message A {}\n")
+  const refused = proto(["in.proto", "-o", "out.ts"])
+  check(
+    "proto: a refused file exits 1 and leaves the module already on disk as it was",
+    refused.status === 1 &&
+      refused.stderr.startsWith("proto: in.proto:1: refused:") &&
+      fs.readFileSync(outFile, "utf8") === written,
+    shown(refused)
+  )
+
+  const help = proto(["--help"])
+  check(
+    "proto: --help prints the usage on stdout and exits 0",
+    help.status === 0 && help.stdout.startsWith("usage: nish proto <file.proto> -o <out.ts> [--check]\n"),
+    shown(help)
+  )
+  fs.writeFileSync(input, text)
+  const usage = [
+    [[], "no .proto file given"],
+    [["in.proto"], "no output file given (-o)"],
+    [["in.proto", "-o"], "-o needs a value"],
+    [["in.proto", "-o", "--check"], "-o needs a value"],
+    [["in.proto", "-o", "a.ts", "-o", "b.ts"], "one -o at most"],
+    [["in.proto", "--bogus", "-o", "new.ts"], "unknown flag --bogus"],
+    [["in.proto", "other.proto", "-o", "new.ts"], "one .proto file at most"],
+    [["missing.proto", "-o", "new.ts"], "cannot read missing.proto"],
+    [["in.proto", "-o", "in.proto"], "-o in.proto is the .proto itself, which the module would overwrite"],
+    [
+      ["in.proto", "-o", "new'.ts"],
+      "a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII",
+    ],
+  ]
+  for (const [args, message] of usage) {
+    const run = proto(args)
+    check(
+      `proto: \`${args.join(" ")}\` exits 2 with "${message}" and writes nothing`,
+      run.status === 2 &&
+        run.stderr === `proto: ${message}\nusage: nish proto <file.proto> -o <out.ts> [--check]\n` &&
+        !fs.existsSync(path.join(protoDir, "new.ts")) &&
+        !fs.existsSync(path.join(protoDir, "new'.ts")) &&
+        fs.readFileSync(input, "utf8") === text,
+      shown(run)
     )
   }
 }

@@ -1,0 +1,1 @@
+proto: refused/no-syntax.proto:1: refused: a file with no syntax statement, which is proto2 (only proto3 is supported)

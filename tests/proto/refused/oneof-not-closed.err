@@ -1,0 +1,1 @@
+proto: refused/oneof-not-closed.proto:3: oneof c is not closed

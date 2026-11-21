@@ -374,26 +374,27 @@ function refuseSite(program: CheckedProgram, listed: boolean, facts: FactsTable,
   pointer program: size=928 writesThrough=true captured=false passedTo=siteAdvice#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer table: size=168 writesThrough=false captured=false passedTo=siteAdvice#1
-  pointer scoped: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
+  pointer scoped: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 StringSet.has#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 siteAdvice#2
   pointer sink: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.report#0 DiagnosticSink.report#0
   stackSites=0 stackLocals=0
   callee +0:22 isAllowed -> @isAllowed
   local +3:9 node: Node (const)
   local +4:9 reaches: PanicSite | null (const)
-  callee +6:29 StringSet.has -> @StringSet.has
-  local +9:11 callee: FunctionFacts | null (const)
-  callee +9:20 FactsTable.get -> @FactsTable.get
-  local +10:11 name: string (const)
-  local +11:11 at: string (const)
-  callee +11:42 SourceFile.lineOf -> @SourceFile.lineOf
-  callee +11:87 SourceFile.columnOf -> @SourceFile.columnOf
-  callee +12:5 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +16:63 panicKindName -> @panicKindName
-  callee +25:3 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +29:10 panicKindName -> @panicKindName
-  callee +29:60 scopeReason -> @scopeReason
-  callee +30:25 siteAdvice -> @siteAdvice
+  callee +8:29 StringSet.has -> @StringSet.has
+  callee +8:56 StringSet.has -> @StringSet.has
+  local +11:11 callee: FunctionFacts | null (const)
+  callee +11:20 FactsTable.get -> @FactsTable.get
+  local +12:11 name: string (const)
+  local +13:11 at: string (const)
+  callee +13:42 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +13:87 SourceFile.columnOf -> @SourceFile.columnOf
+  callee +14:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +18:63 panicKindName -> @panicKindName
+  callee +27:3 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +31:10 panicKindName -> @panicKindName
+  callee +31:60 scopeReason -> @scopeReason
+  callee +32:25 siteAdvice -> @siteAdvice
 function scopeReason(listed: boolean): string -> @scopeReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

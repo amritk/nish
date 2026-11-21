@@ -121,6 +121,12 @@ export const HANDLER_SENT: i32 = 0
 export const HANDLER_DROPPED: i32 = -21
 /** `HttpRequest.query` and `header`: no such name. */
 export const HANDLER_ABSENT: i32 = -20
+/** `before` and `after`: every step bound to the request's route has run, and the request is still the program's to answer. */
+export const HANDLER_NEXT: i32 = -22
+/** `before` and `after`: a step answered the request, so the route body must not. */
+export const HANDLER_ANSWERED: i32 = -23
+/** The most fields `field` adds to one answer. */
+export const HANDLER_MAX_ADDED: i32 = 16
 
 /** The most descriptors `watch` takes beside the handler's own. */
 export const HANDLER_MAX_WATCHED: i32 = 16
@@ -314,6 +320,36 @@ export class HttpRequest {
    * @internal Advanced by `HttpHandler` in this module as `write` keeps what the carrier had no room for.
    */
   pendingEnd: i32 = 0
+  /**
+   * The steps `before` has still to hand out, one bit each; loaded from the router by the first `before`.
+   * @internal Moved only by `HttpHandler.before` in this module.
+   */
+  stepsLeft: i32 = 0
+  /**
+   * The steps `before` handed out that `after` has still to hand out again.
+   * @internal Moved by `HttpHandler.before` and `after` in this module.
+   */
+  stepsRan: i32 = 0
+  /**
+   * Whether `before` has loaded the route's steps into `stepsLeft`.
+   * @internal Set by `HttpHandler.before` and cleared when the request is read, in this module.
+   */
+  stepped: boolean = false
+  /**
+   * How many fields `field` added: `addedNames[0 .. added)` beside `addedValues`.
+   * @internal Counted by `HttpHandler.field` in this module, read by `start`, and cleared when the request is read.
+   */
+  added: i32 = 0
+  /**
+   * The names `field` added, kept by reference until the answer starts.
+   * @internal Grown by `HttpHandler.field` in this module, to at most `HANDLER_MAX_ADDED`, and kept for the requests after.
+   */
+  addedNames: u8[][]
+  /**
+   * The values `field` added, `addedValues[k]` for `addedNames[k]`.
+   * @internal Grown beside `addedNames` by `HttpHandler.field` in this module.
+   */
+  addedValues: u8[][]
 
   /**
    * An empty request for the handler's pool; its buffers grow to the first
@@ -327,6 +363,8 @@ export class HttpRequest {
     this.params = []
     this.body = []
     this.pending = []
+    this.addedNames = []
+    this.addedValues = []
   }
 
   /**
@@ -559,6 +597,9 @@ export class HttpHandler {
   private jsonType: u8[]
   private problemType: u8[]
   private noFields: u8[][]
+  /** Per length: the array `start` gathers an answer's fields and the fields `field` added into, kept for the answers after. */
+  private namesBy: u8[][][]
+  private valuesBy: u8[][][]
   /**
    * When an accept failed for want of a resource (EMFILE for descriptors,
    * ENFILE for ring slots, ENOMEM): the listener is out of the loop until
@@ -645,6 +686,8 @@ export class HttpHandler {
     this.allowMasks = []
     this.allowBytes = []
     this.noFields = []
+    this.namesBy = []
+    this.valuesBy = []
     this.loop = pollCreate()
     if (this.loop < 0) {
       panic(`HttpHandler: pollCreate failed: ${this.loop}`)
@@ -949,6 +992,8 @@ export class HttpHandler {
     r.state = HANDLER_READING
     r.pendingStart = 0
     r.pendingEnd = 0
+    r.stepped = false
+    r.added = 0
     this.route(r)
     // The router found where the path ends, before any query, as it matched.
     r.pathEnd = this.router.pathEnd
@@ -1211,6 +1256,92 @@ export class HttpHandler {
   }
 
   /**
+   * The next step to run before `r`'s route body, lowest id first, or
+   * `HANDLER_NEXT` once every step `Router.use` bound to `r.route` has run,
+   * or `HANDLER_ANSWERED` once a step has answered `r`. A step reads `r`,
+   * and may answer it — `refuse`, `problem`, `empty` or any other answer —
+   * or add answer fields with `field`; call `before` again straight after
+   * each step, before the next `take`, until it answers a negative code.
+   * Only a request `take` handed over runs steps: what the handler answers
+   * itself, to a bad request, a timeout or a full pool, runs none.
+   *
+   *     let s = handler.before(req)
+   *     while (s >= 0) { switch (s) { case AUTH: ... } s = handler.before(req) }
+   *     if (s === HANDLER_NEXT) { switch (req.route) { ... } }
+   *
+   * @param r a request `take` handed over
+   * @returns the next step's id, `HANDLER_NEXT`, or `HANDLER_ANSWERED`
+   */
+  before(r: HttpRequest): i32 {
+    if (r.state !== HANDLER_HELD) {
+      return HANDLER_ANSWERED
+    }
+    if (!r.stepped) {
+      r.stepped = true
+      r.stepsLeft = this.router.steps(r.route)
+      r.stepsRan = 0
+    }
+    const left: i32 = r.stepsLeft
+    if (left === 0) {
+      return HANDLER_NEXT
+    }
+    const low: i32 = left & (0 - left)
+    r.stepsLeft = left ^ low
+    r.stepsRan = r.stepsRan | low
+    return toI32(31) - toI32(Math.clz32(toU32(low)))
+  }
+
+  /**
+   * The next step to run after `r`'s route body has chosen its answer and
+   * before it sends it: the steps `before` handed out, highest id first, then
+   * `HANDLER_NEXT`; or `HANDLER_ANSWERED` once a step has answered `r`. A
+   * step here may still `field` or answer in the body's place. A request
+   * `before` was never called for runs no step here.
+   * @param r a request `take` handed over, not yet answered
+   * @returns the next step's id, `HANDLER_NEXT`, or `HANDLER_ANSWERED`
+   */
+  after(r: HttpRequest): i32 {
+    if (r.state !== HANDLER_HELD) {
+      return HANDLER_ANSWERED
+    }
+    const ran: i32 = r.stepped ? r.stepsRan : 0
+    if (ran === 0) {
+      return HANDLER_NEXT
+    }
+    const step: i32 = toI32(31) - toI32(Math.clz32(toU32(ran)))
+    r.stepsRan = ran ^ (1 << step)
+    return step
+  }
+
+  /**
+   * Adds the field `name: value` to `r`'s answer, after the fields the answer
+   * names itself, whichever answer it is. Both are kept by reference, so they
+   * stay the caller's bytes, unchanged, until the answer starts. Panics past
+   * `HANDLER_MAX_ADDED` fields, or on a request not held; a name or value the
+   * carrier refuses panics as the answer's own would.
+   * @param r a request `take` handed over, not yet answered
+   * @param name the field name, a lowercase token
+   * @param value the field value, field text
+   */
+  field(r: HttpRequest, name: u8[], value: u8[]): void {
+    if (r.state !== HANDLER_HELD) {
+      panic(`HttpHandler.field: the request is not one taken and unanswered (state ${r.state})`)
+    }
+    const at: i32 = r.added
+    if (at >= HANDLER_MAX_ADDED) {
+      panic(`HttpHandler.field: more than ${HANDLER_MAX_ADDED} fields added to one answer`)
+    }
+    if (at < toI32(r.addedNames.length) && at < toI32(r.addedValues.length)) {
+      r.addedNames[at] = name
+      r.addedValues[at] = value
+    } else {
+      r.addedNames.push(name)
+      r.addedValues.push(value)
+    }
+    r.added = at + 1
+  }
+
+  /**
    * Whether the client of `r` has hung up: its connection is closed or
    * reused, or the peer ended its stream while `r` is held. A half-close
    * counts, as nginx counts it, so a hung task is cancelled rather than
@@ -1288,7 +1419,13 @@ export class HttpHandler {
     }
     const conn: Http1Connection = this.server.connection(r.slot)
     const framing: i32 = status === 204 || status === 304 ? HTTP1_NO_BODY : bodyLength
-    const sent: i32 = conn.respond(status, names, values, framing)
+    let outNames: u8[][] = names
+    let outValues: u8[][] = values
+    if (r.added > 0) {
+      outNames = handlerWithAdded(this.namesBy, names, r.addedNames, r.added)
+      outValues = handlerWithAdded(this.valuesBy, values, r.addedValues, r.added)
+    }
+    const sent: i32 = conn.respond(status, outNames, outValues, framing)
     if (sent === H1_AGAIN) {
       // The output still holds more of the response before this one than a
       // head can fit behind — only for a head near half the output, since a
@@ -1751,4 +1888,30 @@ const handlerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 =>
     return ROUTER_NO_ROOM
   }
   return length < 0 ? ROUTER_BAD_ESCAPE : length
+}
+
+/**
+ * `given` followed by `added[0 .. count)`, in the array `byLength` keeps for
+ * that length: made the first time an answer has that many fields, and
+ * written over by each answer after.
+ */
+const handlerWithAdded = (byLength: u8[][][], given: u8[][], added: u8[][], count: i32): u8[][] => {
+  const have: i32 = toI32(given.length)
+  const length: i32 = have + count
+  while (toI32(byLength.length) <= length) {
+    const size: i32 = toI32(byLength.length)
+    const made: u8[][] = []
+    for (let k: i32 = 0; k < size; k++) {
+      made.push(added[0])
+    }
+    byLength.push(made)
+  }
+  const out: u8[][] = byLength[length]
+  for (let k: i32 = 0; k < toI32(given.length) && k < toI32(out.length); k++) {
+    out[k] = given[k]
+  }
+  for (let k: i32 = 0; k < count && k < toI32(added.length); k++) {
+    out[have + k] = added[k]
+  }
+  return out
 }

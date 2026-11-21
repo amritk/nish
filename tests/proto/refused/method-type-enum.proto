@@ -1,0 +1,8 @@
+syntax = "proto3";
+enum E {
+  E_ZERO = 0;
+}
+message A {}
+service S {
+  rpc Get(E) returns (A);
+}

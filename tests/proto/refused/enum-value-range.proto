@@ -1,0 +1,5 @@
+syntax = "proto3";
+enum E {
+  E_ZERO = 0;
+  E_BIG = 2147483648;
+}

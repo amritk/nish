@@ -8,7 +8,9 @@ module knows only tags, wire types and the value encodings on top of them.
 
 It says what the reader refuses and with which code, what it caps and where,
 and the test that pins each property. It is written with the code, against
-`main` at `56ce425`, and cites functions rather than lines.
+`main` at `56ce425`, and cites functions rather than lines. The decoders
+`nish proto` generates over the reader ("Generated decoders", PB-6) were
+added against `main` at `1b1415c`.
 
 **Result.** No byte sequence a peer sends makes the reader panic, loop, read
 outside its span or allocate. A varint whose tenth byte still continues, a
@@ -20,13 +22,15 @@ until `reset`. Each byte of the span is passed once, so the work is linear in
 the message's length. Nothing in the module panics, not even the program's
 own mistakes: a reader window or a `bytes` source window outside its array,
 and a message past `PROTO_MAX_SIZE` bytes, are `PROTO_ERR_WINDOW`. No finding
-is counted; five properties are recorded as accepted (PB-1 to PB-5).
+is counted; six properties are recorded as accepted (PB-1 to PB-6).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
 | `std/net/protobuf.ts` | `ProtoReader` (`reset`, `next`, `uint64`, `int64`, `uint32`, `int32`, `bool`, `sint64`, `sint32`, `fixed32`, `sfixed32`, `float`, `fixed64`, `sfixed64`, `double`, `len`, `enter`, `enterPacked`, `more`, `leave`, and the internal `fail`, `varint`, `length`, `fixed`, `pass`, `skip`, `take`); `ProtoWriter` (`reset`, `uint64`, `int64`, `uint32`, `int32`, `bool`, `sint64`, `sint32`, `fixed32`, `sfixed32`, `float`, `fixed64`, `sfixed64`, `double`, `bytes`, `string`, `beginMessage`, `endMessage`, `packedVarint`, `packedFixed32`, `packedFixed64`, and the internal `put`, `poke`, `putVarint`, `putFixed`, `tag`, `packed`); the helpers `varintSize`, `f32OfBits` |
+| `src/proto-emit.ts` | the `decode` methods it writes per message class, and the module's `protoString` and `protoBytes` copies |
+| `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-cli.ts` | `nish proto`'s reading of a `.proto` file the developer gives it: every construct outside the subset is refused with its line, and nothing is written |
 
 Out of scope: the transport that delivers a message's bytes (HTTP/2 and
 gRPC's length-prefixed framing have their own records). Also out of scope are
@@ -61,6 +65,7 @@ read, and its size is bounded by that message.
 | PB-3 | Low | `ProtoWriter` | `end` and the field lengths are `i32`, so the writer refuses to grow a message past `PROTO_MAX_SIZE` (2^31 − 2) bytes with `PROTO_ERR_WINDOW`. `endMessage` moves an embedded message's contents right once per enclosing `endMessage` when its length needs more than one byte. Writing a message nested d deep therefore copies up to d times its size. | **Accepted, not counted.** gRPC's framing caps a message at 2^32 − 1 bytes, and a program that writes one of 2^31 − 1 bytes or more needs another writer. The copy cost is bounded by `PROTO_MAX_DEPTH` and is the program's own nesting, not a peer's. No test reaches `PROTO_MAX_SIZE`. "a nested message of 20000 bytes" pins the move. |
 | PB-4 | None (a property) | `ProtoReader.len` | A `string` field is a length-delimited span like `bytes`: the reader does not check that it is UTF-8. | **Accepted, not counted; documented.** proto3 requires valid UTF-8 in a `string`, but the check belongs to the code that turns the span into a string with a schema in hand. `len`'s doc comment says the bytes are not checked to be UTF-8. |
 | PB-5 | None (a property) | `ProtoReader.float`, `f32OfBits` | `float` builds its `f32` through an `f64`, and the narrowing sets a signaling NaN's quiet bit: the bits 0x7f800001 come back as 0x7fc00001, without a fault. | **Accepted, not counted; documented.** The language has no conversion from bits to an `f32` that keeps a signaling NaN. `float`'s doc comment says so and that `fixed32` reads the exact bits. Pinned by "a float of bits 0x7f800001 reads as 0x7fc00001". |
+| PB-6 | None (a property) | the `decode` methods `src/proto-emit.ts` writes | A generated `decode` allocates as it reads: an element per `repeated` field or packed element, an entry per map entry field, a class instance per message field, and a copy per `string` or `bytes` field. Each takes at least one byte of the message, but an element can take more memory than the bytes that carried it: a `repeated` message element of two bytes (a tag and a length of 0) allocates a whole class instance. So the memory a decoded message holds is linear in the message's length, with a constant factor set by the schema's largest class. | **Accepted, not counted.** The bound is the message's length, which the caller sets: gRPC's server refuses a message longer than `maxMessage` (4 MiB by default, at most 2^30) before it reaches `decode`. A caller reading another source caps the length itself. Pinned per byte by "Repeated growth" and "Map growth" below; no test measures the memory. |
 
 Two bugs were found while the module was written, before it reached `main`,
 and are not counted. `bytes` bounded its copy loop with `q - from < count`, a
@@ -185,6 +190,51 @@ one. Between them they call `next`, `len`, `enter`, `enterPacked`, `more`,
 `double`, and every writer method but `reset`, `int64`, `uint32`, `bool`,
 `sint64`, `sfixed32` and `sfixed64`.
 
+## Generated decoders
+
+`nish proto` (`src/proto-emit.ts`) writes a `decode` method per message class
+over this reader. A generated decoder calls the reader's methods for every
+tag, value, length and nesting level, so each meets the reader's checks above.
+It reads two public fields too, only in the string and bytes copies below:
+`r.spanStart`, where the span `r.len()` just checked begins, and `r.buf`, the
+array it indexes; each index is tested against `r.buf.length` before it is
+read, so the copy relies on no bound the reader keeps. What the generator adds
+is the loops that grow the class's fields, whose memory is PB-6. No finding is
+counted for them.
+
+- **Nesting depth.** Each message field, `repeated` message and map entry is
+  read between `r.enter()` and `r.leave()`, and `decode` answers false as soon
+  as either does, so a decoder is bounded by `PROTO_MAX_DEPTH` (100) like a
+  hand-written loop. `tests/link/net_proto_classes` sends a message nested 100
+  levels below the top (`one hundred nested messages`, which it holds) and one
+  nested 101 levels (`past the depth limit: refused`).
+- **Repeated growth.** A `repeated` field appends one element per field or
+  packed element read. A field read takes at least its tag byte, and a packed
+  element at least one byte inside a run `enterPacked` has bounded by the
+  message, and `more()` answers false once the reader has failed, so a field
+  grows by at most one element per byte of the message. A packed run whose
+  length runs past its field is refused (`packed length past the field:
+  refused`).
+- **Map growth.** A map entry is one length-delimited field: `decode` enters
+  it, reads its key and value, leaves it and sets one entry, so a map grows by
+  at most one entry per entry field read, and a repeated key replaces its
+  entry rather than adding one (`map key repeated keeps the last`). An entry
+  whose length runs past the message is refused (`bad map entry: refused`).
+- **String and bytes copies.** A `string` or `bytes` field is copied byte by
+  byte from the span `len()` and `spanStart` name, with the index tested
+  against the buffer's length at each step, so the copy never reads past the
+  buffer even if the span did not fit it, and a generated module has no
+  indexing the panic rule refuses. `a two-byte string length` and the `every
+  field kind` vector (a non-ASCII string, and the bytes 0, 1, 127, 128 and 255) pin the copies
+  against the reference.
+
+Each named line is a line of `tests/link/net_proto_classes`'s `expected.out`,
+so the check that fails when one stops holding is
+`link/net_proto_classes: exits with 0 and stdout matches expected.out`. That
+every generated module compiles under the default panic rule is pinned by
+`proto: the <name> module compiles under the default panic rule` in
+`node tests/run.js proto`, one check per `tests/proto/*.ts.expected` golden.
+
 ## Not pinned
 
 - The no-panic property of the methods neither guide example calls (the
@@ -195,3 +245,5 @@ one. Between them they call `next`, `len`, `enter`, `enterPacked`, `more`,
 - No fuzz target drives the reader yet. The properties above are pinned by
   the fixtures alone.
 - PB-3's `PROTO_MAX_SIZE` refusal is not reached by a test.
+- PB-6's memory is not measured by a test: the per-byte bounds are pinned,
+  the constant factor is not.
