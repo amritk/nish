@@ -20,7 +20,17 @@
 //   4. The cap: on a second server whose `maxTimeout` is 60 ms, a call asking
 //      for 99999999 hours, and one asking for nothing, are past their
 //      deadlines 120 ms later.
-//   5. HTTP/1.1: a gRPC call over it is 505.
+//   5. Streaming, over HTTP/2 over TLS and h2c each: SumAll (client
+//      streaming) with a message split across three DATA frames, and three
+//      messages in one, answered only once the stream ends; Echo
+//      (bidirectional) answering a message before the client's stream ends;
+//      a SumAll the client cancels with RST_STREAM, and one whose deadline
+//      passes mid-stream; each framing fault of a streamed message; Count
+//      (server streaming) sending three replies, then a hundred of a kilobyte
+//      each past the flow-control window, the rig holding no more than its
+//      budget queued until the window opens; and `send` and `finish` past the
+//      deadline answering DEADLINE_EXCEEDED.
+//   6. HTTP/1.1: a gRPC call over it is 505.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { H2_FLAG_END_STREAM, http2WriteData } from "nish/net/http2-frame"
@@ -29,7 +39,8 @@ import { n32 } from "../net_quic_frame/typed"
 import { leafPrivate } from "../net_tls_common/server"
 import { NO_PAD, Wire, ZERO } from "../net_http2/peer"
 import { H1Client, H2cClient, H2TlsClient } from "./client"
-import { GrpcRig, RIG_MAX_MESSAGE } from "./rig"
+import { ProtoWriter } from "nish/net/protobuf"
+import { GrpcRig, RIG_BUDGET, RIG_MAX_MESSAGE } from "./rig"
 
 /** `GrpcLimits.maxTimeout`'s default, which the main rig keeps. */
 const DEFAULT_TIMEOUT: i32 = 30000
@@ -54,6 +65,58 @@ const sumOf = (a: i32, b: i32): u8[] => [toU8(0), toU8(0), toU8(0), toU8(0), toU
 /** A DATA frame on `stream` carrying `bytes` and ending the stream. */
 const body = (wire: Wire, stream: i32, bytes: u8[]): void => {
   wire.add(http2WriteData(wire.scratch, ZERO, stream, bytes, ZERO, toI32(bytes.length), H2_FLAG_END_STREAM, NO_PAD))
+}
+
+/** A DATA frame on `stream` carrying `bytes`, the stream left open. */
+const piece = (wire: Wire, stream: i32, bytes: u8[]): void => {
+  wire.add(http2WriteData(wire.scratch, ZERO, stream, bytes, ZERO, toI32(bytes.length), 0, NO_PAD))
+}
+
+/** `a`, then `b`, then `c`, as one array. */
+const joined = (a: u8[], b: u8[], c: u8[]): u8[] => {
+  const out: u8[] = []
+  for (const x of a) {
+    out.push(x)
+  }
+  for (const x of b) {
+    out.push(x)
+  }
+  for (const x of c) {
+    out.push(x)
+  }
+  return out
+}
+
+/** A CountRequest of `count` replies from `start`, each padded with `pad` bytes, length-prefixed. */
+const countOf = (count: i32, start: i32, pad: i32): u8[] => {
+  const w = new ProtoWriter(new Array<u8>(16))
+  w.int32(1, count)
+  w.int32(2, start)
+  w.int32(3, pad)
+  const out: u8[] = [toU8(0), toU8(0), toU8(0), toU8(0), toU8(w.end)]
+  for (let k: i32 = 0; k < w.end; k++) {
+    out.push(w.buf[k])
+  }
+  return out
+}
+
+/** The bytes of every DATA frame on `stream` in `frames`, as `FrameLog.take` joins them. */
+const dataBytes = (frames: string, stream: i32): i32 => {
+  const start: string = `; DATA ${stream} `
+  const text: string = `; ${frames}`
+  let total: i32 = 0
+  let at: i32 = text.indexOf(start)
+  while (at >= 0) {
+    let k: i32 = at + toI32(start.length)
+    let n: i32 = 0
+    while (k < toI32(text.length) && toI32(text.charCodeAt(k)) >= 48 && toI32(text.charCodeAt(k)) <= 57) {
+      n = n * 10 + toI32(text.charCodeAt(k)) - 48
+      k++
+    }
+    total = total + n
+    at = text.indexOf(start, k)
+  }
+  return total
 }
 
 /** `bytes` as `FrameLog` shows a DATA frame's text, one character a byte. */
@@ -263,6 +326,231 @@ const capChecks = (t: Suite, key: Secret<u8[]>): void => {
   t.ok("reply sends DEADLINE_EXCEEDED for each: the cap is maxTimeout, not what was asked", only(late, n32(1), n32(4)) && only(late, n32(3), n32(4)))
 }
 
+/** One client of either kind, and every frame it has read, joined. */
+class Peer {
+  tls: boolean
+  h2: H2TlsClient
+  c: H2cClient
+  wire: Wire
+  rig: GrpcRig
+  text: string = ""
+
+  constructor(rig: GrpcRig, tls: boolean) {
+    this.tls = tls
+    this.rig = rig
+    this.h2 = new H2TlsClient(rig)
+    this.c = new H2cClient(rig)
+    this.wire = tls ? this.h2.wire : this.c.wire
+  }
+
+  /** Connects, then sends the preface and SETTINGS; false when the connect or handshake failed. */
+  connect(key: Secret<u8[]>): boolean {
+    const up: boolean = this.tls ? this.h2.handshake(this.rig.port, key) && this.h2.verified : this.c.connect(this.rig.h2cPort)
+    const none: i32[] = []
+    const noValues: i64[] = []
+    this.wire.preface()
+    this.wire.settings(none, noValues)
+    this.wire.settingsAck()
+    this.flush(key)
+    return up
+  }
+
+  flush(key: Secret<u8[]>): void {
+    if (this.tls) {
+      this.h2.flush(key)
+    } else {
+      this.c.flush(key)
+    }
+  }
+
+  /** Turns the server's loop `n` times; over h2c, reads what came too. */
+  turns(n: i32, key: Secret<u8[]>): void {
+    for (let k: i32 = 0; k < n; k++) {
+      if (this.tls) {
+        this.rig.step(n32(5), key)
+      } else {
+        this.c.turn(key)
+      }
+    }
+  }
+
+  /** Turns the server's loop for `ms` milliseconds or more. */
+  wait(ms: i64, key: Secret<u8[]>): void {
+    const since: i64 = monotonicNanos()
+    for (let turn: i32 = 0; turn < 400 && monotonicNanos() - since < ms * toI64(1000000); turn++) {
+      this.turns(n32(1), key)
+    }
+  }
+
+  /** Reads until a frame shows `marker`; answers every frame read on the connection, joined. */
+  until(marker: string, key: Secret<u8[]>): string {
+    if (this.text.indexOf(marker) >= 0) {
+      return this.text
+    }
+    const got: string = this.tls ? this.h2.awaitText(marker, key) : this.c.awaitText(marker, key)
+    if (got.length > 0) {
+      this.text = this.text.length > 0 ? `${this.text}; ${got}` : got
+    }
+    return this.text
+  }
+}
+
+/** The three streaming methods, over HTTP/2 over TLS (`tls`) or h2c. */
+const streamChecks = (t: Suite, rig: GrpcRig, tls: boolean, key: Secret<u8[]>): void => {
+  const over: string = tls ? "over TLS" : "over h2c"
+  const p = new Peer(rig, tls)
+  t.ok(`streaming ${over}: a connection`, p.connect(key))
+  const calls: i32 = rig.calls
+  const closed: i32 = rig.closed
+  // SumAll, one message split across three DATA frames, each flushed alone.
+  p.wire.headers(n32(1), callOf("SumAll", "application/grpc", ""), 0)
+  piece(p.wire, n32(1), [toU8(0), toU8(0), toU8(0)])
+  p.flush(key)
+  p.turns(n32(3), key)
+  piece(p.wire, n32(1), [toU8(0), toU8(4), toU8(8), toU8(2)])
+  p.flush(key)
+  p.turns(n32(3), key)
+  t.ok(`SumAll ${over}: no answer while the client's stream is open`, p.until("HEADERS 1", key).indexOf("HEADERS 1") < 0 && rig.streams.length === 1)
+  piece(p.wire, n32(1), [toU8(16), toU8(3)])
+  body(p.wire, n32(1), new Array<u8>(0))
+  p.flush(key)
+  t.ok(`SumAll ${over}: a message split across three DATA frames, answered at the end of the stream`, replied(p.until("HEADERS 1 end", key), n32(1), n32(5)))
+  // SumAll, three messages in one DATA frame.
+  p.wire.headers(n32(3), callOf("SumAll", "application/grpc", ""), 0)
+  body(p.wire, n32(3), joined(sumOf(n32(1), n32(2)), sumOf(n32(3), n32(4)), sumOf(n32(5), n32(6))))
+  p.flush(key)
+  t.ok(`SumAll ${over}: three messages in one DATA frame`, replied(p.until("HEADERS 3 end", key), n32(3), n32(21)))
+  // Echo: a message answered while the client's stream is open, then another with its end.
+  p.wire.headers(n32(5), callOf("Echo", "application/grpc", ""), 0)
+  piece(p.wire, n32(5), sumOf(n32(2), n32(3)))
+  p.flush(key)
+  const first: string = p.until(`DATA 5 2 "${shown([toU8(8), toU8(5)])}"`, key)
+  t.ok(`Echo ${over}: 200 and a reply before the client's stream ends`, frameOf(first, "HEADERS 5 :status=200 ").indexOf(" content-type=application/grpc") > 0 && first.indexOf(`DATA 5 2 "${shown([toU8(8), toU8(5)])}"`) > 0 && first.indexOf("HEADERS 5 end") < 0)
+  body(p.wire, n32(5), sumOf(n32(4), n32(4)))
+  p.flush(key)
+  t.ok(`Echo ${over}: the second reply, then grpc-status 0 at the end of the stream`, p.until("HEADERS 5 end", key).indexOf(`DATA 5 2 "${shown([toU8(8), toU8(8)])}"; HEADERS 5 end grpc-status=0`) > 0)
+  // SumAll, cancelled by the client mid-stream.
+  p.wire.headers(n32(7), callOf("SumAll", "application/grpc", ""), 0)
+  piece(p.wire, n32(7), sumOf(n32(1), n32(1)))
+  p.flush(key)
+  p.turns(n32(3), key)
+  const open: boolean = rig.streams.length === 1
+  p.wire.rst(n32(7), n32(8))
+  p.flush(key)
+  p.turns(n32(5), key)
+  t.ok(`SumAll ${over}: RST_STREAM CANCEL ends the call, the program's read with it, and nothing is sent`, open && rig.streams.length === 0 && rig.closed - closed === 1 && p.until("HEADERS 7", key).indexOf("HEADERS 7") < 0)
+  // SumAll, its 300 ms deadline passing mid-stream, the call seen open first.
+  p.wire.headers(n32(9), callOf("SumAll", "application/grpc", "300m"), 0)
+  piece(p.wire, n32(9), sumOf(n32(1), n32(1)))
+  p.flush(key)
+  p.turns(n32(3), key)
+  const open9: boolean = rig.streams.length === 1
+  p.wait(toI64(450), key)
+  t.ok(`SumAll ${over}: a deadline passing mid-stream is DEADLINE_EXCEEDED`, open9 && only(p.until("HEADERS 9 end", key), n32(9), n32(4)) && rig.streams.length === 0)
+  // The framing faults, each in a streamed request.
+  const faults: u8[][] = [
+    [toU8(0), toU8(0), toU8(0), toU8(0), toU8(RIG_MAX_MESSAGE + 1)],
+    [toU8(1), toU8(0), toU8(0), toU8(0), toU8(0)],
+    [toU8(2), toU8(0), toU8(0), toU8(0), toU8(0)],
+    [toU8(0), toU8(0), toU8(0), toU8(0), toU8(RIG_MAX_MESSAGE), toU8(8), toU8(1)],
+    [toU8(0), toU8(0), toU8(0)],
+  ]
+  const statuses: i32[] = [8, 12, 13, 13, 13]
+  const names: string[] = ["a length past maxMessage", "a compressed message", "an unknown flag byte", "a maxMessage-long message the stream ends inside after 2 bytes", "a prefix the stream ends inside"]
+  for (let k: i32 = 0; k < toI32(faults.length); k++) {
+    p.wire.headers(n32(11 + 2 * k), callOf("SumAll", "application/grpc", ""), 0)
+    body(p.wire, n32(11 + 2 * k), faults[k])
+  }
+  p.flush(key)
+  for (let k: i32 = 0; k < toI32(faults.length); k++) {
+    t.ok(`SumAll ${over}: ${names[k]}: grpc-status ${statuses[k]}`, only(p.until(`HEADERS ${11 + 2 * k} end`, key), n32(11 + 2 * k), statuses[k]))
+  }
+  t.ok(`SumAll ${over}: each fault ended the call, none answered by the program`, rig.streams.length === 0 && rig.closed - closed === 7)
+  // Count: three replies, then grpc-status 0.
+  p.wire.headers(n32(21), callOf("Count", "application/grpc", ""), 0)
+  body(p.wire, n32(21), countOf(n32(3), n32(65), n32(0)))
+  p.flush(key)
+  const three: string = p.until("HEADERS 21 end", key)
+  const a: i32 = three.indexOf(`DATA 21 2 "${shown([toU8(8), toU8(65)])}"`)
+  const b: i32 = three.indexOf(`DATA 21 2 "${shown([toU8(8), toU8(66)])}"`)
+  const c: i32 = three.indexOf(`DATA 21 2 "${shown([toU8(8), toU8(67)])}"`)
+  t.ok(`Count ${over}: three replies in order, then grpc-status 0`, frameOf(three, "HEADERS 21 :status=200 ").indexOf(" content-type=application/grpc") > 0 && a > 0 && a < b && b < c && c < three.indexOf("HEADERS 21 end grpc-status=0") && dataBytes(three, n32(21)) === 21)
+  // Count: a hundred replies of 1010 bytes each, past the 65535-byte window.
+  rig.maxPending = 0
+  p.wire.headers(n32(23), callOf("Count", "application/grpc", ""), 0)
+  body(p.wire, n32(23), countOf(n32(100), n32(1), n32(1000)))
+  p.flush(key)
+  p.turns(n32(20), key)
+  t.ok(`Count ${over}: a slow reader stalls the sender, no more than its budget and one reply queued`, rig.senders.length === 1 && rig.left[0] > 0 && rig.maxPending > RIG_BUDGET && rig.maxPending <= RIG_BUDGET + 1010)
+  p.wire.windowUpdate(n32(0), n32(1000000))
+  p.wire.windowUpdate(n32(23), n32(1000000))
+  p.flush(key)
+  const hundred: string = p.until("HEADERS 23 end", key)
+  t.ok(`Count ${over}: the window opened, all hundred replies, then grpc-status 0`, dataBytes(hundred, n32(23)) === 101000 && hundred.indexOf("HEADERS 23 end grpc-status=0") > 0 && rig.senders.length === 0)
+  // Count, stalled past its 300 ms deadline without the server's loop turning: send answers DEADLINE_EXCEEDED.
+  const sendClosed: i32 = rig.closed
+  p.wire.headers(n32(25), callOf("Count", "application/grpc", "300m"), 0)
+  body(p.wire, n32(25), countOf(n32(100), n32(1), n32(1000)))
+  p.flush(key)
+  p.turns(n32(3), key)
+  const since: i64 = monotonicNanos()
+  while (monotonicNanos() - since < toI64(450000000)) {}
+  p.wire.windowUpdate(n32(25), n32(1000000))
+  p.flush(key)
+  t.ok(`Count ${over}: send past the deadline ends the call DEADLINE_EXCEEDED`, p.until("HEADERS 25 end", key).indexOf("HEADERS 25 end grpc-status=4") > 0 && rig.closed - sendClosed === 1 && rig.senders.length === 0)
+  // Count, every reply queued and the deadline passing while they wait: finish answers DEADLINE_EXCEEDED.
+  const results: i32 = toI32(rig.results.length)
+  p.wire.headers(n32(27), callOf("Count", "application/grpc", "300m"), 0)
+  body(p.wire, n32(27), countOf(n32(68), n32(1), n32(1000)))
+  p.flush(key)
+  p.turns(n32(3), key)
+  const queued: boolean = rig.senders.length === 1 && rig.left[0] === 0
+  p.wait(toI64(450), key)
+  p.wire.windowUpdate(n32(27), n32(1000000))
+  p.flush(key)
+  const late: string = p.until("HEADERS 27 end", key)
+  t.ok(`Count ${over}: finish past the deadline ends the call DEADLINE_EXCEEDED, after the replies queued before it`, queued && dataBytes(late, n32(27)) === 68 * 1010 && late.indexOf("HEADERS 27 end grpc-status=4") > 0 && toI32(rig.results.length) === results + 1 && rig.results[results] === HANDLER_SENT && rig.senders.length === 0)
+  t.ok(`streaming ${over}: the program saw all fourteen calls, the faulted ones too`, rig.calls - calls === 14)
+}
+
+/**
+ * The Trailers-Only answers: 150 on one connection, past its 100 stream
+ * slots, each giving its slot back; and a streamed call answered so before
+ * the client's stream ends, whose later DATA does not hand it back to the
+ * program.
+ */
+const onlyChecks = (t: Suite, rig: GrpcRig, tls: boolean, key: Secret<u8[]>): void => {
+  const over: string = tls ? "over TLS" : "over h2c"
+  const p = new Peer(rig, tls)
+  t.ok(`Trailers-Only ${over}: a connection`, p.connect(key))
+  let answered: boolean = true
+  for (let batch: i32 = 0; batch < 3; batch++) {
+    for (let k: i32 = 0; k < 50; k++) {
+      const stream: i32 = 1 + 2 * (50 * batch + k)
+      p.wire.headers(stream, callOf("Missing", "application/grpc", ""), 0)
+      body(p.wire, stream, sumOf(n32(0), n32(0)))
+    }
+    p.flush(key)
+    const frames: string = p.until(`HEADERS ${1 + 2 * (50 * batch + 49)} end`, key)
+    for (let k: i32 = 0; k < 50; k++) {
+      answered = answered && only(frames, 1 + 2 * (50 * batch + k), n32(5))
+    }
+  }
+  t.ok(`Trailers-Only ${over}: 150 calls on one connection, each NOT_FOUND, none refused`, answered && p.text.indexOf("RST_STREAM") < 0)
+  const calls: i32 = rig.calls
+  // SumAll: a message that does not parse, failed while the client's stream is open.
+  p.wire.headers(n32(301), callOf("SumAll", "application/grpc", ""), 0)
+  piece(p.wire, n32(301), [toU8(0), toU8(0), toU8(0), toU8(0), toU8(2), toU8(8), toU8(128)])
+  p.flush(key)
+  const failed: boolean = only(p.until("HEADERS 301 end", key), n32(301), n32(3))
+  piece(p.wire, n32(301), sumOf(n32(1), n32(1)))
+  body(p.wire, n32(301), sumOf(n32(1), n32(1)))
+  p.wire.headers(n32(303), callOf("GetSum", "application/grpc", ""), 0)
+  body(p.wire, n32(303), sumOf(n32(2), n32(3)))
+  p.flush(key)
+  t.ok(`SumAll ${over}: INVALID_ARGUMENT before the stream ends; the client's later DATA is not handed back, and the next call is answered`, failed && replied(p.until("HEADERS 303 end", key), n32(303), n32(5)) && rig.calls - calls === 2 && rig.streams.length === 0)
+}
+
 /** HTTP/1.1: gRPC needs HTTP/2. */
 const h1Checks = (t: Suite, rig: GrpcRig, key: Secret<u8[]>): void => {
   const c = new H1Client(rig)
@@ -279,6 +567,10 @@ export const main = (): i32 => {
   tlsChecks(t, rig, key)
   h2cChecks(t, rig, key)
   deadlineChecks(t, rig, key)
+  streamChecks(t, rig, true, key)
+  streamChecks(t, rig, false, key)
+  onlyChecks(t, rig, true, key)
+  onlyChecks(t, rig, false, key)
   capChecks(t, key)
   h1Checks(t, rig, key)
   wipe(key)

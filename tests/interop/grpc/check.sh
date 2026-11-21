@@ -1,8 +1,9 @@
 #!/bin/bash
 # interop.yml's `grpc` job: calls the Nish gRPC server (`/grpc-server serve`,
-# `tests/link/net_grpc_interop`) with grpcurl, then a short ghz run, over its
-# TLS listener and over its h2c one, and fails on any answer it does not
-# expect. ghz is a stability check, not a benchmark: no throughput is printed.
+# `tests/link/net_grpc_interop`) with grpcurl, unary and one streaming method
+# of each kind, then two short ghz runs, over its TLS listener and over its h2c
+# one, and fails on any answer it does not expect. ghz is a stability check,
+# not a benchmark: no throughput is printed.
 #
 #   tests/interop/grpc/check.sh GRPCURL GHZ TLS_PORT H2C_PORT
 #
@@ -75,6 +76,39 @@ expect_status() {
   fi
 }
 
+# expect_results NAME METHOD JSON WANT SHOWN: METHOD, sent the messages JSON
+# holds, exits 0 and answers exactly the results WANT (space-separated, in
+# order); SHOWN describes the call in the PASS line. proto3 JSON leaves a 0
+# result out, so a missing one reads as 0.
+expect_results() {
+  local name=$1 method=$2 data=$3 want=$4 shown=$5
+  call "$flag" "$port" "$method" "$data"
+  local got
+  got=$(printf '%s' "$out" | jq -c '.result // 0' 2> /dev/null | paste -sd ' ' -)
+  if [ "$code" -eq 0 ] && [ "$got" = "$want" ]; then
+    pass "$name: $method $shown"
+  else
+    fail "$name: $method $shown: exit $code, results '$got', stderr: $err"
+  fi
+}
+
+# expect_ghz NAME METHOD JSON CONCURRENCY CALLS STATUS SHOWN: ghz makes CALLS
+# calls of METHOD, CONCURRENCY at a time on one connection, and every one
+# answers STATUS.
+expect_ghz() {
+  local name=$1 method=$2 data=$3 concurrency=$4 calls=$5 status=$6 shown=$7
+  "$ghz" "$ghz_flag" --import-paths "$protos" --proto benchmark.proto \
+    --call "$service/$method" -d "$data" -c "$concurrency" -n "$calls" \
+    -O json "127.0.0.1:$port" > "$report" 2> "$errfile"
+  local ghz_code=$? ok
+  ok=$(jq -c --arg s "$status" '[.count, (.statusCodeDistribution | keys), .statusCodeDistribution[$s]]' "$report" 2> /dev/null)
+  if [ "$ghz_code" -eq 0 ] && [ "$ok" = "[$calls,[\"$status\"],$calls]" ]; then
+    pass "$name: ghz: $calls $method calls, $concurrency at a time, $shown"
+  else
+    fail "$name: ghz: $method: exit $ghz_code, [count, statuses, $status] $ok; errors: $(jq -c '.errorDistribution' "$report" 2> /dev/null) $(cat "$errfile")"
+  fi
+}
+
 errfile=$(mktemp)
 report=$(mktemp)
 trap 'rm -f "$errfile" "$report"' EXIT
@@ -97,16 +131,24 @@ for listener in "TLS -insecure --skipTLS $tls_port" "h2c -plaintext --insecure $
     fail "$name: Slow: took $ms ms; the server's cap is 1000"
   fi
 
-  "$ghz" "$ghz_flag" --import-paths "$protos" --proto benchmark.proto \
-    --call "$service/GetSum" -d '{"a":2,"b":3}' -c 10 -n "$ghz_calls" \
-    -O json "127.0.0.1:$port" > "$report" 2> "$errfile"
-  ghz_code=$?
-  ok=$(jq -c '[.count, (.statusCodeDistribution | keys), .statusCodeDistribution.OK]' "$report" 2> /dev/null)
-  if [ "$ghz_code" -eq 0 ] && [ "$ok" = "[$ghz_calls,[\"OK\"],$ghz_calls]" ]; then
-    pass "$name: ghz: $ghz_calls GetSum calls, 10 at a time, every one OK"
-  else
-    fail "$name: ghz: exit $ghz_code, [count, statuses, OK] $ok; errors: $(jq -c '.errorDistribution' "$report" 2> /dev/null) $(cat "$errfile")"
-  fi
+  # One streaming method of each kind. grpcurl sends every message -d holds,
+  # then ends its stream.
+  expect_results "$name" SumAll '{"a":1,"b":2} {"a":3,"b":4} {"a":-5}' 5 \
+    "(client streaming): three requests, one reply, their sum 5"
+  expect_results "$name" Count '{"count":3,"start":7}' "7 8 9" \
+    "(server streaming): three replies, 7 8 9, in order"
+  # 200 replies of 4096 bytes each: about 820 KB, more than one HTTP/2
+  # window, so the server's sends wait on grpc-go's WINDOW_UPDATEs.
+  expect_results "$name" Count '{"count":200,"pad":4096}' "$(seq -s ' ' 0 199)" \
+    "(server streaming): 200 replies of 4 KiB padding, 0 to 199, in order"
+  expect_results "$name" Echo '{"a":1,"b":2} {"a":5,"b":6}' "3 11" \
+    "(bidirectional): each request's sum back, 3 then 11"
+
+  expect_ghz "$name" GetSum '{"a":2,"b":3}' 10 "$ghz_calls" OK "every one OK"
+  # Trailers-Only answers, one at a time on ghz's one connection: more
+  # calls than the connection's 100 stream slots, so a slot an answer kept
+  # would turn the 101st into Unavailable (REFUSED_STREAM).
+  expect_ghz "$name" Missing '{}' 1 300 NotFound "every one NotFound, none refused"
 done
 
 echo "grpc interop: $failed failed"
