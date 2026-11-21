@@ -28,7 +28,8 @@
  * request's own `head`, a buffer of `limits.maxHead` bytes made on the
  * request's first use and never grown: each listen call checks that no head
  * its carrier accepts can overrun it. The body is held whole, up to
- * `limits.maxBody`; past it the request is answered 413 on every version.
+ * `limits.maxBody`, past which the request is answered 413 on every version,
+ * except on an HTTP/2 route marked by `streamBody`, whose body comes in pieces.
  *
  * **A fixed pool.** `limits.requests` requests are shared by every listener.
  * With none free, an HTTP/1.1 connection stops being read until one is, an
@@ -783,10 +784,10 @@ export class HttpServer {
   private h3Streams: i64[]
   private h3Reqs: i32[]
   private h3Count: i32[]
-  private queueStart: i32 = 0
   /** Which routes take their body in pieces, by route index, and how many do. */
   private streamRoutes: boolean[]
   private streamCount: i32 = 0
+  private queueStart: i32 = 0
   private queueCount: i32 = 0
   private maxBody: i32 = 0
   private maxHead: i32 = 0
@@ -1571,7 +1572,7 @@ export class HttpServer {
       // it meant for a tunnel.
       conn.closeAfter = true
     }
-    this.admit(r)
+    this.admit(r, false)
     this.h1Current[slot] = r.index
   }
 
@@ -1719,8 +1720,13 @@ export class HttpServer {
     return at
   }
 
-  /** A head is in `r`: its path's end found, its reading state set and its route matched. */
-  private admit(r: HttpServerRequest): void {
+  /**
+   * A head is in `r`: its path's end found, its reading state set and its
+   * route matched. Its body buffer grows to the declared length unless
+   * `mayStream` (an HTTP/2 request whose body is still to come) and its route
+   * takes the body in pieces, which never hold more than a stream window.
+   */
+  private admit(r: HttpServerRequest, mayStream: boolean): void {
     let pathEnd: i32 = r.targetStart
     while (pathEnd < r.targetEnd && toI32(r.head[pathEnd]) !== 63) {
       pathEnd += 1
@@ -1740,7 +1746,7 @@ export class HttpServer {
     r.bodyEnded = true
     this.route(r)
     const declared: i32 = this.declared(r)
-    if (declared > toI32(r.body.length)) {
+    if (declared > toI32(r.body.length) && !(mayStream && this.streamsBody(r.route))) {
       this.growBody(r, declared)
     }
   }
@@ -3123,9 +3129,12 @@ export class HttpServer {
   /**
    * `slot`'s peer has stopped sending, so no streaming request on it will
    * get more of its body: each one still waiting is marked hung up and goes
-   * back to the program, once.
+   * back to the program, once, and its stream is reset CANCEL. A hung-up
+   * request's answer is dropped without touching its stream, so a stream
+   * left open would keep the connection from ever being done.
    */
   private h2Ended(slot: i32): void {
+    const conn: Http2Connection = this.h2Conn(slot)
     const base: i32 = slot * this.perConnection2
     for (let e: i32 = base; e < base + this.perConnection2; e++) {
       const at: i32 = this.h2Reqs[e]
@@ -3134,6 +3143,7 @@ export class HttpServer {
         if (r.streaming && !r.bodyEnded && !r.hung) {
           this.drop(r)
           this.requeue(r)
+          conn.reset(toI32(r.stream), H2_CANCEL)
         }
       }
     }
@@ -3170,7 +3180,7 @@ export class HttpServer {
       this.h2Reqs[e] = at
       this.h2Count[slot] = this.h2Count[slot] + 1
       this.h2IdleSince[slot] = 0
-      this.admit(r)
+      this.admit(r, !conn.endStream)
       const streaming: boolean = !conn.endStream && this.streamsBody(r.route)
       if (long && !streaming) {
         this.release(r)
@@ -3262,6 +3272,8 @@ export class HttpServer {
     } else if (event === H2_RESET) {
       this.drop(r)
       this.unlink(r)
+    } else {
+      return
     }
     this.requeue(r)
   }
@@ -3318,6 +3330,11 @@ export class HttpServer {
     }
     let wants: i32 = this.h2Flush(slot)
     for (let pass: i32 = 0; pass < 4096 && this.h2Holds(slot) && this.h2PushAll(slot); pass++) {
+      wants = this.h2Flush(slot)
+    }
+    // A WINDOW_UPDATE `consume` owed while the output was full goes out now:
+    // a peer at a closed window sends nothing that would make `next` send it.
+    if (this.h2Holds(slot) && this.h2Conn(slot).settleCredit()) {
       wants = this.h2Flush(slot)
     }
     if (!this.h2Holds(slot)) {
@@ -3526,7 +3543,7 @@ export class HttpServer {
       this.h3Streams[e] = id
       this.h3Reqs[e] = at
       this.h3Count[slot] = this.h3Count[slot] + 1
-      this.admit(r)
+      this.admit(r, false)
       return
     }
     const at: i32 = this.h3Find(slot, id)

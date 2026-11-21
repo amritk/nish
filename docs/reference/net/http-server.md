@@ -72,7 +72,8 @@ Every version copies the request head once into the
 request's own `head`, a buffer of `limits.maxHead` bytes made on the
 request's first use and never grown: each listen call checks that no head
 its carrier accepts can overrun it. The body is held whole, up to
-`limits.maxBody`; past it the request is answered 413 on every version.
+`limits.maxBody`, past which the request is answered 413 on every version,
+except on an HTTP/2 route marked by `streamBody`, whose body comes in pieces.
 
 </scalar-detail>
 

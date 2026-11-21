@@ -520,8 +520,6 @@ export class Http2Connection {
   /** The connection's receive window, and what has been handed on since it was last credited. */
   private recvWindow: i64 = 65535
   private recvUnacked: i64 = 0
-  /** A held stream's WINDOW_UPDATE did not fit in the output, so `next` sends it. */
-  private owing: boolean = false
   /** H2_DATA's bytes: the input buffer, valid until the next `feed`. */
   data: u8[]
   /** H2_RESET's, H2_GOAWAY's and H2_ERROR's code. */
@@ -588,6 +586,8 @@ export class Http2Connection {
   resetByPeer: boolean = false
   /** The server's SETTINGS are not written yet: the first `holdOutput` writes them. */
   private prefaceOwed: boolean = false
+  /** A held stream's WINDOW_UPDATE did not fit in the output, so `next` or `settleCredit` sends it. */
+  private owing: boolean = false
 
   /**
    * A connection under `config`, owing its SETTINGS — and the WINDOW_UPDATE
@@ -1248,6 +1248,22 @@ export class Http2Connection {
         this.creditStream(s, toI32(0))
       }
     }
+  }
+
+  /**
+   * Sends the WINDOW_UPDATEs `consumeBody` owed when the output had no room
+   * for them, for a caller that has just drained the output and may call
+   * `next` only once the peer sends more, which a peer at a closed window
+   * never does.
+   *
+   * @returns whether any were owed, so the output may have grown
+   */
+  settleCredit(): boolean {
+    if (!this.owing || this.state === H2_STATE_FAILED || this.room() < H2_CONTROL_RESERVE) {
+      return false
+    }
+    this.settleOwed()
+    return true
   }
 
   // ---- Reading ------------------------------------------------------------------

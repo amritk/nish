@@ -15,14 +15,17 @@ PASS  h2c: a peer that ignores the window: connected
 PASS  h2c: /lazy taken streaming
 PASS  h2c: one byte past the window resets the stream FLOW_CONTROL_ERROR
 PASS  h2c: the unconsumed request comes back hung up
-PASS  h2c: and its answer is dropped
+PASS  h2c: the unconsumed request's answer is dropped
 PASS  h2c: no WINDOW_UPDATE for a stream nothing consumed
 PASS  h2c: RST_STREAM mid-body: connected
+PASS  h2c: the body to cancel taken streaming
 PASS  h2c: a cancelled body comes back hung up
-PASS  h2c: and its answer is dropped
+PASS  h2c: the cancelled request's answer is dropped
 PASS  h2c: the connection lost mid-body: connected
+PASS  h2c: the body to lose taken streaming
 PASS  h2c: a body whose connection closed comes back hung up
-PASS  h2c: and its answer is dropped
+PASS  h2c: the lost request's answer is dropped
+PASS  h2c: and the connection it was on closes
 PASS  h2c: an answer before the body ends: connected
 PASS  h2c: the answer goes out with the body unfinished
 PASS  h2c: then RST_STREAM NO_ERROR for the rest
@@ -46,14 +49,17 @@ PASS  HTTP/2 over TLS: a peer that ignores the window: connected, the server's s
 PASS  HTTP/2 over TLS: /lazy taken streaming
 PASS  HTTP/2 over TLS: one byte past the window resets the stream FLOW_CONTROL_ERROR
 PASS  HTTP/2 over TLS: the unconsumed request comes back hung up
-PASS  HTTP/2 over TLS: and its answer is dropped
+PASS  HTTP/2 over TLS: the unconsumed request's answer is dropped
 PASS  HTTP/2 over TLS: no WINDOW_UPDATE for a stream nothing consumed
 PASS  HTTP/2 over TLS: RST_STREAM mid-body: connected, the server's signature and Finished verified
+PASS  HTTP/2 over TLS: the body to cancel taken streaming
 PASS  HTTP/2 over TLS: a cancelled body comes back hung up
-PASS  HTTP/2 over TLS: and its answer is dropped
+PASS  HTTP/2 over TLS: the cancelled request's answer is dropped
 PASS  HTTP/2 over TLS: the connection lost mid-body: connected, the server's signature and Finished verified
+PASS  HTTP/2 over TLS: the body to lose taken streaming
 PASS  HTTP/2 over TLS: a body whose connection closed comes back hung up
-PASS  HTTP/2 over TLS: and its answer is dropped
+PASS  HTTP/2 over TLS: the lost request's answer is dropped
+PASS  HTTP/2 over TLS: and the connection it was on closes
 PASS  HTTP/2 over TLS: an answer before the body ends: connected, the server's signature and Finished verified
 PASS  HTTP/2 over TLS: the answer goes out with the body unfinished
 PASS  HTTP/2 over TLS: then RST_STREAM NO_ERROR for the rest
@@ -65,5 +71,5 @@ PASS  HTTP/1.1: /upload answered
 PASS  HTTP/1.1: with the whole body
 PASS  HTTP/1.1: taken whole, not streaming
 PASS  HTTP/1.1: a body past maxBody is 413 on a marked route
-http server stream: 67 passed, 0 failed, 0 skipped
+http server stream: 73 passed, 0 failed, 0 skipped
 

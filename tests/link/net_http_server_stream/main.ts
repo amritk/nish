@@ -56,6 +56,14 @@ const awaitFirst = (rig: StreamRig, key: Secret<u8[]>, seen: i32): boolean => {
   return toI32(rig.firsts.length) > seen
 }
 
+/** Turns `rig` until the server holds no connection; whether it got there. */
+const awaitClosed = (rig: StreamRig, key: Secret<u8[]>): boolean => {
+  for (let turn: i32 = 0; turn < TURNS && rig.h.connections() > 0; turn++) {
+    rig.step(toI32(5), key)
+  }
+  return rig.h.connections() === 0
+}
+
 /** What the program's answer to the last hung-up request returned; 1 when there was none. */
 const lastHung = (rig: StreamRig): i32 => {
   const n: i32 = toI32(rig.hungResults.length)
@@ -70,6 +78,8 @@ const carrier = (t: Suite, rig: StreamRig, key: Secret<u8[]>, tls: boolean): voi
   rig.maxHeld = 0
   rig.maxArray = 0
   rig.total = 0
+  // Each carrier's checks read only the requests it sent.
+  rig.firsts = []
   const up = connected(t, rig, key, tls, name, "a long upload")
   up.open(toI32(1), "/upload", total, key)
   t.ok(`${name}: 300000 bytes sent within the window the server gave`, up.body(toI32(1), total, true, key))
@@ -106,31 +116,34 @@ const carrier = (t: Suite, rig: StreamRig, key: Secret<u8[]>, tls: boolean): voi
   greedy.flush(key)
   t.ok(`${name}: one byte past the window resets the stream FLOW_CONTROL_ERROR`, greedy.awaitFrame("RST_STREAM 1 3", key))
   t.ok(`${name}: the unconsumed request comes back hung up`, awaitHung(rig, key, hung))
-  t.ok(`${name}: and its answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
+  t.ok(`${name}: the unconsumed request's answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
   t.ok(`${name}: no WINDOW_UPDATE for a stream nothing consumed`, greedy.text().indexOf("WINDOW_UPDATE 1 ") < 0)
   greedy.close()
 
   hung = rig.hung
   const cancel = connected(t, rig, key, tls, name, "RST_STREAM mid-body")
+  const cancelSeen: i32 = toI32(rig.firsts.length)
   cancel.open(toI32(1), "/upload", toI32(100000), key)
   cancel.wire.dataN(toI32(1), PIECE, ZERO)
   cancel.flush(key)
-  cancel.awaitFrame("WINDOW_UPDATE 1 ", key)
+  t.ok(`${name}: the body to cancel taken streaming`, awaitFirst(rig, key, cancelSeen))
   cancel.wire.rst(toI32(1), H2_CANCEL)
   cancel.flush(key)
   t.ok(`${name}: a cancelled body comes back hung up`, awaitHung(rig, key, hung))
-  t.ok(`${name}: and its answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
+  t.ok(`${name}: the cancelled request's answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
   cancel.close()
 
   hung = rig.hung
   const lost = connected(t, rig, key, tls, name, "the connection lost mid-body")
+  const lostSeen: i32 = toI32(rig.firsts.length)
   lost.open(toI32(1), "/upload", toI32(100000), key)
   lost.wire.dataN(toI32(1), PIECE, ZERO)
   lost.flush(key)
-  lost.awaitFrame("WINDOW_UPDATE 1 ", key)
+  t.ok(`${name}: the body to lose taken streaming`, awaitFirst(rig, key, lostSeen))
   lost.close()
   t.ok(`${name}: a body whose connection closed comes back hung up`, awaitHung(rig, key, hung))
-  t.ok(`${name}: and its answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
+  t.ok(`${name}: the lost request's answer is dropped`, lastHung(rig) === HANDLER_DROPPED)
+  t.ok(`${name}: and the connection it was on closes`, awaitClosed(rig, key))
 
   const early = connected(t, rig, key, tls, name, "an answer before the body ends")
   early.open(toI32(1), "/early", toI32(100000), key)
