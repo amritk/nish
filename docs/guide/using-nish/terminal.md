@@ -21,9 +21,19 @@ called a fixed number of times a second (`options.stepsPerSecond`, 60) with
 the events since the last step, and answers `false` to stop. `render` is
 called whenever a frame may go out, and draws into the frame's `screen` (text
 cells) and `framebuffer` (pixels, when the options ask for one). This program
-bounces a square across the screen until you press `q`:
+bounces a square across the screen until you press `q`.
 
-```ts nish:ok
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays,
+slice buffers and move positions by sums the compiler cannot prove in range,
+and the `nish/term` code they reach keeps panic sites no proof removes yet. A
+guard such as `i < xs.length` before an index, or a bound on a position,
+proves your own code; the slices and the library calls build under the
+default once the standard library is made panic-free.
+
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
 import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term-io";
 
@@ -219,7 +229,7 @@ frame-rate measurements every second for five seconds. Run it in the terminal
 that draws wrong and put its output in the bug report:
 
 ```
-nish run examples/term-probe.ts
+nish run --allow-panics examples/term-probe.ts
 ```
 
 ## `nish:term`, underneath
@@ -325,7 +335,9 @@ This program prints the number of each key you press. It stops on `q`, on
 Ctrl-D, or when stdin ends or fails. Run it in a terminal and press an arrow key to see
 its three bytes.
 
-```ts nish:ok
+<!-- allow-panics: slices with bounds it does not test -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { isTerminal, readStdin, setRawMode, waitStdin } from "nish:term";
 
 export const main = (): i32 => {
@@ -368,7 +380,8 @@ runtime, which writes them once, on the same paths that put raw mode back:
 returning from `main`, `process.exit`, a panic or a crash, Ctrl-C or `kill`.
 It writes them first, then restores the terminal settings.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { write } from "nish:io";
 import { setRawMode, setTerminalRestore } from "nish:term";
 
@@ -393,7 +406,9 @@ undone them all itself. It answers `0`, `-25` when stdout is not a terminal
 `terminalSize()` answers a new pair each time you call it. Call it again on
 each frame to notice when the window is resized.
 
-```ts nish:ok
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { isTerminal, terminalSize } from "nish:term";
 
 export const main = (): i32 => {

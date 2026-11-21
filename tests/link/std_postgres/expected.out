@@ -235,6 +235,12 @@ PASS  int: empty
 PASS  int: a sign alone
 PASS  int: a letter
 PASS  int: a plus sign
+PASS  int: eighteen digits
+PASS  int: a sign and seventeen digits
+PASS  int: a letter in eighteen bytes
+PASS  int: eighteen bytes of leading zeros
+PASS  int: nineteen digits
+PASS  int: a sign and eighteen digits
 PASS  int: a window past the buffer
 PASS  bool: t
 PASS  bool: f
@@ -482,4 +488,4 @@ PASS  it is failed
 PASS  a window before it
 PASS  it is failed too
 PASS  int on a refused walk fails
-postgres: 484 passed, 0 failed, 0 skipped
+postgres: 490 passed, 0 failed, 0 skipped

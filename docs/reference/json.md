@@ -204,10 +204,10 @@ this object and not a path into it: that is the "flat" in the module header,
 and it is the shape the compiler's `--json` line has.
 
 ```ts
-function jsonField(
+const jsonField: (
   object: string,
   name: string,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="object" type="string" required>
@@ -256,10 +256,10 @@ it anywhere before the return would undo this; `tests/link/std_json` pins the
 flat arena and the `using` block.
 
 ```ts
-function jsonFields(
+const jsonFields: (
   object: string,
   names: string[],
-): (string | null)[]
+) => (string | null)[]
 ```
 
 <scalar-field name="object" type="string" required>
@@ -289,7 +289,7 @@ sizes a buffer to fit exactly, writes into it and reads it back. A string
 with nothing to escape skips the writer and is only quoted.
 
 ```ts
-function jsonStringifyString(s: string): string
+const jsonStringifyString: (s: string) => string
 ```
 
 <scalar-field name="s" type="string" required>

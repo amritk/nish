@@ -96,11 +96,11 @@ and exit 2, the hint's command painted with `errStyle`, the error never;
 answers 0 for `PARSE_OK`, which the program goes on to run.
 
 ```ts
-function finish(
+const finish: (
   r: ParseResult,
   outStyle: Style,
   errStyle: Style,
-): i32
+) => i32
 ```
 
 <scalar-field name="r" type="ParseResult" required>

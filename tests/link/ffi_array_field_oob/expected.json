@@ -1,0 +1,2 @@
+{"file":"tests/link/ffi_array_field_oob/main.ts","line":9,"column":7,"endLine":9,"endColumn":8,"severity":"error","code":"NL2818","message":"Index 5 is outside `c.h`, a fixed-length array of 5 elements: its indices are 0 to 4"}
+{"file":"tests/link/ffi_array_field_oob/main.ts","line":10,"column":20,"endLine":10,"endColumn":22,"severity":"error","code":"NL2818","message":"Index -1 is outside `c.h`, a fixed-length array of 5 elements: its indices are 0 to 4"}

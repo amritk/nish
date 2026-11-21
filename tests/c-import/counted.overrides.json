@@ -1,0 +1,12 @@
+{
+  "header": "counted.h",
+  "functions": {
+    "put_u32": { "data": { "buffer": "len" } },
+    "put_u16": { "data": { "buffer": "len" } },
+    "put_u8": { "data": { "buffer": "n" } },
+    "get_into": { "into": { "buffer": "got" } },
+    "get_uchar": { "into": { "buffer": "got" } },
+    "two_bufs": { "a": { "buffer": "n" }, "b": { "buffer": "n" } },
+    "positional": { "data": { "buffer": "len" } }
+  }
+}

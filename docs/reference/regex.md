@@ -176,10 +176,10 @@ order; `u` changes nothing, as patterns are always read by code point.
 The error names what is wrong and its byte in the pattern.
 
 ```ts
-function regexCompile(
+const regexCompile: (
   pattern: string,
   flags: string,
-): Result<Regex, string>
+) => Result<Regex, string>
 ```
 
 <scalar-field name="pattern" type="string" required>
@@ -206,7 +206,7 @@ The compiled pattern, or the reason it does not compile, such as "regex: missing
 pattern matching exactly `text`.
 
 ```ts
-function regexEscape(text: string): string
+const regexEscape: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>

@@ -32,6 +32,15 @@ function hostTriple(): string -> @hostTriple
   local +0:9 arch: string (const)
   local +1:7 cpu: string (let)
   local +10:9 platform: string (const)
+function zeroBasedLinks(target: string): boolean -> @zeroBasedLinks [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: target
+  calls: hostTriple nish_arena_mark nish_arena_release nish_str_at resolveTarget
+  stackSites=0 stackLocals=0
+  local +0:7 triple: string (let)
+  callee +0:16 hostTriple -> @hostTriple
+  local +2:11 resolved: Target | null (const)
+  callee +2:22 resolveTarget -> @resolveTarget
 function resolveTarget(spec: string): Target | null -> @resolveTarget [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: spec

@@ -48,6 +48,18 @@ allow AVX2; such a binary needs it to start
 
 </scalar-field>
 
+<scalar-field name="--pgo-generate">
+
+link a binary that writes a .profraw per run
+
+</scalar-field>
+
+<scalar-field name="--pgo-use" type="&lt;file.profdata&gt;">
+
+optimise the link with a merged profile
+
+</scalar-field>
+
 <scalar-field name="--target" type="&lt;triple&gt;|host">
 
 stamp the IR with a target's data layout
@@ -87,6 +99,12 @@ keep every function externally visible
 <scalar-field name="--no-stack-alloc">
 
 keep every value off the stack
+
+</scalar-field>
+
+<scalar-field name="--compact" type="on|off">
+
+off keeps every class's links full pointers
 
 </scalar-field>
 
@@ -230,7 +248,13 @@ refuse a program that reaches these
 
 <scalar-field name="--deny-panics">
 
-refuse an unproven panic in your package
+refuse an unproven panic site (the default)
+
+</scalar-field>
+
+<scalar-field name="--allow-panics">
+
+hold only the noPanic list to no panic
 
 </scalar-field>
 
@@ -269,6 +293,10 @@ record what each dependency reaches
 before writing Nish, read the language as rules, traps first:
 
 [`docs/AI.md`](https://github.com/amritk/nish/blob/main/docs/AI.md), at the path the install put it.
+
+a panic refused (NL2457, NL2458): add the guard it names; never
+
+--allow-panics, nish:unsafe or a guard that proves nothing
 
 <scalar-field name="--json">
 

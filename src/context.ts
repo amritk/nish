@@ -188,6 +188,21 @@ export class CheckContext {
    */
   wasm: boolean
   /**
+   * WP48: a compact class's links are 32-bit offsets in this build. True for
+   * a native target; false on wasm32, where a pointer is already 4 bytes, and
+   * under the AddressSanitizer harness (`NISH_ASAN` in the compiler's
+   * environment), whose runtime mallocs every block outside the range. Set
+   * by the driver after construction.
+   */
+  compressLinks: boolean
+  /**
+   * WP48: the names of every compact class in the compilation, shared by all
+   * its modules' contexts. A module lays out its fields before it binds its
+   * imports, so a link to an imported class is told by name here, not
+   * through `program.struct`. Filled by `Checker.markCompact`.
+   */
+  compactNames: StringSet
+  /**
    * The build is for wasm with no WASI under it (`isFreestandingWasmBuild`),
    * whose runtime has no stdin: `nish:term` reads it to refuse itself there.
    * Set with `wasm`, and false everywhere else.
@@ -204,6 +219,53 @@ export class CheckContext {
    * `std/math.ts`'s, as on a page module, and a NaN's bits are the quiet one.
    */
   deterministic: boolean
+  /**
+   * WP28: the build is in the compatibility dialect (`opts.compat`), which
+   * `errorFeature` names when it refuses a construct. Set with `wasm`.
+   */
+  compat: boolean
+  /**
+   * WP28: the compatibility features this build allows
+   * (`opts.compatFeatures`), empty for the strict dialect. Set with `compat`;
+   * a site asks through `compatAllows`, never reads it.
+   */
+  compatFeatures: string[]
+  /**
+   * WP28 `optional-params`: each wrapper `liftDefaults` built for a function
+   * with a default that is not a constant (`src/defaults.ts`), and beside it
+   * at the same position the function it stands in front of and the number
+   * of arguments it takes. Empty without the feature.
+   */
+  defaultImpls: Node[]
+  defaultArities: i32[]
+  defaultWrappers: Node[]
+  /**
+   * WP28 `optional-params`, in a build without it: each parameter whose
+   * default a wrapper would evaluate with it, so that the refusal of that
+   * default names the feature (`liftDefaults`).
+   */
+  defaultLifted: Node[]
+  /**
+   * WP28 `overloads`: each bodiless declaration written before an
+   * implementation of the same name (`src/overloads.ts`), and beside it at
+   * the same position, in `overloadOf`, that implementation. Under `--compat`
+   * the signatures are lifted out of the tree, so no pass after the checker
+   * sees them; a strict build records them only to name the feature when it
+   * refuses one.
+   */
+  overloadSignatures: Node[]
+  overloadOf: Node[]
+  /**
+   * WP28 C1: the parameters written `x?: T` under the `optional-params`
+   * feature, by signature and position, and their locals once a body declares
+   * them. A read of one is refused unless it is `optionalRead`, the left
+   * operand of the `??` being checked (`docs/LANGUAGE.md`, "The compatibility
+   * dialect").
+   */
+  optionalSigs: FunctionSig[]
+  optionalAt: i32[]
+  optionalLocals: Local[]
+  optionalRead: Node | null
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -386,9 +448,23 @@ export class CheckContext {
     this.numberSpellings = 0
     this.strictExports = strictExports
     this.wasm = false
+    this.compressLinks = false
+    this.compactNames = new StringSet()
     this.wasmFreestanding = false
     this.pageModule = false
     this.deterministic = false
+    this.compat = false
+    this.compatFeatures = []
+    this.defaultImpls = []
+    this.defaultArities = []
+    this.defaultWrappers = []
+    this.defaultLifted = []
+    this.overloadSignatures = []
+    this.overloadOf = []
+    this.optionalSigs = []
+    this.optionalAt = []
+    this.optionalLocals = []
+    this.optionalRead = null
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.peers = []
@@ -427,6 +503,38 @@ export class CheckContext {
     this.pending = []
     this.pendingFinish = []
     this.exportedLayoutUses = []
+  }
+
+  /**
+   * WP28: whether this build's dialect allows compatibility feature `name`.
+   * Every site that accepts a construct only under `--compat` asks here.
+   */
+  compatAllows(name: string): boolean {
+    for (const feature of this.compatFeatures) {
+      if (feature === name) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * `error`, for a construct compatibility feature `feature` accepts and this
+   * build's dialect does not allow: the message, then a note naming the
+   * feature, after one naming the dialect when the build is in the
+   * compatibility one (WP28 §5.2). The same once-per-statement guard.
+   */
+  errorFeature(node: Node, message: string, feature: string): void {
+    if (this.errored) {
+      return
+    }
+    const diagnostic = new Diagnostic(this.source, node.start, node.end, "error", message)
+    if (this.compat) {
+      diagnostic.notes.push(`this program's dialect is \`compat=${this.compatFeatures.join(",")}\``)
+    }
+    diagnostic.notes.push(`add \`${feature}\` to \`nish.compat\` in package.json to accept it`)
+    this.sink.add(diagnostic)
+    this.errored = true
   }
 
   /**

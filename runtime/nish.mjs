@@ -345,6 +345,8 @@ provide("arena", shim.arena);
 // `nish:simd` is `runtime/core.mjs`, whose vectors are typed arrays made once
 // and never written after, so `--emit-ts` output and a program run as it was
 // written share one implementation.
+// `nish:compact` is `runtime/core.mjs` too: its two marker interfaces pick a
+// native layout and are empty values under Node.
 const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
 const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 // `nish:region` has no allocator to swap under Node: a region is an entry in a
@@ -442,7 +444,7 @@ registerHooks({
     if (specifier === "nish:unsafe") {
       return { url: `data:text/javascript,${encodeURIComponent(unsafeSource)}`, shortCircuit: true };
     }
-    if (specifier === "nish:simd") {
+    if (specifier === "nish:simd" || specifier === "nish:compact") {
       return next(new URL("./core.mjs", import.meta.url).href, context);
     }
     if (specifier === "nish:async") {

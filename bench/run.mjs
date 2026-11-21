@@ -64,7 +64,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 import { BAND_EDGE, cgroupCpus, judge, readAcross, spreadOf, times3 } from "./par-reading.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -434,8 +434,9 @@ const build = (bench) => {
   const nish = (id, label, extra, profile, timed) => {
     const exe = path.join(outDir, `${bench.name}-${id}`)
     const args = [rel(ts), ...modeFlags, ...extra, "--link", rel(exe), "--profile", profile]
-    run(nishc.cmd, [...nishc.prefix, ...args], `${bench.name}/${id}`)
-    variants.push({ id, label, exe, timed, cmd: `nish ${args.join(" ")}` })
+    const compile = compileArgv(nishc, args)
+    run(nishc.cmd, compile, `${bench.name}/${id}`)
+    variants.push({ id, label, exe, timed, cmd: `nish ${compile.slice(nishc.prefix.length).join(" ")}` })
   }
   nish("nish", "Nish", [], "speed", true)
   nish("nish-size", "Nish (size profile)", [], "size", false)
@@ -567,7 +568,7 @@ const buildAwfy = (dir) => {
     "--profile",
     "speed",
   ]
-  run(nishc.cmd, [...nishc.prefix, ...args], "awfy")
+  run(nishc.cmd, compileArgv(nishc, args), "awfy")
   return exe
 }
 
@@ -754,7 +755,7 @@ const runInstructions = () => {
     const exe = path.join(dir, b.name)
     run(
       nishc.cmd,
-      [...nishc.prefix, rel(ts), ...sourceArgs(b.name), "--link", rel(exe), "--profile", "speed"],
+      compileArgv(nishc, [rel(ts), ...sourceArgs(b.name), "--link", rel(exe), "--profile", "speed"]),
       `${b.name}/instructions`
     )
     jobs.push({ name: b.name, size: `n=${n}`, exe, args: [] })
@@ -776,8 +777,7 @@ const runInstructions = () => {
       const exe = path.join(dir, `crypto-${b.family}`)
       run(
         nishc.cmd,
-        [
-          ...nishc.prefix,
+        compileArgv(nishc, [
           rel(path.join(benchDir, "crypto", b.family, "main.ts")),
           "-o",
           `${rel(path.join(src, `crypto-${b.family}`))}${path.sep}`,
@@ -785,7 +785,7 @@ const runInstructions = () => {
           rel(exe),
           "--profile",
           "speed",
-        ],
+        ]),
         `crypto-${b.family}/instructions`
       )
       cryptoExe.set(b.family, exe)
@@ -1065,7 +1065,7 @@ const mapsAtSize = (size) => {
     const exe = path.join(outDir, name)
     run(
       nishc.cmd,
-      [...nishc.prefix, rel(ts), ...sourceArgs(name), "--link", rel(exe), "--profile", "speed"],
+      compileArgv(nishc, [rel(ts), ...sourceArgs(name), "--link", rel(exe), "--profile", "speed"]),
       name
     )
     process.stderr.write(" ok\n")
@@ -1306,7 +1306,8 @@ const runParallel = () => {
     const ts = prepare(`${bench.name}.ts`, opts.sizes.get(bench.name))
     const exe = path.join(outDir, bench.name)
     const args = [path.relative(root, ts), "--link", path.relative(root, exe), "--profile", "speed"]
-    run(nishc.cmd, [...nishc.prefix, ...args], bench.name)
+    const compile = compileArgv(nishc, args)
+    run(nishc.cmd, compile, bench.name)
     process.stderr.write(" ok; running")
     const modes = { seq: timeRuns(exe, ["seq"]), par: timeRuns(exe, ["par"]) }
     if (!sameOutput(modes.seq.stdout, modes.par.stdout)) {
@@ -1315,7 +1316,7 @@ const runParallel = () => {
         `\nCHECKSUM MISMATCH ${bench.name}:\n--- seq\n${modes.seq.stdout}--- par\n${modes.par.stdout}`
       )
     }
-    rows.push({ bench, exe, cmd: `nish ${args.join(" ")}`, ...modes })
+    rows.push({ bench, exe, cmd: `nish ${compile.slice(nishc.prefix.length).join(" ")}`, ...modes })
     process.stderr.write("\n")
   }
   if (disagree > 0) {

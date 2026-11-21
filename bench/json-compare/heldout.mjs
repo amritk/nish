@@ -29,7 +29,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const here = import.meta.dirname
 const root = path.resolve(here, "..", "..")
@@ -256,8 +256,7 @@ const build = (compiler, tag) => {
   const exe = path.join(dir, "main")
   run(
     compiler.cmd,
-    [
-      ...compiler.prefix,
+    compileArgv(compiler, [
       path.join(here, "main.ts"),
       "-o",
       `${dir}${path.sep}`,
@@ -265,7 +264,7 @@ const build = (compiler, tag) => {
       exe,
       "--profile",
       "speed",
-    ],
+    ]),
     `building main.ts with ${compiler.cmd}`
   )
   return exe

@@ -1,0 +1,2 @@
+error: `overflow` may panic here
+this `+` is not proven to fit `i32` here, and a signed overflow panics

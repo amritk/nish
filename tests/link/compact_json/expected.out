@@ -1,0 +1,3 @@
+{"players":[{"name":"Ann","score":3,"next":{"name":"Bo","score":4,"next":null}}],"captain":{"name":"Cy","score":5,"next":null}}
+5 4
+{"players":[{"name":"Ann","score":3,"next":{"name":"Bo","score":4,"next":null}}],"captain":{"name":"Cy","score":5,"next":null}}

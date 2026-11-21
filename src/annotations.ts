@@ -20,7 +20,7 @@ import { LANGUAGE } from "./branding"
 import { StringSet } from "./map"
 import { CheckContext, ExportedLayoutUse, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo, CheckedProgram, STRUCT_CLASS, StructInfo } from "./program"
-import { layoutClass } from "./structs"
+import { layoutClass, rejectOpaque } from "./structs"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
@@ -810,6 +810,12 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     return T_ERROR
   }
   if (rejectForeignPointer(ctx, err, "a `Result` arm", args.children[1])) {
+    return T_ERROR
+  }
+  if (rejectOpaque(ctx, ok, "a `Result` arm", args.children[0])) {
+    return T_ERROR
+  }
+  if (rejectOpaque(ctx, err, "a `Result` arm", args.children[1])) {
     return T_ERROR
   }
   if (rejectStoredMask(ctx, ok, "a `Result` arm", args.children[0])) {

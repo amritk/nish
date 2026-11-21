@@ -18,6 +18,7 @@
 // Linux only (taskset, futex), run from the repository root.
 import { execFileSync, spawnSync } from "node:child_process"
 import { mkdirSync, readFileSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 const opt = (name, fallback) => {
@@ -30,7 +31,7 @@ const out = "build/ring-latency"
 mkdirSync(out, { recursive: true })
 
 const run = (file, argv) => execFileSync(file, argv, { encoding: "utf8" })
-run("build/nish", ["bench/ring-latency/ring.ts", "--link", `${out}/ring`])
+run("build/nish", withAllowPanics("build/nish", ["bench/ring-latency/ring.ts", "--link", `${out}/ring`]))
 run(process.env.CC ?? "clang", ["-O2", "bench/ring-latency/socketpair.c", "-o", `${out}/socketpair`])
 
 // mulberry32: a fixed seed, so a rerun shuffles in the same orders

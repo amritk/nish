@@ -1,12 +1,15 @@
 /*
-  The docs site's one script: it builds the animated hero on the landing page
+  The docs site's one script: it wires the animated hero on the landing page
   (the name unfolding into what it stands for, a source file compiling to its
-  targets) and gives cards a highlight that follows the pointer. Everything it draws is
-  styled, and animated, by theme.css; with this file missing the pages read
-  the same, without the hero.
+  targets) and gives cards a highlight that follows the pointer. Everything
+  the hero shows is styled, and animated, by theme.css.
 
-  The hero's host is `<div data-nish-hero></div>` in docs/guide/index.md, left
-  empty so that GitHub, which renders the same Markdown, shows nothing there.
+  The hero is static markup in docs/guide/index.md, so the server's HTML
+  paints it with the page and nothing moves when this file runs; that markup
+  is `hero()` below, serialized: `node tests/break-web/check.mjs --write-hero`
+  rewrites it, and the break-web check fails when the two differ. This file
+  gives the markup its behaviour (the copy button, the terminal). A host left
+  empty, as scripts/gen-og-image.mjs's is, gets the hero built here.
 */
 ;(() => {
   if (window.__nishSite) {
@@ -103,15 +106,17 @@
     return root
   }
 
-  const copyButton = () => {
-    const label = el("span.nish-hero__copied", { "aria-live": "polite" })
-    const button = el(
+  const copyButton = () =>
+    el(
       "button.nish-hero__install",
       { type: "button", title: "Copy the install command" },
       el("span.nish-hero__prompt", { "aria-hidden": "true" }, "$"),
       el("code", {}, INSTALL),
-      label
+      el("span.nish-hero__copied", { "aria-live": "polite" })
     )
+
+  const bindCopy = (button) => {
+    const label = button.querySelector(".nish-hero__copied")
     button.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(INSTALL)
@@ -125,7 +130,6 @@
         label.textContent = ""
       }, 1800)
     })
-    return button
   }
 
   /** One row of the name: each initial, then the rest of its word. */
@@ -231,6 +235,7 @@
    * the output; the shell's own line takes its place.
    */
   const terminal = (bar, code) => {
+    code.append(el("span.nish-hero__ready", {}, el("b", {}, "$ "), el("i")))
     const input = el("input.nish-hero__input", {
       "aria-label": "Terminal",
       autocapitalize: "off",
@@ -238,9 +243,12 @@
       spellcheck: "false",
       enterkeyhint: "go",
     })
-    const ready = el("span.nish-hero__ready", {}, el("b", {}, "$ "), el("i"))
-    code.append(ready)
-    const term = el("div.nish-hero__window.nish-hero__terminal", {}, bar, code, input)
+    return el("div.nish-hero__window.nish-hero__terminal", {}, bar, code, input)
+  }
+
+  const bindTerminal = (term) => {
+    const input = term.querySelector(".nish-hero__input")
+    const ready = term.querySelector(".nish-hero__ready")
     term.addEventListener("click", () => getSelection().isCollapsed && input.focus())
     const lines = [] // entered while the shell loads
     let shell = null
@@ -264,47 +272,58 @@
     }
     input.addEventListener("input", first)
     input.addEventListener("keydown", first)
-    return term
+    // Text typed into the server's markup before this script ran loads the shell too.
+    if (input.value) {
+      first({ type: "input" })
+    }
   }
 
-  /** When the hero on the page was built: see `fill`. */
-  let built = 0
+  /** The heroes given their behaviour, and when the one on the page began: see `fill`. */
+  const bound = new WeakSet()
+  let began = 0
 
   /**
    * The site is a single-page app: the landing page's Markdown is mounted,
-   * hydrated and unmounted by the framework, which may replace the host at
+   * hydrated and unmounted by the framework, which may replace the hero at
    * any of those moments: on a first load the client app swaps the server's
    * page, hero and all, for its own copy. So every change to the document
-   * refills whichever host is empty, moving in the hero that same change took
-   * off the page rather than building and playing a second one. A host that
-   * comes back on a later navigation gets a fresh hero.
+   * wires whichever hero is new, building it into a host left empty. A copy
+   * that replaces a wired hero in the same change carries on from where that
+   * one was, as its CSS animations restart when it is inserted; a hero that
+   * comes back on a later navigation plays from the start.
    */
   const fill = (records) => {
-    let kept = null
+    let swapped = false
     for (const { removedNodes } of records) {
       for (const node of removedNodes) {
-        kept ??= node.querySelector?.(".nish-hero__inner") ?? null
+        const gone = node.classList?.contains("nish-hero__inner")
+          ? node
+          : node.querySelector?.(".nish-hero__inner")
+        swapped ||= bound.has(gone)
       }
     }
-    for (const host of document.querySelectorAll("[data-nish-hero]:empty")) {
-      host.classList.add("nish-hero")
-      if (kept?.isConnected === false) {
-        // Moving it restarts its CSS animations. All began when it was built,
-        // so one elapsed time puts each back where it was.
-        host.append(kept)
-        for (const animation of kept.getAnimations({ subtree: true })) {
-          animation.currentTime = performance.now() - built
-        }
-        host.setAttribute("data-nish-ready", "")
-        kept = null
-      } else {
-        built = performance.now()
-        host.append(hero())
-        // theme.css hides the page under an unready host, so the hero's
-        // arrival moves nothing a reader sees. Two frames: the one laying it
-        // out still hides the page it pushed down.
-        requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
+    for (const host of document.querySelectorAll("[data-nish-hero]")) {
+      let inner = host.querySelector(".nish-hero__inner")
+      if (bound.has(inner)) {
+        continue
       }
+      if (inner === null) {
+        host.classList.add("nish-hero")
+        inner = hero()
+        host.append(inner)
+      }
+      bound.add(inner)
+      bindCopy(inner.querySelector(".nish-hero__install"))
+      bindTerminal(inner.querySelector(".nish-hero__terminal"))
+      const animations = inner.getAnimations?.({ subtree: true }) ?? []
+      if (swapped) {
+        for (const animation of animations) {
+          animation.currentTime = performance.now() - began
+        }
+      } else {
+        began = animations[0]?.startTime ?? performance.now()
+      }
+      host.setAttribute("data-nish-ready", "")
     }
   }
 

@@ -26,7 +26,14 @@ Every value is immutable: `add` answers a new date rather than changing the one
 it was called on. The calendar is ISO 8601, the proleptic Gregorian one that
 `toString` writes.
 
-```ts nish:ok
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/temporal` keeps
+panic sites no proof removes yet, so a call to it is refused by default until
+the standard library is made panic-free.
+
+<!-- allow-panics: calls `std/temporal.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { Duration, plainDateFrom, PlainDate } from "nish/temporal";
 
 export const main = (): number => {
@@ -65,7 +72,9 @@ A string that Temporal refuses is a panic whose message starts `RangeError:`.
 To read input you do not trust, use the `...OrNull` twin, which answers `null`
 instead:
 
-```ts nish:ok
+<!-- allow-panics: calls `std/temporal.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { PlainDate, plainDateFromOrNull } from "nish/temporal";
 
 export const main = (): number => {
@@ -96,7 +105,9 @@ Here is what `add` and `subtract` do to each type:
 gives: days for a date or a date-time, hours for a time, and seconds for an
 instant.
 
-```ts nish:ok
+<!-- allow-panics: calls `std/temporal.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { durationFrom, instantFrom, plainDateTimeFrom } from "nish/temporal";
 
 export const main = (): number => {

@@ -1,0 +1,1 @@
+--emit-napi build/test/wordings/nl4020_compact_export.c

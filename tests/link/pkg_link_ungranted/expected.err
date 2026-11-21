@@ -1,0 +1,1 @@
+the dependency `pkg_mul` compiles the C source `c/mul.c`, which the root package does not grant it

@@ -132,8 +132,7 @@ function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): 
   callee +0:21 slotWord -> @nish.slotWord
   callee +2:5 fileEntry -> @nish.fileEntry
 function Map<string, i32>.constructor(this: Map<string, i32>): void -> @nish.Map$str$i32.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.probe(this: Map<string, i32>, key: string): i64 -> @nish.Map$str$i32.probe [exported method instance]
@@ -260,8 +259,7 @@ function Map<string, i32>.reserveSlots(this: Map<string, i32>, n: i32): void -> 
   local -1:13 slots: u32[] (const)
   callee +2:7 refile -> @nish.refile
 function Set<i32>.constructor(this: Set<i32>): void -> @nish.Set$i32.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.probe(this: Set<i32>, key: i32): i64 -> @nish.Set$i32.probe [exported method instance]
@@ -433,7 +431,7 @@ function forEachElement<i32, (x) => ...>(s: Set<i32>, f: void): void -> @nish.fo
 function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key mask
-  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic nish_panic_overflow
+  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic
   pointer slots: size=0 writesThrough=false captured=false
   pointer hashes: size=0 writesThrough=false captured=false
   pointer keys: size=0 writesThrough=true captured=false
@@ -490,7 +488,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
 function probeTable<i32>(slots: u32[], mask: i32, hashes: u32[], keys: i32[], key: i32): i64 -> @nish.probeTable$i32 [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key mask
-  calls: nish.absentAt nish.foundAt nish.hashKey$i32 nish.homeBucket nish.sameKey$i32 nish_panic nish_panic_overflow
+  calls: nish.absentAt nish.foundAt nish.hashKey$i32 nish.homeBucket nish.sameKey$i32 nish_panic
   pointer slots: size=0 writesThrough=false captured=false
   pointer hashes: size=0 writesThrough=false captured=false
   pointer keys: size=0 writesThrough=true captured=false

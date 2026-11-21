@@ -352,7 +352,7 @@ function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_index nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
   callee -5:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
@@ -2445,7 +2445,7 @@ function benchBytes(s: string): u8[] -> @benchBytes
 function benchOne(tok: JsonTokenizer, body: u8[], out: u8[]): i64 -> @benchOne
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.reset
-  calls: llvm.fptosi.sat.i64.f64 nish.JsonTokenizer.keyEquals nish.JsonTokenizer.next nish.JsonTokenizer.numberF64 nish.JsonTokenizer.reset nish.JsonTokenizer.stringInto nish_panic_index nish_panic_overflow
+  calls: llvm.fptosi.sat.i64.f64 nish.JsonTokenizer.keyEquals nish.JsonTokenizer.next nish.JsonTokenizer.numberF64 nish.JsonTokenizer.reset nish.JsonTokenizer.stringInto nish_panic_overflow
   pointer tok: size=120 writesThrough=true captured=false passedTo=nish.JsonTokenizer.reset#0 nish.JsonTokenizer.next#0 nish.JsonTokenizer.stringInto#0 nish.JsonTokenizer.keyEquals#0 nish.JsonTokenizer.numberF64#0 nish.JsonTokenizer.next#0
   pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.JsonTokenizer.stringInto#1
@@ -2462,7 +2462,7 @@ function benchOne(tok: JsonTokenizer, body: u8[], out: u8[]): i64 -> @benchOne
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: benchBytes benchOne llvm.fptosi.sat.i32.f64 nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
+  calls: benchBytes benchOne llvm.fptosi.sat.i32.f64 nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
   stackSites=2 stackLocals=1
   local -11:9 rounds: i32 (const)
   local -10:9 body: u8[] (const)

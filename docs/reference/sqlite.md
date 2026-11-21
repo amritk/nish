@@ -6,6 +6,7 @@
 
 ```ts
 import {
+  Cursor,
   Database,
   OPEN_CREATE,
   OPEN_MEMORY,
@@ -13,6 +14,10 @@ import {
   OPEN_READONLY,
   OPEN_READWRITE,
   OPEN_URI,
+  SEEK_GE,
+  SEEK_GT,
+  SEEK_LE,
+  SEEK_LT,
   SQLITE_ABORT,
   SQLITE_BLOB,
   SQLITE_BUSY,
@@ -85,6 +90,12 @@ The version of the SQLite library linked into this program.
 
 </scalar-card>
 
+<scalar-card title="Cursor" icon="phosphor/regular/cube" href="#cursor">
+
+A B-tree cursor on a table or index, which reads rows without a statement.
+
+</scalar-card>
+
 <scalar-card title="Database" icon="phosphor/regular/cube" href="#database">
 
 A connection.
@@ -141,6 +152,36 @@ message; every other call answers `Err` with the bare extended code, and
 
 </scalar-detail>
 
+<scalar-detail title="A cursor reads a table or index without SQL">
+
+Inside a read transaction
+(`beginRead` to `endRead`), `openCursor` checks the object's columns against
+the list the program names, and the `Cursor` then walks SQLite's B-tree
+directly: `first`, `next`, `seekRowid`, and for an index a seek key built
+with `keyI64` and `keyText` and moved to with `seek`. Its column reads
+answer what the row stores and, like a statement's, allocate nothing. Every
+`exec`, `commit`, `rollback` and `endRead`, and every stepped statement but
+a plain read (a `pragma_*` SELECT included), closes every cursor first, so
+a cursor never reads a page that changed; its calls answer `SQLITE_MISUSE`.
+
+<scalar-code-group>
+
+```ts example.ts
+db.beginRead().expect("begin")
+const ix = db.openCursor("t_name", "name,rowid").expect("cursor")
+ix.keyText("ada").expect("key")
+let on = ix.seek(SEEK_GE).expect("seek")
+while (on) {
+  // ix.columnInto(0, buf, 0) is the name, ix.rowid() the row
+  on = ix.next().expect("next")
+}
+db.endRead().expect("end")  // closes `ix`
+```
+
+</scalar-code-group>
+
+</scalar-detail>
+
 <scalar-detail title="Closing is explicit">
 
 `close` finalizes every statement the connection
@@ -166,10 +207,10 @@ path `:memory:` is a database of its own that lives as long as the
 connection. A failed open leaves nothing open behind it.
 
 ```ts
-function openDatabase(
+const openDatabase: (
   path: string,
   flags: i32,
-): Result<Database, SqliteError>
+) => Result<Database, SqliteError>
 ```
 
 <scalar-field name="path" type="string" required>
@@ -196,7 +237,7 @@ The connection, or a `SqliteError` with SQLite's code and message,
 The version of the SQLite library linked into this program.
 
 ```ts
-function sqliteVersion(): string
+const sqliteVersion: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -206,6 +247,37 @@ The version string, such as `3.50.4`.
 </scalar-field>
 
 ## Classes
+
+### Cursor
+
+A B-tree cursor on a table or index, which reads rows without a statement.
+Columns count from 0 in the order `openCursor` named them. A call on a
+closed or invalidated cursor answers `SQLITE_MISUSE` (0 from `rowid` and
+`columnI64`).
+
+```ts
+class Cursor
+```
+
+| Member | |
+| --- | --- |
+| `new Cursor(handle: i32)` | Wraps an adapter handle. A program gets a `Cursor` from `Database.openCursor` rather than building one. |
+| `close(): Result<void, i32>` | Closes the cursor; the handle names nothing after. |
+| `columnI64(c: i32): i64` | Column `c` of the current row as an integer, converted as SQLite converts. |
+| `columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32>` | Copies a text or blob column's stored bytes into `buf` at `at`, and answers their length, as `Statement.columnInto` does: it copies only when all of them fit, so a length larger than `buf.length - at` means nothing was written. It converts no number to text. |
+| `columnType(c: i32): Result<i32, i32>` | The type the current row stores for column `c`, as written: a REAL column holding a whole number stores an integer, where a query would answer a float. |
+| `error(code: i32): SqliteError` | The error for `code`, which this cursor's last call answered. Allocates the `SqliteError`. |
+| `first(): Result<boolean, i32>` | Moves to the first row, in the index's order for an index. |
+| `keyI64(v: i64): Result<void, i32>` | Appends an integer to the seek key, for the index's next key column. |
+| `keyReset(): Result<void, i32>` | Empties an index cursor's seek key, to build a new one with `keyI64`, `keyText` and `keyTextBytes`. |
+| `keyText(text: string): Result<void, i32>` | Appends text to the seek key, copied; the text ends at its first NUL. |
+| `keyTextBytes(buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Appends `buf[off, off + len)` to the seek key as text, copied; a window outside `buf` is `SQLITE_MISUSE`. |
+| `last(): Result<boolean, i32>` | Moves to the last row. |
+| `next(): Result<boolean, i32>` | Moves to the next row. |
+| `previous(): Result<boolean, i32>` | Moves to the row before. |
+| `rowid(): i64` | The current row's rowid: a table row's key, an index entry's `rowid`. |
+| `seek(op: i32): Result<boolean, i32>` | Moves an index cursor by its seek key, compared with each entry's first key columns, so a key with fewer values than the index is a prefix: `SEEK_GE` and `SEEK_GT` land on the first entry at or after the key, `SEEK_LE` and `SEEK_LT` on the last at or before it, the `E` forms counting an equal entry. The key stays, for the next seek. |
+| `seekRowid(rowid: i64): Result<boolean, i32>` | Moves a table cursor to the row whose rowid is `rowid`. |
 
 ### Database
 
@@ -219,12 +291,15 @@ class Database
 | --- | --- |
 | `new Database(handle: i32)` | Wraps an adapter handle. A program gets a `Database` from `openDatabase` rather than building one. With a handle that names no connection, a call that can fail fails with `SQLITE_MISUSE`; `lastInsertRowid` and `changes` answer 0, and `error` answers a message. |
 | `begin(): Result<void, i32>` | Starts a transaction: `exec("BEGIN")`. |
+| `beginRead(): Result<void, i32>` | Starts a read transaction: `BEGIN`, then a read of the schema, which takes the main database's read lock. Its snapshot is what every cursor of this connection reads until `endRead`, and `openCursor` needs one. |
 | `changes(): i64` | How many rows the last INSERT, UPDATE or DELETE on this connection changed. |
 | `close(): Result<void, i32>` | Finalizes every statement of this connection and closes it; the handles name nothing after. A close that fails has still finalized the statements, but leaves the connection open, its message readable through `error`. |
 | `commit(): Result<void, i32>` | Commits the open transaction: `exec("COMMIT")`. |
+| `endRead(): Result<void, i32>` | Closes every cursor of this connection and commits the transaction. |
 | `error(code: i32): SqliteError` | The error for `code`, which this connection's last call answered. Ask before the next call, since the next call replaces the connection's message. Allocates the `SqliteError`. |
 | `exec(sql: string): Result<void, i32>` | Runs every statement of `sql` in turn, discarding any rows. It stops at the first statement that fails, so the ones before it have run. |
 | `lastInsertRowid(): i64` | The rowid of the last row an INSERT on this connection made. |
+| `openCursor(name: string, columns: string): Result<Cursor, SqliteError>` | Opens a cursor on `name`, a table or index of the main database, inside a read transaction (`beginRead`). `columns` is the schema the program reads, checked at open: a table's columns, or an index's key columns, each with ` DESC` where the index has it, and then `rowid`, in order, joined by `,` with no space. A table that is `WITHOUT ROWID`, a view or virtual table, one with a generated column, an index on an expression or with a collation other than `BINARY`, and a database that is not UTF-8 are refused. `close`, `endRead`, closing the connection, any `exec`, and any stepped statement but a plain read (`pragma_*` SELECTs too) close it. |
 | `prepare(sql: string): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. The statement belongs to this connection, and `close` finalizes it. |
 | `rollback(): Result<void, i32>` | Undoes the open transaction: `exec("ROLLBACK")`. |
 
@@ -323,6 +398,38 @@ Open for reading and writing; the file must exist unless `OPEN_CREATE` is given 
 `OPEN_URI: i32`
 
 Read the path as a `file:` URI.
+
+</scalar-card>
+
+<scalar-card title="1" icon="phosphor/regular/hash">
+
+`SEEK_GE: i32`
+
+`Cursor.seek`: the first index entry at or after the key.
+
+</scalar-card>
+
+<scalar-card title="2" icon="phosphor/regular/hash">
+
+`SEEK_GT: i32`
+
+`Cursor.seek`: the first index entry after the key.
+
+</scalar-card>
+
+<scalar-card title="3" icon="phosphor/regular/hash">
+
+`SEEK_LE: i32`
+
+`Cursor.seek`: the last index entry at or before the key.
+
+</scalar-card>
+
+<scalar-card title="4" icon="phosphor/regular/hash">
+
+`SEEK_LT: i32`
+
+`Cursor.seek`: the last index entry before the key.
 
 </scalar-card>
 

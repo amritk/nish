@@ -823,7 +823,7 @@ The failure value, likewise: its `Result` type comes from the context.
 Capability: none.
 
 ```ts
-function Err<T, E>(error: E): Result<T, E>
+const Err: <T, E>(error: E) => Result<T, E>
 ```
 
 <scalar-field name="error" type="E" required>
@@ -846,7 +846,7 @@ literal payload takes no type from the context, so `Ok(3)` for a
 `Result<i32, string>` needs `toI32(3)`. Capability: none.
 
 ```ts
-function Ok<T, E>(value: T): Result<T, E>
+const Ok: <T, E>(value: T) => Result<T, E>
 ```
 
 <scalar-field name="value" type="T" required>
@@ -864,7 +864,7 @@ a `Result` on its success arm.
 The success of a `Result<void, E>`, with no payload. Capability: none.
 
 ```ts
-function Ok<E>(): Result<void, E>
+const Ok: <E>() => Result<void, E>
 ```
 
 <scalar-field name="returns" type="Result&lt;void, E&gt;">
@@ -880,10 +880,7 @@ position. A symbolic link as the last component is refused, as for
 `writeFileSync`. Capability: fs.write.
 
 ```ts
-function appendFileSync(
-  path: string,
-  data: string,
-): void
+const appendFileSync: (path: string, data: string) => void
 ```
 
 <scalar-field name="path" type="string" required>
@@ -934,7 +931,7 @@ call with the release moved ahead of it, unless `g` reads the arena. A panic
 ends the process. Capability: none.
 
 ```ts
-function arena(): Disposable
+const arena: () => Disposable
 ```
 
 <scalar-field name="returns" type="Disposable">
@@ -957,7 +954,7 @@ nothing and may be called in a task. Also exported by `nish:process`.
 Capability: none.
 
 ```ts
-function availableParallelism(): i32
+const availableParallelism: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -973,7 +970,7 @@ except `NaN`, which is not `===` to itself. An argument that is not an `i64`
 is refused. Capability: none.
 
 ```ts
-function bitsToF64(bits: i64): f64
+const bitsToF64: (bits: i64) => f64
 ```
 
 <scalar-field name="bits" type="i64" required>
@@ -999,7 +996,7 @@ where the C function documents that it sets errno. Per thread; refused on a
 freestanding wasm32 build, which has no libc. Capability: unsafe.
 
 ```ts
-function cErrno(): i32
+const cErrno: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -1016,7 +1013,7 @@ either way. Not callable in a `scope()` task or a parallel body. Refused at comp
 wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function connectResult(fd: i32): i32
+const connectResult: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1044,11 +1041,11 @@ behind. Never an exit and never a panic. A `wasm32` build refuses it, and a
 WASI build answers `-ENOSYS`. Capability: fs.write.
 
 ```ts
-function createFileExclusiveSync(
+const createFileExclusiveSync: (
   path: string,
   data: string,
   mode: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1092,7 +1089,7 @@ value. The no-branch promise and its limits are `ctSelect`'s, and so are the
 `wasm32` and Node readings. Capability: none.
 
 ```ts
-function ctEq<T extends u32 | u64>(a: T, b: T): T
+const ctEq: <T extends u32 | u64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>
@@ -1140,11 +1137,11 @@ Node the runtime shim computes the same answer as a pure function (over
 timing is not claimed. Capability: none.
 
 ```ts
-function ctSelect<T extends u32 | u64>(
+const ctSelect: <T extends u32 | u64>(
   mask: T,
   a: T,
   b: T,
-): T
+) => T
 ```
 
 <scalar-field name="mask" type="T" required>
@@ -1180,7 +1177,7 @@ argument of type f32, got f64 ``. Under Node the runtime shim supplies it
 from a `DataView`. Capability: none.
 
 ```ts
-function f32ToBits(x: f32): i32
+const f32ToBits: (x: f32) => i32
 ```
 
 <scalar-field name="x" type="f32" required>
@@ -1203,7 +1200,7 @@ reinterprets bits has no side effect. An argument that is not an `f64` is
 refused, as is a call with other than one argument. Capability: none.
 
 ```ts
-function f64ToBits(x: f64): i64
+const f64ToBits: (x: f64) => i64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -1224,7 +1221,7 @@ Close a descriptor `fileOpen` gave. A second close answers `-9`, unless the
 number has been handed out again since, so close once. Capability: fs.read.
 
 ```ts
-function fileClose(fd: i32): i32
+const fileClose: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1249,7 +1246,7 @@ in a `try`/`finally`. A freestanding `wasm32` build refuses the call (NL2718);
 `--profile wasi` reads through WASI. Capability: fs.read.
 
 ```ts
-function fileOpen(path: string): i32
+const fileOpen: (path: string) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1275,13 +1272,13 @@ len)`, without moving any shared offset (`pread`). The window is checked as
 The array is never grown: memory follows the window. Capability: fs.read.
 
 ```ts
-function fileReadAt(
+const fileReadAt: (
   fd: i32,
   buf: u8[],
   off: i32,
   len: i32,
   pos: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1330,7 +1327,7 @@ The file's size in bytes now, from `fstat`: a file may grow or shrink between
 this and a read, which then answers what is there. Capability: fs.read.
 
 ```ts
-function fileSize(fd: i32): i64
+const fileSize: (fd: i32) => i64
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1361,7 +1358,7 @@ chosen at runtime is forbidden. Two reads of one variable are two calls: a
 `nish:process`. Capability: env.
 
 ```ts
-function getenv(name: string): string | null
+const getenv: (name: string) => string | null
 ```
 
 <scalar-field name="name" type="string" required>
@@ -1386,7 +1383,7 @@ there is no user there. Under Node the runtime shim supplies
 `process.geteuid()`. It is a global, not a `nish:` export. Capability: env.
 
 ```ts
-function geteuid(): i64
+const geteuid: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -1404,7 +1401,7 @@ whether a directory was made, and `readFileSyncOrNull` is still the way to
 read a file without racing a check against it. Capability: fs.read.
 
 ```ts
-function isDirectorySync(path: string): boolean
+const isDirectorySync: (path: string) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1431,7 +1428,7 @@ shim supplies `fs.accessSync` with `X_OK`. It is a global, not a `nish:`
 export. Capability: fs.read.
 
 ```ts
-function isExecutableSync(path: string): boolean
+const isExecutableSync: (path: string) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1453,7 +1450,7 @@ Whether descriptor `fd` is a terminal (`isatty`). `false` for a pipe or a file a
 time on a freestanding wasm32 target. Capability: tty.
 
 ```ts
-function isTerminal(fd: i32): boolean
+const isTerminal: (fd: i32) => boolean
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1480,7 +1477,7 @@ Node's error code back into its errno. Also exported by `nish:process`.
 Capability: process.spawn.
 
 ```ts
-function kill(pid: i32, sig: i32): i32
+const kill: (pid: i32, sig: i32) => i32
 ```
 
 <scalar-field name="pid" type="i32" required>
@@ -1528,7 +1525,7 @@ has none to reach ``. Under Node the runtime shim packs `fs.lstatSync`'s
 export. Capability: fs.read.
 
 ```ts
-function lstatOwnerModeSync(path: string): i64
+const lstatOwnerModeSync: (path: string) => i64
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1552,7 +1549,7 @@ can turn the failure into its own diagnostic. `isDirectorySync` is the `stat`
 half of it. Capability: fs.write.
 
 ```ts
-function mkdirSync(path: string): boolean
+const mkdirSync: (path: string) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1578,10 +1575,7 @@ mode is left as it was, never changed. Never a panic. A `wasm32` build refuses
 it, and a WASI build answers `-ENOSYS`. Capability: fs.write.
 
 ```ts
-function mkdirSyncMode(
-  path: string,
-  mode: i32,
-): i32
+const mkdirSyncMode: (path: string, mode: i32) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1614,7 +1608,7 @@ not fold into one. Not refused on `wasm32`. Also exported by `nish:process`.
 Capability: clock.
 
 ```ts
-function monotonicNanos(): i64
+const monotonicNanos: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -1634,11 +1628,11 @@ and the WASI profile (NL2404); under Node it throws. A call that writes `out` is
 scope's region on an array a task may read, as `fill` is. Capability: net.
 
 ```ts
-function netAddress(
+const netAddress: (
   out: u8[],
   host: string,
   port: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1675,7 +1669,7 @@ callable in a `scope()` task or a parallel body. Refused at compile time on wasm
 profile (NL2404). Capability: net.
 
 ```ts
-function netClose(fd: i32): i32
+const netClose: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1697,7 +1691,7 @@ one the kernel chose. Not callable in a `scope()` task or a parallel body. Refus
 time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function netLocalPort(fd: i32): i32
+const netLocalPort: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1733,7 +1727,7 @@ export const batch = (conn: i32, fallback: i32): i32 => {
 ```
 
 ```ts
-function netMss(fd: i32): i32
+const netMss: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1762,12 +1756,12 @@ array a task may read, as `fill` is. Refused at compile time on wasm32 and the W
 (NL2404). Capability: net.
 
 ```ts
-function netRead(
+const netRead: (
   fd: i32,
   buf: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1811,7 +1805,7 @@ state at 0, and a later listener asks again. -95 on Darwin. Refused at
 compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function netRingState(): i32
+const netRingState: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -1836,11 +1830,11 @@ export const answered = (conn: i32): i32 => netSetOption(conn, NET_TCP_QUICKACK,
 ```
 
 ```ts
-function netSetOption(
+const netSetOption: (
   fd: i32,
   option: i32,
   value: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1879,7 +1873,7 @@ bytes already written, so the peer reads them and then the end of the stream; a 
 and then 0 once the read side is.
 
 ```ts
-function netShutdown(fd: i32, how: i32): i32
+const netShutdown: (fd: i32, how: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1909,12 +1903,12 @@ in a `scope()` task or a parallel body. Refused at compile time on wasm32 and th
 (NL2404). Capability: net.
 
 ```ts
-function netWrite(
+const netWrite: (
   fd: i32,
   buf: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1958,7 +1952,7 @@ may be empty. Not callable in a `scope()` task or a parallel body. Refused at co
 wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function netWrite2(
+const netWrite2: (
   fd: i32,
   a: readonly u8[],
   aOff: i32,
@@ -1966,7 +1960,7 @@ function netWrite2(
   b: readonly u8[],
   bOff: i32,
   bLen: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -2030,7 +2024,7 @@ shape `src/` uses everywhere in place of an assert. Also exported by
 `nish:io`. Capability: none.
 
 ```ts
-function panic(message: string): never
+const panic: (message: string) => never
 ```
 
 <scalar-field name="message" type="string" required>
@@ -2055,7 +2049,7 @@ on every target: the hex integer, correctly rounded, stopping at a hex
 float's `.` or `p` (`0x1p3` is `1`). Exactly one argument. Capability: none.
 
 ```ts
-function parseFloat(s: string): f64
+const parseFloat: (s: string) => f64
 ```
 
 <scalar-field name="s" type="string" required>
@@ -2085,7 +2079,7 @@ argument: there is no radix, since base 10 is the only one. A non-string is
 refused: "`parseInt` expects a string, got i32". Capability: none.
 
 ```ts
-function parseInt(s: string): i32
+const parseInt: (s: string) => i32
 ```
 
 <scalar-field name="s" type="string" required>
@@ -2115,7 +2109,7 @@ may read, as `fill` is. Refused at compile time on wasm32 and the WASI
 profile (NL2404). Capability: net.
 
 ```ts
-function peerCredentials(fd: i32, out: i32[]): i32
+const peerCredentials: (fd: i32, out: i32[]) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -2146,12 +2140,12 @@ descriptor under the token it gave rather than the old one. Not callable in a `s
 parallel body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function pollAdd(
+const pollAdd: (
   loop: i32,
   fd: i32,
   events: i32,
   token: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -2213,7 +2207,7 @@ while (running) {
 ```
 
 ```ts
-function pollCreate(): i32
+const pollCreate: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -2228,12 +2222,12 @@ New events or a new token for a watched `fd`. Not callable in a `scope()` task o
 body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function pollModify(
+const pollModify: (
   loop: i32,
   fd: i32,
   events: i32,
   token: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -2273,7 +2267,7 @@ or a parallel body. Refused at compile time on wasm32 and the WASI profile (NL24
 net.
 
 ```ts
-function pollRemove(loop: i32, fd: i32): i32
+const pollRemove: (loop: i32, fd: i32) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -2318,11 +2312,11 @@ task may read, as `fill` is. Refused at compile time on wasm32 and the WASI
 profile (NL2404). Capability: net.
 
 ```ts
-function pollWait(
+const pollWait: (
   loop: i32,
   ready: i32[],
   timeoutMs: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -2369,7 +2363,7 @@ may still answer `NULL`, so the call tests `p` first and panics with
 The copy is new on every call and is the calling function's allocation, and
 it is refused inside a `using a = arena()` block that would release one held
 outside it (`` `readCString(p)` may be allocated inside the `using arena()`
-block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+block ``). In the no-panic scope its `NULL` test is an `ffi-null` site no
 proof removes, so the scope refuses the call (the copy's `oom` beside it is
 allowed), and the pointer it reads is `ffi`. It lowers the same
 on wasm32, where whether the program links is the `declare function`'s
@@ -2377,7 +2371,7 @@ question. It has no Node form, as a `CPtr` comes only from a `declare
 function`, which Node cannot call. Capability: unsafe.
 
 ```ts
-function readCString(p: CPtr): string
+const readCString: (p: CPtr) => string
 ```
 
 <scalar-field name="p" type="CPtr" required>
@@ -2405,9 +2399,7 @@ I/O and so no `readFileBytesSync`. Under Node the answer is
 `Array.from(fs.readFileSync(path))` or `null`. Capability: fs.read.
 
 ```ts
-function readFileBytesSync(
-  path: string,
-): u8[] | null
+const readFileBytesSync: (path: string) => u8[] | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -2433,7 +2425,7 @@ A `wasm32` build has no file I/O and so no `readFileSync`.
 Capability: fs.read.
 
 ```ts
-function readFileSync(path: string): string
+const readFileSync: (path: string) => string
 ```
 
 <scalar-field name="path" type="string" required>
@@ -2459,9 +2451,7 @@ The 2^31 - 1 byte limit and the NUL rule of `readFileSync` apply.
 Capability: fs.read.
 
 ```ts
-function readFileSyncOrNull(
-  path: string,
-): string | null
+const readFileSyncOrNull: (path: string) => string | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -2485,7 +2475,7 @@ profile refuse it (NL2404). No reading under Node, which throws. Also
 exported by `nish:process`. Capability: signal.
 
 ```ts
-function readSignal(fd: i32): i32
+const readSignal: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -2537,11 +2527,7 @@ export const main = (): number => {
 ```
 
 ```ts
-function readStdin(
-  buf: u8[],
-  off: i32,
-  len: i32,
-): i32
+const readStdin: (buf: u8[], off: i32, len: i32) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -2587,7 +2573,7 @@ unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
 
 A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
 naming the layout, since a `declare function` declared to answer `CPtr` may
-still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+still answer `NULL`. No proof removes that test, so the no-panic scope refuses
 the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
 `oom` beside it.
 
@@ -2597,7 +2583,7 @@ bytes and the layout is sized to match. It has no Node form.
 Capability: unsafe.
 
 ```ts
-function readStruct<T>(p: CPtr): T
+const readStruct: <T>(p: CPtr) => T
 ```
 
 <scalar-field name="p" type="CPtr" required>
@@ -2628,9 +2614,7 @@ directory and not about its contents. A WASI build always answers `null`:
 different contract. Capability: fs.read.
 
 ```ts
-function readdirSync(
-  path: string,
-): string[] | null
+const readdirSync: (path: string) => string[] | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -2656,7 +2640,7 @@ ordinary string, narrowed with `if (p !== null)` like any other nullable.
 Capability: fs.read.
 
 ```ts
-function realpathSync(path: string): string | null
+const realpathSync: (path: string) => string | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -2694,13 +2678,13 @@ is. Refused at compile time on wasm32 and the WASI profile (NL2404).
 Capability: net.
 
 ```ts
-function recvFd(
+const recvFd: (
   sock: i32,
   buf: u8[],
   off: i32,
   len: i32,
   fd: i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="sock" type="i32" required>
@@ -2749,7 +2733,7 @@ never neither — write a temporary next to the target, then rename it over.
 Never a panic. A `wasm32` build refuses it. Capability: fs.write.
 
 ```ts
-function renameSync(from: string, to: string): i32
+const renameSync: (from: string, to: string) => i32
 ```
 
 <scalar-field name="from" type="string" required>
@@ -2798,7 +2782,7 @@ element to zero, and a collector that moved the array may have left the old
 bytes behind. Capability: none.
 
 ```ts
-function secureZero(bytes: u8[]): void
+const secureZero: (bytes: u8[]) => void
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -2822,13 +2806,13 @@ The range is checked as `netRead`'s is, with the same panic; `buf` may be
 compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function sendFd(
+const sendFd: (
   sock: i32,
   fd: i32,
   buf: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="sock" type="i32" required>
@@ -2879,7 +2863,7 @@ task or a parallel body that calls it is refused as any shared write is. A
 Capability: process.spawn.
 
 ```ts
-function setCpuAffinity(cpu: i32): i32
+const setCpuAffinity: (cpu: i32) => i32
 ```
 
 <scalar-field name="cpu" type="i32" required>
@@ -2910,7 +2894,7 @@ task or a parallel body that calls it is refused as any shared write is. A
 `nish:process`. Capability: process.spawn.
 
 ```ts
-function setIdlePriority(): i32
+const setIdlePriority: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -2936,7 +2920,7 @@ the priority is the one the program's children inherit, and a step down
 cannot always be taken back. Capability: process.spawn.
 
 ```ts
-function setNice(n: i32): i32
+const setNice: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>
@@ -2996,7 +2980,7 @@ it throws; refused at compile time on a freestanding wasm32 target.
 Capability: tty.
 
 ```ts
-function setRawMode(on: boolean): i32
+const setRawMode: (on: boolean) => i32
 ```
 
 <scalar-field name="on" type="boolean" required>
@@ -3031,7 +3015,7 @@ terminal and again with each change, last the set that undoes them all. Under
 refused at compile time on a freestanding wasm32 target. Capability: tty.
 
 ```ts
-function setTerminalRestore(bytes: string): i32
+const setTerminalRestore: (bytes: string) => i32
 ```
 
 <scalar-field name="bytes" type="string" required>
@@ -3071,7 +3055,7 @@ Node, which delivers a signal only to its event loop: it throws. Also
 exported by `nish:process`. Capability: signal.
 
 ```ts
-function signalFd(): i32
+const signalFd: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -3097,7 +3081,7 @@ Under `--sandbox` with a list of granted programs, the program started
 cannot start another, as for `spawnSync`.
 
 ```ts
-function spawn(argv: string[]): i32
+const spawn: (argv: string[]) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -3140,12 +3124,12 @@ Under `--sandbox` with a list of granted programs, the program started
 cannot start another, as for `spawnSync`.
 
 ```ts
-function spawnPiped(
+const spawnPiped: (
   argv: string[],
   stdin: readonly u8[],
   stdout: u8[],
   stderr: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -3202,13 +3186,13 @@ Under `--sandbox` with a list of granted programs, the program started
 cannot start another, as for `spawnSync`.
 
 ```ts
-function spawnPipedWithin(
+const spawnPipedWithin: (
   argv: string[],
   stdin: readonly u8[],
   stdout: u8[],
   stderr: u8[],
   timeoutMs: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -3268,7 +3252,7 @@ what that takes (Docker's default profile does), the spawn fails and one
 line on stderr says so.
 
 ```ts
-function spawnSync(argv: string[]): number
+const spawnSync: (argv: string[]) => number
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -3299,11 +3283,11 @@ Under `--sandbox` with a list of granted programs, the program started
 cannot start another, as for `spawnSync`.
 
 ```ts
-function spawnSyncTo(
+const spawnSyncTo: (
   argv: string[],
   stdoutPath: string,
   stderrPath: string,
-): number
+) => number
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -3349,10 +3333,10 @@ Under `--sandbox` with a list of granted programs, the program started
 cannot start another, as for `spawnSync`.
 
 ```ts
-function spawnWithFds(
+const spawnWithFds: (
   argv: string[],
   fds: readonly i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -3392,7 +3376,7 @@ JavaScript's own answer for a time that is not one; test it with `m !== m`. A
 })?.mtimeMs`, or NaN. Also exported by `nish:fs`. Capability: clock.
 
 ```ts
-function statMtimeSync(path: string): f64
+const statMtimeSync: (path: string) => f64
 ```
 
 <scalar-field name="path" type="string" required>
@@ -3417,7 +3401,7 @@ refused in a scope's region on an array a task may read, as `fill` is. Refused a
 wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function tcpAccept(fd: i32, peer: u8[]): i32
+const tcpAccept: (fd: i32, peer: u8[]) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -3469,7 +3453,7 @@ if (connectResult(fd) === 0) {
 ```
 
 ```ts
-function tcpConnect(addr: readonly u8[]): i32
+const tcpConnect: (addr: readonly u8[]) => i32
 ```
 
 <scalar-field name="addr" type="readonly u8[]" required>
@@ -3494,11 +3478,11 @@ connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other
 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function tcpListen(
+const tcpListen: (
   host: string,
   port: i32,
   backlog: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="host" type="string" required>
@@ -3556,12 +3540,12 @@ refused the listener serves descriptors and `netRingState` says why. Elsewhere
 the flag is accepted and does nothing.
 
 ```ts
-function tcpListenFlags(
+const tcpListenFlags: (
   host: string,
   port: i32,
   backlog: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="host" type="string" required>
@@ -3603,7 +3587,7 @@ frame to follow a resize. Under Node it is Node's `columns` and `rows`; in a bro
 `[-25, 0]`; refused at compile time on a freestanding wasm32 target. Capability: tty.
 
 ```ts
-function terminalSize(): i32[]
+const terminalSize: () => i32[]
 ```
 
 <scalar-field name="returns" type="i32[]">
@@ -3622,7 +3606,7 @@ unchanged. A bare literal argument is typed `f32`: `toF32(2.75)`.
 Capability: none.
 
 ```ts
-function toF32(x: number | boolean): f32
+const toF32: (x: number | boolean) => f32
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3644,7 +3628,7 @@ signed or unsigned by its own signedness. An `f64` is unchanged. A bare
 literal argument is typed `f64`: `toF64(3)`. Capability: none.
 
 ```ts
-function toF64(x: number | boolean): f64
+const toF64: (x: number | boolean) => f64
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3676,7 +3660,7 @@ Hi>`. An argument that is not a number is refused, as `` `toI32` expects a
 number (i32, i64, or f64), got string ``. Capability: none.
 
 ```ts
-function toI32(x: number | boolean): i32
+const toI32: (x: number | boolean) => i32
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3698,7 +3682,7 @@ zero-extended, and a float saturates (NaN is 0, out of range clamps). An
 `i64` is unchanged, and a `u64` keeps its bits. Capability: none.
 
 ```ts
-function toI64(x: number | boolean): i64
+const toI64: (x: number | boolean) => i64
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3719,7 +3703,7 @@ the value to convert.
 `0 .. 65535`. Capability: none.
 
 ```ts
-function toU16(x: number | boolean): u16
+const toU16: (x: number | boolean) => u16
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3741,7 +3725,7 @@ the value to convert.
 emitted. Capability: none.
 
 ```ts
-function toU32(x: number | boolean): u32
+const toU32: (x: number | boolean) => u32
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3765,7 +3749,7 @@ move. The largest `u64` values cannot be written as literals (past 2^53), so
 they are built this way: `toU64(0) - toU64(1)` is 2^64 - 1. Capability: none.
 
 ```ts
-function toU64(x: number | boolean): u64
+const toU64: (x: number | boolean) => u64
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3790,7 +3774,7 @@ also types a literal, which is how `255` is written for a `u8` where
 no context gives it that type: `toU8(255)`. Capability: none.
 
 ```ts
-function toU8(x: number | boolean): u8
+const toU8: (x: number | boolean) => u8
 ```
 
 <scalar-field name="x" type="number | boolean" required>
@@ -3814,7 +3798,7 @@ refuses it (NL2404). It writes nothing and may be called in a task. Also
 exported by `nish:process`. Capability: none.
 
 ```ts
-function totalMemory(): i64
+const totalMemory: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -3831,11 +3815,7 @@ always read. Without flag 1 a port in use is -98. Refused at compile time on was
 profile (NL2404), and not callable in a `scope()` task or a parallel body. Capability: net.
 
 ```ts
-function udpBind(
-  host: string,
-  port: i32,
-  flags: i32,
-): i32
+const udpBind: (host: string, port: i32, flags: i32) => i32
 ```
 
 <scalar-field name="host" type="string" required>
@@ -3889,14 +3869,14 @@ read, as `fill` is. Refused at compile time on wasm32 and the WASI profile
 (NL2404). Capability: net.
 
 ```ts
-function udpRecvFrom(
+const udpRecvFrom: (
   fd: i32,
   buf: u8[],
   off: i32,
   len: i32,
   from: u8[],
   meta: i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -3955,7 +3935,7 @@ above 0 is -95. Not callable in a `scope()` task or a parallel body. Refused at 
 wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function udpSendTo(
+const udpSendTo: (
   fd: i32,
   buf: readonly u8[],
   off: i32,
@@ -3963,7 +3943,7 @@ function udpSendTo(
   to: readonly u8[],
   segment: i32,
   ecn: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -4031,14 +4011,14 @@ array may be read.
 
 To the bounds proof it is the load `xs[i]` is, less the check: it moves no
 length, and it records no passed check, so a checked `xs[i]` after it keeps
-its check. Under `--deny-panics` it is an allowed `unchecked` site. Under
+its check. In the no-panic scope it is an allowed `unchecked` site. Under
 Node the runtime shim reads `xs[i]`. Capability: unsafe.
 
 ```ts
-function uncheckedGet<T extends number>(
+const uncheckedGet: <T extends number>(
   xs: readonly T[],
   i: i32,
-): T
+) => T
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -4072,15 +4052,15 @@ to it is a value and is not stored inline.
 The store is a write of the array for every rule that asks, the rule for a
 parallel body included. To the bounds proof it is the store `xs[i] = v` is,
 less the check, and a resize in the value stored still takes the length away.
-Under `--deny-panics` it is an allowed `unchecked` site. Under Node the
+In the no-panic scope it is an allowed `unchecked` site. Under Node the
 runtime shim stores `xs[i] = v`. Capability: unsafe.
 
 ```ts
-function uncheckedSet<T extends number>(
+const uncheckedSet: <T extends number>(
   xs: T[],
   i: i32,
   v: T,
-): void
+) => void
 ```
 
 <scalar-field name="xs" type="T[]" required>
@@ -4108,7 +4088,7 @@ written: a Unix client is seldom bound. Not callable in a `scope()` task or a pa
 Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function unixAccept(fd: i32): i32
+const unixAccept: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -4130,7 +4110,7 @@ path is the working directory's. Not callable in a `scope()` task or a parallel 
 compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function unixConnect(path: string): i32
+const unixConnect: (path: string) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4174,11 +4154,11 @@ the WASI profile (NL2404). Not callable in a `scope()` task or a parallel
 body. Capability: net.
 
 ```ts
-function unixListen(
+const unixListen: (
   path: string,
   backlog: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4217,12 +4197,12 @@ connect gets in under a wider one. Not callable in a `scope()` task or a paralle
 at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function unixListenMode(
+const unixListenMode: (
   path: string,
   backlog: i32,
   flags: i32,
   mode: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4265,10 +4245,7 @@ refused in a scope's region on an array a task may read, as `fill` is. Refused a
 wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
-function unixSocketPair(
-  kind: i32,
-  fds: i32[],
-): i32
+const unixSocketPair: (kind: i32, fds: i32[]) => i32
 ```
 
 <scalar-field name="kind" type="i32" required>
@@ -4297,7 +4274,7 @@ what it names. A directory is refused, not removed, with no fallback to
 `rmdir`. Never a panic. A `wasm32` build refuses it. Capability: fs.write.
 
 ```ts
-function unlinkSync(path: string): i32
+const unlinkSync: (path: string) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4330,7 +4307,7 @@ as any shared write is. Also exported by `nish:process`. Capability:
 process.spawn.
 
 ```ts
-function waitPid(pid: i32, flags: i32): i32[]
+const waitPid: (pid: i32, flags: i32) => i32[]
 ```
 
 <scalar-field name="pid" type="i32" required>
@@ -4372,7 +4349,7 @@ throws; refused at compile time on a freestanding wasm32 target. Capability:
 tty.
 
 ```ts
-function waitStdin(timeoutMs: i32): boolean
+const waitStdin: (timeoutMs: i32) => boolean
 ```
 
 <scalar-field name="timeoutMs" type="i32" required>
@@ -4396,7 +4373,7 @@ job, not this one's. Not refused on `wasm32`. Also exported by `nish:process`.
 Capability: clock.
 
 ```ts
-function wallClockNanos(): i64
+const wallClockNanos: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -4418,15 +4395,12 @@ operand's type, wherever it stands. `wrappingAdd(2147483647, 1)` is
 
 In a module constant's initialiser the call folds, wrapping, where
 `2147483647 + 1` is refused; it is the one call such an initialiser may make.
-It is not a site under `--deny-panics`, as it cannot panic. Under Node the
+It is not a site in the no-panic scope, as it cannot panic. Under Node the
 runtime shim computes `(a + b) | 0` on an `i32` and `BigInt.asIntN(64, ...)`
 on the BigInt an `i64` is there. Capability: unsafe.
 
 ```ts
-function wrappingAdd<T extends i32 | i64>(
-  a: T,
-  b: T,
-): T
+const wrappingAdd: <T extends i32 | i64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>
@@ -4454,10 +4428,7 @@ the low bits of the sum.
 `Math.imul` on an `i32`. Capability: unsafe.
 
 ```ts
-function wrappingMul<T extends i32 | i64>(
-  a: T,
-  b: T,
-): T
+const wrappingMul: <T extends i32 | i64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>
@@ -4485,10 +4456,7 @@ the low bits of the product.
 computes `(a - b) | 0` on an `i32`. Capability: unsafe.
 
 ```ts
-function wrappingSub<T extends i32 | i64>(
-  a: T,
-  b: T,
-): T
+const wrappingSub: <T extends i32 | i64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>
@@ -4522,7 +4490,7 @@ is not UTF-8 becomes U+FFFD. `writeBytes` is the route for bytes that are not
 text. Also exported by `nish:io`. Capability: none.
 
 ```ts
-function write(s: string): void
+const write: (s: string) => void
 ```
 
 <scalar-field name="s" type="string" required>
@@ -4548,11 +4516,11 @@ the bytes go to `fs.writeSync(1, ...)`. A `wasm32` build has no stdout to
 reach and refuses it. Also exported by `nish:io`. Capability: none.
 
 ```ts
-function writeBytes(
+const writeBytes: (
   bytes: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="bytes" type="readonly u8[]" required>
@@ -4587,7 +4555,7 @@ position, the same byte-for-byte rule for a string. Also exported by
 `nish:io`. Capability: none.
 
 ```ts
-function writeError(s: string): void
+const writeError: (s: string) => void
 ```
 
 <scalar-field name="s" type="string" required>
@@ -4606,10 +4574,10 @@ carry on. Never an exit and never a panic. A `wasm32` build refuses it.
 Capability: fs.write.
 
 ```ts
-function writeFileBytesSync(
+const writeFileBytesSync: (
   path: string,
   bytes: readonly u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4642,10 +4610,7 @@ refused rather than followed, natively and under Node alike (a Node
 they are. Capability: fs.write.
 
 ```ts
-function writeFileSync(
-  path: string,
-  data: string,
-): void
+const writeFileSync: (path: string, data: string) => void
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4682,11 +4647,11 @@ and never a panic. A `wasm32` build refuses it, and a WASI build answers
 `-ENOSYS`, as WASI has no file modes to set. Capability: fs.write.
 
 ```ts
-function writeFileSyncMode(
+const writeFileSyncMode: (
   path: string,
   data: string,
   mode: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -4756,6 +4721,7 @@ interface Array<T>
 | `fill(value: T, start?: number, end?: number): this` | Store `value` into every slot of `[start, end)`, each end relative (a negative one counts back from the length) and then clamped into `[0, a.length]`, as `TypedArray.prototype.fill`'s are, so no range is out of range, a reversed range fills nothing, and `fill` never panics. Arrays of numbers only, of any width and ranged integers included (a ranged element checks `value` once, before the fill); on any other array it is refused: "`set` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got string[]" (NL2395).<br><br>`value` is the element type ("`fill` expects u8 (the element type of u8[]), got string"), one to three arguments are taken (NL2398), and each end is a number. It is a statement: its answer cannot be used as a value, and JavaScript's answer is the array the program already holds.<br><br>A float end converts as JavaScript's `ToIntegerOrInfinity` does: `NaN` is `0`, a fraction truncates toward zero (`2.7` is `2`, `-0.5` is `0`), and an infinity or a value past the `i64` range saturates, then clamps, so in f64 mode `a.fill(v, 0, 1 / 0)` fills all of it. An unsigned end is never negative, whatever its width: a `u64` of 2^63 or more as a start fills nothing and as an end fills to the length. Natively a `u8[]` fill is one `memset`.<br><br>Under Node it is `Array.prototype.fill`, which has `TypedArray.prototype.fill`'s meaning for every argument Nish admits, except that an `i64` or `u64` end is a `bigint` there and throws a `TypeError`, as all 64-bit arithmetic does. A `readonly T[]` refuses it: "Cannot `fill` through readonly u8[] (declare it u8[] to write through it)". Capability: none. |
 | `filter(predicate: (value: T, index: number) => boolean): T[]` | A new array of the elements for which `predicate` answers `true`, in order, as `Array.prototype.filter` gives. The predicate answers a `boolean` and takes the element, or the element and its index, under the callback rules of `map`. Capability: none. |
 | `findIndex(predicate: (value: T, index: number) => boolean): number` | The index of the first element for which `predicate` answers `true`, or `-1`, as `Array.prototype.findIndex` gives. The callback rules are `map`'s. There is no `find`: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and points here. Capability: none. |
+| `forEach(callbackfn: (value: T, index: number) => void): void` | Call `callbackfn` with each element in order, as `Array.prototype.forEach` does, up to the length the array had when the call began: an element the callback pushes is not visited, and one that shrinks the array ends the walk at its new length. The call answers `void`, and so does the callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its index; one that declares a third parameter, JavaScript's array, is refused (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow written at the call, which may not assign a name of the function around it (NL2586), so a running total is a `for...of` loop. The call compiles to a counted loop with the callback inlined (`std/array`'s `forEach`, or `forEachIndexed` for a two-parameter callback). Capability: none. |
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`: strings by content, classes, interfaces and arrays by identity, floats by `==` on the number (so a `NaN` element is never found, as in JavaScript). One argument; an argument of another type than the element is refused. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`. `string[]` only: "`join` requires string[], got i32[]", because converting an element would allocate once per element. One pass sums the lengths, then one allocation holds the result. Like a concatenation, the result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated. Capability: none. |
 | `map<U>(callbackfn: (value: T, index: number) => U): U[]` | A new array of `callbackfn(element)` for each element, in order, as `Array.prototype.map` gives. The callback takes the element, or the element and its index; a third parameter (JavaScript's array argument) is refused (NL2698), as is a second argument to `map` itself. It is a top-level function or an arrow reading only `const` locals and parameters, and the call compiles to a loop that calls it directly (`std/array`'s `map`). Capability: none. |
@@ -5017,7 +4983,7 @@ keeps, and a `--emit-header` prototype spells such a parameter `const
 nish_array *`.
 
 Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
-`map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+`map`, `filter`, `some`, `every`, `findIndex`, `forEach`, `slice`, passing it on to
 another `readonly T[]`); every write is refused under its own name, an
 element store ("Cannot assign to an element of readonly i32[]
 (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
@@ -5040,6 +5006,7 @@ interface ReadonlyArray<T>
 | `every(predicate: (value: T, index: number) => boolean): boolean` | Whether `predicate` answers `true` for every element, stopping at the first that does not, as `Array.prototype.every` does; an empty array answers `true`. The callback rules are `map`'s. Capability: none. |
 | `filter(predicate: (value: T, index: number) => boolean): T[]` | A new array of the elements for which `predicate` answers `true`, in order, as `Array.prototype.filter` gives. The predicate answers a `boolean` and takes the element, or the element and its index, under the callback rules of `map`. Capability: none. |
 | `findIndex(predicate: (value: T, index: number) => boolean): number` | The index of the first element for which `predicate` answers `true`, or `-1`, as `Array.prototype.findIndex` gives. The callback rules are `map`'s. There is no `find`: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and points here. Capability: none. |
+| `forEach(callbackfn: (value: T, index: number) => void): void` | Call `callbackfn` with each element in order, as `Array.prototype.forEach` does, up to the length the array had when the call began: an element the callback pushes is not visited, and one that shrinks the array ends the walk at its new length. The call answers `void`, and so does the callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its index; one that declares a third parameter, JavaScript's array, is refused (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow written at the call, which may not assign a name of the function around it (NL2586), so a running total is a `for...of` loop. The call compiles to a counted loop with the callback inlined (`std/array`'s `forEach`, or `forEachIndexed` for a two-parameter callback). Capability: none. |
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`, as on `T[]`: one argument, strings by content, classes, interfaces and arrays by identity, and a `NaN` element is never found. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`, as on `string[]`: `string[]` only, and the result is held to 2^31 − 1 bytes. Capability: none. |
 | `map<U>(callbackfn: (value: T, index: number) => U): U[]` | A new array of `callbackfn(element)` for each element, in order, as `Array.prototype.map` gives. The callback takes the element, or the element and its index; a third parameter (JavaScript's array argument) is refused (NL2698), as is a second argument to `map` itself. It is a top-level function or an arrow reading only `const` locals and parameters, and the call compiles to a loop that calls it directly (`std/array`'s `map`). Capability: none. |
@@ -5090,6 +5057,7 @@ interface Set<T>
 | `add(value: T): this` | Add `value`; a member already there keeps its place. Calls chain. Capability: none. |
 | `clear(): void` | Remove every member. Capability: none. |
 | `delete(value: T): boolean` | Remove `value`. Adding it again appends it at the end of the order. Capability: none. |
+| `forEach(callbackfn: (value: T) => void): void` | Call `callbackfn` with each member in insertion order, as `Set.prototype.forEach` does: the `for...of` walk over the set with the callback inlined (`std/collections`' `forEachElement`), so a member added during the walk is visited and one deleted before the walk reaches it is not. The callback takes the member alone; JavaScript passes it again as a second argument and the set as a third, and a callback that declares a second parameter is refused (NL2772). The callback rules are those of an array's `forEach`. Capability: none. |
 | `has(value: T): boolean` | Whether `value` is a member. One probe. Capability: none. |
 
 ### String

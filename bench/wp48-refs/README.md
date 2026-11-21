@@ -13,21 +13,30 @@ build neither 32-bit design and to write ports in `sibling.ts`'s layout, with
 `columns.ts`'s for hot, closed tables.
 WP48 was reopened on 2026-11-17 for a narrower design, 32-bit links for the
 linked classes the compiler picks ([`docs/wp48-ref32-classes.md`](../../docs/wp48-ref32-classes.md)),
-which measures its decode on `sibling.ts`.
+which measures its decode on `sibling.ts`. That design shipped: the compiler
+now picks `sibling.ts`'s `Node` by itself and stores its three links as 32-bit
+offsets, so a `sibling.ts` node is 20 bytes, the same as `columns.ts`'s
+(`build/nish bench/wp48-refs/sibling.ts --explain-layout` prints the verdict,
+and `--compact off` builds the 32-byte layout). The 1M- and 4M-node gate in
+that note's §5.5 has `sibling.ts` level with its pointer layout in time, at
+0.63x the memory.
 
 | program | a node is | a link is | bytes a node |
 | --- | --- | --- | ---: |
-| `class.ts` | a class instance with a `kids: Node[]` array, as an idiomatic port writes it | an 8-byte pointer | 63 |
-| `sibling.ts` | a class instance with `first` and `next` sibling links | an 8-byte pointer | 32 |
-| `pool.ts` | an `interface` record in one `Rec[]`, children as a run of a flat `i32[]` | an `i32` index | 50 |
-| `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 41 |
-| `columns.ts` | the same five fields, one presized `i32[]` column each | an `i32` index | 20 |
+| `class.ts` | a class instance with a `kids: Node[]` array, as an idiomatic port writes it | an 8-byte pointer | 62.8 |
+| `sibling.ts` | a class instance with `first` and `next` sibling links | a 32-bit offset (compact) | 20.4 |
+| `pool.ts` | an `interface` record in one `Rec[]`, children as a run of a flat `i32[]` | an `i32` index | 24.5 |
+| `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 20.4 |
+| `columns.ts` | the same five fields, one presized `i32[]` column each | an `i32` index | 20.4 |
 
 `records.ts` is what a whole-program 32-bit reference mode (Design A in
 WP48) would make of `sibling.ts`; `pool.ts` and `columns.ts` are what a
 library `Pool` (Design B) can write today. The byte counts are peak RSS over
 the node count at 4,000,000 nodes, so they include the blocks a growing array
-leaves behind in the arena.
+leaves behind in the arena. They are from `node bench/wp48-refs/run.mjs
+--rounds 3 --sizes 4000000` with `build/nish` at 568e1ef5, on a 4-core cloud
+container. The first WP48 run, before arrays grew in place and before compact
+classes, read 63, 32, 50, 41 and 20.
 
 ```bash
 npm run build

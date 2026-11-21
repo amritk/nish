@@ -205,13 +205,24 @@ or runtime change.
     (17.5% and 15.8%), at 4M and at 16M words. `same()` still compares one byte per iteration where
     a word-at-a-time compare (or `memcmp`) would do eight; `hash()` is a
     serial FNV-1a multiply chain per byte.
-- **A tree node is twice the size.** A `tree.ts` node is 24 bytes: an `i32`,
-  four bytes of padding and two 64-bit pointers. A Goose pool node is 12
-  bytes, because its links are 32-bit indices into the pool. The tree at
-  n = 24 is 33.5M nodes, so the difference is both the RSS gap (788 MB
-  against 395 MB) and most of the time gap.
-  - **Fix:** 32-bit references for a class whose instances all live in one
-    arena.
-- **bintrees allocates many small trees.** Its RSS gap is small. The time gap
-  is most likely the same node size: 16 bytes in Nish against Goose's 8.
-  This one has not been measured separately.
+- **Fixed: a tree node was twice the size.** A `tree.ts` node was 24 bytes:
+  an `i32`, four bytes of padding and two 64-bit pointers. A Goose pool node
+  is 12 bytes, because its links are 32-bit indices into the pool. The
+  compiler now picks `TNode` as a compact class by itself (WP48,
+  [`docs/wp48-ref32-classes.md`](../../docs/wp48-ref32-classes.md) §5.6): its
+  links are 32-bit offsets into one reserved range and the node is 12 bytes.
+  At n = 24, `build/nish` at 568e1ef5 against the same build with
+  `--compact off`, 11 rounds alternating which ran first, process wall under
+  `bench/rss.c`: 1888 ms against 2806 ms (median gap −33.5%, range −37.6%
+  to −30.0%), peak RSS 394,720 KB against 788,320 KB. Goose was not rebuilt
+  in that session; the table above has it at 395,320 KB, so the RSS gap is
+  closed, and its 1371 ms is from another session, so the time ratio is not
+  restated here. The binary is 1,528 bytes larger (9,360 against 7,832): the
+  range allocator.
+- **bintrees allocates many small trees.** Its node is 16 bytes in Nish
+  against Goose's 8. The compiler leaves it wide, on measurement: narrowed
+  under an earlier version of the rule it took half the memory but ran 18.8% slower at depth 19 (median of 9
+  rounds, range +1.8% to +25.5%; §5.5 of the same note). Each tree is freed
+  before the next, so the smaller node saves little traffic, and four 16-byte
+  nodes already fit in a cache line. The rule therefore counts a saving only
+  on a class of at least 24 bytes. Where the time gap goes is not measured.

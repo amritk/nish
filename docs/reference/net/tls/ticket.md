@@ -192,10 +192,10 @@ fresh random id in `info`, `now` as its creation time and a count of 0.
 The seal cap is left as the program set it.
 
 ```ts
-function tlsTicketKeyDraw(
+const tlsTicketKeyDraw: (
   info: TlsTicketKeyInfo,
   now: i64,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="info" type="TlsTicketKeyInfo" required>
@@ -221,10 +221,10 @@ The new key, owned by the caller, who keeps it in a local and wipes it when it i
 True when the key `info` describes should be replaced: at the end of its issue window, or at its seal cap.
 
 ```ts
-function tlsTicketKeyDue(
+const tlsTicketKeyDue: (
   info: TlsTicketKeyInfo,
   now: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="info" type="TlsTicketKeyInfo" required>
@@ -258,13 +258,13 @@ after the branch on the tag and on the parse, so the one wipe covers every
 path.
 
 ```ts
-function tlsTicketOpen(
+const tlsTicketOpen: (
   key: Secret<u8[]>,
   info: TlsTicketKeyInfo,
   ticket: u8[],
   now: i64,
   out: TlsTicketState,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
@@ -316,13 +316,13 @@ The plaintext is built after the key id and nonce in one array, the one
 refusals.
 
 ```ts
-function tlsTicketSeal(
+const tlsTicketSeal: (
   key: Secret<u8[]>,
   info: TlsTicketKeyInfo,
   state: TlsTicketState,
   now: i64,
   out: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
@@ -369,7 +369,7 @@ suite this server does not know, a PSK of another length than its hash, or
 a server name longer than 255 bytes, which is issued no ticket.
 
 ```ts
-function tlsTicketSize(state: TlsTicketState): i32
+const tlsTicketSize: (state: TlsTicketState) => i32
 ```
 
 <scalar-field name="state" type="TlsTicketState" required>

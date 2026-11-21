@@ -35,7 +35,7 @@ import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
 import { FLAG_POSTFIX, Node, NodeKind } from "./nodes"
 import { SWITCH_COVERED } from "./program"
-import { isFloat } from "./types"
+import { isFloat, T_STRING } from "./types"
 
 // ---- Branch helpers -----------------------------------------------------------
 
@@ -244,9 +244,10 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
     }
     i = i + 1
   }
+  const strings = emitter.typeOf(stmt.children[0]) === T_STRING
   const table: string[] = []
   i = 0
-  while (i < clauses.length) {
+  while (i < clauses.length && !strings) {
     if (clauses[i].kind === NodeKind.Case) {
       const value = emitter.program.nodeCaseValues[clauses[i].id]
       table.push(`    ${type} ${value}, label %${targetOf(bodies, endBlock, i).label}`)
@@ -260,7 +261,11 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   const covered = defaultIndex < 0 && emitter.program.switchCoverage[stmt.id] === SWITCH_COVERED
   const unmatched = covered ? fn.newBlock("sw.unreachable") : endBlock
   const defaultBlock = defaultIndex < 0 ? unmatched : targetOf(bodies, endBlock, defaultIndex)
-  fn.emit(`switch ${type} ${subject}, label %${defaultBlock.label} [\n${table.join("\n")}\n  ]`)
+  if (strings) {
+    emitStringDispatch(emitter, clauses, bodies, endBlock, subject, defaultBlock)
+  } else {
+    fn.emit(`switch ${type} ${subject}, label %${defaultBlock.label} [\n${table.join("\n")}\n  ]`)
+  }
 
   // `sw.end` is reachable from the implicit default edge, from a `break`, and
   // from a last clause that falls out; an empty trailing clause is the same
@@ -298,6 +303,41 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   if (reachesEnd) {
     fn.placeBlock(endBlock)
   }
+}
+
+/**
+ * WP28 C1: the dispatch of a `string-switch`, a chain of `nish_str_eq` calls
+ * in label order that ends at the default edge. Every label is a constant
+ * (`checkStringCaseLabel`), so evaluating them in order has no effect to
+ * observe, and no two are equal, so the first that matches is the only one.
+ * A chain rather than a tree bucketed by length: `nish_str_eq` returns on a
+ * length mismatch before it reads a byte, so a label of the wrong length
+ * costs one call and one compare, and a tree would buy that back only for a
+ * switch with many labels of each length.
+ */
+const emitStringDispatch = (
+  emitter: Emitter,
+  clauses: Node[],
+  bodies: (IRBlock | null)[],
+  endBlock: IRBlock,
+  subject: string,
+  defaultBlock: IRBlock
+): void => {
+  const fn = emitter.fn
+  let i = 0
+  while (i < clauses.length) {
+    if (clauses[i].kind === NodeKind.Case) {
+      const label = emitter.emitExpression(clauses[i].children[0])
+      const equal = fn.emitValue(
+        `call zeroext i1 ${emitter.useRuntime("nish_str_eq")}(i8* ${subject}, i8* ${label})`
+      )
+      const next = fn.newBlock("sw.next")
+      fn.emit(`br i1 ${equal}, label %${targetOf(bodies, endBlock, i).label}, label %${next.label}`)
+      fn.placeBlock(next)
+    }
+    i = i + 1
+  }
+  fn.emit(`br label %${defaultBlock.label}`)
 }
 
 /** The `BLOCK` of a clause: after the label for a `case`, the only child for a `default`. */

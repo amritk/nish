@@ -27,6 +27,7 @@ import {
   emitArrayLength,
   emitArrayMethodCall,
   emitBoxedArrayAssignment,
+  emitEmptyArray,
   emitInlineArrayAssignment,
   emitNewArray,
   initInlineArrays,
@@ -83,6 +84,9 @@ export const loadField = (emitter: Emitter, info: StructInfo, receiver: string, 
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
   const tbaa = fieldTbaa(emitter, info, field)
+  if (field.link) {
+    return decodeLink(emitter, ty, emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4${tbaa}`))
+  }
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
 }
 
@@ -95,8 +99,60 @@ export const storeField = (
 ): void => {
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
+  if (field.link) {
+    const offset = encodeLink(emitter, ty, value)
+    emitter.fn.emit(`store i32 ${offset}, i32* ${ptr}, align 4${fieldTbaa(emitter, info, field)}`)
+    return
+  }
   const tbaa = fieldTbaa(emitter, info, field)
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
+}
+
+// WP48 (docs/wp48-ref32-classes.md §4): a link is a 32-bit offset, in 4-byte
+// units, into the arena's reserved range, and 0 is `null`. On Linux the range
+// sits at a fixed address below 16 GiB, so the offset is the address shifted
+// (zero-based) and null needs no test; elsewhere it is relative to
+// `@nish_ref_base`, which the runtime sets once before `main`. The based IR
+// is pinned only by its text (`tests/cases/compact_darwin.ll`): Linux CI cannot
+// run a macOS binary, so no test executes it. The slot's load and store carry
+// the `ref32` TBAA tag (`fieldTbaa`), so a link never aliases an `i32` field.
+
+/** The `ty` (a `%struct.R*`) that the 32-bit link `slot` holds. */
+const decodeLink = (emitter: Emitter, ty: string, slot: string): string => {
+  const fn = emitter.fn
+  const wide = fn.emitValue(`zext i32 ${slot} to i64`)
+  const bytes = fn.emitValue(`shl nuw nsw i64 ${wide}, 2`)
+  if (emitter.zeroBasedLinks) {
+    return fn.emitValue(`inttoptr i64 ${bytes} to ${ty}`)
+  }
+  const base = loadRefBase(emitter)
+  const at = fn.emitValue(`getelementptr inbounds i8, i8* ${base}, i64 ${bytes}`)
+  const object = fn.emitValue(`bitcast i8* ${at} to ${ty}`)
+  const isNull = fn.emitValue(`icmp eq i32 ${slot}, 0`)
+  return fn.emitValue(`select i1 ${isNull}, ${ty} null, ${ty} ${object}`)
+}
+
+/** The 32-bit link that holds `value`, a `ty` (`%struct.R*`) in the range or null. */
+const encodeLink = (emitter: Emitter, ty: string, value: string): string => {
+  const fn = emitter.fn
+  const address = fn.emitValue(`ptrtoint ${ty} ${value} to i64`)
+  if (emitter.zeroBasedLinks) {
+    const units = fn.emitValue(`lshr i64 ${address}, 2`)
+    return fn.emitValue(`trunc i64 ${units} to i32`)
+  }
+  const base = fn.emitValue(`ptrtoint i8* ${loadRefBase(emitter)} to i64`)
+  const bytes = fn.emitValue(`sub i64 ${address}, ${base}`)
+  const units = fn.emitValue(`lshr i64 ${bytes}, 2`)
+  const offset = fn.emitValue(`trunc i64 ${units} to i32`)
+  const isNull = fn.emitValue(`icmp eq ${ty} ${value}, null`)
+  return fn.emitValue(`select i1 ${isNull}, i32 0, i32 ${offset}`)
+}
+
+/** `@nish_ref_base`, which never changes once `main` runs (`!invariant.load`). */
+const loadRefBase = (emitter: Emitter): string => {
+  emitter.readsRefBase = true
+  const invariant = emitter.metadata("!{}")
+  return emitter.fn.emitValue(`load i8*, i8** @nish_ref_base, align 8, !invariant.load ${invariant}`)
 }
 
 /**
@@ -105,15 +161,27 @@ export const storeField = (
  * attribute stays true), else `info.size` bytes bumped from the arena.
  */
 const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
+  // A compact class is never a stack site (`compactType` in escape.ts): a
+  // link reaches only the arena's range.
   if (emitter.isStackSite(site)) {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8)
   }
   return arenaObject(emitter, info)
 }
 
+/**
+ * Whether an instance of `info` comes from `@nish_alloc_ref` (WP48): a compact
+ * class of alignment 4 in a build that compresses, rounded to 4 rather than 8.
+ * One with an 8-aligned field keeps `@nish_alloc_struct`, whose blocks are
+ * 8-aligned; both are in the arena's range, which is all a link needs.
+ */
+const compactInstance = (emitter: Emitter, info: StructInfo): boolean =>
+  info.compact && info.align < 8 && emitter.opts.compactLinks
+
 /** `info.size` bytes from the arena, as a `%struct.X*`. */
 const arenaObject = (emitter: Emitter, info: StructInfo): string => {
-  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
+  const bump = compactInstance(emitter, info) ? "nish_alloc_ref" : "nish_alloc_struct"
+  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime(bump)}(i64 ${info.size})`)
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`)
 }
 
@@ -125,7 +193,7 @@ const arenaObject = (emitter: Emitter, info: StructInfo): string => {
  * (an imported class `new`ed without a constructor), whose type table and
  * enums this emitter does not have.
  */
-export const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
+const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer
   if (init === null) {
     process.exit(internalErrorFor("emitter: a field initializer that is not there", emitter.opts.json))
@@ -180,11 +248,42 @@ export const defaultValue = (emitter: Emitter, sig: FunctionSig, p: i32, passed:
   return field.index >= 0 ? passed[field.index] : initializerConstant(emitter, field)
 }
 
-/** Store the literal initializers of the fields `info` declares itself. */
+/**
+ * The value a field initializer stores: a fresh empty array for `[]`, a fresh
+ * arena object built by its class's constructor (or initializers) for
+ * `new C(...)`, whose arguments are constants (`FieldInfo.initArgs`), and
+ * the constant `initializerConstant` writes for anything else. Read from the
+ * field and the classes alone, as `initializerConstant` is, because a class
+ * without a constructor runs its initializers at another module's `new`.
+ * Always the arena: the object is stored into another one, which the escape
+ * analysis has not followed (`initializersAllocate`).
+ */
+export const initializerValue = (emitter: Emitter, field: FieldInfo): string => {
+  const init = field.initializer
+  if (init !== null && init.kind === NodeKind.Array) {
+    return emitEmptyArray(emitter)
+  }
+  const made = field.initNew
+  if (init === null || made === null) {
+    return initializerConstant(emitter, field)
+  }
+  const obj = arenaObject(emitter, made)
+  initInlineArrays(emitter, made, obj)
+  const ctor = made.ctor
+  if (ctor !== null) {
+    const none: Node[] = []
+    emitCall(emitter, ctor, obj, none, field.initArgs, init)
+  } else {
+    emitFieldInitializers(emitter, made, obj)
+  }
+  return obj
+}
+
+/** Store the initializers of the fields `info` declares itself, in declaration order. */
 const emitFieldInitializers = (emitter: Emitter, info: StructInfo, receiver: string): void => {
   for (const field of info.fields) {
     if (field.initializer !== null) {
-      storeField(emitter, info, receiver, field, initializerConstant(emitter, field))
+      storeField(emitter, info, receiver, field, initializerValue(emitter, field))
     }
   }
 }
@@ -202,7 +301,8 @@ const constructObject = (
 ): void => {
   const ctor = info.ctor
   if (ctor !== null) {
-    emitCall(emitter, ctor, receiver, args, site)
+    const constants: FieldInfo[] = []
+    emitCall(emitter, ctor, receiver, args, constants, site)
     return
   }
   emitFieldInitializers(emitter, info, receiver)
@@ -378,12 +478,17 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
   )
 }
 
-/** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
+/**
+ * `call <ret> @Sym(<this>, args...)` for a method or constructor. The
+ * arguments are `args`, or, for a `new` initializer, which has no node the
+ * emitter may read, the constants `constants` holds (`FieldInfo.initArgs`).
+ */
 const emitCall = (
   emitter: Emitter,
   callee: FunctionSig,
   receiver: string,
   args: Node[],
+  constants: FieldInfo[],
   site: Node
 ): string => {
   const calleePrivate = privateAbi(emitter.opts, callee.visibleOutside())
@@ -403,7 +508,9 @@ const emitCall = (
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1]
     let value = ""
-    if (i >= args.length) {
+    if (i < constants.length) {
+      value = initializerConstant(emitter, constants[i])
+    } else if (i >= args.length) {
       value = defaultValue(emitter, callee, i + 1, passed)
     } else if (emitter.table.resultByValue(want)) {
       value = emitPackedResult(emitter, args[i], want, calleePrivate)
@@ -449,7 +556,8 @@ export const emitMethodCall = (emitter: Emitter, expr: Node): string => {
     process.exit(internalErrorFor(`emitter: no method recorded for \`${access.text}\``, emitter.opts.json))
   }
   const receiver = emitter.emitExpression(access.children[0])
-  return emitCall(emitter, callee, receiver, expr.children[1].children, expr)
+  const constants: FieldInfo[] = []
+  return emitCall(emitter, callee, receiver, expr.children[1].children, constants, expr)
 }
 
 /** `recv.f = v` stores `v`; `recv.f op= v` reads the field first, as JS does. */
@@ -481,6 +589,11 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
     }
     storeField(emitter, info, receiver, field, value)
     return value
+  }
+  // A compact link takes no arithmetic or bitwise operator, so no compound
+  // assignment reaches one; the raw load and store below skip its encoding.
+  if (field.link) {
+    process.exit(internalErrorFor("emitter: a compound assignment to a compact link", emitter.opts.json))
   }
   // One GEP for both halves of the read-modify-write, so `p.f op= e` addresses
   // the field once however the receiver was spelled.
@@ -618,6 +731,12 @@ const fieldLLVMType = (emitter: Emitter, field: FieldInfo): string => {
   const nested = field.nested
   if (nested !== null) {
     return structTypeName(nested)
+  }
+  if (field.link) {
+    return "i32"
+  }
+  if (field.cLength >= 0) {
+    return `[${field.cLength} x ${emitter.llvm(field.type)}]`
   }
   if (!field.inline()) {
     return emitter.llvm(field.type)

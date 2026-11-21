@@ -34,7 +34,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(root, "build", "bench", "chacha20")
@@ -100,7 +100,7 @@ const paths =
   verified.match(/^chacha20 ([a-z0-9, ]+):/)?.[1].split(", ") ?? fail(`verify printed ${verified}`)
 
 // bench/chacha20.ts imports both AEADs, so one binary runs every column.
-run(nishc.cmd, [...nishc.prefix, "bench/chacha20.ts", "-o", `${rel(outDir)}/`, "--profile", "speed"])
+run(nishc.cmd, compileArgv(nishc, ["bench/chacha20.ts", "-o", `${rel(outDir)}/`, "--profile", "speed"]))
 const exe = path.join(outDir, "chacha20")
 run("bash", [
   "scripts/build.sh",

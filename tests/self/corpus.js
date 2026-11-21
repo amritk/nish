@@ -16,10 +16,14 @@
  *   - `args` in the directory — `tests/link/<name>/`, one whole program per
  *     directory (`tests/run.js`);
  *   - `// smoke: args <flags>` on a line of the source — `examples/`, the
- *     marker `scripts/smoke.sh` reads.
+ *     marker `scripts/smoke.sh` reads;
+ *   - `--allow-panics` for every `docs/cookbook/` snippet, which
+ *     `docs/cookbook/regen.sh` builds with it: the listings show checks' IR,
+ *     a panic's among them.
  */
 import fs from "node:fs"
 import path from "node:path"
+import { ALLOW_PANICS } from "../allow-panics.js"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 
@@ -52,8 +56,13 @@ const CORPUS_DIRS = [
  */
 const extraArgs = (file) => {
   const sidecar = file.replace(/\.ts$/, ".args")
+  const cookbook =
+    path.dirname(path.resolve(file)) === path.join(root, "docs", "cookbook") ? [ALLOW_PANICS] : []
   if (fs.existsSync(sidecar)) {
-    return split(fs.readFileSync(sidecar, "utf8"))
+    return [...cookbook, ...split(fs.readFileSync(sidecar, "utf8"))]
+  }
+  if (cookbook.length > 0) {
+    return cookbook
   }
   const dirArgs = path.join(path.dirname(file), "args")
   if (path.basename(file) === "main.ts" && fs.existsSync(dirArgs)) {

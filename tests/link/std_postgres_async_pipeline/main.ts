@@ -73,7 +73,10 @@
 //      answered the eight held seats free within a turn or two of the loop,
 //      and the queued tasks are seated over at most five turns, as many at
 //      once as there are seats free, rather than one a turn, each woken by
-//      the one seated ahead of it (nine turns).
+//      the one seated ahead of it (nine turns). The held seats free in
+//      one loop turn only because each done rings the turn lanes of the
+//      seats behind it in answer order: with one wake for all of them,
+//      epoll could wake the seat whose turn had come last, one a turn.
 import { cancel, sleep, spawn, taskId } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"

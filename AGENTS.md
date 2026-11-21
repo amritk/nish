@@ -37,22 +37,41 @@ reference documents are [`docs/LANGUAGE.md`](./docs/LANGUAGE.md) (what the langu
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (how the compiler is put
 together); [`docs/MASTER_PLAN.md`](./docs/MASTER_PLAN.md) is the work-package
 plan, with the conventions every agent follows in §7 and a brief template in §8,
-and [`docs/roadmap/`](./docs/roadmap/index.md) holds each package's state, a box
-per stage, and the stage to do next.
+and the [Roadmap issue](https://github.com/amritk/nish/issues/1849) holds the open work, a parent issue per package
+and a sub-issue per stage.
 
 ## Picking up a work package
 
-For a contributor, or an agent asked to "pick up WP50":
+The open work is GitHub issues. The [Roadmap issue](https://github.com/amritk/nish/issues/1849)
+lists one parent issue per work package (or theme) in pickup order, and each
+parent's sub-issues are its stages, one pull request each. A plan file,
+`.claude/plans/<slug>.plan.md`, specifies each parent, the design note in
+`docs/` holds the reasons, and the issues hold the state.
 
-1. Open the package's page, `docs/roadmap/wpN-*.md`. The work is the item
-   under **Next**; if that item is an *(open question)*, ask before
-   starting.
-2. Read the section of the design note that **Next** links, and the open
-   pull requests and issues that name the package, so the work is not done twice.
-3. In the pull request that lands the stage, tick its box on the page, move
-   **Next** on, update the page's "Done" count and its row in
-   [`docs/roadmap/index.md`](./docs/roadmap/index.md), and update that
-   page's Up next list if the order changed.
+The labels, and how an agent claims, checkpoints, hands off and takes over an
+issue, are the `pickup` skill's
+([`pickup`](https://github.com/amritk/ai/blob/main/.claude/skills/pickup/SKILL.md)):
+
+- To build a whole package, run `/feature #<parent issue>` or `/feature --next`.
+- To work one stage by hand, run `/pickup #<stage issue>` or `/pickup next`.
+- For questions only the owner can answer, use `/decide`.
+- For new work, add a stage to the plan file in a PR, then run `/plan-issues`.
+
+What nish adds to the skill:
+
+- **When a package's last stage closes**, the PR that lands that stage also
+  sets the status line at the head of its design note to landed, with a
+  summary of what shipped. Nothing else under `docs/` records a package's state.
+- **A new package** gets its design note and plan file (with a `priority`) in
+  one PR, then `/plan-issues`.
+
+The workflow skills and agents (`feature`, `plan-issues`, `pickup`, `decide`,
+the review agents) are not in this repo. They come from the `ai` plugin in the
+`amritk` marketplace, which is the [`amritk/ai`](https://github.com/amritk/ai)
+repository. `.claude/settings.json` enables it for local sessions, and the
+owner's claude.ai account syncs it. A skill is named `/ai:<name>`, or `/<name>`
+where no other skill takes that name. Change a skill in `amritk/ai`, never here.
+This repo keeps only what is nish's own: the plans, the hooks and these rules.
 
 ## Workflow
 
@@ -61,7 +80,7 @@ npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the full suite: goldens, llvm-as, native, runtime, differential; CI runs eight shards
+npm test                    # the full suite: goldens, llvm-as, native, runtime, differential; CI runs nine shards
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
 npm run lint                # file names + biome, formatting included; any finding fails CI
@@ -94,7 +113,7 @@ itself.
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
 | where the program can panic | `nish --emit-panics <file.json> <files>` | one JSON object in the file, every function with its panic sites, each with its kind and whether the checker proved it away ([LANGUAGE.md](./docs/LANGUAGE.md#panic-sites)); the IR is unchanged |
-| that a module cannot panic | `nish --deny-panics <files>`, or `"nish": { "noPanic": [...] }` in the root `package.json` | every unproven panic site in scope is an error (NL2457, or NL2458 at a call out of the scope) naming its kind and the guard that proves it; out of memory is allowed; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#the-no-panic-scope)) |
+| that a module cannot panic | nothing: every module of the root package is held to it by default (`--allow-panics` relaxes it to `"nish": { "noPanic": [...] }` in the root `package.json`; fix a refusal rather than relaxing it) | every unproven panic site in scope is an error (NL2457, or NL2458 at a call out of the scope) naming its kind and the guard that proves it; out of memory is allowed; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#the-no-panic-scope)) |
 | that a program keeps no unreachable memory | `nish --deny-retention <files>` | each arena-retention warning in the root package (NL9002, NL9003, NL9011, NL9016, NL9018, NL9019) is an error (NL2462) that keeps the warning's code and text; a dependency's stay warnings; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#retention-as-an-error)) |
 | where each allocation's memory goes | `nish --emit-arena <file.json> <files>` | one JSON object in the file, every function with its allocation sites, each with its kind, its placement (`stack`, `pass`, `block`, `function`, `returned`, `caller`, `kept`, `unscoped`) and whether it accumulates pass after pass; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#arena-placement)) |
 | which loops and functions keep their memory, and why | `nish --explain-memory <files>` | one stderr line per loop whose passes keep what they allocate and per function with a scalar result that keeps it, each with the reason and where the memory goes back, then a summary count; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#explaining-kept-memory)) |
@@ -197,7 +216,7 @@ find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
 this does not happen silently.
 
-**CI's eight `test (…, shard N/8)` rows are the full-suite run a pull request
+**CI's nine `test (…, shard N/9)` rows are the full-suite run a pull request
 is judged by** ([definition of done](./CLAUDE.md#definition-of-done)). Read
 each shard's summary as you would a local one — no `DEGRADED:` banner, no skip
 outside the environmental ones below — because eight green rows with skips in
@@ -207,6 +226,10 @@ bootstrap's fixed point, which the job hands to the `bootstrap (x86_64-linux)`
 row of the same run rather than proving it twice. A delegation is not a skip;
 it is named with the job that proves it, and the shard is only as green as
 that job. A local `npm test` delegates nothing (`.claude/testing.md`).
+Each shard's summary line, FAIL lines and SKIP lines are also copied into the
+job's step summary (the "Test summary" step, `scripts/ci-test-summary.mjs`),
+which is uploaded separately from the console log. Read them there when the
+console log stops before its summary, as shard 8's has in green runs (#1836).
 
 ## Shipping a change: what a pull request must be, and who merges it
 

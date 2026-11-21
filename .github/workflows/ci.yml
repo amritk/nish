@@ -2,13 +2,15 @@
 #
 # test: the full golden/native test suite on Linux with LLVM 18
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), every case compiled by a
-#       stage1 the last released nish builds, then a binary size table in the
-#       job summary, and the IR cookbook staleness check. The matrix is
+#       stage1 the last released nish builds. The matrix is
 #       written for macOS too and that row is commented out; the comment beside
 #       it names the four checks that still fail there, with the run that
 #       measured them. `bootstrap` below has had darwin rows since the 0.4.0
 #       seeds, `runtime-net` runs the network runtime on a mac, and `nish-cmp`
 #       runs on the Linux rows only (.github/seed-matrix.sh says why).
+# examples: scripts/smoke.sh over every example with a main, the IR
+#       cookbook staleness check and the binary size table in the job
+#       summary, with the compiler the shards test, beside the shards.
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -44,6 +46,14 @@
 #       otherwise), `npm run lint:dead`, shellcheck over the shell scripts,
 #       docs/check-links.mjs over every Markdown file, then
 #       `scripts/gen-reference.mjs --check` (docs/reference/ is not stale).
+# scope + ci-gate: scoped lanes (docs/wp10-ci.md). `scope` runs
+#       scripts/ci-scope.mjs, which turns a side job off for a pull request
+#       only when every changed path is one that job is proven not to read;
+#       bootstrap, nish-cmp, nish-cmp-elision, simd-arm64, sha256-macos,
+#       fuzz-smoke and postgres-live then skip their steps and still report.
+#       The test shards and lint always run. `ci-gate` needs every job and
+#       fails unless each one it selected succeeded: it is the one check
+#       branch protection has to require.
 #
 # Also reusable via `workflow_call`: release.yml runs it before packing a tag.
 # Runs on `merge_group` too, for the merge queue on main (see `on:` below).
@@ -73,6 +83,10 @@ on:
   pull_request:
   merge_group:
   workflow_call:
+  # release-pr.yml starts the Release PR's run this way (`release/next`): its
+  # GITHUB_TOKEN push raises `pull_request` runs that wait for approval, and a
+  # dispatch does not. A dispatched run selects every lane (ci-scope.mjs).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -119,29 +133,90 @@ env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
-# A newer push to a pull request makes the older run's answer worthless, so
-# that run is cancelled. A push to main is never superseded that way: each one
-# is a merge, and its run is the only record of whether main was green after
-# it. With `cancel-in-progress: true` for every event, the next merge landing
-# within the half hour a run takes cancelled the one before it, and #396's and
-# #397's runs on main ended cancelled -- neither green nor red, and nothing
-# said which merge broke main if one had. So only a pull request's runs cancel;
-# main's queue up in the same group and each finishes. A merge-queue run has a
-# ref of its own per queued entry, so it shares a group with nothing and the
-# queue, not this setting, decides when it is superseded.
+# Every run shares one group per ref, and the newest run cancels the one it
+# replaces: a newer push to a pull request makes the older run's answer
+# worthless, and so does a newer merge to main. A main push's run tests a tree
+# the merge queue already tested (`merge_group` below runs this workflow on
+# main plus everything queued ahead, and merges only what passed there), and
+# runs every lane (`scope` turns lanes off for pull requests only), so the
+# next merge's run tests a superset of what a cancelled one would have. Which
+# merge broke main is the queue's record, one run per entry, not this one's:
+# before the queue, #396's and #397's main runs ended cancelled and nothing
+# said which merge broke main, which is why main used to queue instead.
+#
+# Two kinds of main push are pinned instead: each gets a group of its own (its
+# run id) and is never cancelled, nor cancels the run before it.
+# - The Release PR's merge, recognised by its squash subject
+#   (`chore(release): <version>`) or by the push adding `changelog/<version>.json`,
+#   which only the release PR writes. Either is enough: a false match only
+#   leaves an ordinary run uncancelled, while a miss would let the next merge
+#   cancel the release commit's run.
+# - Re-runs (a later attempt), so recovering an older run never cancels the
+#   tip's run.
+# Release CI proper is untouched: release.yml calls this workflow at the tag,
+# where `github.ref` is `refs/tags/v*`, and the Release PR's own runs are
+# `pull_request` runs like any other. A merge-queue run has a ref of its own
+# per queued entry, so it shares a group with nothing and the queue, not this
+# setting, decides when it is superseded. interop.yml uses the same rule.
+# `run_attempt` is a string in the `github` context, hence `'1'`.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ci-${{ github.workflow }}-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
 jobs:
+  # Which side jobs this run needs (docs/wp10-ci.md, "Scoped lanes"). One
+  # `<lane>=true|false` output per lane; each lane job keeps its matrix rows and
+  # its name, runs on ubuntu-latest when its lane is `false`, and skips every
+  # work step; only the one that says why runs. Work steps compare with `!= 'false'`,
+  # so a missing output runs the lane; if this job fails, GitHub skips the jobs
+  # that need it, and `ci-gate` fails on both. A pull
+  # request is the only event that can turn a lane off; any other event (a
+  # push to main, the merge queue, workflow_call) runs everything, as do the
+  # `ci:full` label and the NISH_CI_SCOPE repository variable set to `full`.
+  # The test shards and lint are never lanes and do not wait on this job.
+  scope:
+    name: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No `pull-requests: read`: release.yml calls this workflow granting only
+    # what the top of this file asks for, and a called job asking for more
+    # makes the whole call invalid. The repository is public, so the default
+    # token reads a pull request's files and labels; if that read fails, the
+    # script runs every lane.
+    outputs:
+      bootstrap: ${{ steps.scope.outputs.bootstrap }}
+      nish_cmp: ${{ steps.scope.outputs.nish_cmp }}
+      elision: ${{ steps.scope.outputs.elision }}
+      simd: ${{ steps.scope.outputs.simd }}
+      sha256_macos: ${{ steps.scope.outputs.sha256_macos }}
+      fuzz: ${{ steps.scope.outputs.fuzz }}
+      postgres: ${{ steps.scope.outputs.postgres }}
+      why: ${{ steps.scope.outputs.why }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: scripts/ci-scope.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Decide the lanes
+        id: scope
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          NISH_CI_SCOPE: ${{ vars.NISH_CI_SCOPE }}
+        run: node scripts/ci-scope.mjs
+
   test:
-    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)
+    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
     # a 15-minute limit cancelled it. With four shards, shard 1 alone ran the
     # twelve minutes of sections after the tests/link programs and took 21
-    # minutes (run 41882940444). Those sections are now dealt too, eight ways,
+    # minutes (run 41882940444). Those sections are now dealt too, nine ways,
     # by the costs in tests/shard-costs.json (regenerated from that run), so
     # each shard takes about nine; the limit stays as headroom while the
     # table drifts.
@@ -229,14 +304,14 @@ jobs:
         # cancelling the Linux row that says whether it is the platform or the
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the four checks above
-        # `npm test` is split eight ways by `--shard` (tests/run.js, "Shards"):
+        # `npm test` is split nine ways by `--shard` (tests/run.js, "Shards"):
         # shard 1 runs the sections after the tests/link programs that are not
         # dealt (`DEALT_SECTIONS`), shard 2 the `simd` group the steps below
         # read, and the programs and the other sections are dealt by their
-        # cost in tests/shard-costs.json so that the eight finish together.
-        # One unsharded run took 25 minutes. The `/8` in the Test step is this
+        # cost in tests/shard-costs.json so that the nine finish together.
+        # One unsharded run took 25 minutes. The `/9` in the Test step is this
         # list's length, and a check in tests/run.js holds the two together.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -352,7 +427,7 @@ jobs:
       # every shard, and the same binary as the last run whose src/, std/, seed
       # and toolchain were these: tests/self/compiler-cache.js keys it on all
       # of them, and the Test step below copies it rather than linking again.
-      # Shard 1 alone saves a miss, since the eight build the same bytes;
+      # Shard 1 alone saves a miss, since the nine build the same bytes;
       # `fuzz-smoke` and `postgres-live` read the same key and save nothing.
       - name: The compiler under test
         uses: ./.github/actions/compiler-cache
@@ -392,18 +467,50 @@ jobs:
       # running them a second time. A check in tests/run.js fails if this step
       # asks for it while `fuzz-smoke` has stopped running either.
       #
+      # `--delegate-bench-timing`, which tests/run.js honours on a
+      # `pull_request` event alone: there the crypto-bench section still
+      # builds every twin and checks every checksum against expected.txt, and
+      # leaves the timed portable proofs to the push-to-main run of this job.
+      # A newer push to main cancels an older one's first attempt (the
+      # concurrency group above), so the proofs time the code as it stands at
+      # the next push whose run is not cancelled; the merge queue and
+      # workflow_call time them too. A check in tests/run.js fails if this job
+      # stops running on a push to main.
+      #
       # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
       # scripts/build.sh and tests/run.js look in exists.
+      #
+      # The log is kept for the steps below that require a line of it, and for
+      # the step summary after this step (#1836). The step's status is npm's;
+      # tee's is written beside the log rather than folded into it. On these
+      # runners tee is uutils', which by default stops writing to a broken
+      # console pipe without a word and exits 0: had the pipe broken, the run
+      # stayed green with no sign of it. `--output-error=warn` keeps it
+      # writing the file and makes that case `tee=1` in the summary.
       - name: Test
         env:
           WASI_SYSROOT: /usr
           SHARD: ${{ matrix.shard }}
-        # The log is kept for the steps below that require a line of it.
         run: |
-          set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
+          set +e
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee --output-error=warn "$RUNNER_TEMP/test.log"
+          status=("${PIPESTATUS[@]}")
+          echo "npm=${status[0]} tee=${status[1]}" > "$RUNNER_TEMP/test.status"
+          exit "${status[0]}"
+
+      # The shard's summary line, every FAIL line with its detail and every
+      # SKIP line, copied into the job's step summary from the log the Test
+      # step kept. The stored console log of shard 8 has lost its last minutes
+      # in green runs (#1836); the step summary is a separate upload, so these
+      # survive it. It reports and never fails, and runs after a failed Test
+      # step too, which is when the FAIL lines are wanted.
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node scripts/ci-test-summary.mjs "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/test.status"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -569,10 +676,77 @@ jobs:
         if: matrix.shard == 1
         run: node bench/adler32.mjs --check
 
+      # The diagnostic-code registry's `gen-diagnostic-codes.mjs --check` and
+      # `security-scope.mjs` are not steps here: `npm test` runs both, in the
+      # diagnostics section (`codes: scripts/gen-diagnostic-codes.mjs --check
+      # accepts the registry`, `security-scope: every std/net, std/crypto and
+      # runtime C file is in a record ...`, and the scope script's refusal of a
+      # file no record names), in whichever shard the deal sends it to. A
+      # failure there is named by its own check line in that shard's log.
+      #
+      # The other half of WP19 G2.4 -- every code provoked by a program, not
+      # only every diagnostic given a code -- is not a step here: it is inside
+      # `npm test`, which runs `tests/diagnostic-coverage.js` with
+      # `--require-coverage` and `--strict-refusals`.
+
+  # examples: the checks that drive a linked compiler over examples/ and
+  # docs/IR_COOKBOOK.md rather than through `npm test`: the smoke test, the IR
+  # cookbook staleness check and the binary size table. They ran after the
+  # suite on test shard 1, about 80 s on the critical path of every run; here
+  # they run beside the shards on their own runner. The compiler comes from
+  # the same cache key the shards link (tests/self/compiler-cache.js), so it is
+  # the binary the suite tests. Not scoped: like `test` and `lint`, it runs on
+  # every event, and `ci-gate` needs it.
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.13.1
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev
+
+      - name: Link the LLVM 18 tools by their plain names
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-link llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
+        run: bash scripts/fetch-seed.sh
+
+      # The test shards save this key; this job only reads it, so a miss links
+      # here (about a minute) and saves nothing.
+      - name: The compiler under test
+        timeout-minutes: 10
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: "false"
+
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
-      # run, the compiler this job built.
+      # run, the compiler the step above linked.
       - name: Smoke (build + run every example with a main, size profile)
-        if: matrix.shard == 1
         env:
           NISH: build/nish
         run: bash scripts/smoke.sh
@@ -582,41 +756,18 @@ jobs:
       # (the `internal` linkage of --strict-exports and the `nsw` defaults were
       # missing), so the staleness check is a gate rather than a chore.
       - name: Docs (IR cookbook up to date)
-        if: matrix.shard == 1
         env:
           NISH: build/nish
         run: bash docs/cookbook/regen.sh --check
 
-      # The diagnostic-code registry, src/codes.ts, is kept by hand: a new
-      # code takes the next free number in its band, and this checks its
-      # format and that every code is unique.
-      # `npm test` checks it too -- this names it in its own step so a stale
-      # registry reads as itself rather than as one failure among a thousand.
-      - name: Diagnostic codes (registry up to date)
-        if: matrix.shard == 1
-        run: node scripts/gen-diagnostic-codes.mjs --check
-
-      # Every std/net, std/crypto and runtime C file is in a security record's
-      # scope or on docs/security/README.md's "Not yet audited" list, which only
-      # shrinks: new attacker-facing code ships with its record (CLAUDE.md).
-      - name: Security records cover the attacker-facing surface
-        if: matrix.shard == 1
-        run: node scripts/security-scope.mjs
-
-      # The other half of WP19 G2.4 -- every code provoked by a program, not
-      # only every diagnostic given a code -- is not a step here: it is inside
-      # `npm test`, which runs `tests/diagnostic-coverage.js` with
-      # `--require-coverage` and `--strict-refusals`.
-
       - name: Size report
-        if: matrix.shard == 1
         env:
-          MATRIX_OS: ${{ matrix.os }}
+          RUNNER_LABEL: ubuntu-latest
         run: |
-          build/nish examples/add.ts -o build/add.ll
+          build/nish examples/add.ts --allow-panics -o build/add.ll
           bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
           {
-            echo "### Binary size ($MATRIX_OS, LLVM 18)"
+            echo "### Binary size ($RUNNER_LABEL, LLVM 18)"
             echo
             echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime-os.c`'
             echo
@@ -752,13 +903,13 @@ jobs:
 
   bootstrap:
     name: bootstrap (${{ matrix.seed.asset }})
-    needs: seeds
+    needs: [seeds, scope]
     # Before the first release nothing is seeded anywhere, which is an empty
     # matrix -- and an empty matrix is a strategy GitHub refuses to evaluate
     # rather than a job with no rows. `seeds` is what says so in that state,
     # and this job is grey rather than green.
     if: needs.seeds.outputs.rows != '[]'
-    runs-on: ${{ matrix.seed.runner }}
+    runs-on: ${{ needs.scope.outputs.bootstrap == 'false' && 'ubuntu-latest' || matrix.seed.runner }}
     timeout-minutes: 15
     strategy:
       # One platform's linker is not another's, so a failure on one row must
@@ -768,9 +919,19 @@ jobs:
       matrix:
         seed: ${{ fromJSON(needs.seeds.outputs.rows) }}
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.bootstrap == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the bootstrap lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the bootstrap lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.bootstrap != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.bootstrap != 'false'
         with:
           node-version: 26.13.1
           cache: npm
@@ -781,14 +942,14 @@ jobs:
       # skipped is 42 seconds of the slowest runner GitHub rents, on every
       # push, to emit one warning.
       - name: Install LLVM 18 + lld (Ubuntu)
-        if: runner.os == 'Linux'
+        if: ${{ (runner.os == 'Linux') && needs.scope.outputs.bootstrap != 'false' }}
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18
 
       - name: Link the LLVM 18 tools by their plain names
-        if: runner.os == 'Linux'
+        if: ${{ (runner.os == 'Linux') && needs.scope.outputs.bootstrap != 'false' }}
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -798,20 +959,21 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install LLVM 18 + lld (macOS)
-        if: runner.os == 'macOS'
+        if: ${{ (runner.os == 'macOS') && needs.scope.outputs.bootstrap != 'false' }}
         timeout-minutes: 10
         uses: ./.github/actions/brew-install
         with:
           formulae: llvm@18
 
       - name: Put LLVM 18 on PATH (macOS)
-        if: runner.os == 'macOS'
+        if: ${{ (runner.os == 'macOS') && needs.scope.outputs.bootstrap != 'false' }}
         run: |
           prefix="$(brew --prefix llvm@18)"
           if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.bootstrap != 'false'
         run: npm ci --ignore-scripts
 
       # The tarball is .github/seed-targets.json's, resolved against the
@@ -836,6 +998,7 @@ jobs:
       # the tarball it resolves is the row's -- release.yml's `binaries` job
       # holds its rows to `host` the same way.
       - name: Download the seed
+        if: needs.scope.outputs.bootstrap != 'false'
         id: download
         env:
           GH_TOKEN: ${{ github.token }}
@@ -847,6 +1010,7 @@ jobs:
           echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
 
       - name: Build src/ with the seed
+        if: needs.scope.outputs.bootstrap != 'false'
         env:
           SEED: ${{ steps.download.outputs.path }}
         run: |
@@ -859,6 +1023,7 @@ jobs:
       # runtime's stack protector and _FORTIFY_SOURCE show as the imports they
       # add (docs/security/runtime.md, RT-HARDEN).
       - name: The self-hosted compiler is hardened
+        if: needs.scope.outputs.bootstrap != 'false'
         run: |
           if [ "$(uname)" = Linux ]; then
             node scripts/check-hardening.mjs build/nish --imports __stack_chk_fail,__memcpy_chk
@@ -872,9 +1037,12 @@ jobs:
       # and here it is pointed at the stage2 this row's seed built, where `npm test`
       # points it at a stage1. Its counted skips are the summary below.
       - name: The CLI contract, against the self-hosted compiler
+        if: needs.scope.outputs.bootstrap != 'false'
         run: |
           set -o pipefail
-          build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
@@ -884,6 +1052,7 @@ jobs:
       # do not reach this job at all -- they are the `seeds` job's summary and
       # a row that is not here.
       - name: Say what this proved
+        if: needs.scope.outputs.bootstrap != 'false'
         env:
           TAG: ${{ matrix.seed.tag }}
           ASSET: ${{ matrix.seed.asset }}
@@ -917,7 +1086,7 @@ jobs:
   # release note and the tool cannot drift apart.
   nish-cmp:
     name: nish-cmp (${{ matrix.seed.asset }})
-    needs: seeds
+    needs: [seeds, scope]
     # Empty for the two reasons the `cmpSince` note in seed-targets.json
     # separates: no release has happened, or every release so far carries a
     # seed that cannot compile the corpus. Either way this is grey rather than
@@ -925,7 +1094,7 @@ jobs:
     # made -- and an empty matrix is an error GitHub refuses to evaluate rather
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
-    runs-on: ${{ matrix.seed.runner }}
+    runs-on: ${{ needs.scope.outputs.nish_cmp == 'false' && 'ubuntu-latest' || matrix.seed.runner }}
     # The byte compare and the two fuzz passes, about 6 minutes on the slower
     # x86_64 runners now that nish-cmp compiles four programs at a time and the
     # elision check runs beside it in `nish-cmp-elision`; the serial compare
@@ -940,9 +1109,19 @@ jobs:
       matrix:
         seed: ${{ fromJSON(needs.seeds.outputs.cmp) }}
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.nish_cmp == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the nish_cmp lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the nish_cmp lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.nish_cmp != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.nish_cmp != 'false'
         with:
           node-version: 26.13.1
           cache: npm
@@ -954,12 +1133,14 @@ jobs:
       # The sanitizer runtimes are not here: the ASan builds they serve are
       # `nish-cmp-elision`'s.
       - name: Install LLVM 18 + lld
+        if: needs.scope.outputs.nish_cmp != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18
 
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.nish_cmp != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -969,12 +1150,14 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.nish_cmp != 'false'
         run: npm ci --ignore-scripts
 
       # The same verified download `bootstrap` makes, and the same rule about
       # the matrix reaching bash through `env:` rather than spliced into the
       # script, and the same refusal of a seed that is not this row's.
       - name: Download the seed
+        if: needs.scope.outputs.nish_cmp != 'false'
         id: download
         env:
           GH_TOKEN: ${{ github.token }}
@@ -989,6 +1172,7 @@ jobs:
       # scripts/bootstrap.sh and the harness already read and there is one name
       # for the seed across all three.
       - name: The released compiler and HEAD write the same bytes
+        if: needs.scope.outputs.nish_cmp != 'false'
         env:
           SEED: ${{ steps.download.outputs.path }}
         run: |
@@ -1003,6 +1187,7 @@ jobs:
       # candidate is the `build/self/compile` the step above just linked from
       # this tree rather than a second 15 s link.
       - name: The released compiler and HEAD emit the same IR for random programs
+        if: needs.scope.outputs.nish_cmp != 'false'
         env:
           SEED: ${{ steps.download.outputs.path }}
         run: |
@@ -1015,6 +1200,7 @@ jobs:
       # reaches no row `emit-ts-known.txt` may list, so every verdict but an
       # agreement is red. About 13 s for the 200.
       - name: HEAD's native build and its --emit-ts output agree on random programs
+        if: needs.scope.outputs.nish_cmp != 'false'
         run: |
           node tests/differential/fuzz.js --emit-ts --seed 20261001 --count 200 \
             --candidate build/self/compile
@@ -1025,6 +1211,7 @@ jobs:
       # both or written by neither -- so the notice is the tool's number rather
       # than a restatement of it.
       - name: Say what this proved
+        if: needs.scope.outputs.nish_cmp != 'false'
         env:
           TAG: ${{ matrix.seed.tag }}
           ASSET: ${{ matrix.seed.asset }}
@@ -1042,7 +1229,7 @@ jobs:
   # same compiler, and it carries the same `seeds` gating for the same reason.
   nish-cmp-elision:
     name: nish-cmp elision (${{ matrix.seed.asset }})
-    needs: seeds
+    needs: [seeds, scope]
     # Empty for the two reasons the `cmpSince` note in seed-targets.json
     # separates: no release has happened, or every release so far carries a
     # seed that cannot compile the corpus. Either way this is grey rather than
@@ -1050,7 +1237,7 @@ jobs:
     # made -- and an empty matrix is an error GitHub refuses to evaluate rather
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
-    runs-on: ${{ matrix.seed.runner }}
+    runs-on: ${{ needs.scope.outputs.elision == 'false' && 'ubuntu-latest' || matrix.seed.runner }}
     # About 4 minutes: the link and the step's own `--budget 360`. The margin
     # is nish-cmp's, for a slow runner.
     timeout-minutes: 30
@@ -1062,9 +1249,19 @@ jobs:
       matrix:
         seed: ${{ fromJSON(needs.seeds.outputs.cmp) }}
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.elision == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the elision lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the elision lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.elision != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.elision != 'false'
         with:
           node-version: 26.13.1
           cache: npm
@@ -1072,12 +1269,14 @@ jobs:
       # The toolchain links the candidate, and the sanitizer runtimes are for
       # the soundness step's ASan builds.
       - name: Install LLVM 18 + lld + the sanitizer runtimes
+        if: needs.scope.outputs.elision != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18 libclang-rt-18-dev
 
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.elision != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -1087,11 +1286,13 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.elision != 'false'
         run: npm ci --ignore-scripts
 
       # nish-cmp's verified download, with its refusal of a seed that is not
       # this row's.
       - name: Download the seed
+        if: needs.scope.outputs.elision != 'false'
         id: download
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1108,6 +1309,7 @@ jobs:
       # on this row's seed. Where that seed is the one the `test` job fetches,
       # the key is the `test` job's and the binary is the one its shard 1 saved.
       - name: Build the candidate
+        if: needs.scope.outputs.elision != 'false'
         uses: ./.github/actions/compiler-cache
         with:
           seed: ${{ steps.download.outputs.path }}
@@ -1130,6 +1332,7 @@ jobs:
       # can be sound on one target's code and not on the other's. The weekly
       # randomised pass is .github/workflows/soundness-fuzz.yml.
       - name: Every proof-backed elision changes nothing a program prints
+        if: needs.scope.outputs.elision != 'false'
         run: |
           node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \
             --corpus tests/differential/corpus --gen --seed 20261024 --count 600 --asan --budget 360
@@ -1143,10 +1346,10 @@ jobs:
   #
   # The full pass runs per release, not per push: on the Release PR
   # (`release/next`) and in the run release.yml makes of this workflow at the
-  # `v*` tag, whose `release` job needs it. The Release PR's run shows a broken
-  # runner before the tag is cut only once someone approves it: release-pr.yml
-  # pushes with GITHUB_TOKEN unless a RELEASE_PR_TOKEN secret is set, and those
-  # runs wait as `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
+  # `v*` tag, whose `release` job needs it. On the Release PR that is the run
+  # release-pr.yml dispatches at `release/next` (`github.ref`), since its
+  # `pull_request` runs wait for approval (`github.head_ref`, once approved).
+  # Every assertion it makes about a compiler is one the `test`
   # job makes too, so per push it was about 36 runner-minutes spent proving the
   # same corpus twice (run 44224030613). What it alone catches -- a regression in
   # the runner itself, or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`
@@ -1156,7 +1359,7 @@ jobs:
   # that expression and that release.yml still calls this workflow.
   runner:
     name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
-    if: github.ref_type == 'tag' || github.head_ref == 'release/next'
+    if: github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The runner walks the corpus one program at a time; `--shard` deals the
@@ -1243,7 +1446,9 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
           jobs="$(nproc)"
           if [ "$jobs" -gt 8 ]; then jobs=8; fi
           node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$jobs"
@@ -1269,23 +1474,36 @@ jobs:
   # the gate is that line naming `base` on arm64, not the section's exit status.
   simd-arm64:
     name: the NEON path agrees (aarch64-linux)
-    runs-on: ubuntu-24.04-arm
+    needs: scope
+    runs-on: ${{ needs.scope.outputs.simd == 'false' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 15
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.simd == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the simd lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the simd lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.simd != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.simd != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
+        if: needs.scope.outputs.simd != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18
 
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.simd != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -1295,11 +1513,13 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.simd != 'false'
         run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs,
       # and the section's GC check compiles examples/hello.ts with it.
       - name: Fetch the seed
+        if: needs.scope.outputs.simd != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           NISH_REQUIRE_ATTESTATION: "1"
@@ -1310,12 +1530,14 @@ jobs:
       # seven runs copy it from build/cache rather than each spending 40 s on
       # the link (tests/self/compiler-cache.js).
       - name: The compiler under test
+        if: needs.scope.outputs.simd != 'false'
         uses: ./.github/actions/compiler-cache
 
       # `set -o pipefail` so that a failed check in the section fails the step
       # before the grep is asked anything; the grep is then the guard against a
       # green section that ran no NEON code.
       - name: The simd section, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
@@ -1332,6 +1554,7 @@ jobs:
       # this target could part ways, so the gate is the native line, not the
       # section's exit status: a skip cannot pass.
       - name: The float corpus, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js float-corpus | tee "$RUNNER_TEMP/float-corpus.log"
@@ -1341,6 +1564,7 @@ jobs:
       # PMULL kernels, run end to end against the bitsliced walker, the 8- and
       # 60-byte IV cases (whose GHASH state the walker finishes) among them.
       - name: The lowered AES program, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
@@ -1349,6 +1573,7 @@ jobs:
       # The SHA-256 lowering on AArch64: std/crypto/sha256.ts's block function on
       # the ARMv8 SHA-256 instructions, with NISH_SHA256 unset and set to soft.
       - name: The lowered SHA-256 programs, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js "sha256 kernel" | tee "$RUNNER_TEMP/sha256-kernel.log"
@@ -1356,6 +1581,7 @@ jobs:
           grep -E '^PASS  sha256 kernel: sha256_hw_agree with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/sha256-kernel.log"
 
       - name: SHA-256 throughput on each path
+        if: needs.scope.outputs.simd != 'false'
         run: |
           calls=build/test/simd/sha256-calls.speed
           # Each path is named by the resolver's own answer. The bench compiles
@@ -1371,6 +1597,7 @@ jobs:
       # WP38 S10 on AArch64: std/crypto/chacha20poly1305.ts's keystream on the
       # NEON kernel, with NISH_CHACHA20 unset and set to soft.
       - name: The lowered ChaCha20 program, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js "chacha20 kernel" | tee "$RUNNER_TEMP/chacha20-kernel.log"
@@ -1379,6 +1606,7 @@ jobs:
       # WP38's CRC-32 on AArch64: the compiler's branch to the ARMv8 CRC32
       # kernel, run end to end against the Nish walk.
       - name: The lowered CRC-32 programs, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js "crc32 kernel" | tee "$RUNNER_TEMP/crc32-kernel.log"
@@ -1389,6 +1617,7 @@ jobs:
       # WP38 S8's Adler-32 on AArch64: the compiler's branch to the NEON
       # kernel, run end to end against the Nish walk.
       - name: The lowered Adler-32 programs, natively on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           set -o pipefail
           node tests/run.js "adler32 kernel" | tee "$RUNNER_TEMP/adler32-kernel.log"
@@ -1402,6 +1631,7 @@ jobs:
       # column is the noise band the kernel's gain is read against, built
       # with the stage1 the section above linked into build/nish-test.
       - name: CRC-32 throughput on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           build/test/simd/crc32 bench
           node bench/crc32.mjs --check --compiler build/nish-test
@@ -1413,6 +1643,7 @@ jobs:
       # (docs/wp38-simd.md §3.1); then `--self`, the adler32Update that ships
       # with NISH_ADLER32 unset against the same binary pinned soft.
       - name: Adler-32 throughput on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           node bench/adler32.mjs --check --compiler build/nish-test
           node bench/adler32.mjs --runs 12 --compiler build/nish-test
@@ -1428,6 +1659,7 @@ jobs:
       # with one run fewer, which cost the job a minute and a half for a
       # second copy of the same table.
       - name: ChaCha20 throughput on AArch64
+        if: needs.scope.outputs.simd != 'false'
         run: |
           node bench/chacha20.mjs --check --compiler build/nish-test
           node bench/chacha20.mjs --runs 10 --compiler build/nish-test
@@ -1577,24 +1809,37 @@ jobs:
   # `runtime-sha256 darwin` check, which the `test` job makes on Linux.
   sha256-macos:
     name: SHA-256 on Apple silicon (macos-latest)
-    runs-on: macos-latest
+    needs: scope
+    runs-on: ${{ needs.scope.outputs.sha256_macos == 'false' && 'ubuntu-latest' || 'macos-latest' }}
     timeout-minutes: 20
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.sha256_macos == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the sha256_macos lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the sha256_macos lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.sha256_macos != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.sha256_macos != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       # The `test` job's macOS install step, word for word.
       - name: Install LLVM 18 + lld (macOS)
+        if: needs.scope.outputs.sha256_macos != 'false'
         timeout-minutes: 10
         uses: ./.github/actions/brew-install
         with:
           formulae: llvm@18
 
       - name: Put LLVM 18 on PATH (macOS)
+        if: needs.scope.outputs.sha256_macos != 'false'
         run: |
           prefix="$(brew --prefix llvm@18)"
           # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
@@ -1603,11 +1848,13 @@ jobs:
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.sha256_macos != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs.
       - name: Fetch the seed
+        if: needs.scope.outputs.sha256_macos != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1617,6 +1864,7 @@ jobs:
       # One stage1 for the run under each pin below, copied from build/cache
       # rather than linked once per pin (tests/self/compiler-cache.js).
       - name: The compiler under test
+        if: needs.scope.outputs.sha256_macos != 'false'
         uses: ./.github/actions/compiler-cache
 
       # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
@@ -1625,6 +1873,7 @@ jobs:
       # The `sha256 kernel` section counts calls with GNU ld's --wrap and skips
       # on Darwin, so its SKIP lines are the one kind allowed here.
       - name: SHA-256 on the ARMv8 instructions, natively on Darwin
+        if: needs.scope.outputs.sha256_macos != 'false'
         run: |
           set -o pipefail
           clang -std=c11 -Wall -Wextra -Werror -O2 tests/simd/sha256.c -o "$RUNNER_TEMP/sha256"
@@ -1639,6 +1888,7 @@ jobs:
           done
 
       - name: SHA-256 throughput on each path
+        if: needs.scope.outputs.sha256_macos != 'false'
         run: |
           calls="$RUNNER_TEMP/sha256-calls"
           clang -std=c11 -O2 tests/simd/sha256-calls.c runtime/runtime-sha256.c -o "$calls"
@@ -1660,23 +1910,36 @@ jobs:
   # and UBSan. Long campaigns are fuzz.yml's, weekly.
   fuzz-smoke:
     name: fuzz-smoke
+    needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.fuzz == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the fuzz lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the fuzz lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.fuzz != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.fuzz != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld + the sanitizer runtimes
+        if: needs.scope.outputs.fuzz != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18 libclang-rt-18-dev
 
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.fuzz != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -1686,10 +1949,12 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.fuzz != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       - name: Fetch the seed
+        if: needs.scope.outputs.fuzz != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1705,6 +1970,7 @@ jobs:
       # `bootstrap (x86_64-linux)` row asserts IR(stage1) == IR(stage2).
       # The `test` job's shard 1 saves a miss; this job only reads.
       - name: The compiler under test
+        if: needs.scope.outputs.fuzz != 'false'
         timeout-minutes: 10
         uses: ./.github/actions/compiler-cache
         with:
@@ -1719,6 +1985,7 @@ jobs:
       # below; `bash scripts/fuzz.sh --replay <target>` after copying it into
       # tests/fuzz/regressions/<target>/ reproduces it.
       - name: Fuzz smoke
+        if: needs.scope.outputs.fuzz != 'false'
         timeout-minutes: 12
         env:
           FUZZ_SMOKE_SECONDS: "30"
@@ -1731,7 +1998,7 @@ jobs:
       # which would link a stage1 of its own under another key; with the
       # release seed it copies the one the step above put in build/cache.
       - name: The runtime unit test under ASan and UBSan
-        if: ${{ !cancelled() }}
+        if: ${{ (!cancelled()) && needs.scope.outputs.fuzz != 'false' }}
         timeout-minutes: 10
         run: |
           set -o pipefail
@@ -1740,7 +2007,7 @@ jobs:
           if grep -E '^SKIP  ' "$RUNNER_TEMP/runtime-sanitize.log"; then exit 1; fi
 
       - name: Upload crash inputs
-        if: failure()
+        if: ${{ (failure()) && needs.scope.outputs.fuzz != 'false' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: fuzz-smoke-artifacts
@@ -1756,11 +2023,12 @@ jobs:
   # check can verify it and see it refused under another root or name.
   postgres-live:
     name: postgres-live
+    needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+        image: ${{ needs.scope.outputs.postgres != 'false' && 'postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6' || '' }}
         env:
           POSTGRES_USER: nish_live
           POSTGRES_PASSWORD: nish-live
@@ -1778,20 +2046,32 @@ jobs:
           --health-timeout 5s
           --health-retries 30
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.postgres == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the postgres lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the postgres lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.postgres != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.postgres != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
+        if: needs.scope.outputs.postgres != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18
 
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.postgres != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -1801,10 +2081,12 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.postgres != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       - name: Fetch the seed
+        if: needs.scope.outputs.postgres != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1815,6 +2097,7 @@ jobs:
       # with: the `test` job's stage1 through the same cache and key, as in
       # `fuzz-smoke` above, rather than `npm run build`'s two links.
       - name: The compiler under test
+        if: needs.scope.outputs.postgres != 'false'
         timeout-minutes: 10
         uses: ./.github/actions/compiler-cache
         with:
@@ -1825,6 +2108,7 @@ jobs:
       # service, which turns `ssl` on at a reload: the image takes no
       # server options, and a service starts before the checkout.
       - name: Turn TLS on in the PostgreSQL service
+        if: needs.scope.outputs.postgres != 'false'
         timeout-minutes: 2
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
@@ -1848,6 +2132,7 @@ jobs:
           test "$(docker exec "$PG_CONTAINER" psql -U nish_live -d nish_live -qAt -c 'show ssl')" = on
 
       - name: The live PostgreSQL suite
+        if: needs.scope.outputs.postgres != 'false'
         timeout-minutes: 5
         env:
           PG_TEST_URL: postgres://nish_live:nish-live@127.0.0.1:5432/nish_live
@@ -1874,7 +2159,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       # The typecheck, once per push. It used to run in each of the `test`
-      # job's eight shards, over the same sources every time.
+      # job's shards, over the same sources every time.
       - name: Typecheck
         run: npm run check
 
@@ -1912,3 +2197,44 @@ jobs:
       # and docs/LANGUAGE.md; a page edited by hand or left behind fails here.
       - name: Docs (the library reference is regenerated)
         run: node scripts/gen-reference.mjs --check
+
+  # The one check branch protection needs (docs/wp10-ci.md, "Scoped lanes").
+  # It runs whatever happened above and fails unless every job succeeded, or
+  # was skipped by its own `if:` on this run. A lane that was not selected
+  # still succeeds (only its steps skip), so a lane job that is `skipped` here
+  # means its `needs` failed, and fails the gate. EXPECT_SKIP lists the jobs
+  # whose own `if:` is false on this run, written from those `if:`s:
+  # runtime-net (`if: false`), runner (a tag or release/next only), bootstrap
+  # (no seed rows) and the two nish-cmp jobs (no cmp rows).
+  ci-gate:
+    name: ci-gate
+    if: always()
+    needs:
+      - scope
+      - test
+      - examples
+      - seeds
+      - bootstrap
+      - nish-cmp
+      - nish-cmp-elision
+      - runner
+      - simd-arm64
+      - runtime-net
+      - sha256-macos
+      - fuzz-smoke
+      - postgres-live
+      - lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: scripts/ci-scope.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Every selected job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EXPECT_SKIP: >-
+            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
+        run: node scripts/ci-scope.mjs --gate

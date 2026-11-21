@@ -12,7 +12,16 @@ library module ([`export` and `import`](https://github.com/amritk/nish/blob/main
 
 ## Fetching a URL
 
-```ts nish:ok
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/fetch` and
+`nish/net/outbound` keep panic sites no proof removes yet, and so does the
+range check of `String.fromBytes`, so those calls are refused by default for
+now. The sums and the `panic` call in your own code build under the default
+once a guard bounds each sum and the `panic` becomes an error answer.
+
+<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
 
 export const main = (): i32 => {
@@ -66,7 +75,9 @@ parse is not echoed at all. The URL is named as it parses: in
 `http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
 path, which is echoed, so put credentials in a header, not in a URL:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/fetch";
 
 export const main = (): i32 => {
@@ -105,11 +116,13 @@ an https URL, writes and waits for the answer, the program's other tasks run
 ([Async functions](../language/async.md)). Two fetches under
 `awaitAll` are in flight together:
 
-```ts nish:ok
+<!-- allow-panics: calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { awaitAll } from "nish:async";
 import { FetchPool, RequestInit, fetch } from "nish/net/fetch";
 
-async function title(url: string, pool: FetchPool): Promise<string> {
+const title = async (url: string, pool: FetchPool): Promise<string> => {
   const init = new RequestInit();
   init.header("Accept", "text/plain");
   init.pool = pool;
@@ -118,9 +131,9 @@ async function title(url: string, pool: FetchPool): Promise<string> {
     return r.error.text;
   }
   return `${r.value.status}: ${r.value.text()}`;
-}
+};
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const pool = new FetchPool();
   const [a, b] = await awaitAll(
     title("http://127.0.0.1:8080/a", pool),
@@ -130,7 +143,7 @@ export async function main(): Promise<i32> {
   console.log(b);
   pool.close();
   return 0;
-}
+};
 ```
 
 `fetch` answers a `Result`: a `FetchResponse` or a `FetchError`, whose `code`
@@ -271,7 +284,9 @@ credentials in it; `http://127.0.0.1:6379/` reaches a database that trusts
 local callers; a name that resolves to either does the same. Give such a
 client an `OutboundPolicy`, from `nish/net/outbound`:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { HTTP_E_BLOCKED, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch";
 import { OutboundPolicy } from "nish/net/outbound";
 
@@ -349,7 +364,9 @@ constants are shared with the server side and come from `nish/net/http1-codec`.
 
 ### A first request
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; slices with bounds it does not test; calls `panic` -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { HTTP1_BODY, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import { Http1ResponseParser, http1RequestHead } from "nish/net/http1-client-codec";
 

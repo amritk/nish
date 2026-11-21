@@ -1,0 +1,1 @@
+main.ts:5:52: error: An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first

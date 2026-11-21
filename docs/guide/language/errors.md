@@ -13,7 +13,8 @@ A `Result<T, E>` is either a success carrying a `T` or a failure carrying an
 `E`. You build one with `Ok(value)` or `Err(error)`, and both take their type
 from the function's return type:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const parseDigit = (c: string): Result<i32, string> => {
   if (c.length !== 1) {
     return Err(`'${c}' is not one character`);
@@ -54,9 +55,17 @@ nothing to hand back on success returns `Result<void, E>` and succeeds with
 | `r.error` | the `E`, only where a test proved `r` is a failure |
 | `r.orReturn()` | the `T`, or else return the failure from the current function |
 | `r.unwrapOr(d)` | the `T`, or `d` if `r` is a failure |
-| `r.expect(message)` | the `T`, or else print `message` and exit with status 1 |
+| `r.expect(message)` | the `T`, or else print `message` and exit with status 1; refused by default, built under `--allow-panics` |
 
-```ts nish:ok
+An `expect` can end the program and no proof removes it, so by default the
+compiler refuses it, and this example builds with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do). Testing `r.isOk()` before
+`r.value`, or `unwrapOr`, as the example's other lines do, builds under the
+default:
+
+<!-- allow-panics: unwraps a `Result` with `expect` -->
+<!-- nish:ok --allow-panics -->
+```ts
 const checkAge = (age: i32): Result<i32, string> => {
   if (age < 0) {
     return Err(`${age} is not an age`);
@@ -82,7 +91,8 @@ success of a parse that answers one of several shapes is the union, and
 `Ok(new Circle(r))` converts the variant into it, as passing it to a
 `Shape` parameter would. Read the value into a local, then switch on its tag:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -145,7 +155,8 @@ forgetting about a failure into a compile error.
 inside code that a test of `r` has proved is the success case, so the error
 path is always written before the success path:
 
-```ts nish:err NL2044
+<!-- nish:err NL2044 -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   return Ok(n / 2);
 };
@@ -166,7 +177,8 @@ local variable, not to a field: copy `obj.result` into a `const` and test that.
 ignoring the answer is an error, and so is storing it in a local that is never
 read:
 
-```ts nish:err NL2025
+<!-- nish:err NL2025 -->
+```ts
 const save = (name: string): Result<void, string> => {
   if (name.length === 0) {
     return Err("no name");
@@ -189,7 +201,8 @@ Most of the time the right thing to do with a failure is to hand it to your
 own caller. `orReturn()` does that in one call, as `?` does in Rust: it gives
 you the success value, or returns the failure from the enclosing function.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err(`${n} is odd`);
@@ -220,7 +233,8 @@ Because `orReturn()` returns early, it is allowed only in a function that
 itself returns a `Result` whose error type matches. A function that passes a
 failure on has to admit it in its own signature:
 
-```ts nish:err NL2037
+<!-- nish:err NL2037 -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   return Ok(n / 2);
 };
@@ -234,7 +248,8 @@ export const main = (): i32 => {
 There is no automatic conversion between error types. When a callee fails with
 one type and your function reports another, convert it yourself:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum ConfigError {
   BadPort,
 }
@@ -263,7 +278,8 @@ export const main = (): i32 => {
 
 `throw` is refused, with a message that names the two replacements:
 
-```ts nish:err NL1001
+<!-- nish:err NL1001 -->
+```ts
 export const main = (): i32 => {
   throw new Error("unreachable");
 };
@@ -275,9 +291,13 @@ it prints the message on stderr and ends the process with status 1. `panic`
 never returns, so a function may end with it where it would otherwise need a
 `return`. `r.expect(message)` is the same ending for a `Result` you are
 certain succeeded, and it insists on a reason, which is why there is no
-`unwrap()`.
+`unwrap()`. No proof removes a `panic` or an `expect`, so by default the
+compiler refuses both, and the program builds only with `--allow-panics`;
+return a `Result` instead where the program should build under the default.
 
-```ts nish:ok
+<!-- allow-panics: calls `panic` -->
+<!-- nish:ok --allow-panics -->
+```ts
 const daysIn = (month: i32): i32 => {
   if (month === 2) {
     return 28;

@@ -31,7 +31,17 @@ for each request. It answers `JWT_OK` or one `JWT_ERR_*` code, and after
 `JWT_OK` the payload's JSON is `v.claims[0 .. v.claimsLen)` and its times are
 `v.exp`, `v.nbf` and `v.iat`.
 
-```ts nish:ok
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/crypto/jwt`
+keeps panic sites no proof removes yet, so a call to it is refused by default
+until the standard library is made panic-free, and `crypto.getRandomValues`
+exits the program when the system has no random bytes to give, a check no proof
+removes. The division by `toI64(1000)` and the sum after it build under the
+default once a guard bounds them, such as `if (d > 0)` on a local divisor.
+
+<!-- allow-panics: calls a file or entropy builtin that exits on failure; divides by a value it does not test; calls `std/crypto/hmac.ts`, `std/crypto/jwt.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import {
   JWT_ALG_HS256,
   JWT_ERR_EXPIRED,
@@ -163,7 +173,9 @@ object. Claims outside ASCII are refused too: escape such text in the JSON
 `jwtSignKid(key, kid, bytes)` adds a `kid`. The claims are signed as given,
 so put the `exp` in yourself.
 
-```ts nish:ok
+<!-- allow-panics: calls a file or entropy builtin that exits on failure; divides by a value it does not test; does integer arithmetic nothing bounds; calls `std/crypto/jwt.ts`, `std/crypto/sha512.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { JWT_OK, JWT_MAX_TOKEN, JwtKey, JwtVerifier, jwtEd25519SigningKey, jwtSignKid } from "nish/crypto/jwt";
 import { Secret, secret, wipe } from "nish:secret";
 

@@ -1,0 +1,20 @@
+sizeof ShaCtx 48: tag 0, h 4, total 24, num 32, data 34, last 40
+h[0] 1010101
+h[1] 2020202
+h[2] 3030303
+h[3] 4040404
+h[4] f5f5f5f5
+data[0] 11
+data[1] 22
+data[2] f3
+scalars 1023.25
+zeroed 0
+written fff
+sumH ffffffff
+poke(1) 200
+index out of range: 5 >= 5
+readH(5) exit 1
+index out of range: 18446744073709551615 >= 5
+readH(-1) exit 1
+index out of range: 3 >= 3
+poke(3) exit 1

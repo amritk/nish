@@ -112,7 +112,7 @@ npm ci                      # install (typescript and biome are dev dependencies
 bash scripts/fetch-seed.sh  # the last release into build/seed/ (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the whole suite; builds its own stage1 from the seed (CI runs it in eight shards)
+npm test                    # the whole suite; builds its own stage1 from the seed (CI runs it in nine shards)
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
 npm run test:update         # write missing .ll goldens (the whole suite)
@@ -162,4 +162,4 @@ runs, and CI's `test` shards as the full-suite gate — and the checklist is
 | How do I test it? | [`testing.md`](./testing.md) |
 | I am copying or porting code from somewhere else | [`licensing.md`](./licensing.md) — the notice it keeps and the licences allowed |
 | What is the plan? | `docs/MASTER_PLAN.md`, `docs/wp14-selfhost.md` |
-| What is built, what is next, or "pick up WP*N*"? | `docs/roadmap/index.md`, then the package's page `docs/roadmap/wpN-*.md`; the steps are `AGENTS.md`'s "Picking up a work package" |
+| What is built, what is next, or "pick up WP*N*"? | Built: the package's design note, `docs/wpN-*.md`. Next: the [Roadmap issue](https://github.com/amritk/nish/issues/1849), whose sub-issues are each package's parent issue, backed by `.claude/plans/<slug>.plan.md`. The steps are `AGENTS.md`'s "Picking up a work package" |

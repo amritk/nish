@@ -113,12 +113,12 @@ their member order. The two may be one document. `false` when either
 handle names no value. Iterative, so any depth compares.
 
 ```ts
-function jsonEqual(
+const jsonEqual: (
   da: JsonDocument,
   a: i32,
   db: JsonDocument,
   b: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="da" type="JsonDocument" required>
@@ -164,10 +164,10 @@ as the module header says).
 `""` for a handle that names no value.
 
 ```ts
-function jsonEqualCanonical(
+const jsonEqualCanonical: (
   doc: JsonDocument,
   v: i32,
-): string
+) => string
 ```
 
 <scalar-field name="doc" type="JsonDocument" required>
@@ -197,10 +197,10 @@ JSON Schema's `uniqueItems` holds exactly when this is `-1`. Linear in the
 elements read, through a `Map` of their canonical texts.
 
 ```ts
-function jsonEqualFirstDuplicate(
+const jsonEqualFirstDuplicate: (
   doc: JsonDocument,
   v: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="doc" type="JsonDocument" required>
@@ -230,10 +230,7 @@ module header says what that means for a table). The offset basis for a handle t
 value.
 
 ```ts
-function jsonEqualHash(
-  doc: JsonDocument,
-  v: i32,
-): u64
+const jsonEqualHash: (doc: JsonDocument, v: i32) => u64
 ```
 
 <scalar-field name="doc" type="JsonDocument" required>

@@ -205,10 +205,7 @@ threads as the machine has and the length is worth: `Array.from({ length:
 n }, (_, i) => f(i))`, with the array allocated before any element is.
 
 ```ts
-function parallelFrom<U>(
-  n: i32,
-  f: (i: i32) => U,
-): U[]
+const parallelFrom: <U>(n: i32, f: (i: i32) => U) => U[]
 ```
 
 <scalar-field name="n" type="i32" required>
@@ -237,10 +234,7 @@ an array this call allocates, before any element is computed, so nothing
 but the map itself can hold it while the region runs.
 
 ```ts
-function parallelMap<T, U>(
-  src: T[],
-  f: (x: T) => U,
-): U[]
+const parallelMap: <T, U>(src: T[], f: (x: T) => U) => U[]
 ```
 
 <scalar-field name="src" type="T[]" required>
@@ -269,11 +263,11 @@ machine has and the length is worth. `dst` must be at least as long as
 `src`, which is checked once, before any element is written.
 
 ```ts
-function parallelMapInto<T, U>(
+const parallelMapInto: <T, U>(
   src: T[],
   dst: U[],
   f: (x: T) => U,
-): void
+) => void
 ```
 
 <scalar-field name="src" type="T[]" required>
@@ -305,11 +299,11 @@ the blocks, so the answer does not depend on how many threads computed it.
 An empty `src` answers `identity`.
 
 ```ts
-function parallelReduce<T>(
+const parallelReduce: <T>(
   src: T[],
   f: (acc: T, x: T) => T,
   identity: T,
-): T
+) => T
 ```
 
 <scalar-field name="src" type="T[]" required>
@@ -345,7 +339,7 @@ the fold of every element of `src`, the same however many threads
 A new scope, for a `using` declaration: `using s = scope()`.
 
 ```ts
-function scope(): ThreadScope
+const scope: () => ThreadScope
 ```
 
 <scalar-field name="returns" type="ThreadScope">
@@ -365,7 +359,7 @@ that overflows it faults instead of writing past it. Under Node, and on a
 target without threads, the size is checked and has no other effect.
 
 ```ts
-function scopeWithStack(bytes: i32): ThreadScope
+const scopeWithStack: (bytes: i32) => ThreadScope
 ```
 
 <scalar-field name="bytes" type="i32" required>

@@ -71,7 +71,7 @@ refused draw is wiped before the next, and the caller wipes the one
 returned.
 
 ```ts
-function x509DrawP256Key(): Secret<u8[]>
+const x509DrawP256Key: () => Secret<u8[]>
 ```
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
@@ -89,7 +89,7 @@ random bits, past the 64 the CA/Browser Forum asks of a serial. A serial is
 public, written into the certificate, so it is a plain array.
 
 ```ts
-function x509DrawSerial(): u8[]
+const x509DrawSerial: () => u8[]
 ```
 
 <scalar-field name="returns" type="u8[]">
@@ -107,12 +107,12 @@ that presents the certificate signs its handshakes with it; draw one with
 `x509DrawP256Key`.
 
 ```ts
-function x509MintSelfSignedDrawn(
+const x509MintSelfSignedDrawn: (
   priv: Secret<u8[]>,
   commonName: string,
   notBeforeMs: i64,
   days: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="priv" type="Secret&lt;u8[]&gt;" required>

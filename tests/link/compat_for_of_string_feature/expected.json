@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_for_of_string_feature/main.ts","line":5,"column":19,"endLine":5,"endColumn":24,"severity":"error","code":"NL2136","message":"`for...of` requires an array, got string","notes":["this program's dialect is `compat=string-switch`","add `for-of-string` to `nish.compat` in package.json to accept it"]}

@@ -56,6 +56,7 @@ import {
   typedArraySpelling,
 } from "./arrays"
 import { StringMap, StringSet } from "./map"
+import { moduleSymbolQualifier } from "./packages"
 import {
   CAPTURE_CALL,
   CAPTURE_NONE,
@@ -99,8 +100,9 @@ import {
 import {
   collectMethodSignature,
   collectStructMembers,
-  noteStructNames,
-  referencedStructNames,
+  noteStructTypes,
+  referencedStructTypes,
+  rejectOpaque,
 } from "./structs"
 import { FLAG_ASYNC, FLAG_FOREIGN, FLAG_REFERENCE_ARROW, isGatheredRest, Node, NodeKind } from "./nodes"
 import {
@@ -337,7 +339,9 @@ export const isGenericFunction = (decl: Node): boolean => {
  * mangling of each type argument in order (`docs/wp18-generics.md` §3c). The
  * mangling is prefix-coded, so the arguments are self-delimiting and the whole
  * name splits again at the first `$` — which is why `$` may not appear in a
- * declared name.
+ * declared name. The base is the template's own symbol (`templateSymbol`), so
+ * a private template WP57 S1 qualified carries its `$.` too (`helper$.id$i32`);
+ * the base symbols are already distinct, so the instances are as well.
  */
 const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => {
   let out = base
@@ -345,6 +349,77 @@ const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => 
     out = `${out}$${table.mangle(arg)}`
   }
   return out
+}
+
+/**
+ * Whether the free function or function template `name` that `home` declares
+ * takes a module-qualified symbol (WP57 S1, `docs/wp57-module-scoped-names.md`
+ * §4): it is private, the build keeps `--strict-exports`, and another free
+ * function or template of its package -- or, for a `main` outside the entry,
+ * the entry wrapper `@main` -- would take the same bare symbol. Every private
+ * party to such a clash is qualified and an exported one keeps its name, so an
+ * exported symbol never moves.
+ *
+ * Decided from source names and each module's own lookups, which renaming a
+ * signature leaves alone, so `Compilation.qualifyClashingSymbols` (which
+ * renames the functions before imports are bound) and `instantiate` (which
+ * names a template's instantiations whenever pass 2 or 3 asks for one) reach
+ * one answer. `peers` is every module, entry first; empty, nothing qualifies.
+ */
+export const qualifiesClashing = (
+  peers: CheckContext[],
+  home: CheckContext,
+  name: string,
+  exported: boolean
+): boolean => {
+  if (exported || !home.strictExports || peers.length === 0) {
+    return false
+  }
+  const entry = peers[0]
+  if (home === entry && name === "main") {
+    return false
+  }
+  const prefix = home.program.symbolPrefix
+  let parties = 0
+  if (name === "main" && prefix.length === 0 && entry.program.entryMain !== null) {
+    parties = 1
+  }
+  for (const peer of peers) {
+    if (peer.program.symbolPrefix !== prefix) {
+      continue
+    }
+    const sig = peer.signature(name)
+    if (
+      sig !== null &&
+      sig.owner === null &&
+      sig.instance === null &&
+      !sig.foreign() &&
+      sig.definedIn(peer.source) &&
+      !(peer === entry && name === "main")
+    ) {
+      parties = parties + 1
+    }
+    const template = peer.template(name)
+    if (template !== null && template.owner === null && template.origin === peer.source) {
+      parties = parties + 1
+    }
+  }
+  return parties > 1
+}
+
+/**
+ * The symbol a free function template's instantiations build on: its
+ * package's prefix and name, `pkg.identity`, or with its module's qualifier
+ * between them when `qualifiesClashing` says so, `pkg.lib_util$.identity`.
+ */
+export const templateSymbol = (peers: CheckContext[], template: TemplateInfo): string => {
+  const home = template.home
+  const prefix = home.program.symbolPrefix
+  if (!qualifiesClashing(peers, home, template.sourceName, template.exported)) {
+    return `${prefix}${template.sourceName}`
+  }
+  const qualifier = moduleSymbolQualifier(home.source.path, peers[0].source.path)
+  return `${prefix}${qualifier}$.${template.sourceName}`
 }
 
 /** `identity<i32>`: the source spelling, for diagnostics and the dump. */
@@ -871,16 +946,19 @@ class RequestSite {
  * same (#613).
  */
 const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolean): boolean => {
-  if (ctx.program.structs.has(info.name)) {
+  const held = ctx.program.structByType(info.type)
+  if (held !== null) {
     if (symbols) {
-      reachForeignSymbols(ctx, info.name)
+      reachForeignSymbols(ctx, held)
     }
     return false
   }
   if (symbols) {
     ctx.program.reachableStructs.push(ctx.program.structList.length)
   }
-  ctx.program.addStruct(info.name, info)
+  // Under its symbol: a layout another module declares is reached by its
+  // identity, and a qualified symbol (WP57 S3d) never meets a source name.
+  ctx.program.addStruct(info.symbol, info)
   return true
 }
 
@@ -895,13 +973,10 @@ const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolea
  * module (#613). A struct this module defines itself is never upgraded, and one
  * already in `reachableStructs` is not pushed twice.
  */
-const reachForeignSymbols = (ctx: CheckContext, name: string): void => {
+const reachForeignSymbols = (ctx: CheckContext, held: StructInfo): void => {
   const program = ctx.program
-  let index = 0
-  while (index < program.structList.length && program.structList[index].name !== name) {
-    index = index + 1
-  }
-  if (index === program.structList.length || program.structList[index].origin === program.source) {
+  const index = program.structIndex(held)
+  if (index < 0 || held.origin === program.source) {
     return
   }
   for (const reached of program.reachableStructs) {
@@ -926,7 +1001,7 @@ const reachForeignMember = (
   walked: StringSet,
   pending: StructInfo[]
 ): void => {
-  if (!walked.add(info.name)) {
+  if (!walked.add(info.symbol)) {
     return
   }
   if (reachForeignLayout(ctx, info, symbols) || (symbols && info.origin !== ctx.program.source)) {
@@ -962,15 +1037,13 @@ const registerForeignLayouts = (
   while (at < pending.length) {
     const info = pending[at]
     at = at + 1
-    const names = new StringSet()
-    referencedStructNames(ctx.table, info, names)
-    let i = 0
-    while (i < names.size()) {
-      const next = from.program.struct(names.at(i))
+    const types: i32[] = []
+    referencedStructTypes(ctx.table, info, types)
+    for (const type of types) {
+      const next = from.program.structByType(type)
       if (next !== null) {
         reachForeignMember(ctx, next, symbols, walked, pending)
       }
-      i = i + 1
     }
   }
 }
@@ -988,17 +1061,15 @@ const adoptArgumentLayouts = (ctx: CheckContext, args: i32[], site: RequestSite)
   if (site.asker === ctx) {
     return
   }
-  const names = new StringSet()
+  const types: i32[] = []
   for (const arg of args) {
-    noteStructNames(ctx.table, arg, names)
+    noteStructTypes(ctx.table, arg, types)
   }
-  let i = 0
-  while (i < names.size()) {
-    const info = site.asker.program.struct(names.at(i))
+  for (const type of types) {
+    const info = site.asker.program.structByType(type)
     if (info !== null) {
       registerForeignLayouts(ctx, info, site.asker, false)
     }
-    i = i + 1
   }
 }
 
@@ -1088,6 +1159,9 @@ const instantiateStructHere = (
   // is never a type argument, which would name it outside a parameter.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
+    if (rejectOpaque(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
     if (rejectStoredMask(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
@@ -1217,8 +1291,9 @@ const collectInstanceMembers = (ctx: CheckContext, instance: StructInstantiation
       continue
     }
     // WP21 S1: an instantiation's symbol is complete from the moment it is
-    // minted, because `qualifySymbols` runs once at the end of pass 1 and an
-    // instantiation may be created on either side of it.
+    // minted, because `qualifySymbols` runs once at the end of pass 1 (and
+    // `qualifyClashing`, WP57 S1, once per module after it) while an
+    // instantiation may be created on either side of either.
     sig.name = `${prefix}${sig.name}`
     const member = new Instantiation(
       null,
@@ -1279,18 +1354,16 @@ const instantiate = (
  * declaring because it defines them (`Emitter.declareAll`).
  */
 const adoptInstanceLayouts = (ctx: CheckContext, home: CheckContext, sig: FunctionSig): void => {
-  const names = new StringSet()
-  noteStructNames(ctx.table, sig.returnType, names)
+  const types: i32[] = []
+  noteStructTypes(ctx.table, sig.returnType, types)
   for (const type of sig.paramTypes) {
-    noteStructNames(ctx.table, type, names)
+    noteStructTypes(ctx.table, type, types)
   }
-  let i = 0
-  while (i < names.size()) {
-    const info = home.program.struct(names.at(i))
+  for (const type of types) {
+    const info = home.program.structByType(type)
     if (info !== null) {
       registerForeignLayouts(ctx, info, home, true)
     }
-    i = i + 1
   }
 }
 
@@ -1345,15 +1418,24 @@ const instantiateHere = (
   // A generic method's symbol builds on its receiver's method symbol,
   // `Box$i32.pick` (WP18 G8, §15.8).
   const owner = template.owner
-  const base = owner === null ? template.sourceName : `${owner.name}.${template.decl.children[0].text}`
+  const home = template.home
+  if (owner === null && home.peers.length === 0) {
+    process.exit(
+      internalErrorFor(
+        `generics: \`${template.sourceName}\` was instantiated before the modules were known`,
+        ctx.table.json
+      )
+    )
+  }
+  const base =
+    owner === null
+      ? templateSymbol(home.peers, template)
+      : `${home.program.symbolPrefix}${owner.name}.${template.decl.children[0].text}`
   // WP29: a callee another module defines has to be callable from this one.
   for (const fn of functions) {
     exposeTo(ctx, fn)
   }
-  const symbol = withFunctionArguments(
-    instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args),
-    functions
-  )
+  const symbol = withFunctionArguments(instanceSymbol(ctx.table, base, args), functions)
   const existing = ctx.program.instantiation(symbol)
   if (existing !== null) {
     // One symbol is one (template, tuple): the mangling is injective because
@@ -1378,6 +1460,9 @@ const instantiateHere = (
   // message is the same, because it is the same rule.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
+    if (rejectOpaque(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
     if (rejectStoredMask(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
@@ -1815,7 +1900,9 @@ const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionB
  * arrow the caller wrote, calls a function another module defines. Such a
  * function would be `internal`, so it becomes `hidden` instead: in the final
  * link, and exported from nothing. A function's symbol is already unique across
- * the program whether or not it is exported (`rejectSymbolClashes`), and a
+ * the program whether or not it is exported (`rejectSymbolClashes`, which runs
+ * after WP57 S1 has given a clashing private function its module-qualified
+ * symbol, `helper$.add`), and a
  * lifted arrow's is its enclosing function's with a `$` no declared name can
  * spell. The module that calls it gets a `declare`, the way an instantiation it
  * calls and another module defines does.
@@ -1886,17 +1973,15 @@ const noteJsonRoute = (ctx: CheckContext, home: CheckContext, sig: FunctionSig):
   for (const fn of jsonRouteCallees(home.program, ctx.table, sig)) {
     exposeTo(ctx, fn)
   }
-  const names = new StringSet()
+  const types: i32[] = []
   for (const type of sig.paramTypes) {
-    noteStructNames(ctx.table, type, names)
+    noteStructTypes(ctx.table, type, types)
   }
-  let i = 0
-  while (i < names.size()) {
-    const info = home.program.struct(names.at(i))
+  for (const type of types) {
+    const info = home.program.structByType(type)
     if (info !== null) {
       registerForeignLayouts(ctx, info, home, false)
     }
-    i = i + 1
   }
 }
 

@@ -1,0 +1,1 @@
+main.ts:13:14: error: `push` is exported to Node and its signature holds `Cell`, which implements `Compact`

@@ -1,0 +1,1 @@
+main.ts:18:10: error: Duplicate `case` label `"😀"` in this `switch`

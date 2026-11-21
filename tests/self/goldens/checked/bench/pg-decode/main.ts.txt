@@ -13,12 +13,11 @@ import setU16BE from "nish/bytes" -> function @nish.setU16BE
 import base64StdPadDecode from "nish/crypto/base64url" -> function @nish.base64StdPadDecode
 import base64StdPadEncode from "nish/crypto/base64url" -> function @nish.base64StdPadEncode
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
-import hmacSha256 from "nish/crypto/hmac" -> function @nish.hmacSha256
-import pbkdf2HmacSha256 from "nish/crypto/hmac" -> function @nish.pbkdf2HmacSha256
-import Sha256 from "nish/crypto/sha256" -> struct Sha256
+import scramSha256ClientProof from "nish/crypto/scram" -> function @nish.scramSha256ClientProof
+import scramSha256SaltedPassword from "nish/crypto/scram" -> function @nish.scramSha256SaltedPassword
+import scramSha256ServerSignature from "nish/crypto/scram" -> function @nish.scramSha256ServerSignature
 import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose
-import exposeWith from "nish:secret" -> generic function exposeWith
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
 import urlDecode from "nish/net/url" -> function @nish.urlDecode
@@ -285,6 +284,7 @@ struct PgConnection (class) size=216 align=8 exported
   method tailRoom -> @nish.PgConnection.tailRoom
   method compactOutput -> @nish.PgConnection.compactOutput
   method reserve -> @nish.PgConnection.reserve
+  method grow -> @nish.PgConnection.grow
   method putByte -> @nish.PgConnection.putByte
   method putI32 -> @nish.PgConnection.putI32
   method putI16 -> @nish.PgConnection.putI16
@@ -646,54 +646,6 @@ function pgBytesAre(b: u8[], start: i32, length: i32, text: string): boolean -> 
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 i: i32 (let)
-function pgSaltedPassword(password: Secret<u8[]>, salt: u8[], iterations: i32): Secret<u8[]> | null -> @nish.pgSaltedPassword
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.pbkdf2HmacSha256
-  escaping: iterations
-  calls: nish.pbkdf2HmacSha256
-  pointer password: size=8 writesThrough=false captured=false passedTo=nish.pbkdf2HmacSha256#0
-  pointer salt: size=0 writesThrough=true captured=true passedTo=nish.pbkdf2HmacSha256#1
-  stackSites=0 stackLocals=0
-  callee +0:3 pbkdf2HmacSha256 -> @nish.pbkdf2HmacSha256
-function pgSha256Wiped(data: u8[]): u8[] -> @nish.pgSha256Wiped
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Sha256.update
-  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.update nish.wipe$arr.u32 nish.wipe$arr.u8
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  stackSites=1 stackLocals=1
-  local +0:9 h: Sha256 (const)
-  callee +0:13 new Sha256 -> @nish.Sha256.constructor
-  callee +1:3 Sha256.update -> @nish.Sha256.update
-  local +2:9 digest: u8[] (const)
-  callee +2:24 Sha256.digest -> @nish.Sha256.digest
-  callee +3:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +4:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +5:3 wipe<u32[]> -> @nish.wipe$arr.u32
-function pgScramKeys(salted: u8[], authMessage: u8[]): u8[] -> @nish.pgScramKeys
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.hmacSha256
-  calls: nish.hmacSha256 nish.pgBytesOf nish.pgSha256Wiped nish.wipe$arr.u8 nish_panic
-  pointer salted: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#0 nish.hmacSha256#0
-  pointer authMessage: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#1 nish.hmacSha256#1
-  stackSites=0 stackLocals=0
-  local +0:9 clientKey: u8[] (const)
-  callee +0:27 hmacSha256 -> @nish.hmacSha256
-  callee +0:46 pgBytesOf -> @nish.pgBytesOf
-  local +1:9 storedKey: u8[] (const)
-  callee +1:27 pgSha256Wiped -> @nish.pgSha256Wiped
-  local +2:9 clientSignature: u8[] (const)
-  callee +2:33 hmacSha256 -> @nish.hmacSha256
-  local +3:9 serverKey: u8[] (const)
-  callee +3:27 hmacSha256 -> @nish.hmacSha256
-  callee +3:46 pgBytesOf -> @nish.pgBytesOf
-  local +4:9 serverSignature: u8[] (const)
-  callee +4:33 hmacSha256 -> @nish.hmacSha256
-  local +5:9 out: u8[] (const)
-  local +9:12 i: i32 (let)
-  callee +13:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +14:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +15:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +16:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function PgText.reset(this: PgText): void -> @nish.PgText.reset [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -710,11 +662,17 @@ function PgText.int(this: PgText, b: u8[], start: i32, length: i32): i64 -> @nis
   local -2:11 end: i32 (const)
   local +3:11 negative: boolean (const)
   local +4:9 i: i32 (let)
-  local +13:11 lastDigit: i64 (const)
-  local +15:11 minTenth: i64 (const)
-  local +16:9 acc: i64 (let)
-  local +18:13 d: i32 (const)
-  local +23:13 digit: i64 (const)
+  local +20:11 head: i64 (let)
+  local +22:15 d: i32 (const)
+  local +30:11 tail: i64 (let)
+  local +31:11 scale: i64 (let)
+  local +33:15 d: i32 (const)
+  local +53:13 v: i64 (const)
+  local +57:11 lastDigit: i64 (const)
+  local +59:11 minTenth: i64 (const)
+  local +60:9 acc: i64 (let)
+  local +62:13 d: i32 (const)
+  local +67:13 digit: i64 (const)
 function PgText.bool(this: PgText, b: u8[], start: i32, length: i32): boolean -> @nish.PgText.bool [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1255,61 +1213,58 @@ function PgConnection.scramContinue(this: PgConnection, body: i32, end: i32): i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: body end
-  calls: nish.PgConnection.dispose nish.PgConnection.endMessage nish.PgConnection.fail nish.PgConnection.firstBare nish.PgConnection.putString nish.PgConnection.startMessage nish.base64StdPadDecode nish.base64StdPadEncode nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.16.nish.pgScramKeys nish.pgBytesAre nish.pgBytesOf nish.pgFind nish.pgSaltedPassword nish.wipe$$Secret$arr.u8 nish.wipe$arr.u8 nish_panic nish_panic_overflow nish_panic_slice nish_str_concat nish_str_new
+  calls: nish.PgConnection.dispose nish.PgConnection.endMessage nish.PgConnection.fail nish.PgConnection.firstBare nish.PgConnection.putString nish.PgConnection.startMessage nish.base64StdPadDecode nish.base64StdPadEncode nish.pgBytesAre nish.pgBytesOf nish.pgFind nish.scramSha256ClientProof nish.scramSha256SaltedPassword nish.scramSha256ServerSignature nish.wipe$$Secret$arr.u8 nish.wipe$arr.u8 nish_panic_overflow nish_panic_slice nish_str_concat nish_str_new
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.firstBare#0 nish.PgConnection.dispose#0 nish.PgConnection.startMessage#0 nish.PgConnection.putString#0 nish.PgConnection.endMessage#0
-  stackSites=1 stackLocals=1
-  local -75:11 b: u8[] (const)
-  callee -73:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -71:11 nonceEnd: i32 (const)
-  callee -71:27 pgFind -> @nish.pgFind
-  local -70:11 saltEnd: i32 (const)
-  callee -70:26 pgFind -> @nish.pgFind
-  callee -66:8 pgBytesAre -> @nish.pgBytesAre
-  callee -65:8 pgBytesAre -> @nish.pgBytesAre
-  callee -63:8 pgBytesAre -> @nish.pgBytesAre
+  stackSites=0 stackLocals=0
+  local -63:11 b: u8[] (const)
   callee -61:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -58:11 ours: i32 (const)
-  callee -57:41 pgBytesAre -> @nish.pgBytesAre
-  callee -56:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -54:11 nonceStart: i32 (const)
-  local -53:11 digitsStart: i32 (const)
-  callee -51:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -49:14 i: i32 (let)
-  local -48:13 c: i32 (const)
-  callee -46:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -42:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -40:9 iterations: i32 (let)
-  local -39:14 i: i32 (let)
-  local -38:13 d: i32 (const)
-  callee -36:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -31:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -29:11 salt: u8[] | null (const)
-  callee -29:31 base64StdPadDecode -> @nish.base64StdPadDecode
-  callee -27:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -25:11 password: PgPassword (const)
-  callee -23:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -21:11 salted: Secret<u8[]> | null (const)
-  callee -21:41 pgSaltedPassword -> @nish.pgSaltedPassword
+  local -59:11 nonceEnd: i32 (const)
+  callee -59:27 pgFind -> @nish.pgFind
+  local -58:11 saltEnd: i32 (const)
+  callee -58:26 pgFind -> @nish.pgFind
+  callee -54:8 pgBytesAre -> @nish.pgBytesAre
+  callee -53:8 pgBytesAre -> @nish.pgBytesAre
+  callee -51:8 pgBytesAre -> @nish.pgBytesAre
+  callee -49:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -46:11 ours: i32 (const)
+  callee -45:41 pgBytesAre -> @nish.pgBytesAre
+  callee -44:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -42:11 nonceStart: i32 (const)
+  local -41:11 digitsStart: i32 (const)
+  callee -39:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -37:14 i: i32 (let)
+  local -36:13 c: i32 (const)
+  callee -34:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee -30:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -28:9 iterations: i32 (let)
+  local -27:14 i: i32 (let)
+  local -26:13 d: i32 (const)
+  callee -24:16 PgConnection.fail -> @nish.PgConnection.fail
   callee -19:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -17:11 withoutProof: string (const)
-  local -16:11 authMessage: u8[] (const)
-  callee -16:31 pgBytesOf -> @nish.pgBytesOf
-  callee -15:10 PgConnection.firstBare -> @nish.PgConnection.firstBare
-  local -13:11 keys: u8[] (const)
-  callee -13:24 exposeWith<u8[], u8[], u8[], pgScramKeys> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.16.nish.pgScramKeys
-  callee -12:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee -11:5 PgConnection.dispose -> @nish.PgConnection.dispose
-  local -10:11 proof: u8[] (const)
-  local -9:11 signature: u8[] (const)
-  local -5:14 i: i32 (let)
-  callee -1:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  local +2:11 encoded: string (const)
-  callee +2:29 base64StdPadEncode -> @nish.base64StdPadEncode
-  callee +3:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  local +4:11 at: i32 (const)
-  callee +4:21 PgConnection.startMessage -> @nish.PgConnection.startMessage
-  callee +5:5 PgConnection.putString -> @nish.PgConnection.putString
-  callee +6:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
+  local -17:11 salt: u8[] | null (const)
+  callee -17:31 base64StdPadDecode -> @nish.base64StdPadDecode
+  callee -15:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -13:11 password: PgPassword (const)
+  callee -11:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -9:11 salted: Secret<u8[]> | null (const)
+  callee -9:41 scramSha256SaltedPassword -> @nish.scramSha256SaltedPassword
+  callee -7:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -5:11 withoutProof: string (const)
+  local -4:11 authMessage: u8[] (const)
+  callee -4:31 pgBytesOf -> @nish.pgBytesOf
+  callee -3:10 PgConnection.firstBare -> @nish.PgConnection.firstBare
+  local -1:11 proof: u8[] (const)
+  callee -1:25 scramSha256ClientProof -> @nish.scramSha256ClientProof
+  callee +0:28 scramSha256ServerSignature -> @nish.scramSha256ServerSignature
+  callee +1:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee +2:5 PgConnection.dispose -> @nish.PgConnection.dispose
+  local +4:11 encoded: string (const)
+  callee +4:29 base64StdPadEncode -> @nish.base64StdPadEncode
+  callee +5:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local +6:11 at: i32 (const)
+  callee +6:21 PgConnection.startMessage -> @nish.PgConnection.startMessage
+  callee +7:5 PgConnection.putString -> @nish.PgConnection.putString
+  callee +8:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
 function PgConnection.scramFinal(this: PgConnection, body: i32, end: i32): i32 -> @nish.PgConnection.scramFinal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1351,12 +1306,20 @@ function PgConnection.compactOutput(this: PgConnection): void -> @nish.PgConnect
   callee -1:5 copyBytes -> @nish.copyBytes
 function PgConnection.reserve(this: PgConnection, want: i32): void -> @nish.PgConnection.reserve [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.PgConnection.grow
+  escaping: want
+  calls: nish.PgConnection.grow
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.grow#0
+  stackSites=0 stackLocals=0
+  callee +0:7 PgConnection.grow -> @nish.PgConnection.grow
+function PgConnection.grow(this: PgConnection, want: i32): void -> @nish.PgConnection.grow [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: want
   calls: nish_panic nish_panic_overflow nish_panic_slice
   pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -6:11 size: i32 (const)
+  local -3:11 size: i32 (const)
   local -2:11 grown: u8[] (const)
 function PgConnection.putByte(this: PgConnection, v: i32): void -> @nish.PgConnection.putByte [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -3120,6 +3083,91 @@ function timingSafeEqualAt(a: u8[], aOff: i32, b: u8[], bOff: i32, len: i32): bo
   local +11:9 bAt: u32 (const)
   local +12:7 diff: i32 (let)
   local +13:12 k: i32 (let)
+module std/crypto/scram.ts [package nish]
+import hmacSha256 from "nish/crypto/hmac" -> function @nish.hmacSha256
+import pbkdf2HmacSha256 from "nish/crypto/hmac" -> function @nish.pbkdf2HmacSha256
+import Sha256 from "nish/crypto/sha256" -> struct Sha256
+import Secret from "nish:secret" -> generic class Secret
+import exposeWith from "nish:secret" -> generic function exposeWith
+import wipe from "nish:secret" -> generic function wipe
+function scramAscii(text: string): u8[] -> @nish.scramAscii
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +1:9 out: u8[] (const)
+  local +2:12 i: i32 (let)
+function scramSha256Wiped(data: u8[]): u8[] -> @nish.scramSha256Wiped
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Sha256.update
+  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.update nish.wipe$arr.u32 nish.wipe$arr.u8
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
+  stackSites=1 stackLocals=1
+  local +0:9 h: Sha256 (const)
+  callee +0:13 new Sha256 -> @nish.Sha256.constructor
+  callee +1:3 Sha256.update -> @nish.Sha256.update
+  local +2:9 digest: u8[] (const)
+  callee +2:24 Sha256.digest -> @nish.Sha256.digest
+  callee +3:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +4:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +5:3 wipe<u32[]> -> @nish.wipe$arr.u32
+function scramClientProofExposed(salted: u8[], authMessage: u8[]): u8[] -> @nish.scramClientProofExposed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacSha256
+  calls: nish.hmacSha256 nish.scramAscii nish.scramSha256Wiped nish.wipe$arr.u8 nish_panic
+  pointer salted: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#0
+  pointer authMessage: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#1
+  stackSites=0 stackLocals=0
+  local +0:9 clientKey: u8[] (const)
+  callee +0:27 hmacSha256 -> @nish.hmacSha256
+  callee +0:46 scramAscii -> @nish.scramAscii
+  local +1:9 storedKey: u8[] (const)
+  callee +1:27 scramSha256Wiped -> @nish.scramSha256Wiped
+  local +2:9 clientSignature: u8[] (const)
+  callee +2:33 hmacSha256 -> @nish.hmacSha256
+  local +6:9 proof: u8[] (const)
+  local +7:12 i: i32 (let)
+  callee +10:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +11:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +12:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function scramServerSignatureExposed(salted: u8[], authMessage: u8[]): u8[] -> @nish.scramServerSignatureExposed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacSha256
+  calls: nish.hmacSha256 nish.scramAscii nish.wipe$arr.u8
+  pointer salted: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#0
+  pointer authMessage: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#1
+  stackSites=0 stackLocals=0
+  local +0:9 serverKey: u8[] (const)
+  callee +0:27 hmacSha256 -> @nish.hmacSha256
+  callee +0:46 scramAscii -> @nish.scramAscii
+  local +1:9 signature: u8[] (const)
+  callee +1:27 hmacSha256 -> @nish.hmacSha256
+  callee +2:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function scramSha256SaltedPassword(password: Secret<u8[]>, salt: u8[], iterations: i32): Secret<u8[]> | null -> @nish.scramSha256SaltedPassword [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.pbkdf2HmacSha256
+  escaping: iterations
+  calls: nish.pbkdf2HmacSha256
+  pointer password: size=8 writesThrough=false captured=false passedTo=nish.pbkdf2HmacSha256#0
+  pointer salt: size=0 writesThrough=true captured=true passedTo=nish.pbkdf2HmacSha256#1
+  stackSites=0 stackLocals=0
+  callee +0:27 pbkdf2HmacSha256 -> @nish.pbkdf2HmacSha256
+function scramSha256ClientProof(saltedPassword: Secret<u8[]>, authMessage: u8[]): u8[] -> @nish.scramSha256ClientProof [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.scramClientProofExposed
+  calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.scramClientProofExposed
+  pointer saltedPassword: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.scramClientProofExposed#0
+  pointer authMessage: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.scramClientProofExposed#1
+  stackSites=0 stackLocals=0
+  callee +0:3 exposeWith<u8[], u8[], u8[], scramClientProofExposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.scramClientProofExposed
+function scramSha256ServerSignature(saltedPassword: Secret<u8[]>, authMessage: u8[]): u8[] -> @nish.scramSha256ServerSignature [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.32.nish.scramServerSignatureExposed
+  calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.32.nish.scramServerSignatureExposed
+  pointer saltedPassword: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.32.nish.scramServerSignatureExposed#0
+  pointer authMessage: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.32.nish.scramServerSignatureExposed#1
+  stackSites=0 stackLocals=0
+  callee +0:3 exposeWith<u8[], u8[], u8[], scramServerSignatureExposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.32.nish.scramServerSignatureExposed
 module std/crypto/hmac.ts [package nish]
 import SHA256_BLOCK from "nish/crypto/sha256" -> const SHA256_BLOCK
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
@@ -3357,7 +3405,7 @@ function hmacKeySha512(inner: Sha512, outer: Sha512, key: u8[]): void -> @nish.h
 function HmacSha256.constructor(this: HmacSha256, key: u8[]): void -> @nish.HmacSha256.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.hmacKeySha256
-  calls: nish.Sha256.constructor nish.hmacKeySha256 nish_alloc_struct nish_panic
+  calls: nish.Sha256.constructor nish.hmacKeySha256 nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
   stackSites=0 stackLocals=0
@@ -3376,7 +3424,7 @@ function HmacSha256.update(this: HmacSha256, data: u8[], off: i32, len: i32): vo
 function HmacSha256.digest(this: HmacSha256): u8[] -> @nish.HmacSha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha256.digestInto
-  calls: nish.HmacSha256.digestInto nish_panic
+  calls: nish.HmacSha256.digestInto
   pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.digestInto#0
   stackSites=0 stackLocals=0
   local +0:11 tag: u8[] (const)
@@ -3574,8 +3622,8 @@ function hmacCopySha384(from: Sha384, to: Sha384): void -> @nish.hmacCopySha384 
   local +3:9 toBlock: u8[] (const)
   local +5:9 i: i32 (let)
 function HmacSha256Scratch.constructor(this: HmacSha256Scratch): void -> @nish.HmacSha256Scratch.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish.Sha256.constructor nish_alloc_struct nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Sha256.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new Sha256 -> @nish.Sha256.constructor
@@ -3646,8 +3694,8 @@ function HmacSha256Scratch.wipe(this: HmacSha256Scratch): void -> @nish.HmacSha2
   callee +0:5 hmacWipeSha256 -> @nish.hmacWipeSha256
   callee +1:5 hmacWipeSha256 -> @nish.hmacWipeSha256
 function HmacSha384Scratch.constructor(this: HmacSha384Scratch): void -> @nish.HmacSha384Scratch.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish.Sha384.constructor nish_alloc_struct nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Sha384.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new Sha384 -> @nish.Sha384.constructor
@@ -4426,8 +4474,7 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +268:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +268:35 sha256Majority -> @nish.sha256Majority
 function Sha256.constructor(this: Sha256): void -> @nish.Sha256.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 h: u32[] (const)
@@ -4464,7 +4511,7 @@ function Sha256.copy(this: Sha256): Sha256 -> @nish.Sha256.copy [exported method
 function Sha256.digest(this: Sha256): u8[] -> @nish.Sha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.digestInto
-  calls: nish.Sha256.digestInto nish_panic
+  calls: nish.Sha256.digestInto
   pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#0
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
@@ -4694,9 +4741,8 @@ function storeWord(buf: u8[], off: i32, word: u64): void -> @nish.storeWord
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
 function Sha512Engine.constructor(this: Sha512Engine, initial: u64[]): void -> @nish.Sha512Engine.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: initial
-  calls: nish_panic
   pointer this: size=40 writesThrough=true captured=false
   pointer initial: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -4803,7 +4849,7 @@ function Sha512Engine.finish(this: Sha512Engine, size: i32): u8[] -> @nish.Sha51
   local +18:14 i: i32 (let)
   callee +19:7 storeWord -> @nish.storeWord
 function Sha512.constructor(this: Sha512): void -> @nish.Sha512.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Sha512Engine.constructor nish.sha512Initial nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -4835,7 +4881,7 @@ function Sha512.digest(this: Sha512): u8[] -> @nish.Sha512.digest [exported meth
   stackSites=0 stackLocals=0
   callee +0:12 Sha512Engine.finish -> @nish.Sha512Engine.finish
 function Sha384.constructor(this: Sha384): void -> @nish.Sha384.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Sha512Engine.constructor nish.sha384Initial nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -4929,26 +4975,34 @@ function expose<u8[], boolean, pgAllZero>(s: Secret<u8[]>, f: void): boolean -> 
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:70 pgAllZero -> @nish.pgAllZero
-function wipe<u32[]>(_target: u32[]): void -> @nish.wipe$arr.u32 [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via llvm.memset.p0i8.i64
-  calls: llvm.memset.p0i8.i64
-  pointer _target: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
 function wipe<u8[]>(_target: u8[]): void -> @nish.wipe$arr.u8 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via llvm.memset.p0i8.i64
   calls: llvm.memset.p0i8.i64
   pointer _target: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function exposeWith<u8[], u8[], u8[], pgScramKeys>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.16.nish.pgScramKeys [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.pgScramKeys
-  calls: nish.pgScramKeys
-  pointer s: size=8 writesThrough=false captured=false
-  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.pgScramKeys#1
+function wipe<u32[]>(_target: u32[]): void -> @nish.wipe$arr.u32 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:93 pgScramKeys -> @nish.pgScramKeys
+function exposeWith<u8[], u8[], u8[], scramClientProofExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.scramClientProofExposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.scramClientProofExposed
+  calls: nish.scramClientProofExposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.scramClientProofExposed#1
+  stackSites=0 stackLocals=0
+  callee +0:93 scramClientProofExposed -> @nish.scramClientProofExposed
+function exposeWith<u8[], u8[], u8[], scramServerSignatureExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.32.nish.scramServerSignatureExposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.scramServerSignatureExposed
+  calls: nish.scramServerSignatureExposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.scramServerSignatureExposed#1
+  stackSites=0 stackLocals=0
+  callee +0:93 scramServerSignatureExposed -> @nish.scramServerSignatureExposed
 function wipe<u64[]>(_target: u64[]): void -> @nish.wipe$arr.u64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via llvm.memset.p0i8.i64
@@ -5480,7 +5534,7 @@ function urlParse(s: string): Url | null -> @nish.urlParse [exported]
   callee +1:10 urlFinish -> @nish.urlFinish
 function urlMerge(base: Url, path: string): string -> @nish.urlMerge
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_slice nish_str_concat nish_str_eq nish_str_new
+  calls: nish_panic_slice nish_str_concat nish_str_eq nish_str_new
   pointer base: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 k: i32 (let)

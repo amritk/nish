@@ -173,12 +173,12 @@ block `counter` on, which both encrypts and decrypts. Answers `null` unless
 counter past its last value rather than repeat the keystream.
 
 ```ts
-function chacha20(
+const chacha20: (
   key: u8[],
   counter: u32,
   nonce: u8[],
   data: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -219,11 +219,11 @@ block `counter` under `key` and `nonce`. Answers `null` unless `key` is
 `CHACHA20_KEY_SIZE` bytes and `nonce` is `CHACHA20POLY1305_NONCE_SIZE`.
 
 ```ts
-function chacha20Block(
+const chacha20Block: (
   key: u8[],
   counter: u32,
   nonce: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -261,10 +261,10 @@ header-protection key `hpKey`. Answers `null` unless `hpKey` is
 `CHACHA20_KEY_SIZE` bytes and `sample` is `CHACHA20_HEADER_SAMPLE_SIZE`.
 
 ```ts
-function chacha20HeaderMask(
+const chacha20HeaderMask: (
   hpKey: u8[],
   sample: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="hpKey" type="u8[]" required>
@@ -296,12 +296,12 @@ Answers `null` too unless `key` is `CHACHA20_KEY_SIZE` bytes and `nonce` is
 `CHACHA20POLY1305_NONCE_SIZE`, and when `sealed` is shorter than a tag.
 
 ```ts
-function chacha20Poly1305Open(
+const chacha20Poly1305Open: (
   key: u8[],
   nonce: u8[],
   aad: u8[],
   sealed: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -345,12 +345,12 @@ never be used twice with one key. Answers `null` unless `key` is
 when the sealed message would not fit in an array.
 
 ```ts
-function chacha20Poly1305Seal(
+const chacha20Poly1305Seal: (
   key: u8[],
   nonce: u8[],
   aad: u8[],
   plaintext: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -393,13 +393,13 @@ word positions `a`, `b`, `c` and `d`, which is what §2.1.1 and §2.2.1 test.
 when a position is not inside `state`.
 
 ```ts
-function chacha20QuarterRound(
+const chacha20QuarterRound: (
   state: u32[],
   a: i32,
   b: i32,
   c: i32,
   d: i32,
-): u32[] | null
+) => u32[] | null
 ```
 
 <scalar-field name="state" type="u32[]" required>
@@ -447,10 +447,7 @@ below makes a fresh one per nonce. Answers `null` unless `key` is
 `POLY1305_KEY_SIZE` bytes.
 
 ```ts
-function poly1305(
-  key: u8[],
-  msg: u8[],
-): u8[] | null
+const poly1305: (key: u8[], msg: u8[]) => u8[] | null
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -480,10 +477,10 @@ ChaCha20 block with counter 0 under the AEAD's key and nonce. Answers
 `CHACHA20POLY1305_NONCE_SIZE`.
 
 ```ts
-function poly1305KeyGen(
+const poly1305KeyGen: (
   key: u8[],
   nonce: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="u8[]" required>

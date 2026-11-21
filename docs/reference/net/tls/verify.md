@@ -132,11 +132,11 @@ Authenticates `client`'s server, while its interest says
 or the alert the connection failed with.
 
 ```ts
-function tlsClientAuthenticate(
+const tlsClientAuthenticate: (
   client: TlsRecordClient,
   trust: TlsClientTrust,
   nowMs: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="client" type="TlsRecordClient" required>
@@ -171,12 +171,12 @@ The chain step: 0 when `chain` (DER, leaf first) leads to a root in
 `certificate_expired`, `unknown_ca` or `bad_certificate`.
 
 ```ts
-function tlsClientChain(
+const tlsClientChain: (
   chain: u8[][],
   serverName: string,
   nowMs: i64,
   trust: TlsClientTrust,
-): i32
+) => i32
 ```
 
 <scalar-field name="chain" type="u8[][]" required>
@@ -221,10 +221,10 @@ before the system bundle drops it. A trust distrusts nothing until this is
 called.
 
 ```ts
-function tlsClientDistrustSpki(
+const tlsClientDistrustSpki: (
   trust: TlsClientTrust,
   spkiSha256: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="trust" type="TlsClientTrust" required>
@@ -251,7 +251,7 @@ The trust of the system's roots (`pkiLoadSystemRoots`): what a client trusts unl
 It reads the roots from disk each time it is called, so a program makes it once and shares it.
 
 ```ts
-function tlsClientSystemTrust(): TlsClientTrust
+const tlsClientSystemTrust: () => TlsClientTrust
 ```
 
 <scalar-field name="returns" type="TlsClientTrust">
@@ -265,9 +265,7 @@ A trust over the roots `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the syst
 The trust of `roots`, as `nish/crypto/pki-roots` read them.
 
 ```ts
-function tlsClientTrust(
-  roots: PkiRoots,
-): TlsClientTrust
+const tlsClientTrust: (roots: PkiRoots) => TlsClientTrust
 ```
 
 <scalar-field name="roots" type="PkiRoots" required>
@@ -290,11 +288,11 @@ that leaf to a root in `trust` for the configured server name at `nowMs`
 (milliseconds since 1970-01-01 UTC), else the alert to refuse with.
 
 ```ts
-function tlsClientVerdict(
+const tlsClientVerdict: (
   tls: TlsClient,
   trust: TlsClientTrust,
   nowMs: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="tls" type="TlsClient" required>
@@ -331,12 +329,12 @@ does not fit the key's kind and for every scheme this client does not
 offer.
 
 ```ts
-function tlsVerifyCertificateVerify(
+const tlsVerifyCertificateVerify: (
   leaf: X509Certificate,
   scheme: i32,
   content: u8[],
   signature: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="leaf" type="X509Certificate" required>

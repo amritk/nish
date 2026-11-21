@@ -20,6 +20,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -59,7 +60,18 @@ for (const { label, compiler } of compilers) {
   const dir = path.join(out, label)
   fs.mkdirSync(dir, { recursive: true })
   const exe = path.join(dir, "map-keys")
-  run(compiler, [path.join(here, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
+  run(
+    compiler,
+    withAllowPanics(compiler, [
+      path.join(here, "main.ts"),
+      "-o",
+      `${dir}/`,
+      "--profile",
+      "speed",
+      "--link",
+      exe,
+    ])
+  )
   binaries.push({ label, exe })
 }
 const copy = path.join(out, `${binaries[0].label}-copy`)

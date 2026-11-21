@@ -50,7 +50,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { scanBatch } from "../web/bytes-worker.mjs"
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const benchDir = path.join(root, "bench")
@@ -301,7 +301,7 @@ if (only.has("scan")) {
   const exe = path.join(dir, "scan-native")
   run(
     nishc.cmd,
-    [...nishc.prefix, rel(path.join(dir, "main.ts")), "--link", rel(exe), "--profile", "speed"],
+    compileArgv(nishc, [rel(path.join(dir, "main.ts")), "--link", rel(exe), "--profile", "speed"]),
     "scan"
   )
   const native = timeRuns("scan native", timeProcess(exe, []))
@@ -310,7 +310,7 @@ if (only.has("scan")) {
   // Built the way bench/worker.mjs builds it: the library alone, freestanding.
   const ll = path.join(dir, "scan-wasm.ll")
   const wasm = path.join(dir, "scan.wasm")
-  run(nishc.cmd, [...nishc.prefix, rel(path.join(dir, "scan.ts")), "-o", rel(ll)], "scan wasm")
+  run(nishc.cmd, compileArgv(nishc, [rel(path.join(dir, "scan.ts")), "-o", rel(ll)]), "scan wasm")
   run(
     "bash",
     ["scripts/build.sh", rel(ll), "runtime/runtime-wasm.c", "-o", rel(wasm), "--profile", "wasm"],
@@ -332,7 +332,7 @@ if (only.has("scan")) {
 
 for (const name of ["nbody", "vec3", "spectral"].filter((n) => only.has(n))) {
   const ll = path.join(outDir, `${name}.ll`)
-  run(nishc.cmd, [...nishc.prefix, `bench/${name}.ts`, ...sourceArgs(name), "-o", rel(ll)], name)
+  run(nishc.cmd, compileArgv(nishc, [`bench/${name}.ts`, ...sourceArgs(name), "-o", rel(ll)]), name)
   const link = (exe, env) =>
     run(
       "bash",

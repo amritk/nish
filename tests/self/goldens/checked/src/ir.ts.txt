@@ -91,7 +91,7 @@ struct IRModule (class) size=112 align=8 exported
   method attrGroupFor -> @IRModule.attrGroupFor
   method toText -> @IRModule.toText
 function PanicSiteTable.constructor(this: PanicSiteTable): void -> @PanicSiteTable.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -176,7 +176,7 @@ function IRParam.constructor(this: IRParam, name: string, type: string, attrs: s
   pointer attrs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function IRFunction.constructor(this: IRFunction, name: string, params: IRParam[], returnType: string): void -> @IRFunction.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: name params returnType
   calls: IRBlock.constructor StringMap.constructor nish_alloc_struct
   pointer this: size=184 writesThrough=true captured=false
@@ -354,7 +354,7 @@ function IRFunction.toText(this: IRFunction, inlineAttrs: string): string -> @IR
   callee +45:5 StringBuilder.add -> @StringBuilder.add
   callee +46:12 StringBuilder.toText -> @StringBuilder.toText
 function IRModule.constructor(this: IRModule, sourceFileName: string): void -> @IRModule.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: sourceFileName
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=112 writesThrough=true captured=false

@@ -11,9 +11,18 @@ and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 ## Arrays
 
 `T[]` (or `Array<T>`) is an array of `T`. A literal's elements must all have
-one type, and an empty literal `[]` needs a type to take from its context:
+one type, and an empty literal `[]` needs a type to take from its context.
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they
+index, pop and add without the guards the compiler reads, and `sort`, `map`,
+`filter`, `slice` and `String.fromBytes` keep checks no proof removes yet.
+Testing `i < xs.length` before an index and `xs.length > 0` before a `pop`,
+and bounding the arithmetic, builds the rest under the default; the others
+will once the standard library is made panic-free and a range can be proved:
 
-```ts nish:ok
+<!-- allow-panics: pops an array it does not test for empty; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const main = (): i32 => {
   const primes = [2, 3, 5, 7];          // i32[]
   const names: string[] = [];           // [] needs the annotation
@@ -50,7 +59,9 @@ how two elements compare: a negative number puts `a` first, a positive one
 puts `b` first, and zero keeps them in the order they had — the sort is
 stable, so the result is exactly the one Node gives.
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/sort.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 class Score {
   name: string;
   points: i32;
@@ -90,8 +101,9 @@ Nish cannot follow:
   may ([Functions](functions.md)): `xs.sort((a, b) => rank[a] - rank[b])` with
   a `const rank`. Bind a `let` to a `const` before the call.
 
-`(a, b) => a - b` is checked `i32` arithmetic: on elements more than
-`2^31 - 1` apart, such as `[2147483647, -1]`, it panics with
+`(a, b) => a - b` is checked `i32` arithmetic: nothing bounds it, so the
+compiler refuses it by default, and under `--allow-panics`, on elements more
+than `2^31 - 1` apart, such as `[2147483647, -1]`, it panics with
 `attempt to subtract with overflow`. When the values may span the whole range,
 compare instead: `(a, b) => (a > b ? 1 : a < b ? -1 : 0)`. An array holding
 `NaN`, or a comparator that is not a consistent order, sorts to some
@@ -108,7 +120,9 @@ memory.
 which gets the element, or the element and its index, as in TypeScript.
 `slice` copies a range into a new array.
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/array.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 8, 1, 6];
   const doubled = xs.map((x) => x * 2);
@@ -132,8 +146,10 @@ its own loop that calls it directly. Three things differ from JavaScript:
   `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`.
 - **A callback takes at most two parameters.** JavaScript passes the array as
   a third; read the array you called the method on instead.
-- **`slice` stops the program on a bad range**, as string `slice` does:
-  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. A negative
+- **`slice` checks its range**, as string `slice` does:
+  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. No guard
+  proves that to the compiler yet, so a call is refused by default; under
+  `--allow-panics` a bad range stops the program. A negative
   index does not count from the end, and an end past the length is not
   clamped. `xs.slice()` copies the whole array, and `xs.slice(start)` copies
   from `start` to the end.
@@ -143,7 +159,9 @@ its own loop that calls it directly. Three things differ from JavaScript:
 `for (const x of xs)` visits each element in order; use an index loop when
 you need the position:
 
-```ts nish:ok
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 const sum = (xs: f64[]): f64 => {
   let total: f64 = 0.0;
   for (const x of xs) {
@@ -178,7 +196,9 @@ function around it. To add up, write the `for...of` loop of `sum` above: a
 `forEach` callback that assigns a total is refused (NL2586), and the message
 says to use `for...of`.
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 8, 1];
   const seen: i32[] = [];
@@ -193,14 +213,17 @@ export const main = (): i32 => {
 
 ### Bounds
 
-Every `xs[i]` is checked: an index outside `0 … xs.length - 1` — a negative
-one included — stops the program with `index out of range` on stderr and
-exit status 1, where JavaScript would answer `undefined`. `pop()` on an
-empty array stops the program the same way. The compiler removes the check
-wherever it can prove the index is in range, as in the `i < xs.length` loop
-above.
+Every `xs[i]` is checked. The compiler must prove the index is in range, as
+in the `i < xs.length` loop above, and by default it refuses the program
+where it cannot; `pop()` needs an `xs.length > 0` test the same way. Under
+`--allow-panics` the check is built in instead: an index outside
+`0 … xs.length - 1` — a negative one included — stops the program with
+`index out of range` on stderr and exit status 1, where JavaScript would
+answer `undefined`, and `pop()` on an empty array stops it the same way.
 
-```ts nish:ok
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const main = (): i32 => {
   const xs = [10, 20, 30];
   const i = 3;
@@ -224,7 +247,9 @@ elements are worked out when the program compiles and kept as read-only
 data in the binary: nothing runs to build it, and nothing can write it
 ([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 const LIMIT: i32 = 100;
 const SCALE: readonly i32[] = [1, 10, LIMIT, LIMIT * 10];
 
@@ -246,7 +271,8 @@ export const main = (): i32 => {
   `push`, `sort`, or handing it where a writable `u8[]` is expected is
   refused:
 
-```ts nish:err NL2792
+<!-- nish:err NL2792 -->
+```ts
 const XS: i32[] = [1, 2, 3];
 
 export const main = (): i32 => {
@@ -267,7 +293,9 @@ keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
 ([Module storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#module-storage)).
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 const SCORES = new Int32Array(4);
 
 const sum = (xs: Int32Array): i32 => {
@@ -299,7 +327,8 @@ export const main = (): i32 => {
   `pop` and `sort` included), nor may its `length` be assigned; keep a count
   beside it for the slots in use:
 
-```ts nish:err NL2688
+<!-- nish:err NL2688 -->
+```ts
 const xs = new Int32Array(4);
 
 export const main = (): i32 => {
@@ -331,11 +360,11 @@ content, and these are its methods, all of them:
 | `s.length` | the length in **bytes** |
 | `s.charCodeAt(i)` | the byte at `i`, bounds-checked |
 | `s.substring(start, end?)` | the bytes from `start` up to `end`, clamped into range as in JavaScript |
-| `s.slice(start, end?)` | the same, but an out-of-range or reversed pair stops the program instead of being clamped |
+| `s.slice(start, end?)` | the same, but checked instead of clamped: refused by default, and under `--allow-panics` an out-of-range or reversed pair stops the program |
 | `s.indexOf(sub, from?)` | the first byte offset of `sub` at or after `from` (default `0`), or `-1` |
 | `s.startsWith(sub)`, `s.endsWith(sub)` | a `boolean` |
 | `String.fromCharCode(c)` | the one-byte string of `c` |
-| `String.fromBytes(bytes, start, end)` | the bytes of a `u8[]` from `start` up to `end` as one string; an out-of-range or reversed pair stops the program, as `slice`'s does |
+| `String.fromBytes(bytes, start, end)` | the bytes of a `u8[]` from `start` up to `end` as one string, checked as `slice` is |
 
 `toUpperCase`, `split`, `trim`, `replace` and the rest do not exist;
 build them from these, or look in the
@@ -344,7 +373,9 @@ build them from these, or look in the
 **Lengths and offsets count bytes, not characters.** An ASCII character is
 one byte, but `é` is two and most emoji are four:
 
-```ts nish:ok-body
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok-body --allow-panics -->
+```ts
 const word = "café";
 console.log(`${word.length}`);              // 5
 console.log(word.substring(0, 3));          // caf
@@ -361,7 +392,9 @@ Bytes become text the other way with `String.fromBytes`: the range of a
 way to turn what a file or a socket handed you into a string, where a
 `String.fromCharCode` per byte joined together allocates once per byte:
 
-```ts nish:ok-body
+<!-- allow-panics: slices with bounds it does not test -->
+<!-- nish:ok-body --allow-panics -->
+```ts
 const bytes: u8[] = [99, 97, 102, 195, 169];
 console.log(String.fromBytes(bytes, 0, 5));   // café
 console.log(String.fromBytes(bytes, 0, 3));   // caf
@@ -378,7 +411,8 @@ A template literal is how a number becomes text: each `${…}` hole may be a
 refused (no implicit conversion), and so are `String(n)` and
 `n.toString()`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const name = "nish";
   const version = 0;
@@ -388,7 +422,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err-body NL2231
+<!-- nish:err-body NL2231 -->
+```ts
 const n = 3;
 console.log("n = " + n);
 ```

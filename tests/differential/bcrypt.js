@@ -27,6 +27,7 @@
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import { withAllowPanics } from "../allow-panics.js"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const buildDir = path.join(root, "build", "test", "differential-bcrypt")
@@ -376,10 +377,14 @@ const expected = oracle(
 const allBatches = batchesOf(all)
 fs.writeFileSync(path.join(buildDir, "main.ts"), program(all, allBatches))
 const app = path.join(buildDir, "app")
-const compiled = spawnSync(compiler, [path.join(buildDir, "main.ts"), "-o", `${buildDir}/`, "--link", app], {
-  cwd: root,
-  encoding: "utf8",
-})
+const compiled = spawnSync(
+  compiler,
+  withAllowPanics(compiler, [path.join(buildDir, "main.ts"), "-o", `${buildDir}/`, "--link", app]),
+  {
+    cwd: root,
+    encoding: "utf8",
+  }
+)
 if (compiled.status !== 0) {
   console.log(`FAIL  bcrypt differential: the Nish program did not build\n${compiled.stderr}`)
   process.exit(1)

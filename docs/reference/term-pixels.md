@@ -164,12 +164,12 @@ nearest of xterm's 16 standard colours. `Screen` sends colours as 24-bit or
 lands on the colour chosen here, not on a neighbour of it.
 
 ```ts
-function drawAscii(
+const drawAscii: (
   fb: Framebuffer,
   screen: Screen,
   rect: PixelRect,
   colors: i32,
-): void
+) => void
 ```
 
 <scalar-field name="fb" type="Framebuffer" required>
@@ -206,11 +206,11 @@ and `Screen.flush` sends only the cells whose glyph or colours changed, so
 a frame that barely moves costs almost nothing.
 
 ```ts
-function drawHalfBlocks(
+const drawHalfBlocks: (
   fb: Framebuffer,
   canvas: Canvas,
   rect: PixelRect,
-): void
+) => void
 ```
 
 <scalar-field name="fb" type="Framebuffer" required>
@@ -246,7 +246,7 @@ terminal font, so a square framebuffer stays square. An empty framebuffer or
 area answers an empty rect at 0, 0.
 
 ```ts
-function fitFramebuffer(
+const fitFramebuffer: (
   fbW: i32,
   fbH: i32,
   cols: i32,
@@ -254,7 +254,7 @@ function fitFramebuffer(
   cellW: i32,
   cellH: i32,
   backend: i32,
-): PixelRect
+) => PixelRect
 ```
 
 <scalar-field name="fbW" type="i32" required>
@@ -314,7 +314,7 @@ puts it in its terminal restore string, so the last frame does not stay
 behind. Panics, like `kittyFrame`, on an id below 1.
 
 ```ts
-function kittyDelete(imageId: i32): string
+const kittyDelete: (imageId: i32) => string
 ```
 
 <scalar-field name="imageId" type="i32" required>
@@ -359,12 +359,12 @@ is done with it.
 else panics. An empty framebuffer or rect writes nothing.
 
 ```ts
-function kittyFrame(
+const kittyFrame: (
   fb: Framebuffer,
   rect: PixelRect,
   imageId: i32,
   out: PixelBytes,
-): void
+) => void
 ```
 
 <scalar-field name="fb" type="Framebuffer" required>
@@ -401,11 +401,11 @@ divisor below 1 panics; 1 copies. `dst` must be another framebuffer than
 `src`, which resizing it would blank.
 
 ```ts
-function scaleFramebuffer(
+const scaleFramebuffer: (
   src: Framebuffer,
   divisor: i32,
   dst: Framebuffer,
-): void
+) => void
 ```
 
 <scalar-field name="src" type="Framebuffer" required>
@@ -453,12 +453,12 @@ gradient becomes a fine, stable pattern rather than steps. An empty rect
 writes nothing.
 
 ```ts
-function sixelFrame(
+const sixelFrame: (
   fb: Framebuffer,
   rect: PixelRect,
   dither: boolean,
   out: PixelBytes,
-): void
+) => void
 ```
 
 <scalar-field name="fb" type="Framebuffer" required>

@@ -894,7 +894,7 @@ function PlainDate.constructor(this: PlainDate, isoYear: i32, isoMonth: i32, iso
   callee +30:24 temporalMonthLength -> @nish.temporalMonthLength
 function PlainDate.toString(this: PlainDate): string -> @nish.PlainDate.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalPutDate nish.temporalPutDate4 nish_panic nish_panic_slice nish_str_new
+  calls: nish.temporalPutDate nish.temporalPutDate4 nish_panic_slice nish_str_new
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
@@ -995,7 +995,7 @@ function PlainTime.constructor(this: PlainTime, hour: i32, minute: i32, second: 
   callee +15:22 temporalNanoOfDay -> @nish.temporalNanoOfDay
 function PlainTime.toString(this: PlainTime): string -> @nish.PlainTime.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalPutTime nish_panic nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.temporalPutTime nish_panic_overflow nish_panic_slice nish_str_new
   pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
@@ -1099,7 +1099,7 @@ function temporalLooksLikeYearMonthOrMonthDay(text: string): boolean -> @nish.te
   callee +20:48 temporalDaysInMonth -> @nish.temporalDaysInMonth
 function temporalTwoDigits(text: string, at: i32): i32 -> @nish.temporalTwoDigits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_index
   stackSites=0 stackLocals=0
 function plainTimeCompare(a: PlainTime, b: PlainTime): i32 -> @nish.plainTimeCompare [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1122,7 +1122,7 @@ function PlainDateTime.constructor(this: PlainDateTime, isoYear: i32, isoMonth: 
   callee +12:7 temporalRangeError -> @nish.temporalRangeError
 function PlainDateTime.toString(this: PlainDateTime): string -> @nish.PlainDateTime.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalPutByte nish.temporalPutDate nish.temporalPutDateTime4 nish.temporalPutFraction nish.temporalPutTime nish_panic nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.temporalPutByte nish.temporalPutDate nish.temporalPutDateTime4 nish.temporalPutFraction nish.temporalPutTime nish_panic_overflow nish_panic_slice nish_str_new
   pointer this: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
@@ -1290,7 +1290,7 @@ function Duration.constructor(this: Duration, years: i64, months: i64, weeks: i6
   callee +28:7 temporalRangeError -> @nish.temporalRangeError
 function Duration.toString(this: Duration): string -> @nish.Duration.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalPutByte nish.temporalPutField nish.temporalPutFraction nish.temporalPutNumber nish_panic nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.temporalPutByte nish.temporalPutField nish.temporalPutFraction nish.temporalPutNumber nish_panic_overflow nish_panic_slice nish_str_new
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 k: i64 (const)
@@ -1470,7 +1470,7 @@ function Instant.constructor(this: Instant, epochSeconds: i64, nanoseconds: i64)
   callee +7:7 temporalRangeError -> @nish.temporalRangeError
 function Instant.toString(this: Instant): string -> @nish.Instant.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalCivilDay nish.temporalCivilMonth nish.temporalCivilOfEpochDay nish.temporalCivilYear nish.temporalFloorDiv nish.temporalFloorMod nish.temporalPutByte nish.temporalPutDate nish.temporalPutDateTime4 nish.temporalPutFraction nish.temporalPutNanoOfDay nish_panic nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.temporalCivilDay nish.temporalCivilMonth nish.temporalCivilOfEpochDay nish.temporalCivilYear nish.temporalFloorDiv nish.temporalFloorMod nish.temporalPutByte nish.temporalPutDate nish.temporalPutDateTime4 nish.temporalPutFraction nish.temporalPutNanoOfDay nish_panic_overflow nish_panic_slice nish_str_new
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 day: i64 (const)

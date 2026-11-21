@@ -1,0 +1,1 @@
+main.ts:5:7: error: `Gen` is generic, and a generic class cannot implement `Compact`

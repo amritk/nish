@@ -1,0 +1,7 @@
+{
+  "name": "compat-string-switch-feature",
+  "private": true,
+  "nish": {
+    "compat": ["nullish"]
+  }
+}

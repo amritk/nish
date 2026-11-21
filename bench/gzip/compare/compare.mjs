@@ -36,6 +36,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import zlib from "node:zlib"
+import { withAllowPanics } from "../../../tests/allow-panics.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const gzipDir = path.resolve(here, "..")
@@ -73,13 +74,17 @@ const build = (what, cmd, cmdArgs, cwd = root) => {
 // [name, command, arguments]: each prints its rows.
 const programs = []
 if (
-  build("nish", compiler, [
-    path.join(gzipDir, "main.ts"),
-    "-o",
-    `${out}/nish/`,
-    "--link",
-    path.join(out, "nish-gzip"),
-  ])
+  build(
+    "nish",
+    compiler,
+    withAllowPanics(compiler, [
+      path.join(gzipDir, "main.ts"),
+      "-o",
+      `${out}/nish/`,
+      "--link",
+      path.join(out, "nish-gzip"),
+    ])
+  )
 ) {
   programs.push(["nish", path.join(out, "nish-gzip"), args])
 }

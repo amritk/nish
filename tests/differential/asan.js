@@ -51,6 +51,7 @@ import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import * as lib from "./lib.js"
+import { seedArgs } from "../self/seed.js"
 
 const runtimeDir = path.join(lib.root, "runtime")
 const asanDir = path.join(lib.buildDir, "asan")
@@ -177,11 +178,11 @@ const runtimeObjects = (threads) => {
 const build = (file, exe, { compiler, threads = false }) => {
   const modules = `${exe}.modules`
   fs.rmSync(modules, { recursive: true, force: true })
-  const args = [...compiler.prefix, file, "-o", `${modules}/`]
-  if (threads) {
-    args.push("--threads")
-  }
-  const compiled = run(compiler.cmd, args)
+  const args = [file, "-o", `${modules}/`, ...(threads ? ["--threads"] : [])]
+  // NISH_ASAN tells the compiler this build links the -DNISH_ASAN runtime,
+  // which mallocs every block outside the compact-class range: a compact
+  // class's links stay pointers (WP48).
+  const compiled = run(compiler.cmd, seedArgs(compiler, args), { env: { ...process.env, NISH_ASAN: "1" } })
   if (compiled.status !== 0) {
     return { rejected: true, stderr: compiled.stderr }
   }

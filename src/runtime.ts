@@ -1738,20 +1738,41 @@ export const inlineAllocatorAttrs = (): string[] => {
 
 /**
  * The inline bump allocator. `size` is rounded up to 8 bytes so every object
- * (and therefore every field of every struct) is 8-byte aligned.
+ * (and therefore every field of every struct) is 8-byte aligned. In a program
+ * with compact classes (`realign`, WP48) `@nish_alloc_ref` may have left the
+ * offset 4 past an 8-byte boundary, so the block starts at the next one.
  */
-export const inlineAllocator = (attrGroup: string): string => {
+export const inlineAllocator = (attrGroup: string, realign: boolean): string =>
+  bumpAllocator("nish_alloc_struct", 8, realign, attrGroup)
+
+/**
+ * The inline bump for a compact class (WP48, docs/wp48-ref32-classes.md §3.3):
+ * 4-rounded and 4-aligned, so an instance of an `i32` and two links is 12
+ * bytes. Every other block stays 8-aligned because `@nish_alloc_struct` and
+ * the runtime's bumps realign in such a program.
+ */
+export const inlineRefAllocator = (attrGroup: string): string =>
+  bumpAllocator("nish_alloc_ref", 4, false, attrGroup)
+
+/** One inline bump allocator `@<name>`, rounding to and aligned at `align`. */
+const bumpAllocator = (name: string, align: i32, realign: boolean, attrGroup: string): string => {
   const lines: string[] = []
   lines.push(
-    `define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) ${attrGroup} {`
+    `define internal noalias noundef nonnull align ${align} i8* @${name}(i64 noundef %size) ${attrGroup} {`
   )
   lines.push("entry:")
-  lines.push("  %size.p7 = add i64 %size, 7")
-  lines.push("  %size.aligned = and i64 %size.p7, -8")
+  lines.push(`  %size.p${align - 1} = add i64 %size, ${align - 1}`)
+  lines.push(`  %size.aligned = and i64 %size.p${align - 1}, -${align}`)
   lines.push(
     "  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1"
   )
-  lines.push("  %off = load i64, i64* %off.ptr, align 8")
+  if (realign) {
+    lines.push("  %off.raw = load i64, i64* %off.ptr, align 8")
+    lines.push("  %off.p7 = add i64 %off.raw, 7")
+    lines.push("  %off = and i64 %off.p7, -8")
+  } else {
+    lines.push("  %off = load i64, i64* %off.ptr, align 8")
+  }
   lines.push("  %new.off = add i64 %off, %size.aligned")
   lines.push(
     "  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2"
@@ -1770,6 +1791,14 @@ export const inlineAllocator = (attrGroup: string): string => {
   lines.push("  ret i8* %obj")
   lines.push("")
   lines.push("slow:")
+  if (name === "nish_alloc_ref" || realign) {
+    // Stage 1's ABI symbol, which only the range runtime defines: a module
+    // whose links are offsets and that allocates cannot link against the
+    // default runtime. Both
+    // bumps name it in such a module, because an 8-aligned compact class (a
+    // wide field beside its links) comes from `nish_alloc_struct`.
+    lines.push("  %abi = load volatile i32, i32* @nish_arena_range_abi, align 4")
+  }
   lines.push("  %grown = call i8* @nish_arena_grow(i64 %size.aligned)")
   lines.push("  ret i8* %grown")
   lines.push("}")

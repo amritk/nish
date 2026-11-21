@@ -1,0 +1,1 @@
+main.ts:10:9: error: Field `cell` of `declare class` `Holder` holds the compact class `Cell`

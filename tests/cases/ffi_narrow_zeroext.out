@@ -1,0 +1,7 @@
+widen_u8(toU8(511)): 255
+widen_u16(toU16(196611)): 3
+pick(true): 7
+pick(false): 3
+low_byte(511): 255
+is_odd(511): true
+run: 255

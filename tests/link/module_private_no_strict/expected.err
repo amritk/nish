@@ -1,0 +1,1 @@
+and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported; two functions may not share one symbol

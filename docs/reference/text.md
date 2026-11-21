@@ -204,7 +204,7 @@ This is not JavaScript's `toLowerCase`, for the reason `asciiUpper` gives:
 same natively and under Node for any text.
 
 ```ts
-function asciiLower(text: string): string
+const asciiLower: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -233,7 +233,7 @@ text, since a byte or unit from 97 to 122 is always the letter itself, so
 NL8001 (`--warn-portability`) has nothing to warn about, and does not.
 
 ```ts
-function asciiUpper(text: string): string
+const asciiUpper: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -274,7 +274,7 @@ the two halves of a pair joined at run time, which are one string under Node
 and two lone surrogates natively.
 
 ```ts
-function codePointLength(text: string): i32
+const codePointLength: (text: string) => i32
 ```
 
 <scalar-field name="text" type="string" required>
@@ -296,10 +296,10 @@ Whether `needle` occurs anywhere in `haystack`. One `indexOf`, named, because
 yes or a no. `contains(s, "")` is `true`, as `indexOf("")` is `0`.
 
 ```ts
-function contains(
+const contains: (
   haystack: string,
   needle: string,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="haystack" type="string" required>
@@ -329,10 +329,10 @@ first differing line and not a boolean, because printing two whole files is
 not a diagnostic.
 
 ```ts
-function firstDifference(
+const firstDifference: (
   left: string[],
   right: string[],
-): i32
+) => i32
 ```
 
 <scalar-field name="left" type="string[]" required>
@@ -375,11 +375,11 @@ Natively the search is the runtime's `nish_str_index_of_any`, which reads
 never for secret data.
 
 ```ts
-function indexOfAny(
+const indexOfAny: (
   text: string,
   bytes: string,
   from: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="text" type="string" required>
@@ -417,11 +417,11 @@ rules. `padEnd("7", 4, "ab")` is `"7aba"`, and `padEnd("é", 3, " ")` is
 `"é "` natively and `"é  "` under Node.
 
 ```ts
-function padEnd(
+const padEnd: (
   text: string,
   width: i32,
   fill: string,
-): string
+) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -470,11 +470,11 @@ a string rather than a number. Pad ASCII text, or count the width with
 be ASCII: natively it would be cut in the middle of a UTF-8 sequence.
 
 ```ts
-function padStart(
+const padStart: (
   text: string,
   width: i32,
   fill: string,
-): string
+) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -516,11 +516,11 @@ An empty `needle` answers `text` unchanged, because every other answer is a
 choice about how many empty matches a string contains.
 
 ```ts
-function replaceAll(
+const replaceAll: (
   text: string,
   needle: string,
   replacement: string,
-): string
+) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -572,10 +572,7 @@ caller chose, so an empty one is a mistake in the program, like an index out
 of range, and not a condition a caller could recover from.
 
 ```ts
-function split(
-  text: string,
-  sep: string,
-): string[]
+const split: (text: string, sep: string) => string[]
 ```
 
 <scalar-field name="text" type="string" required>
@@ -616,11 +613,11 @@ gives; JavaScript would answer `[]` for a limit of 0, and its UTF-16 units
 otherwise.
 
 ```ts
-function splitLimit(
+const splitLimit: (
   text: string,
   sep: string,
   limit: i32,
-): string[]
+) => string[]
 ```
 
 <scalar-field name="text" type="string" required>
@@ -659,8 +656,15 @@ the end. A `\r\n` line ending keeps its `\r`: stripping it would make this
 function guess at the file's provenance, and a caller that needs it gone can
 `trimEnd` each line.
 
+The scan runs sixteen positions at a time with `nish:simd`. The text is
+copied, 4096 positions at a time, as one flag byte per position into a
+buffer the lane-wise compare reads sixteen flags at a time: a string has no
+lane-wise load of its own. A flag rather than the character, so that a UTF-16
+unit under Node whose low byte is 10 is not taken for a newline. Text under
+sixteen positions is scanned one position at a time, with no buffer.
+
 ```ts
-function splitLines(text: string): string[]
+const splitLines: (text: string) => string[]
 ```
 
 <scalar-field name="text" type="string" required>
@@ -683,7 +687,7 @@ splitting a line of command-line flags wants — and it is why this is not
 `split(text, " ")`, which would.
 
 ```ts
-function splitWhitespace(text: string): string[]
+const splitWhitespace: (text: string) => string[]
 ```
 
 <scalar-field name="text" type="string" required>
@@ -725,7 +729,7 @@ rounds to zero keeps it: `toFixed(-0.0001, 2)` is `"-0.00"`.
 bad one is a mistake in the program, as `split`'s empty separator is.
 
 ```ts
-function toFixed(x: f64, digits: i32): string
+const toFixed: (x: f64, digits: i32) => string
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -753,7 +757,7 @@ How many digits to write after the point, from 0 to 100; with
 `text` without blank bytes at either end.
 
 ```ts
-function trim(text: string): string
+const trim: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -775,7 +779,7 @@ The text to trim; the blanks are space, tab, newline and
 `text` without its trailing blank bytes.
 
 ```ts
-function trimEnd(text: string): string
+const trimEnd: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -797,7 +801,7 @@ The text to trim; the blanks are space, tab, newline and
 `text` without its leading blank bytes.
 
 ```ts
-function trimStart(text: string): string
+const trimStart: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>

@@ -368,7 +368,7 @@ holds what follows until `endSync`, then paints it in one go, so a frame is
 never seen half drawn. One that does not ignores it.
 
 ```ts
-function beginSync(): string
+const beginSync: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -383,7 +383,7 @@ Move the cursor home and erase the whole screen; a `Screen` that was drawn on
 wants `invalidate` after it.
 
 ```ts
-function clearScreen(): string
+const clearScreen: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -397,7 +397,7 @@ The escape sequences, to `write`.
 End a synchronized update, so the terminal paints what `beginSync` held.
 
 ```ts
-function endSync(): string
+const endSync: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -412,7 +412,7 @@ Switch to the alternate screen, which the terminal restores the old contents
 from on leaving.
 
 ```ts
-function enterAltScreen(): string
+const enterAltScreen: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -426,7 +426,7 @@ The escape sequence, to `write`.
 Hide the cursor, so a redraw does not flicker it across the screen.
 
 ```ts
-function hideCursor(): string
+const hideCursor: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -440,7 +440,7 @@ The escape sequence, to `write`.
 Leave the alternate screen and show what was there before `enterAltScreen`.
 
 ```ts
-function leaveAltScreen(): string
+const leaveAltScreen: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -454,7 +454,7 @@ The escape sequence, to `write`.
 Move the cursor to a cell.
 
 ```ts
-function moveCursor(x: i32, y: i32): string
+const moveCursor: (x: i32, y: i32) => string
 ```
 
 <scalar-field name="x" type="i32" required>
@@ -481,7 +481,7 @@ The 256-colour palette entry nearest a colour: one of the 6×6×6 cube (16–231
 or of the 24 greys (232–255), whichever is closer in RGB.
 
 ```ts
-function paletteIndex(colour: i32): i32
+const paletteIndex: (colour: i32) => i32
 ```
 
 <scalar-field name="colour" type="i32" required>
@@ -501,7 +501,7 @@ The palette index; `COLOR_DEFAULT` stays itself.
 Reset colour and attributes to the terminal's defaults: SGR 0.
 
 ```ts
-function resetStyle(): string
+const resetStyle: () => string
 ```
 
 <scalar-field name="returns" type="string">
@@ -515,7 +515,7 @@ The escape sequence, to `write`.
 A colour from its red, green and blue.
 
 ```ts
-function rgb(r: i32, g: i32, b: i32): i32
+const rgb: (r: i32, g: i32, b: i32) => i32
 ```
 
 <scalar-field name="r" type="i32" required>
@@ -547,7 +547,7 @@ The colour as `0xRRGGBB`, for any `fg`, `bg` or pixel.
 Show the cursor again.
 
 ```ts
-function showCursor(): string
+const showCursor: () => string
 ```
 
 <scalar-field name="returns" type="string">

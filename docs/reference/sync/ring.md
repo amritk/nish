@@ -210,10 +210,10 @@ none. The magic is loaded `ACQUIRE`, which pairs with the `RELEASE` store
 of it that the init function makes last.
 
 ```ts
-function attachMpscRing(
+const attachMpscRing: (
   region: SharedRegion,
   base: i32,
-): Result<MpscRing, string>
+) => Result<MpscRing, string>
 ```
 
 <scalar-field name="region" type="SharedRegion" required>
@@ -245,10 +245,10 @@ none. The magic is loaded `ACQUIRE`, which pairs with the `RELEASE` store
 of it that the init function makes last.
 
 ```ts
-function attachSpscRing(
+const attachSpscRing: (
   region: SharedRegion,
   base: i32,
-): Result<SpscRing, string>
+) => Result<SpscRing, string>
 ```
 
 <scalar-field name="region" type="SharedRegion" required>
@@ -284,13 +284,13 @@ all. A reset ring had the magic already, so an attach racing a reset has
 no such promise.
 
 ```ts
-function initMpscRing(
+const initMpscRing: (
   region: SharedRegion,
   base: i32,
   slots: i32,
   slotBytes: i32,
   doorbell: boolean,
-): MpscRing
+) => MpscRing
 ```
 
 <scalar-field name="region" type="SharedRegion" required>
@@ -346,12 +346,12 @@ ring had the magic already, so an attach racing a reset has no such
 promise.
 
 ```ts
-function initSpscRing(
+const initSpscRing: (
   region: SharedRegion,
   base: i32,
   capacity: i32,
   doorbell: boolean,
-): SpscRing
+) => SpscRing
 ```
 
 <scalar-field name="region" type="SharedRegion" required>
@@ -396,10 +396,7 @@ the 256-byte header and each slot's 16-byte head and payload. Nothing is
 checked here; `initMpscRing` refuses a shape it cannot make.
 
 ```ts
-function mpscRingBytes(
-  slots: i32,
-  slotBytes: i32,
-): i32
+const mpscRingBytes: (slots: i32, slotBytes: i32) => i32
 ```
 
 <scalar-field name="slots" type="i32" required>
@@ -429,7 +426,7 @@ The bytes an `SpscRing` of `capacity` data bytes takes from its base: the
 refuses a capacity that is not a power of two from 8.
 
 ```ts
-function spscRingBytes(capacity: i32): i32
+const spscRingBytes: (capacity: i32) => i32
 ```
 
 <scalar-field name="capacity" type="i32" required>

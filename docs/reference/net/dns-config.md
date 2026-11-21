@@ -158,14 +158,14 @@ most `max` of them, and answers how many it wrote. An entry that names
 written. It allocates nothing.
 
 ```ts
-function dnsHostsFind(
+const dnsHostsFind: (
   hosts: DnsHosts,
   name: string,
   qtype: i32,
   port: i32,
   out: u8[],
   max: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="hosts" type="DnsHosts" required>
@@ -224,14 +224,14 @@ Each call allocates the sixteen bytes it parses into, released when it
 returns; the two file parsers reuse a buffer of their own instead.
 
 ```ts
-function dnsParseAddress(
+const dnsParseAddress: (
   b: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   port: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -284,12 +284,12 @@ empty. It allocates nothing; a line whose address is not a literal, or
 that names nothing, is ignored, and what does not fit is counted.
 
 ```ts
-function dnsParseHosts(
+const dnsParseHosts: (
   b: u8[],
   off: i32,
   len: i32,
   hosts: DnsHosts,
-): void
+) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -324,12 +324,12 @@ nameserver line held an address. It allocates nothing, and nothing in the
 bytes makes it panic or fail: what it cannot use is ignored or counted.
 
 ```ts
-function dnsParseResolvConf(
+const dnsParseResolvConf: (
   b: u8[],
   off: i32,
   len: i32,
   config: DnsConfig,
-): void
+) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>

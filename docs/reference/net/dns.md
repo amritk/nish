@@ -142,10 +142,10 @@ own, such as the async `fetch`'s, starts from this so every lookup in a
 program honours the same files. Both reads are synchronous file reads.
 
 ```ts
-function dnsLoadSystem(
+const dnsLoadSystem: (
   config: DnsConfig | null,
   hosts: DnsHosts,
-): void
+) => void
 ```
 
 <scalar-field name="config" type="DnsConfig | null" required>
@@ -169,7 +169,7 @@ of `name` on a loop of its own, for at most `timeoutMs`. Blocks as
 so one pair can serve many calls.
 
 ```ts
-function dnsLookupWith(
+const dnsLookupWith: (
   config: DnsConfig,
   hosts: DnsHosts | null,
   name: string,
@@ -177,7 +177,7 @@ function dnsLookupWith(
   port: i32,
   out: u8[],
   ttls: i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="config" type="DnsConfig" required>
@@ -248,13 +248,13 @@ makes its own configuration, resolver and loop, closing the loop before
 it returns.
 
 ```ts
-function resolveHost(
+const resolveHost: (
   name: string,
   timeoutMs: i32,
   port: i32,
   out: u8[],
   ttls: i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="name" type="string" required>

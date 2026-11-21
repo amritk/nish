@@ -66,8 +66,7 @@ function relayJsonPutCodePoint(j: RelayJson, cp: i32): boolean -> @relayJsonPutC
   callee +15:5 relayJsonPut -> @relayJsonPut
   callee +16:5 relayJsonPut -> @relayJsonPut
 function RelayJson.constructor(this: RelayJson): void -> @RelayJson.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function RelayJson.read(this: RelayJson, buf: u8[], off: i32, len: i32): boolean -> @RelayJson.read [exported method]

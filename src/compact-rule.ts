@@ -1,11 +1,14 @@
 // The compact-class rule: which classes docs/wp48-ref32-classes.md §3.1 would
-// make compact, and why each other class is left alone. `--explain-layout`
-// prints it (`Compilation.explainLayoutText`); nothing else reads it yet, so
-// it changes no byte of the IR. The stage that narrows the classes it picks
-// reads the same answer.
+// make compact, and why each other class is left alone. One answer serves
+// both readers: `Compilation.settleCompactClasses` marks each class it picks
+// compact before any body is emitted, and `--explain-layout` prints the same
+// report (`Compilation.explainLayoutText`). `--compact off` refuses every
+// class, `implements Compact` included.
 //
 // A class `R` is compact when five tests hold, asked in order, and the first
-// that fails is the reason it is not:
+// that fails is the reason it is not. A class written `implements Compact`
+// skips tests 2 to 4, and test 1 still refuses it; one written `implements
+// Wide` is refused at test 5:
 //
 //   1. the output is a native executable: a closed-world build
 //      (`buildModeOf` in `src/visibility.ts`), which `--link` and `nish run`
@@ -13,11 +16,18 @@
 //      `--emit-napi-async`, `--emit-dts`) or a `declare function` opens it;
 //      `--emit-ts` writes TypeScript and no IR, so it is refused as well;
 //   2. some class, `R` included, has a field typed exactly `R` or `R | null`;
-//   3. narrowing those fields to four bytes (`narrowedSize`) shrinks `R` or a
-//      class holding the link, after rounding;
+//   3. `R` is at least 24 bytes and narrowing those fields to four bytes
+//      (`narrowedSize`) takes at least a quarter off it, after rounding
+//      (`pays`): a 16-byte cell measured slower narrowed, a smaller saving pays
+//      the decode on every link read for a few percent of one class, and a
+//      saving only in a class holding the link (4 to 8 bytes in one holder,
+//      `ZlibCompressor` 8 → 4, `JsonDocument` 248 → 240) measured as noise
+//      (docs/wp48-ref32-classes.md §3.1, §5.5), so it is named in the refusal
+//      but does not pass;
 //   4. some `new R(...)` is lexically inside a loop, or inside a function that
 //      reaches itself through direct calls by name;
-//   5. nothing forbids it: `R` is not a `declare class` and holds no `Secret`.
+//   5. nothing forbids it: `R` is not a `declare class`, holds no `Secret`, is
+//      no generic instantiation and does not write `implements Wide`.
 //
 // Test 1 refuses a bare `-o x.ll` build: a host may link that IR, and its
 // exports are then the host's to call with any object. A `declare function` is
@@ -46,14 +56,13 @@
 // inheritance (docs/LANGUAGE.md), so `T.m()` and an inherited `this.m()` have
 // no case to cover.
 //
-// A generic class is not reported and makes no class a holder: only a
-// class's own declaration (`info.instance === null`) is asked about. Nor is
-// `new Box<i32>(...)` a made-site or a constructor edge (`madeClass` reads a
-// bare class name), so recursion through a generic class's constructor is a
-// miss; §3.1 allows a miss, since a missed class only stays as it is. Test 5
-// reads a field's own type (`holdsSecret`): a `Secret<T>`, or an array,
-// nullable or `Result` of one; a field holding a class that holds a `Secret`
-// is not looked into.
+// A generic class is reported once per instantiation (`Box<i32>`), at its
+// template's declaration, under the module that declares the template, and
+// test 5 refuses it: `implements Compact` is refused on one at compile time
+// (`checkCompactClass`), and the rule keeps to the same set. A template no
+// code instantiates has no layout, and no line. Test 5 reads a field's own
+// type (`holdsSecret`): a `Secret<T>`, or an array, nullable or `Result` of
+// one; a field holding a class that holds a `Secret` is not looked into.
 
 import { isLoopKind } from "./escape"
 import { StringMap } from "./map"
@@ -107,14 +116,17 @@ class CallNode {
   }
 }
 
-/** A `new R(...)`: the class, the function it is in, and whether a loop encloses it there. */
+/**
+ * A `new R(...)`: the class as written (`classKey`), the function it is in,
+ * and whether a loop encloses it there.
+ */
 class MadeSite {
-  info: StructInfo
+  key: string
   fn: i32
   inLoop: boolean
 
-  constructor(info: StructInfo, fn: i32, inLoop: boolean) {
-    this.info = info
+  constructor(key: string, fn: i32, inLoop: boolean) {
+    this.key = key
     this.fn = fn
     this.inLoop = inLoop
   }
@@ -172,15 +184,19 @@ const functionKey = (sig: FunctionSig): string => {
 }
 
 /**
- * The key of `owner`'s member `member`: the class as written, without its type
- * arguments. A generic class's instance is named by its symbol (`Box$i32`), so
- * its template gives the written name.
+ * The key of a class as written, without its type arguments: its module's
+ * path and its name. A generic class's instance is named by its symbol
+ * (`Box$i32`), so its template gives the written name, and every
+ * instantiation of one template shares the template's key.
  */
-const memberKey = (owner: StructInfo, member: string): string => {
-  const instance = owner.instance
-  const name = instance === null ? owner.name : instance.template.sourceName
-  return `${owner.origin.path}#${name}.${member}`
+const classKey = (info: StructInfo): string => {
+  const instance = info.instance
+  const name = instance === null ? info.name : instance.template.sourceName
+  return `${info.origin.path}#${name}`
 }
+
+/** The key of `owner`'s member `member`, as `classKey` writes the class. */
+const memberKey = (owner: StructInfo, member: string): string => `${classKey(owner)}.${member}`
 
 /** The block a declaration's body is: a constructor's second child, any other function's fourth. */
 const functionBodyOf = (decl: Node): Node | null => {
@@ -255,13 +271,22 @@ const calleeIndex = (graph: CallGraph, self: CallNode, callee: Node): i32 => {
   return -1
 }
 
-/** The class `new` builds when its callee is a name `program` knows as a class, else `null`. */
-const madeClass = (program: CheckedProgram, node: Node): StructInfo | null => {
+/**
+ * The `classKey` of what `new` builds when its callee is a name `program`
+ * knows as a class or a generic class's template, else `""`. A template's key
+ * is its instantiations' key, whatever type arguments the site writes.
+ */
+const madeClass = (program: CheckedProgram, node: Node): string => {
   const callee = node.children[0]
   if (callee.kind !== NodeKind.Ident) {
-    return null
+    return ""
   }
-  return program.struct(callee.text)
+  const info = program.struct(callee.text)
+  if (info !== null) {
+    return classKey(info)
+  }
+  const template = program.structTemplate(callee.text)
+  return template === null ? "" : `${template.origin.path}#${template.sourceName}`
 }
 
 /**
@@ -277,10 +302,10 @@ const scanBody = (graph: CallGraph, fn: i32, node: Node, inLoop: boolean): void 
       self.calls.push(callee)
     }
   } else if (node.kind === NodeKind.New) {
-    const info = madeClass(self.program, node)
-    if (info !== null) {
-      graph.sites.push(new MadeSite(info, fn, inLoop))
-      const ctor = graph.byKey.get(memberKey(info, "constructor"), -1)
+    const made = madeClass(self.program, node)
+    if (made.length > 0) {
+      graph.sites.push(new MadeSite(made, fn, inLoop))
+      const ctor = graph.byKey.get(`${made}.constructor`, -1)
       if (ctor >= 0) {
         self.calls.push(ctor)
       }
@@ -354,21 +379,63 @@ const buildGraph = (modules: LayoutModule[]): CallGraph => {
   return graph
 }
 
+/** Whether `info` is a class a report line is about: a class, laid out whole. */
+const reportable = (info: StructInfo): boolean => info.kind === STRUCT_CLASS && !info.poisoned
+
+/**
+ * Every generic class instantiation any of `modules` holds, once each by its
+ * symbol, into `into`, and into `homes` the index of the module that declares
+ * its template (or the first that holds it, when no module in the list does).
+ */
+const collectInstances = (modules: LayoutModule[], into: StructInfo[], homes: i32[]): void => {
+  const seen = new StringMap()
+  let m = 0
+  while (m < modules.length) {
+    for (const info of modules[m].program.structList) {
+      if (info.instance === null || !reportable(info) || seen.has(info.name)) {
+        continue
+      }
+      seen.set(info.name, 1)
+      let home = m
+      let h = 0
+      while (h < modules.length) {
+        if (modules[h].program.source === info.origin) {
+          home = h
+        }
+        h = h + 1
+      }
+      into.push(info)
+      homes.push(home)
+    }
+    m = m + 1
+  }
+}
+
 /**
  * Appends every class a report line is about to `into`: each declared class
- * of `program` (not an instantiation), in its module's source order.
+ * of module `m`, and each instantiation of `instances` whose template it
+ * declares (`homes`), in the module's source order. An instantiation sits at
+ * its template's declaration, after the classes declared before it.
  */
-const collectClasses = (program: CheckedProgram, into: StructInfo[]): void => {
+const collectClasses = (
+  m: i32,
+  program: CheckedProgram,
+  instances: StructInfo[],
+  homes: i32[],
+  into: StructInfo[]
+): void => {
   const first = into.length
   for (const info of program.structList) {
-    if (
-      info.origin === program.source &&
-      info.kind === STRUCT_CLASS &&
-      info.instance === null &&
-      !info.poisoned
-    ) {
+    if (info.origin === program.source && info.instance === null && reportable(info)) {
       into.push(info)
     }
+  }
+  let n = 0
+  while (n < instances.length && n < homes.length) {
+    if (homes[n] === m) {
+      into.push(instances[n])
+    }
+    n = n + 1
   }
   // `structList` is in collection order; a report reads in source order.
   let i = first + 1
@@ -385,6 +452,13 @@ const collectClasses = (program: CheckedProgram, into: StructInfo[]): void => {
     i = i + 1
   }
 }
+
+/** A pointer type no field has, so `narrowedSize` narrows nothing: the size before any class is compact. */
+const NO_TARGET: i32 = -1
+
+/** The class as a diagnostic spells it: `Node`, or an instantiation's `Box<i32>`. */
+const displayName = (table: TypeTable, info: StructInfo): string =>
+  info.instance === null ? info.name : table.typeName(info.type)
 
 /** Test 1's refusal, the flag or target that makes the build not a native executable, or `""`. */
 const notNative = (opts: Options, programs: CheckedProgram[]): string => {
@@ -440,28 +514,90 @@ const forbidden = (table: TypeTable, info: StructInfo): string => {
   return ""
 }
 
-/** The counts the summary line reads. */
+/** The rule's answer: the report `--explain-layout` prints, its counts, and the classes it picks. */
 export class LayoutReport {
   text: string
   classes: i32
   picked: i32
+  /**
+   * The classes the rule picks that do not write `implements Compact`, which
+   * `Compilation.settleCompactClasses` marks compact; a marked class is
+   * compact already and counts in `picked` only.
+   */
+  compact: StructInfo[]
 
-  constructor(text: string, classes: i32, picked: i32) {
+  constructor(text: string, classes: i32, picked: i32, compact: StructInfo[]) {
     this.text = text
     this.classes = classes
     this.picked = picked
+    this.compact = compact
   }
 }
 
 /**
- * The `--explain-layout` report over `modules`: one line per class, in module
- * order and each module's source order, saying `compact` or the first test
- * that refuses it, with its size now and narrowed, and a summary line.
+ * The smallest class test 3 narrows, in bytes. A 16-byte cell already packs
+ * four to a cache line, and narrowed it measured slower, not faster: the
+ * `bench/awfy` List cells by a median 27% and the `bench/goose/bintrees`
+ * nodes by 19% at depth 19, while every 24- and 32-byte node held within
+ * its noise band or gained (docs/wp48-ref32-classes.md §5.5).
  */
-export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutModule[]): LayoutReport => {
+const PAYING_SIZE: i32 = 24
+
+/**
+ * Whether narrowing `size` bytes to `narrowed` pays (test 3): a class of at
+ * least `PAYING_SIZE` bytes with at least a quarter of it gone, so the 4-byte
+ * heap rounding and the decode on every link read cost less than the cache
+ * lines saved.
+ *
+ * @param size the class's size with no class narrowed
+ * @param narrowed its size with the candidate's links narrowed
+ * @returns true when `size` is at least `PAYING_SIZE` and the saving at least a quarter of it
+ */
+const pays = (size: i32, narrowed: i32): boolean => size >= PAYING_SIZE && narrowed * 4 <= size * 3
+
+/**
+ * Whether the class under `key` is made at a site inside a loop or in a
+ * recursive function (test 4).
+ *
+ * @param graph the call graph over every module
+ * @param key the class's call-graph key
+ * @returns true when some such site makes it
+ */
+const madeInLoop = (graph: CallGraph, key: string): boolean => {
+  for (const site of graph.sites) {
+    if (site.key === key && (site.inLoop || graph.nodes[site.fn].recursive)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The rule over `modules`, and the `--explain-layout` report of it: one line
+ * per class, in module order and each module's source order, saying `compact`
+ * or the first test that refuses it, with its size unnarrowed and narrowed,
+ * and a summary line.
+ *
+ * @param opts the build's options, for `--compact off` and the target
+ * @param table the type table the classes' names and sizes are read from
+ * @param modules every checked module of the program
+ * @param pointers why this build keeps every link a full pointer though it is
+ *   native (a page module, `NISH_ASAN`), or `""`
+ * @returns the report's text, the count of classes and of those picked, and the picked classes
+ */
+export const explainLayout = (
+  opts: Options,
+  table: TypeTable,
+  modules: LayoutModule[],
+  pointers: string
+): LayoutReport => {
   const wasm = isWasmBuild(opts)
-  // Every class in the program, for test 2's and test 3's scan of the
-  // holders, and the index of the module each one is declared in.
+  // Every class in the program, each generic class's instantiations
+  // included, for test 2's and test 3's scan of the holders, and the index of
+  // the module each one is declared in.
+  const instances: StructInfo[] = []
+  const homes: i32[] = []
+  collectInstances(modules, instances, homes)
   const all: StructInfo[] = []
   const owners: i32[] = []
   const programs: CheckedProgram[] = []
@@ -469,76 +605,113 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
   while (m < modules.length) {
     const program = modules[m].program
     programs.push(program)
-    collectClasses(program, all)
+    collectClasses(m, program, instances, homes, all)
     while (owners.length < all.length) {
       owners.push(m)
     }
     m = m + 1
   }
-  const native = notNative(opts, programs)
+  const refused = notNative(opts, programs)
+  const native = refused.length > 0 ? refused : pointers
   const graph = buildGraph(modules)
+  // Each class's shown name and call-graph key are made once, before the
+  // report loop, so no pass of that loop allocates a string it keeps.
+  const names: string[] = []
+  const keys: string[] = []
+  for (const each of all) {
+    names.push(displayName(table, each))
+    keys.push(classKey(each))
+  }
   const lines = new StringBuilder()
   let classes = 0
   let picked = 0
+  const compact: StructInfo[] = []
   let k = 0
-  while (k < all.length && k < owners.length) {
+  while (k < all.length && k < owners.length && k < names.length && k < keys.length) {
     const info = all[k]
     const module = modules[owners[k]]
     const source = module.program.source
+    const shownName = names[k]
+    const key = keys[k]
     k = k + 1
     {
       classes = classes + 1
+      // The size as no class narrowed it, so a class marked `implements
+      // Compact` does not hide its own saving; any other class is already
+      // laid out that way, with wasm32's 4-byte pointers.
+      const before = info.compact ? narrowedSize(table, info, NO_TARGET, wasm) : info.size
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
-      let saver = after < info.size ? info.name : ""
-      let saving = after < info.size ? `${info.size} → ${after}` : ""
-      for (const holder of all) {
+      let saves = false
+      // The best saving refused, named when nothing pays, so the line says
+      // why a class that does save bytes was not picked.
+      let unpaid = ""
+      if (after < before) {
+        if (pays(before, after)) {
+          saves = true
+        } else {
+          unpaid =
+            before < PAYING_SIZE
+              ? `${shownName} saves ${before} → ${after}, under ${PAYING_SIZE} bytes`
+              : `${shownName} saves ${before} → ${after}, under a quarter`
+        }
+      }
+      let h = 0
+      while (h < all.length && h < names.length && h < keys.length) {
+        const holder = all[h]
+        const holderName = names[h]
+        h = h + 1
         if (!linksTo(table, holder, info.type)) {
           continue
         }
         linked = true
-        if (saver.length === 0 && holder !== info) {
+        // A holder's saving alone does not pass test 3 (§3.1): it is named
+        // only to say why a class that saves bytes somewhere was refused.
+        if (!saves && unpaid.length === 0 && holder !== info) {
+          const held = narrowedSize(table, holder, NO_TARGET, wasm)
           const narrowed = narrowedSize(table, holder, info.type, wasm)
-          if (narrowed < holder.size) {
-            saver = holder.name
-            saving = `${holder.size} → ${narrowed}`
+          if (narrowed < held) {
+            unpaid = `${holderName} saves ${held} → ${narrowed}, not ${shownName} itself`
           }
         }
       }
-      let made = false
-      for (const site of graph.sites) {
-        if (site.info === info && (site.inLoop || graph.nodes[site.fn].recursive)) {
-          made = true
-        }
-      }
+      const made = madeInLoop(graph, key)
       const forbids = forbidden(table, info)
       let verdict = "compact"
-      if (native.length > 0) {
+      if (!opts.compact) {
+        verdict = "off: --compact off"
+      } else if (native.length > 0) {
         verdict = `1 native: ${native}`
+      } else if (info.compact) {
+        // `implements Compact` stands in for tests 2 to 4; a class test 5
+        // refuses is a compile error, so it never reaches here.
+        verdict = "compact (implements Compact)"
       } else if (!linked) {
         verdict = "2 no link"
-      } else if (saver.length === 0) {
-        verdict = "3 no saving"
+      } else if (!saves) {
+        verdict = unpaid.length > 0 ? `3 no saving that pays: ${unpaid}` : "3 no saving"
       } else if (!made) {
         verdict = "4 not made in a loop or recursion"
+      } else if (info.wide) {
+        verdict = "5 forbidden: implements Wide"
+      } else if (info.instance !== null) {
+        verdict = "5 forbidden: a generic class"
       } else if (forbids.length > 0) {
         verdict = `5 forbidden: ${forbids}`
       }
-      const shown = !linked || saver.length === 0 ? info.size : after
+      const shown = linked && saves ? after : before
       const name = info.decl.children[0]
       lines.add(`${source.path}:${source.lineOf(name.start)}:${source.columnOf(name.start)}: layout: `)
-      lines.add(`${info.name}${module.std ? " (std)" : ""}: ${verdict}, ${info.size} → ${shown} bytes`)
+      lines.add(`${shownName}${module.std ? " (std)" : ""}: ${verdict}, ${before} → ${shown} bytes`)
       if (verdict === "compact") {
-        picked = picked + 1
+        compact.push(info)
       }
-      // When the saving that passed test 3 is a holder's, not `R`'s own, the
-      // line names that holder.
-      if (linked && saver.length > 0 && saver !== info.name) {
-        lines.add(`; ${saver} saves ${saving}`)
+      if (verdict === "compact" || (info.compact && verdict.startsWith("compact"))) {
+        picked = picked + 1
       }
       lines.add("\n")
     }
   }
   lines.add(`explain-layout: ${picked} of ${classes} classes compact`)
-  return new LayoutReport(lines.toText(), classes, picked)
+  return new LayoutReport(lines.toText(), classes, picked, compact)
 }

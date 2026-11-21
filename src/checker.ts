@@ -10,6 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
+import { attachOverloads } from "./overloads"
 import { recordAccumulation } from "./accumulate"
 import {
   checkExportedLayouts,
@@ -33,7 +34,13 @@ import {
   unsafeModule,
 } from "./nish-modules"
 import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
-import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations"
+import {
+  collectFunctionSignature,
+  collectImports,
+  isExported,
+  isOptionalParameter,
+  markEntryMain,
+} from "./declarations"
 import {
   checkDeferredConstraints,
   collectStructTypeParamNames,
@@ -44,11 +51,13 @@ import {
   isTemplateFunction,
   refuseNestedFunctionTypes,
   parameterOrigin,
+  qualifiesClashing,
   refuseUninferable,
   rejectDollarInSymbolName,
   resolveStructTemplateConstraints,
   resolveTemplateConstraints,
 } from "./generics"
+import { moduleSymbolQualifier } from "./packages"
 import {
   FLAG_ABSTRACT,
   FLAG_COMPUTED,
@@ -106,13 +115,19 @@ import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
+  checkCompactClass,
+  checkInitializerCycle,
+  resolveNewInitializers,
+  refuseCompactTemplate,
   checkImplements,
   collectStructMembers,
+  declaresCompact,
+  declaresWide,
   declareStruct,
   markTemplateImplements,
-  noteStructNames,
-  referencedStructNames,
-  signatureStructNames,
+  noteStructTypes,
+  referencedStructTypes,
+  signatureStructTypes,
 } from "./structs"
 import { handleHeaderMessage, isHandleFieldAnnotation } from "./handles"
 import {
@@ -135,6 +150,10 @@ export class Checker {
   program: CheckedProgram
   /** The classes `declareNames` declared, whose layout checks run at the end of pass 1. */
   declared: StructInfo[]
+  /** Set by `resolveInitializers`: a `new` initializer can be resolved at once. */
+  importsBound: boolean
+  /** Instantiations finished before then, whose initializers wait for it. */
+  unresolvedInitializers: StructInfo[]
 
   constructor(
     table: TypeTable,
@@ -150,6 +169,8 @@ export class Checker {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
     this.program.f64Mode = numberMode === NUMBER_MODE_F64
     this.declared = []
+    this.importsBound = false
+    this.unresolvedInitializers = []
     this.ctx = new CheckContext(table, this.program, sink, numberMode, strictExports)
   }
 
@@ -223,6 +244,21 @@ export class Checker {
   }
 
   /**
+   * WP48: marks this module's compact classes. The compilation runs it for
+   * every module before any module's pass 1, since a class declared above `R`,
+   * or in a module that imports `R`, may hold an `R` link and lays it out then.
+   */
+  markCompact(): void {
+    for (const info of this.declared) {
+      info.compact = info.compact || declaresCompact(this.ctx, info.decl)
+      info.wide = info.wide || declaresWide(this.ctx, info.decl)
+      if (info.compact) {
+        this.ctx.compactNames.add(info.name)
+      }
+    }
+  }
+
+  /**
    * Pass 1, after `declareNames` and `bindTypeImports`: members and
    * signatures, then the layout checks. A struct that fails at any step is left
    * in the registry so annotations still resolve; it is the diagnostics that
@@ -278,6 +314,7 @@ export class Checker {
           if (template !== null && template.decl === stmt) {
             resolveStructTemplateConstraints(template)
             markTemplateImplements(this.program, stmt)
+            refuseCompactTemplate(this.ctx, stmt)
           }
           declareMethodTypeParameters(this.ctx, stmt)
         }
@@ -302,6 +339,7 @@ export class Checker {
       if (info.kind === STRUCT_CLASS && !info.poisoned) {
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
+        checkCompactClass(this.ctx, info)
       }
     }
     // Every instantiation an annotation in this module's signatures asked for
@@ -521,7 +559,10 @@ export class Checker {
    *
    * `main` needs no exception: only the entry module may declare it, and the
    * entry module is the root package by construction (`Compilation` derives
-   * every other module's package by comparing it with the entry's own).
+   * every other module's package by comparing it with the entry's own). Nor
+   * does WP57 S1's module qualifier need one here: it is applied separately,
+   * by `qualifyClashing`, only to a private free function whose bare symbol
+   * clashes, and the entry's exported `main` is never one.
    *
    * A `declare function` is the exception that is not a symbol of the package
    * at all: it names a C function, and C has one namespace, so it keeps the
@@ -548,6 +589,44 @@ export class Checker {
       // spell the package twice.
       if (sig.instance === null && !sig.foreign() && sig.definedIn(this.program.source)) {
         sig.name = `${prefix}${sig.name}`
+      }
+    }
+  }
+
+  /**
+   * Give each free function this module defines whose bare symbol would clash
+   * (`qualifiesClashing`, in `src/generics.ts`) its module-qualified symbol,
+   * `<prefix><qualifier>$.<name>` (WP57 S1, `docs/wp57-module-scoped-names.md`
+   * §4). `Compilation.qualifyClashingSymbols` runs this for every module
+   * before any import is bound, so an importer copies the final symbol. A
+   * method or constructor is named after its class and is never in reach, and
+   * a template's instantiations are named when they are minted
+   * (`templateSymbol`). The qualifier is spelled only once a function needs it,
+   * so a module with no clash allocates nothing here.
+   *
+   * `qualifiesClashing` reads each peer's functions by source name, so
+   * renaming one here does not change the answer for the next.
+   *
+   * `$` cannot appear in a declared name and `.` cannot appear in a qualifier,
+   * so `lib_util$.helper` is spelled like no declared function, method or
+   * instantiation; the clash check still runs over the result, which is what
+   * refuses two modules whose paths reduce to one qualifier.
+   */
+  qualifyClashing(peers: CheckContext[], modulePath: string, entryPath: string): void {
+    const prefix = this.program.symbolPrefix
+    let qualifier = ""
+    for (const sig of this.program.functions) {
+      if (
+        sig.owner === null &&
+        sig.instance === null &&
+        !sig.foreign() &&
+        sig.definedIn(this.program.source) &&
+        qualifiesClashing(peers, this.ctx, sig.sourceName, sig.exported)
+      ) {
+        if (qualifier.length === 0) {
+          qualifier = moduleSymbolQualifier(modulePath, entryPath)
+        }
+        sig.name = `${prefix}${qualifier}$.${sig.sourceName}`
       }
     }
   }
@@ -709,6 +788,7 @@ export class Checker {
     }
     const sig = collectFunctionSignature(this.ctx, stmt)
     const name = sig.sourceName
+    attachOverloads(this.ctx, sig, -1, name)
     if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
       return
     }
@@ -895,6 +975,42 @@ export class Checker {
   }
 
   /**
+   * Hold every `new` field initializer to its rule. It needs the constructor
+   * of the class it names, which may be imported, so it runs once every
+   * module's imports are bound (`Compilation`), for the declared classes and
+   * the instantiations pass 1 finished before then.
+   */
+  resolveInitializers(): void {
+    this.importsBound = true
+    for (const info of this.declared) {
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        resolveNewInitializers(this.ctx, info)
+      }
+    }
+    for (const info of this.unresolvedInitializers) {
+      resolveNewInitializers(this.ctx, info)
+    }
+    this.unresolvedInitializers = []
+    this.ctx.errored = false
+  }
+
+  /**
+   * Refuse a class whose initializers construct it again. After every
+   * module's `resolveInitializers`, because the loop may pass through an
+   * imported class. An instantiation is never in one: an initializer cannot
+   * `new` a generic class. `reported` is shared by every module, so a cycle
+   * through two of them is reported once.
+   */
+  checkInitializerCycles(reported: StringSet): void {
+    for (const info of this.declared) {
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        checkInitializerCycle(this.ctx, info, reported)
+      }
+    }
+    this.ctx.errored = false
+  }
+
+  /**
    * The `implements` and definite-assignment checks owed by struct
    * instantiations, run once every struct in the module has its members.
    *
@@ -910,6 +1026,11 @@ export class Checker {
       at = at + 1
       this.ctx.errored = false
       if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        if (this.importsBound) {
+          resolveNewInitializers(this.ctx, info)
+        } else {
+          this.unresolvedInitializers.push(info)
+        }
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
       }
@@ -1193,6 +1314,9 @@ export class Checker {
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM)
       local.origin = parameterOrigin(this.ctx, sig, i)
       local.typedArray = parameterSpelling(this.ctx, sig, sig.paramNames[i])
+      if (isOptionalParameter(this.ctx, sig, i)) {
+        this.ctx.optionalLocals.push(local)
+      }
       if (!scope.declare(local)) {
         this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``)
       }
@@ -1242,57 +1366,59 @@ export class Checker {
       const struct = imp.struct
       if (struct !== null) {
         // The imported class itself is already registered under its name.
-        seen.add(struct.name)
+        seen.add(struct.symbol)
         pending.push(struct)
       }
       // An imported *function* drags its types in the same way: `parse(): Node`
       // hands this module `Node` values with no mention of `Node` anywhere.
       const sig = imp.sig
       if (sig !== null) {
-        const names = new StringSet()
-        signatureStructNames(this.ctx.table, sig, names)
-        this.reachAll(declared, seen, pending, names)
+        const types: i32[] = []
+        signatureStructTypes(this.ctx.table, sig, types)
+        this.reachAll(declared, seen, pending, types)
       }
       // So does an imported module storage: `cells[0].v` reads a `Cell` this
       // module may never name (`tests/link/storage_import_record`).
       const constant = imp.constant
       if (constant !== null) {
-        const names = new StringSet()
-        noteStructNames(this.ctx.table, constant.type, names)
-        this.reachAll(declared, seen, pending, names)
+        const types: i32[] = []
+        noteStructTypes(this.ctx.table, constant.type, types)
+        this.reachAll(declared, seen, pending, types)
       }
     }
     while (pending.length > 0) {
       const info = pending.pop()
-      const names = new StringSet()
-      // A self-referential field (`parent: Node | null`) puts the struct's own name in
+      const types: i32[] = []
+      // A self-referential field (`parent: Node | null`) puts the struct's own type in
       // here; `reach` ignores it, since nothing reaches `pending` unless marked seen.
       // @ts-expect-error `pop` is `T` in Nish and `T | undefined` in lib.es5 (runtime/nish.d.ts).
-      referencedStructNames(this.ctx.table, info, names)
-      this.reachAll(declared, seen, pending, names)
+      referencedStructTypes(this.ctx.table, info, types)
+      this.reachAll(declared, seen, pending, types)
     }
   }
 
-  reachAll(declared: StructRegistry, seen: StringSet, pending: StructInfo[], names: StringSet): void {
-    let i = 0
-    while (i < names.size()) {
-      this.reach(declared, seen, pending, names.at(i))
-      i = i + 1
+  reachAll(declared: StructRegistry, seen: StringSet, pending: StructInfo[], types: i32[]): void {
+    for (const type of types) {
+      this.reach(declared, seen, pending, type)
     }
   }
 
-  /** Register `name`'s layout here, if the program declares it and this module has not seen it. */
-  reach(declared: StructRegistry, seen: StringSet, pending: StructInfo[], name: string): void {
-    if (!seen.add(name)) {
+  /**
+   * Register the layout of the struct type `type` here, if the program
+   * declares it and this module has not seen it. It is found by its type, not
+   * its name (WP57 S3a), and registered under its symbol.
+   */
+  reach(declared: StructRegistry, seen: StringSet, pending: StructInfo[], type: i32): void {
+    if (!seen.add(this.ctx.table.symbolOf(type))) {
       return
     }
-    const info = declared.get(name)
+    const info = declared.byType(type)
     if (info === null) {
       return
     }
-    if (!this.program.structs.has(name)) {
+    if (this.program.structByType(type) === null) {
       this.program.reachableStructs.push(this.program.structList.length)
-      this.program.addStruct(name, info)
+      this.program.addStruct(info.symbol, info)
     }
     pending.push(info)
   }
@@ -2286,6 +2412,8 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     // the first operand of that `??` is sure to run.
     const chained =
       node.kind === NodeKind.Binary && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
+    // WP28 C1: a statement that is a `?.` chain stops at its links the same way.
+    const skipped = node.kind === NodeKind.ExprStmt && isOptionalChain(node.children[0])
     const repeats =
       node.kind === NodeKind.While ||
       node.kind === NodeKind.Do ||
@@ -2295,6 +2423,7 @@ const guardStatement = (body: Node, access: Node): Node | null => {
       down !== node &&
       ((branches && (!first || chained)) ||
         repeats ||
+        skipped ||
         node.kind === NodeKind.Arrow ||
         node.kind === NodeKind.Labeled)
     if (crosses) {

@@ -48,9 +48,11 @@
  * agrees, 1 on a difference, 2 on a usage error or a case that does not do
  * what its `.err` (or the lack of one) says before `--compat` is ever passed.
  */
+import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "./allow-panics.js"
 import { jobsFrom, pool, run } from "./pool.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -74,6 +76,11 @@ const MARK = /^!nish\.compat = !\{(!\d+)\}$/
 /** The line `--emit-checked` opens with under the dialect. */
 const CHECKED_LINE = /^compat number=\S+ features=\[[^\]]*\]$/
 
+/** The note a refusal adds when the program's dialect leaves the refusal's feature out. */
+const DIALECT_NOTE = /^ {2}= this program's dialect is `compat=[a-z,-]+`$/
+/** The same note in a `--json` diagnostic's `notes`. */
+const DIALECT_NOTE_JSON = /"this program's dialect is `compat=[a-z,-]+`",?/
+
 /** The words of NL9020, the note on `--number-mode i32` beside the dialect. */
 const PRICED_NOTE = "`--number-mode i32` beside the compatibility dialect: "
 
@@ -94,6 +101,38 @@ const GOLDEN_FLAGS = [
   [".arena", ["--emit-arena", `${WORK}arena.txt`]],
   [".memory", ["--explain-memory"]],
 ]
+
+/**
+ * The reject cases a feature of the dialect admits, and that feature. Each is
+ * still refused without the flag, its refusal naming the feature; it compiles
+ * under `--compat=<feature>`; and the program it links to prints what Node
+ * prints and exits as Node exits. A reject case not listed here that the
+ * dialect compiles fails the run: the dialect accepts more only where a
+ * feature says so.
+ *
+ * A positive case whose `.args` name the dialect and that the strict dialect
+ * refuses is held to the same, the feature read from its refusal.
+ *
+ * A reject case not listed whose refusal names a feature makes a second
+ * refusal behind the first: with the feature the first gives way and the
+ * second is reported. It is still refused under `--compat`, and it is compared
+ * under the dialect with every feature but that one.
+ */
+const ADMITTED = new Map([
+  ["reject_arr_forof_non_array", "for-of-string"],
+  ["reject_ffi_handle_walk_optional_param", "optional-params"],
+  ["reject_nullish", "nullish"],
+  ["reject_nullish_nullable", "nullish"],
+  ["reject_optional_chain_element_inner", "optional-chaining"],
+  ["reject_optional_chain_statement", "optional-chaining"],
+  ["reject_param_default_array", "optional-params"],
+  ["reject_param_default_expression", "optional-params"],
+  ["reject_param_default_object", "optional-params"],
+  ["reject_switch_string", "string-switch"],
+])
+
+/** The note a strict refusal of an admitted construct closes with, naming its feature. */
+const FEATURE_NOTE = /add `([a-z-]+)` to `nish\.compat`/
 
 /** How long one compile may take before it is killed: the slowest case takes a few seconds. */
 const COMPILE_TIMEOUT_MS = 120_000
@@ -118,6 +157,22 @@ if (!fs.existsSync(compiler)) {
   process.exit(2)
 }
 
+/**
+ * The features this compiler has built, read from its refusal of a name that
+ * is none (`--compat=` names the empty one).
+ */
+const FEATURES = (() => {
+  const probe = spawnSync(compiler, [`${FLAG}=`], { cwd: root, encoding: "utf8" })
+  const listed = /the ones this compiler has built are ((?:`[a-z-]+`(?:, )?)+)/.exec(probe.stderr)
+  if (probe.status !== 2 || listed === null) {
+    console.error(
+      `compat-erasure: \`${FLAG}=\` did not list the features (exit ${probe.status})\n${probe.stderr}`
+    )
+    process.exit(2)
+  }
+  return [...listed[1].matchAll(/`([a-z-]+)`/g)].map((m) => m[1])
+})()
+
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts") && f.includes(filter))
@@ -135,7 +190,10 @@ const filesUnder = (dir) =>
     .filter((entry) => entry.isFile())
     .map((entry) => path.join(entry.parentPath, entry.name))
     .sort()
-    .map((file) => ({ name: path.relative(dir, file), bytes: fs.readFileSync(file) }))
+    .map((file) => ({
+      name: path.relative(dir, file),
+      bytes: fs.readFileSync(file),
+    }))
 
 /**
  * The flags a case's `.args` names, without the dialect: a case written for
@@ -182,11 +240,21 @@ const compile = async (name, extra) => {
   const placed = extra.map((arg) => (arg.startsWith(WORK) ? path.join(work, arg.slice(WORK.length)) : arg))
   const source = path.join("tests", "cases", `${name}.ts`)
   // A compile that hangs is killed, and its signal is then part of its answer.
-  const r = await run(compiler, [source, "-o", path.join(work, `${name}.ll`), ...args, ...placed], {
-    cwd: root,
-    timeout: COMPILE_TIMEOUT_MS,
-  })
-  return { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr, files: filesUnder(work) }
+  const r = await run(
+    compiler,
+    withAllowPanics(compiler, [source, "-o", path.join(work, `${name}.ll`), ...args, ...placed]),
+    {
+      cwd: root,
+      timeout: COMPILE_TIMEOUT_MS,
+    }
+  )
+  return {
+    status: r.status,
+    signal: r.signal,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    files: filesUnder(work),
+  }
 }
 
 /** `text` without the lines `from` to `to` (exclusive), each with its newline. */
@@ -216,12 +284,17 @@ const unmarkedModule = (bytes) => {
 
 /**
  * A stream without what the dialect says about itself on it: the line
- * `--emit-checked` opens with, and the note that prices `--number-mode i32`
- * beside the dialect -- one JSON line under `--json`, and otherwise the message
- * with the source line and the caret under it.
+ * `--emit-checked` opens with, the note a refusal adds naming a dialect that
+ * leaves the refusal's feature out, and the note that prices
+ * `--number-mode i32` beside the dialect -- one JSON line under `--json`, and
+ * otherwise the message with the source line and the caret under it.
  */
 const unmarkedStream = (bytes) => {
-  let lines = bytes.toString("latin1").split("\n")
+  let lines = bytes
+    .toString("latin1")
+    .split("\n")
+    .filter((line) => !DIALECT_NOTE.test(line))
+    .map((line) => (line.startsWith("{") ? line.replace(DIALECT_NOTE_JSON, "") : line))
   if (CHECKED_LINE.test(lines[0])) {
     lines = lines.slice(1)
   }
@@ -292,6 +365,78 @@ const firstDifference = (without, withFlag) => {
   return null
 }
 
+/** The flags a case's `.args` name the dialect with, or none. */
+const dialectArgs = (name) => {
+  const argsFile = path.join(casesDir, `${name}.args`)
+  return fs.existsSync(argsFile)
+    ? fs
+        .readFileSync(argsFile, "utf8")
+        .trim()
+        .split(/\s+/)
+        .filter((arg) => arg === FLAG || arg.startsWith(`${FLAG}=`))
+    : []
+}
+
+/** A run's exit and stdout, as one text to compare. */
+const runAnswer = (r) =>
+  Buffer.from(
+    `${r.signal === null ? `exit ${r.status}` : `killed by ${r.signal}`}\n${r.stdout.toString("utf8")}`
+  )
+
+/**
+ * A case a feature admits: refused without the flag with a note naming
+ * `feature`, compiled under `--compat=<feature>`, linked, and run beside the
+ * same source under Node. A string saying what failed, or `null`; `difference`
+ * is set when the two runs part ways.
+ */
+const admit = async (name, feature, strict, result) => {
+  if (strict.status !== 1 || FEATURE_NOTE.exec(strict.stderr.toString("utf8"))?.[1] !== feature) {
+    return (
+      `${name}: \`${feature}\` admits it, but the strict refusal does not name the feature` +
+      ` (exit ${strict.status})\n${strict.stderr.toString("utf8")}`
+    )
+  }
+  const work = path.join(outDir, name)
+  const exe = path.join(work, name)
+  // A reject case was written for the strict dialect's number, and keeps it;
+  // a case written for the dialect keeps the dialect's.
+  const number = result.reject ? [NUMBER_MODE, numberModeOf(caseArgs(name))] : []
+  const linked = await compile(name, [`${FLAG}=${feature}`, ...number, "--link", `${WORK}${name}`])
+  if (linked.status !== 0) {
+    return `${name}: \`${FLAG}=${feature}\` does not compile it (exit ${linked.status})\n${linked.stderr.toString("utf8")}`
+  }
+  const native = await run(exe, [], { cwd: root, timeout: COMPILE_TIMEOUT_MS })
+  const entry = path.join(casesDir, `${name}.ts`)
+  const node = await run(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(entry)}); process.exit(await m.main());`,
+    ],
+    { cwd: root, timeout: COMPILE_TIMEOUT_MS }
+  )
+  // An exit status alone is a weak answer: a native crash can exit 1 too.
+  if (node.stdout.length === 0) {
+    return `${name}: \`${FLAG}=${feature}\` admits it, but it prints nothing under Node, so a silent crash would match it`
+  }
+  const [a, b] = [runAnswer(node), runAnswer(native)]
+  if (!a.equals(b)) {
+    result.difference = {
+      flags: [`${FLAG}=${feature}`],
+      claim: "the native program does not print and exit as Node does",
+      difference: ["the run", a, b],
+      sides: ["node", "native"],
+    }
+    stopped = true
+  }
+  result.admitted = feature
+  return null
+}
+
 /** How many `--json` diagnostics on a stdout carry a code. */
 const codedDiagnostics = (stdout) =>
   stdout
@@ -313,16 +458,44 @@ const erase = async (name) => {
     return null
   }
   const reject = fs.existsSync(path.join(casesDir, `${name}.err`))
-  const result = { name, reject, files: 0, diagnostics: 0, numbered: 0, broken: "", difference: null }
+  const result = {
+    name,
+    reject,
+    files: 0,
+    diagnostics: 0,
+    numbered: 0,
+    admitted: null,
+    uncovered: null,
+    broken: "",
+    difference: null,
+  }
+  const listed = ADMITTED.get(name)
+  if (listed !== undefined || (!reject && dialectArgs(name).length > 0)) {
+    const strict = await compile(name, [])
+    const feature = listed ?? FEATURE_NOTE.exec(strict.stderr.toString("utf8"))?.[1]
+    if (listed !== undefined || (strict.status === 1 && feature !== undefined)) {
+      result.broken = (await admit(name, feature, strict, result)) ?? ""
+      stopped = stopped || result.broken.length > 0
+      return result
+    }
+  }
   const differs = (flags, claim, difference) => {
     result.difference = { flags, claim, difference }
     stopped = true
     return result
   }
   /** `base` against `dialect`, the second with its mark taken out; true when they differ. */
-  const compare = async (flags, base, dialect, claim) => {
-    const marked = await compile(name, [...flags, ...dialect])
+  const compare = async (flags, base, against, claim) => {
+    const marked = await compile(name, [...flags, ...against])
     const { answer, missing } = unmarked(marked)
+    if (reject && base.status !== 0 && marked.status === 0) {
+      differs(
+        flags,
+        `${FLAG} accepts a reject case no feature admits (list it in ADMITTED with its feature)`,
+        ["the exit status", Buffer.from(`exit ${base.status}`), Buffer.from("exit 0")]
+      )
+      return true
+    }
     if (marked.status === 0 && missing !== null) {
       const file = marked.files.find((f) => f.name === missing)
       differs(flags, `${FLAG} left the module ${missing} without its \`!nish.compat\` mark`, [
@@ -345,6 +518,10 @@ const erase = async (name) => {
     : GOLDEN_FLAGS.filter(([suffix]) => fs.existsSync(path.join(casesDir, `${name}${suffix}`))).map(
         ([, f]) => f
       )
+  // The dialect a case is compared under: all of it, or, for a reject case
+  // whose refusal names a feature the dialect has, the dialect without that
+  // feature (with it, the refusal gives way to the next one the case makes).
+  let dialect = [FLAG]
   for (const flags of [[], ...golden]) {
     const without = await compile(name, flags)
     if (reject ? without.status !== 1 : without.status !== 0) {
@@ -355,7 +532,28 @@ const erase = async (name) => {
       stopped = true
       return result
     }
-    if (await compare(flags, without, [FLAG, NUMBER_MODE, mode], `${FLAG} changed`)) {
+    const named =
+      reject && flags.length === 0 ? FEATURE_NOTE.exec(without.stderr.toString("utf8"))?.[1] : undefined
+    if (named !== undefined && FEATURES.includes(named)) {
+      const others = FEATURES.filter((feature) => feature !== named)
+      if (others.length === 0) {
+        result.broken = `${name}: its refusal names \`${named}\`, the only feature, so no dialect leaves it out`
+        stopped = true
+        return result
+      }
+      dialect = [`${FLAG}=${others.join(",")}`]
+      result.uncovered = named
+      // With the feature, the case is still refused: only a listed case is admitted.
+      const whole = await compile(name, [FLAG, NUMBER_MODE, mode])
+      if (whole.status !== 1) {
+        return differs(
+          [FLAG],
+          `${FLAG} accepts a reject case no feature admits (list it in ADMITTED with its feature)`,
+          ["the exit status", Buffer.from(`exit ${without.status}`), Buffer.from(`exit ${whole.status}`)]
+        )
+      }
+    }
+    if (await compare(flags, without, [...dialect, NUMBER_MODE, mode], `${dialect[0]} changed`)) {
       return result
     }
     result.files += without.files.length
@@ -364,7 +562,7 @@ const erase = async (name) => {
       continue
     }
     const double = await compile(name, [...flags, NUMBER_MODE, "f64"])
-    if (await compare(flags, double, [FLAG], `${FLAG} is not \`${NUMBER_MODE} f64\` in`)) {
+    if (await compare(flags, double, dialect, `${dialect[0]} is not \`${NUMBER_MODE} f64\` in`)) {
       return result
     }
     result.numbered += flags.length === 0 ? 1 : 0
@@ -379,7 +577,11 @@ const firstDifferingLine = (a, b) => {
   while (at < left.length && at < right.length && left[at] === right[at]) {
     at++
   }
-  return { line: at + 1, without: left[at] ?? "(end of text)", with: right[at] ?? "(end of text)" }
+  return {
+    line: at + 1,
+    without: left[at] ?? "(end of text)",
+    with: right[at] ?? "(end of text)",
+  }
 }
 
 const results = (await pool(cases, jobs, erase)).filter((result) => result !== null)
@@ -390,31 +592,35 @@ if (broken !== undefined && broken.broken.length > 0) {
   process.exit(2)
 }
 if (broken !== undefined) {
-  const { flags, claim, difference } = broken.difference
+  const { flags, claim, difference, sides = ["without", "with"] } = broken.difference
   const [, without, withFlag] = difference
   const at = firstDifferingLine(without, withFlag)
   // Both answers in full, beside the tree the last compile left behind.
   const kept = (side) => path.join(outDir, `${broken.name}.${side}.txt`)
-  fs.writeFileSync(kept("without"), without)
-  fs.writeFileSync(kept("with"), withFlag)
+  fs.writeFileSync(kept(sides[0]), without)
+  fs.writeFileSync(kept(sides[1]), withFlag)
+  const width = Math.max(...sides.map((side) => side.length)) + 1
   console.error(
     `compat-erasure: ${broken.name}${flags.length > 0 ? ` (${flags.join(" ")})` : ""}: ${claim}, ` +
       `first at line ${at.line}\n` +
-      `  without: ${at.without}\n` +
-      `  with:    ${at.with}\n` +
-      `  both in full: ${path.relative(root, kept("without"))}\n` +
-      `                ${path.relative(root, kept("with"))}`
+      `  ${`${sides[0]}:`.padEnd(width)} ${at.without}\n` +
+      `  ${`${sides[1]}:`.padEnd(width)} ${at.with}\n` +
+      `  both in full: ${path.relative(root, kept(sides[0]))}\n` +
+      `                ${path.relative(root, kept(sides[1]))}`
   )
   process.exit(1)
 }
 
-const positive = results.filter((result) => !result.reject)
-const rejected = results.filter((result) => result.reject)
+const admitted = results.filter((result) => result.admitted !== null)
+const positive = results.filter((result) => !result.reject && result.admitted === null)
+const rejected = results.filter((result) => result.reject && result.admitted === null)
 const sum = (list, key) => list.reduce((total, result) => total + result[key], 0)
 console.log(
   `compat-erasure: ${positive.length} positive cases byte-identical under ${FLAG} (${sum(positive, "files")} files), ` +
     `${rejected.length} reject cases rejected alike (${sum(rejected, "diagnostics")} coded diagnostics, ` +
-    `${rejected.filter((result) => result.diagnostics === 0).length} cases with none), ` +
+    `${rejected.filter((result) => result.diagnostics === 0).length} cases with none, ` +
+    `${rejected.filter((result) => result.uncovered !== null).length} with the feature their refusal names left out), ` +
     `${sum(results, "numbered")} cases the same under ${FLAG} as under \`${NUMBER_MODE} f64\`, ` +
+    `${admitted.length} cases a feature admits running as under Node, ` +
     `${cases.length - results.length} skipped`
 )

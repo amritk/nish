@@ -55,8 +55,7 @@ function checksumLoad64(buf: u8[], p: integer<0, 2147483639>): u64 -> @nish.chec
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function crc32Step(t: u32[], c: u32, w: u64): u32 -> @nish.crc32Step
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer t: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 lo: u32 (const)
@@ -68,7 +67,7 @@ function checksumWindow(what: string, buf: u8[], off: i32, len: i32): void -> @n
   stackSites=0 stackLocals=0
 function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: llvm.ctlz.i32 nish_panic nish_panic_overflow
+  calls: llvm.ctlz.i32 nish_panic_overflow
   pointer this: size=16 writesThrough=true captured=false
   stackSites=1 stackLocals=1
   local +0:11 t: u32[] (const)
@@ -655,8 +654,8 @@ function deflateStore64(b: u8[], p: integer<0, 2147483639>, w: u64): void -> @ni
   pointer b: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function deflateCtz64(x: u64): i32 -> @nish.deflateCtz64
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.ctlz.i32 nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
   stackSites=0 stackLocals=0
   local +0:9 lo: u32 (const)
   local +1:9 hi: u32 (const)

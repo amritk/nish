@@ -116,9 +116,12 @@ const advertisedFlags = (): string[] => [
   "--emit-arena",
   "--explain-memory",
   "--explain-layout",
+  "--compact",
   "--compat[=<feature>,...]",
   "--target",
   "--cpu",
+  "--pgo-generate",
+  "--pgo-use",
   "--profile",
   "--warn-portability",
   "--fix",
@@ -230,6 +233,63 @@ const hasStackFrame = (text: string): boolean => {
   return false;
 };
 
+/** The flag a compile of a program that may panic on purpose passes, as `ALLOW_PANICS_FLAG` in `src/options.ts` spells it. */
+const ALLOW_PANICS: string = "--allow-panics";
+
+/** Whether `word`, as the first argument, is a command whose arguments are not a compile's. */
+const isNotACompile = (word: string): boolean => word === "upgrade" || word === "c-import" || word === "break";
+
+/** Whether `arg` already decides the panic scope, or asks for no compile at all. */
+const decidesPanics = (arg: string): boolean =>
+  arg === "--deny-panics" || arg === ALLOW_PANICS || arg === "-h" || arg === "--help" || arg === "-v" || arg === "--version";
+
+/**
+ * `args` with `--allow-panics` added, by the rule `withAllowPanics` in
+ * `tests/allow-panics.js` follows for the JS harnesses: the line names a `.ts`
+ * program outside the repository's `examples/` and `docs/`, is not `upgrade`,
+ * `c-import` or `break`, and passes none of `--deny-panics`, `--allow-panics`,
+ * `--help` or `--version` before the program (anywhere, for a compile). The flag
+ * goes first, or right after `run`. Otherwise `args` itself.
+ */
+const withAllowPanics = (args: string[]): string[] => {
+  if (args.length === 0 || isNotACompile(args[0])) {
+    return args;
+  }
+  const run: i32 = args[0] === "run" ? 1 : 0;
+  let program: i32 = -1;
+  let at: i32 = 0;
+  for (const arg of args) {
+    if (program < 0 && at >= run && arg.endsWith(".ts")) {
+      program = at;
+    }
+    at += 1;
+  }
+  if (program < 0) {
+    return args;
+  }
+  at = 0;
+  for (const arg of args) {
+    if (at === program) {
+      if (arg.startsWith("examples/") || arg.startsWith("docs/")) {
+        return args;
+      }
+    } else if ((run === 0 || at < program) && decidesPanics(arg)) {
+      return args;
+    }
+    at += 1;
+  }
+  const added: string[] = [];
+  at = 0;
+  for (const arg of args) {
+    if (at === run) {
+      added.push(ALLOW_PANICS);
+    }
+    added.push(arg);
+    at += 1;
+  }
+  return added;
+};
+
 /**
  * The compiler under test, as something spawnable.
  *
@@ -241,11 +301,24 @@ class Cli {
   head: string[];
   /** What the report calls it. */
   label: string;
+  /**
+   * Whether its `--help` lists `--allow-panics`: a released compiler older than
+   * the flag exits 2 on it, so a compile gets it only when this says so.
+   */
+  allowPanics: boolean;
 
   constructor(spec: string) {
     this.label = spec;
     const node = spec.endsWith(".js") || spec.endsWith(".mjs") || spec.endsWith(".cjs");
     this.head = node ? ["node", spec] : [spec];
+    const help: string[] = [];
+    for (const part of this.head) {
+      help.push(part);
+    }
+    help.push("--help");
+    const helpOut = `${WORK}/help.probe.out`;
+    this.allowPanics =
+      spawnSyncTo(help, helpOut, `${WORK}/help.probe.err`) === 0 && readOrEmpty(helpOut).indexOf(ALLOW_PANICS) >= 0;
   }
 
   /**
@@ -262,7 +335,10 @@ class Cli {
   /**
    * One run, with `env` layered over the inherited environment through `env(1)`
    * and both streams captured to `<slot>` files. Every caller passes its own slot
-   * so that a failure's output is still on disk after the run.
+   * so that a failure's output is still on disk after the run. A compile of a
+   * program that may panic gets `--allow-panics` (`withAllowPanics`), so the day
+   * the default refuses an unproven panic these checks still reach what they ask
+   * about; a line that names `--deny-panics` keeps it.
    */
   run(slot: string, env: string[], args: string[]): Run {
     const argv: string[] = [];
@@ -275,7 +351,7 @@ class Cli {
     for (const part of this.head) {
       argv.push(part);
     }
-    for (const arg of args) {
+    for (const arg of this.allowPanics ? withAllowPanics(args) : args) {
       argv.push(arg);
     }
     const outPath = `${WORK}/${slot}.out`;
@@ -1458,7 +1534,16 @@ const checkPackageBoundary = (t: Suite, cli: Cli): void => {
  * these were `NL0000`, which is not a code a tool can key on.
  */
 const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: string): void => {
-  const run = cli.plain(name, [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`]);
+  checkClashCodeWith(t, cli, name, file, code, []);
+};
+
+/** `checkClashCode` for a program built with `flags` as well. */
+const checkClashCodeWith = (t: Suite, cli: Cli, name: string, file: string, code: string, flags: string[]): void => {
+  const args = [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`];
+  for (const flag of flags) {
+    args.push(flag);
+  }
+  const run = cli.plain(name, args);
   if (!t.eqI32(`${name}: a symbol two modules define is refused`, run.status, 1)) {
     return;
   }
@@ -1474,7 +1559,11 @@ const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: st
  * An exported function and a private one are each a symbol the whole program
  * shares, so a second definition is a driver refusal with a code of its own:
  * NL3024 for an exported function and NL3026 for a private one, whose package
- * spellings, NL3025 and NL3027, are pinned by `tests/wordings/`. A class's
+ * spellings, NL3025 and NL3027, are pinned by `tests/wordings/`. Two private
+ * functions clash only under `--no-strict-exports`: by default each is
+ * qualified by its module's path (WP57 S1), so `duplicate_internal` builds, and
+ * two whose paths qualify them to one symbol (`module_private_residual`) are
+ * NL3026 even so. A class's
  * constructor or method is one too, but two classes that share one share a name,
  * and since #193 that is refused first and alone, as NL3028 — one object for one
  * mistake, whether the classes declare a constructor, a method, fields only, or
@@ -1491,7 +1580,8 @@ const checkSymbolClashes = (t: Suite, cli: Cli): void => {
   checkClashCode(t, cli, "iface_clash_private", "lib.ts", "NL3028");
   checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3028");
   checkClashCode(t, cli, "duplicate_export", "b.ts", "NL3024");
-  checkClashCode(t, cli, "duplicate_internal", "helper.ts", "NL3026");
+  checkClashCodeWith(t, cli, "module_private_no_strict", "helper.ts", "NL3026", ["--no-strict-exports"]);
+  checkClashCode(t, cli, "module_private_residual", "lib_util.ts", "NL3026");
   checkClashCode(t, cli, "generic_class_clash_signature", "a.ts", "NL3013");
   checkClashCode(t, cli, "class_dollar_name", "main.ts", "NL2296");
   checkClashCode(t, cli, "class_dollar_name_imported", "lib.ts", "NL2296");
@@ -1904,6 +1994,7 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
     ].join("\n")
   );
 
+  // strict: a one-line program with no panic site, refused before it compiles.
   const link = spawnSyncTo(
     inDirectory(planted, [`${lone}/nish`, "main.ts", "-o", "out/", "--link", "out/main"]),
     `${WORK}/sec_planted_link.out`,
@@ -1916,6 +2007,7 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
   );
   t.eqI32("CLI-2: and is refused with the toolchain band, since there is no package", link, 3);
 
+  // strict: a one-line program with no panic site, refused before it compiles.
   const std = spawnSyncTo(
     inDirectory(planted, [`${lone}/nish`, "uses-std.ts", "-o", "out/"]),
     `${WORK}/sec_planted_std.out`,
@@ -2106,6 +2198,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   const linkArgs: string[] = [source, "-o", `${abs}/sec-shared.ll`, "--link", `${abs}/sec-shared`];
 
   chmodTo("777", pkg);
+  // strict: FIXTURE_OK has no panic site, and this build is refused before it compiles.
   const shared = spawnSyncTo(
     inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)),
     `${WORK}/sec_shared.out`,
@@ -2139,6 +2232,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
       "",
     ].join("\n")
   );
+  // strict: a one-line program with no panic site, refused before it compiles.
   const std = spawnSyncTo(
     inDirectory("/", [`${pkg}/bin/nish`, usesStd, "-o", `${abs}/sec-shared-std.ll`]),
     `${WORK}/sec_shared_std.out`,
@@ -2152,6 +2246,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   );
 
   chmodTo("775", pkg);
+  // strict: FIXTURE_OK has no panic site, so it builds with or without the flag.
   spawnSyncTo(inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)), `${WORK}/sec_group.out`, `${WORK}/sec_group.err`);
   t.eqBool(
     "CLI-9: a package root only its group can write is still the package",
@@ -2190,6 +2285,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   writeFileSync(`${decoy}/bin/nish`, "#!/bin/sh\nexit 0\n");
   writeFileSync(`${decoy}/scripts/build.sh`, `touch '${decoyMarker}'\nexit 1\n`);
   writeFileSync(`${dirDecoy}/scripts/build.sh`, `touch '${dirDecoyMarker}'\nexit 1\n`);
+  // strict: FIXTURE_OK has no panic site, so it builds with or without the flag.
   spawnSyncTo(
     inDirectory("/", followedBy(["env", `PATH=${dirDecoy}/bin:${decoy}/bin:${pkg}/bin:${path}`, "nish"], linkArgs)),
     `${WORK}/sec_path.out`,

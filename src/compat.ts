@@ -2,15 +2,28 @@
 // and `nish.compat` in a `package.json` are checked against this one table,
 // and a stage that builds a feature adds its name here.
 //
-// Nothing is built yet, so the table is empty: the dialect can be asked for,
-// recorded and held to its ceiling, and accepts what the strict one accepts.
+// C1 builds `nullish` (a `??` whose left operand strict refuses for it),
+// `optional-chaining` (a statement `a?.b`, `a?.[i]` and `a?.m()`),
+// `string-switch` (a `switch` over a `string` with constant labels) and
+// `for-of-string` (a `for...of` over a `string`, a code point per pass),
+// `optional-params` (`x?: T` and a default that is not a constant, evaluated
+// on each call that leaves it out) and `overloads` (bodiless signatures before
+// one implementation, `src/overloads.ts`); a feature a build does not allow leaves the dialect accepting what strict
+// accepts.
 
 import { NUMBER_MODE_F64 } from "./context"
 import { Options } from "./options"
 
 /** Every feature this compiler has built, in the order `--compat` lists them. */
 export const compatFeatureNames = (): string[] => {
-  const names: string[] = []
+  const names: string[] = [
+    "nullish",
+    "optional-chaining",
+    "string-switch",
+    "for-of-string",
+    "optional-params",
+    "overloads",
+  ]
   return names
 }
 
@@ -26,12 +39,8 @@ export const compatHasFeature = (name: string): boolean => {
 
 /** The known features as the clause a refusal of an unknown one ends with. */
 export const compatKnownText = (): string => {
-  const names = compatFeatureNames()
-  if (names.length === 0) {
-    return "this compiler has built none yet"
-  }
   const quoted: string[] = []
-  for (const name of names) {
+  for (const name of compatFeatureNames()) {
     quoted.push(`\`${name}\``)
   }
   return `the ones this compiler has built are ${quoted.join(", ")}`

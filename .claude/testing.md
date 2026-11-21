@@ -149,10 +149,27 @@ test is **data, not code**: a source file next to the output it must produce.
   job passes two: `--delegate-fixed-point` leaves the bootstrap's fixed
   point to the `bootstrap (x86_64-linux)` row, which asserts the same two
   equalities with the same seed, and `--delegate-sanitizers` leaves the
-  `runtime_sanitize` rows and the fuzz replays to `fuzz-smoke`. The flag is honoured only inside GitHub
+  `runtime_sanitize` rows and the fuzz replays to `fuzz-smoke`. A third,
+  `--delegate-bench-timing`, is honoured on a `pull_request` event only: it
+  keeps crypto-bench's builds and checksum asserts and leaves its timed
+  portability proofs to the push-to-main run of the same job, a later run
+  rather than the same one (the next push to `main` whose run is not
+  cancelled by a newer one), which a check holds to `ci.yml`'s `push:
+  branches: [main]`. The flags are honoured only inside GitHub
   Actions, so a local `npm test` still runs it, and a check reads `ci.yml` so
   each delegation cannot outlive the job it names. Do not delegate anything
-  that is not already proved elsewhere in the same workflow run.
+  that is not already proved elsewhere in the same workflow run; the one
+  named exception is `--delegate-bench-timing`, whose timed proofs only
+  measure and assert no output, and whose lane is the push-to-main run.
+- **A delegated-to job is a scoped lane, so its read set is part of the
+  claim.** `bootstrap` and `fuzz-smoke` skip their steps on a pull request
+  that changes nothing `scripts/ci-scope.mjs` says they read
+  ([docs/wp10-ci.md](../docs/wp10-ci.md#scoped-lanes)). A check that opens a
+  new file or tree, and is delegated, needs that path in its lane's `reads`;
+  `node tests/run.js ci.yml` fails when the `bootstrap` or `fuzz` lane would
+  skip a change to a file its check reads. A new top-level tree a lane reads
+  needs no edit: a path on no allowlist runs every lane. Run
+  `node tests/run.js ci-scope` after changing `scripts/ci-scope.mjs`.
 
 ## What every construct ships with
 
@@ -294,6 +311,34 @@ process's own descriptors. Where a descriptor count is the claim, the program
 under test takes it from its own `/proc/self/fd`, before and after, and the
 check reads the difference.
 
+## Building a program that may panic
+
+A case, a fixture, a fuzz target or `src/` panics on purpose, so its build
+passes `--allow-panics`; an example under `examples/` is what a user copies,
+so the helper leaves its build alone, and an example that keeps a panic site
+passes the flag visibly where it is built (its `// smoke: args` line, its
+`build.mjs`, the check that builds it) and says why in its first lines. The
+compiler's default holds every module of the root package to no panic, and
+the flag relaxes it to the `noPanic` list. Pass it through the helper,
+never by hand: the seed and any older release exit 2 on a flag they do not
+know, so the helper reads the compiler's `--help` first.
+
+- **JS**: `withAllowPanics(compiler, args)` from `tests/allow-panics.js`
+  returns `args` with the flag added when the compiler lists it, the line
+  names a `.ts` program outside `examples/` and none of its own flags
+  already decides the scope. In `tests/run.js`, `spawnNish(args, options)` is
+  `spawnSync(NISH, ...)` through it; a check that must build without the flag
+  calls `spawnSync(NISH, ...)` directly. A `tests/link/<name>/` program that
+  tests the default itself holds a `strict` file beside its `main.ts`, and the
+  link runner builds it with no flag added (`no_panic_default`).
+- **Shell**: `. scripts/nish-compiler.sh`, then `nish_allow_panics <cmd...>`
+  sets the array `allow_panics`; expand it as
+  `${allow_panics[@]+"${allow_panics[@]}"}` (macOS's bash 3.2).
+- **npm scripts**: `bash scripts/nish-harness.sh <program.ts> <exe>` builds a
+  harness written in Nish with `build/nish` through `nish_allow_panics` and
+  runs it (`test:nish`, `test:cli`); `tests/run.js` refuses an npm script
+  that builds a non-example program any other way.
+
 ## Testing a Nish program in Nish
 
 Everything above is the harness that tests the *compiler*. A program the
@@ -433,7 +478,7 @@ skips against a compiler that has no hook.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
-node tests/run.js --shard 2/8       # one of CI's eight shards (docs/wp10-ci.md)
+node tests/run.js --shard 2/9       # one of CI's nine shards (docs/wp10-ci.md)
 npm run test:update                 # write missing .ll goldens and tests/self/goldens/
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --stage1 --count 200
@@ -443,9 +488,16 @@ npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
 A filter is what a session runs before pushing: one for every section or
-program the change touches. The unfiltered suite is CI's eight `test` shards,
+program the change touches. The unfiltered suite is CI's nine `test` shards,
 read per [`CLAUDE.md`](../CLAUDE.md#definition-of-done); run it locally only for
 a change to the suite itself or a fork PR.
+`scripts/smoke.sh`, `docs/cookbook/regen.sh --check` and the size report are
+not part of `npm test`: CI runs them in its `examples` job, beside the shards.
+A change to `examples/` or `docs/IR_COOKBOOK.md` runs the first two locally
+(`NISH=build/nish`). A step that reads the Test step's log stays in the
+`test` job, behind `if: matrix.shard == N`; one that only needs a compiler
+goes to `examples`, not onto a shard's critical path
+([docs/wp10-ci.md](../docs/wp10-ci.md#shards-and-time-limits)).
 
 **A filtered run's count is a measurement only after `rm -rf build/test`.**
 `run.js` is one process and section A compiles the goldens before anything else

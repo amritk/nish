@@ -7,7 +7,8 @@ its first field, a `readonly` field of an
 The normative rules are in the reference's
 [Discriminated unions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#discriminated-unions) section.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -48,7 +49,8 @@ names at least two different variants.
 
 A class without such a field is not a variant:
 
-```ts nish:err NL2523
+<!-- nish:err NL2523 -->
+```ts
 class Point {
   x: i32 = 0;
 }
@@ -93,9 +95,17 @@ too.
 class over it, `Box<Shape>` or `Stack<Shape>`, holds the union in each `T`
 slot, a generic function called with one binds its type parameter to the
 union, and a `Result` can carry one on either side. A variant converts here
-too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast:
+too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast.
+The examples from here on build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): some add and index with
+nothing bounding them, which bounding the operands and testing
+`i < xs.length` before an index would fix, and the JSON one calls
+standard-library code that keeps panic sites no proof removes yet, which will
+build under the default once that code is made panic-free:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -159,7 +169,8 @@ constraint such as `<T extends HasKind>`, and an instance over a union is not
 a class typed JSON writes. And a union is still not a `Set` element or a `Map`
 key:
 
-```ts nish:err NL2353
+<!-- nish:err NL2353 -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -188,7 +199,8 @@ reads it, and it compares, switches and passes as the enum. Any other field or
 method of a variant is an error until a test of the tag says which variant
 `s` is, and so is writing to the union's fields, even one every variant has.
 
-```ts nish:err NL2528
+<!-- nish:err NL2528 -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -224,7 +236,9 @@ whatever variants remain. `!==`, the operands the other way round
 so does each `case` of a `switch (s.kind)`, with `default` holding the
 variants no `case` named.
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -312,7 +326,8 @@ much as that tag local: a test of `k === Kind.Circle` or `k !== Kind.Circle`,
 in every form above and in a `switch (k)`, leaves `k` holding only the members
 the test allows, so a second test it already decided is an error (NL2531).
 
-```ts nish:err NL2531
+<!-- nish:err NL2531 -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -346,7 +361,8 @@ left. A narrowing made inside the body, by a test or a store, carries to the
 comparisons after the loop the same way, for a local the loop only tests as
 much as for one it stores into:
 
-```ts nish:err NL2531
+<!-- nish:err NL2531 -->
+```ts
 enum Kind {
   A,
   B,
@@ -396,7 +412,8 @@ This version does not track that, so it refuses a store that would narrow,
 and asks for one of two things instead: declare the variable as the variant,
 or give it a value of the whole union, such as a call that returns `Shape`.
 
-```ts nish:err NL2534
+<!-- nish:err NL2534 -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -427,7 +444,8 @@ the case no label names unreachable rather than testing for it. The tag may be
 read through a variable, a field or an element: `s.kind`, `h.shape.kind`,
 `shapes[i].kind`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -467,7 +485,8 @@ Leave a variant out and the function can end without a value, which is an
 error, as `tsc --strict --noImplicitReturns` reports it. Adding a variant to
 the union therefore points at every `switch` that has to handle it.
 
-```ts nish:err NL2093
+<!-- nish:err NL2093 -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -521,7 +540,9 @@ goes on the wire as the name of its enum member, and `jsonDecodeUnion` picks
 the variant by it. When the tags come from a string enum, the tag on the wire
 is the member's string instead:
 
-```ts nish:ok
+<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 

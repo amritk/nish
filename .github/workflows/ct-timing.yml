@@ -111,7 +111,11 @@ jobs:
           build/seed/bin/nish --version
 
       - name: Build the compiler with the seed
-        run: build/seed/bin/nish src/compile.ts --link build/nish
+        run: |
+          # src/ may panic on purpose: `--allow-panics` when the seed lists it.
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/seed/bin/nish
+          build/seed/bin/nish ${allow_panics[@]+"${allow_panics[@]}"} src/compile.ts --link build/nish
 
       # The exit code is kept rather than acted on here, so that the table is
       # uploaded whatever it says: 0 nothing above the threshold twice, 1 a

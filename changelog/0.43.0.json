@@ -1,0 +1,697 @@
+{
+  "version": "0.43.0",
+  "date": "2026-11-18",
+  "tag": "v0.43.0",
+  "range": {
+    "from": "v0.42.0",
+    "to": "4d0faa4b"
+  },
+  "entries": [
+    {
+      "id": "grow-arrays-in-place-copy-a-push-loop",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "grow arrays in place; Copy a push loop over an array range in one memcpy",
+      "body": "An array built by push no longer costs the sum of every size it passed\nthrough. nish_array_grow grows the block where it is: by a bump when the\ndata is the arena's last block, or by a realloc of the exact chunk a block\nover 64 KB fills; anything else takes the copy. NISH_REUSE_CAP keeps a chunk\npast 64 KB that is reused from its start one word short, so a scope's mark is\nnever under a reallocated chunk; a smaller chunk stays whole, so a recycled\nasync task region still fits its next task. The --debug-arena build always\ncopies, because its chunks are never malloc'd.\n\nA for loop whose body is one dst.push(src[P + j]) now copies the range in\none guarded memcpy. Whatever a guard refuses runs the unchanged loop, so an\nout-of-range index still panics where it did.\n\nbench/goose/ ports five Goose benchmarks and records the results. The\nruntime's .text budgets move: core 1,805 -> 2,098 bytes, threads\n2,010 -> 2,300.",
+      "metrics": [
+        "peak RSS on Goose's large size, records 392 -> 179 MB, strlist 358 -> 162 MB, words 804 -> 411 MB (best of three, noise under 1%); words at 16M words about 11% faster (run-to-run noise about 4%); instructions Queens +0.14%, Bounce -0.4%"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/cases/arr_append_range",
+        "tests/runtime/debug-arena-grow-test.c",
+        "tests/link/async_region_recycle"
+      ],
+      "commits": [
+        "c391e09"
+      ],
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "give-every-page-a-canonical-link-its-own",
+      "type": "docs",
+      "scope": "site",
+      "breaking": false,
+      "title": "give every page a canonical link, its own titles and a theme-color",
+      "body": "Each page route in scalar.config.json now carries a generated head: a title with the site name, a bare og:title and a canonical link. scripts/route-head.mjs writes them and its --check catches drift. page.js writes theme-color from the current light or dark background and takes the JSON-LD headline from og:title. Scalar has no title template and loads head scripts only by URL, so JSON-LD stays client-side; docs/README.md records why.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1fe3ce5"
+      ],
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "give-net-relay-f64-its-own-scratch-directory",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "give net_relay_f64 its own scratch directory",
+      "body": "net_relay and net_relay_f64 run the same checks, and setup.ts wrote the PEM pair its renewal checks watch to the fixed paths build/net_relay/chain.pem and key.pem. The link pool runs both programs at once, so each overwrote the files the other was about to load. The mtime-only RelayWatch read the other's writes as a renewal. That is the intermittent PEM/renewal failure CI saw in runs 43941217022 and 44156052604.\n\nrelayChecks and setupChecks now take the scratch directory as a required parameter, and each entry names its own directory. No retry, no skip and no serialisation. The two built apps run side by side failed in 20 of 20 iterations before the change and in 0 of 20 after.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_relay",
+        "tests/link/net_relay_f64"
+      ],
+      "commits": [
+        "13c7e62"
+      ],
+      "pr": 1704,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "hold-the-crypto-specs-to-vector-0-4",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold the crypto specs to vector 0.4.0's rows instead of transcribed properties",
+      "body": "Four specs now say with vector rows what they could only say with a property\nor an Untested paragraph before 0.4.0, so fidelity holds every printed byte to\nits RFC.\n\n- RFC 7748 §6.1 is four rows under the RFC's own labels (\"Alice's private key,\n  a\", \"Their shared secret, K\"), replacing P-DH-VECTOR, whose bytes nothing\n  checked against the RFC.\n- RFC 4231 test case 5 is three rows with a `Truncate: … to 128 bits`\n  paragraph each, replacing P-TRUNC-256, -384 and -512.\n- RFC 8439's quarter-round vectors (§2.1.1, §2.2.1) are rows over the `u32[]`\n  state, so chacha20QuarterRound is tested rather than out of scope; the A.1,\n  A.2 and A.4 rows cite their own Test Vector.\n- RFC 8032 §7.1's five signatures each get an ed25519Verify row whose result\n  is cited to §5.1.7 and derived by P-ROUNDTRIP, which now draws messages up\n  to 1,023 bytes so TEST 1024's is in range.\n\ncontracts/README.md names these forms and points at .vector-version instead\nof naming a vector version. Nothing under std/, src/ or runtime/ changes.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "test/spec/rfc7748-x25519.ts",
+        "test/spec/rfc4231-hmac-sha2.ts",
+        "test/spec/rfc8439-chacha20-poly1305.ts",
+        "test/spec/rfc8032-ed25519.ts"
+      ],
+      "commits": [
+        "05c92f4"
+      ],
+      "pr": 1702,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "move-to-vector-0-5-0-1703",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "move to vector 0.5.0",
+      "body": "vector 0.5.0 replays every counterexample exactly, refuses a property that\nrestates the row it derives, and names a refusal's own markdown line. Every\ncontract and generated test is byte-identical under it, so only the pin\nmoves.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ca31766"
+      ],
+      "pr": 1703,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "fail-the-fnref-peak-checks-only-on-growth",
+      "type": "test",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "fail the fnref peak checks only on growth",
+      "body": "The section 4.4 \"no reference call leaks\" checks compared two peak resident sets with an absolute bound, so a second peak lower than the first by one arena chunk failed. A leak only raises the second peak, so the checks now bound growth only: the second peak may not exceed the first by 128 KB.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f975b0d"
+      ],
+      "pr": 1709,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "free-an-idle-ring-slot-s-receive-queue",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "free an idle ring slot's receive queue",
+      "body": "A ring slot's receive queue was allocated at 4 KiB on first receive and\nfreed only when the connection closed, so every idle keep-alive slot held\nit. nr_read now frees the queue once it drains it, and the queue starts at\n1,024 bytes, inside glibc's tcache. A slot reused at accept never carries a\nqueue, because every path that frees a slot runs after nr_close's free.\n\nRecorded as NURING-38 in docs/security/net-uring.md, with a net_ring check\nthat holds idle ring connections and bounds the server's memory per idle\nconnection; the base runtime fails it.\n\nMeasured: bench/handler-ring at 96,000 connections, PSS 141.4-141.7 MB on the ring against S4's 518 MB (docs/BENCHMARKS.md)\nRefs: docs/security/net-uring.md, docs/BENCHMARKS.md\nTests: tests/link/net_ring_idle\nPart of #1708",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7c04815"
+      ],
+      "pr": 1712,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "echo-ecn-counts-in-the-quic-server-s",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "echo ECN counts in the QUIC server's ACKs",
+      "body": "The server now counts the ECN codepoint each new packet arrived with, per packet-number space (ECT(0), ECT(1), CE), and once any count is above zero sends its ACKs as ACK_ECN (RFC 9000 §13.4.1). A duplicate counts nothing; each coalesced packet counts once. Http3Server passes the codepoint udpRecvFrom reports to the connection through QuicConnection.arrivalEcn.\n\nRefs: docs/security/quic.md#quic-10\nTests: tests/link/net_quic_ecn\n\nFixes #759",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1fd0a62"
+      ],
+      "pr": 1711,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "measure-nish-s-crypto-against-openssl-go-rust",
+      "type": "feat",
+      "scope": "bench",
+      "breaking": false,
+      "title": "measure Nish's crypto against OpenSSL, Go, Rust and Node, portable and with assembly",
+      "body": "node bench/run.mjs --only crypto writes a \"Crypto against other languages\" section into docs/BENCHMARKS.md. Every kernel runs as Nish (with its runtime kernels and portable, with NISH_AES, NISH_CHACHA20 and NISH_SHA256 set to soft), OpenSSL (and OPENSSL_ia32cap-masked), Go (and purego), Rust (and soft) and Node. Checksums agree across all nine, the kernels join the instruction-count gate and --validate, and docs/crypto-performance.md analyses every cell more than 1.5x behind portable code.\n\nMeasured: AES-128-GCM seal at 1350 B: 93.7 MB/s portable and 708 MB/s on the kernel, against 130 (Rust soft) and 822 MB/s (OpenSSL)\nRefs: docs/BENCHMARKS.md#crypto-against-other-languages, docs/crypto-performance.md\nFixes #475",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a382f47"
+      ],
+      "pr": 1716,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "give-netshutdown-and-netmss-a-slot-path-1715",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "give netShutdown and netMss a slot path",
+      "body": "netShutdown on a NET_LISTEN_RING slot used to reach shutdown(2) with the\nslot handle and answer -9, so Http1Server's lingering close on a ring\nlistener fell back to an immediate close and could reset a client that was\nstill sending. A slot's shutdown now goes through the ring as\nIORING_OP_SHUTDOWN, queued behind the slot's pending sends so the FIN\nfollows the bytes already written, and a close waits for a shutdown in\nflight. A closed or stale handle still answers -9.\n\nSHUTDOWN joins the restricted rings' allowed ops. The ring layer only ever\nsubmits it on a fixed file of the ring's own table, as it does SEND; the\nrestriction whitelists SQE flags but does not require FIXED_FILE, which is\nrecorded as NURING-39. A kernel without the op keeps the listener on epoll.\n\nnetMss on a slot answers -1, as it did, now explicitly and documented: the\nMSS of a direct descriptor cannot be read without IORING_OP_URING_CMD, which\nwould widen the restriction set. The guide and nish.d.ts say so, where the\nguide had said -9.\n\nruntime-net.c's .text budget rises from 11,008 to 11,264 bytes, measured at\n11,190.\n\nTests: tests/link/net_ring_linger, tests/runtime/uring-test.c (shutclose)\nRefs: docs/security/net-uring.md, docs/guide/using-nish/networking.md\nPart of #1708",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0a85db5"
+      ],
+      "pr": 1715,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "accept-a-websocket-without-leaving-bytes-in-the",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "accept a WebSocket without leaving bytes in the arena",
+      "body": "Http1Connection.acceptWebSocket built the Sec-WebSocket-Accept value as a fresh string on every upgrade, so a long-lived server's arena grew by the key, its SHA-1 and its base64 on each accepted connection. The connection now owns a WsAcceptKey (a Sha1 state and a 28-byte buffer) made on the first upgrade and reused after it; Sha1.digestInto and base64StdPadEncodeInto write into it, and websocketWriteUpgradeResponse sends the response from those bytes. This closes H1-3, the way HpackDecoder closed H2-1.\n\nRefs: docs/security/http1-codec.md#h1-3\nTests: tests/link/net_http1_server (acceptsFlat), tests/link/net_websocket\nFixes #447",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0738cc6"
+      ],
+      "pr": 1714,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "carve-the-arena-from-a-reserved-range-when",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "carve the arena from a reserved range when a program has a compact class",
+      "body": "WP48 stage 1. A second runtime build, compiled with -DNISH_ARENA_RANGE, puts every arena chunk of 2 MiB or less on one reserved address range. scripts/build.sh takes --arena-range for it and src/run-cache.ts keys it. The compiler selects it only for a program with a compact class, and none exists until stage 2, so no program's IR and no byte of the default runtime change.\n\nOn Linux the range is fixed at [1 GiB, 16 GiB) and reserved with MAP_FIXED_NOREPLACE. A busy address panics before main, and a refused mapping has its own panic. On macOS the range goes anywhere, with its base in nish_ref_base. The first 64 bytes are never handed out. Chunks are carved in power-of-two classes from 4 KiB to 2 MiB, with a locked free list per class; exact chunks over 2 MiB stay on malloc. Exhausting the range panics and names the 15 GiB limit.\n\nEvery C bump and relocation site rounds the arena offset up to 8 in this build. That covers the struct and text bumps, nish_cross_in, keep and region adopt, so stage 2's 4-byte compact instances cannot misalign the rest. In-place array growth never reallocs a range chunk: it copies out instead. --debug-arena takes its never-reused reservation from the range, and the ASan build reserves nothing.\n\nThe design note's §7 records the owner's decisions of 2026-11-17:\n- accepted;\n- the compiler picks compact classes, with implements Compact and implements Wide to force or refuse;\n- the zero-based decode on Linux and Windows, based on macOS;\n- fields only;\n- 4-byte units;\n- a busy fixed address panics.",
+      "metrics": [
+        "bench/goose/tree.ts at depth 24, 21 rounds, range runtime against stock: +2.5% wall, within the median per-round ptr vs ptr-copy band (3.5%) and the widest (16.8%); peak RSS within 0.2 MB. Runtime .text at -Oz: default rows unchanged (2,098 / 2,300 B); range build 2,695 / 2,917 B."
+      ],
+      "refs": [
+        "docs/wp48-ref32-classes.md#33-the-arena-on-a-reserved-range"
+      ],
+      "tests": [
+        "tests/runtime/range-test.c",
+        "node tests/run.js arena-range"
+      ],
+      "commits": [
+        "abbdca8"
+      ],
+      "pr": 1707,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "record-the-ring-s-p99-as-a-queue",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "record the ring's p99 as a queue on one core, and measure 300,000 connections",
+      "body": "One ring process's p99 trailed five SO_REUSEPORT epoll processes in an\nexternal SQLite entry (65 against 20 ms at 90,000 keep-alive connections).\nbench/handler-ring now measures it. loadgen records per-request latency\nwith a configurable keep-alive think time and reports p50, p99 and p99.9\nover a steady window. The window excludes the connect burst and counts\nfailed sends, closed connections and requests left unanswered.\n\nAt matched load on one core the ring's p99 was the lower one in every round\n(96,000 connections, 4 s think: ring 1.55 to 1.78 ms against epoll from\n2.27 ms). One epoll process alone tails as well, worse than the ring at\n45,000 a second. bench/handler-ring/trace.patch, run by trace.sh, counts\npasses, pumps, waits and the ready list. It shows no pass long enough to\nexplain the tail and a ready list that queues behind one core. So the stage\nrecords the cause, a queue on one core, rather than changing the runtime.\n\nAt 300,000 connections one ring process held 436 MB PSS at 23.7 µs a\nrequest, with a p99 of 0.90 ms.\n\nRefs: docs/BENCHMARKS.md, docs/wp63-iouring-net.md\nPart of #1708",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "cca87ab"
+      ],
+      "pr": 1717,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "run-each-duplicated-check-once-per-push-1721",
+      "type": "ci",
+      "breaking": false,
+      "title": "run each duplicated check once per push",
+      "body": "Four checks ran twice on every push. The test job's sanitizers section ran runtime_sanitize and the fuzz replays that fuzz-smoke also runs; it now reports them as DELEGATED under --delegate-sanitizers (honoured only under GitHub Actions), and a tests/run.js guard fails if fuzz-smoke stops running them unconditionally. A local npm test still runs both. The runner job, which pushed the golden corpus through the harness written in Nish and made only assertions the test shards also make, now runs on the release: the Release PR and the v* tag run release.yml makes of ci.yml. A guard holds that gate, and the nishRunner section's pop run still proves the harness on every push. npm run check moves from all eight test shards to the lint job, and the shard-2 SHA-256 throughput step, which printed figures and asserted nothing the simd section does not, is removed.",
+      "metrics": [
+        "176.9 -> 125.5 runner-minutes for one push (main run 44224030613 against PR run 44237099813, one run each); test x8 90.7 -> 77.2, runner x3 36.4 -> 0"
+      ],
+      "refs": [
+        "docs/wp10-ci.md",
+        ".claude/testing.md#the-golden-runner-in-nish"
+      ],
+      "tests": [
+        "node tests/run.js \"ci.yml\"",
+        "node tests/run.js runtime_sanitize",
+        "node tests/run.js fuzz"
+      ],
+      "commits": [
+        "491984b"
+      ],
+      "pr": 1721,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "test-a-counted-loop-s-x-i-for",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "test a counted loop's x + i for overflow once, before the loop",
+      "body": "A checked `x + i` inside a counted `for` loop, where `x` does not change in the loop and `i` steps by one between known bounds, now tests both ends of the range once in the loop's preheader. When neither end can overflow, the loop body uses `add nsw`. Otherwise it runs the unchanged checked addition, so an addition that really overflows still panics at the same operation with the same message. The guard applies only to a local or constant `x` that the loop body never writes, and it is never shared across functions or async resume points.\n\nA callgrind profile of bench/goose/words.ts put 31.9% of instructions on `same()`, string equality on the map's probe path, which paid two `llvm.sadd.with.overflow` branches per byte. The FNV-1a `hash()` took 13.25%, so `same()` was the larger cost and is the one fixed here. bench/goose/README.md records the profile, the fix, and `hash()` as the next step.",
+      "metrics": [
+        "words at 16M words, best of 10 alternating runs: 3548 ms (range 3548 to 4053) before, 3110 ms (3110 to 3423) after. The ranges do not overlap: 12% faster. Under callgrind, total instructions fell from 1,603.5M to 1,368.3M, and `same()` fell from 512.0M to 239.4M. The words binary grows by 112 bytes."
+      ],
+      "refs": [
+        "bench/goose/README.md"
+      ],
+      "tests": [
+        "tests/cases/ovf_loop_guard"
+      ],
+      "commits": [
+        "883d233"
+      ],
+      "pr": 1710,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "rewrite-the-reject-golden-cases-to-arrow-declarations",
+      "type": "test",
+      "breaking": false,
+      "title": "rewrite the reject_* golden cases to arrow declarations",
+      "body": "The reject_* golden cases now declare their functions as `const NAME = (...) => {...}`, the declaration form WP22 settled on. The rewrite is scripts/arrowify.mjs with block bodies only, so no line moves and every pinned diagnostic keeps its code, message and position.\n\nCases where the `function` keyword is the thing under test keep it: reject_fn_nested, reject_fn_anonymous, reject_ffi_body, reject_generator, reject_export_default and reject_export_c_symbol_function, along with every `declare function`, generator and `async function`.\n\nPart of #1722 (WP22 stage C, the test corpus).",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "50df343"
+      ],
+      "pr": 1725,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "correct-the-ring-slot-s-netshutdown-and-netmss",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "correct the ring slot's netShutdown and netMss answers and the io_uring counts",
+      "body": "docs/LANGUAGE.md still said netShutdown and netMss answer -9 on a ring slot.\nSince NURING-39, netShutdown shuts a slot down through the ring behind its\nqueued sends, a later netWrite answers -32 after a write shut, and netMss\nanswers -1. The reference page is regenerated from it.\n\nThe security index's io_uring row now counts NURING-38 as fixed: twenty fixed,\ntwo open, seventeen decided. docs/BENCHMARKS.md says the earlier loadgen\nclosed its window after take()'s sample reads, not after its last /proc\nreads, and marks the share of a request's CPU that a pumped completion\ncarries as an inference.\n\nPart of #1728",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e426fe8"
+      ],
+      "pr": 1730,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "link-the-compiler-under-test-once-per-compiler",
+      "type": "perf",
+      "scope": "ci",
+      "breaking": false,
+      "title": "link the compiler under test once per compiler input",
+      "body": "fuzz-smoke and postgres-live built their compiler with `npm run build`, which links stage1 and then stage2 from it. They now take the test job's stage1 through the compiler-cache action, under the same key and without saving. nish-cmp elision's candidate, the same `--link` made with its row's seed, now comes through the cache too. On a cache hit each of these jobs copies the binary instead of linking it. stage2 is still built and exercised on every push by `bootstrap (x86_64-linux)`, which asserts IR(stage1) == IR(stage2).\n\nThe roughly 80 s per test shard seen in run 44241824047 was a legitimate miss: that push to main changed src/, so it made a new key. On a hit the cache already restores in seconds, so the test job needed no change. Also fixes two stale descriptions from #1724: the ci.yml header still listed the typecheck under `test`, and docs/wp10-ci.md gave the wrong simd step count.",
+      "metrics": [
+        "one PR run (44253614689) against the 39-run baseline medians: fuzz-smoke 6.3 -> 4.5 min, postgres-live 3.6 -> 1.8, nish-cmp elision x86_64 5.1 -> 3.5, aarch64 3.9 -> 3.6; test shard summaries identical to main's 44252691648 (77935 passed, 0 failed, 17 skipped)"
+      ],
+      "refs": [
+        "docs/wp10-ci.md",
+        "#1724",
+        "#1734"
+      ],
+      "tests": [],
+      "commits": [
+        "0ffbc97"
+      ],
+      "pr": 1735,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "rewrite-the-link-programs-and-wording-cases-to",
+      "type": "test",
+      "breaking": false,
+      "title": "rewrite the link programs and wording cases to arrow declarations",
+      "body": "Every module under tests/link and tests/wordings now declares its functions as `const NAME = (...) => {...}`, the declaration form WP22 settled on. The rewrite uses scripts/arrowify.mjs with block bodies only, so no line moves and every pinned wording is unchanged. The diagnostics reference pages that quote the wording cases are regenerated with scripts/gen-reference.mjs.\n\nThe tests/wordings/host modules keep `export function`. They are host modules, page TypeScript that src/host-module.ts reads without a parser, and that reader keeps only `export function` signatures.\n\nPart of #1722 (WP22 stage C, the test corpus).",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e8d9140"
+      ],
+      "pr": 1726,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "rewrite-the-differential-corpus-and-the-remaining-fixtures",
+      "type": "test",
+      "breaking": false,
+      "title": "rewrite the differential corpus and the remaining fixtures to arrow declarations",
+      "body": "The differential corpus and the small fixture directories now declare their functions as `const NAME = (...) => {...}`. That covers tests/fix, tests/parser, tests/layout, tests/emit-ts, tests/host-import, tests/module-storage and tests/page. The rewrite is scripts/arrowify.mjs with block bodies only.\n\nThe frozen differential rewrites are keyed on a hash of their sources, and nothing can re-freeze one since stage0 was retired. So `tests/differential/goldens.js` gains `--rekey-arrowified --rev <ref>`, which moves a stale record's key only when two checks pass:\n- every module's source at <ref> hashes to the frozen key;\n- arrowify's own block-bodied rewrite of that source gives the working-tree bytes exactly.\n\nAnything else stays stale, is named, and exits non-zero. All 157 frozen programs stay frozen.\n\nKept as `function`, because the declaration form is what they test or what their reader needs: host modules (src/host-module.ts reads only `export function` signatures), parser fixtures about `function` parsing, and three `nish --fix` fixtures whose subject is the declaration kind.\n\nPart of #1722 (WP22 stage C, the test corpus).",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d84938c"
+      ],
+      "pr": 1737,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "split-the-test-runner-s-lines-sixteen-positions",
+      "type": "perf",
+      "scope": "self",
+      "breaking": false,
+      "title": "split the test runner's lines sixteen positions at a time with nish:simd, and add simd variants checked against scalar",
+      "body": "The golden runner now splits text into lines with splitLinesLanes, a lane-wise split in tests/nish/lines.ts. It writes a newline flag per position, compares sixteen flags at a time with nish:simd (eq, bitmask) and walks the set bits. A scalar tail handles the last few positions. It is used everywhere tests/nish/run.ts split lines, and gives the same lines as std/text splitLines at every length.\n\nstd/text.ts is unchanged. The compiler records every nish:simd load as an index site it cannot prove, so a lane-wise splitLines in std/text would make every --deny-panics caller of splitLines fail to build. The runner is not built under --deny-panics. The other candidate loops stay scalar, as profiled:\n- the stdout diff runs only when a test fails;\n- the line compare in std/testing is 1.6% of the run and already uses glibc's memcmp;\n- stripHeader's scanning is the line split itself.\n\nThree new golden programs each compute one answer two ways, a scalar loop and a sixteen-lane nish:simd loop with a scalar tail, and assert that the two agree:\n- simd_byte_runs: first index, count and run length;\n- simd_adler32: Adler-32, also held to the published value of \"Wikipedia\";\n- simd_hex: lower-case hex.\n\nLengths 0, 1, 15, 16, 17, 31, 32, 33 and a 100-byte tail cover the empty input, the tail alone, one block and blocks plus a tail. The scalar twins elsewhere in the suite are unchanged.\n\ntests/link/std_text_split_lines_simd holds splitLinesLanes to std/text splitLines, natively and under Node, across:\n- lengths 0 to 48, 4095, 4096, 4097 and 8193;\n- a newline at each chunk edge;\n- \\r\\n endings, U+010A and a surrogate pair.\n\nMeasured: runner instructions on the simd_ filter, --jobs 1, cachegrind: 30,714,650 (main) and 30,711,365 (main, second build; band 0.01%) to 26,515,940, -13.7%\nTests: tests/cases/simd_byte_runs\nTests: tests/cases/simd_adler32\nTests: tests/cases/simd_hex\nTests: tests/link/std_text_split_lines_simd\nPart of #1706",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1bbb57b"
+      ],
+      "pr": 1713,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "raise-strbuild-and-map-proto-ordered-fp32-instruction",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "raise strbuild and map-proto-ordered-fp32 instruction baselines",
+      "body": "Both counts rose in runtime commits whose CI passed: strbuild at 2f4f8e30 (the per-lane arena's carved-bit check) and map-proto-ordered-fp32 at 6074bbec (nish_str_from_i32 no longer inlined). bench/instructions.json mixes counts from the cloud container and from CI's runner, so the container's --check failed where CI's did not. Both baselines now take the container's counts. The instructions section prints its count table on a pass too, and bench/README.md records which environment each count comes from. bench/goose/README.md adds a before row for words, before/after geomeans with their noise band, and a 16M callgrind split of hash() and same().\n\nFixes #1727",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "243c8b5"
+      ],
+      "pr": 1738,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "pin-benchmark-table-provenance-and-stale-pointer-greps",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "pin benchmark-table provenance and stale-pointer greps in CLAUDE.md",
+      "body": "Two conventions the wp63-ring-gaps run kept rediscovering. Every\nBENCHMARKS.md table names the commit whose bench code produced it,\nclaims only the fields that version prints, and quotes a per-second\nmaximum as a maximum. A builtin whose answer changes is grepped across\nLANGUAGE.md, the guide and nish.d.ts, and a security record's count change\nmoves its docs/security/README.md row.",
+      "metrics": [],
+      "refs": [
+        "#1708",
+        "#1712",
+        "#1715",
+        "#1717"
+      ],
+      "tests": [],
+      "commits": [
+        "e5ea93f"
+      ],
+      "pr": 1729,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "rewrite-the-positive-golden-cases-to-arrow-declarations",
+      "type": "test",
+      "breaking": false,
+      "title": "rewrite the positive golden cases to arrow declarations",
+      "body": "Every non-reject tests/cases program now declares its functions as `const NAME = (...) => {...}`, the declaration form WP22 settled on. That is 630 rewrites in 255 files.\n\nThe rewrite is scripts/arrowify.mjs with block bodies only, so no line moves and every .ll golden is byte-identical. Cases where `function` is the subject (`declare function`, `async function`, the stage-B parity case) are left alone.\n\nThe 77 rewritten cases that the differential oracle holds frozen are re-keyed with `goldens.js --rekey-arrowified`, not unfrozen. The store still holds 157 programs.\n\nPart of #1722 (WP22 stage C, the test corpus).",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a315de2"
+      ],
+      "pr": 1723,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "report-which-classes-the-compact-class-rule-picks",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "report which classes the compact-class rule picks, with --explain-layout",
+      "body": "`nish --explain-layout` prints, for every class in a program, whether WP48's compact-class rule (docs/wp48-ref32-classes.md §3.1) would pick it. For each class it gives the first of the five tests that refuses it and the size before and after narrowing. It changes no byte of the IR, and no program's layout moves. The rule lives in its own module, src/compact-rule.ts, and codegen does not call it yet. Stage 3 switches it on once stage 2's emitter lands, and the report can already survey the compiler and the corpus.\n\nTest 1 passes only for a closed native build: `--link` or `nish run`. A bare `-o` build is refused because a host may link the IR. So are wasm32, `--emit-ts`, the C and N-API sidecars, and a module that declares a C function. Test 4 finds recursion in the direct-call graph of the parsed bodies, generic functions and methods included. A name that a parameter or local shadows is not counted as an edge. The report confirms the design's three figures: `TNode` 24 → 12 bytes in bench/goose/tree.ts, `TNode` 16 → 8 in bench/goose/bintrees.ts, and the node in bench/wp48-refs/sibling.ts 32 → 20.",
+      "metrics": [],
+      "refs": [
+        "docs/wp48-ref32-classes.md#31-which-classes-are-compact"
+      ],
+      "tests": [
+        "tests/run.js explain layout"
+      ],
+      "commits": [
+        "a8da647"
+      ],
+      "pr": 1736,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "refuse-a-new-function-definition-in-the-test",
+      "type": "test",
+      "breaking": false,
+      "title": "refuse a new function definition in the test corpus",
+      "body": "Biome reads src/, std/ and examples/, not tests/, so nothing kept the test corpus spelled as arrows. A new tests/run.js check, arrow-corpus, fails on any tests/**/*.ts file holding a top-level definition scripts/arrowify.mjs would rewrite unless tests/function-spelling-allowlist.txt lists it with a reason, and on a listed file that no longer holds one, so the list only shrinks. The inline Nish the JS harnesses write out, and the fuzz generator's programs, are now const arrows. WP22 stage C is done (4 of 5).",
+      "metrics": [],
+      "refs": [
+        "docs/wp22-arrow-functions.md"
+      ],
+      "tests": [
+        "node tests/run.js arrow-corpus"
+      ],
+      "commits": [
+        "ecd4638"
+      ],
+      "pr": 1741,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "let-knip-know-prlimit-is-a-system-tool",
+      "type": "ci",
+      "breaking": false,
+      "title": "let knip know prlimit is a system tool",
+      "body": "tests/run.js is about to run the checks that expect a SIGSEGV under util-linux's prlimit, so the kernel writes no core of the debug arena's 1 TiB reservation (#1739). knip reports any binary a script spawns that no package provides, so prlimit joins the system tools in ignoreBinaries beside clang, gdb and unshare. Until #1739 lands, knip reports the entry as a configuration hint, which does not fail it.",
+      "metrics": [],
+      "refs": [
+        "#1739",
+        "#1734"
+      ],
+      "tests": [],
+      "commits": [
+        "10b82e2"
+      ],
+      "pr": 1742,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "deal-the-test-shards-by-today-s-costs",
+      "type": "perf",
+      "scope": "ci",
+      "breaking": false,
+      "title": "deal the test shards by today's costs",
+      "body": "Shard 5 was the slowest test shard in 40 of 48 runs, at a median of 14.8 min against 9.4 for the typical shard, and it set PR feedback time. The debug-arena and compact-class range checks that expect a SIGSEGV made the runner dump a core of the whole 1 TiB reservation, at 81 to 303 s each, and the cost table dealt runtimeChecks as 54 s when it took about 524 s. Those checks now run under util-linux's `prlimit --core=1:1`; a limit of 1 is the one the kernel reads as \"no core\" for a piped core_pattern too. Without prlimit on the path they run as before, and the suite prints a NOTE saying so. Each check still asserts the same signal and output.\n\ntests/shard-costs.json could not be refit before this: scripts/shard-costs.mjs failed on three sections that had no recognizer (h1Between, unboundedPass, breakWeb). The script now knows their first checks. It also takes `--drop <regex>`, which measures runs logged before a fix as though the matching checks took no time. The table is refit from five green post-#1721 main runs with `--drop '^debug arena.*dies of SIGSEGV'`. The runner job's `--check-runner` slices were checked locally against the new table.",
+      "metrics": [
+        "PR run 44273081341 against main run 44270405010 (one run each). Wall time 17m41s -> 11m44s. Slowest/median shard 1.61 -> 1.19. Shard 5 Test step 935 -> 438 s. Runner-minutes 133.4 -> 119.0. The eight shards sum to 78047 passed, 0 failed, 17 skipped, identical to main at this PR's base (run 44271306222)."
+      ],
+      "refs": [
+        "scripts/shard-costs.mjs",
+        "docs/wp10-ci.md",
+        "#1734"
+      ],
+      "tests": [],
+      "commits": [
+        "5dc9743"
+      ],
+      "pr": 1739,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "spell-1736-s-inline-nish-programs-as-arrows",
+      "type": "test",
+      "breaking": false,
+      "title": "spell #1736's inline Nish programs as arrows",
+      "body": "The compact-class --explain-layout tests landed with 15 inline Nish function definitions while the corpus rewrite was in review; they are now const arrows like the rest of the harness's inline programs. IR is unchanged.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "10dee41"
+      ],
+      "pr": 1743,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "lay-out-a-class-pointer-field-in-4",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "lay out a class pointer field in 4 bytes on wasm32",
+      "body": "computeLayout gave every class pointer field an 8-byte slot, so on wasm32, where LLVM's p:32:32 lays a pointer out in 4, a class's size over-allocated and its offsets disagreed with the struct LLVM emits. A pointer-valued field (class, string, array, union, Result, CPtr) is now 4 bytes wide and 4 aligned on wasm32; native layouts and IR do not move. Debug info, field alignment and the string-join element loads read the same pointer width.\n\nA new wasm32-layout section pins each test class's size, alignment and field offsets against what LLVM's wasm32 DataLayout folds for the emitted struct, and checks the allocation size per class. Moved wasm32 goldens are regenerated and declared in nish-cmp. A Result's own layout (resultLayout) still pads a pointer payload to 8 on wasm32 and is left open.",
+      "metrics": [],
+      "refs": [
+        "docs/wp48-ref32-classes.md#4"
+      ],
+      "tests": [
+        "tests/run.js wasm32-layout",
+        "tests/cases/wasm_union_generic",
+        "tests/cases/root_storage_page"
+      ],
+      "commits": [
+        "0b753c1"
+      ],
+      "pr": 1740,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "spell-the-last-host-importing-inline-programs-as",
+      "type": "test",
+      "breaking": false,
+      "title": "spell the last host-importing inline programs as arrows",
+      "body": "The host-import section's entry programs import a host module but are not one, so they take the const-arrow spelling; the host modules keep `export function`, which src/host-module.ts reads. The allowlist reason for tests/parser/names-operator-calls.ts now names what blocks the codemod: functions named after operator words, not `catch`.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e0a6227"
+      ],
+      "pr": 1748,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "run-the-side-jobs-only-when-their-inputs",
+      "type": "perf",
+      "scope": "ci",
+      "breaking": false,
+      "title": "run the side jobs only when their inputs change, behind one gate",
+      "body": "A pull request that changes nothing a side job reads no longer pays for that job. A new `scope` job runs scripts/ci-scope.mjs over the pull request's changed files and labels, and writes one `<lane>=true|false` output for each of seven side jobs: bootstrap, nish-cmp, nish-cmp elision, the NEON path, SHA-256 on Apple silicon, fuzz-smoke and postgres-live. When a lane is off, its job skips every work step, says why in its summary, moves to an ubuntu-latest runner, and still reports success under its usual name. The `test` shards and `lint` are never lanes and never wait on `scope`.\n\nThe rule fails closed. A lane is off only when every changed path is on that lane's allowlist of paths that none of its commands read; every lane whose job runs `node tests/run.js` reads all of tests/. Every lane runs in each of these cases:\n- any event other than a pull request, which includes pushes to main and the release;\n- the `ci:full` label (add it, then re-run all jobs);\n- `NISH_CI_SCOPE=full`;\n- a changed-file list that is unreadable, empty or truncated;\n- a deleted file;\n- a rename that crosses a read set;\n- a change to .github/, a package file or the scope script.\n\n`ci-gate` needs every job, runs always, and fails unless each job succeeded or was skipped by its own `if:`. It can become the one required check.\n\ntests/run.js pins, per lane, a file that each of its commands reads. The `test` job delegates the fixed point to bootstrap and the sanitizers to fuzz-smoke, and it holds those delegations only while bootstrap's and fuzz-smoke's lanes read the delegated checks' inputs. The runtime_sanitize step is held to pipefail, a `passed, 0 failed` line and no SKIP line, with no `|| true` or continue-on-error.\n\nA replay of 60 merged pull requests found no failing job that the scope would have skipped. Their recorded failures cover only nish-cmp, fuzz-smoke and the always-run jobs, so the replay is no evidence for the other five lanes. The one excused failure, #1666's fuzz-smoke toolchain download, is pinned by name. A docs-only probe (#1747) ran this workflow with every lane off: every check concluded, the lane jobs took 2–7 s each, and the run used about 66 runner-minutes.\n\nMeasured: the backtest skips 17.5 of the lanes' 41.6 runner-minutes per pull request run, 14.7% of a ~119-minute run, with 0 misses over 60 merged PRs. Docs-only probe run 44280413840: 65.8 runner-minutes, all lanes off.\nRefs: docs/wp10-ci.md#scoped-lanes, #1734\nTests: node tests/run.js ci-scope, node tests/run.js ci.yml, node scripts/ci-scope.mjs --backtest\nFixes #1724",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1cc087c"
+      ],
+      "pr": 1746,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "lay-out-an-implements-compact-class-s-links",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "lay out an implements Compact class's links as 32-bit offsets",
+      "body": "A class that implements `Compact` from the new `nish:compact` module now stores every field typed exactly as that class, or that class `| null`, as a 32-bit offset into the reserved arena range that stage 1 added. This applies in any class, across modules, and through interface and generic views. A field load decodes the offset and a field store encodes it. Linux uses a zero-based shape. macOS uses a based shape through `@nish_ref_base`.\n\nA compact class is 4-aligned and allocated in 4-byte units, so a node of an `i32` and two links takes 12 bytes instead of 24. A compact class is never promoted to the stack. Every `align`/`dereferenceable` attribute reads the class's real alignment, including through an interface type. `--debug-info` describes a link as a 32-bit member. Its TBAA tag, debug type and pretty-printers are deferred to stage 2b.\n\nThe marker is refused with a diagnostic where C, Node or the layout rules would read the class:\n- a header or N-API build (NL4021)\n- a class exported to C or N-API (NL4020)\n- a `declare class` (NL2795), or a field of a declare class (NL2796)\n- a class holding a `Secret` (NL2797)\n- a generic class (NL2798)\n\nwasm32 builds, host page modules and ASAN builds compile the marker to today's IR. A program without the marker is unchanged byte for byte: nish-cmp shows no undeclared differences and declares none.\n\n`Wide` is declared for stage 3, when the compiler picks compact classes itself.",
+      "metrics": [
+        "bench/goose/tree.ts n = 24, 21 interleaved rounds, TNode implements Compact against the stage-0 prototype IR: peak RSS 385.5 MB vs 385.5 MB (0.0%), wall 1675.7 ms vs 1690.8 ms (-0.9%); against uncompressed ptr 0.50x RSS and 0.69x wall; noise band median 3.5% (ptr vs ptr-copy)"
+      ],
+      "refs": [
+        "docs/wp48-ref32-classes.md",
+        "docs/roadmap/wp48-ref32-classes.md"
+      ],
+      "tests": [
+        "tests/cases/compact_*",
+        "tests/link/compact_*",
+        "tests/wordings/nl2795..nl2798",
+        "nl4020",
+        "nl4021",
+        "tests/module-storage/persist/compact-chain.ts"
+      ],
+      "commits": [
+        "1673f40"
+      ],
+      "pr": 1744,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "hold-a-ci-lane-s-read-set-to",
+      "type": "docs",
+      "breaking": false,
+      "title": "hold a CI lane's read set to what its commands read",
+      "body": "scripts/ci-scope.mjs lets a side job skip when a pull request changes nothing\nthe job reads. Review of #1746 found three hand-listed read sets that missed a\nfile their job opens: cli.ts's fixtures for bootstrap, tests/self for\npostgres-live, tests/runtime/range-test.c for fuzz-smoke. The 60-PR backtest\ncaught none of them, because it can only see lanes whose jobs failed in its\nsample. The rule asks for the trace and a per-command test instead.",
+      "metrics": [],
+      "refs": [
+        "#1746",
+        "#1734",
+        "docs/wp10-ci.md#scoped-lanes"
+      ],
+      "tests": [],
+      "commits": [
+        "792a433"
+      ],
+      "pr": 1751,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "report-generic-class-instantiations-in-explain-layout-1756",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "report generic class instantiations in --explain-layout",
+      "body": "Each instantiation of a generic class is now a candidate class for the\ncompact-class rule's five tests and gets its own --explain-layout line,\nnamed as written in a type (TNode<i32>) at the generic class's\ndeclaration, marked (std) when std declares it. Fields typed exactly the\ninstantiation or it | null count as links and holders, and new Box<T>(...)\nrecords a made-site and constructor edge. Analysis only: no program's IR\nchanges.\n\nscripts/layout-survey.mjs writes docs/wp48-layout-survey.txt, the raw\n--link --explain-layout report over src/compile.ts and the nish-cmp corpus\nprograms with a main, naming those left out for having none. The\nexplain-layout test now compares the --emit-ts output and the interop\nsidecars with and without the flag, and removes its temp directory in a\nfinally.\n\nFixes #1745",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e12922b"
+      ],
+      "pr": 1756,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "widen-narrow-c-arguments-and-results-with-zeroext",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "widen narrow C arguments and results with zeroext",
+      "body": "A declare function with a u8, u16 or boolean parameter or return was emitted without zeroext at the declaration and at each call, so a clang-built C callee on x86-64 SysV or Apple arm64 read stale upper bits (toU8(511) arrived as 511). Every narrow (i1/i8/i16) foreign parameter and result now carries zeroext at both sites, including wasm --host calls.\n\nTests: tests/cases/ffi_narrow_zeroext\nFixes #1755",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4d0faa4"
+      ],
+      "pr": 1758,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    }
+  ]
+}

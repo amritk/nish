@@ -292,6 +292,14 @@ export class Diagnostic {
    * applies it. Empty everywhere but a portability row that knows one.
    */
   review: Edit[]
+  /**
+   * Lines printed under the excerpt as `= <note>` and in `--json` as
+   * `notes`: what the report adds to its message, such as the WP28
+   * compatibility feature that would accept a refused construct
+   * (`CheckContext.errorFeature`). Empty everywhere else, so every other
+   * report prints as it always has.
+   */
+  notes: string[]
 
   constructor(source: SourceFile, start: i32, end: i32, kind: string, text: string) {
     this.source = source
@@ -303,6 +311,7 @@ export class Diagnostic {
     this.column = source.columnOf(start)
     this.edits = []
     this.review = []
+    this.notes = []
   }
 
   /**
@@ -404,8 +413,15 @@ export class Diagnostic {
 
   /** `message`, painted by `style` (`summary`, `excerpt`, and `note` for a dependency's file). */
   styledMessage(style: Style): string {
-    const report = `${this.summary(style)}\n${this.excerpt(style)}`
-    return this.source.dependency.length > 0 ? `${report}\n${this.note(style)}` : report
+    const lines: string[] = [`${this.summary(style)}\n${this.excerpt(style)}`]
+    const marker = style.faint("=")
+    for (const note of this.notes) {
+      lines.push(`  ${marker} ${paintText(style, note)}`)
+    }
+    if (this.source.dependency.length > 0) {
+      lines.push(this.note(style))
+    }
+    return lines.join("\n")
   }
 
   /**
@@ -436,7 +452,8 @@ export class Diagnostic {
    * `fix` on the same terms, so a line without review edits is unchanged too.
    * `package` sits between `message` and the edits, and only for a diagnostic
    * in a dependency's file (WP21 S3): the dependency's name, so a tool can tell
-   * the program's own errors from the ones it can only report upstream. Each
+   * the program's own errors from the ones it can only report upstream.
+   * `notes` comes before it, and only when the diagnostic has any. Each
    * edit is placed the way the diagnostic is — 1-based, columns in UTF-16 code
    * units, the end exclusive.
    */
@@ -447,7 +464,19 @@ export class Diagnostic {
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.packageJson()}${this.editsJson("fix", this.edits)}${this.editsJson("review", this.review)}}`
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.notesJson()}${this.packageJson()}${this.editsJson("fix", this.edits)}${this.editsJson("review", this.review)}}`
+  }
+
+  /** `,"notes":[...]` for `json()`, or `""` when there are none. */
+  notesJson(): string {
+    if (this.notes.length === 0) {
+      return ""
+    }
+    const quoted: string[] = []
+    for (const note of this.notes) {
+      quoted.push(jsonQuote(note))
+    }
+    return `,"notes":[${quoted.join(",")}]`
   }
 
   /** `,"package":"<name>"` for `json()` when the file is a dependency's, or `""`. */

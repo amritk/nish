@@ -34,6 +34,8 @@ export class TbaaCache {
   char: string
   /** `!N` of each value type's scalar node, by `TypeTable` id; `""` where not yet interned. */
   scalars: string[]
+  /** `!N` of the `ref32` node a compact link's accesses hang off, or `""` before the first. */
+  ref32: string
   /** Class name -> index into `structs` and `structNodes`. */
   structIndex: StringMap
   structs: StructInfo[]
@@ -43,6 +45,7 @@ export class TbaaCache {
   constructor() {
     this.char = ""
     this.scalars = []
+    this.ref32 = ""
     this.structIndex = new StringMap()
     this.structs = []
     this.structNodes = []
@@ -84,6 +87,29 @@ const scalarNode = (emitter: Emitter, type: i32): string => {
 }
 
 /**
+ * The scalar node of a compact class's link (WP48): a 32-bit offset that is
+ * neither an `i32` value nor a pointer, so a sibling of both under the root
+ * rather than a child of `i32` — a store to an `i32` field cannot clobber a
+ * link, nor a link store an `i32`. That is sound because Nish IR writes a
+ * link slot only through `storeField`'s encode and reads it only through
+ * `loadField`'s decode, both tagged here (or both untagged, where `fieldTbaa`
+ * answers `""`); a whole-record copy is an untagged `llvm.memcpy`, and a call
+ * is opaque to TBAA. Interned on the first link, so a program without one
+ * emits no new node and its IR does not move.
+ */
+const ref32Node = (emitter: Emitter): string => {
+  const cache = emitter.tbaa
+  if (cache.ref32.length === 0) {
+    cache.ref32 = emitter.metadata(`!{!"ref32", ${charNode(emitter)}, i64 0}`)
+  }
+  return cache.ref32
+}
+
+/** The scalar node an access of `field` hangs off: `ref32` for a link, else its type's. */
+const fieldScalar = (emitter: Emitter, field: FieldInfo): string =>
+  field.link ? ref32Node(emitter) : scalarNode(emitter, field.type)
+
+/**
  * `!{!"Body", <double>, i64 0, <double>, i64 8, ...}`: the whole layout, in
  * offset order. Remembered by name for the `StructInfo` it was built from:
  * another layout under the same name is built afresh rather than trusted.
@@ -113,8 +139,9 @@ const buildStructNode = (emitter: Emitter, info: StructInfo): string => {
     // array's header and slots, read and written only through `headerTbaa`
     // and `elementTbaa` tags, never through a field access of this class.
     if (!field.inline() && !field.boxed) {
-      // Interned in stage0's order, so the two compilers number the nodes alike.
-      members = `${members}, ${scalarNode(emitter, field.type)}, i64 ${field.offset}`
+      // Interned in stage0's order, so the two compilers number the nodes
+      // alike. A compact link sits at its 4-byte offset under `ref32`.
+      members = `${members}, ${fieldScalar(emitter, field)}, i64 ${field.offset}`
     }
     i = i + 1
   }
@@ -138,7 +165,7 @@ export const fieldTbaa = (emitter: Emitter, info: StructInfo, field: FieldInfo):
     return ""
   }
   const base = structNode(emitter, info)
-  const scalar = scalarNode(emitter, field.type)
+  const scalar = fieldScalar(emitter, field)
   return `, !tbaa ${emitter.metadata(`!{${base}, ${scalar}, i64 ${field.offset}}`)}`
 }
 

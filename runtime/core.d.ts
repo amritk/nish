@@ -8,6 +8,22 @@ export * from "./core/numbers.js";
 export * from "./core/result.js";
 export * from "./core/strings.js";
 
+// `nish:compact`: what `--emit-ts` writes for a program's `import ... from "nish:compact"`.
+
+/**
+ * The marker a class implements to store its links as 32-bit offsets in a
+ * native build. It has no members, so `implements Compact` adds nothing a
+ * TypeScript checker sees.
+ */
+export interface Compact {}
+/** The value `core.mjs` exports under the marker's name, so an emitted import of it resolves. */
+export declare const Compact: Compact;
+
+/** Reserved for WP48 stage 3, which lets a class refuse the compiler's choice. */
+export interface Wide {}
+/** The value `core.mjs` exports under the reserved marker's name. */
+export declare const Wide: Wide;
+
 // `nish:simd`: what `--emit-ts` writes for a program's `import ... from "nish:simd"`.
 import type { f32, f64, i32, u16, u32, u8 } from "./core/numbers.js";
 

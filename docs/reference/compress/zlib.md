@@ -85,14 +85,14 @@ Written from RFC 1950.
 alone.
 
 ```ts
-function zlibCompress(
+const zlibCompress: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   level: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -144,14 +144,14 @@ The index in `out` one past the stream's last byte, or
 alone.
 
 ```ts
-function zlibDecompress(
+const zlibDecompress: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   limit: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>

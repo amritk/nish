@@ -101,9 +101,15 @@ permissions:
   # gh attestation verify, for the seed scripts/fetch-seed.sh checks.
   attestations: read
 
+# ci.yml's rule: a newer push to a pull request, or a newer ordinary merge to
+# main, cancels the run it replaces. The Release PR's merge and re-runs on main
+# get a group of their own and are never cancelled; release.yml's call runs at
+# the tag's ref and is untouched. ci.yml's `concurrency` comment says why.
 concurrency:
-  group: interop-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    interop-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
 #
 # Every Ubuntu install goes through .github/actions/apt-install, which points
@@ -710,7 +716,10 @@ jobs:
           NISH_REQUIRE_ATTESTATION: "1"
         run: |
           bash scripts/fetch-seed.sh
-          build/seed/bin/nish src/compile.ts --link build/nish
+          # src/ may panic on purpose: `--allow-panics` when the seed lists it.
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/seed/bin/nish
+          build/seed/bin/nish ${allow_panics[@]+"${allow_panics[@]}"} src/compile.ts --link build/nish
           node --no-warnings examples/wasm-arena/build.mjs --nish build/nish --out build/arena
           ls -l build/arena/web
 

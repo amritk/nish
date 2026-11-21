@@ -560,16 +560,17 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
   rather than the source (`tests/self/goldens/checked/`, one file per module).
-- **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
-  or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
+- **The import is the opt-in the no-panic scope takes.** In the scope — every
+  module of the package by default, the `"nish".noPanic` list under
+  `--allow-panics` — `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](semantics-decisions.md#the-no-panic-scope),
   `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
   its pointer for `NULL`, an `ffi-null` site no proof removes
   (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
-  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
-  refuses a call to either in its scope. The
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so the scope
+  refuses a call to either. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -1400,6 +1401,99 @@ integers, and is an intrinsic emitted into the program, so it needs no runtime
 function and works wherever the program's IR does. Key material belongs in a
 `Secret`, and `secureZero` is for bytes that never were one.
 
+## Compact classes
+
+`class R implements Compact` (`import { Compact } from "nish:compact"`)
+stores every field typed exactly `R` or `R | null` — a *link*, in `R` itself
+or in any other class — as a 32-bit offset into the one address range the
+arena reserves, where a plain class stores a 64-bit pointer. A list or tree
+node of an `i32` and two links is 12 bytes instead of 24, so twice as many fit
+in a cache line.
+
+```ts
+import { Compact } from "nish:compact"
+
+class Cell implements Compact {
+  value: i32
+  next: Cell | null
+  constructor(value: i32, next: Cell | null) {
+    this.value = value
+    this.next = next
+  }
+}
+```
+
+- **Only a link moves.** A local, a parameter, a return, an array element, a
+  `Map` key or value, and a field whose type is a wider union all stay full
+  pointers. A load of a link widens it back to a pointer and a store narrows
+  it; what the program reads and prints is the same as without the marker
+  (`compact_list`).
+- **The class's own layout follows its fields.** A compact class whose fields
+  are all 4 bytes or narrower is 4-aligned and rounded to 4, so `Cell` is 8
+  bytes; one with a `string` or an `f64` keeps 8. Its objects are allocated
+  in the range and never on the stack.
+- **Where a pointer is already 4 bytes, nothing moves.** On wasm32
+  (`--profile wasi`, `--target wasm32`), in a page module built for the host
+  with `--emit-dts` (it runs on the wasm runtime, whose root trace reads each
+  link as a pointer: `compact_root_page`), and under `NISH_ASAN`, the marker
+  compiles to the IR the class has without it.
+- **The marker changes nothing under Node.** Type stripping removes the
+  `implements Compact` clause, and the `nish:compact` import resolves to the
+  frozen values `runtime/core.mjs` exports, so the program runs unmodified
+  there.
+- **A generic field instantiated as exactly a compact class is narrowed.**
+  `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
+  interface view of the field and its implementer agree on the layout.
+- **A C host reaches a compact class only through a handle.** A
+  `--emit-header` build keeps every class that holds a link opaque
+  (`typedef struct Cell Cell;`): the compact class, a class with a field of
+  it, and an instantiation such as `Box<Cell>`. An export takes and returns
+  one as a full `struct Cell *`. The C host links the range runtime
+  (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
+  default runtime a program fails to link as soon as one of its modules
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
+  shared library another process loads is not supported.
+- **A compact class is refused where Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-napi` or
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and each
+  constructor and method of an exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
+  `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
+  `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
+  through a full pointer (NL2797, `compact_reject_secret`); and as a generic
+  class, whose instantiations keep full-pointer links (NL2798,
+  `compact_reject_generic`).
+
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2819, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
+
+Reference: [`nish:compact`](../nish-compact.md).
+
 ## Regions: `nish:region`
 
 A region is memory a program frees when it says so: an arena of its own,
@@ -1523,7 +1617,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   panic and never a double free. A child's handle is dead once its parent is
   freed (`tests/link/region_child_stale`), and `child` with no region entered
   stops the program. Each call
-  is a `region` site under [`--deny-panics`](semantics-decisions.md#panic-sites)
+  is a `region` site the [no-panic scope](semantics-decisions.md#the-no-panic-scope) refuses
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
 - A program run under Node as it is written (`runtime/nish.mjs`) gets a
@@ -3792,7 +3886,7 @@ default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
 message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
 `slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
-proof at the call removes, and `--deny-panics` refuses it
+proof at the call removes, and the no-panic scope refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,
@@ -4485,7 +4579,8 @@ export const main = (): i32 => {
     one whose left operand is neither is refused in the words Phase 0 always
     used,
     `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-    (`reject_nullish`, `reject_nullish_nullable`).
+    (`reject_nullish`, `reject_nullish_nullable`), which the `nullish`
+    feature of [the compatibility dialect](semantics-decisions.md#the-compatibility-dialect) admits.
   - **Everywhere else a maybe is refused**, and the message names the place,
     because the rewrite differs by place. Some fail under `tsc` too (an
     operand, a `const` annotated `V`); the rest are legal TypeScript that this
@@ -4833,7 +4928,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program
@@ -5185,7 +5281,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities`, `host`, `compat` and `netRings` — is NL3036
+  than `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as

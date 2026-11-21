@@ -225,8 +225,7 @@ function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): 
   callee +0:21 slotWord -> @nish.slotWord
   callee +2:5 fileEntry -> @nish.fileEntry
 function Map<i64, Region<Session>>.constructor(this: Map<i64, Region<Session>>): void -> @nish.Map$i64$rgn.$Session.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Map<i64, Region<Session>>.probe(this: Map<i64, Region<Session>>, key: i64): i64 -> @nish.Map$i64$rgn.$Session.probe [exported method instance]
@@ -355,7 +354,7 @@ function Map<i64, Region<Session>>.reserveSlots(this: Map<i64, Region<Session>>,
 function probeTable<i64>(slots: u32[], mask: i32, hashes: u32[], keys: i64[], key: i64): i64 -> @nish.probeTable$i64 [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key mask
-  calls: nish.absentAt nish.foundAt nish.hashKey$i64 nish.homeBucket nish.sameKey$i64 nish_panic nish_panic_overflow
+  calls: nish.absentAt nish.foundAt nish.hashKey$i64 nish.homeBucket nish.sameKey$i64 nish_panic
   pointer slots: size=0 writesThrough=false captured=false
   pointer hashes: size=0 writesThrough=false captured=false
   pointer keys: size=0 writesThrough=true captured=false

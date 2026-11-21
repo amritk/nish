@@ -1,0 +1,7 @@
+{
+  "name": "compat-overloads-constructor-no-match",
+  "private": true,
+  "nish": {
+    "compat": ["overloads"]
+  }
+}
