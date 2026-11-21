@@ -186,6 +186,14 @@ that skipping is safe. `node tests/run.js ci-scope` runs the replay and
 pins every case that must run everything, and `node tests/run.js ci.yml` pins
 the lanes the `test` job delegates to.
 
+`interop.yml` is scoped by GitHub, not by this script: a pull request runs it
+only when a changed file matches its `pull_request.paths`. Those paths are its
+read set, so the same rule applies to them. `ci-scope.mjs`'s `workflowPaths`
+reads the list, and `node tests/run.js ci-scope` fails when a file the `grpc`
+job opens is not on it (WP72 S4). That covers the workflow, the files
+`server.dockerfile` copies in for the gRPC server, `tests/interop/grpc/`, and
+the server's sources, followed through every relative and `nish/` import.
+
 ### Shards and time limits
 
 Every job stops at 15 minutes (`timeout-minutes`) but `test` (25),

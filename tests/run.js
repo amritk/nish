@@ -42319,6 +42319,55 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       sanitizeStep.indexOf("set -o pipefail") < sanitizeStep.indexOf("node tests/run.js runtime_sanitize"),
     `runtime_sanitize step:\n${sanitizeStep || "(not found)"}`
   )
+  // WP72 S4: interop.yml runs on a pull request only when a changed file
+  // matches its `paths`, so every file its `grpc` job opens must: the
+  // workflow, what server.dockerfile copies in for the gRPC server, the
+  // check script and proto it runs, and the server's sources, followed
+  // through every relative and `nish/` import (std/net and std/crypto are on
+  // the list whole). The build job's own reads (scripts/, src/, runtime/)
+  // are the `build` job's, shared with every other job here.
+  const interopYml = fs.readFileSync(path.join(root, ".github", "workflows", "interop.yml"), "utf8")
+  const interopPaths = ciScope.workflowPaths(interopYml)
+  const sourcesOf = (file, seen = new Set()) => {
+    if (seen.has(file) || !fs.existsSync(path.join(root, file))) {
+      return seen
+    }
+    seen.add(file)
+    const text = fs.readFileSync(path.join(root, file), "utf8")
+    for (const m of text.matchAll(/^import [^"]*"(\.\.?\/[^"]+|nish\/[^"]+)"/gm)) {
+      const spec = m[1].endsWith(".ts") ? m[1] : `${m[1]}.ts`
+      sourcesOf(
+        spec.startsWith("nish/")
+          ? `std/${spec.slice("nish/".length)}`
+          : path.posix.normalize(path.posix.join(path.posix.dirname(file), spec)),
+        seen
+      )
+    }
+    return seen
+  }
+  const grpcSources = [...sourcesOf("tests/link/net_grpc_interop/main.ts")]
+  const grpcReads = [
+    ".github/workflows/interop.yml",
+    "tests/interop/server.dockerfile",
+    "tests/interop/run-endpoint.sh",
+    ...filesUnder("tests/interop/grpc"),
+    ...grpcSources,
+  ]
+  const grpcMisses = grpcReads.filter((f) => !ciScope.matches(f, interopPaths ?? []))
+  const grpcJob = ciJob(interopYml, "grpc")
+  const dockerfile = fs.readFileSync(path.join(root, "tests", "interop", "server.dockerfile"), "utf8")
+  check(
+    "interop.yml: every file the `grpc` job opens is on its pull_request paths",
+    interopPaths !== null &&
+      ciScope.workflowPaths("on:\n  push:\n    paths:\n      - \"a/**\"\n") === null &&
+      ["tests/link/net_grpc/rig.ts", "std/net/grpc.ts", "std/testing.ts"].every((f) => grpcSources.includes(f)) &&
+      grpcMisses.length === 0 &&
+      /^ {8}run: tests\/interop\/grpc\/check\.sh /m.test(grpcJob) &&
+      dockerfile.includes("tests/link/net_grpc_interop/main.ts"),
+    `paths: ${JSON.stringify(interopPaths)}\nfiles off them: ${grpcMisses.join(", ") || "none"}\n` +
+      `sources: ${grpcSources.length}`
+  )
+
   // The `runner` job, the whole corpus through the golden runner written in
   // Nish, runs per release rather than per push: on the Release PR, and in
   // the run release.yml makes of this workflow at the tag, which its
