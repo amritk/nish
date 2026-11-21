@@ -9,7 +9,7 @@ stages:
   - id: s6-gate
     title: WP49 S6 — the async entries within the explicit ones' noise band on plaintext, json and db
     goal: Re-run bench/techempower/run.sh unchanged and the async entry is inside the explicit one's band on every judged plaintext, json and db cell, with figures in docs/BENCHMARKS.md and WP49 stage 6 ticked.
-    verification: node tests/run.js net_serve && node tests/run.js tfb && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node tests/nish-cmp.js && npm run check && npm run lint
+    verification: node tests/run.js net_serve && node tests/run.js tfb && node tests/run.js emit-ts && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node tests/nish-cmp.js && NISH=build/nish bash docs/cookbook/regen.sh --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check
     status: pending
     issue: 1637
     related: [1402, 1468, 1509, 1610]
@@ -65,6 +65,9 @@ Five reports, one gap, each a regate after a different build. The newest, #1637,
 - #1637: after the resume build; the async entry still runs about 2,054 more instructions a request than the explicit one on plaintext and 2,425 on json (second task about 425, router about 455 and 348, `serveTask`'s request copy about 378).
 Owner's rules from #1637, unchanged: only changes that help regular serve and Router users; nothing in `bench/techempower/` or `run.sh`; no kept epoll registrations; every answered byte identical; serve invariants and `net_serve_*` and `tfb_async_*` probes hold; public API source-compatible; no judged or recorded cell worse beyond its band. Workers must get `wrk` working before measuring; a new tests/link probe importing `std/net/*` needs its own nish-cmp DECLARED entry. #1637 carries a ready `/feature` prompt.
 Likely files: `std/net/serve.ts`, `std/net/router.ts`, `std/net/handler.ts`, `runtime/runtime-async.c`, `src/emit-async.ts`, `docs/BENCHMARKS.md`.
+
+**Owns:** `src/**` (the construct; `src/` itself may not use it — rolling freeze), `std/net/{serve,router,handler,http1-server}.ts`, `std/async.ts`, `runtime/runtime-async.c`, `runtime/nish.d.ts`, `tests/**` (cases, link probes and negatives, emit-ts fixtures, `tests/run.js`, `tests/nish-cmp.js` DECLARED entries, `tests/runtime-budgets.js`), `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/cookbook/**`, `docs/guide/**`, `docs/BENCHMARKS.md`, `docs/wp49-async-server.md`, `docs/wp33-round-trip.md`, `docs/reference/diagnostics/**`, `docs/security/{async,serve,README}.md`, `scalar.config.json` (guide route only). Not `bench/techempower/**` (owner's rule), not `.claude/**` (CODEOWNERS; the lead updates this plan's statuses).
+Generated (regenerate, never hand-edit): `tests/self/goldens/checked/**`, `docs/reference/**`, `tests/link/*/expected.caps.json`, `tests/differential/emit-ts-known.txt`, `docs/IR_COOKBOOK.md`, `docs/site/break/**`.
 
 ### Decision on the cuts
 Settled by the owner on [#1637](https://github.com/amritk/nish/issues/1637) (2026-11-20, via `/decide`): build **design B**, then regate. A task reads its spawner's slot in place through a borrowed non-growable view, removing `serveTask`'s request copy (about −378 Ir per request). It is a new construct, so it follows the full checklist in [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) → "How to add a construct" and the rolling freeze: `src/` cannot use it until the next release ships it.
