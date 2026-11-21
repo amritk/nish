@@ -16816,6 +16816,13 @@ fails and names the new sites, a module that gains its first site fails, and
 a count that falls fails until the file is rewritten to it with
 `--update-std-panics`, so a fixed site cannot be traded for a new one.
 
+**A change that lands `std/` code updates `tests/std-panics.json` in the
+same PR.** The section runs in CI's `test` shards, so the PR that adds a site
+fails on it and names it. The PR makes the new site proven, or returns the
+failure; a site it keeps, it counts with `--update-std-panics`, and each new
+explicit `panic(...)` either joins `kept` with its reason or raises
+`explicit.toFix`. A PR that removes sites lowers the counts the same way.
+
 **An explicit `panic(...)` in `std/` stays only where the caller broke a
 contract the function's doc states**: an index or range outside an array the
 caller sized, a negative or oversized length, a call the doc rules out. A

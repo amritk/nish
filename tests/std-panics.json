@@ -4,9 +4,9 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9595,
+  "total": 9614,
   "explicit": {
-    "kept": 412,
+    "kept": 418,
     "toFix": 51
   },
   "modules": {
@@ -265,9 +265,9 @@
     "std/net/handler.ts": {
       "array-length": 14,
       "divide": 4,
-      "index": 72,
-      "overflow": 63,
-      "panic": 16,
+      "index": 76,
+      "overflow": 66,
+      "panic": 18,
       "pop": 1,
       "slice": 1
     },
@@ -291,10 +291,10 @@
     "std/net/http-server.ts": {
       "array-length": 21,
       "divide": 5,
-      "index": 185,
+      "index": 186,
       "io-exit": 2,
-      "overflow": 160,
-      "panic": 44,
+      "overflow": 162,
+      "panic": 46,
       "pop": 2,
       "slice": 1
     },
@@ -473,9 +473,9 @@
     },
     "std/net/router.ts": {
       "array-length": 7,
-      "index": 70,
-      "overflow": 50,
-      "panic": 4
+      "index": 72,
+      "overflow": 51,
+      "panic": 6
     },
     "std/net/serve.ts": {
       "array-length": 19,
@@ -1348,6 +1348,11 @@
     },
     {
       "module": "std/net/handler.ts",
+      "function": "HttpHandler.field",
+      "reason": "field requires a request taken and not yet answered, and at most HANDLER_MAX_ADDED fields per answer; a caller sequencing contract and a static cap"
+    },
+    {
+      "module": "std/net/handler.ts",
       "function": "HttpHandler.put",
       "reason": "write requires a started response, an in-buffer window and no more than the declared length; all caller-controlled preconditions"
     },
@@ -1450,6 +1455,11 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServer.end",
       "reason": "response must be started and the declared body length fully written; the caller controls its own response framing"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.field",
+      "reason": "field requires a request taken and not yet answered, and at most HANDLER_MAX_ADDED fields per answer; a caller sequencing contract and a static cap"
     },
     {
       "module": "std/net/http-server.ts",
@@ -1945,6 +1955,11 @@
       "module": "std/net/quic.ts",
       "function": "quicWorkerCheck",
       "reason": "workerIndex and workerCount must satisfy 0 <= k < n <= QUIC_WORKER_MAX; a static caller configuration"
+    },
+    {
+      "module": "std/net/router.ts",
+      "function": "Router.use",
+      "reason": "the step and route ids must be ones the table names; both are static caller values"
     },
     {
       "module": "std/net/router.ts",
