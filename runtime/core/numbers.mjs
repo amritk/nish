@@ -254,8 +254,17 @@ export function convert(x, from, to) {
   if (typeof x === "bigint") {
     if (to === "u64") return BigInt.asUintN(64, x);
     if (to === "i64") return BigInt.asIntN(64, x);
-  } else if (to === "u64" && (from === "u32" || from === "u16" || from === "u8")) {
-    return BigInt(x);
+  } else if (from === "i32" || from === "u32" || from === "u16" || from === "u8") {
+    // An integer `number` source: the 32-bit wrap `|0` / `>>>0` and a mask do
+    // what trunc/sext/zext do, without a BigInt. These are most of a string
+    // walk's conversions (`toI32(bytes[i])`, `toU8(code)`), so they are
+    // answered here rather than one call further down.
+    if (to === "i32") return x | 0;
+    if (to === "u32") return x >>> 0;
+    if (to === "u16") return x & 0xffff;
+    if (to === "u8") return x & 0xff;
+    if (to === "i64") return BigInt(x);
+    if (to === "u64" && from !== "i32") return BigInt(x);
   }
   return convertOther(x, from, to);
 }
@@ -268,14 +277,6 @@ function convertOther(x, from, to) {
     if (narrow !== undefined) {
       return Number(narrow.signed ? BigInt.asIntN(narrow.bits, x) : BigInt.asUintN(narrow.bits, x));
     }
-  } else if (from === "i32" || from === "u32" || from === "u16" || from === "u8") {
-    // An integer `number` source narrowed to a `number` kind: the 32-bit wrap
-    // `|0` / `>>>0` and a mask do what trunc/sext/zext do, without a BigInt.
-    if (to === "i32") return x | 0;
-    if (to === "u32") return x >>> 0;
-    if (to === "u16") return x & 0xffff;
-    if (to === "u8") return x & 0xff;
-    if (to === "i64") return BigInt(x);
   }
   const num = typeof x === "bigint" ? Number(x) : x;
   if (to === "f64") return num; // sitofp / uitofp / fpext
