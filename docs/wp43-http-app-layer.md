@@ -325,8 +325,9 @@ slower; it is not claimed as faster.
 
 Stage 4's `deflate` is built: `HttpCompressor.compress`, `compressAnyway` and
 `Http1Connection.respondEncoded` send `HTTP_CODING_DEFLATE` as the zlib format
-(RFC 1950, RFC 9110 §8.4.1.2), so the "`deflate` as a coding ... not" in §4
-holds now only of request bodies. The compressor runs its two gzip encoders
+(RFC 1950, RFC 9110 §8.4.1.2), and `HttpHandler` decodes a zlib `deflate`
+request body under its limit, so `deflate` is built for response and request
+bodies alike. The compressor runs its two gzip encoders
 and reframes the member in place (a 2-byte header for the 10, an Adler-32 for
 the CRC-32 and length), so it holds no second set of tables, at the cost of a
 CRC-32 computed and dropped per deflate body; the result is 12 bytes shorter
@@ -437,11 +438,12 @@ COMP-18, HANDLER-16 and HANDLER-17.
   other coding, two codings, or two fields pass the body through as it
   arrived, with `decodedFrom` left `HTTP_CODING_IDENTITY` and the
   `Content-Encoding` field still set; a program that will not take such a
-  body answers 415 when the field is there and `decodedFrom` is identity
-  (HANDLER-17). `deflate` is the zlib-wrapped stream only; raw deflate is
+  body answers 415 when `decodedFrom` is identity and `httpContentEncoding`
+  on a `Content-Encoding` field gives anything but `HTTP_CODING_IDENTITY`
+  (HANDLER-17); a field of only `identity` is a plain body. `deflate` is the zlib-wrapped stream only; raw deflate is
   answered 400.
-- **`HttpServer` and `serve()` do not decode yet.** The façade over
-  HTTP/1.1, 2 and 3 and `nish/net/serve` hand a body over as sent; giving it the same decoder is later work.
+- **`HttpServer` and `serve()` do not decode yet.** `nish/net/serve`
+  (HTTP/1.1) and the façade (every version) hand a body over as sent; giving it the same decoder is later work.
 
 ### Measured
 

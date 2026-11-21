@@ -392,11 +392,13 @@ Any other coding (`br`, `zstd`), or two stacked (`gzip, gzip`), is not decoded:
 the body reaches your program as it arrived, with `decodedFrom`
 `HTTP_CODING_IDENTITY` and its `Content-Encoding` field in the head for you to
 read or refuse. Since a decoded request keeps that field too, a program that
-wants an unknown coding refused answers 415 itself when the request has a
-`Content-Encoding` field and `decodedFrom` is `HTTP_CODING_IDENTITY`.
+wants an unknown coding refused answers 415 itself when `decodedFrom` is
+`HTTP_CODING_IDENTITY` and `httpContentEncoding` on a `Content-Encoding`
+field gives anything but `HTTP_CODING_IDENTITY`. A field of only `identity`
+names no coding: that body is plain, so do not refuse it.
 
-Only `HttpHandler` decodes. `serve()` (`nish/net/serve`) and `HttpServer`
-(`nish/net/http-server`), on every HTTP version, hand a gzip body to your
+Only `HttpHandler` decodes. `serve()` (`nish/net/serve`, HTTP/1.1) and
+`HttpServer` (`nish/net/http-server`, every version) hand a gzip body to your
 program compressed, as it arrived; their requests have no `decodedFrom`.
 
 To decode a body yourself, outside the handler, `HttpBodyDecoder` from
