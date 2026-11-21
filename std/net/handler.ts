@@ -65,6 +65,15 @@
  * buffer grows to the body it holds, so a handler holds at most its slots
  * times the cap in bodies. `docs/security/handler.md` is the record.
  *
+ * **A compressed body is decoded under its own cap.** A body sent with one
+ * `Content-Encoding` of `gzip`, `x-gzip` or `deflate` is decoded before the
+ * program takes it, into at most `HandlerLimits.maxDecoded` bytes (one MiB):
+ * `req.body` holds the decoded bytes and `req.decodedFrom` the coding they
+ * came in. A body that decodes past the cap — a decompression bomb — is
+ * answered 413 by the handler, and one that does not decode 400; the program
+ * never takes either. Any other coding, or two codings stacked, reaches the
+ * program as it arrived, with `decodedFrom` `HTTP_CODING_IDENTITY`.
+ *
  * Misuse — a status outside 200 to 599, a reserved field (`Content-Length`,
  * `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`), more body than
  * the length said, a second `start` — panics: it is a bug in the program,
@@ -114,6 +123,15 @@ import {
   pollWait,
   tcpListenFlags,
 } from "nish:net"
+import {
+  HTTP_CODING_DEFLATE,
+  HTTP_CODING_GZIP,
+  HTTP_CODING_IDENTITY,
+  HTTP_CODING_NONE,
+  HTTP_DECODE_TOO_LARGE,
+  HttpBodyDecoder,
+  httpContentEncoding,
+} from "nish/net/http-compress"
 
 /** An answer sent, or queued to be sent. */
 export const HANDLER_SENT: i32 = 0
@@ -208,11 +226,18 @@ export class HandlerLimits {
    * to a second, or until `wait` returns.
    */
   bodyTimeout: i32 = 30000
+  /**
+   * The most bytes a `gzip` or `deflate` request body may decode to; past it
+   * the request is answered 413 and never taken. 0 decodes nothing, so every
+   * body reaches the program as it arrived. Each slot's body buffer may grow
+   * to this as well as to `http.maxBody`.
+   */
+  maxDecoded: i32 = HANDLER_ONE_MIB
 
   /**
    * The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30
-   * second body timeout, and the carrier's own defaults with the body cap
-   * lowered to one MiB. Change a field after construction to tune one.
+   * second body timeout, a one MiB cap on a decoded body, and the carrier's
+   * own defaults with the body cap lowered to one MiB. Change a field after construction to tune one.
    */
   constructor() {
     this.http = new Http1Config()
@@ -296,6 +321,17 @@ export class HttpRequest {
   headerCount: i32 = 0
   /** How many bytes of `body` are the request's body, 0 for none; read the body as `body[0 .. bodyLength)`. */
   bodyLength: i32 = 0
+  /**
+   * The content coding the handler decoded `body` from: `HTTP_CODING_GZIP`
+   * or `HTTP_CODING_DEFLATE`, or `HTTP_CODING_IDENTITY` for a body that is
+   * as it arrived. Its `Content-Encoding` field is kept in `head` either way.
+   */
+  decodedFrom: i32 = 0
+  /**
+   * The status the handler answers in the program's place, 413 or 400, or 0.
+   * @internal Set by `HttpHandler` in this module when a body does not decode, and answered by `ready`.
+   */
+  refusal: i32 = 0
   /** The connection's slot, and its generation when this request was read. */
   slot: i32 = 0
   /**
@@ -596,6 +632,10 @@ export class HttpHandler {
   private allowBytes: u8[][]
   private jsonType: u8[]
   private problemType: u8[]
+  /** Decodes `gzip` and `deflate` bodies under `HandlerLimits.maxDecoded`. */
+  private decoder: HttpBodyDecoder
+  /** `HandlerLimits.maxDecoded`, 0 to decode nothing. */
+  private maxDecoded: i32 = 0
   private noFields: u8[][]
   /** Per length: the array `start` gathers an answer's fields and the fields `field` added into, kept for the answers after. */
   private namesBy: u8[][][]
@@ -654,6 +694,11 @@ export class HttpHandler {
         `HttpHandler: slots ${limits.slots}, jsonBytes ${limits.jsonBytes}, maxEvents ${limits.maxEvents} and bodyTimeout ${limits.bodyTimeout} need at least 1, 256, 1 and 1`
       )
     }
+    if (limits.maxDecoded < 0) {
+      panic(`HttpHandler: maxDecoded ${limits.maxDecoded} is negative`)
+    }
+    this.maxDecoded = limits.maxDecoded
+    this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
     this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
     this.server = new Http1Server(limits.http, listener, limits.slots)
     this.router = router
@@ -986,6 +1031,8 @@ export class HttpHandler {
     r.targetStart = p.targetStart
     r.targetEnd = p.targetEnd
     r.bodyLength = 0
+    r.decodedFrom = HTTP_CODING_IDENTITY
+    r.refusal = 0
     r.slot = slot
     r.gen = this.slotGen[slot]
     r.since = this.turnAt
@@ -1062,11 +1109,45 @@ export class HttpHandler {
       return
     }
     const r: HttpRequest = this.requests[at]
+    this.decode(r)
     if (this.roomy(conn)) {
       this.enqueue(r)
     } else {
       r.state = HANDLER_PARKED
     }
+  }
+
+  /**
+   * Decodes `r`'s body when its one `Content-Encoding` is gzip or deflate,
+   * swapping the decoded bytes in as its body; a body that decodes past
+   * `maxDecoded`, or not at all, is marked for `ready` to refuse.
+   */
+  private decode(r: HttpRequest): void {
+    if (this.maxDecoded === 0 || r.bodyLength === 0) {
+      return
+    }
+    let coding: i32 = HTTP_CODING_IDENTITY
+    for (let i: i32 = 0; i < r.headerCount; i++) {
+      if (handlerSpanIs(r.head, r.spans[4 * i], r.spans[4 * i + 1], "content-encoding")) {
+        const named: i32 = httpContentEncoding(r.head, r.spans[4 * i + 2], r.spans[4 * i + 3])
+        // A second field stacks its codings on the first's (RFC 9110 §5.3).
+        coding = coding === HTTP_CODING_IDENTITY ? named : HTTP_CODING_NONE
+      }
+    }
+    if (coding !== HTTP_CODING_GZIP && coding !== HTTP_CODING_DEFLATE) {
+      return
+    }
+    const got: i32 = this.decoder.decode(coding, r.body, HANDLER_ZERO, r.bodyLength)
+    if (got < 0) {
+      r.refusal = got === HTTP_DECODE_TOO_LARGE ? toI32(413) : toI32(400)
+      return
+    }
+    // The buffers change hands, so neither is copied or grown twice.
+    const decoded: u8[] = this.decoder.output
+    this.decoder.output = r.body
+    r.body = decoded
+    r.bodyLength = got
+    r.decodedFrom = coding
   }
 
   private enqueue(r: HttpRequest): void {
@@ -1224,18 +1305,30 @@ export class HttpHandler {
   // ---- Requests -------------------------------------------------------------------
 
   /**
-   * Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here.
+   * Whether a whole request is waiting for `take`. Requests whose connection
+   * closed while queued are handed back here, and a body that decoded past
+   * `maxDecoded` (413) or did not decode (400) is answered here.
    * @returns true when `take` will give out a request whose connection is still open
    */
   ready(): boolean {
     while (this.queueCount > 0) {
       const r: HttpRequest = this.requests[this.queue[this.queueStart]]
-      if (this.live(r)) {
+      const live: boolean = this.live(r)
+      if (live && r.refusal === 0) {
         return true
       }
       this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
       this.queueCount -= 1
-      this.release(r)
+      if (live) {
+        r.state = HANDLER_HELD
+        if (r.refusal === 413) {
+          this.problem(r, toI32(413), "Content Too Large", "the body decodes to more than this server takes")
+        } else {
+          this.problem(r, toI32(400), "Bad Request", "the body is not in the coding its Content-Encoding names")
+        }
+      } else {
+        this.release(r)
+      }
     }
     return false
   }

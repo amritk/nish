@@ -80,9 +80,10 @@
  * output buffer of `compressBound(maxLength)` bytes and
  * the field arrays `addFields` fills, all built once.
  */
-import { DEFLATE_FAST, compressBound } from "nish/compress/deflate"
+import { DEFLATE_ERR_OUTPUT_LIMIT, DEFLATE_FAST, compressBound } from "nish/compress/deflate"
 import { adler32 } from "nish/compress/checksum"
-import { GzipCompressor, GzipFixedCompressor } from "nish/compress/gzip"
+import { GzipCompressor, GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
+import { ZlibDecompressor } from "nish/compress/zlib"
 import { wrappingAdd } from "nish:unsafe"
 
 /** No content coding: the body as it is. */
@@ -885,3 +886,152 @@ export class HttpCompressor {
  *   other setting at its default
  */
 export const httpCompressorDefault = (): HttpCompressor => new HttpCompressor(DEFLATE_FAST, 1024, 1048576)
+
+/**
+ * The content coding a `Content-Encoding` value `buf[start .. end)` names
+ * (RFC 9110 §8.4): `HTTP_CODING_GZIP` for `gzip` or `x-gzip`,
+ * `HTTP_CODING_DEFLATE` for `deflate`, `HTTP_CODING_IDENTITY` for an empty
+ * value or `identity`, ignoring case, optional whitespace and empty list
+ * elements. Anything else — an unknown coding, a byte no coding holds, or
+ * two codings applied one over the other — is `HTTP_CODING_NONE`, which a
+ * reader cannot undo in one step. A window outside `buf` panics.
+ * @param buf the bytes that hold the field value
+ * @param start where the value starts in `buf`
+ * @param end where the value ends in `buf`, one past its last byte
+ * @returns the one coding named, `HTTP_CODING_IDENTITY` for none, or `HTTP_CODING_NONE`
+ */
+export const httpContentEncoding = (buf: u8[], start: i32, end: i32): i32 => {
+  if (start < 0 || start > end || end > toI32(buf.length)) {
+    panic("httpContentEncoding: the window lies outside its buffer")
+  }
+  let coding: i32 = HTTP_CODING_IDENTITY
+  let p: i32 = start
+  while (p < end) {
+    while (p < end && (httpOws(toI32(buf[p])) || buf[p] === 44)) {
+      p += 1
+    }
+    if (p >= end) {
+      break
+    }
+    const codingStart: i32 = p
+    while (p < end && httpCodingChar(toI32(buf[p]))) {
+      p += 1
+    }
+    const codingEnd: i32 = p
+    while (p < end && httpOws(toI32(buf[p]))) {
+      p += 1
+    }
+    if (codingEnd === codingStart || (p < end && buf[p] !== 44)) {
+      return HTTP_CODING_NONE
+    }
+    let named: i32 = HTTP_CODING_NONE
+    if (httpCodingIs(buf, codingStart, codingEnd, "gzip") || httpCodingIs(buf, codingStart, codingEnd, "x-gzip")) {
+      named = HTTP_CODING_GZIP
+    } else if (httpCodingIs(buf, codingStart, codingEnd, "deflate")) {
+      named = HTTP_CODING_DEFLATE
+    } else if (httpCodingIs(buf, codingStart, codingEnd, "identity")) {
+      continue
+    }
+    if (named === HTTP_CODING_NONE || coding !== HTTP_CODING_IDENTITY) {
+      return HTTP_CODING_NONE
+    }
+    coding = named
+  }
+  return coding
+}
+
+/** `HttpBodyDecoder.decode`: the body decodes to more than `limit` bytes. */
+export const HTTP_DECODE_TOO_LARGE: i32 = -1
+/** `HttpBodyDecoder.decode`: the body is not a whole, well-formed stream of its coding. */
+export const HTTP_DECODE_MALFORMED: i32 = -2
+
+/** The first output buffer `HttpBodyDecoder` makes, when its limit allows that many bytes. */
+const HTTP_DECODE_FIRST: i32 = 4096
+
+/**
+ * Decodes a request body sent with `Content-Encoding: gzip` or `deflate`
+ * under a limit on what it decodes to, so a small body that inflates to
+ * gigabytes (a decompression bomb) is refused once `limit` bytes are out,
+ * having cost at most twice that in inflating and `limit` bytes of memory.
+ * The decompressors are built once; `output` grows, doubling, to the
+ * largest body decoded and is kept. Not shared between threads.
+ *
+ *     const d = new HttpBodyDecoder(1 << 20)
+ *     const n: i32 = d.decode(HTTP_CODING_GZIP, body, 0, bodyLength) // d.output[0 .. n), or < 0
+ */
+export class HttpBodyDecoder {
+  /** The most bytes a body may decode to; one more is `HTTP_DECODE_TOO_LARGE`. */
+  readonly limit: i32
+  /**
+   * Where `decode` writes, from index 0. A caller may take the array and
+   * leave another in its place, which `decode` then writes into, or grows
+   * past.
+   */
+  output: u8[]
+  private readonly gunzip: GzipDecompressor
+  private readonly unzlib: ZlibDecompressor
+
+  /**
+   * A decoder that refuses a body decoding to more than `limit` bytes; a
+   * `limit` under 1 panics.
+   * @param limit the most bytes one body may decode to
+   */
+  constructor(limit: i32) {
+    if (limit < 1) {
+      panic(`HttpBodyDecoder: a limit of ${limit} is under 1`)
+    }
+    this.limit = limit
+    this.output = []
+    this.gunzip = new GzipDecompressor()
+    this.unzlib = new ZlibDecompressor()
+  }
+
+  /**
+   * Decodes `src[off .. off + len)`, one body in `coding`, into `output`
+   * from index 0. Another coding than `HTTP_CODING_GZIP` or
+   * `HTTP_CODING_DEFLATE`, or a window outside `src`, panics.
+   * @param coding `HTTP_CODING_GZIP` (one gzip member or several) or `HTTP_CODING_DEFLATE` (a zlib stream)
+   * @param src the array that holds the encoded body
+   * @param off where the body starts in `src`
+   * @param len how many bytes the body is; every one must belong to the stream
+   * @returns how many bytes the body decoded to, `output[0 .. result)`;
+   *   `HTTP_DECODE_TOO_LARGE` past `limit`; or `HTTP_DECODE_MALFORMED` for
+   *   a stream that is cut short, fails its check or has bytes after it.
+   *   After a refusal `output` means nothing.
+   */
+  decode(coding: i32, src: u8[], off: i32, len: i32): i32 {
+    if (coding !== HTTP_CODING_GZIP && coding !== HTTP_CODING_DEFLATE) {
+      panic(`HttpBodyDecoder.decode: coding ${coding} is neither gzip nor deflate`)
+    }
+    if (off < 0 || len < 0 || off > toI32(src.length) - len) {
+      panic("HttpBodyDecoder.decode: the window lies outside its buffer")
+    }
+    const limit: i32 = this.limit
+    // A first guess of four times the input, so most bodies decode at once.
+    let size: i32 = len > (limit >> 2) ? limit : len * 4
+    if (size < HTTP_DECODE_FIRST) {
+      size = limit < HTTP_DECODE_FIRST ? limit : HTTP_DECODE_FIRST
+    }
+    while (true) {
+      if (toI32(this.output.length) < size) {
+        this.output = new Array<u8>(size)
+      }
+      const end: i32 =
+        coding === HTTP_CODING_GZIP
+          ? this.gunzip.decompress(src, off, len, this.output, 0, limit)
+          : this.unzlib.decompress(src, off, len, this.output, 0, limit)
+      if (end >= 0) {
+        return end
+      }
+      if (end !== DEFLATE_ERR_OUTPUT_LIMIT) {
+        return HTTP_DECODE_MALFORMED
+      }
+      const have: i32 = toI32(this.output.length)
+      if (have >= limit) {
+        return HTTP_DECODE_TOO_LARGE
+      }
+      size = have > (limit >> 1) ? limit : have * 2
+    }
+    return HTTP_DECODE_MALFORMED
+  }
+}
