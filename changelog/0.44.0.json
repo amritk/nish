@@ -1,0 +1,1442 @@
+{
+  "version": "0.44.0",
+  "date": "2026-11-21",
+  "tag": "v0.44.0",
+  "range": {
+    "from": "v0.43.0",
+    "to": "11e2bd75d"
+  },
+  "entries": [
+    {
+      "id": "write-code-examples-as-arrow-functions-and-hide",
+      "type": "docs",
+      "breaking": false,
+      "title": "write code examples as arrow functions and hide the nish:ok test markers from the site",
+      "body": "The library reference shows a function as the const arrow binding std/\ndeclares (`const jsonDecode: <T>(d: JsonDecoder, out: T) => i32`), and a\nparameter without the leading `_` that tsc's noUnusedParameters asks of a\nstub the compiler writes the body of.\n\nA guide example's test marker moves out of its fence line, where the docs\nsite showed it as the block's title, into an HTML comment above the fence\n(`<!-- nish:ok -->`); a file of a program of several puts its path after\nthe language, so its title is the file's name. tests/run.js reads the new\nspelling and refuses the old one.\n\nThe examples in docs/guide/, docs/AI.md, docs/LANGUAGE.md and the std/ doc\ncomments declare functions as const arrows, async ones included. A C\nimport keeps `declare function` and a host module `export function`,\nwhich the compiler requires.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3ddba68"
+      ],
+      "pr": 1753,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "make-the-pipelined-pool-s-seats-freed-together",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "make the pipelined pool's seats-freed-together check deterministic",
+      "body": "Section 13 of tests/link/std_postgres_async_pipeline failed about once\nin 80 runs under load. It printed \"over 8 loop turns\" where the bound is 5.\nThe cause was in the async Postgres pool, not in the test.\n\nEvery seat waiting for its turn on a connection waited on one shared\nwake. Epoll woke those waiters in the order they last waited, which was\noften the reverse of answer order. The seat whose turn had come ran last,\nso seats freed together were taken one per loop turn.\n\nEach seat now waits on its own turn lane, `seat % 128`. Any event that\nleaves a turn come rings the lanes of the waiting seats in answer order:\na done, skip, abandon or doom. On Linux, epoll returns distinct\ndescriptors in the order they became ready, so the chain completes in\none loop turn there. kqueue promises no order, and there a seat that\nruns early re-parks.\n\nA pool now holds up to 257 socket pairs: 514 descriptors at size 8 or\nmore, 290 at size 1. Before, it held 2 × (size + 129) descriptors.\ndocs/security/postgres.md records the change.\n\nThe check's bound, its line in expected.out and the test are unchanged.\nNothing is retried or skipped.",
+      "metrics": [
+        "TFB /db req/s (median of 5×10 s, 1 worker, 4 connections, depth 16) vs main at 16/64/256 connections: +6.9%/+2.2%/+1.6%, noise band 16.4%/9.4%/1.7%; /queries?queries=20: +4.2%/+8.1%/+1.7%, band 0.0%/4.4%/7.6%; none below main"
+      ],
+      "refs": [
+        "#1750"
+      ],
+      "tests": [
+        "tests/link/std_postgres_async_pipeline"
+      ],
+      "commits": [
+        "af59ebe"
+      ],
+      "pr": 1766,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "propose-wp66-c-libraries-from-their-headers-1759",
+      "type": "docs",
+      "scope": "interop",
+      "breaking": false,
+      "title": "propose WP66, C libraries from their headers",
+      "body": "A design note for reading a C library's interface from its header instead\nof typing every `declare function` by hand. A `nish c-import` subcommand\nwould run clang on the header and write an ordinary Nish module of\ndeclarations, struct layouts, out-parameter classes and constants, with an\noverride file for what a header cannot say (ownership, nullability, which\ncount goes with which buffer). The note measures a prototype on sqlite3.h,\nzlib.h, png.h and openssl/sha.h, and orders the language stages that would\nbind what is left: opaque classes, fixed-length array fields, buffers paired\nby name, callbacks and linking a library from a package. Its first stage is\nthe zeroext defect in amritk/nish#1755.",
+      "metrics": [],
+      "refs": [
+        "docs/wp66-c-headers.md",
+        "docs/roadmap/wp66-c-headers.md"
+      ],
+      "tests": [],
+      "commits": [
+        "f058770"
+      ],
+      "pr": 1759,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "link-a-wasm32-link-case-natively-in-the",
+      "type": "test",
+      "breaking": false,
+      "title": "link a wasm32 link case natively in the Nish runner too",
+      "body": "#1740 laid a class pointer field out in 4 bytes on wasm32 and taught\ntests/run.js to drop `--target wasm32` before the native link of a link\ncase that runs, since clang swaps in the host datalayout and the program\nthen writes 8-byte pointers into 4-byte slots. tests/nish/run.ts kept\nlinking the wasm32 IR, so std_host_game and break_core_wasm segfaulted\n(exit 139) in \"the golden cases, in Nish\", the job that runs only on a\ntag or release/next, and v0.43.0's Release run stopped at ci-gate.\n\nThe Nish runner now follows the same rule: the native build drops the\ntwo-token `--target wasm32`, and the wasm32 compile is still made and\neach module passed through llvm-as and opt -passes=verify.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_host_game",
+        "tests/link/break_core_wasm"
+      ],
+      "commits": [
+        "0eefa5e"
+      ],
+      "pr": 1768,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "pin-std-line-moves-and-nish-simd-panic",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "pin std/ line moves and nish:simd panic proofs in CLAUDE.md",
+      "body": "Two conventions the simd-test-suite run rediscovered on #1713. An edit that shifts lines in a std/ module moves the std/<file>.ts:LINE:COL positions pinned in expected.caps.json, the wording negatives and the diagnostics reference, which have to be regenerated in the same PR. A nish:simd load is always recorded as an unproven index site, so std/ code reachable from --deny-panics callers does not use one.",
+      "metrics": [],
+      "refs": [
+        "#1713",
+        "#1706"
+      ],
+      "tests": [],
+      "commits": [
+        "0d84269"
+      ],
+      "pr": 1754,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "measure-where-a-minimal-http-1-1-get",
+      "type": "docs",
+      "scope": "bench",
+      "breaking": false,
+      "title": "measure where a minimal HTTP/1.1 GET spends its instructions and bytes",
+      "body": "Measure where a minimal keep-alive GET -> 200 JSON spends its instructions and bytes on Http1Server, to decide whether an opt-in lean Http1Config mode (request line, a few named fields, Content-Length bodies only) is worth building. It is not: widened to every term's noise-band edge, a lean path would save about 446 ns a request, under the 0.5 us bar and 3.7% of the measured server CPU a request at 18,000 connections.\n\ndocs/BENCHMARKS.md gains the section: pinned callgrind instructions and interleaved wall-clock ns for head parse, header spans of unread fields (a 449.5-instruction-a-field slope over 0, 4 and 10 fields), Date, response head and sendBody; bytes per idle and serving connection by object against measured RSS; and per-request user and system time and memory for bench/http1-server.ts and bench/handler-ring at 18,000 connections over epoll and NET_LISTEN_RING, on a route that touches no database. Date stays on every final response: RFC 9110 section 6.6.1 requires it of an origin server with a clock.\n\nbench/http1-request gains the field-count cases and breakdown.mjs, bench/http1-conn gains bytes.ts, and bench/handler-ring gains a --nodb route and an h1 design that runs bench/http1-server.ts under loadgen.\n\nRefs: docs/BENCHMARKS.md#http-lean-get\nPart of #1760",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a4b73d7"
+      ],
+      "pr": 1765,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "plan-wp67-keeping-every-cause-in-an-error",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WP67, keeping every cause in an error chain",
+      "body": "A conversion between error types drops the failure it converts, std folds\ncauses into message text, and expect never prints the error. The plan keeps\ntyped error classes with a cause field for libraries, adds a built-in\nFailure and r.context(message) for applications so that keeping the cause\nis the easy path, makes expect print every link, and makes a dropped cause\na compile error. Owner decisions D1 to D7 are recorded.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d20d4ec"
+      ],
+      "pr": 1774,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "cancel-a-main-run-once-the-next-merge",
+      "type": "ci",
+      "breaking": false,
+      "title": "cancel a main run once the next merge lands, pinning release merges and re-runs",
+      "body": "A push to main's CI and interop runs now share one group per ref and the\nnewest cancels the one it replaces, as pull request runs already did. The\nmerge queue tested each merge's tree before it landed and records which merge\nbroke main, and the next main run runs every lane, so a cancelled run loses\nnothing. The Release PR's merge (its `chore(release):` subject, or a push\nadding `changelog/`) and re-runs get a group of their own and are never\ncancelled; release.yml's call at the tag and the Release PR's own runs are\nuntouched.",
+      "metrics": [],
+      "refs": [
+        "docs/wp10-ci.md#ci-matrix"
+      ],
+      "tests": [],
+      "commits": [
+        "b18d1bf"
+      ],
+      "pr": 1772,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "profile-guided-builds-with-nish-link-pgo-generate",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "profile-guided builds with nish --link --pgo-generate and --pgo-use",
+      "body": "`nish --link` now takes the profile-guided build that only\nscripts/build.sh offered before. `--pgo-generate` links an instrumented\nbinary. Running it writes `.profraw` files, `llvm-profdata merge` turns\nthem into a profile, and `--pgo-use <profdata>` optimises with that\nprofile. Both flags reach the program, every runtime unit and the\nvendored SQLite, which is most of an SQLite-heavy program's user-space\nCPU.\n\nA PGO link bypasses the run cache entirely: it reads and writes no\nruntime, SQLite or module entry, so instrumented and plain objects never\nmix. The profile path is made absolute before it reaches build.sh, which\ncompiles SQLite from runtime/sqlite/. Both flags need llvm-profdata on\nPATH. When it is missing, the link fails with exit 3 (NL0002 under\n--json), names the tool, and links nothing. `--pgo-use` also checks the\nfile with `llvm-profdata show`, so a raw `.profraw` or a profile from\nanother LLVM is refused up front.\n\nThe following are refused with exit 2 and one line, before anything is\nwritten:\n- either flag without --link;\n- both flags together;\n- an empty, missing, unreadable or non-regular profile (a FIFO, a\n  device or a directory);\n- `--profile debug` or `wasi`;\n- a non-host --target;\n- `nish run`.\n\nThe user guide's CLI page gains \"Optimizing a build\", which shows the\nthree-step flow.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/cli.md#optimizing-a-build"
+      ],
+      "tests": [
+        "tests/run.js pgo section"
+      ],
+      "commits": [
+        "1eb9406"
+      ],
+      "pr": 1764,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "read-sqlite-tables-and-indexes-through-b-tree",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "read SQLite tables and indexes through B-tree cursors",
+      "body": "`nish/sqlite` gains a `Cursor`. It walks one table or index through SQLite's own B-tree, without preparing or stepping a statement, for hot reads a program plans by hand, such as a feed that walks an index and looks rows up by rowid.\n\n- **Transactions.** `Database.beginRead()` and `endRead()` bracket a read transaction.\n- **Opening a cursor.** `openCursor(name, columns)` opens a cursor on a table or index. It checks the declared column list against the schema and refuses a mismatch, a view, a virtual table, a `WITHOUT ROWID` table, a generated column, an expression index or a non-BINARY index with `SQLITE_SCHEMA`.\n- **Moving.** `first`, `last`, `next`, `previous`, `seekRowid`, and `seek` on an integer or text key prefix (`SEEK_GE`, `SEEK_GT`, `SEEK_LE`, `SEEK_LT`).\n- **Reading.** `rowid`, `columnI64`, `columnType` and `columnInto`. Every row call answers a scalar and allocates nothing.\n- **Invalidation.** Any `exec`, a statement that is not a plain read, a commit or rollback, `endRead` and `close` invalidate every cursor on the connection before they run. An invalidated cursor answers `SQLITE_MISUSE`.\n\nSQLite stays unmodified at 3.54.1. Its B-tree and record functions are static in the amalgamation, so `runtime/sqlite/nish-sqlite.c` now includes `sqlite3.c` and is compiled as one native unit; `sqlite3.c` is no longer compiled on its own. The adapter writes no `BtCursor` field and reads neither the file format nor the record format by hand.\n\nThe runtime size gate now measures the adapter as what its unit adds over `sqlite3.c`, compiled with `scripts/build.sh`'s SQLite options. The design, with link-time costs before and after, is in `docs/sqlite-cursor.md`, and the security record covers raw record reads.",
+      "metrics": [],
+      "refs": [
+        "docs/sqlite-cursor.md"
+      ],
+      "tests": [
+        "tests/link/std_sqlite_cursor",
+        "tests/link/std_sqlite_cursor_feed",
+        "tests/link/std_sqlite_cursor_schema",
+        "tests/link/std_sqlite_cursor_sql",
+        "tests/link/std_sqlite_cursor_stale"
+      ],
+      "commits": [
+        "7144c1f"
+      ],
+      "pr": 1771,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "accept-optional-chaining-and-nullish-coalescing-under-compat",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "accept optional chaining and nullish coalescing under --compat",
+      "body": "WP28 C1, first stage. Under `--compat`, two dialect features admit forms that strict Nish refuses, each keeping Node's meaning:\n\n- optional-chaining: a statement `a?.b`, `a?.[i]…` or `a?.m(args)` compiles to a null test that skips the rest of the statement, arguments included, from the first null link. An element read the chain would carry past the end of an array (a final `?.[i]`, `a?.xs[i];`, `xs[i]?.m();`, parenthesised or not) stays refused in both dialects with NL1067, because Node answers `undefined` where Nish's bounds check panics. An optional call `f?.()` stays refused (NL1068).\n- nullish: a `??` whose left operand can never be missing (a documented allowlist of forms) compiles to its left operand, with the NL9021 performance warning naming the default to drop.\n\nEach strict refusal that a feature would admit names the feature to add to `nish.compat`. For a program the strict dialect accepts, a strict build is unchanged, `--emit-ts` included.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/compat.md"
+      ],
+      "tests": [
+        "tests/cases/compat_optional_chain_*",
+        "tests/link/compat_*",
+        "tests/compat-erasure.js"
+      ],
+      "commits": [
+        "8bb8997"
+      ],
+      "pr": 1770,
+      "author": "Redis Stasa",
+      "date": "2026-11-18"
+    },
+    {
+      "id": "accept-string-switch-and-for-of-over-a",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "accept string switch and for...of over a string under --compat",
+      "body": "WP28 C1, second stage. Two more `--compat` dialect features, each matching Node:\n\n- string-switch: a `switch` on a string whose labels are string literals, templates with no substitution, or module `const` strings compiles to a `nish_str_eq` chain in source order. Fallthrough, a `default` in the middle, `break` and labelled `break` behave as in Node. A duplicate label (compared by cooked text) and a non-constant label (NL2799) are refused.\n- for-of-string: `for...of` over a string binds one code point per pass, as a fresh string of its UTF-8 bytes. A pass takes the lead byte and only the continuation bytes that follow it, so invalid UTF-8 takes Node's number of passes. The escape analysis treats each code point as an allocation, so a scoped arena pass never frees one kept past the loop.\n\nEach strict refusal names the feature to add to `nish.compat`. For a program the strict dialect accepts, a strict build is unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/compat.md"
+      ],
+      "tests": [
+        "tests/cases/compat_string_switch*",
+        "tests/cases/compat_for_of_string*",
+        "tests/link/compat_string_switch_*",
+        "tests/link/compat_for_of_string_*"
+      ],
+      "commits": [
+        "89377f3"
+      ],
+      "pr": 1788,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "sell-nish-s-speed-in-search-results-and",
+      "type": "docs",
+      "breaking": false,
+      "title": "sell Nish's speed in search results and serve a 48px favicon",
+      "body": "The site's meta, Open Graph and structured-data description now leads with\nwhat Nish is for: TypeScript compiled to fast native binaries, no\ninterpreter, JIT or garbage collector. The landing page's lead paragraph,\nwhich search engines often quote instead, opens the same way and cites the\nrecorded benchmark run against Go and Rust.\n\nGoogle shows a site's favicon in results only at 48x48 or larger, and the\nsite served only 16 and 32px icons. favicon.ico now carries 16, 32 and 48px\nimages, favicon-48.png and favicon-192.png are linked with sizes, and the\nstructured data names icon-512.png as the Organization logo and the\nSoftwareApplication image. All are renders of mark.svg.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4a3d401"
+      ],
+      "pr": 1790,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "check-each-golden-case-s-ir-on-one",
+      "type": "perf",
+      "scope": "ci",
+      "breaking": false,
+      "title": "check each golden case's IR on one shard and time crypto-bench on main only",
+      "body": "Every test shard compiled every tests/cases program and checked its IR, although only the post-IR work was dealt. A shard now compiles and checks only the cases caseShard deals it and prints the rest as delegated to their shard; an unsharded run still checks all of them, and every later reader of a case's IR goes through caseLl. Two shard-1 steps that npm test already runs on the same push (gen-diagnostic-codes --check, security-scope) leave ci.yml. crypto-bench's timed portability proofs are delegated on pull_request runs to the push-to-main run of the same job, under --delegate-bench-timing; their exact checks still run on every PR.",
+      "metrics": [
+        "shards 2-8 finish in 5.5-9.5 min against 7.5-11 min on run 44466084639; shard 1 is unchanged at about 15 min, and the next stage rebalances it"
+      ],
+      "refs": [
+        "docs/wp10-ci.md"
+      ],
+      "tests": [
+        "tests/run.js \"ci.yml\""
+      ],
+      "commits": [
+        "522107c"
+      ],
+      "pr": 1792,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "accept-optional-parameters-non-constant-defaults-and-overload",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "accept optional parameters, non-constant defaults and overload signatures under --compat",
+      "body": "Under --compat=optional-params, an `x?: T` parameter is read through `??`, and a non-constant default on a top-level function that is not exported or overloaded is evaluated per call through a lifted wrapper. Every other non-constant default keeps NL2607, now with a note naming the rule.\n\nUnder --compat=overloads, bodiless signatures before a function, method or constructor implementation are checked against it (NL2800) and lifted out before the later passes. A call no signature takes is refused (NL2801), and an exported overloaded declaration is refused in header, N-API and .d.ts builds (NL2802). A strict build still refuses a signature as a missing body, with a note naming the feature.\n\nThis completes WP28 stage C1.\n\nTests: tests/cases/compat_optional_params, tests/cases/compat_overloads, tests/link/compat_overloads_*, tests/link/compat_optional_params_*\nRefs: docs/guide/using-nish/compat.md, docs/roadmap/wp28-compatibility-mode.md\nFixes part of #1769",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1cb4cc7"
+      ],
+      "pr": 1789,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "rebalance-the-test-shards-around-what-is-left",
+      "type": "perf",
+      "scope": "ci",
+      "breaking": false,
+      "title": "rebalance the test shards around what is left",
+      "body": "Smoke, the cookbook check and the size report move out of the test\nshards into an `examples` side job. Shard 1's after-link sections are\ndealt as their own tail groups. The suite is split nine ways, because at\neight the refitted costs project more than 8.5 minutes a shard.\ntests/shard-costs.json is refitted from the median of the two nine-way\nruns and run 44569577732. scripts/shard-costs.mjs no longer matches a\ngolden case's name, such as arr_range_call_generic, against a section's\nrecognizer.",
+      "metrics": [
+        "run 44576694180 9.1 min wall, slowest/median 1.14; run 44578797002 10.7 min wall, 1.21; the deal's slowest/median 1.06-1.16 under each of four runs' own costs"
+      ],
+      "refs": [
+        "docs/wp10-ci.md#shards-and-time-limits"
+      ],
+      "tests": [
+        "node tests/run.js shard"
+      ],
+      "commits": [
+        "8c88f17"
+      ],
+      "pr": 1797,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "paint-the-landing-page-s-hero-from-the",
+      "type": "perf",
+      "scope": "docs",
+      "breaking": false,
+      "title": "paint the landing page's hero from the server's HTML",
+      "body": "The landing page's hero is now static markup in docs/guide/index.md, so the server's HTML paints it with the page; site.js wires its copy button and terminal instead of building it after load, and the 1.2 s hold that hid the page under it is gone. page.js starts on requestIdleCallback, with theme-color set at once. Text typed into the hero's terminal before site.js runs now loads the shell when the script binds it.",
+      "metrics": [
+        "Lighthouse LCP 3.9 s to 3.0 s, Performance 81 to 88; TBT -45 ms from the idle start"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/break-web/check.mjs"
+      ],
+      "commits": [
+        "d0f446d"
+      ],
+      "pr": 1799,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "read-short-postgres-int-columns-without-the-overflow",
+      "type": "perf",
+      "scope": "interop",
+      "breaking": false,
+      "title": "read short Postgres int columns without the overflow test",
+      "body": "`PgText.int` now reads a column of at most 18 bytes as two runs of digits, each\nbelow 10^9. That lets the bounds prover show nothing there can wrap, so the\ndigit loop no longer tests for overflow. `PgConnection.reserve` keeps only its\nlength test and calls the new `PgConnection.grow` when the buffer is short, so\nthe test every put makes is inlined. The module's unproven panic sites stay at\n591.\n\nbench/sqlite and bench/postgres gain Rust twins, using rusqlite and\ntokio-postgres. docs/BENCHMARKS.md records both clients against C and Rust:\nnish/sqlite is indistinguishable from SQLite's C API and rusqlite, and\nnish/net/postgres uses less client CPU than tokio-postgres on all three\nworkloads and less than libpq on pk and list.",
+      "metrics": [
+        "callgrind instructions per op against std at d81c00c1: rows 1 3662 -> 3350 (-8.5%), text 1 4013 -> 3721 (-7.3%), params 1 3923 -> 3447 (-12.1%), params 100 138200 -> 126734 (-8.3%); a byte-identical copy agrees to 0.0%"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md"
+      ],
+      "tests": [
+        "tests/link/std_postgres"
+      ],
+      "commits": [
+        "076f5dd"
+      ],
+      "pr": 1800,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "a-package-links-a-c-library-or-its",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "A package links a C library or its own C sources",
+      "body": "A package's package.json can now name what it links: `\"nish\": { \"link\": { \"libraries\": [...], \"sources\": [...] } }`. `nish run` and `--link` pass each library as `-l<name>` and compile each C source beside the runtime, with no hand-run scripts/build.sh. A dependency's link takes effect only when the root package grants it under `nish.link.dependencies.<name>`; an ungranted entry is NL3061.\n\nThe manifest reader fails closed: an unknown key, a repeated key or package, a value of the wrong shape, or an entry that is not printable ASCII is refused (NL3059, NL3060) rather than ignored, and a library name or source path cannot become a flag or leave its package (checked again by scripts/build.sh). The `nish run` cache keys the link set, each source's bytes and every file `clang -M` lists for it. The accepted limits are recorded: `.incbin` files, a later shadowing header, and a static library's own bytes are not keyed. SQLite's built-in link stays a LinkSet flag. The security record is docs/security/package-link.md.\n\nPart of WP66 (S7). Tests: tests/link/pkg_link_*, tests/run.js package-link",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/interop.md",
+        "docs/security/package-link.md"
+      ],
+      "tests": [],
+      "commits": [
+        "abadc9f"
+      ],
+      "pr": 1796,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "cache-checked-cursor-shapes-and-keep-read-transaction",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "cache checked cursor shapes and keep read-transaction statements prepared",
+      "body": "* perf(runtime): cache checked cursor shapes and keep read-transaction statements prepared\n\nopenCursor re-ran its schema check (seven pragma and schema queries) on\nevery open, and beginRead/endRead parsed BEGIN, a schema read and COMMIT\non every call, so one read transaction per request cost about 12x a\nprepared SQL statement. A connection now keeps up to eight checked shapes,\nanswered only inside a SQLITE_TXN_READ transaction under the same schema\ncookie, and prepares its BEGIN, schema read and COMMIT once.\n\nMeasured: bench/sqlite database, median of 7 rounds, noise band 4%: one read transaction per call, lookup 72.0 -> 6.2 us, feed 84.5 -> 16.1 us (SQL autocommit: 5.9 / 19.1 us)\nTests: std_sqlite_cursor, sqlite-link, c-symbols\n\n* test(runtime): pin the cursor shape cache's invalidation and record it\n\nA link program checks that a kept cursor shape is answered again and is\nrefused after ALTER TABLE ADD COLUMN, a DROP and CREATE, another\nconnection's change, and a rolled-back write transaction matched by as many\ncommitted DDL statements; that more shapes than the cache keeps each read\nright; and, rerun under -DSQLITE_DEBUG, that close frees the kept KeyInfo\nunder the connection's mutex. The cursor design note and the SQLite security\nrecord describe the cache's validity rule and the kept statements.\n\nTests: std_sqlite_cursor_shapes, sqlite-link\n\n* test(runtime): raise the SQLite adapter's size budget for the shape cache\n\nnish-sqlite.c less sqlite3.c measures 8,213 bytes at -Oz with the cursor\nshape cache and the read transaction's kept statements, over the 7,680\nceiling; it is raised to 8,448, the next 256-byte boundary, and the move is\nrecorded in docs/wp7-runtime.md.\n\nTests: budget",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "9996c9b"
+      ],
+      "pr": 1801,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "opaque-declare-classes-c-can-return-1795",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "opaque declare classes C can return",
+      "body": "A field-less `declare class` in an interop module is now an opaque C type: C can return one and take one back, and Nish can hold it in a `CPtr` placement, but `new`, a field read or write, storing it elsewhere, capturing it in an arrow, and passing one opaque type where another is wanted are each refused with a diagnostic.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp66-c-headers.md"
+      ],
+      "tests": [
+        "tests/cases/ffi_opaque_*",
+        "tests/link/ffi_opaque_*"
+      ],
+      "commits": [
+        "4d9618c"
+      ],
+      "pr": 1795,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "add-a-leaderboards-page-with-the-multicore-server",
+      "type": "docs",
+      "breaking": false,
+      "title": "add a Leaderboards page with the multicore server challenge result",
+      "body": "* docs: add a Contests page with the multicore server challenge result\n\nA new reference page, docs/CONTESTS.md, routed at /reference/contests\nbeside Benchmarks, records public contests a Nish entry was scored in.\nIts first entry is the multicore server challenge: the Nish entry held\n220,000 users on 8 cores and placed second on the leaderboard. The page\nlinks the video, the entry and its last PR, quotes the organiser's\nfigures, and describes how the entry is built and what moved it up.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLdzR2JaBqzNvxTznG\n\n* docs: add the video's chapter and figures to the Contests page\n\nThe multicore server challenge entry now links the video's \"#2 Nish\"\nchapter at 19:19, gives its publish date and its view, like and\nsubscriber counts on 2026-11-19, and says what the video covers. The\nranking line now says what the leaderboard and the video both show:\nNish second of the three entries that held 220,000 users.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLdzR2JaBqzNvxTznG\n\n* docs: embed the challenge video on the Contests page\n\nThe video section now plays the organiser's video in the page through\nScalar's scalar-embed component, starting at the Nish entry's chapter.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLdzR2JaBqzNvxTznG\n\n* docs: play the whole challenge video in the Contests embed\n\nThe embed now starts at the beginning; the page's 19:19 links still jump\nto the Nish chapter.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLdzR2JaBqzNvxTznG\n\n* docs: link the challenge's leaderboard site from the Contests page\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLdzR2JaBqzNvxTznG\n\n* docs: rename the Contests page to Leaderboards\n\nThe page is now docs/LEADERBOARDS.md at /reference/leaderboards, a name\nthat fits a standing ranking such as TechEmpower's as well as a closed\nchallenge. It lists an entry only once its leaderboard has published it.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLdzR2JaBqzNvxTznG",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3ac1d64"
+      ],
+      "pr": 1802,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "pair-a-c-buffer-with-its-count-by",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "pair a C buffer with its count by name, at any unsigned width",
+      "body": "An interop declaration can now name the parameter that carries a buffer's length, and that count may be a `u8`, `u16`, `u32` or `u64`, or a field of an out class (zlib's `uLongf *destLen`). A buffer whose length does not fit a narrower count is refused at the call before C runs, and the prover removes the check where the count is the buffer's own length. WP53's adjacent-`u64` rule compiles unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp66-c-headers.md"
+      ],
+      "tests": [
+        "tests/cases/ffi_buffer_*",
+        "tests/link/ffi_buffer_*"
+      ],
+      "commits": [
+        "f2b8933"
+      ],
+      "pr": 1794,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "fixed-length-array-fields-in-a-declare-class",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "fixed-length array fields in a declare class",
+      "body": "A `declare class` field can now be a C fixed-length array (`unsigned int h[5]` in SHA_CTX, `char sysname[65]` in utsname), laid out inline as `[N x T]` exactly as clang lays it out. An element is read and written by index: a dynamic index takes an unsigned range check, a constant one out of range is a compile-time error, and the prover removes the check where it can show the index in range. The field cannot escape as a Nish array; unions and bitfields stay refused.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp66-c-headers.md"
+      ],
+      "tests": [
+        "tests/cases/ffi_array_field",
+        "tests/link/ffi_array_field_*"
+      ],
+      "commits": [
+        "18af09c"
+      ],
+      "pr": 1803,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "nish-c-import-writes-a-nish-module-from",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "nish c-import writes a Nish module from a C header",
+      "body": "`nish c-import` reads a C header through clang and writes a checked-in Nish module of declare functions, declare classes, out classes and constants, using only today's language. An override file adds what the header cannot say (which functions to bind, a parameter's role, a non-null or owned return) and never reaches past the header. Whatever it cannot bind is listed, in header order, in a Not bound block. The module records the target's data model, and a build for another data model is refused with the command that regenerates it.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp66-c-headers.md",
+        "docs/security/c-import.md"
+      ],
+      "tests": [
+        "tests/c-import",
+        "tests/link/c_import_*"
+      ],
+      "commits": [
+        "1d6311f"
+      ],
+      "pr": 1798,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "nish-c-import-emits-opaque-classes-array-fields",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "nish c-import emits opaque classes, array fields and named buffer pairs",
+      "body": "`nish c-import` now writes the three spellings S3, S4 and S5 shipped. A struct the header only declares becomes its own field-less class, so C can hand it back and the checker keeps two opaque types apart. A struct with fixed-length array members binds where its layout matches clang's for the target; an array of pointers, of function pointers or of arrays is listed with its reason. A buffer whose override names its count becomes `CountedBy<…, \"count\">`, with the count a `u8` to `u64` by value or an out class C writes back through a pointer.\n\nThe design note's four headers were re-run: sqlite3.h binds 72 of its 300 functions, up from 52.",
+      "metrics": [],
+      "refs": [
+        "docs/wp66-c-headers.md#11",
+        "docs/security/c-import.md"
+      ],
+      "tests": [
+        "tests/c-import (arrays",
+        "opaque",
+        "counted)",
+        "tests/run.js c-import"
+      ],
+      "commits": [
+        "13db709"
+      ],
+      "pr": 1810,
+      "author": "Redis Stasa",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "a-compact-class-crosses-emit-header-as-an",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "a compact class crosses --emit-header as an opaque handle (WP48 stage 2c)",
+      "body": "* feat(interop): a compact class crosses --emit-header as an opaque handle (WP48 stage 2c)\n\nWIP: the header build no longer refuses a compact class; N-API builds still do.\n\nFixes #1775\n\n* docs(interop): record the compact header lift in the guide, reference and roadmap\n\nA --emit-header build takes a compact class as an opaque handle; N-API\nbuilds stay refused. The guide shows a C host and says a shared library\nanother process loads is out of scope.\n\n* fix(interop): keep the header banner unchanged for a program without compact classes\n\n* test(self): regenerate the checked goldens for the compact header\n\n* fix(interop): name nish_arena_range_abi from every bump in a compact program\n\nAn 8-aligned compact class (a wide field beside its links) is allocated by\nnish_alloc_struct, which did not name the range runtime's ABI symbol, so a\nheader build holding only such classes linked against the default runtime\nand read its offsets from the wrong base. Both inline bumps now name\nnish_arena_range_abi in any module whose links are offsets, so every such\nmodule fails to link without the range runtime.\n\nThe header marks an opaque record's array elements as opaque, and its\nbanner names every runtime unit and scripts/build.sh --arena-range. The\nsecurity record, the design doc, LANGUAGE.md and the guide say who links the\nrange runtime and what happens when they do not.\n\nTests: tests/run.js \"compact header\"\n\n* test(codegen): regenerate perf_padding_compact's golden for the bump's ABI load\n\nThe 8-aligned compact class's nish_alloc_struct now names\nnish_arena_range_abi in its slow path.\n\n* fix(interop): declare the compact bump's moved IR and prove the range link by exit status\n\nThe compact-class allocator's slow block now loads `nish_arena_range_abi`,\nso three nish-cmp corpus programs move under `--no-sidecars`\n(perf_padding_compact, compact_json, compact_threads); they are declared in\n`tests/nish-cmp.js`. The `nish:compact` doc in `runtime/nish.d.ts` now says a\n`--emit-header` build keeps a compact class opaque and links the range\nruntime, and the library reference is regenerated from it.\n\nThe default-runtime link checks under \"compact header\" now prove that the\nrange ABI symbol is the only thing missing by exit status: the plain link\nfails, and the same link plus a stub that defines only\n`nish_arena_range_abi` succeeds. The docs say \"a program that allocates\"\nwhere they said \"every module whose links are offsets\", the guide explains\n`$NISH` and links the interop page to the compact section, and the runtime\nsecurity record names the four checks.\n\nTests: tests/run.js compact header",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ce9bfd3"
+      ],
+      "pr": 1781,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-19"
+    },
+    {
+      "id": "two-modules-may-each-keep-a-private-function",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "two modules may each keep a private function or generic of one name",
+      "body": "A private function or generic template whose bare symbol would clash with another module's is now spelled with its module path, `<package prefix><module qualifier>$.<name>`. For example, `lib/util.ts`'s private `helper` becomes `@lib_util$.helper`, and its instantiations and lifted spawn arrows follow (`lib_util$.identity$i32`, `m$.work$arrow0`). Before this, any such clash was refused with NL3026 or NL3027. The decision is made per module from source names, so it never depends on load order. An exported party keeps its bare symbol.\n\nWhat stays refused: two exported functions or templates of one package (NL3024, NL3025, NL3010; WP57 S2), any clash under `--no-strict-exports`, where every root function is on the C surface, and two module paths that qualify to the same symbol (NL3026 or NL3027, naming both files). Not breaking: a rename applies only to symbols that used to clash, which every program that compiled before refused, so no existing program's IR moves. nish-cmp declares only the six programs the seed refuses and this release compiles.",
+      "metrics": [],
+      "refs": [
+        "docs/wp57-module-scoped-names.md#4-s1-private-functions-and-generic-templates"
+      ],
+      "tests": [
+        "tests/link/duplicate_internal",
+        "tests/link/module_private_*",
+        "tests/wordings/nl3026_function_clash",
+        "tests/wordings/nl3027_package_function_clash",
+        "tests/wordings/nl3010_generic_redeclared"
+      ],
+      "commits": [
+        "936ba0b"
+      ],
+      "pr": 1812,
+      "author": "Redis Stasa",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "measure-the-feed-through-cursors-against-sql-1787",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "measure the feed through cursors against SQL",
+      "body": "bench/sqlite times the twelve-dollar challenge's feed three ways through\nnish/sqlite, on the same rows: as SQL (`feed`), as a cursor walk over one\nread transaction and four cursors opened before the timed loop\n(`feed-cursor-walk`), and as the same walk with the transaction and cursors\nopened on every call, the way a request would (`feed-cursor`). Both cursor\nworkloads must print `feed`'s rows and checksum, and they run on the build\nand its byte-identical copy only, because the C and Rust twins have no cursor\npath.\n\ndocs/BENCHMARKS.md records the run with bench code c940ecb3, which includes\n#1801. At the median, the walk is 5,550 ns per call below SQL (-30.7 %) and\nthe per-request cursor read is 3,434 ns below (-19.0 %), both outside every\nnoise band and IQR. Part of the walk's gap is transaction work: each `feed`\ncall opens its own read transaction, while the walk holds one across calls.",
+      "metrics": [],
+      "refs": [
+        "docs/BENCHMARKS.md#the-feed-through-cursors-against-sql"
+      ],
+      "tests": [
+        "node bench/sqlite/run.mjs --validate"
+      ],
+      "commits": [
+        "eb020c4"
+      ],
+      "pr": 1787,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "say-in-ci-scope-s-why-whether-any",
+      "type": "fix",
+      "scope": "ci",
+      "breaking": false,
+      "title": "say in ci-scope's why= whether any lane is off",
+      "body": "When no full-run reason applies, the scope job's why= used to say \"every\nchanged path of a skipped lane is on its allowlist of paths it does not read\"\nwhether seven lanes were off or none was, so a run's why= could not tell a\nlane-off run from an all-on one. It now names the lanes that are off\n(\"lanes off: nish_cmp, elision, bootstrap; ...\") or says \"every lane reads a\nchanged path\". A full-run reason still wins over both. No lane's read set,\nallowlist or command list changes.",
+      "metrics": [],
+      "refs": [
+        "#1750"
+      ],
+      "tests": [
+        "node tests/run.js ci-scope"
+      ],
+      "commits": [
+        "505f112"
+      ],
+      "pr": 1815,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "settle-wp57-s2-as-keep-refusing-and-split",
+      "type": "docs",
+      "scope": "roadmap",
+      "breaking": false,
+      "title": "settle WP57 S2 as keep refusing and split S3 into stages",
+      "body": "WP57 S2 is decided as option A. An exported function or generic template stays unique across its package, so NL3024, NL3025 and NL3010 between two exports stay as they are and nothing is built. Option A keeps the C surface the same in every build mode. B, with `export { f } from`, is recorded as what would reopen the question.\n\nS3, module-scoped class and interface names, is re-inventoried against main after S1 (anchored at 936ba0b1) and split into five sized sub-stages, S3a to S3e, each one PR with its gate, the files it reaches, its dependency order and its release note. Under option A, exported clashing classes stay refused, NL3028 across packages included. The design note's S1 test table now lists what S1 actually shipped (#1812), and the roadmap page and index show 2 of 7 done with S3a next.",
+      "metrics": [],
+      "refs": [
+        "docs/wp57-module-scoped-names.md#6-s2-exported-names-that-clash-inside-one-package-decided-keep-refusing"
+      ],
+      "tests": [],
+      "commits": [
+        "e22028b"
+      ],
+      "pr": 1816,
+      "author": "Redis Stasa",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "record-a-guarded-nish-simd-access-as-a",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "record a guarded nish:simd access as a proven panic site",
+      "body": "The emitter already dropped the bounds check of a `nish:simd` load or store whose lanes `bounds.ts` proves in range. The panic-site table still recorded every such access as an unproven `index` site, so `--deny-panics` refused a guarded `loadU8x16` whose IR had no panic left in it. `noteBuiltinSite` now records a vector access as proven exactly when `nodeProvenIndex` is set for it. That is the fact `emitVectorAccess` reads, so the table and the IR agree.\n\nAn unguarded vector access stays unproven:\n- In a `--deny-panics` module, the access itself is refused with NL2457. The advice names the guard that proves both ends, such as `if (i >= 0 && i <= xs.length - 16)`. This case used to crash the compiler, which took the access for a plain index.\n- Through a dependency, the call is refused with NL2458.\n\n`docs/LANGUAGE.md` (Panic sites), the simd guide page and CLAUDE.md now say so. 8 of the 17 simd sites in `std/net` http1-codec and http1-server are now proven.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#panic-sites",
+        "docs/guide/language/simd.md"
+      ],
+      "tests": [
+        "tests/link/simd_deny_panics_guarded",
+        "tests/link/simd_deny_panics_in_scope",
+        "tests/link/simd_deny_panics_unguarded"
+      ],
+      "commits": [
+        "6835d5c"
+      ],
+      "pr": 1784,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "tick-wp39-s-and-wp43-s-built-stages",
+      "type": "docs",
+      "scope": "roadmap",
+      "breaking": false,
+      "title": "tick WP39's and WP43's built stages and move finished packages to Landed",
+      "body": "WP39's E5 on every core (#1448), E6's Postgres over TLS (#1446), G5's CUBIC\n(#1495), G7's nish/net/http-server façade (#1473) and G8's HTTP/2 and HTTP/3\nfigures (#1462) had merged without their boxes ticked, and the façade is also\nWP43's handler over HTTP/2 and HTTP/3. The index now says a package is landed\nonce every stage it has left is deferred or waits on a decision, and WP22,\nWP37, WP39 and WP66 move there. WP28's and WP60's index rows match their\npages, WP39 leaves Up next, and the docs/README.md rows and the WP39 and G7\nnotes' status lines say what is built.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "95256b7"
+      ],
+      "pr": 1819,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "foreach-on-arrays-and-sets-nl9019-s-scope",
+      "type": "docs",
+      "breaking": false,
+      "title": "forEach on arrays and sets, NL9019's scope, string-enum and stale security lines",
+      "body": "The library reference now documents `forEach` on `Array`, `ReadonlyArray` and `Set`: what each walk visits, what it does when the collection changes during the walk, and the diagnostics it gives. NL9019's reference page also states what the warning judges: only the direct callees of a loop pass that releases nothing. A call inside an arrow is not judged, and memory kept deeper in the call chain is left to `--explain-memory`.\n\nString enums: the stale guide, interop and design-note lines from #1639 are corrected. `tests/link/json_enum_string` gains a combined document that round-trips byte for byte, and the JSON security record describes how a string enum is read and written.\n\nSecurity records: the crypto-rsa and crypto-x509 records name the three modules that now call RSA verification, each with its 2048-bit floor. The JSON and URL records give their fuzzing results from the 2026-11-14 `fuzz.yml` run, with execution counts and the earlier runs. The index states what every `fuzz.yml` run since 2026-10-30 ran.\n\nFixes #1607\nFixes #1573\nFixes #1639\nRefs #987, #888",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "cb21e48"
+      ],
+      "pr": 1825,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "pin-that-cpu-reaches-the-sqlite-unit-and",
+      "type": "test",
+      "scope": "cli",
+      "breaking": false,
+      "title": "pin that --cpu reaches the SQLite unit, and record why --cpu native is refused",
+      "body": "SQLite's units are compiled apart from the runtime's, so the cpu-level section now links tests/link/sqlite_link with --cpu x86-64-v3 and requires -march=x86-64-v3 -ffp-contract=off on the clang line of every runtime/sqlite unit, the module and the link.\n\n--cpu native stays refused, now with its reason, in nish and scripts/build.sh (exit 2): under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids). The new tests/ct-asm-runtime.js --fixtures <cpu>... reproduces that reading; docs/security/ct-verification.md records it as open.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js cpu-level"
+      ],
+      "commits": [
+        "0dc13e6"
+      ],
+      "pr": 1783,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "add-nish-crypto-scram-and-move-the-postgres",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it",
+      "body": "nish/crypto/scram exports the SCRAM-SHA-256 client computation of RFC 5802\nsection 3 with RFC 7677's SHA-256: scramSha256SaltedPassword (Hi, as\nPBKDF2-HMAC-SHA-256 with a 32-byte output), scramSha256ClientProof and\nscramSha256ServerSignature. SaltedPassword is taken and given as a Secret;\nClientKey, StoredKey, ClientSignature and ServerKey are wiped before each\nfunction returns. The module holds none of SCRAM's messages, so it is a pure\nfunction of its inputs that specs/scram-sha256.md holds to RFC 7677's printed\nexchange. nish/net/postgres now authenticates through it in place of its own\nprivate helpers, and runs the same HMACs as before. pbkdf2HmacSha256 gets a\nvector contract with RFC 7914 section 11's two PBKDF2-HMAC-SHA-256 vectors.",
+      "metrics": [],
+      "refs": [
+        "specs/scram-sha256.md",
+        "specs/rfc7914-pbkdf2-sha256.md",
+        "docs/security/postgres.md"
+      ],
+      "tests": [
+        "tests/link/std_scram",
+        "test/spec/scram-sha256.ts",
+        "test/spec/rfc7914-pbkdf2-sha256.ts",
+        "tests/wipes/crypto.js"
+      ],
+      "commits": [
+        "e7a501d"
+      ],
+      "pr": 1814,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "pin-the-n-api-refusals-of-compact-classes",
+      "type": "test",
+      "scope": "interop",
+      "breaking": false,
+      "title": "pin the N-API refusals of compact classes, and say which code appears when",
+      "body": "Three tests/link negatives pin what an N-API build does with a compact class under the flag combinations no test covered: --emit-napi-async --threads alone, the same beside --emit-header, and --emit-napi beside --emit-header. Each pins its whole --json output, so it pins both codes, where they point, and that NL4021 is not reported for a class an export already names.\n\nThe guide, LANGUAGE.md and the library reference now say which code appears when. NL4020 is reported at each exported function, or constructor of an exported class, whose signature holds a compact class. Under --no-strict-exports that is every function. NL4021 is reported at each compact class no NL4020 named, and --emit-header beside either flag lifts neither. The CLI guide notes that --explain-layout under --emit-header reports the automatic rule's verdict, not the layout an explicit `implements Compact` class gets in a header build. A grammar slip in LANGUAGE.md is fixed.\n\nTests: tests/link/compact_reject_napi_async, tests/link/compact_reject_header_napi_async, tests/link/compact_reject_header_export\nFixes #1817",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5c7a3a1"
+      ],
+      "pr": 1823,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "tick-wp39-s-merged-stages-mark-wp60-s",
+      "type": "docs",
+      "breaking": false,
+      "title": "tick WP39's merged stages, mark wp60's in-band cells, and fix stale bench lines",
+      "body": "The WP60 design note now reads its §3.3 timings against the ±2.6% noise band of §3.1. The 11 cells inside it are marked n.s. (not shown), and the summary says \"11 of its 25 cases are inside the band\" instead of \"12 within 3%\". `timing_tp3` and the escape group, which time no byte-identical copy of their own, cite §3.1's band and §3.4's between-run drift. No figure was added or changed.\n\nThe browser-games guide says the game modules first ship in nish 0.40.0. It also says the link writes `game.wasm.sites.json`, which, passed to the loader as `imports: { sites }`, ends a panic's message with `at path:line:col`.\n\n`bench/crypto/bcrypt/run.mjs` stops before it fetches or builds anything when the compiler path it was given does not exist, and says to run `npm run build` first.\n\nThe WP39 roadmap ticks and the BENCHMARKS loadgen wording that #1433 and #1728 asked for were already on main.\n\nFixes #1609\nRefs #1728, #953, #1433, #1505",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f7214be"
+      ],
+      "pr": 1828,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "name-the-template-literal-spelling-when-a-number",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "name the template-literal spelling when a number's toString is called",
+      "body": "Calling `toString()` with no argument on an `i32`, `i64`, `u8` or `f64` is still refused (NL2249), but the message now names the spelling that works. It is written with the receiver the program used, for example: Unknown method `toString` on i32; use a template literal: `${n}`. The quick-fix that writes that template literal is unchanged. A `toString(radix)` call keeps today's message, because no template literal takes a radix. Other receivers keep theirs too.\n\nNegative pins cover i32, i64, u8 and f64 (with a parenthesised receiver) and the radix case. `docs/AI.md` quotes the new message, and its number-to-string note now says `String()` converts only a string enum's value (#1639). The WP65 design note records the decision as D1b, with the `String(n)` half not taken.\n\nFixes #1632",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "862c120"
+      ],
+      "pr": 1824,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "give-a-compact-class-s-links-their-own",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "give a compact class's links their own TBAA node, debug type and debugger printers",
+      "body": "A compact class's link is a 32-bit offset, neither an i32 value nor a\npointer, and now carries its own identity in three places. It gets a TBAA\nscalar node, ref32, beside i32 and ptr under the root, so a link store that\nLLVM merges across two classes is not read as a clobber of an i32 or pointer\nfield. The node is interned on the first link, so a program without a compact\nclass emits the same IR as before. Under -g a link is a DW_TAG_typedef\n`ref32 <Class>` over unsigned int (a typedef, because lldb drops a base\ntype's name). tools/gdb/ref32.py and tools/lldb/ref32.py decode a link to the\nobject it names, zero-based on *-linux-gnu and nish_ref_base-relative\nelsewhere, and the compact-classes guide page gains \"Debugging a compact\nclass\". WP48 stage 2b; the roadmap reads 6 of 9.",
+      "metrics": [
+        "bench/goose/tree.ts n = 24, ref32 node vs the node renamed i32: binaries byte-identical; peak RSS 394652 KB for both; wall median 1691.8 vs 1747.6 ms over 9 interleaved rounds, inside a noise band of at least 3.3% (two byte-identical builds' medians were 3.3% apart)"
+      ],
+      "refs": [
+        "docs/wp48-ref32-classes.md#4",
+        "docs/guide/language/compact-classes.md"
+      ],
+      "tests": [
+        "tests/cases/compact_tbaa",
+        "tests/run.js \"compact tbaa\"",
+        "\"compact debugger\""
+      ],
+      "commits": [
+        "919c920"
+      ],
+      "pr": 1782,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "ring-in-place-bench-validation-its-deadline-claims",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "ring-in-place bench validation, its deadline claims, and single-process ring pins",
+      "body": "This closes the decision-free items of #1238. Most were already fixed on main by #1435, and this change records the evidence for each one:\n- `bench/ring-inplace` validates `mode` and `n` in every process, and `run.mjs` refuses an unknown mode with exit 2.\n- `body_bytes` is printed from rounded hundredths.\n- `drain`, the reader loop and every other wait have the ten-second deadline. `waitPid` is the one recorded exception.\n- `tests/link/sync_ring_inplace_partial` reserves against a partly full ring and places a skip marker at a nonzero head.\n- `sync_ring_inplace_memmove`'s `expected.once` pins how `copyBytes` lowers.\n\nThe two ring-in-place records claimed that the FNV-1a check slows the stages that pace the pipeline and raises its figures. No run without the check was recorded, and the tables have no waiting column, so both claims now say the effect is not measured. No figure was added or changed.\n\n`peekWait`, the O(windows) lend walk (SHM-6) and the `sendBody` partial-send remainder stay open on #1238.\n\nRefs #1238",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b1e5c58"
+      ],
+      "pr": 1831,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "measure-pgo-and-the-cpu-level-on-the",
+      "type": "perf",
+      "scope": "bench",
+      "breaking": false,
+      "title": "measure PGO and the CPU level on the SQLite feed workload",
+      "body": "bench/sqlite/run.mjs gains --variant pgo | x86-64-v3 | pgo-x86-64-v3 | c-native. Each variant is timed in the same interleaved rounds as the plain build, against the binary it varies and that binary's byte-identical copy, so every comparison carries its own noise band. PGO trains an instrumented build on a database from another seed and at other sizes than the timed one. nish refuses --cpu native, so -march=native is measured on the C twin alone.\n\ndocs/BENCHMARKS.md records the feed workload under each variant. PGO makes the build faster on feed. --cpu x86-64-v3 alone shows no measurable change. PGO with x86-64-v3 points the same way as PGO but is not resolved at the median. The C twin with -march=native shows no measurable change.",
+      "metrics": [
+        "feed, pgo -4,142 ns median (-20.8%), band 789, IQRs 3,254/1,752, 12 rounds",
+        "feed, x86-64-v3 -363 ns median (-1.7%), band 607, 24 rounds; +889 at 12 rounds",
+        "feed, pgo-x86-64-v3 -4,150 ns median (-19.9%), band 335, IQRs 4,669/2,952, 24 rounds",
+        "feed, C -march=native +322 ns median (+1.7%), band 993, 20 rounds"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md#pgo-and-the-cpu-level-on-the-sqlite-feed"
+      ],
+      "tests": [],
+      "commits": [
+        "0560cf2"
+      ],
+      "pr": 1832,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "propose-wp68-shared-libraries-layered-like-atomic-design",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "propose WP68, shared libraries layered like atomic design",
+      "body": "WP68 proposes shared libraries for the small helpers std/ and src/ each keep their own copy of, layered as atoms, molecules, organisms and pages with an import rule biome enforces. The design note surveys eight clusters (hex, digit, decimal, json-escape, be-load, utf8, fnv, grow): 86 sites and 1,181 lines at 0eefa5e9, 87 and 1,193 on main since nish c-import added a sixteenth hex copy. It benchmarks the copies against each other and quotes each gain against the fastest existing copy on a named input. Each extraction stage, S2 to S9, names a non-regression bench whose input reaches the copy it changes, or the input it adds first. The owner's decisions D1 to D6 come before S2.\n\nThe benches (bench/wp68-*.ts, bench/wp68-run.mjs) and the survey (bench/wp68-survey.mjs) ship with the note, so every figure can be rerun; the tables come from the bench code at 38031fa9.",
+      "metrics": [
+        "a 256-entry hex table at 4.8-4.9x std/math hexDigit on mixed bytes; two digits a step 4-5% over http1PutDecimal on non-negative values; each outside its byte-identical twin's band"
+      ],
+      "refs": [
+        "docs/wp68-shared-libraries.md",
+        "docs/roadmap/wp68-shared-libraries.md"
+      ],
+      "tests": [],
+      "commits": [
+        "ba53750"
+      ],
+      "pr": 1779,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "pin-constant-tables-the-recursion-loop-s-panics",
+      "type": "test",
+      "breaking": false,
+      "title": "pin constant tables, the recursion loop's panics, and the long-path cleanup",
+      "body": "Constant tables (#1640) had passed acceptance only by hand. This adds tests for the behaviours that run rested on:\n- after `opt -O2`, a `u8` lookup into a 256-entry table is one element load;\n- an exported table keeps a non-internal header, and an importing module declares it `external constant` (`tests/link/const_table_export`);\n- `u16` and `u32` tables round-trip natively;\n- an `f64` table folds from other constants;\n- a 256-entry table prints every byte's class;\n- the interop surfaces: the `--emit-dts` typing, a `--profile wasm` and a `--profile wasm-host` build whose export hands back a copy, and the `--emit-napi` shim, which copies into a `Uint8Array`;\n- negatives for a table reaching a mutable `T[]` through a generic, a class field, an interface field and a closure capture.\n\nThe `u32` table builds its large elements from literals. Folding one from an `i64` constant exposed an `--emit-ts` bug, filed as #1827.\n\n`tests/run.js`'s long-path fixture cleanup removes the stray only when `lstat` says it is a socket, and never when it ends in a path separator. A `build/test` path of exactly 107 bytes no longer crashes the run (#1422).\n\n#1605 item 2 needed no change: the `accDiff` differential already compares every panicking `acc_*` case under the loop and `--no-elision`.\n\nFixes #1422\nRefs #1640, #1605, #1827",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d545727"
+      ],
+      "pr": 1826,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "the-compiler-picks-compact-classes-with-implements-wide",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "the compiler picks compact classes, with implements Wide and --compact off",
+      "body": "A native --link build (or nish run) now compacts each class the WP48 rule picks, with no marker in the source: a class at least 24 bytes, linked to, made in a loop or recursion, whose own size narrowing its links cuts by at least a quarter, and that nothing forbids (a C or N-API surface, a declare class, a Secret field, a generic class). A saving that lands only in a holder class no longer counts. `implements Wide` from nish:compact keeps a class wide, writing both Compact and Wide on one class is NL2819, and `--compact off` keeps every class wide. --explain-layout prints each class's verdict, and a picked class gets the same layout, ref32 TBAA node and debug type as an `implements Compact` one.\n\nThe floor and the own-saving test come from measurement (docs/wp48-ref32-classes.md §5.5). Under #1736's any-saving rule, 16-byte cells ran slower, by a median 27% on the awfy List and 19% on bintrees at depth 19. Holder-only picks measured inside their noise band, and one doubled its peak RSS. Under the final rule the picked tree nodes gain or hold. No std/ class and none of the compiler's 307 classes is picked, so their IR is unchanged; P256ProjectivePoint stays wide (ECC-9).",
+      "metrics": [
+        "goose/tree depth 20 -43.2% (band -56.2..-25.6%), RSS 50.5 -> 25.9 MB; treesum -23.8% (-31.4..-6.7%), RSS 25.8 -> 13.6 MB; sibling 1M +5.6% (-18.0..+31.2%) and 4M +0.4% (-10.4..+9.4%), RSS 126.6 -> 79.7 MB at 4M"
+      ],
+      "refs": [
+        "docs/wp48-ref32-classes.md#55-stage-3-the-rules-picks-and-its-gate"
+      ],
+      "tests": [
+        "tests/run.js explain_layout",
+        "tests/link/compact_reject_wide",
+        "tests/layout/compact-bench"
+      ],
+      "commits": [
+        "8db240e"
+      ],
+      "pr": 1786,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "lend-http1server-connections-only-to-busy-slots-1785",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "lend Http1Server connections only to busy slots",
+      "body": "An idle keep-alive slot no longer holds an Http1Connection. Http1Server lends one to a slot when a request starts and takes it back onto a spare stack when the connection rests between requests, so a resting slot keeps only its slot arrays (about 32 bytes).",
+      "metrics": [
+        "idle RSS per connection 1265 -> 99 B on epoll and 1610 -> 459 B on the ring (18,000 keep-alive connections, median of 5, min-max bands in docs/BENCHMARKS.md); server CPU per request within noise in both modes"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md",
+        "docs/security/http1-codec.md"
+      ],
+      "tests": [],
+      "commits": [
+        "61d9a35"
+      ],
+      "pr": 1785,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "lay-a-result-s-pointer-payload-out-in",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "lay a Result's pointer payload out in 4 bytes on wasm32",
+      "body": "resultLayout took every arm's width from TypeTable.alignOf, so on wasm32 a\nResult's pointer payload sat at offset 8 and Result<i32, string> measured 16\nbytes where LLVM's { i1, i32, i8* } under p:32:32 is 12. The -g composite,\ndereferenceable(N) and nish_alloc_struct all read that size. resultLayout now\ntakes the target's pointer width, as computeLayout does for a class field, and\na pointer member's DWARF size is the pointer width. Native output is\nunchanged. The WP48 design note's wasm32 row is in the past tense and points\nat pointerBytes in src/structs.ts.\n\nTests: tests/run.js wasm32-layout\nFixes #1749",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bffbc94"
+      ],
+      "pr": 1757,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "allow-and-new-expressions-as-class-field-initializers",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "allow [] and new expressions as class field initializers",
+      "body": "A class field may now be initialized with `[]`, an empty array of the field's declared element type, or with `new C(...)`, whose arguments are literals or enum members. The constructor stores these before its body runs, in declaration order, as it already does for literal initializers. A class with no constructor runs them wherever it is built.\n\nThe checker refuses:\n- a non-empty array literal, `[]` on a field that is not an array, a `new` of a generic, handle or layout class, and a type the made object does not match (an interface or a union);\n- `new` with arguments on a class that has no constructor;\n- a cycle of classes that construct each other in initializers (NL2821);\n- an exported class with no constructor, or an exported generic class, whose `new` initializer names a class that is private to its module (NL2820).\n\nAn initializer's allocation lives as long as the object. For a class with no constructor, escape analysis now treats the `new` site as leaking, and a loop pass refuses to release it per iteration. Without that, a function returning a field read out of such an object would have released it with its own arena scope; `tests/cases/cls_field_init_arena` pins this under the debug arena. A typed-JSON decode of a missing optional key runs that key's `[]` or `new` initializer, including into a reused object.\n\nLANGUAGE.md also says that the shift and bitwise operators are refused in a constant and in a constant table's element, not folded (#1640).\n\nFixes #1631",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "32c7cd9"
+      ],
+      "pr": 1829,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "split-lines-in-std-text-sixteen-positions-at",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "split lines in std/text sixteen positions at a time",
+      "body": "`std/text` `splitLines` now finds newlines sixteen positions at a time with `nish:simd`. It first flags each newline code unit of a chunk, up to 4096 at once, then turns each 16-lane block of flags into a bit mask and walks its set bits. Strings under 16 code units take an inline scalar path, so they allocate no flag buffer. Behaviour is unchanged: no trailing empty line after a final newline, `\\r\\n` keeps its `\\r`, and a UTF-16 code unit whose low byte is 10 is not a newline.\n\nEvery vector access is guarded in a form `bounds.ts` proves, so `splitLines` stays panic-free. Its caps entry has no unproven site, and `--deny-panics` callers through std/json, std/yaml and std/cli still build. The golden runner uses `splitLines` again, and its private copy, `tests/nish/lines.ts`, is gone.",
+      "metrics": [
+        "splitLines on an ~810 KB text 116.20M -> 63.49M Ir (1.83x); on strings under 16 bytes 37.30M -> 38.30M Ir (+2.7%); cachegrind, main-vs-main band 0.00%"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/std_text_split_lines_simd",
+        "tests/link/caps_package_named_nish"
+      ],
+      "commits": [
+        "0de1c60"
+      ],
+      "pr": 1834,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "give-each-struct-a-symbol-separate-from-its",
+      "type": "refactor",
+      "scope": "checker",
+      "breaking": false,
+      "title": "give each struct a symbol separate from its source name",
+      "body": "StructInfo carries a symbol beside its source name, set equal to it, and every declared struct now has a display in the type table. Both struct registries index structs by type, and the cross-module layout walks (registerForeignLayouts and its callers, the checker's closeReachableStructs) pass the struct, not its name, between modules. No IR moves: within a registry a name maps to one type, and first-seen order is kept. WP57 S3a; also refreshes the stale pre-S1 rule pointers in the WP26, WP15, WP21 notes and the master plan.",
+      "metrics": [],
+      "refs": [
+        "docs/wp57-module-scoped-names.md#7b-stages"
+      ],
+      "tests": [],
+      "commits": [
+        "568e1ef"
+      ],
+      "pr": 1840,
+      "author": "Redis Stasa",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "say-what-the-compact-rule-picks-in-the",
+      "type": "docs",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "say what the compact rule picks in the tree benches and the memory guide (WP48 stage 4)",
+      "body": "The tree ports (bench/goose/tree.ts, bintrees.ts, bench/wp48-refs/sibling.ts) say what the compact rule picks or refuses and why. The memory guide and compact-classes page say when to write implements Wide or implements Compact against the rule, with the measured figures. Design note §5.5 names the 19 compiler classes #1736's rule picked (#1835), and §5.6 records tree.ts at n = 24: half the peak RSS and a third off the wall time with the rule on.\n\nFixes #1835",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1019f14"
+      ],
+      "pr": 1844,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "nl4020-also-reaches-the-methods-of-an-exported",
+      "type": "docs",
+      "scope": "interop",
+      "breaking": false,
+      "title": "NL4020 also reaches the methods of an exported class",
+      "body": "The compact-class rule in the guide, docs/LANGUAGE.md and the library reference said NL4020 is reported at each exported function and at the constructor of each exported class whose signature holds a compact class. The check walks every exported signature, and each method of an exported class is one, with `this` first, so every method of an exported compact class is refused too. The three places now say \"each constructor and method of an exported class\".\n\ncompact_reject_napi_async gives its exported compact class a method, and its expected.json, regenerated from the compiler's --json output, pins NL4020 at the method's name.\n\nFixes #1830",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/compact_reject_napi_async"
+      ],
+      "commits": [
+        "f46aad2"
+      ],
+      "pr": 1845,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "say-that-ci-s-lint-job-runs-more",
+      "type": "docs",
+      "breaking": false,
+      "title": "say that CI's lint job runs more than npm run lint",
+      "body": "* docs: plan the 2026-11-20 issue sweep\n\nSeven one-PR stages for the open issues a Linux container can finish without an owner decision or benchmark hardware.\n\n* docs: say that CI's lint job runs more than npm run lint\n\nTwo PRs in the 2026-11-20 issue sweep (#1824, #1829) passed `npm run lint` locally and went red in CI on steps it does not run: a renamed heading broke an anchor that `node docs/check-links.mjs` checks, and an unused export failed `npm run lint:dead`. The definition of done now names both.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "627c747"
+      ],
+      "pr": 1841,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "recheck-diagnostic-codes-and-roadmap-counts-after-syncing",
+      "type": "docs",
+      "breaking": false,
+      "title": "recheck diagnostic codes and roadmap counts after syncing main",
+      "body": "A sync with main can make a fact the branch pins stale without any textual\nconflict. #1786 hit this twice. Main's #1788 took the diagnostic code NL2799\nthat the branch had added. Separately, the WP48 roadmap's \"Done\" count went\nstale twice, as stages 2c and 2b landed on main (5 -> 6 -> 7 of 9). The\ndefinition of done now says to run the code registry check and to recount\nticked boxes after every sync.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3c80fb8"
+      ],
+      "pr": 1842,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "make-the-examples-panic-free-under-deny-panics",
+      "type": "fix",
+      "scope": "examples",
+      "breaking": false,
+      "title": "make the examples panic-free under --deny-panics",
+      "body": "Every example's own panic sites are fixed the way the guide teaches, while each example keeps the same stdout. The fixes use guards the prover reads, unsigned or ranged integers where wrapping or a range is meant, arrays built with push, guarded substring, and Result checks in place of expect. None uses nish:unsafe, and no guard answers a made-up value. argv, math and nbody now build clean under --deny-panics.\n\nExamples refused only because they call into std/ (threads, json, net, collections, term-io) open with an opt-out comment naming the std modules and the follow-up. The same goes for relay, whose parsers need Result-based rewrites, and wasm-arena, whose record module storage the checker cannot bound yet. add.ts, multi/math.ts and arrays.ts keep their checked arithmetic on purpose: it is the example's point or a pinned interop signature. The wasm-arena page budget moves down to its measured size.\n\nPart of #1847.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ca44364"
+      ],
+      "pr": 1989,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "add-allow-panics-and-pass-it-wherever-the",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "add --allow-panics and pass it wherever the repository builds a program that may panic",
+      "body": "`nish --allow-panics` undoes an earlier `--deny-panics`. When both flags are given, the last one decides. A package's `\"nish\".noPanic` list still holds under it. The default does not change yet, so the flag changes no IR and no build outcome on its own. It prepares for holding the root package to no panic by default.\n\nThe repository's own builds of programs that may panic on purpose now pass the flag, but only to a compiler whose `--help` lists it. Those builds are the self-build stages, the test corpus, the tests/link programs, the Nish-written harnesses, bench drivers, CI workflows and the interop image. One probing helper per language decides this: `scripts/nish-compiler.sh` (`nish_allow_panics`) and `tests/allow-panics.js`. A seed that predates the flag is never passed it, and the helpers can go once every supported seed accepts it. Builds a user would copy, under examples/ and docs/, stay strict. A tests/run.js check fails on a raw compile that bypasses the helper.\n\nTests: tests/run.js \"allow-panics\" (probe, both-flags rule, --emit-ast, noPanic under the flag, IR byte-identical with and without it)\n\nPart of #1847.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "fbf5323"
+      ],
+      "pr": 1848,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "track-the-open-roadmap-as-issues-specified-by",
+      "type": "docs",
+      "breaking": false,
+      "title": "track the open roadmap as issues, specified by plan files, with the workflow skills vendored",
+      "body": "* chore: vendor the shared agent skills and write the open roadmap as plan files\n\nThe /feature, /plan-issues, /decide and review skills now live in .claude/skills, copied from amritk/ai by scripts/sync-skills.mjs, whose --check refuses a hand edit. Every open roadmap stage and every open issue is written into a plan file under .claude/plans, one per work package or theme, ready to be filed as issues.\n\n* docs: move the pickup rules from roadmap checkboxes to issues\n\nThe open work is GitHub issues under the Roadmap issue, one parent per work package and one sub-issue per stage, specified by the plan files. A pull request closes its stage with Fixes instead of ticking a box, so it no longer edits docs/roadmap.\n\n* chore: record the filed issue numbers in the plans\n\n* chore: record more filed issue numbers in the plans\n\n* chore: record more filed issue numbers in the plans\n\n* chore: record the last filed issue numbers in the plans\n\n* docs: point each roadmap page at its open-work issue, and keep claimed work recoverable\n\nEach work package's roadmap page now records what landed and links its parent issue; the open stages, the next step and the open questions live in the issues. The overview's tables link the parent issues instead of done counts.\n\nAn agent working a stage by hand claims it with one status comment, edited in place, and pushes at each finished todo and before stopping, so a stale claim can be taken over from its branch. The vendored skills are re-synced to carry the same protocol.\n\n* chore: pin the vendored skills to amritk/ai main\n\n* docs: point the pickup rules at the shared pickup skill\n\nThe labels, the claim and its status comment, checkpoints and takeover now live in the pickup skill from amritk/ai, vendored with the others; AGENTS.md keeps only what nish adds: a landed package's roadmap state line, and what a new package ships with.\n\n* chore: pin the vendored skills to amritk/ai main\n\n* chore: take the workflow skills from the ai plugin instead of committed copies\n\nThe feature, plan-issues, pickup and decide skills and the review agents come from the ai plugin in the amritk marketplace (amritk/ai), enabled in .claude/settings.json and synced through the owner's claude.ai account. The copies, their manifest and scripts/sync-skills.mjs are gone; the repo keeps only what is nish's own.\n\n* docs: drop the roadmap pages; the site's Roadmap entry links to the open work on GitHub\n\ndocs/roadmap/ and its 66 routes are gone. The site's Roadmap sidebar entry is now a link to the Roadmap issue, whose sub-issues are each package's parent issue. A landed package's design note already records what shipped, so nothing under docs/ keeps a package's state any more; check-links no longer requires a roadmap page per note.\n\nEvery link to a roadmap page now points at the package's parent issue or its design note, MASTER_PLAN states which milestones are met, and the plans drop their roadmap field and the steps that ticked roadmap boxes.\n\n* docs: take the roadmap out of the site and the README\n\nThe open work is tracked privately for now, so the site's sidebar no longer links to it, and README.md and CONTRIBUTING.md no longer point readers there. The contributor and agent guides keep their pointer to the Roadmap issue.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "9e3756b"
+      ],
+      "pr": 1998,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "plan-2000-and-the-leftovers-of-five-finished",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan #2000 and the leftovers of five finished feature runs",
+      "body": "The docs follow-ups plan gains DOCS S5 for #2000: AI.md's --emit-ts check fails on an install.sh compiler because Node cannot find the nish package. WP68 gains S1 acceptance (#2001), the proposal run's criteria and last review round checked against main. CI gains S12 (#2002), bench/chacha20.ts stopping at the link in the ECC-9 sweep. CI S2 now owns the ci-under-10 run's unmet five-green-runs criterion.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8eea692"
+      ],
+      "pr": 2003,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "require-a-bench-side-to-be-the-code",
+      "type": "docs",
+      "breaking": false,
+      "title": "require a bench side to be the code it names",
+      "body": "A benchmark side called an existing copy now has to call the shipped\nfunction with its callers' argument types and input shapes (and the native\nkernel where one replaces it), and a claimed gain names its callers and a\ngate bench that reaches the changed function. All three review rounds on the\nWP68 proposal found new instances of exactly this.",
+      "metrics": [],
+      "refs": [
+        "amritk/nish#1779",
+        "amritk/nish#1773"
+      ],
+      "tests": [],
+      "commits": [
+        "05053e4"
+      ],
+      "pr": 1807,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "keep-each-test-shard-s-results-in-the",
+      "type": "ci",
+      "scope": "cli",
+      "breaking": false,
+      "title": "keep each test shard's results in the step summary",
+      "body": "The stored console log of the `test` job's shard 8 sometimes stopped\npartway through the tests/link programs and went straight to \"Post job\ncleanup\", in a green job: no FAIL line and no `N passed, M failed`\nsummary, in the page or in the downloaded log. The file the Test step\ntees into was whole each time.\n\nA new \"Test summary\" step now copies the summary line, the Note or\nDEGRADED paragraph, every FAIL line with its detail and every SKIP line\nfrom that file into the job's step summary. The runner uploads that\nseparately from the console, and the step runs after a failed Test step\ntoo. The Test step's status is still npm's.\n\nThe step also records tee's exit status. On these runners tee is\nuutils', which by default stops writing to a broken console pipe without\na word and exits 0. It now runs with `--output-error=warn`, so a broken\npipe shows as `tee=1` next to the results, and `tee=0` beside a cut log\nmeans the runner lost lines it had already read. Every cut so far fell\ninside the one burst of output larger than 100 KB that any shard prints:\nshard 8 replays about 230 KB of held-back link results within one second.\n\nFixes #1836",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js \"ci-test-summary\" and \"ci.yml: the Test step tees with --output-error=warn\""
+      ],
+      "commits": [
+        "a69e239"
+      ],
+      "pr": 2005,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "plan-wp71-to-wp73-for-httparena-and-retire",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WP71 to WP73 for HttpArena, and retire the TechEmpower submission",
+      "body": "* docs: plan WP71 to WP73 for HttpArena, and retire the TechEmpower submission\n\nTechEmpower archived its Framework Benchmarks on 2026-03-24 and takes no\nentries, so WP39's E9 and WP49's D6 move to \"not planned\" and the TechEmpower\nentry stays as a benchmark of this repository. Its README now records that the\ndatabase entry coalesces its reads into one query per batch, which\nTechEmpower's rules refused.\n\nHttpArena is the benchmark that took its place. WP71 plans the entry, the rig\non a machine HttpArena's size, and each of its 19 scored profiles against the\npackage it waits on. WP72 plans gRPC (protobuf's wire format, trailers on the\nfaçade, unary calls), and WP73 Brotli, measured against gzip's levels before\nany encoder is written.\n\nExisting plans take the rest: WP39 ticks G7's façade (#1473) and adds HTTP/1.1\nover TLS and WebSocket on it, with h2c by preface on one port as an open\nquestion; WP43 adds what static files must do for HttpArena, `br` as a coding,\nand middleware as an open question.\n\n* docs: wrap the new roadmap routes' heads as gen-reference writes them\n\n* docs: plan WP72 gRPC as issues\n\nAdd the WP72 plan file, filed as parent #2008 with one sub-issue per\nstage: S1 protobuf wire format, S2 trailers on the façade's HTTP/2\nanswers, S3 unary gRPC, S4 grpcurl and ghz in the interop job, and S5\n(generated message classes) and S6 (streaming) deferred.\n\nRefs: docs/wp72-grpc.md\n\n* docs: plan WP71 as an entry and the features it needs, filed as issues\n\nThe HttpArena package drops the rig and the measurement against each\nfamily's leader: HttpArena's own validate.sh checks the entry, and its\nmachine measures it when it is entered. The stages are now the entry on\nwhat is built (S1), one stage per package the other profiles wait on\n(S2a to S2e, deferred until each lands), io_uring under the façade (S3),\nentering, decided for after S1 and confirmed by the owner each time (S4),\nand the gateway board (S5, deferred).\n\nRefs: docs/wp71-httparena.md#4-stages\n\n* docs: plan WP73 as issues, Brotli measured first\n\nAdds .claude/plans/wp73-brotli.plan.md, filed as #2034 under the Roadmap\nissue right after WP43, with stages #2035 (measure gzip against Brotli on\njson-comp's bodies, ending in a go or no-go), #2036 (the encoder, only on a\ngo), #2037 (br responses, related to WP43's #2006) and #2038 (a decoder for\nrequest bodies, deferred). The design note's score now takes its rate from\nthe per-request cost of serving the body plus the compression time, not the\ncompression time alone.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0d3abef"
+      ],
+      "pr": 1809,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "plan-wp39-g7-s-tls-websocket-and-h2c",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WP39 G7's TLS, WebSocket and h2c-by-preface on the façade, retire the TechEmpower submission",
+      "body": "WP39 gains three G7 stages on nish/net/http-server, each asked for by WP71's HttpArena profiles: HTTP/1.1 over TLS beside listenHttp2Tls (#2010), WebSocket on the HTTP/1.1 listener (#2011), and an opt-in h2c-by-preface on that listener (#2012), which the owner chose over http-one-handler.md §4's two ports. TechEmpower archived FrameworkBenchmarks on 2026-03-24 and takes no entries, so WP39 E9 (#1859) and WP49 S8 (#1905) are closed as not planned and listed under each plan's Out of scope. WP39 is signed off ready.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0be1d0d"
+      ],
+      "pr": 2058,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "read-named-constants-masks-charcodeat-and-down-counting",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "read named constants, masks, charCodeAt and down-counting loops in the panic prover",
+      "body": "--deny-panics now proves four kinds of correct code it used to refuse, and drops their runtime checks from the IR:\n\n- A module- or function-level `const` bound to an integer literal, a folded constant, or a conversion of a literal that fits (`toU64(0)`, `toU8(200)`) is read as its value, as a `new Array` length, a divisor, a mask or shift, or the zero in `b === zero ? a : a % b`. A `let`, a field, a call result, a conversion that wraps and a negative length stay refused.\n- `x & C` is read as `[0, C]` and `x >>> k` as `[0, 2^(bits-k) - 1]`; `toI32` of a `u32` whose range fits keeps that range.\n- `s.charCodeAt(i)` is read as `[0, 255]`, the byte it answers natively and under --emit-ts, and `Math.clz32(x)` as `[0, 32]`.\n- A loop counter that starts at a string's length and is only decremented keeps that upper bound, so `t.charCodeAt(end - 1)` under `end > 0` needs no index check, as long as nothing else writes the counter or reassigns the string.\n\nIn vector, NL2458 refusals that land in std fall from 701 to 580; the Map probe overflow, `trimEnd`'s index and both `INITIAL_SLOTS` array lengths no longer refuse. docs/LANGUAGE.md's \"Panic sites\" lists what each proof now reads.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#panic-sites"
+      ],
+      "tests": [
+        "tests/cases/deny_panics_*",
+        "tests/cases/reject_deny_panics_*"
+      ],
+      "commits": [
+        "29b227f"
+      ],
+      "pr": 1999,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "propose-wp69-and-wp70-what-a-spectral-compatible",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "propose WP69 and WP70, what a Spectral-compatible linter needs from std",
+      "body": "Two design-only work packages for a Spectral-compatible linter written in Nish, with their plan files filed as issues under the Roadmap. WP69 (#2018) is run-time JSON Schema validation, nish/json-schema, with external references loaded outside the validator by a file and an HTTP loader. WP70 (#2039) is the rest of the surface such a linter needs: JSON with source ranges and jsonc-parser's recovery, YAML loaded as Spectral loads it, UTF-16 columns, Unicode collation and globs. The WP61 and WP62 notes now point to WP69 for run-time validation.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8bf2a97"
+      ],
+      "pr": 1805,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "plan-wp43-s-static-file-needs-from-wp71",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WP43's static-file needs from WP71, br responses and middleware",
+      "body": "The WP43 plan takes in what PR #1809 adds to the design note's §4. Static files (#485) now also need a cache of the module's own that follows the disk, a .br or .gz sibling when Accept-Encoding offers it, Content-Type for seven extensions and every version the http-server façade serves. Stage 4 gains br as a response coding on WP73's encoder (#2006). Stage 5, middleware, is filed as an open decision (#2007). The handler over HTTP/2 and HTTP/3 needs no stage: the façade from #1473 is it.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1101b37"
+      ],
+      "pr": 2060,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "plan-wp41-s-open-stages-and-pr-1808",
+      "type": "chore",
+      "breaking": false,
+      "title": "plan WP41's open stages and PR 1808's two follow-ups",
+      "body": "Adds .claude/plans/wp41-mul-high.plan.md, the plan behind #2046: S2 X25519 on five 51-bit limbs (#2048), S3 Poly1305 on 64-bit limbs (#2049), S4 a cheaper wasm32 lowering for mulHigh (#2061) and S5 the P-256 constant-time fixture on mulHigh (#2062), each with its bar.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "47fa7b7"
+      ],
+      "pr": 2059,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "hold-the-root-package-to-no-panic-by",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": true,
+      "title": "hold the root package to no panic by default; --allow-panics relaxes it",
+      "body": "BREAKING CHANGE: a build is now held to no panic by default. Without a flag, every module of the root package may keep no panic site except running out of memory. An unproven index, an unproven overflow, or a call that can exit is refused at compile time (NL2457, NL2458), and `nish run`, `--emit-ts` and `--compat` are held to it too. `--allow-panics` relaxes this. Under it, the scope is exactly the modules the package's `\"nish\".noPanic` list names, so a committed `noPanic` list still holds under the flag. No manifest value relaxes the default: an empty list and a missing key change nothing. `--deny-panics` spells out the default. When both flags are given, the last one wins. `--emit-ast` skips the default check but still refuses an explicit `--deny-panics`.\n\nstd/ is not panic-free yet, so a strict module cannot yet call `Map`, `Set`, `split` or the JSON reads. Each reaches a panic site in std/ that no caller can remove. A program that needs them builds with `--allow-panics` until std/ migrates. The examples that do so say why in their first lines and show the flag in their build commands. Guide pages whose examples need the flag say so on the page.\n\nTo migrate a project such as amritk/vector, add `--allow-panics` to its build, list modules in `noPanic` one at a time as they become panic-free, and drop the flag once every module is listed. On amritk/vector, the new default refused 2,459 sites on 2,065 lines in 92 files, measured before the prover improvements of #1999.\n\nMeasured: recording panic sites on src/compile.ts (--allow-panics with --emit-panics against --allow-panics alone, 7 interleaved pairs, 4 cores) costs +0.08 s on 2.43 s, +3.5% by medians; per pair -0.2% to +7.6%, unrecorded runs spread 2.37-2.50 s (±2.7%); an upper bound, since it includes writing the 3.5 MB listing\nRefs: docs/LANGUAGE.md#panic-sites\nTests: tests/link/no_panic_default, tests/link/no_panic_empty_list, tests/link/allow_panics_relaxed, node tests/run.js allow-panics\n\nPart of #1847.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ab77d8b"
+      ],
+      "pr": 2004,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "file-the-overload-and-postgres-write-order-plans",
+      "type": "docs",
+      "scope": "plans",
+      "breaking": false,
+      "title": "file the overload and Postgres write-order plans, and fix four plan-issue drifts",
+      "body": "Files the overload-queue and Postgres write-order plans behind #2047 and #2054, which were filed as issues while their plan files stayed on an unmerged branch.\n\nRecords the owner's answers for WP43 S5 (#2007, middleware) and WP49 S6 (#1637, design B) in their plans and drops their needs-decision labels, so a plan-issues rerun no longer re-adds them. WP73 S3 now tracks br responses as #2006, WP43's issue for the same change; #2037 is closed as its duplicate. The wp48-s3-rule plan's frontmatter parses again.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "51bd82b"
+      ],
+      "pr": 2063,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "file-the-overload-queue-and-postgres-write-order",
+      "type": "docs",
+      "scope": "plans",
+      "breaking": false,
+      "title": "file the overload-queue and Postgres write-order plans",
+      "body": "Two new plans, filed as issues under the Roadmap. One adds opt-in\nnewest-first serving with age-based shedding to HttpHandler, measured\nbefore it spreads to serve and the async pool. The other names the\ncause of the async TechEmpower entry's non-2xx answers, proves or\nfixes the /updates row-lock order, and records why a cross-request\nwrite batcher is declined.",
+      "metrics": [],
+      "refs": [
+        ".claude/plans/net-overload-queue.plan.md",
+        ".claude/plans/pg-write-order.plan.md"
+      ],
+      "tests": [],
+      "commits": [
+        "859f0a5"
+      ],
+      "pr": 2064,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "regenerate-break-web-on-a-help-change-and",
+      "type": "docs",
+      "breaking": false,
+      "title": "regenerate break-web on a --help change, and back every-site sweeps with a check",
+      "body": "Two rules the strict-by-default run (#1847) learned in review. A change to\n`nish --help` left examples/break-web/help.ts and docs/site/break stale in\ntwo PRs (#1848, #2004), and test shard 8 went red both times. A rule that\nhad to reach every compile or every guide sentence was missed in a new\nplace in five review rounds across the same PRs, because a grep found only\nthe call shapes it was written for.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b0f6dec"
+      ],
+      "pr": 2066,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "honour-strict-link-programs-in-the-nish-runner",
+      "type": "fix",
+      "scope": "ci",
+      "breaking": false,
+      "title": "honour strict link programs in the Nish runner, and push the Release PR with RELEASE_PR_TOKEN",
+      "body": "tests/nish/run.ts passed --allow-panics to every compile, so the two link\nprograms with a `strict` file (no_panic_default, no_panic_empty_list) built\nunder the relaxed scope and compiled cleanly where they must be refused. It\nnow leaves the flag off for them, as tests/run.js's panicScope does. The\nrunner job runs only on the Release PR and the tag, so the Release PR for\n0.44.0 was the first to see it.\n\nrelease-pr.yml pushed release/next with the checkout's GITHUB_TOKEN even\nwhen RELEASE_PR_TOKEN was set, so every CI run on the Release PR waited as\naction_required. With the secret set, the push now goes out under it, and\nthe runs start as the token owner's without approval.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/no_panic_default",
+        "tests/link/no_panic_empty_list"
+      ],
+      "commits": [
+        "f2dee04"
+      ],
+      "pr": 2067,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "start-the-release-pr-s-checks-by-dispatch",
+      "type": "ci",
+      "breaking": false,
+      "title": "start the Release PR's checks by dispatch, with no token",
+      "body": "#2067 pushed release/next with a RELEASE_PR_TOKEN so that its pull_request\nruns would not wait for approval. That needs a long-lived personal token in\nthe repository. The job now pushes with its own GITHUB_TOKEN again and\ndispatches ci.yml and pr-title.yml at release/next: workflow_dispatch is the\nevent GITHUB_TOKEN may raise, a dispatched run needs no approval, and its\nchecks report on the PR's head commit, which is what the merge requires. The\nwaiting pull_request runs can be left unapproved.\n\nci.yml's release-only `runner` job and ci-gate's expected skips now also\nrecognise a run at refs/heads/release/next. A dispatched title check has no\npull request, so it checks the head commit's subject, which release-pr.yml\nalso uses as the title, and fails on any other branch. No workflow reads a\nrepository secret any more; the RELEASE_PR_TOKEN secret can be deleted.",
+      "metrics": [],
+      "refs": [
+        "docs/wp12-release.md"
+      ],
+      "tests": [
+        "node tests/run.js ci.yml"
+      ],
+      "commits": [
+        "51c6441"
+      ],
+      "pr": 2068,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "require-exit-declared-entries-and-an-old-rule",
+      "type": "docs",
+      "breaking": false,
+      "title": "require exit DECLARED entries and an old-rule grep when a refusal flips",
+      "body": "A change that makes a refused program compile, or a compiling one refuse,\nnow adds `file: \"exit\"` DECLARED entries to tests/nish-cmp.js for each\ncorpus program it flips, and greps docs/wp*.md, docs/MASTER_PLAN.md and\ntests/** comments for the old rule's wording and test names, not only\nLANGUAGE.md and the guide.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3114927"
+      ],
+      "pr": 1839,
+      "author": "Redis Stasa",
+      "date": "2026-11-20"
+    },
+    {
+      "id": "refit-the-test-shard-costs-and-cancel-superseded",
+      "type": "ci",
+      "breaking": false,
+      "title": "refit the test shard costs and cancel superseded Release PR runs",
+      "body": "* ci: start the Release PR's checks from the train and cancel superseded runs\n\nrelease-pr.yml pushes release/next with the default GITHUB_TOKEN, and the\npull_request run that push raises waits as action_required until someone\napproves it, so the Release PR sat with no checks. The train now dispatches\nci.yml and pr-title.yml at release/next after each push; a dispatch is an\nevent GITHUB_TOKEN may start. ci.yml's concurrency group for\nrefs/heads/release/next cancels the run of the commit the push replaced, and\nthe runner job and ci-gate's EXPECT_SKIP accept the dispatched ref.\n\nTests: node tests/run.js ci.yml\n\n* ci: refit the test shard costs and read shard 1's link programs again\n\nThe cost table gave cryptoBench 143 s where green main runs now measure\n282 s, so shard 6 took 9.9 to 12.2 minutes while others finished in 6.\nshard-costs.mjs had also stopped reading shard 1: its netStartup pattern\nmatched the net_tcp_connect checks that print before the link programs.\nIt now matches that section's first check, and the table is refitted from\nfour green main runs. Summed under their median costs the slowest shard\ncarries 8.1 minutes of the Test step, down from 9.4.\n\nRefs: docs/wp10-ci.md\n\n* ci: cancel a superseded Release PR run, and leave the dispatch to #2068\n\nDrops the dispatch of ci.yml and pr-title.yml at release/next, and the runner\nand ci-gate changes that came with it: #2068 makes the same change. What stays\nis the concurrency rule: a run at refs/heads/release/next now cancels when a\nnewer one starts, as a pull request's does. The train force-pushes that branch\non every merge to main, so the older commit's run tests a release nobody can\nmerge any more, and the dispatched runs, whose event is not pull_request, were\nnot covered by the existing condition.\n\nTests: node tests/run.js ci.yml",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "11e2bd7"
+      ],
+      "pr": 2069,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-20"
+    }
+  ]
+}

@@ -20,7 +20,11 @@
 # GITHUB_TOKEN, whose `pull_request` runs wait as `action_required` until a
 # maintainer approves them, so the step also dispatches ci.yml and
 # pr-title.yml at `release/next`: a dispatched run needs no approval, and its
-# checks land on the same commit, which is the PR's head.
+# checks land on the same commit, which is the PR's head. A PR's required
+# checks never count a dispatched run's check runs, so ci.yml's gate also
+# reports itself as a `ci-gate` commit status there. GitHub still refuses
+# the merge while any run at the head waits for approval, required or not, so
+# the job then deletes those waiting `pull_request` runs.
 #
 # Why the tag is created here and not by the merge itself: a tag pushed by a
 # workflow using the default GITHUB_TOKEN does not start another workflow, so
@@ -43,7 +47,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write # dispatch release.yml at the tag this job pushes
+  # Dispatch release.yml at the tag this job pushes, dispatch ci.yml and
+  # pr-title.yml at release/next, and delete the Release PR's waiting runs.
+  actions: write
   # gh attestation verify, for the seed the break-web rebuild fetches.
   attestations: read
 
@@ -233,7 +239,8 @@ jobs:
           # someone approves them. `workflow_dispatch` is exempt, as it is for
           # release.yml at the tag above, so start the two workflows whose
           # checks the merge requires at the branch: they report on the commit
-          # just pushed, the PR's head, with no approval and no personal token.
+          # just pushed, the PR's head, with no approval and no personal token
+          # (the required `ci-gate` as a commit status; see ci.yml's gate).
           # A refused dispatch leaves the pull request, which is still worth
           # opening, so it warns.
           for workflow in ci.yml pr-title.yml; do
@@ -269,3 +276,40 @@ jobs:
             echo "$out" >&2
             exit 1
           fi
+
+      # The merge box says "Some checks are waiting for approval" and refuses
+      # to merge while any run at the PR's head is `action_required`, even one
+      # no ruleset requires. The push above raises a CI and a PR title run as
+      # github-actions[bot] (`synchronize`, or `opened` for a new PR), and the
+      # title or body edit raises another PR title run (`edited`); approving
+      # them only re-runs what the dispatch already ran. Deleting a run removes
+      # its check suite, so this deletes every waiting `pull_request` run at
+      # the head. Each appears a few seconds after its event, so it sweeps for
+      # a minute rather than once. A run it cannot delete is left for a
+      # maintainer to approve, with a warning, rather than failing main.
+      - name: Delete the Release PR's runs that wait for approval
+        if: steps.path.outputs.mode == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head="$(git ls-remote origin refs/heads/release/next | cut -f1)"
+          if [ -z "$head" ]; then
+            echo "::notice::no release/next branch, so no runs to delete"
+            exit 0
+          fi
+          deleted=0
+          failed=" "
+          for _ in $(seq 1 12); do
+            sleep 5
+            ids="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=pull_request&status=action_required&head_sha=$head&per_page=100" --jq '.workflow_runs[].id' || true)"
+            for id in $ids; do
+              case "$failed" in *" $id "*) continue ;; esac
+              if gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id" > /dev/null; then
+                deleted=$((deleted + 1))
+              else
+                failed="$failed$id "
+                echo "::warning title=Release PR run not deleted::Run $id at $head waits for approval and could not be deleted, so the Release PR cannot merge until it is approved or deleted: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$id"
+              fi
+            done
+          done
+          echo "::notice::deleted $deleted waiting pull_request run(s) at $head"

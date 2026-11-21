@@ -195,7 +195,10 @@ const RECOGNIZERS = {
   fileServer: /^file-server:/,
   differential: /^differential: native and Node/,
   p256Seams: /^p256/,
-  netStartup: /^net_\w+: /,
+  // Its own first check, not any `net_` one: the `net_tcp_connect` and
+  // `net_udp_echo` checks print before the link programs, and a match there
+  // ends the link programs before they begin.
+  netStartup: /^net_http1_server: startup\.ts links$/,
   threadWasi: /^(skipped: )?link\/thread_mutex_counter: (the `--profile wasi` build|no WASI sysroot)/,
   cryptoChecks: /^nish:secret: (the wipe survives|no opt)/,
   arrayChecks: /^arr_range_call/,

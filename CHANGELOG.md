@@ -16,6 +16,110 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-21
+
+### Breaking changes
+
+- cli: Hold the root package to no panic by default; --allow-panics relaxes it ([#2004](https://github.com/amritk/nish/pull/2004))
+
+### Added
+
+- cli: Profile-guided builds with nish --link --pgo-generate and --pgo-use ([#1764](https://github.com/amritk/nish/pull/1764))
+- runtime: Read SQLite tables and indexes through B-tree cursors ([#1771](https://github.com/amritk/nish/pull/1771))
+- checker: Accept optional chaining and nullish coalescing under --compat ([#1770](https://github.com/amritk/nish/pull/1770))
+- codegen: Accept string switch and for...of over a string under --compat ([#1788](https://github.com/amritk/nish/pull/1788))
+- checker: Accept optional parameters, non-constant defaults and overload signatures under --compat ([#1789](https://github.com/amritk/nish/pull/1789))
+- cli: A package links a C library or its own C sources ([#1796](https://github.com/amritk/nish/pull/1796))
+- checker: Opaque declare classes C can return ([#1795](https://github.com/amritk/nish/pull/1795))
+- checker: Pair a C buffer with its count by name, at any unsigned width ([#1794](https://github.com/amritk/nish/pull/1794))
+- checker: Fixed-length array fields in a declare class ([#1803](https://github.com/amritk/nish/pull/1803))
+- cli: Nish c-import writes a Nish module from a C header ([#1798](https://github.com/amritk/nish/pull/1798))
+- cli: Nish c-import emits opaque classes, array fields and named buffer pairs ([#1810](https://github.com/amritk/nish/pull/1810))
+- interop: A compact class crosses --emit-header as an opaque handle (WP48 stage 2c) ([#1781](https://github.com/amritk/nish/pull/1781))
+- checker: Two modules may each keep a private function or generic of one name ([#1812](https://github.com/amritk/nish/pull/1812))
+- runtime: Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it ([#1814](https://github.com/amritk/nish/pull/1814))
+- codegen: Give a compact class's links their own TBAA node, debug type and debugger printers ([#1782](https://github.com/amritk/nish/pull/1782))
+- codegen: The compiler picks compact classes, with implements Wide and --compact off ([#1786](https://github.com/amritk/nish/pull/1786))
+- checker: Allow [] and new expressions as class field initializers ([#1829](https://github.com/amritk/nish/pull/1829))
+- cli: Add --allow-panics and pass it wherever the repository builds a program that may panic ([#1848](https://github.com/amritk/nish/pull/1848))
+- checker: Read named constants, masks, charCodeAt and down-counting loops in the panic prover ([#1999](https://github.com/amritk/nish/pull/1999))
+
+### Fixed
+
+- net: Make the pipelined pool's seats-freed-together check deterministic ([#1766](https://github.com/amritk/nish/pull/1766))
+- ci: Say in ci-scope's why= whether any lane is off ([#1815](https://github.com/amritk/nish/pull/1815))
+- checker: Record a guarded nish:simd access as a proven panic site ([#1784](https://github.com/amritk/nish/pull/1784))
+- checker: Name the template-literal spelling when a number's toString is called ([#1824](https://github.com/amritk/nish/pull/1824))
+- runtime: Ring-in-place bench validation, its deadline claims, and single-process ring pins ([#1831](https://github.com/amritk/nish/pull/1831))
+- codegen: Lay a Result's pointer payload out in 4 bytes on wasm32 ([#1757](https://github.com/amritk/nish/pull/1757))
+- examples: Make the examples panic-free under --deny-panics ([#1989](https://github.com/amritk/nish/pull/1989))
+- ci: Honour strict link programs in the Nish runner, and push the Release PR with RELEASE_PR_TOKEN ([#2067](https://github.com/amritk/nish/pull/2067))
+
+### Performance
+
+- ci: Check each golden case's IR on one shard and time crypto-bench on main only ([#1792](https://github.com/amritk/nish/pull/1792))
+- ci: Rebalance the test shards around what is left ([#1797](https://github.com/amritk/nish/pull/1797))
+- docs: Paint the landing page's hero from the server's HTML ([#1799](https://github.com/amritk/nish/pull/1799))
+- interop: Read short Postgres int columns without the overflow test ([#1800](https://github.com/amritk/nish/pull/1800))
+- runtime: Cache checked cursor shapes and keep read-transaction statements prepared ([#1801](https://github.com/amritk/nish/pull/1801))
+- runtime: Measure the feed through cursors against SQL ([#1787](https://github.com/amritk/nish/pull/1787))
+- bench: Measure PGO and the CPU level on the SQLite feed workload ([#1832](https://github.com/amritk/nish/pull/1832))
+- runtime: Lend Http1Server connections only to busy slots ([#1785](https://github.com/amritk/nish/pull/1785))
+- runtime: Split lines in std/text sixteen positions at a time ([#1834](https://github.com/amritk/nish/pull/1834))
+
+### Changed
+
+- checker: Give each struct a symbol separate from its source name ([#1840](https://github.com/amritk/nish/pull/1840))
+
+### Documentation
+
+- Write code examples as arrow functions and hide the nish:ok test markers from the site ([#1753](https://github.com/amritk/nish/pull/1753))
+- interop: Propose WP66, C libraries from their headers ([#1759](https://github.com/amritk/nish/pull/1759))
+- self: Pin std/ line moves and nish:simd panic proofs in CLAUDE.md ([#1754](https://github.com/amritk/nish/pull/1754))
+- bench: Measure where a minimal HTTP/1.1 GET spends its instructions and bytes ([#1765](https://github.com/amritk/nish/pull/1765))
+- Plan WP67, keeping every cause in an error chain ([#1774](https://github.com/amritk/nish/pull/1774))
+- Sell Nish's speed in search results and serve a 48px favicon ([#1790](https://github.com/amritk/nish/pull/1790))
+- Add a Leaderboards page with the multicore server challenge result ([#1802](https://github.com/amritk/nish/pull/1802))
+- roadmap: Settle WP57 S2 as keep refusing and split S3 into stages ([#1816](https://github.com/amritk/nish/pull/1816))
+- roadmap: Tick WP39's and WP43's built stages and move finished packages to Landed ([#1819](https://github.com/amritk/nish/pull/1819))
+- ForEach on arrays and sets, NL9019's scope, string-enum and stale security lines ([#1825](https://github.com/amritk/nish/pull/1825))
+- Tick WP39's merged stages, mark wp60's in-band cells, and fix stale bench lines ([#1828](https://github.com/amritk/nish/pull/1828))
+- self: Propose WP68, shared libraries layered like atomic design ([#1779](https://github.com/amritk/nish/pull/1779))
+- codegen: Say what the compact rule picks in the tree benches and the memory guide (WP48 stage 4) ([#1844](https://github.com/amritk/nish/pull/1844))
+- interop: NL4020 also reaches the methods of an exported class ([#1845](https://github.com/amritk/nish/pull/1845))
+- Say that CI's lint job runs more than npm run lint ([#1841](https://github.com/amritk/nish/pull/1841))
+- Recheck diagnostic codes and roadmap counts after syncing main ([#1842](https://github.com/amritk/nish/pull/1842))
+- Track the open roadmap as issues, specified by plan files, with the workflow skills vendored ([#1998](https://github.com/amritk/nish/pull/1998))
+- Plan #2000 and the leftovers of five finished feature runs ([#2003](https://github.com/amritk/nish/pull/2003))
+- Require a bench side to be the code it names ([#1807](https://github.com/amritk/nish/pull/1807))
+- Plan WP71 to WP73 for HttpArena, and retire the TechEmpower submission ([#1809](https://github.com/amritk/nish/pull/1809))
+- Plan WP39 G7's TLS, WebSocket and h2c-by-preface on the façade, retire the TechEmpower submission ([#2058](https://github.com/amritk/nish/pull/2058))
+- self: Propose WP69 and WP70, what a Spectral-compatible linter needs from std ([#1805](https://github.com/amritk/nish/pull/1805))
+- Plan WP43's static-file needs from WP71, br responses and middleware ([#2060](https://github.com/amritk/nish/pull/2060))
+- plans: File the overload and Postgres write-order plans, and fix four plan-issue drifts ([#2063](https://github.com/amritk/nish/pull/2063))
+- plans: File the overload-queue and Postgres write-order plans ([#2064](https://github.com/amritk/nish/pull/2064))
+- Regenerate break-web on a --help change, and back every-site sweeps with a check ([#2066](https://github.com/amritk/nish/pull/2066))
+- Require exit DECLARED entries and an old-rule grep when a refusal flips ([#1839](https://github.com/amritk/nish/pull/1839))
+
+### Tests
+
+- Link a wasm32 link case natively in the Nish runner too ([#1768](https://github.com/amritk/nish/pull/1768))
+- cli: Pin that --cpu reaches the SQLite unit, and record why --cpu native is refused ([#1783](https://github.com/amritk/nish/pull/1783))
+- interop: Pin the N-API refusals of compact classes, and say which code appears when ([#1823](https://github.com/amritk/nish/pull/1823))
+- Pin constant tables, the recursion loop's panics, and the long-path cleanup ([#1826](https://github.com/amritk/nish/pull/1826))
+
+### CI
+
+- Cancel a main run once the next merge lands, pinning release merges and re-runs ([#1772](https://github.com/amritk/nish/pull/1772))
+- cli: Keep each test shard's results in the step summary ([#2005](https://github.com/amritk/nish/pull/2005))
+- Start the Release PR's checks by dispatch, with no token ([#2068](https://github.com/amritk/nish/pull/2068))
+- Refit the test shard costs and cancel superseded Release PR runs ([#2069](https://github.com/amritk/nish/pull/2069))
+
+### Internal
+
+- Plan WP41's open stages and PR 1808's two follow-ups ([#2059](https://github.com/amritk/nish/pull/2059))
+
+
 ## [0.43.0] - 2026-11-18
 
 ### Added
@@ -2091,3 +2195,4 @@ file per release, and each release's notes and downloads are on the
 [0.41.0]: https://github.com/amritk/nish/releases/tag/v0.41.0
 [0.42.0]: https://github.com/amritk/nish/releases/tag/v0.42.0
 [0.43.0]: https://github.com/amritk/nish/releases/tag/v0.43.0
+[0.44.0]: https://github.com/amritk/nish/releases/tag/v0.44.0

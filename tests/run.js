@@ -8905,9 +8905,10 @@ if (dealtHere("selfHosting")) {
         `${nishCmp.stdout}${nishCmp.stderr}`
       )
 
-      // The window starts at the first generated program a declaration in
-      // fuzz.js reaches (20261176 holds a guarded counted loop), since an entry
-      // no program in the run uses fails as stale; any 16 programs are as random.
+      // The window starts where the last fuzz.js declaration (0.44.0's loop
+      // guards) needed it, at 20261176, which holds a guarded counted loop; a
+      // new entry no program in the run uses fails as stale, so it moves with
+      // the next one. Any 16 programs are as random.
       const stage1FuzzSeed = 20261176
       const stage1Fuzz = spawnSync(
         "node",
@@ -41890,6 +41891,18 @@ if (selects("ci-scope", "ci.yml")) {
 }
 
 if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // The train force-pushes release/next on every merge to main, so a run of
+  // the commit it replaced tests a release nobody can merge any more: the
+  // group for that ref cancels like a pull request's. The run it cancels is
+  // the one release-pr.yml dispatches there (`github.ref`), which a
+  // `pull_request` condition alone does not reach.
+  const cancelIf = /^ {2}cancel-in-progress: >-\n {4}(.*)$/m.exec(ciYmlText)?.[1] ?? ""
+  check(
+    "ci.yml: a newer push to release/next cancels the older commit's run",
+    cancelIf.startsWith("${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || ") &&
+      /^ {4}ci-\$\{\{ github\.workflow \}\}-.*\|\| github\.ref \}\}$/m.test(ciYmlText),
+    `cancel-in-progress: ${cancelIf || "(none)"}`
+  )
   // Each delegation is honest only while the job it names makes the check on
   // every run that could change its answer. Those jobs are scoped lanes
   // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so

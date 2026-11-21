@@ -610,19 +610,14 @@ const DECLARED = []
  * `tests/nish-cmp.js` states it: `explains: (reference, candidate) =>
  * cmp.withoutHardening(candidate) === reference`.
  *
- * The loop-guarded additions (`emitAddGuards`, src/emit-arrays.ts) add
- * instructions to a generated program's counted loops: a pre-loop overflow
- * flag and an unchecked add beside each checked one. `onlyAddsLoopGuards`
- * takes the guards back out of the candidate and requires what is left to be
- * the reference.
+ * 0.44.0 shipped the last of the loop-guarded additions (`emitAddGuards`,
+ * src/emit-arrays.ts), which an entry here stated with
+ * `explains: (reference, candidate) => onlyAddsLoopGuards(reference, candidate)`:
+ * a counted loop gains a pre-loop overflow flag and an unchecked add beside
+ * each checked one. `onlyAddsLoopGuards` stays, held to fabricated pairs, for
+ * the next release that adds guards the same way.
  */
-const DECLARED_CHECKS = [
-  {
-    changelog: "counted loop's x + i for overflow once",
-    why: "a counted loop that adds a loop-invariant value to its counter gains a pre-loop overflow test and an unchecked add beside each checked one, and its values renumber",
-    explains: (reference, candidate) => onlyAddsLoopGuards(reference, candidate),
-  },
-]
+const DECLARED_CHECKS = []
 
 /** How many times each runtime panic is called, and each check block opened, in an IR text. */
 const panicCounts = (ir) => {
