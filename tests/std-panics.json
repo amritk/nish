@@ -6,8 +6,8 @@
   ],
   "total": 9796,
   "explicit": {
-    "kept": 342,
-    "toFix": 134
+    "kept": 338,
+    "toFix": 138
   },
   "modules": {
     "std/base64.ts": {
@@ -1147,11 +1147,6 @@
       "module": "std/net/handler.ts",
       "function": "HttpHandler.field",
       "reason": "field requires a request taken and not yet answered, and at most HANDLER_MAX_ADDED fields per answer; a caller sequencing contract and a static cap"
-    },
-    {
-      "module": "std/net/handler.ts",
-      "function": "HttpHandler.put",
-      "reason": "write requires a started response, an in-buffer window and no more than the declared length; all caller-controlled preconditions"
     },
     {
       "module": "std/net/handler.ts",

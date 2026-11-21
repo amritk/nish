@@ -142,7 +142,7 @@ The two largest server modules are cleared, so file-server and prefork-server bu
 
 Sites as of 071ed014 (586): net/http1-server 166, net/http-server 420. Kinds: overflow 261, index 236, panic 47, array-length 27, slice 5, divide 5, pop 3, io-exit 2.
 
-Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `HttpServer.carry`, `HttpServer.h1Of`, `HttpServer.h2cOf`, `HttpServer.h2Of`, `HttpServer.h3Of`, `Http1Connection.respondEncoded`.
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `HttpServer.carry`, `HttpServer.h1Of`, `HttpServer.h2cOf`, `HttpServer.h2Of`, `HttpServer.h3Of`, `Http1Connection.respondEncoded`, `HttpHandler.put`.
 
 ### S5 — the handler, serve and router layer
 
