@@ -35,6 +35,8 @@ PASS  HEAD: the length and no body
 PASS  POST: 405 with Allow: GET, HEAD
 PASS  a file past the cache streams whole
 PASS  and by range across a read
+PASS  If-Range with the date of a file changed this second: the whole file
+PASS  the same-second If-Range check ran within one second
 PASS  traversal refused: /static/../outside.txt is 404 and refused
 PASS  traversal refused: /static/sub/../../outside.txt is 404 and refused
 PASS  traversal refused: /static/%2e%2e/outside.txt is 404 and refused
@@ -97,4 +99,4 @@ PASS  limits out of range: a path past 4096, nothing served
 PASS  limits out of range: a negative cache, nothing served
 PASS  limits out of range: a cache past 2^30, nothing served
 PASS  limits in range: the root resolves
-static files: 99 passed, 0 failed, 0 skipped
+static files: 101 passed, 0 failed, 0 skipped

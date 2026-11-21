@@ -346,8 +346,8 @@ const staticCut = (src: u8[], length: i32): u8[] => {
 export class StaticFiles {
   /** The root's real path, or `""` when it did not resolve (then every request is not found). */
   root: string
-  /** What the constructor was given. */
-  limits: StaticLimits
+  /** A copy of the limits the constructor was given, within their ranges. */
+  private limits: StaticLimits
   /** Whether the last `serve` that answered `STATIC_NOT_FOUND` refused the path rather than missing the file. */
   refused: boolean = false
   /** The status the last `serve` sent, or 0 when it sent none. */
@@ -423,8 +423,8 @@ export class StaticFiles {
   /**
    * A server of the files under `root`, which is resolved once, now. Limits
    * out of range (`maxEntries` or `maxPath` outside 1 to 4096, or a
-   * `maxCachedBytes` outside 0 to 2^30) leave the root empty, so every request is not
-   * found.
+   * `maxCachedBytes` outside 0 to 2^30) leave the root empty, so every GET or
+   * HEAD is not found.
    * @param root the directory to serve
    * @param limits the cache and path limits
    */
@@ -438,7 +438,12 @@ export class StaticFiles {
       limits.maxCachedBytes <= 1073741824
     const real: string | null = ok ? realpathSync(root) : null
     this.root = real === null ? "" : real
-    this.limits = limits
+    // A copy, so a program that changes its limits later cannot outgrow the arrays sized here.
+    const own = new StaticLimits()
+    own.maxCachedBytes = ok ? limits.maxCachedBytes : 0
+    own.precompressed = limits.precompressed
+    own.index = limits.index
+    this.limits = own
     let entries: i32 = 1
     let room: i32 = 17
     const asked: i32 = limits.maxEntries
@@ -448,6 +453,8 @@ export class StaticFiles {
       entries = asked
       room = longest + 16
     }
+    own.maxEntries = entries
+    own.maxPath = room - 16
     this.path = new Array<u8>(room)
     this.keys = new Array<u8>(entries * room)
     this.etag = new Array<u8>(48)
@@ -673,7 +680,10 @@ export class StaticFiles {
       this.refused = true
       return STATIC_NOT_FOUND
     }
-    let chosen: string = real
+    // Each time is read before its file is opened: a file renamed over it in
+    // between is then served once under the older time, and the next request
+    // sees the newer one and reads it again, never the reverse.
+    let mtime: f64 = statMtimeSync(real)
     let fd: i32 = fileOpen(real)
     if (fd < 0) {
       return STATIC_NOT_FOUND
@@ -688,11 +698,12 @@ export class StaticFiles {
         if (this.coding === STATIC_IDENTITY && q > 0 && q >= this.qIdentity) {
           const sibling: string | null = realpathSync(base + (coding === STATIC_BR ? ".br" : ".gz"))
           if (sibling !== null && sibling.startsWith(prefix)) {
+            const otherTime: f64 = statMtimeSync(sibling)
             const other: i32 = fileOpen(sibling)
             if (other >= 0) {
               fileClose(fd)
               fd = other
-              chosen = sibling
+              mtime = otherTime
               this.coding = coding
             }
           }
@@ -701,7 +712,6 @@ export class StaticFiles {
     }
     this.fd = fd
     this.size = fileSize(fd)
-    const mtime: f64 = statMtimeSync(chosen)
     // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
     this.mtime = mtime === mtime ? mtime : 0
     if (this.size < 0) {
@@ -851,7 +861,7 @@ export class StaticFiles {
     return false
   }
 
-  /** Whether `If-Range` is the strong ETag or the exact Last-Modified date. @internal Called by `staticRange`. */
+  /** Whether `If-Range` is the strong ETag, or the Last-Modified date of a file unchanged for a second or more. @internal Called by `staticRange`. */
   staticIfRange(head: u8[]): boolean {
     let s: i32 = this.ifRangeStart
     let e: i32 = this.ifRangeEnd
@@ -865,7 +875,10 @@ export class StaticFiles {
       return this.staticSameTag(head, s, e)
     }
     const at: i64 = staticDate(head, s, e)
-    return at >= 0 && at === this.staticSecond()
+    const last: i64 = this.staticSecond()
+    // A date validates only a strong Last-Modified, a second or more before
+    // now (RFC 9110 §13.1.5): two versions within one second share the date.
+    return at >= 0 && at === last && (last + 1) * 1000 <= toI64(Date.now())
   }
 
   /**

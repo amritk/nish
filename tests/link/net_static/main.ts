@@ -185,6 +185,35 @@ const typeChecks = (t: Suite, rig: StaticRig, key: Secret<u8[]>): void => {
   }
 }
 
+/** Waits `ms` milliseconds of wall-clock time. */
+const pause = (ms: i64): void => {
+  const until: i64 = toI64(Date.now()) + ms
+  while (toI64(Date.now()) < until) {}
+}
+
+/**
+ * `If-Range` with the date of a file written this second: two versions within
+ * one second share the date, so it is not a validator and the whole file is
+ * sent. Tried again while the request ran past that second, so the check
+ * judges only a same-second answer.
+ */
+const sameSecondCheck = (t: Suite, rig: StaticRig, key: Secret<u8[]>): void => {
+  let judged = false
+  for (let attempt: i32 = 0; attempt < 5 && !judged; attempt++) {
+    // Early in a second, past the few milliseconds the kernel's file clock may lag.
+    while (toI64(Date.now()) % 1000 < 20 || toI64(Date.now()) % 1000 > 400) {}
+    const second: i64 = toI64(Date.now()) / 1000
+    writeFileSync(`${WWW}/fresh.txt`, `fresh ${attempt}\n`)
+    const modified: string = fieldOf(h1(rig, key, rig.h2.h1Port, "GET", "/static/fresh.txt", ""), "last-modified")
+    const r: string = h1(rig, key, rig.h2.h1Port, "GET", "/static/fresh.txt", `Range: bytes=0-3\r\nIf-Range: ${modified}\r\n`)
+    if (toI64(Date.now()) / 1000 === second) {
+      judged = true
+      t.ok("If-Range with the date of a file changed this second: the whole file", statusOf(r) === "200" && bodyOf(r) === `fresh ${attempt}\n`)
+    }
+  }
+  t.ok("the same-second If-Range check ran within one second", judged)
+}
+
 /** Validators, conditional requests, ranges, HEAD and 405 over HTTP/1.1. */
 const h1Checks = (t: Suite, rig: StaticRig, key: Secret<u8[]>): void => {
   const port: i32 = rig.h2.h1Port
@@ -210,6 +239,8 @@ const h1Checks = (t: Suite, rig: StaticRig, key: Secret<u8[]>): void => {
   expect(t, "a multipart Range is answered whole", h1(rig, key, port, "GET", "/static/site.css", "Range: bytes=0-1,4-5\r\n"), "200", "body{color:red}\n", [])
   expect(t, "a Range in another unit is ignored", h1(rig, key, port, "GET", "/static/site.css", "Range: lines=1-2\r\n"), "200", "body{color:red}\n", [])
   expect(t, "If-Range with the ETag: the range", h1(rig, key, port, "GET", "/static/site.css", `Range: bytes=0-3\r\nIf-Range: ${etag}\r\n`), "206", "body", [])
+  // A date validates only a file unchanged for a second or more: wait that long since the fixture wrote it.
+  pause(1100)
   expect(t, "If-Range with the date: the range", h1(rig, key, port, "GET", "/static/site.css", `Range: bytes=0-3\r\nIf-Range: ${modified}\r\n`), "206", "body", [])
   expect(t, "If-Range with another tag: the whole file", h1(rig, key, port, "GET", "/static/site.css", `Range: bytes=0-3\r\nIf-Range: "old"\r\n`), "200", "body{color:red}\n", [])
   expect(t, "bad Range: a start past the end is 416 with bytes */size", h1(rig, key, port, "GET", "/static/site.css", "Range: bytes=50-60\r\n"), "416", "", ["content-range", "bytes */16", "content-length", "0"])
@@ -412,9 +443,15 @@ export const main = (): i32 => {
   const limits = new StaticLimits()
   limits.maxCachedBytes = 4096
   const rig = new StaticRig(limits)
+  // Changed after the files were made: they keep the copy they were given, so
+  // the cache does not walk past the entries it sized and siblings stay on.
+  limits.maxEntries = 4096
+  limits.maxPath = 4096
+  limits.precompressed = false
   t.ok("the server listens on every carrier, and the handler beside it", rig.h2.h1Port > 0 && rig.h2.h2cPort > 0 && rig.h2.port > 0 && rig.quicPort > 0 && rig.handlerPort > 0)
   typeChecks(t, rig, key)
   h1Checks(t, rig, key)
+  sameSecondCheck(t, rig, key)
   traversalChecks(t, rig, key)
   precompressedChecks(t, rig, key)
   changedChecks(t, rig, key)
