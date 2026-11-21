@@ -7217,6 +7217,40 @@ if (dealtHere("emitTs")) {
       caught.join("\n")
     )
   }
+
+  // runtime/core/strings.mjs encodes a string once while it stays in use, not
+  // once per byte read: a single-slot cache re-encoded the document on every
+  // read of a loop that alternates it with a needle, quadratic in its length.
+  // tests/emit-ts/encodes/count.mjs counts `TextEncoder` calls. The unit half
+  // runs that loop over the runtime's helpers and answers by its exit status;
+  // the end-to-end half loads about 100 KB of YAML in a program written out
+  // with `--emit-ts`, one scalar not ASCII, and reads the count it leaves.
+  const encodes = path.join(fixtures, "encodes")
+  const unit = spawnSync("node", [path.join(encodes, "unit.mjs")], { cwd: root, encoding: "utf8" })
+  check(
+    "emit-ts: strings.mjs encodes a document once over a loop that alternates it with two short strings",
+    unit.status === 0,
+    `exit ${unit.status}\n${unit.stdout}${unit.stderr}`
+  )
+  const yamlOut = path.join(work, "encodes", "yaml")
+  fs.rmSync(yamlOut, { recursive: true, force: true })
+  const yamlTs = spawnNish([path.join(encodes, "yaml.ts"), "--allow-panics", "--emit-ts", yamlOut], { cwd: root, encoding: "utf8" })
+  const countFile = path.join(yamlOut, "encodes.txt")
+  const yamlRun =
+    yamlTs.status === 0
+      ? spawnSync("node", ["--import", path.join(encodes, "count.mjs"), ...emitTsNodeFlags, path.join(yamlOut, "entry.ts")], {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, NISH_ENCODES_TO: countFile },
+        })
+      : yamlTs
+  const yamlBytes = yamlRun.status === 0 ? Number(yamlRun.stdout.split(" ")[0]) : 0
+  const yamlEncodes = yamlRun.status === 0 && fs.existsSync(countFile) ? Number(fs.readFileSync(countFile, "utf8")) : Infinity
+  check(
+    `emit-ts: a YAML load of ${yamlBytes} bytes under --emit-ts encodes under one string per thousand bytes (${yamlEncodes} encodes)`,
+    yamlBytes >= 100_000 && yamlEncodes * 1000 < yamlBytes,
+    `exit ${yamlRun.status}\n${yamlRun.stdout}${yamlRun.stderr}`
+  )
 }
 
 // ---- Removed before 1.0: `Arena.release` and `Arena.reset` --------------------------

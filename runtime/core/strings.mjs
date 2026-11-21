@@ -11,31 +11,65 @@ import { panicIndex, panicSlice, toIndex } from "./checks.mjs";
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder("utf-8", { ignoreBOM: true });
 
-/** The string `bytesOf` encoded last, and its bytes. */
-let lastString = "";
-let lastBytes = new Uint8Array(0);
+/** A UTF-16 unit that is not ASCII, so its UTF-8 bytes are not its units. */
+const NON_ASCII = /[^\x00-\x7f]/;
 
 /**
- * The UTF-8 bytes of `s`, which is what an Nish string holds. The last string
- * encoded is kept with its bytes, so a loop of `s.charCodeAt(i)` over one
- * string encodes it once rather than once per byte. Nothing here writes to
+ * How many strings `bytesOf` keeps. A loop alternates between strings: std's
+ * `indexOfAnyFrom` and `yamlByte` read a byte of the document, then of a
+ * needle or a word, per step, so a cache of one encodes the document on every
+ * read. Eight covers the most std's loops keep live at once.
+ */
+const SLOTS = 8;
+
+/**
+ * The strings `bytesOf` saw last, most recent first, and their bytes: `null`
+ * for an ASCII string, whose units are its bytes and which is never encoded.
+ * A hit moves its entry to the front and a miss drops the last one, so a
+ * string stays while it is read and leaves when it is not. A lookup compares
+ * at most `SLOTS` strings with `===`, which answers at once for the same
+ * string or a different length and otherwise stops at the first unit that
+ * differs.
+ */
+const keys = new Array(SLOTS).fill("");
+const values = new Array(SLOTS).fill(null);
+let used = 0;
+
+/**
+ * The UTF-8 bytes of `s`, which is what an Nish string holds, or `null` when
+ * `s` is ASCII and its UTF-16 units are those bytes. Nothing here writes to
  * the bytes it is handed.
  */
 function bytesOf(s) {
-  if (s !== lastString) {
-    lastBytes = ENCODER.encode(s);
-    lastString = s;
+  if (keys[0] === s) return values[0];
+  let at = 1;
+  while (at < used && keys[at] !== s) at++;
+  let bytes;
+  if (at < used) {
+    bytes = values[at];
+  } else {
+    bytes = NON_ASCII.test(s) ? ENCODER.encode(s) : null;
+    if (used < SLOTS) used++;
+    at = used - 1;
   }
-  return lastBytes;
+  for (; at > 0; at--) {
+    keys[at] = keys[at - 1];
+    values[at] = values[at - 1];
+  }
+  keys[0] = s;
+  values[0] = bytes;
+  return bytes;
 }
 
 /**
  * `s.length`: UTF-8 byte length for strings (arrays keep their own `.length`).
- * The engine's encoder outruns a count in JavaScript, and the loop condition
- * `i < s.length` then leaves the bytes for the `s.charCodeAt(i)` it guards.
+ * The loop condition `i < s.length` then leaves the bytes for the
+ * `s.charCodeAt(i)` it guards.
  */
 export function strLen(x) {
-  return typeof x === "string" ? bytesOf(x).length : x.length;
+  if (typeof x !== "string") return x.length;
+  const bytes = bytesOf(x);
+  return bytes === null ? x.length : bytes.length;
 }
 
 /**
@@ -52,6 +86,10 @@ export function strLenOpt(x) {
 export function charCodeAt(s, i) {
   const bytes = bytesOf(s);
   const k = toIndex(i);
+  if (bytes === null) {
+    if (!(k >= 0 && k < s.length)) panicIndex(k, s.length);
+    return s.charCodeAt(k);
+  }
   if (!(k >= 0 && k < bytes.length)) panicIndex(k, bytes.length);
   return bytes[k];
 }
@@ -59,9 +97,11 @@ export function charCodeAt(s, i) {
 /** `s.substring(a, b)`: JavaScript's clamp and swap, over byte offsets. */
 export function substring(s, a, b) {
   const bytes = bytesOf(s);
-  const clamp = (v) => Math.max(0, Math.min(toIndex(v), bytes.length));
+  const len = bytes === null ? s.length : bytes.length;
+  const clamp = (v) => Math.max(0, Math.min(toIndex(v), len));
   const from = clamp(a);
-  const to = b === undefined ? bytes.length : clamp(b);
+  const to = b === undefined ? len : clamp(b);
+  if (bytes === null) return s.substring(from, to);
   return DECODER.decode(bytes.subarray(Math.min(from, to), Math.max(from, to)));
 }
 
@@ -73,17 +113,22 @@ export function substring(s, a, b) {
  */
 export function slice(s, a, b) {
   const bytes = bytesOf(s);
+  const len = bytes === null ? s.length : bytes.length;
   const from = toIndex(a);
-  const to = b === undefined ? bytes.length : toIndex(b);
-  if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
-  return DECODER.decode(bytes.subarray(from, to));
+  const to = b === undefined ? len : toIndex(b);
+  if (!(from >= 0 && from <= to && to <= len)) panicSlice(from, to, len);
+  return bytes === null ? s.slice(from, to) : DECODER.decode(bytes.subarray(from, to));
 }
 
-/** Whether `needle` sits in `bytes` at byte offset `at`. */
-function bytesAt(bytes, at, needle) {
-  if (!(at >= 0 && at + needle.length <= bytes.length)) return false;
-  for (let j = 0; j < needle.length; j++) {
-    if (bytes[at + j] !== needle[j]) return false;
+/**
+ * Whether `sub` sits in `bytes` at byte offset `at`; `needle` is `sub`'s
+ * bytes, or `null` when `sub` is ASCII and its units are compared instead.
+ */
+function bytesAt(bytes, at, sub, needle) {
+  const n = needle === null ? sub.length : needle.length;
+  if (!(at >= 0 && at + n <= bytes.length)) return false;
+  for (let j = 0; j < n; j++) {
+    if (bytes[at + j] !== (needle === null ? sub.charCodeAt(j) : needle[j])) return false;
   }
   return true;
 }
@@ -92,35 +137,40 @@ function bytesAt(bytes, at, needle) {
  * `s.indexOf(sub, from)`: the first *byte* offset at or after `from`, or -1.
  * `from` is converted as JavaScript's `ToIntegerOrInfinity` converts it (NaN
  * is 0) and clamped into `[0, len]`, so an empty `sub` is found at `from`.
- * The engine's `indexOf` over the bytes finds each candidate for `sub`'s
- * first byte, and only those are compared in full.
+ * In an ASCII `s` the engine's own `indexOf` answers: offsets are bytes there,
+ * and a `sub` that is not ASCII is in it nowhere, as none of its bytes are.
+ * Otherwise the engine's `indexOf` over the bytes finds each candidate for
+ * `sub`'s first byte, and only those are compared in full.
  */
 export function indexOf(s, sub, from) {
   const haystack = bytesOf(s);
+  const len = haystack === null ? s.length : haystack.length;
   const at = from === undefined ? 0 : toIndex(from);
-  const start = Number.isNaN(at) ? 0 : Math.max(0, Math.min(at, haystack.length));
+  const start = Number.isNaN(at) ? 0 : Math.max(0, Math.min(at, len));
   if (sub.length === 0) return start;
-  const needle = ENCODER.encode(sub);
-  const last = haystack.length - needle.length;
-  for (let i = haystack.indexOf(needle[0], start); i >= 0 && i <= last; i = haystack.indexOf(needle[0], i + 1)) {
-    if (bytesAt(haystack, i, needle)) return i;
+  if (haystack === null) return s.indexOf(sub, start);
+  const needle = bytesOf(sub);
+  const first = needle === null ? sub.charCodeAt(0) : needle[0];
+  const last = len - (needle === null ? sub.length : needle.length);
+  for (let i = haystack.indexOf(first, start); i >= 0 && i <= last; i = haystack.indexOf(first, i + 1)) {
+    if (bytesAt(haystack, i, sub, needle)) return i;
   }
   return -1;
 }
 
-/** `nish_str_at`: whether `sub`'s bytes sit at byte offset `at`. */
-function occursAt(s, at, sub) {
-  return bytesAt(bytesOf(s), at, ENCODER.encode(sub));
-}
-
+/** `s.startsWith(sub)`: whether `sub`'s bytes begin `s`'s; an ASCII `s` asks the engine. */
 export function startsWith(s, sub) {
-  return occursAt(s, 0, sub);
+  const bytes = bytesOf(s);
+  if (bytes === null) return s.startsWith(sub);
+  return bytesAt(bytes, 0, sub, bytesOf(sub));
 }
 
+/** `s.endsWith(sub)`: whether `sub`'s bytes end `s`'s; an ASCII `s` asks the engine. */
 export function endsWith(s, sub) {
   const bytes = bytesOf(s);
-  const needle = ENCODER.encode(sub);
-  return bytesAt(bytes, bytes.length - needle.length, needle);
+  if (bytes === null) return s.endsWith(sub);
+  const needle = bytesOf(sub);
+  return bytesAt(bytes, bytes.length - (needle === null ? sub.length : needle.length), sub, needle);
 }
 
 /**
