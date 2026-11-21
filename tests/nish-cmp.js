@@ -10111,6 +10111,18 @@ const DECLARED = [
         "net_http_server_h3_webtransport",
         "net_http_server_lifecycle",
         "net_http_server_matrix",
+        "net_http_server_start_fields",
+        "net_http_server_start_length",
+        "net_http_server_start_refused",
+        "net_http_server_start_status",
+        "net_http_server_start_twice",
+        "net_http_server_take_none",
+        "net_http_server_timeouts",
+        "net_http_server_unbegun",
+        "net_http_server_wait_tls",
+        "net_http_server_write_long",
+        "net_http_server_write_unstarted",
+        "net_http_server_write_window",
       ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]])
     )
   ),
@@ -10119,6 +10131,52 @@ const DECLARED = [
     {
       "tests/link/cls_field_init_json/main.ts": ["bytes.ll", "json.ll", "main.h", "main.ll"],
     }
+  ),
+  ...stdPanicFree(
+    "std/text's indexOfAny walks its input under guards the prover reads, so the scan inlined into the program changes",
+    Object.fromEntries(
+      [
+        "std_text_index_of_any",
+        "std_text_index_of_any_empty_set",
+        "std_text_index_of_any_long_set",
+        "std_text_index_of_any_non_ascii_offset",
+        "std_text_index_of_any_non_ascii_set",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll"]])
+    )
+  ),
+  ...stdPanicFree(
+    "std/text's case helpers index under guards instead of panicking, so the inlined code and the classes it declares change",
+    {
+      "tests/link/std_text_camel_case/main.ts": ["main.h", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/regex compiles and matches with guarded indexes and Results in place of panics, so the program's matching code and its classes change",
+    {
+      "tests/link/std_regex/main.ts": ["suite.ll"],
+      "tests/link/std_regex_f64/main.ts": ["suite.ll"],
+      "tests/link/std_regex_node/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_regex_unicode/main.ts": ["main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/json's writer guards every index and grows its buffer without a computed array length, so the formatter, its unit table and the classes they declare change",
+    {
+      "tests/link/std_json_format/main.ts": ["json-format.ll", "main.h", "units.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "the program calls nish/bytes' new tryCopyBytes, or reaches it through std/json, which now copies with that Result form in place of a panicking copy; the seed's nish/bytes does not export it, so the seed refuses the program",
+    Object.fromEntries(
+      [
+        "std_bytes_runs",
+        "std_json",
+        "std_json_tokenizer",
+        "std_text_f64",
+        "std_yaml_conformance",
+        "std_yaml_write",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["exit"]])
+    )
   ),
   ...stdPanicFree(
     "the example drops its --allow-panics opt-out now that the Map and Set calls it makes cannot panic, so the seed, whose collections still can, refuses it as a strict module",
