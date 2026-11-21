@@ -355,7 +355,7 @@ class ProtoParser {
 
   /** Stops the parse with "expected `what`, found" the token `t`. */
   expected(what: string, t: ProtoToken): boolean {
-    return this.expected(what, t)
+    return this.fail(`expected ${what}, found ${this.shown(t)}`, t.line)
   }
 
   /** Steps past the punctuation `p`, or stops the parse. */
@@ -626,13 +626,16 @@ class ProtoParser {
 
   /**
    * Whether the current word starts a field whose type is named like a
-   * keyword (`reserved reserved = 1;` declares a field): the next token is
-   * then a name, or a `.` continuing a type name.
+   * keyword (`reserved reserved = 1;` declares a field): a name, `=` and a
+   * field number follow, where `option deprecated = true;` has a value.
    */
   isFieldStart(): boolean {
     const n = this.peek2()
     return (
-      n.kind === ProtoTok.Ident && this.pos + 2 < this.toks.length && this.toks[this.pos + 2].text === "="
+      n.kind === ProtoTok.Ident &&
+      this.pos + 3 < this.toks.length &&
+      this.toks[this.pos + 2].text === "=" &&
+      this.toks[this.pos + 3].kind === ProtoTok.Int
     )
   }
 

@@ -232,13 +232,14 @@ function ProtoParser.shown(this: ProtoParser, t: ProtoToken): string -> @ProtoPa
   pointer t: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function ProtoParser.expected(this: ProtoParser, what: string, t: ProtoToken): boolean -> @ProtoParser.expected [method]
-  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: what
-  calls: ProtoParser.expected
-  pointer this: size=40 writesThrough=false captured=false passedTo=ProtoParser.expected#0
-  pointer t: size=16 writesThrough=false captured=false passedTo=ProtoParser.expected#2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ProtoParser.fail
+  calls: ProtoParser.fail ProtoParser.shown nish_str_concat
+  pointer this: size=40 writesThrough=false captured=false passedTo=ProtoParser.fail#0 ProtoParser.shown#0
+  pointer t: size=16 writesThrough=false captured=false passedTo=ProtoParser.shown#1
   stackSites=0 stackLocals=0
-  callee +0:12 ProtoParser.expected -> @ProtoParser.expected
+  callee +0:12 ProtoParser.fail -> @ProtoParser.fail
+  callee +0:49 ProtoParser.shown -> @ProtoParser.shown
 function ProtoParser.expect(this: ProtoParser, p: string, after: string): boolean -> @ProtoParser.expect [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ProtoParser.fail
@@ -253,7 +254,7 @@ function ProtoParser.expect(this: ProtoParser, p: string, after: string): boolea
   callee +5:14 ProtoParser.expected -> @ProtoParser.expected
   callee +7:5 ProtoParser.advance -> @ProtoParser.advance
 function ProtoParser.ident(this: ProtoParser, what: string): string -> @ProtoParser.ident [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ProtoParser.fail
   escaping: what
   calls: ProtoParser.advance ProtoParser.expected ProtoParser.fail ProtoParser.peek
@@ -282,7 +283,7 @@ function ProtoParser.dotted(this: ProtoParser, what: string): string -> @ProtoPa
   local +13:13 part: string (const)
   callee +13:20 ProtoParser.ident -> @ProtoParser.ident
 function ProtoParser.str(this: ProtoParser, what: string): string -> @ProtoParser.str [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ProtoParser.fail
   escaping: what
   calls: ProtoParser.advance ProtoParser.expected ProtoParser.fail ProtoParser.peek
