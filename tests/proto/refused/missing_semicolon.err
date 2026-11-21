@@ -1,0 +1,1 @@
+proto: refused/missing_semicolon.proto:2: expected ";" after the syntax statement, found "message"

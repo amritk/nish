@@ -1,0 +1,1 @@
+proto: refused/method_constant_clash.proto:4: refused: method Get of service S, whose constant S_GET the module already has

@@ -1,0 +1,4 @@
+syntax = "proto3";
+message A {
+  google.protobuf.Timestamp at = 1;
+}

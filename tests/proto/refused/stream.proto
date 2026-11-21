@@ -1,0 +1,5 @@
+syntax = "proto3";
+message A {}
+service S {
+  rpc Get(stream A) returns (A);
+}

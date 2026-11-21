@@ -1,0 +1,1 @@
+proto: refused/label_in_oneof.proto:4: refused: repeated inside a oneof

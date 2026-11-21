@@ -1,0 +1,1 @@
+proto: refused/field_named_encode.proto:3: refused: field encode in message A, a name the class already has or may not use

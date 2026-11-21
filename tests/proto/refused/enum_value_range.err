@@ -1,0 +1,1 @@
+proto: refused/enum_value_range.proto:4: enum value E_BIG is out of the int32 range

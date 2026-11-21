@@ -1,0 +1,1 @@
+proto: refused/map_key_double.proto:3: refused: a map key of double (keys are integers, bool or string)

@@ -1,0 +1,1 @@
+proto: refused/field_number_twice.proto:4: refused: two fields numbered 1 in message A

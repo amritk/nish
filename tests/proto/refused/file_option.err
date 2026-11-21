@@ -1,0 +1,1 @@
+proto: refused/file_option.proto:2: refused: option cc_enable_arenas (an option changes what the code means)
