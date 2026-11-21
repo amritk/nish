@@ -45,11 +45,20 @@ and a derived-key length. SCRAM-SHA-256's <tt>Hi</tt> is this function with a
 32-byte output, which is how nish/net/postgres uses it.</t>
       <t>RFC 7914 has no binding sentence in the sense of BCP 14 for PBKDF2, so the
 profile does not claim it as its main source: there is no completeness to
-check. Section 11 prints each call across two lines, the strings on the first
-and <tt>c</tt> and <tt>dkLen</tt> on the second, and vector pairs a printed string only with
-values on its own line. Each vector therefore takes its expected value from
-Python's hashlib, as a command <tt>spec check --run-sources</tt> runs; the bytes it
-prints are the ones Section 11 prints, byte for byte.</t>
+check.</t>
+      <t>Section 11 prints both vectors, and vector 0.6.0 cannot cite either, so each
+takes its expected value from Python's hashlib, as a command
+<tt>spec check --run-sources</tt> runs; the bytes it prints are the ones Section 11
+prints, byte for byte. Section 11 prints each value under the label
+<tt>PBKDF2-HMAC-SHA-256 (P="passwd", S="salt", c=1, dkLen=64) =</tt>, split across
+two lines. vector asks for that label on the Expected value, and its
+Markdown literal grammar refuses one with a <tt>"</tt>, an <tt>=</tt> or a comma inside its
+parentheses ("Expected: not a literal"). The labels <tt>c</tt> and <tt>dkLen</tt> on the
+integer arguments are refused as well: vector reads them back from this
+profile's own Test Vectors section, finds <tt>c</tt> and <tt>dkLen</tt> on both rows, and
+refuses ("nothing pairs a printed string with one of several labelled
+values"). The integers are left bare, and <tt>spec check</tt> warns that each has
+no label to find it by.</t>
     </section>
     <section anchor="interface">
       <name>Interface</name>
@@ -68,6 +77,21 @@ export const pbkdf2HmacSha256 = (password: Secret<u8[]>, salt: u8[], iterations:
         <t>The password and salt strings are passed as sequences of ASCII [RFC20] octets.
 <xref section="11" sectionFormat="of" target="RFC7914"/></t>
       </blockquote>
+    </section>
+    <section anchor="laws">
+      <name>Laws</name>
+      <t>PBKDF2 computes its output block by block, each block from the password,
+the salt, the count and the block's index alone, so a shorter key is a
+prefix of a longer one under the same inputs. The vectors hold 64-byte keys;
+the clause below holds the lengths around SHA-256's 32-byte block.</t>
+      <sourcecode type="ts-property"><![CDATA[
+// P-PREFIX covers R-PBKDF2 — dkLen bytes, a prefix of every longer key
+// samples: 32
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* 1..3 */, a: i32 /* 1..40 */, b: i32 /* 0..40 */) => {
+  const k = pbkdf2HmacSha256(pw, salt, n, a + b);
+  return k !== null && unwrap(k).length === a + b && unwrap(pbkdf2HmacSha256(pw, salt, n, a)) === unwrap(k).slice(0, a);
+}
+]]></sourcecode>
     </section>
     <section anchor="test-vectors">
       <name>Test Vectors</name>
@@ -154,43 +178,56 @@ export const pbkdf2HmacSha256 = (password: Secret<u8[]>, salt: u8[], iterations:
     </references>
   </back>
   <!-- ##markdown-source:
-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
+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
+fjdz/wa2DoCh9hEAAA==
 
 -->
 

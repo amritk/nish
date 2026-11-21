@@ -6,10 +6,12 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 95b80090fd04ae617c1f9ee15efa2c5dfdf1f8938b246ecc1bcc61f17a21bc78
+// vector-contract-sha256: 0e99690896edd329fe57883fc2cf28f60d74f80dff3b0070f06add8acc284f51
 
 import { Suite } from "nish/testing";
+import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac";
 import { scramSha256ClientProof, scramSha256SaltedPassword, scramSha256ServerSignature } from "nish/crypto/scram";
+import { sha256 } from "nish/crypto/sha256";
 import { Secret, expose, secret, wipe } from "nish:secret";
 
 /** `bytes` as lowercase hex, the way the RFC prints them. */
@@ -51,12 +53,97 @@ const nibble = (c: number): i32 => {
   return v - 48;
 };
 
+/** Equal contents, or both null. */
+const bytesEq = (a: u8[] | null, b: u8[] | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null;
+  }
+  const n: i32 = toI32(a.length);
+  if (n !== toI32(b.length)) {
+    return false;
+  }
+  for (let i: i32 = 0; i < n; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const isNullBytes = (b: u8[] | null): boolean => b === null;
+
+/**
+ * `a` and `b` combined byte by byte (k 0: xor, 1: and, 2: or), as long as
+ * the longer: the shorter reads as zeros past its end.
+ */
+const bitwiseBytes = (a: u8[], b: u8[], k: i32): u8[] => {
+  const na: i32 = toI32(a.length);
+  const nb: i32 = toI32(b.length);
+  let n: i32 = na;
+  if (nb > n) {
+    n = nb;
+  }
+  const out: u8[] = [];
+  for (let i: i32 = 0; i < n; i += 1) {
+    let x: i32 = 0;
+    if (i < na) {
+      x = toI32(a[i]);
+    }
+    let y: i32 = 0;
+    if (i < nb) {
+      y = toI32(b[i]);
+    }
+    let z: i32 = x ^ y;
+    if (k === 1) {
+      z = x & y;
+    }
+    if (k === 2) {
+      z = x | y;
+    }
+    out.push(toU8(z));
+  }
+  return out;
+};
+
 /** A fresh copy of `b`. */
 const copyBytes = (b: u8[]): u8[] => {
   const out: u8[] = [];
   for (const x of b) {
     out.push(x);
   }
+  return out;
+};
+
+/**
+ * `unwrap` without exceptions: a null is recorded and stands in as no bytes,
+ * and the sample that saw it fails.
+ */
+class Unwrap {
+  sawNull: boolean
+
+  constructor() {
+    this.sawNull = false
+  }
+
+  get(b: u8[] | null): u8[] {
+    if (b !== null) {
+      return b
+    }
+    this.sawNull = true
+    return []
+  }
+}
+
+/** pbkdf2HmacSha256 on plain bytes: secrets are copied in, wiped after. */
+const plain_pbkdf2HmacSha256 = (a_password: u8[], a_salt: u8[], a_iterations: i32, a_length: i32): u8[] | null => {
+  const s_password: Secret<u8[]> = secret(copyBytes(a_password));
+  const r: Secret<u8[]> | null = pbkdf2HmacSha256(s_password, a_salt, a_iterations, a_length);
+  wipe(s_password);
+  if (r === null) {
+    return null;
+  }
+  const out: u8[] = expose(r, copyBytes);
+  wipe(r);
   return out;
 };
 
@@ -145,6 +232,509 @@ const clause_S3 = (t: Suite): boolean => t.eqStr("[S3] RFC 7677 §3: the server-
  */
 const clause_S4 = (t: Suite): boolean => t.eqStr("[S4] an iteration count of 0 is null (R-COUNT)", hexOrNull(plain_scramSha256SaltedPassword(unhex("70656e63696c"), unhex("5b6d99689d12358eeca04b141236fa81"), 0)), "null");
 
+/**
+ * SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte key
+ *
+ * R-SALTED — RFC 5802 §3, DEFINITION:
+ *   SaltedPassword := Hi(Normalize(password), salt, i)
+ *
+ * R-HI — RFC 5802 §2.2, DEFINITION:
+ *   Hi() is, essentially, PBKDF2 [RFC2898] with HMAC() as the pseudorandom
+ *   function (PRF) and with dkLen == output length of HMAC() == output
+ *   length of H().
+ */
+const clause_P_HI = (t: Suite): boolean => {
+  const table_pw: string[] = [
+    "94a881312797aa73baf5",
+    "",
+    "cd",
+    "4215789b872c7125fd3809e45132023f4f73e04eca35f9",
+    "65b9d5e3aa15421f188d3c7ac2c4b0d0f7af72f98ceacce9",
+    "f071eb3a24844e1a7bc1fe053b9a1a67d719",
+    "2932bc",
+    "f4010684c4cc9a19bd2bfd727c295a8096c5",
+    "89a57a1c5e740984f1e122f0",
+    "",
+    "3b6d7dc4aefc96944bd3d0433a226f529bc52b31a2",
+    "04cf3d4a17404f8a",
+    "0ed34d",
+    "d460aaec8af38c709b16072d5a01a7dd12",
+    "5c111fa3e9689b23",
+    "7319732adab99d5866fd5224a793698c7de911c53846",
+    "f00f0add412759593cab7570e212c47d5d",
+    "247a1329abf3",
+    "0a",
+    "a75e38df6b5584845f27b39579",
+    "b3103e5b950f",
+    "",
+    "5daa64c266a6127a911063",
+    "354404",
+    "76b83ae445bd18e3b4fa545ee64f8a",
+    "",
+    "ed",
+    "33d5bdd3e801c8f399842dc648bbb4265632",
+    "2f8019fd1e9aa72925fb80d804947d263bd996e3409d",
+    "ad",
+    "eb277b02d5a7a802132ef6c70cd5204160e96f32",
+    "46d5103b28fd02c6ffa47ab25e3d",
+  ];
+  const table_salt: string[] = [
+    "e783aebbe191",
+    "51e2d85af9",
+    "471b9f43",
+    "3e6d7ed350a47c68db469040ed7e44e0fee4c0",
+    "04b492a45bc8d984",
+    "",
+    "97",
+    "d8a66fc2395540b321414961b62eb2ed069c012d1f5d22",
+    "85da4196b84eac4477fb1ca7e69070ada94ba96b700cdc61",
+    "5abaf1cf74480673aceb555d05d92a3596",
+    "712fa43c20bd24623245ea0f",
+    "d43a40bae1",
+    "5f5e95e73711fc572c02ec3542854ea8b52df5b090c33fce",
+    "",
+    "7919ad9a46179dda78d834e0c426a19bc747887604",
+    "268bc019f228057dee810de4f78df50ab6",
+    "1bdf20ab8619b069b83b",
+    "97d09afa954870a49a93972b24",
+    "9f132c64c63b4fee3545335c551fe124",
+    "217ea9",
+    "5e",
+    "7d652963c1ff8b",
+    "80",
+    "aeb1cd",
+    "cb1047447d21c763df6346d6876476",
+    "056b1d880a2d2ae0296e037e6d48c62593b5bc76a3",
+    "ad3f43b9588812e2f203862fb1bf",
+    "4d2797c9e9e80e7de7a6acd18e",
+    "af1ee7f1c6b0b0ec",
+    "f0012861ceb4bbbb2c3d03a6c70810d20e",
+    "f8145e2a3dcc4c389f",
+    "78c89a5ae4",
+  ];
+  const table_n: i32[] = [2, 3, 3, 3, 1, 1, 2, 1, 3, 1, 2, 3, 3, 3, 2, 3, 2, 1, 1, 3, 2, 3, 3, 3, 1, 2, 3, 1, 1, 3, 3, 1];
+  for (let i: i32 = 0; i < 32; i += 1) {
+    const v_pw: u8[] = unhex(table_pw[i]);
+    const v_salt: u8[] = unhex(table_salt[i]);
+    const v_n: i32 = table_n[i];
+    const u: Unwrap = new Unwrap();
+    const v_sp: u8[] | null = plain_scramSha256SaltedPassword(v_pw, v_salt, v_n);
+    const holds: boolean = (!isNullBytes(v_sp) && (toI32(u.get(v_sp).length) === 32) && bytesEq(u.get(v_sp), u.get(plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, 32))));
+    if (u.sawNull || !holds) {
+      let why: string = "the assertion is false";
+      if (u.sawNull) {
+        why = "unwrap met a null";
+      }
+      return t.fail("[P-HI] SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte key (R-SALTED, R-HI)", `sample ${i + 1} of 32 (len(pw) = ${toI32(v_pw.length)}, len(salt) = ${toI32(v_salt.length)}, n = ${v_n}): ${why}`);
+    }
+  }
+  return t.pass("[P-HI] SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte key (R-SALTED, R-HI) — 32 samples");
+};
+
+/**
+ * a count below 1 is null
+ *
+ * R-COUNT — scram-sha256 §4.1, MUST:
+ *   scramSha256SaltedPassword MUST return null when the iteration count is
+ *   less than 1.
+ */
+const clause_P_COUNT = (t: Suite): boolean => {
+  const table_pw: string[] = [
+    "0dcc7f61f6f60c",
+    "",
+    "67",
+    "b74c796ddcf818df795498dea0294fc5d71d35857f75b6",
+    "6da78d3a9be014bd7e03dbc084a5e816aeace8e6275d2112",
+    "b801afaa3fb4e936322bdd929dbef6fd69f6fc7f",
+    "e270b35d8ac3a712e31086d8",
+    "12ad23f42f0fe9dbac55caf7588a46ec7099ebcd4511",
+    "45b6c2b9cbdb",
+    "ddc8ed932271b6604fa8a81e72b22d5c1aebba98",
+    "02076b412e9ff94e2d5fc2977072d8afc79bbac5",
+    "9be234573435a71e985989df59eb6228371067eeb2",
+    "099848c5f857",
+    "98b924",
+    "9b52d634b35b",
+    "597ca2d1d0b00c28c9d6c97a8ebf268175a9a9cf2cdd3114",
+    "da8e68813d10",
+    "d5d635",
+    "64de677d5e8fb4f83d0e1be7",
+    "fce24244d25abe73a83d79378c90c275e29251d47b6c",
+    "fbcd36f4",
+    "ccb9fc8140cbac0ede256e712ff9",
+    "4e7317c4dd45518c05fa87cd72da8a5f7bfa9171d9",
+    "847ef51fbdf9",
+    "788c1b029f5c43cb1b1d99ac66066288",
+    "8b7db2",
+    "60037f496ba59f23ac85852105c2b25e132108d0b3",
+    "",
+    "5b0e92c1253ee3f574e4583e123dfada0dad8721",
+    "9a38844f4e762453099021412aefac94379bb9",
+    "e42df3dba2fe84147e41cd8d13f482a7",
+    "e90919ab8e9dcf5d0a1fda1c39f721f77a711f",
+  ];
+  const table_salt: string[] = [
+    "868badf346c826c5362aa49a1f886e481446947deb",
+    "a45c7b",
+    "f9eaa9291e78cc3f0281b3721e0040",
+    "4fa023ec5e637b92f0ddb3a8728e217a75edccc1f4",
+    "07dd191eef0198f3827bb297a36112bcb5956eb1a70e",
+    "",
+    "81",
+    "c53df24676b6998e706d84ab9f4d92d08416a3a0ee90a3",
+    "276d0743c138700d0249ba1f240232d9f9799b62d2bf1eff",
+    "7a8ec5f225",
+    "987a63cdd1a8ea3ba6f7dce67529324afd5bd433b619a6",
+    "1157264c1651b08a83b478d7565717fa0a",
+    "",
+    "923cc0c55408d2fe36872f255da39ab504b94f",
+    "59991b85a13378ebaf04c4340bbe1d",
+    "27c2aaeebac9f2faa927d62a7e72ce99",
+    "48f1f04e2a83a7d76656b09e0c5f5a33d4abcb305718",
+    "bbe623d05e8afc",
+    "ddaffc916dac6a1282a75db5e7f0a5fa60d5cd5c07",
+    "c7db",
+    "962f",
+    "49",
+    "7632cff3525ab4f630",
+    "7b6596c1650995f0b0cfb288c98dd6beac7775418a2e84e9",
+    "67e1a7fc2b4c5cace508541205f0c4643a",
+    "1cbd8dbfc6ab8d34620ed069309b83e0cb5f4e522b469918",
+    "74f01d3abec3f2a6a4a9e2",
+    "d2ccdda6770824075d04a6bff1533ed17635",
+    "6bc3e00c",
+    "57eb09e5de39",
+    "ce4e6749d3",
+    "bd127e99d3c38231dd61238b8000883b7564181e",
+  ];
+  const table_n: i32[] = [-1, 0, -1, -2, -1, 0, 0, -3, 0, -3, -2, -1, 0, -2, -1, 0, -3, 0, 0, -2, -1, -1, 0, 0, -2, -3, -2, -1, -2, -1, -3, -1];
+  for (let i: i32 = 0; i < 32; i += 1) {
+    const v_pw: u8[] = unhex(table_pw[i]);
+    const v_salt: u8[] = unhex(table_salt[i]);
+    const v_n: i32 = table_n[i];
+    const holds: boolean = isNullBytes(plain_scramSha256SaltedPassword(v_pw, v_salt, v_n));
+    if (!holds) {
+      return t.fail("[P-COUNT] a count below 1 is null (R-COUNT)", `sample ${i + 1} of 32 (len(pw) = ${toI32(v_pw.length)}, len(salt) = ${toI32(v_salt.length)}, n = ${v_n}): the assertion is false`);
+    }
+  }
+  return t.pass("[P-COUNT] a count below 1 is null (R-COUNT) — 32 samples");
+};
+
+/**
+ * ClientProof is ClientKey XOR HMAC(H(ClientKey), AuthMessage)
+ *
+ * R-SHA256 — RFC 7677 §3, DEFINITION:
+ *   the hash function for HMAC() and H() uses SHA-256 instead of SHA-1
+ *   [RFC6234].
+ *
+ * R-CLIENT-KEY — RFC 5802 §3, DEFINITION:
+ *   ClientKey := HMAC(SaltedPassword, "Client Key") StoredKey :=
+ *   H(ClientKey)
+ *
+ * R-PROOF — RFC 5802 §3, DEFINITION:
+ *   ClientSignature := HMAC(StoredKey, AuthMessage) ClientProof := ClientKey
+ *   XOR ClientSignature
+ */
+const clause_P_PROOF = (t: Suite): boolean => {
+  const table_sp: string[] = [
+    "d31234423279832aa0777f39891f2a83ab01fb6e55d5362b3f802a4f847f7851809e7a9100879d5e6e106a7e0ce480f58683ad5e5d3ac093f99ff43f3c63826235",
+    "",
+    "6a",
+    "8324e8cac06c1823cb1e59ee2701050021269d05dc3f115596732b569950008bdc8591d8c0e89aa98fe1cf8c8b53d89ac233fa9b1be027c40769a43d8b26c0b1efdabc444310a760db326ff4795399",
+    "f06f14feaa4497720ed050d3a49b70160d04128260fe7a33f048b2e7166e8629929db9a11fde85461fedcece9caa3e4c79a323c9c50d5afa6787414b7dde6586bb3a8d3fcea7ba3f950b6f6f1255baa0",
+    "e2bd1b0e65dde37f0b39b3ef7143c8cf5f4b219e35ff",
+    "cf",
+    "4e33052e",
+    "affb4321467856d0e746177c9333a198ee3700a6e59b1bf3bf08f4b15b9fca0297c4ab61fc59e534d06f2c555f0b5fb988756e55f88df9f18b9fbe3538ef51da2f",
+    "a174c3a38b173d202d6d47d2e84dcde0f0",
+    "d6fecfb9fc9572e395a77c95ef6a41008d02e8a8671f23bbd9fc1476d09a356ac448c28cd1659a1951f8cb9a063ea2cfffaa623b339a17d1880a",
+    "918901eb8da92413eeccdb049091d9752d00ac9bd4c0d0770918a20f1d314f5dbc8c2a05ad90f3093543a5be97581b49e5cf3ba73e",
+    "a53f22f6d96572",
+    "5a71f2796421207cccf22759f2d05690ad6769c0116fd2d8f4361c88de1816a561662d0ca60bea10a9f7e6a6b8431485dc336c893f1118dc69092811a1f9a79524060720e96c9840dca54230c9",
+    "10aeff08dcf74cfa41b8f67dcacdbdfc7bf98d14fc17cbee99d01ec3dc715becd28d4cbd6ef6906b4f3d960be3a783b68959f41a9a1bd2e220b1e55e4194fcd28c1898f52edcd0be38d7ce54b038b22f",
+    "2bfd703d",
+    "1ca478cbe0",
+    "5489cd64a08e4eaf3e2e",
+    "fa10198c01ecc970d84975a8cc254710b77b8c695db79d5c8d962e142393060cc5925d4419b47b6211bd2deb3eee276f4db791110152e4",
+    "7193383d6d14ac119ff0f9df463f0a37a65a485721386aafd368a327a78250af5980a8fa2b72fa5b6ad90fd94c0faeec165fa82fef3f1c4fc64044b6c3475b0ae8ccd3829a7793c4",
+    "0e525d6f12fd012e3b22963ff35462",
+    "057aab17419c5b62d39d409d3e38e883a496c24e4e7c2f16f8a22a75c640261bff703ab87c553e05ace85368c998dbc368c23d5343c2c852dd9faffa78c71e8f7c23",
+    "1763987e4a97e6b1b7831e09f31c2818efb5fa70a8df30e920fe1cc6fc7517277cecd9fe7580d0a374b0240ddd09e72f19af39d7ac9a8eefaa66bf2ee56caa7af6",
+    "3db0555180935e8a",
+    "c1ef059aa5edceb84a81ee016f4e34f8f7ac68d09a58ae939426f44e159246a5ea0e027bdeda03d1b412198aef27f9f506caad27b04522ee07ae76091bae8f",
+    "83814daba01e99",
+    "e1ab8d4f5c821f7e7adfe65af3688c6fb6aadf9befcb4c8677838371138faab688",
+    "5d11ee",
+    "a93d5ffaedb0df628ffdf94b13a5c4848863c1b07ab0af80f3755e9d7973756579a0194e",
+    "e65f32787e24297e04cac7f331ddb5df300fd8d49015357405a165d1725e62d4cfff85c94e435a007f331c7470b9e6971d1ddce8d1c5e8ddccd97beea84bf948",
+    "fcd0c2d62853cb51abe7cf7119e602ab91f9a7104c0d0b5cca2aa45627994b7942393b460a65eb58dda1f676b2208002d2838c14096af72c8eff7a09b06de8430974b1377573c8320a885d23",
+    "dfb637159c1577d4672e9d45c46dd0cde502586f92b2682d50cf579ff8db5dee8cac9a2348cc86a6ded3da7b97e314ffe3f5db9c56df052f1c6d0b68832f6f83dd0a7474",
+    "bc74649a093bb67fd3992ecd0557fae9edfeafa8f73df66c2eabe53398adcf7f19ddcd20ddadd5a719d8df11fb80e10a8cdee004d1",
+    "632d1afc36c8ca61c716a8c19f0ec51caf0e959967efe802ec952bf5acd6ae2c37ea706fc5c503112618c3a557e67e6d7993295a6d5bdf1ea626fb3d0a92612126fbdef767ee6bc57066908e360d",
+    "6d1329223f4f494a49eb29953e911c4d",
+    "d3d83e4a610afe20372101",
+    "d84bb78b1165ed1e21402dcf41b7b8597298078bb9136ea9c9864a0d7420faae978c6f95dff5f1e7eb1d89d0585bd2ddc04c3d0c8a18c0c0257d4b858132816fba",
+    "4c3fbce4",
+    "43ae95b61a98506a7269edea6b443ce91fced7270a3dd924ae8e45daf6fc56babd4a736453534ee7c9bfcb210c64d8a51501bc3c10c55ffc667462fdc3c8f5bf45692271",
+    "be964877145012cbbe38a4b2f2d8597a083ca39b246cd337ac93",
+    "35c73ffb04d1",
+    "4752508679e2f9fb869de599f93ccf2b8de0d4925f984c86bb6bcb713918",
+    "3e507b6b6015e1b6b084633fe806329d84d42ae9f2b787bb9531d5c044ae5728a7c99c5ef350e1147ca25565bc9c6e",
+    "c80aa907c80c75cf9d5b3cd0a56fc915c962c34d43bc35b476148e96546c4834bd28e06132",
+    "f9393b9d693b1afafc910dce2cb2df2f4dae5838bd025940065f46ddc04cf22093bdbda42329d60d1311e7379f7257dfdad005f73e7ff2bf23e1c3a2e962c73ca3",
+    "3f2c2247a77c1af61fc064",
+    "cfd95b0e468aeffc918cf1b2f47447989908186659cd43b15cf43953e87b7d1cad669140aacb1fc58ccafb8459ef67c22e85823d088a131bd600b63ad3c1fc2316b0ac116f5b68e5",
+    "8c496b4278cb326f740641842c8ef0500ea72042fdc6bcceef358a34e20c90dc84d7801dac5ff89c2a45423e98e63e9e0b13923dbead69a4beefa8ba",
+    "57e5823979",
+    "d4b46d38d544daeddac9d5ed76bb8f4d7a8c0335e32685cac0400f2cc7e6b75753a6137f6451b5f70d050d8c95ea69a662d8c2cfed2d3a109d6260e39b27474686455213e134bd268c40",
+    "d696a9560cb132c5fd",
+    "b149c5b095396183abd2672276d00c1b",
+    "b1769d18133dae6c081d5a8ec81525e0",
+    "2058c458",
+    "c3b6aedd9674ebbaeb56dd7ef278915555d8d10acb65a478624797f1e959ddc9fd699a47ba1852c82908400f784d448a63a8a729f8139e854e55145023ff4b74dbf69c1fac3086",
+    "3592b5aa1618e60f8d30734af5a624843761b8268426aa253f82591c5326134f2f536ed50e1c396fbd999f092df40a54178b05cb00b08d779cc403e1785df7019407e3585f23f53c373d62a04c67cc",
+    "ef0abd58af59d42278a4dfa8c096",
+    "05e61fa4b679cbaca2f64593335dd6a1acf75177ce6e9da87b654412f24f2b1324e81172fa13d172d0232a440de820fb106f491a6f13b7a8a5436a6fddef8d43d0ca579f5b7ccac230f4342a9d16",
+    "062a10a2bd851af7d108f8736c3f",
+    "40121e7c9b51b4d6e06384a3c3a2a22601b31a57d39ded7a14b698dd82fc0c2b4872e42111551c82ecd234b95830681d89838641d445cb4a85eb46069fa490a7eb43e8fde3e5da",
+    "6a5481ffef41e11a27568de41d3166cf1f63276eee62ae6d48caf18b",
+    "f75ca1ffc65d25fe6007d4939026d8e817a94438165b9bd86e8d65757b0bb00ac8540652b83ae95d6d2845fbeeaa15427708b59c6397cf48d74542ac2fad70bd747668",
+    "a3004112e37f57064bdb54c34ba6eec1b9d8227d9378d551b6e8d3bd3ca5e44b09e588c7ef7cf79da00dad0b8cbc86c9e56c0d5c9083fe2c1a5044a92160bdf4860956ebf28aa21e0d24b0",
+    "05bebbeac5a332f7f594d48fc5629a1bfd9c0fbc8c973fe8e015a4cc2ec585c6d030fb6afdc9ae67a08388ddcd2b9b109f8185d47bb044e2981bb06b1fbacb45fab29a140514ba8730dc0fc533ec",
+  ];
+  const table_am: string[] = [
+    "1db333b003faf213efe9e3bb6e358f44021a3a6c000a4c57ec2d2065da100724b6f4f5430100c410b6aa18cf54a8f05ec3140ff7b169d1e73c4d4eb99b32967f22dfd8258f24f0e0cd88341f64f776b50c71df4e64c6bf26d02f",
+    "de001a263018c654cb387830a2367cdc6498ea30f400c3deb29ebcd4324d326083531ac8ee8948756c505dbee6c2c0dfb7e4b9fc115822a1fcdf662a97415ed397ed6db27a7033d14fc0a92aa354a87b29ddda",
+    "b9d0f84d82153a676a6ba3a731bc5fdaeb0777bc009776c53159a86238d484b145d2a87bb9cab594cebd3bef63763847561b",
+    "46650b39d311bc1b2a1f834db985b2f5f180eda255af94c47d2b86f3d67b26346b7198e9bc20078930edf2922888",
+    "e8a703df1e23770e4716990d",
+    "",
+    "13",
+    "802223894712f01f6b38ed376eb01ba32cde3dcb22d336f6630e3b81d6c20a2cf3a6355c3df195ab8080c90e721cd37083cd80c8aa74325b0a3f53d469ec2874094e1eb6ad962d83f5ee505a91ed3d6aa578a27e3d270f891454c2e0bb4387",
+    "1968e480706c1fa1b13ff8a91ea9f38d1a9edef5e6816080f064169cfe14605945b417b4ac891bc853733db6e2319deb24a15417eefd9e5e9be24327421841df3fdcc4c701f1dfc3adbe8fe521496582fda3fc9825a26317d5977e33c5eb3148",
+    "aab863f9d31bf9043ebd660b451c25e11fb566a3cf045efc5aca9924e09a483d5701d39d40bc06e732d37804b072e80e0cbbdd4e052fb28f249546abe8218cd690448e934dac2ccc4cd475183bd1c5cbde8fe18a6d1ed3e44fc47649846e",
+    "8ce4fad61b8391d34ee74eef80c2cd158b235019f0",
+    "caeb3dee26d45384383092710a2cbead3301f5ab7368f8a66e1e5fc16e71e2a73a0e93220c89cecf0e82369ac73bfdd138b85d882bba8e5cce828646d223e33bd1ca77823c663114cd8b2b30213b016f9704ca8245",
+    "0f72489eed5b4f65e190d7a797fefafcde4e06c30bd74c4369229269356248ec955116c8a12a5500c914700ed2f381df95a5b4e284a2",
+    "364239afcf400326771ab90025b37df0e63e29d628fe5f57e73f40bf259078ddd1b4cc54703ab2b4549eae67c9d220e22e2e87f6dbceacf5bdc453753f2f82a8b6a283073b71bed43d",
+    "81e921b4c54bbd67e85eb9e49f81ba7ff64060f1b4903249",
+    "2ea07056e07fdf0fdd20d951a7f4a3d3b5873abb848a4d004f3c38f892d6738737eb44f4445319b802d3bc79c44136434e5a1ad6fec0ed4daf71077c4029dbca0d1ba2247dec4cd0847a9371bf3de6966cf9a1ae6040",
+    "83ff6a68bc1af985cdd899f5ef43b2d3cafb3dd44bbf648043b05cecea554925fa57c2ed3ac74c89405f393539b3635ffeb06b1550a123dbdbabb737cd14cb6a24569692df070727283304b5",
+    "5a6d0261a0290b07262a46e6b9b964de7f1defee73070268c7c9481d6faec7085eb6adb6c78dddc612a079517baaf18abf4a9db5ca2c0476ef778da0623188db99f12463f11a8f18d63eeebdcedb13",
+    "aa509ef5dff5e3fc6ac67d318b588546fbd6a06e1c35115c3eac3ce48e1c83e91f3cf03ef8fb96e7919816020d28630900249cec9b2b769c0db31a53efd2408f25fc311c996a84291e3eedcc12dd7c7b35837dfc0ca8a116",
+    "96d45f1b69f71857f8490d46255737f2efc004244efd977d3208452d99e422db01cc1f78c9b299d8e4a841488695825f40c2239c8b9d60cc92edb662d2c5a9e127dcea6df853367483db8a0edf17c2ba7521c5cf362d5225eb983167613b",
+    "03553e45df952cf66b11f5cd092a604c95fbbdfa86e56f66dd3d76cc8e05ebc874cfb11eb396a7f79ae68df171937af52e09ba5f3fea1394296b374f44d2502a70e98398f2747d6b2f557230ee8ce2ada4d09bd5e1deea",
+    "674c8d75b9ed5efeb84dc103168ebb173cf716c4e2897efb6cdb40105c728cb03d1d9bcb63a17a5547c02dde13c3bdcc2b0a53eca214b1a2b4d4434ebefef9330d27e35790bae67325f7ddd9e2ff348a2daa",
+    "e0c6ccb6",
+    "cc644c9e",
+    "886aec4750561628",
+    "768bcd773dad6502",
+    "f9aa971466e5f84baf85db0d062369b02e28f59cfb9140007487a268adb2891dd4a815e48bcb25d34839315b1622e0eecb94e6b0908e6d117413150bdc79ca2a4f8e5cdecfaa4a3b",
+    "1e5332f37168c54274b7c6f3274379b1a9ed80e8f9beb0fcac3bdc78759ff9c49e53b6708198d0630f8bdc5bd824fda0fec8a3b757ada7d27dce4e6c95dcde48b32e623e57fc5bdbf8e0f22916573604d7223a114feaea45c4a753",
+    "c23eab389a7022a3318ecd858d7dd383b992be44fe34de0f39fa7e9445b262558d8a15ad7b0964dcc1013e5094f551a3edae6cd429c87aa13a522d2a24c0077646544bfb84560ed7ec646e143b7521cd1dc5561274",
+    "4c56",
+    "ffd45b8f8877cea79ab1ca547c379b6ee0e43c5c89a715d1dbc815d88a2bc7d705ab404e89cf25f5300ac4f70415c76ffe9814d97596ec6ab371cd688fe11cff5eb3c666c1ba4cc880f9c0bc3cf7ae379698c5",
+    "6be71a07b7973f8a88aeb7136a809eb81e04da73e6402ad2305348",
+    "f1032f6aa5ce7bffe30f903334efccd08df792637d086f28f6440070925d1dd9545771ab7908e7914160d46a",
+    "d9ccb69607a950b69f219d9c421df48c4adc5036530541db",
+    "4d2462215637af12ab4ed48818d60eb46430dd23ba4a195a575daffd953d6bdd5c37510e7c",
+    "862ac64d2923fd7fc36e9e56f34df36da4a4e54de5f814724b5b6a41fe16ebb88b6ff044fed91c43e29a77b313a045",
+    "c42878e72d2674745cb73995364bbc992bee064a2180cfd7e63ff16bd06d15d868426848640cb1da399d020ab998116490dd445951527bff3ea8645cdec26750294a86b501ad1d7e198b0c2e46742c4b538cd3b9105e64ad454110",
+    "80ea3d6ba5f8ef8aa9796759e5c8a054bb470b21d6965f09ae1de24fc49929656a",
+    "6580d5f9c8132afe9020114ff9dab967ffae8710a5247f47bb0a3640c8f16cbc261b93fcc00c459e586002b7aa8e8dcd4ff83d91a77dd4ebad4f6f8062f79e7e30529d36abd738213303faaa2c903ef0ca361006c8",
+    "7001d7562d33d5fbe20d8a7b38c926527af6f17201eed0809a52ea158205f82475fb0d2fd691b04d7b8f35948ab149989342399e526cde4f5768ef2b79f40c78842387b22cb1c7cd27e1ec5b16150ba4abbe9c4164",
+    "b26c175cabbd4d88ec02c4da5c8aa5d4c5e92906acfc6c699879d1834c955688166e7759a7cabf52990cdc17f13623fa71acdc113cfb5baf6e",
+    "1a67cf0276bafa6e9f75333ccd95b4516229442d469f3dc7c3a66dbe5ad05bb513cb2de8151812556e2f39f0a1e1dc7d023c24cae0b1dc3a9c4877276ddb7acef5135b4f03a66106bfa0717ea6edb4d2861c9c9973a4d818a65dfd",
+    "71ef66f4636f2b3175d1f60b93c7a8",
+    "e20b0235e04055345a35e726a04ecbfd2ed218ccdaee4c5ab37885275a466314ac6417875b7abd3686fd7ca41922debdbf8e789011b33c8a309dfd93221d378e",
+    "3e1bffffb398d1912e73801d6dc1eb660d4423cf0812",
+    "0e66409ef9c26af65fca844bc01a",
+    "2c8aaa2946402dbf982ae33d674f6443b9071670d1c7ab610bde7b5d91a16e3405ad10851717c97f3ea860089ff0241737dd84a14968",
+    "da2e970d688cc47cc8524ed44df3ee2df56940a763045c8d20acb8f6d112dc91b54fb927acc5a3066a0bcf310dab1ab163dbef4a9f78c9b786b410fe555faff3a4607b0f33133fd5e95dbc32124f474ffceda9634f6ad71246e89d27",
+    "d3afd1da42e49dfe7e5461d438d8bbb8a774fcddb54f7201b1d91844c02cee0c7dc17f5f55c35f03739010463170501230dfe6fa7bffd48936b25a9d3f03047d93a9ca8c3a30ac1d53a7c27eb1f521fa4cb801780382ffe95eca835928e95ad4",
+    "fc0c30612ded989817c40643c5d702fe49131db60bea08581cf0387722dc52239e831fda88083f9f5e489ddb8d53e4",
+    "a342",
+    "a180e6e78f65884248bacc47de5334",
+    "e9072fe596399a9e406b782ce39efaa5dd42068285ad9ddb8c391e746ad79c670364f9b23ec547be3d7fb91c2113348b5b3239a1eaf698f912f997a9befbb007dc84e3f2c31494d20f8d2d9564a153ff70f3bb",
+    "7756e17cc8afc2042e5eed0cea4475e2cc886e759f451db06d8bed66c2c1609d6b8668a5969cdc9c6c92f4fd8ebffb61dc792307b4ea571ec5bb5b5b456acd4aa63f43e8677c803f456f976a880c1a388c90",
+    "4e0309fbd26904b5631df6a66a477998b3a8793c4469d9cf88c89fa5038b696dd2d110973de7cdfcece651bfeab7d0e8273b3a9d94fc4399e31f6e9128d0f51c16dd",
+    "fc4bd6cddc5bf38a37e4c4e0048d96ca3a71216b7ea426129f7ad5ddc7c72c5ee9f2a5668fef7925e70db98cfe2aad15e3d9",
+    "7d0fc34e1d6f10e2e1c307464880e8ae3f86902558f2593c8c3c4519144004979c6fc4ff107078a775d096558fd6ebddd9c74d0d5aeedfe832a45f61a1aa852d4cb1c2899adb8d01e07127c23efe9d2ea0317434a838e9",
+    "49ad6e3d018c8006",
+    "068120be083341caf7bcd4ddddb6537227ccb6ad5ced0c238ce2",
+    "3270129f6455300e684772c4adcef42c4c09fe6b924a41e409e7c5b02614bc43f701a844b32771b5fa536e44db3ea3c4522a2d7a1ead54",
+    "f46d3ff9d8c7b5",
+    "76e37e2c85decf99a35f7134f48b84d474f1a24f397e46a2fc7e912c066ee628f2cda64fc26f7d0855f04f68ef94b99246da44ca6c82e19208071fea598c2cdc7f592eb4afe4410060fc54a931730342734b71eca054abc84eff6c",
+    "3b91521a36a03c8463c4db6a3dedacd980defebcab404110225bd296dc04902a1c",
+    "c87b703cce1fd8696663ddfe",
+  ];
+  for (let i: i32 = 0; i < 64; i += 1) {
+    const v_sp: u8[] = unhex(table_sp[i]);
+    const v_am: u8[] = unhex(table_am[i]);
+    const v_ck: u8[] = hmacSha256(v_sp, unhex("436c69656e74204b6579"));
+    const holds: boolean = bytesEq(plain_scramSha256ClientProof(v_sp, v_am), bitwiseBytes(v_ck, hmacSha256(sha256(v_ck), v_am), 0));
+    if (!holds) {
+      return t.fail("[P-PROOF] ClientProof is ClientKey XOR HMAC(H(ClientKey), AuthMessage) (R-SHA256, R-CLIENT-KEY, R-PROOF)", `sample ${i + 1} of 64 (len(sp) = ${toI32(v_sp.length)}, len(am) = ${toI32(v_am.length)}): the assertion is false`);
+    }
+  }
+  return t.pass("[P-PROOF] ClientProof is ClientKey XOR HMAC(H(ClientKey), AuthMessage) (R-SHA256, R-CLIENT-KEY, R-PROOF) — 64 samples");
+};
+
+/**
+ * ServerSignature is HMAC(HMAC(SaltedPassword, "Server Key"), AuthMessage)
+ *
+ * R-SHA256 — RFC 7677 §3, DEFINITION:
+ *   the hash function for HMAC() and H() uses SHA-256 instead of SHA-1
+ *   [RFC6234].
+ *
+ * R-SERVER-SIG — RFC 5802 §3, DEFINITION:
+ *   ServerKey := HMAC(SaltedPassword, "Server Key") ServerSignature :=
+ *   HMAC(ServerKey, AuthMessage)
+ */
+const clause_P_SERVER_SIG = (t: Suite): boolean => {
+  const table_sp: string[] = [
+    "441a84",
+    "",
+    "e2",
+    "d3f3ad04ddf1546dfef5008d233e0f1afdcad1b8781ad30aaa40c594dc4ee0dec012947b1d727f8ddd392592c948b6f2666eb76a76fa2f0929ce3563f56700704259e5b85da8b1372339ee837f08e4",
+    "0f5aeb61439fcf1b833c9eff0a5ee03f9f0f77d00d958bc27ecadd2c96055ba15e10344cb489a274db2ba835864ed84ed4f01ec0d83a7f82e91408497e20b5e7ee392461402b139d903449c205d9c176",
+    "743b39245b6669f1ef5df9ef6c0cae2c7b9048babf34b811b32dd61865d9d6218145c17a978037ea81d08564eacc0ef8b83ce7802de50611a3e32323aa15a1cef1d8bb5030aa410bd25a473dbb8fb8",
+    "d5fe8c65a847657b880a77",
+    "e1c83eb96ab554a93dc087bec993fa618cebb9f6416e251d89a1ef9a8ae0f0ef22608f94c81e06433a9b6f7cd6c0ce76670e76f8719bc1",
+    "",
+    "0f7e042a",
+    "cca3b0b002933e6286781aa42e36dbc8ceb6f0ca5aad",
+    "0c80cdcc78aabd98089e881f81967ab479c318c9de0775b6e52c65f8aa50067cd5a4f769ba19bae2db36",
+    "f2a9e8bea0b93c34b46e11b9b51c97222823c202a819fe9010db3ff356fdff51bcc777e2bae286b8610d",
+    "261459",
+    "f0676a8cda51046f1d73a9ac45fc4ba12e1657ee18e9c24b980296b4eb626575995bd4becaf4fd1fbbb84cdf4ede9cb2e8f9bef8dc8a",
+    "da62b6b6",
+    "aa5c899538e6ac86",
+    "f441a765277c991adfd6941ffefdc0b3fd5c00d961c25d50b43e78d87f101066c0cc248b67f7bc35abfe04bb642ee84eefc8f0886d375675dc430c3c63cac35c304a64116d5dd4d10738addd",
+    "3e5cb70accdc8f2a508119ec9cf4f1b6be5cdc3f24ea70cadd2ef44fca97c7d00cc60ba7b696a0e483e4876201f9f0c57602d79aa8c13127be8047bde0764cc693c59f8e2a295f248fe5f7f10f",
+    "41695c2723d81471055d76072ca9a3d65828222309cea81ecf8a412efb937a2365ca3b184f9e459a2519f982268cee070fa16dc6584c931c91",
+    "e358ea71e20629dda973ff5f093a8ea8f1f1924725b0312bc4325f57273def3706257ee78fc8b1481ee7025d4c7b0ceb63d4921ae5a94a634484efc7d19d4d00af53cf60",
+    "2d72f5923bdfed155e38afff61eefc",
+    "4e7e280144f442b104ca44fd7d1b92db2500dd7e9a4f4f74d2b9e4bc3bab41c3efc6a3e23538677bc49a0f52f176c6fc",
+    "f7f45f0d7c743bbc39184a56fcfdc5376f5c73cf447f26ae7b1839110d369771ae7d1665899890535a5c4f64d5d3bace6c8c3af8725c9971800453d8feb5baead1ad9980cc63d644e15227b4fd76e75a",
+    "730947c5b05ddb32e96f0e0ae759fc9aadc70851f57e293001a9c3da67bbada5504dc879f826f74c58dfe8ccadac96d6ac52b99d07d2b827cadacf15e3f4950b7f2f916f7bbac49afb3a",
+    "06c0a878541e79d8b1a6d605fa0af1b9ded68e725a3b9c05fbdde508801e0cb0bdfa41ad0b2bc9a1d07a52a6e5",
+    "48828b77d4933853473de6ff37eb092cf02301187e164227a00cdef8f0eb2073811eaf2de73edbd9fc5be57584db82159b5ebd59b4294d7d04b780e4fba0731ef4e731486d2ce9decd0e82e75fa3",
+    "e32d17fd213f659080e7521bfd242b1e583c3064653940def86f8b1b7eb2205c7a0c440052ac9267",
+    "fd3ef15719b53e06864f6e1f5dd59e43a4012283b4d28b59dbdfca4a0d8aa241b61d40fbb65b18323b905f0cad821eac5a880a3f5429db8821d0a367bbbc335eddb2b2ac",
+    "65c1407d6d2410e6268f82a47bfb860314752384a7020e14a9a85fc6a54da33ca97d96528e80fd9f139071a01c18fa44523ff0f4ff092cf3dc23b1f3cfba",
+    "09f09476a900c739c11ef633e77d336494",
+    "662e9b8094a4fa7700b906619bc419c262b663629e9cb3909ee3da9e42cfe44c5f30",
+    "ff",
+    "06e407a7ae6b0125191feebc6a2604fd3b657611b3cff6e6c4ee026f5a3cae8eadbf477ff2fa0999906631a47612dca6156c575d012ab59dcc8c23d59edb516e016779d7a4dac439b04a0137d2a4cc95",
+    "7c9ea9115cc5fbcba62afb959569c529",
+    "978bcb6b65f7aab30a79cfc4e5baf08dc7eabe5bfcfd7bf6000be708df6a489a20018eaca682a625f1902b9e1f92e451dd009a3cb4cdeba9c0fc5db73990900c1f",
+    "f9c6619f84785157fa8d2d525fa33ec5e002195408507c2393d6910e6e04fd8d87937461c08e",
+    "ef468833c8125158aceae48e806f6459db146fb488eee9d6f677ce308cf58128b4281aabf6808091c2a2829bb0ff1c8de0858a68c24242c3ceb8381feb9e11919c9aca7b05c5b8eec5d06bf113",
+    "dd19e3864fa306cb72a7",
+    "475cdc28fa045a88308656748af7b96aebd60f20ae97fcf89c659bded3c02d3df8883475d55a6106f77b62fc0a2d220f0c505e",
+    "cf51f3662fd27612a02c627514",
+    "595823f7f979a1706bd6cd9e25",
+    "3948459eda7058156b2ef3038993b4199b8ff59409405c22b265f883bf656b580b7ed7d98a6487f182104514038c112b4062cdd26d8ac1359725aa726d01344012ff950f9d3c6775afa4ba69ccdf",
+    "0f4f8207758d69316d82b37d9ca8ee85389d02f07e03d6f3c12604dd7bcc571f9cc88fd123a826d7c33450f0cf2f2fef1bc0940a3976161f561f0ff9cae0571a0f5ee6e5eb9695337b7e",
+    "6e78f66644453b95c9fc3ab57bff2f02207b84b372905211ea579669dca3533ed23203e8baa107a48a",
+    "c663e5a6fe0a7a7101ac85086235575f4413ef21f464055d33d032b4cd443f265b7ca3a61e8cb9676d7a5190b7c4cbea1d726f59cb8bc158332180749c3355",
+    "d2de0e15d21b",
+    "1f4c94f2496743b1aded717f5a10d0d487b2a83671cd2256c144a08197fd266b2e9020e7e285a0dee3192111cb535415566fc94b21cbca1624641a6681e6ae5ce9",
+    "33e0460afd3cd82e89498f80fb82055eb15038122faf86400c89336a1c5ba438fa1e41f70d7b0a51a0247eb2048520671fabaa9d8c039491254777c65b1ceccd",
+    "d5d7b6cb6e2e93b4458d63ea332907b7bca47ab1632f0b541e519657139f5a7381a041980fa0292ecc5b70223b30a6fe3086601bd2583bcf",
+    "3ad6cfeaef3d55d18f207edb2c94915bf6c4ab1ffe6ade64d7085b691e29f95d73b2b00475b7994eb4d25f37118e3f08561e85725df42b80498eee873c67a9348e0727d6401b86e15b6756c2735f",
+    "",
+    "ee6da55d42ff0a89cfa20a345224168deaf180f4b71f15bf2f672cefd401a5f87835cf23352ae876719acbc017ae19cfe6fc5d6caed48157ddf63880da80b57fea78c5896201cff94162",
+    "0c81c8d40bbd5d11e91a6942c18c0b66c38e9745e018964abc35ff96bd6386800d80a598c3f6b7b374bfad3426b45cca6756327f950ff47ec240919d8a4712e1",
+    "444d3cab10783b5b2bddc20f3d88f3802fcd77188251c3bb87f8f6e59775acdc1b",
+    "0683848921da0e9fc607e7053440b3286a76ea483cd14522c7b831254f2a84",
+    "3441bbb54fe45a41bc26",
+    "17e07e72bef11866d39568c8ca23",
+    "edc8627ae2ca",
+    "206cd572572027a64cc7cfc206aee50f0fb5c4d6c07567cf7faac527556ca8993e011530350a0821ba1314a40415d3c37085db878c3b45bc591a59bcdc0bf404ef6fa8caab43546a591ee4be4d",
+    "cefbf8757ab8",
+    "64c35855005bf8584b77e87a6d8be7cd2ec619de107a3dce2e3d6b5661212ce9dddd53fe43e9b918aba7c1a4e7f5",
+    "dde21819f5e09834cbb5bf3a7d5c03",
+    "c7fa66f21af626b7bfb9be59ae8d3db790538395cc51a682880cd2d41232e62822e25187b7ace348f17e5e60bdd96c052511fb9083277a0fa7e5eab6ef91daac916dca06e7a78fcfe416a88f",
+  ];
+  const table_am: string[] = [
+    "ecc71e7ecbafa5f555",
+    "4e2fc3033a1dc81312",
+    "6ac1e45a80368192dc9aa3cb7b21d9b7f274d6745bac5db075aa662f92fc94500b9b0c5dbae7ae550a11442d60bcebcc7ff6dda8b7c6c5b1a48c162d33882ce9964fe3ba83538e0f02f0a9850f2e1a13610b0e6e994d",
+    "da1a30e1663e13251c4de19d1e",
+    "b971bf6b8864b5041af7c73356748079f69a50ecde4779a53e767705282f5ca7fe5409",
+    "",
+    "ba",
+    "99198da3f37e7f20e8bd06740b5453a37c61fd7713183e01d5dd7582f1b94969af151e7a637f2897fbf41c388d290bef23085723506a184cf4db51820b430f12bf7295680138d0b40b240b941d22da230d6a27d8bd721b6618854093e7d7cb",
+    "717945e559f529c86d42b5321d4bac08ce1fd8c516b78ae3e0027a5b0e0f35aacc31653710ead33b8ba00aa2f760197b3d2f4664036a2632d8b7ace0f06ab57a74e806bd12a6f2a99d311347ebc64f568d58996788047edb3e8a61d5caf830c4",
+    "62ebd49c59875848",
+    "8ed92542cb9a644e55aec14538daf89e71aa0733502459d98b10f57f7b28",
+    "fbaaba03bd535e4b1911905b3718698e",
+    "fa80b95272592d7575c39fb39fb6853bb2f23d550877a39fa2450b907bd49be656766a8817764553857a6582a8f88156df4f2d9e7a366f140f1be5e9335c39ebad24fbc5d221dfab96a817eeb67e1c6819446488814403967bdc",
+    "7f794e0d1cc054156a38341f",
+    "ff5a2fa8ad279ca58bb692cd0bb12dc32af45faf5b43f93082d80e0f05ef422d3c9717379dd917cb29846deb05089c65398fb419e45bf8ebe6f9deca1ee631",
+    "57f8327a4cd47b172fdf18db4d9f2de9caa6659aabadcedb2a23cbf8a3307ea82664b52bbe7be8b3ba2274e23d2c10cfd1634a81",
+    "",
+    "18c094b76e38463efb1a2a409e2a2762b4bbfe77175f5e3716b1aabb0cc606daffcd1406f5a5cf6a1a9bbb42845c86b421433c4f01a8f73602632c8fc15999d8c4b41c437292cb03962f7bab97d30baa334a219fc6512d07",
+    "85a3a2fa8da573b91b",
+    "95458f8386c4f0cfdfdf64ed6e6bd879e3f4a64bfc89a11ca5e1079e2a541f10af31dc927dd80f71983f0e14147d600c602fae9c94c2973a8adcfca882c7cd1cdb80e30b025c8430aefeefc2a6c7474dd5202414829c058b3bfe50b856e607",
+    "53417a8d097f300c7179a4c1ce394a69b4d46dd9078c45eb1c554093ff3df487cd5ceb07564d22df8a19251d0f9953557e9ec324772f43",
+    "06fd85cc67976472fdd96ac3a6926f75a0095fc0e070f7aa2d64ef7d8d3f428a45faca98e27f09c67b1effbc15c07fae93eb3342809289f059424e1f4577e90cb9b5a3b0686bdba2e6c2381403916fec384e6f26be0cf80126830ff243db41",
+    "0da347910f59a924061a63cc2da8fcbf50f6c0bf42f62f28d7715f2b8f58",
+    "9913ef00ea478eca0b24145ddfc976ca3be5d34300dd1f45bc582a09f44b5069846ad42c9a178e17bf9378f942afdaf6937b",
+    "44ab05d183",
+    "0ce904e3fd55ab4f25a44d2cd099f8a3c0c0870a656218c1a99f6b1c637bcdeb672d9af83fdb9f1c66f73696b8cb0d4977",
+    "5e02e9a5",
+    "04b142c29ea2a5",
+    "feeab08006abafad",
+    "33c7de9b0710a4f4b8eef59656ac2f42c23856fac4b152027b917cea8961d7b74af834ddb78a335f43f956fa940773324b3db431",
+    "7e271b851b",
+    "49dcf022ee8463ef2c36723f2690a4190757996fc66f50f6192601256489f74bb4db4b57e162c24a693ca1c362e5821a",
+    "ae2d2913a96b",
+    "732aa4503b7c8792db244b44b46068a9b5825417c0e3ea4a770ed81537ad514b9176bf96d02ec75041db06064416c5bb5ca7d9ead36b59d7419b2923b246fedf4c2155ba49",
+    "319ad0ffdc0bdcf00a23b888fae89f6776e11d3d6b897b5d41d8663d9d4fe03e9045da779799ef5a426121951291bbb05f4ce5dcc520ae149b8baa81ba7ccfce727194754e17f76cf73fcb3d7f59ea7c30277b653f80882d",
+    "9a526e9522ae6d429249926f6a16f5b7f854f0db1c8d2ebdd13d701cdb25894416ca875ac65a597299f6c121ac7b7dde7db56130671adc254cf84aa1d9a874961489",
+    "22f207c1b1218a17dabc6925cd31552686f361beb1a49a2fc940bf004afd02afd92e2e4596224b6b6025edaf51a3f432448a7d47b6fe",
+    "",
+    "a03799f51b5f",
+    "1e1d74e7142b79a063a051dcdc9311998afcb4817960137ce1d88656ad84c5ca6c019d2e63971d903b88c3ccf84e3f7cac98280b",
+    "c6c3dd62248f592886058de9d6f69b518f053f42ff1a9f7b2d48bbfde7fc53c58d05f83b60eebf7424a033045c6b45f939b6c1e5410ac39cba4125b1c17ff3b01873e2088fe717339f44fa203d04572bb9b0fa6d4bef116e2f",
+    "04422234ec87daba7c8e8f9cadcec26e85f0e2194984e9d9",
+    "82b9a7",
+    "708af713b911fb3884071f32c6e071512209bf520d8c732d257cab9e6be978ec1a42c48bd12526032c217ee717",
+    "282f8d47d9ea0a5567d5e45d3610c00b65f6e7d1761ed307",
+    "f1df1778cd549844a1804deff49a7bede8938ed036d7940ab85c06644cc7247bd99805ad343a7687eb5e1130075a1d17ebe5666b3292dee8ce990ecda5f9eb323990978119e9b0d7da0c9d0e44d97f7b5e482e7c51d7fc9ac4e7fbfc8a33",
+    "ac04b70d089a9f1bac776be5291ebaa8",
+    "30c066f154a6f35a37bc16b94336ce44639ea5c26b503d4c0e7a7157441bbeaf398fb0dbe8089f96cade58d9162d9a44efb11418899073de8a13c0ae1cac913c7dfa76b0892be7e5dd93012f1d52630d6fa5057637fdb9a2c1b05b",
+    "470bd674bf421e1660b7ea415e35b12a",
+    "344818a985259f14e9c348e1f4125daa34b9810c40e67073372cae066b9200e7d70d135eb66070895c075a6a",
+    "717aa69bfe84c5d40e83fc61b6b19616ae2b8fde36d11f31c95c3e729fb818be30daa28f6fb001d24b08ed879c3d8beb58c525a89ed5b85fa8d925f9be4110b065ea699326d5f0ff466f5012c7d4c86873e51da30b29",
+    "",
+    "54",
+    "5af4",
+    "7c49fa8c688e8100ec2d962d28552580e04e9c2420a7ccbf3a0d42c2cc0f15c64329cb0ce18e36ef13988d53536c5ea4e55ee39d2c2b1037b5f277f6e1a30758d66506525ed02b059faf056e81f8eceae81b00d6292ef146a8c6b9028457a77d",
+    "af6f2426502ee56b4d55104cf3af4a56eea6abc704fd8e2629c9d41e59468b5bfd5b56f93a408909e7ce23a87e",
+    "2a156ada2085ad6914807a0b01f579a3f7b538266b25500a5f35d679eb7b957611c0c9e04dbd86268623b1117c1d68a592334bcf6b3c2bfa9f79170ce5eb8cb7244636762cca6611fd35a6f5e4fa19cedd742902744c8743092ca0cc",
+    "9718312385fa5cda96a6c123896ba9dc1ad6ec3c608071d6ff9080b26d5cbd023ade385bdc0cf48e07d2a42c22d7c2b13cf6b1d345098c137daa4ee600e3dfdb858faad88170498a5969601a6ef1d5ddb784579e1ccf991b7285200004",
+    "4f9c49e85298",
+    "a12a581c0b07492e83e710e33061",
+    "12c78c8578f78319a23e36bf710b1d40327d16effe67d069c871381d671068930767f1155334f83afb89081976e3bf1bfbbdebaec724af3ad2e9f3511d884e608b2c",
+    "a7b8074df90a7a57979bef88e7f5c22faa2397c5cdc0e6af67cc7e1ce2a38d4e5aea41f4f28945cc2e5249d2ef329f1fdca44cb306226b71d01532048466cb28026abda792d60378f44b1ada72402e92b6",
+    "85aecc69310463edf48a54b0f4b0e4663df95da1fd53259f2d9b85cd7fe244f199cec55392cb7159a137edf8771a50d2c376dd934d29d6123980adf6469fe91feb2af72dbeb93862536859c82c4cd03b",
+    "f4adb9422c260909e45df12e85249a636c4f428f6ced69df5bf1394e8668330f1dfd0a152b9da75c338602084a4ad2a929d5ab560e8eca2505c85b5f01c53ae926e2822a0a58457ef0e1a187b33b17fc",
+  ];
+  for (let i: i32 = 0; i < 64; i += 1) {
+    const v_sp: u8[] = unhex(table_sp[i]);
+    const v_am: u8[] = unhex(table_am[i]);
+    const holds: boolean = bytesEq(plain_scramSha256ServerSignature(v_sp, v_am), hmacSha256(hmacSha256(v_sp, unhex("536572766572204b6579")), v_am));
+    if (!holds) {
+      return t.fail("[P-SERVER-SIG] ServerSignature is HMAC(HMAC(SaltedPassword, \"Server Key\"), AuthMessage) (R-SHA256, R-SERVER-SIG)", `sample ${i + 1} of 64 (len(sp) = ${toI32(v_sp.length)}, len(am) = ${toI32(v_am.length)}): the assertion is false`);
+    }
+  }
+  return t.pass("[P-SERVER-SIG] ServerSignature is HMAC(HMAC(SaltedPassword, \"Server Key\"), AuthMessage) (R-SHA256, R-SERVER-SIG) — 64 samples");
+};
+
 export const main = (): i32 => {
   const t: Suite = new Suite("scram-sha256");
   let ran: string = "";
@@ -152,6 +742,10 @@ export const main = (): i32 => {
   ran = `${ran}${clause_S2(t) ? "1" : "0"}`;
   ran = `${ran}${clause_S3(t) ? "1" : "0"}`;
   ran = `${ran}${clause_S4(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_HI(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_COUNT(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_PROOF(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_SERVER_SIG(t) ? "1" : "0"}`;
   const code: i32 = t.done();
   const nonce: string = toI32(process.argv.length) > 1 ? process.argv[1] : "-";
   console.log(`vector-done ${nonce} ${ran}`);

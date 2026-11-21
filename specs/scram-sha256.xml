@@ -46,14 +46,29 @@ and encodes the proof. The password reaches it as <tt>Secret</tt> bytes already
 normalized; <tt>Normalize</tt>, SASLprep in RFC 5802, is the caller's, and
 nish/net/postgres sends the password's UTF-8 bytes unchanged, as a
 PostgreSQL server accepts.</t>
-      <t>RFC 7677 Section 3 prints one SCRAM-SHA-256 exchange, as base64 inside
-wrapped protocol messages. vector binds a printed string to a value only
-whole and only beside the other values on its line, so the exchange cannot be
-cited value by value. Each vector below therefore takes its expected value
-from a command that <tt>spec check --run-sources</tt> runs: Python's hashlib for
-SaltedPassword, which the exchange does not print, and a base64 decode of the
-printed <tt>p=</tt> and <tt>v=</tt> for ClientProof and ServerSignature, so those two are
-the RFC's own values.</t>
+      <t>RFC 7677 Section 3 prints one SCRAM-SHA-256 exchange, and vector 0.6.0
+cannot cite any value of it, so each vector below takes its expected value
+from a command that <tt>spec check --run-sources</tt> runs:</t>
+      <ul spacing="normal">
+        <li>
+          <t>S1, Python's hashlib: the exchange does not print SaltedPassword at all.</t>
+        </li>
+        <li>
+          <t>S2 and S3, a base64 decode of the printed <tt>p=</tt> and <tt>v=</tt>, so those two are
+the RFC's own bytes. The exchange prints the proof and the signature only
+as base64 inside wrapped protocol messages, and the profile has no base64
+literal, so the printed text never equals a hex or byte-array Expected.</t>
+        </li>
+        <li>
+          <t>S4, the refusal this profile adds in <xref target="refused-count"/>.</t>
+        </li>
+      </ul>
+      <t>The iteration counts 4096 (S1) and 0 (S4) carry no label. vector 0.6.0
+checks a labelled argument of a command-sourced or cross-referenced vector
+against this profile's own Test Vectors section, finds the same password and
+the same label on two rows there, and refuses: "nothing pairs a printed
+string with one of several labelled values". The integer is left bare, and
+<tt>spec check</tt> warns that it has no label to find it by.</t>
       <t>The arguments are the exchange's: the password 'pencil', the salt the server
 sends as <tt>s=W22ZaJ0SNY7soEsUEjb6gQ==</tt> (the 16 bytes <tt>[5b 6d 99 68 9d 12 35 8e
 ec a0 4b 14 12 36 fa 81]</tt>), the iteration count 4096, and the AuthMessage
@@ -68,6 +83,11 @@ message without its proof, with a comma between each.</t>
 export const scramSha256SaltedPassword = (password: Secret<u8[]>, salt: u8[], iterations: i32): Secret<u8[]> | null
 export const scramSha256ClientProof = (saltedPassword: Secret<u8[]>, authMessage: u8[]): u8[]
 export const scramSha256ServerSignature = (saltedPassword: Secret<u8[]>, authMessage: u8[]): u8[]
+// module: nish/crypto/hmac
+export const pbkdf2HmacSha256 = (password: Secret<u8[]>, salt: u8[], iterations: i32, length: i32): Secret<u8[]> | null
+export const hmacSha256 = (key: u8[], data: u8[]): u8[]
+// module: nish/crypto/sha256
+export const sha256 = (data: u8[]): u8[]
 ]]></sourcecode>
     </section>
     <section anchor="the-hash">
@@ -113,6 +133,45 @@ ClientProof     := ClientKey XOR ClientSignature
 ServerSignature := HMAC(ServerKey, AuthMessage)
 <xref section="3" sectionFormat="of" target="RFC5802"/></t>
       </blockquote>
+    </section>
+    <section anchor="laws">
+      <name>Laws</name>
+      <t>The ClientProof and ServerSignature of RFC 5802 Section 3 are each a fixed
+composition of HMAC-SHA-256 and SHA-256 over SaltedPassword, and
+SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte output. The clauses
+below state those compositions against the reference functions of
+nish/crypto/hmac and nish/crypto/sha256, for any key and AuthMessage, where
+the vectors hold one exchange. The bytes <tt>[43 6c 69 65 6e 74 20 4b 65 79]</tt>
+are "Client Key" and <tt>[53 65 72 76 65 72 20 4b 65 79]</tt> are "Server Key".</t>
+      <sourcecode type="ts-property"><![CDATA[
+// P-HI covers R-SALTED, R-HI — SaltedPassword is PBKDF2-HMAC-SHA-256 with a 32-byte key
+// samples: 32
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* 1..3 */) => {
+  const sp = scramSha256SaltedPassword(pw, salt, n);
+  return sp !== null && unwrap(sp).length === 32 && unwrap(sp) === unwrap(pbkdf2HmacSha256(pw, salt, n, 32));
+}
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-COUNT covers R-COUNT — a count below 1 is null
+// samples: 32
+forall (pw: u8[] /* 0..24 */, salt: u8[] /* 0..24 */, n: i32 /* -3..0 */) => scramSha256SaltedPassword(pw, salt, n) === null
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-PROOF covers R-SHA256, R-CLIENT-KEY, R-PROOF — ClientProof is ClientKey XOR HMAC(H(ClientKey), AuthMessage)
+// samples: 64
+forall (sp: u8[] /* 0..80 */, am: u8[] /* 0..96 */) => {
+  const ck = hmacSha256(sp, [43 6c 69 65 6e 74 20 4b 65 79]);
+  return scramSha256ClientProof(sp, am) === xor(ck, hmacSha256(sha256(ck), am));
+}
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-SERVER-SIG covers R-SHA256, R-SERVER-SIG — ServerSignature is HMAC(HMAC(SaltedPassword, "Server Key"), AuthMessage)
+// samples: 64
+forall (sp: u8[] /* 0..80 */, am: u8[] /* 0..96 */) => scramSha256ServerSignature(sp, am) === hmacSha256(hmacSha256(sp, [53 65 72 76 65 72 20 4b 65 79]), am)
+]]></sourcecode>
+      <t>The proof is also the server's check: it recovers ClientKey as
+<tt>xor(ClientProof, ClientSignature)</tt> and compares <tt>H(ClientKey)</tt> with
+StoredKey. P-PROOF states the same XOR, so no separate clause states it.</t>
     </section>
     <section anchor="security-considerations">
       <name>Security Considerations</name>
@@ -247,67 +306,86 @@ no vector here tests them; the module's security record does.</t>
     </references>
   </back>
   <!-- ##markdown-source:
-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
-QEZA29RYS7ABePs/pmz8iTIaAAA=
+H4sIAAAAAAAAA+1Z23LbRhJ9x1d06N2ITECKBCneHDoly1KkRDeTUryOy7Uc
+AEMSFgjAGFA0LSu1H7EfsG/7H/mU/ZLtngFAAKQsl2vztn6wgMFcuk+fvkyz
+Wq1qkRO5vA8lzxGzXStcBZG/K6yQzeE///gnRDMOo4Ph/ll1dLxfNfbaYLkO
+9yKw/HmwiFjk+F5JY6YZ8ts+bOyh2b7lsTnub4dsElXlYFXMGO5Urdc1i0V8
+6oerPjjexNecIOxDFC5EZNTrvbqhiYU5d4TAQ6JVwGmWzQOO/3mRhuc1NRs3
+6INRN9rVRqPa6GpsEc38sK8BVEGdfI5Cwb4cFjgM4IdTJarm+eEcVbjlNH94
+dLDXrRvxY6fd6fS1arUKzBRRyKxI00ao70L0IQj9wBfcrsGZby8IPRHZOb1r
+kYDyBhqVGlwhnjd8pdk8dG4lesA8m3b0JwLY57DmuCUKBiQkjLglFzd1belE
+M0hWMEHCA0m/ngOCozxOVOnDiLkRty+ZEEs/tGES+nNp4yAe0TWBM6RMTsRD
+JaHlL7xIp3keHEiRLkleOWvEw1sejpyph9iEXO6oFU6heXQIGeGMC8GmvKa4
+4vFoF6GMpiFqR6bDvR0ihQCpFg7Ma5o0w9yxbZdr2hM48aIQcZfKaVqMKNBJ
+Akpn16Orkq7+wvmFfB4evrw+GR6+oGcE6vQ0fdDiGaPji+vTF+un9cqDi7Oz
+w/MXajGOQm5IK53tv8YvpGHp4vLq5OJ8/7SENEXJHQHI/sWcLMgQmcgHk+Mn
+hDUIOeKDxkIeIDMcE19wzfODyz/+1WjB3d03aESj0ejd38cv3UanhS9LBEid
+5nvuKn5FkFYaCwLOQtqFuS5YLHAi5gqdCCFm/tKDGQ85QvndG0LmbR9+MK2g
+0XoWD5DCucEEs9ygxGxzZGOxAnHL0JZjUjRz4wWk8/Luv869J7hnBn/40XU8
+DhgQfnymKY7MpavCzHeRJsRGFiLD5hz5BsjlvOMRwp6PNvSm9NGJhDZXxEX3
+p8UWosxDMBcObZchtg42t3w0q5wmpHfsCDCZ4O0WkHNptDn31pOk86vQkLgh
+hJxZM05OSxYcoysjZcZgrsg1mIuf7ZUKX67zkdtPYXyevIx1GO2PTpFjAdEh
+CRk6OCIj+o6QPNI23VBgfBW5oIDyX18dVbvx8QvPmjFvym3JLqZdqpWjl6ex
+vsAsiweRQLptCUZBiD4gkMDFzMI/qH0VwW9xgR9CvdauUZ7w0BxgYUzCjyu4
+Ze6CK8voIHwgtJIVJnf9JUTsRsIncNsAP6CHyUWaDHmMYupcxSUWwVjgFEDA
+rRuoVsOFVxX+IrS4GAO+iD5GIBg1dLhcYRbxEI4ZEzPXMRUXErnR3fFIklOq
+WIy1eA4iX6OtDBU6m6hpwgzFGlJJUYLihA3jYDCWc8e3g7HUFAUQGEuWPsUU
+TFU0G0FGmcjJpYEUlVKpYrxTpqXhWKRBm4IJ7sVSnjqecFCaZUhhRaanyLd8
+FxIn0NNN8NPEIb9ipHq8HvdyZfpwY5nXGkX8QwQeJ5bw9wsMUQjBjH8AMhwK
+X2VhyFZwGNtMotWSIQ5dYrJA/1GRNTmW2chVZPndnfzM7apMVvf3NeX1hSQm
+oFXvtaE8alSkBnV8bFXQJcJwReK7DNlTK3CPaEFiyo8uxe1wqsI6gZkwKaaM
+TZpYoS9EFSXCmOvRmNpQY1OGyEY5FWLLXXEc/1VOIxeUzqLDxEl8UWAtsw4P
+5LnpqJQLbShZEfpLuSCM3UjBIqjAi+NZwJyQ1IktomF1Q8My35JTolKC7INQ
+pxpL1xElxSxaNkX7oQ4un0Ro8/gwLeNHY1iy0BPKvzCKxfxQsmIqJM1o3FzF
+lkpAFSpZZhi8E8fcVPsdLAEtx93RY2TcKBNsNRW/KGqKwSvD+I39XB+dv+4I
+/1BcH74z29OXA3SqMq1otOOQNn6zZ0Lbhl4P2l3o2dAwoLkHXa6hPqwOLRMw
+L9NgGyYMuo2344o6vUAwyS99W8WjSSRS15fa9GGzoIN3vuPFkVrWWtUJ2itK
+XE+We/4ikqFt7On6GN2HYTmpZzDIL0mlSffzmJvkM8juJ+ODrqgQExvDabTk
+WPhRiEVTqfqLhxNmYTH2+++/QySqTjqyuxsn2m2XAYzEfkjlLPmAHBrJm0Ah
+UA6gnJi6Dyrz/bDovnn7TJe27gO96GvkEUanaVTyc+ETeAvXffDMbB2LB4qc
+CMVj2dqM6vSK+vOwRoWq+OtPeADQ2ZxZ+dMD88aeGMc4rkT4Shh19GlvGs2+
+GNNZ7kSsxJON8WrGvkgXdR0sYJnuuLkNko5oSEHjGPOwpj2T7KacDBMsTqQf
+TTAMH5/tH5RVoD/GvxQH04sSxWH0G1n64VAD3qArto1m620N97u7W/sjzojv
+g/f32l0fngypYqE9ps6gZLq+dfN+4Ue8dE9S5blMshXYDf0BHDvltFxLjVRR
+dkGLVLZKQGFiLcH+6dXhiy0SPKPNKxibdUA60XUKi44Vli7Pf3lxZEgtjW6v
++1Y5eYJQXB4IvrD9EPHCEilFsnw5PFIgyiX2zSlGg8EAMGjgrTSmC8kYb7b1
+U7mSh9WoGdvUOj7ZBuoT2I/zmB1H2bsn+XSvacdOXPIxOpchhSiXhfgVy9Tr
+Ru0z8Ubef5Dki9BT/KZr1dbgLjOekEnNg0YtFvrg4vr8Sho/E1TIEur1F7yc
+qn9kecIofz7eK9VEwJklsv0IiwBu59eV082+gB0HpyeH51fVXw5fb2WI2mod
+nVK5knP1bOKqpCtUtIwlWiv3t4thccvHRbwcXlwcbfegfOyULiSHvgBINXEN
+ZCEMp+uS/TYUfcztDoe/HuKfk5+2in7KlkJVM4+1SdTexdRPlY+8yjCsjz5g
+bUadH1848nPsYbk7avLsk9ZFNKgiK1AdCawCQTW3VZzwm0aVyqHYfVWxZ7mM
+4qamblUiYhGP7yAZ2dDr0spWFuqq7k1jCJa4E62YvtQleyMP6DJ00yWPujo0
+J3e7XlJpK2vf27hYphu9dPakXlSCJ4VdqwltC9pY2O1Bm0OnBYas5/C103s7
+1gjzrAOq69abvaacYeDtNX7ILZOmytKtlhZD1B3kYbSidHdJEc0i6whIgrYO
+Ms5Rd/WrrEPtQ9waS//ApcK+aWiIGHV9ysFSpUjY/Q4vLzWjBd/tZrN9ftyT
+OZ7GGrVaE4cwdqMH4OUtzsEB5t8HwyYeliQsr/IUF8URFFd9gymAAil8+y0s
+PLpElkVQqcXpYIBf8djcNzkYvxYLmexBOq6s4Gn3qgjYirgMx2vQ1SuhzeIo
+rqjcILhluP8fg1lt1mr1BM0vg0+qL2V5WC0VMNdckiUIcWkd7OlNTSN1syEI
+Vc3HaxkGs0mlEAmzmOB9PsFEBDndu3WpO5vnRvGCvcEl6wa5tC4VcSMdHnHN
+HKm2Fu5yFzZX8H3ww7J1o+cOUX+sm4qc9ghvMrF9C8qZr9JzC/EcAVaQPpqW
+/hSgH7565DDKYFO0xefjnQJQgXeVNpIcakXG/Z200ylv/3262oc8xnFNPSa0
+MRkqY0S9WDtUVMeL0gujfuQ4S9OxjIZaWqnUUs+QqSnTK0GWy+aT56NsuBMl
+LpXMkqlOVFP1hrUInWgFB77sesW3IU0rmjGjRprR6U1mbJdHmJt82dhKe8xz
+LfubRlJmowhh2heL29Jx7Yr7Tp1buqYUeofUZ027wKoWD3gGWR0yxVuxvsuL
+a3IkGdekgci5RO3RaoWSHd0l1A8bhCP91kAzqQkZuJj7k9bjftIaT+3H1txY
+dxylFceRM3e86YhN+CH1Asdxf2mz6s4xLPKRZD6WIH0K6fI0zWKBUM1ghwoP
+vA1Q41Z1n+ZUTJBjonjnfqx10tSSv46oAySkZBgNORO3AKnaAFRMNVDnTzM2
+25F9OkUdojqaiRrAklPZbp6mfYITG+/OB+TZn9LeJo0o//gEI9k7xIcr+jUW
+PmmfqvhP/pf+yT1uPOASGDVwh/HDKaek+mYlcvft7S54qN2ly8YWuh8e8MZq
+AWtBbw8adcrkTQZmCyY92DPQHGA1aA1u3cItetDsAe/Q1qwDLRvaJvAuNBCr
+CXTqgCEMXzu4VRNszAUN2LPf0im52Jutm1CAQLbhm1C1YMeZy66B6jvrSWP+
+qepuluPXmqop/k5Br1xSaQFRMNeAqPU1s91Sjfhy6aHWIUVwiUVtxj+UK5Ud
+KW3yM8cf/25u/siKPEpalljkYIQptDch/c1VEV7a0ijYMpv3/nQLYM7yBjJO
+hYPwIgjPf5osD00+fDU1zw9v3l88MPzX2e3rF8Gra2YM2dXB/mTx4ejEfVeZ
+nbtHf7mp6w/3Y3VnIBun1sB0luKrdi/F5MQqomOBLTMXY4D1s2FAi4PRJHRQ
+yQ6nB7sDpk1g2W1i/KQDzS4h0qxDpwuGRWuxMmEI6ATMOhgdwmivtUHObeXX
+5ziaUHOTcfbxR/M3Frw6uWm9u56df38d8d4qYtPex3eTs+OpeD+fOx87+579
+60tk4cP0K7Z6kz4wEi0YKHI1i4GiUDT8n2APE4zTb3bADVIV0WkbRDZUjyEc
+qOQEJnUwUWdGTOt1weoibYiNrR5MJlTlNji0O2DYhOxeA0yDEOzYwHEa34x+
+68rz63jVDkPnavjcMZqvguFwdxktgu/nZ7Pr3669Xfv5nnd69fNQvHN7ez+1
+HuVV+vtCnle3Ma9af2ICqiv86ZqkIFI3u0+bv/3hGPM2ygisberJnQ+l/S8X
+adtH/CQAAA==
 
 -->
 

@@ -6,11 +6,12 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: b5edb88222a6b19f58c562216fa96456e6752f27b00b44052a51edebd2acb1c7
+// vector-contract-sha256: b28436106f04185a756acdcb12df2c28eaa5bd1931b1fa92443f54048fd13128
 
 import { Suite } from "nish/testing";
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
 import { Secret, expose, secret, wipe } from "nish:secret";
+import { wrappingAdd } from "nish:unsafe";
 
 /** `bytes` as lowercase hex, the way the RFC prints them. */
 const hexOf = (bytes: u8[]): string => {
@@ -51,6 +52,49 @@ const nibble = (c: number): i32 => {
   return v - 48;
 };
 
+/** Equal contents, or both null. */
+const bytesEq = (a: u8[] | null, b: u8[] | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null;
+  }
+  const n: i32 = toI32(a.length);
+  if (n !== toI32(b.length)) {
+    return false;
+  }
+  for (let i: i32 = 0; i < n; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const isNullBytes = (b: u8[] | null): boolean => b === null;
+
+/** `b[from, to)`, both ends clamped into the array. */
+const sliceBytes = (b: u8[], from: i32, to: i32): u8[] => {
+  const n: i32 = toI32(b.length);
+  let lo: i32 = from;
+  if (lo < 0) {
+    lo = 0;
+  }
+  if (lo > n) {
+    lo = n;
+  }
+  let hi: i32 = to;
+  if (hi < lo) {
+    hi = lo;
+  }
+  if (hi > n) {
+    hi = n;
+  }
+  const out: u8[] = [];
+  for (let i: i32 = lo; i < hi; i += 1) {
+    out.push(b[i]);
+  }
+  return out;
+};
+
 /** A fresh copy of `b`. */
 const copyBytes = (b: u8[]): u8[] => {
   const out: u8[] = [];
@@ -59,6 +103,26 @@ const copyBytes = (b: u8[]): u8[] => {
   }
   return out;
 };
+
+/**
+ * `unwrap` without exceptions: a null is recorded and stands in as no bytes,
+ * and the sample that saw it fails.
+ */
+class Unwrap {
+  sawNull: boolean
+
+  constructor() {
+    this.sawNull = false
+  }
+
+  get(b: u8[] | null): u8[] {
+    if (b !== null) {
+      return b
+    }
+    this.sawNull = true
+    return []
+  }
+}
 
 /** pbkdf2HmacSha256 on plain bytes: secrets are copied in, wiped after. */
 const plain_pbkdf2HmacSha256 = (a_password: u8[], a_salt: u8[], a_iterations: i32, a_length: i32): u8[] | null => {
@@ -99,11 +163,111 @@ const clause_PBKDF2_1 = (t: Suite): boolean => t.eqStr("[PBKDF2-1] RFC 7914 §11
  */
 const clause_PBKDF2_2 = (t: Suite): boolean => t.eqStr("[PBKDF2-2] RFC 7914 §11: 80,000 iterations, a 64-byte key (R-PBKDF2, R-ASCII)", hexOrNull(plain_pbkdf2HmacSha256(unhex("50617373776f7264"), unhex("4e61436c"), 80000, 64)), "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d");
 
+/**
+ * dkLen bytes, a prefix of every longer key
+ *
+ * R-PBKDF2 — RFC 7914 §11, DEFINITION:
+ *   The test vectors below can be used to verify the PBKDF2-HMAC-SHA-256
+ *   [RFC2898] function.
+ */
+const clause_P_PREFIX = (t: Suite): boolean => {
+  const table_pw: string[] = [
+    "d505f522dda7af99d3270c15acf2c07d4165da7c37",
+    "",
+    "85",
+    "e0409505be122b17f718d3e06c4329469101e549fbf0e5",
+    "c8f7ef819e25c5bc7936e5c683de6019e9631dfe59937889",
+    "32",
+    "6fd1e799e9f7bd955bfca586a9e5fa0a182aa0dbf1cf8b0f",
+    "6d7ae041d18ce31189b056d64ace343974f74ba616635be7",
+    "ea141404eecdb8d1bf2444c25fcad428",
+    "2f5614828ad591caeca10001665bdf09ed",
+    "0405a8b29c",
+    "",
+    "30045a02701c16ae6ca3433384c5dd102619",
+    "780e82c433af4ac85dbf6bab27a298",
+    "2fe2706ca2ee",
+    "09c910292175afedb87d05",
+    "8d252b0eecb638ec31b0694cd5291d8eef",
+    "87ece7d410204df331585bed2d",
+    "3b4f3fde477926b001d4e6dae5219bda287fd429d14431ba",
+    "502d2fff12ca42b26108cf4d4f93240aab",
+    "322b41280d",
+    "86a8b68e4a7984e6f50773",
+    "6661778f5cd5d155f8e399fb9c0bde20e97e2783c9a0",
+    "7ad54f2927da96652572a69eef3b",
+    "6c99ec5926b583c889ae3c1ae5a0780c",
+    "9ad6b6",
+    "acb2b303cb",
+    "",
+    "95a41c697c5af68b9108971df0260f22",
+    "c5f65e5cce9cc5fb59",
+    "782da3d3b85ba341189653bbe4d898ee7decd4",
+    "bba1da183c72e13f2319b2c0834471",
+  ];
+  const table_salt: string[] = [
+    "472da1c685a747",
+    "342ca06019b44ee973ffbb72e7ae4adc15c4a4fdd03b6e22",
+    "285ff16c",
+    "c7",
+    "9e52f02e9fb46cf875be54b1",
+    "",
+    "dc",
+    "b0be3db0a3cd06696815872a50c5f85ff136dde4ceab03",
+    "94a3c5f3a079f585e12523c89a47e810409f2fc51ad35394",
+    "6a9045a651d2f574",
+    "cb6b6b9cee4273ca7d",
+    "eb89fc6cda88d7497db3a6eadc9ffbdb861f0e09a3",
+    "45d9b65d764dcd9d78c46faf812ae7fde7",
+    "06e16f486bca0f86fa",
+    "5599885fb69ce9ddec29f9d7588edc",
+    "67df87975a964685a60a40647475f21b",
+    "44e2ca9361bd1dcf8d",
+    "87e08d8e8751d4ea26e576ea29d61876c54ac5eb",
+    "f3",
+    "4144520114a206d3c1fc1cb78f0c4961ca924c84",
+    "ca315ec0af15",
+    "123c9d4261f6839f46",
+    "0f018470d75aec32",
+    "28d9861588",
+    "c0d93ad436ce81afacec88ade8bee1fa5c",
+    "a70caf95",
+    "db266f13b02e1e62480a6b76d1",
+    "d01e2f3efcc1d014ecabde5ef0ab85509edcea",
+    "b73052192bfd697b58cd",
+    "e3fbf78a1edb",
+    "03b141d7b897641a137a",
+    "0c41",
+  ];
+  const table_n: i32[] = [1, 1, 2, 3, 1, 1, 2, 1, 2, 1, 2, 3, 1, 2, 1, 3, 2, 2, 3, 2, 3, 1, 1, 3, 2, 3, 2, 2, 3, 1, 1, 2];
+  const table_a: i32[] = [15, 24, 11, 29, 26, 12, 1, 35, 9, 39, 14, 7, 1, 2, 39, 40, 39, 38, 1, 16, 31, 32, 37, 28, 17, 11, 15, 17, 24, 15, 30, 37];
+  const table_b: i32[] = [16, 20, 13, 5, 31, 5, 36, 23, 6, 16, 30, 33, 32, 1, 29, 2, 0, 1, 39, 40, 33, 6, 11, 10, 27, 12, 34, 2, 0, 2, 20, 30];
+  for (let i: i32 = 0; i < 32; i += 1) {
+    const v_pw: u8[] = unhex(table_pw[i]);
+    const v_salt: u8[] = unhex(table_salt[i]);
+    const v_n: i32 = table_n[i];
+    const v_a: i32 = table_a[i];
+    const v_b: i32 = table_b[i];
+    const u: Unwrap = new Unwrap();
+    const v_k: u8[] | null = plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, wrappingAdd(v_a, v_b));
+    const holds: boolean = (!isNullBytes(v_k) && (toI32(u.get(v_k).length) === wrappingAdd(v_a, v_b)) && bytesEq(u.get(plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, v_a)), sliceBytes(u.get(v_k), 0, v_a)));
+    if (u.sawNull || !holds) {
+      let why: string = "the assertion is false";
+      if (u.sawNull) {
+        why = "unwrap met a null";
+      }
+      return t.fail("[P-PREFIX] dkLen bytes, a prefix of every longer key (R-PBKDF2)", `sample ${i + 1} of 32 (len(pw) = ${toI32(v_pw.length)}, len(salt) = ${toI32(v_salt.length)}, n = ${v_n}, a = ${v_a}, b = ${v_b}): ${why}`);
+    }
+  }
+  return t.pass("[P-PREFIX] dkLen bytes, a prefix of every longer key (R-PBKDF2) — 32 samples");
+};
+
 export const main = (): i32 => {
   const t: Suite = new Suite("rfc7914-pbkdf2-sha256");
   let ran: string = "";
   ran = `${ran}${clause_PBKDF2_1(t) ? "1" : "0"}`;
   ran = `${ran}${clause_PBKDF2_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_PREFIX(t) ? "1" : "0"}`;
   const code: i32 = t.done();
   const nonce: string = toI32(process.argv.length) > 1 ? process.argv[1] : "-";
   console.log(`vector-done ${nonce} ${ran}`);
