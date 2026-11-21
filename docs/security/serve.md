@@ -104,12 +104,14 @@ unchanged until the task ends:
    may parse a pipelined next request into the same head before `giveBack`
    ends the loan. That window opens after the task's last step and closes
    at `giveBack`, in the same pass of the loop, and in it the loop reads
-   only the slot's arrays, never the record. A handler cannot carry a view
+   only the slot's arrays, never the record. That window is argued from
+   the code named here; no test pins it. A handler cannot carry a view
    of the head into it: `serveOn` instantiates `serveTask` with the handler,
    and the lend rule refuses a handler that keeps its `Request`, stores it,
    or hands it to a task of its own (NL2822,
-   `tests/link/net_serve_handler_keeps`). A handler that waits holds a head
-   no pipelined request is parsed into (`tests/link/net_serve_lent_window`).
+   `tests/link/net_serve_handler_keeps`). What a test pins is the
+   loan while the task runs: a handler that waits holds a head no
+   pipelined request is parsed into (`tests/link/net_serve_lent_window`).
    A connection that closes
    while its task runs — a hang-up, a deadline, a draining close — restarts
    for the next connection on its slot, which would hand the parser's head

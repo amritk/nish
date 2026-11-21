@@ -423,7 +423,10 @@ finishes, so a long-running program does not grow with every task it has run.
 `lend(x)` from `nish:async` hands a callee, or a holder built around it,
 the very object the task was given, with no copy. The lent object stays its
 spawner's, lent only while the task runs: the task may read it, write
-numbers into it, and copy strings and numbers out of it.
+numbers into it, and copy strings and numbers out of it. It may not keep the
+object: storing it in a field or array of the task's own, or pushing it into
+one, is refused, because a later write through that holder would reach the
+spawner's object.
 
 ```ts
 import { lend, sleep, spawn } from "nish:async";

@@ -4391,7 +4391,16 @@ const run = async (): Promise<void> => {
   through `[lend(note)][0]` or `{ n: lend(note) }.n`, or a callee handed
   such a literal that stores into it, is refused the same way
   (`reject_async_lend_literal_array`, `reject_async_lend_literal_object`,
-  `reject_async_lend_literal_call`, `tests/link/async_lend_literal`). A number,
+  `reject_async_lend_literal_call`, `tests/link/async_lend_literal`), as is a
+  store through a literal nested around it or a value that may be it
+  (`reject_async_lend_literal_nested`, `reject_async_lend_ternary`). The view
+  may not be kept: storing it, or a literal around it, into a field or array
+  of the task's own, or pushing it into one, is refused at that store
+  (`reject_async_lend_kept_field`, `reject_async_lend_kept_literal`,
+  `reject_async_lend_kept_push`). The walk tracks a literal around a view as
+  the view itself, so a literal that holds one also refuses what the view
+  would: `const xs = [lend(a)]; xs.push(lend(b))`, or a store through
+  `[lend(a), new Note()][1]`, is refused although no view is written. A number,
   `boolean`, enum or `string` is copied anyway, so `lend` of one is
   `` `lend` from `nish:async` takes one object or array, its spawner's
   memory, which a task reads in place and answers as it was given `` (NL2693,

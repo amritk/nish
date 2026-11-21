@@ -745,18 +745,18 @@ function RegionWalk.store(this: RegionWalk, holder: i32, value: i32, at: Node, w
   pointer at: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.report#1
   stackSites=0 stackLocals=0
   callee +0:5 RegionWalk.noteWrite -> @RegionWalk.noteWrite
-  callee +2:7 RegionWalk.report -> @RegionWalk.report
-  callee +2:23 lentMessage -> @lentMessage
-  callee +3:72 mayBeReleased -> @mayBeReleased
-  callee +4:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +5:44 mayBeReleased -> @mayBeReleased
+  callee +4:7 RegionWalk.report -> @RegionWalk.report
+  callee +4:23 lentMessage -> @lentMessage
+  callee +5:72 mayBeReleased -> @mayBeReleased
   callee +6:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +7:73 mayBeRegion -> @mayBeRegion
-  callee +8:7 RegionWalk.report -> @RegionWalk.report
-  callee +8:23 regionToOuterMessage -> @regionToOuterMessage
-  callee +12:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +14:9 RegionWalk.report -> @RegionWalk.report
-  callee +14:25 regionToOuterMessage -> @regionToOuterMessage
+  callee +7:44 mayBeReleased -> @mayBeReleased
+  callee +8:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +9:73 mayBeRegion -> @mayBeRegion
+  callee +10:7 RegionWalk.report -> @RegionWalk.report
+  callee +10:23 regionToOuterMessage -> @regionToOuterMessage
+  callee +14:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +16:9 RegionWalk.report -> @RegionWalk.report
+  callee +16:25 regionToOuterMessage -> @regionToOuterMessage
 function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit

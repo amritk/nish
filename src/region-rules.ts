@@ -955,7 +955,9 @@ class RegionWalk {
       return
     }
     this.noteWrite(holder)
-    if (holder === ORIGIN_LENT || (value === ORIGIN_LENT && holder !== ORIGIN_REGION)) {
+    // A lent view kept anywhere, even in the task's own memory, is a pointer
+    // the walk would lose: a store through the holder later reaches the view.
+    if (holder === ORIGIN_LENT || value === ORIGIN_LENT) {
       this.report(at, lentMessage(this.who, what))
     } else if ((holder === ORIGIN_REGION || holder === ORIGIN_ROOT) && mayBeReleased(value)) {
       this.reportOuter(at, what)
