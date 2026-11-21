@@ -247,10 +247,10 @@ export function maxU64(a, b) {
  * what `sext`/`zext`/`trunc` do natively.
  */
 export function convert(x, from, to) {
-  // The hot paths of u64 arithmetic written over i64 (`toU64(a) * toU64(b)`)
-  // stay in a function small enough for V8 to inline at the call: the two
-  // 64-bit kinds reinterpret each other's bits, and a zext of an unsigned
-  // 32-bit-or-narrower value to u64 keeps the value as it is.
+  // The hot conversions stay in a function small enough for V8 to inline at
+  // the call: the two 64-bit kinds reinterpret each other's bits (u64
+  // arithmetic written over i64, `toU64(a) * toU64(b)`), and an integer
+  // `number` source is wrapped or widened below.
   if (typeof x === "bigint") {
     if (to === "u64") return BigInt.asUintN(64, x);
     if (to === "i64") return BigInt.asIntN(64, x);
@@ -263,8 +263,8 @@ export function convert(x, from, to) {
     if (to === "u32") return x >>> 0;
     if (to === "u16") return x & 0xffff;
     if (to === "u8") return x & 0xff;
-    if (to === "i64") return BigInt(x);
-    if (to === "u64" && from !== "i32") return BigInt(x);
+    // A negative i32 widened to u64 wraps, so `convertOther` answers that one.
+    if (to === "i64" || (to === "u64" && from !== "i32")) return BigInt(x);
   }
   return convertOther(x, from, to);
 }

@@ -2,7 +2,8 @@
 // program written out with `--emit-ts` loads a YAML document of about 100 KB
 // with `parseYaml` and `YamlJsonLoader`, under a Node that counts encodes
 // (count.mjs). One scalar is not ASCII, so the document is read through its
-// bytes rather than as ASCII. Prints `<bytes> <nodes> <values>`.
+// bytes rather than as ASCII. Prints `<units> <nodes> <values>`,
+// where `<units>` is the document's length in UTF-16 code units.
 import { JsonLimits } from "nish/json-tokenizer"
 import { JSON_VALUE_MAX_VALUES, JsonDocument } from "nish/json-value"
 import { parseYaml } from "nish/yaml"
