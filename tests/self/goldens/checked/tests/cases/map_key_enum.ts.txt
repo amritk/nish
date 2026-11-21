@@ -57,8 +57,7 @@ function fileEntry(slots: u32[], mask: i32, h: u32, index: i32): void -> @nish.f
   local -5:9 low: u32 (const)
   local -4:7 bucket: u32 (let)
   callee -4:22 homeBucket -> @nish.homeBucket
-  local -3:12 step: u32 (let)
-  local -2:11 b: i32 (const)
+  local -3:7 b: i32 (let)
 function compactHashes(hashes: u32[]): void -> @nish.compactHashes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -69,22 +68,25 @@ function compactHashes(hashes: u32[]): void -> @nish.compactHashes
   local -3:12 from: i32 (let)
   local -2:11 h: u32 (const)
 function rebuiltSlots(slots: u32[], live: i32, used: i32): u32[] -> @nish.rebuiltSlots
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.clearSlots
   escaping: slots
-  calls: nish.clearSlots nish.emptySlots
-  pointer slots: size=0 writesThrough=true captured=true passedTo=nish.clearSlots#0 nish.emptySlots#0
+  calls: nish.clearSlots nish.widenSlots
+  pointer slots: size=0 writesThrough=true captured=true passedTo=nish.clearSlots#0 nish.widenSlots#0 nish.clearSlots#0
   stackSites=0 stackLocals=0
   callee +0:5 clearSlots -> @nish.clearSlots
-  callee +3:10 emptySlots -> @nish.emptySlots
-function emptySlots(slots: u32[], times: i32): u32[] -> @nish.emptySlots
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  local +3:9 n: i32 (const)
+  callee +8:3 widenSlots -> @nish.widenSlots
+  callee +9:3 clearSlots -> @nish.clearSlots
+function widenSlots(slots: u32[], times: i32): void -> @nish.widenSlots
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   calls: nish_array_grow
-  pointer slots: size=0 writesThrough=false captured=false
+  pointer slots: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:9 out: u32[] (const)
-  local +1:12 i: i32 (let)
-  local +2:14 j: i32 (let)
+  local -3:9 n: i32 (const)
+  local -2:12 k: i32 (let)
+  local -1:14 i: i32 (let)
 function refile(slots: u32[], hashes: u32[]): void -> @nish.refile
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.fileEntry
@@ -256,16 +258,20 @@ function Map<Fruit, i32>.rebuild(this: Map<Fruit, i32>): void -> @nish.Map$en$Fr
   callee +2:5 refile -> @nish.refile
 function Map<Fruit, i32>.reserveSlots(this: Map<Fruit, i32>, n: i32): void -> @nish.Map$en$Fruit$i32.reserveSlots [exported method instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: llvm.fptosi.sat.i32.f64 nish.emptySlots nish.refile
+  sharedWrite: +0:9
+  calls: llvm.fptosi.sat.i32.f64 nish.clearSlots nish.refile nish.widenSlots
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -12:11 want: f64 (const)
-  local -7:11 have: f64 (const)
-  local -6:9 size: f64 (let)
-  local -1:13 slots: u32[] (const)
-  callee -1:21 emptySlots -> @nish.emptySlots
-  callee +2:7 refile -> @nish.refile
+  local -14:11 want: f64 (const)
+  local -9:11 have: f64 (const)
+  local -8:9 size: f64 (let)
+  local -3:13 wanted: i32 (const)
+  local -1:15 slots: u32[] (const)
+  callee +2:9 refile -> @nish.refile
+  local +5:13 slots: u32[] (const)
+  callee +6:7 widenSlots -> @nish.widenSlots
+  callee +7:7 clearSlots -> @nish.clearSlots
+  callee +9:7 refile -> @nish.refile
 function Map<Fruit, i32>.walkKeys(this: Map<Fruit, i32>): Fruit[] -> @nish.Map$en$Fruit$i32.walkKeys [exported method instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=56 writesThrough=false captured=false
@@ -288,14 +294,13 @@ function probeTable<Fruit>(slots: u32[], mask: i32, hashes: u32[], keys: Fruit[]
   local +2:9 fingerprint: u32 (const)
   local +3:7 bucket: u32 (let)
   callee +3:22 homeBucket -> @nish.homeBucket
-  local +8:12 step: u32 (let)
-  local +9:11 b: i32 (const)
-  local +11:13 word: u32 (const)
-  callee +13:16 absentAt -> @nish.absentAt
-  local +16:15 at: i32 (const)
-  callee +22:11 sameKey<Fruit> -> @nish.sameKey$en$Fruit
-  callee +24:18 foundAt -> @nish.foundAt
-  callee +30:10 absentAt -> @nish.absentAt
+  local +10:7 b: i32 (let)
+  local +12:11 word: u32 (const)
+  callee +14:14 absentAt -> @nish.absentAt
+  local +17:13 at: i32 (const)
+  callee +23:9 sameKey<Fruit> -> @nish.sameKey$en$Fruit
+  callee +25:16 foundAt -> @nish.foundAt
+  callee +31:10 absentAt -> @nish.absentAt
 function truncate<Fruit>(items: Fruit[]): void -> @nish.truncate$en$Fruit [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -342,7 +347,7 @@ function sameKey<Fruit>(a: Fruit, b: Fruit): boolean -> @nish.sameKey$en$Fruit [
 import Map from "nish/collections" -> generic class Map
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.Map$en$Fruit$i32.set
+  sharedWrite: via nish_print
   calls: nish.Map$en$Fruit$i32.constructor nish.Map$en$Fruit$i32.delete nish.Map$en$Fruit$i32.has nish.Map$en$Fruit$i32.set nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   local +0:9 m: Map<Fruit, i32> (const)
