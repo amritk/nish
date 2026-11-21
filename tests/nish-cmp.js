@@ -10044,8 +10044,62 @@ const proverReadsDeclared = () => [
   },
 ]
 
+// The std/ modules a strict module calls (Map and Set, text, JSON, array,
+// regex, bytes) prove or drop their panic sites under this PR's subject.
+const STD_PANIC_FREE = "std/ panic-free for strict modules"
+const stdPanicFree = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
+  )
+
 const DECLARED = [
   ...proverReadsDeclared(),
+  ...stdPanicFree(
+    "Map and Set probe until a bucket answers instead of counting steps, and rebuild a small table into a fresh u16-sized array, so the inlined table walk changes",
+    {
+      "docs/cookbook/map-foreach.ts": ["map-foreach.ll"],
+      "docs/cookbook/map-iter.ts": ["map-iter.ll"],
+      "tests/link/map_walk_two_modules/main.ts": ["walker.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/array's sliceAll, what `xs.slice()` compiles to, copies directly instead of through slice's range check, so the copy changes",
+    {
+      "tests/cases/arr_slice.ts": ["arr_slice.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/text's indexOfAny walks its input under guards the prover reads, so the scan changes",
+    {
+      "bench/index-of-any.ts": ["index-of-any.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/regex compiles and matches with guarded indexes and Results in place of panics, so its code and its classes change",
+    {
+      "bench/regex/main.ts": ["main.h", "main.ll"],
+      "tests/link/caps_dep_std_not_refused/main.ts": ["main.h"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/json's reader, tokenizer and writer guard every index and grow their buffers without a computed array length, so json.ll changes",
+    Object.fromEntries(
+      [
+        "net_handler_rest_close",
+        "net_http_server",
+        "net_http_server_bad_limit",
+        "net_http_server_bad_param",
+        "net_http_server_bad_watch",
+        "net_http_server_caps",
+        "net_http_server_carriers",
+        "net_http_server_end_short",
+        "net_http_server_end_unstarted",
+        "net_http_server_foreign",
+        "net_http_server_h1_fields",
+        "net_http_server_h1_head",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]])
+    )
+  ),
   ...scramModule(),
   {
     program: "tests/cases/cls_field_init.ts",
