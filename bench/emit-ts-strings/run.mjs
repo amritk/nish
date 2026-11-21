@@ -53,16 +53,22 @@ const opts = { rounds: 5, mb: 3, timeout: 120, only: SIDES, against: null }
 for (let i = 0; i < nishc.rest.length; i++) {
   const arg = nishc.rest[i]
   const value = nishc.rest[++i]
-  if (value === undefined) fail(`${arg} needs a value`)
+  if (value === undefined) {
+    fail(`${arg} needs a value`)
+  }
   if (arg === "--rounds" || arg === "--mb" || arg === "--timeout") {
     opts[arg.slice(2)] = Number(value)
   } else if (arg === "--only") {
     opts.only = value.split(",")
     const bad = opts.only.filter((s) => !SIDES.includes(s))
-    if (bad.length > 0) fail(`--only names no side ${bad.join(", ")}`)
+    if (bad.length > 0) {
+      fail(`--only names no side ${bad.join(", ")}`)
+    }
   } else if (arg === "--against") {
     opts.against = path.resolve(value)
-    if (!fs.existsSync(opts.against)) fail(`no ${value}`)
+    if (!fs.existsSync(opts.against)) {
+      fail(`no ${value}`)
+    }
   } else {
     fail(`unknown option ${arg}`)
   }
@@ -166,6 +172,7 @@ const generateJson = (paths) => {
     components: { schemas: {} },
   }
   for (let i = 0; i < paths; i++) {
+    // biome-ignore lint/style/useNamingConvention: OpenAPI's reference key
     const ref = { $ref: `#/components/schemas/Thing${i}` }
     doc.paths[`/things${i}/{id}`] = {
       get: {
@@ -210,7 +217,9 @@ const generateJson = (paths) => {
 const pathsFor = (generate, bytes) => {
   const per = generate(100).length / 100
   let paths = Math.max(1, Math.floor(bytes / per))
-  while (generate(paths).length < bytes) paths += 1
+  while (generate(paths).length < bytes) {
+    paths += 1
+  }
   return paths
 }
 
@@ -229,7 +238,9 @@ const runtimeCopy = (dir, strings) => {
 
 const compile = (args, what) => {
   const env = { ...process.env }
-  if (env.WASI_SYSROOT === undefined && fs.existsSync("/usr/lib/wasm32-wasi")) env.WASI_SYSROOT = "/usr"
+  if (env.WASI_SYSROOT === undefined && fs.existsSync("/usr/lib/wasm32-wasi")) {
+    env.WASI_SYSROOT = "/usr"
+  }
   const r = spawnSync(nishc.cmd, compileArgv(nishc, [path.join(here, "main.ts"), ...args]), {
     encoding: "utf8",
     env,
@@ -309,7 +320,9 @@ const main = () => {
     const shift = round % runs.length
     const order = [...runs.slice(shift), ...runs.slice(0, shift)]
     for (const r of round % 2 === 0 ? order : order.reverse()) {
-      if (r.over) continue
+      if (r.over) {
+        continue
+      }
       const [cmd, ...args] = r.side.argv
       const p = spawnSync(cmd, [...args, r.input.workload, r.input.file, String(r.input.iterations)], {
         cwd: root,
@@ -320,8 +333,11 @@ const main = () => {
         process.stderr.write(
           `  ${r.side.name} ${r.input.workload} ${r.input.size}: over ${opts.timeout} s, not run again\n`
         )
-        for (const same of runs)
-          if (same.input === r.input && same.side.name === r.side.name) same.over = true
+        for (const same of runs) {
+          if (same.input === r.input && same.side.name === r.side.name) {
+            same.over = true
+          }
+        }
         continue
       }
       const lines = (p.stdout ?? "").trim().split("\n")
@@ -343,11 +359,15 @@ const main = () => {
   for (const input of inputs) {
     const mine = runs.filter((r) => r.input === input)
     const seen = new Set(mine.flatMap((r) => [...r.checksums]))
-    if (seen.size > 1) fail(`${input.workload} ${input.size}: the runs disagree: ${[...seen].join(" | ")}`)
+    if (seen.size > 1) {
+      fail(`${input.workload} ${input.size}: the runs disagree: ${[...seen].join(" | ")}`)
+    }
     const ms = {}
     const cells = names.map((name) => {
       const [a, b] = mine.filter((r) => r.side.name === name)
-      if (a.over || b.over) return `over ${opts.timeout} s`
+      if (a.over || b.over) {
+        return `over ${opts.timeout} s`
+      }
       const ma = median(a.ns) / input.iterations / 1e6
       const mb = median(b.ns) / input.iterations / 1e6
       ms[name] = ma
