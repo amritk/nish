@@ -108,7 +108,7 @@ PASS  a tag that never ends in ten bytes
 PASS  a fixed64 cut short
 PASS  a fixed32 cut short
 PASS  a length past the span
-PASS  a length past 2^64 - 1 bytes
+PASS  a length of 2^64 - 1 bytes
 PASS  a length cut short
 PASS  field number 0
 PASS  a field number past 2^29 - 1
@@ -145,8 +145,9 @@ PASS  endMessage with none open
 PASS  a nested message of 2 bytes
 PASS  a nested message of 200 bytes
 PASS  a nested message of 20000 bytes
+PASS  a nested message of 303 bytes keeps its contents
 PASS  bytes writes its window
 PASS  an empty string
 PASS  int32 and int64 negatives take ten bytes
 PASS  a warm writer allocates nothing per field
-protobuf: 151 passed, 0 failed, 0 skipped
+protobuf: 152 passed, 0 failed, 0 skipped

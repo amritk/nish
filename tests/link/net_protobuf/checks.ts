@@ -271,7 +271,7 @@ const refusalChecks = (s: Suite): void => {
   s.eqI32("a fixed64 cut short", skipAll([9, 1, 2, 3]), PROTO_ERR_TRUNCATED)
   s.eqI32("a fixed32 cut short", skipAll([13, 1, 2, 3]), PROTO_ERR_TRUNCATED)
   s.eqI32("a length past the span", skipAll([10, 5, 1, 2]), PROTO_ERR_LENGTH)
-  s.eqI32("a length past 2^64 - 1 bytes", skipAll([10, 255, 255, 255, 255, 255, 255, 255, 255, 255, 1]), PROTO_ERR_LENGTH)
+  s.eqI32("a length of 2^64 - 1 bytes", skipAll([10, 255, 255, 255, 255, 255, 255, 255, 255, 255, 1]), PROTO_ERR_LENGTH)
   s.eqI32("a length cut short", skipAll([10]), PROTO_ERR_TRUNCATED)
   s.eqI32("field number 0", skipAll([0, 1]), PROTO_ERR_FIELD)
   s.eqI32("a field number past 2^29 - 1", skipAll([128, 128, 128, 128, 16, 1]), PROTO_ERR_FIELD)
@@ -426,6 +426,21 @@ const writerChecks = (s: Suite): void => {
     r.leave()
     s.ok(`a nested message of ${size * 2} bytes`, count === size && r.next() && r.field === 3 && r.bool())
   }
+  // Contents that do not repeat, so a length moved in wrong would show.
+  const ramp: u8[] = []
+  for (let i: i32 = 0; i < 300; i += 1) {
+    ramp.push(toU8(i % 251))
+  }
+  w.reset()
+  w.beginMessage(1)
+  w.bytes(2, ramp, 0, 300)
+  w.endMessage()
+  const rr = new ProtoReader(w.buf, 0, w.end)
+  rr.next()
+  rr.enter()
+  rr.next()
+  const n = rr.len()
+  s.ok("a nested message of 303 bytes keeps its contents", n === 300 && bytesText(rr.buf, rr.spanStart, n) === bytesText(ramp, 0, 300))
   // A window of bytes, and a writer that reuses its buffer.
   const src: u8[] = [1, 2, 3, 4]
   w.reset()

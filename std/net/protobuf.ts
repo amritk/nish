@@ -37,8 +37,8 @@
  *
  * **A field the caller does not read is skipped by its wire type** when
  * `next` is called again, so an unknown field is checked and passed, never
- * interpreted. A varint's bits past the 64th are dropped, as protobuf's own
- * decoders drop them, and an over-long varint (`0x80 0x00` for 0) is read as
+ * interpreted. A varint's bits past the 64th (the tenth byte's top six) are
+ * dropped, and an over-long varint (`0x80 0x00` for 0) is read as
  * its value; neither can move the reader outside its span.
  *
  * **The writer appends to the caller's buffer** from `end`, storing over the
@@ -470,7 +470,8 @@ export class ProtoReader {
   /**
    * Reads the current length-delimited field as a span of bytes: a string,
    * bytes, or a message to read later with a reader of its own. The span
-   * begins at `spanStart` in `buf`.
+   * begins at `spanStart` in `buf`; a string's bytes are not checked to be
+   * UTF-8, which is the caller's to decode.
    *
    * @returns The span's length, or 0 on a fault.
    */
