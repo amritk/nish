@@ -2215,15 +2215,20 @@ const jsonValuePut = (a: i32[], i: i32, x: i32): void => {
  * `a` when it holds at least `n` elements, and otherwise a copy of it at
  * least twice as long, for the caller to keep in `a`'s place. Doubling is
  * what keeps a run of appends linear, and the old array is left in the arena.
+ * The copy is built by `push`, so no length is computed for `new Array`.
  */
 const jsonValueRoom = (a: u8[], n: i32): u8[] => {
   const have: i32 = toI32(a.length)
   if (n <= have) {
     return a
   }
-  const grown: u8[] = new Array<u8>(jsonValueGrownLength(have, n))
-  for (let i: i32 = 0; i < have && i < toI32(grown.length); i += 1) {
-    grown[i] = a[i]
+  const target: u32 = jsonValueGrownLength(have, n)
+  const grown: u8[] = []
+  for (let i: i32 = 0; i < toI32(a.length); i += 1) {
+    grown.push(a[i])
+  }
+  while (toU32(grown.length) < target) {
+    grown.push(0)
   }
   return grown
 }
@@ -2234,9 +2239,13 @@ const jsonValueRoomI32 = (a: i32[], n: i32): i32[] => {
   if (n <= have) {
     return a
   }
-  const grown: i32[] = new Array<i32>(jsonValueGrownLength(have, n))
-  for (let i: i32 = 0; i < have && i < toI32(grown.length); i += 1) {
-    grown[i] = a[i]
+  const target: u32 = jsonValueGrownLength(have, n)
+  const grown: i32[] = []
+  for (let i: i32 = 0; i < toI32(a.length); i += 1) {
+    grown.push(a[i])
+  }
+  while (toU32(grown.length) < target) {
+    grown.push(0)
   }
   return grown
 }
