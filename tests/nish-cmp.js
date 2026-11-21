@@ -578,7 +578,7 @@ const routeSteps = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: ROUTE_STEPS, why }))
   )
 /** The changelog words of WP43 stage 4, which decodes request bodies in HttpHandler. */
-const BOMB_LIMIT = "decode request bodies under a decompression-bomb limit"
+const BOMB_LIMIT = "request bodies under a decompression-bomb limit"
 const bombLimit = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: BOMB_LIMIT, why }))
@@ -15278,6 +15278,7 @@ const DECLARED = [
       "tests/link/net_http2_cleartext_bad_slots/main.ts": ["zlib.ll"],
       "tests/link/net_http2_cleartext_bad_timeout/main.ts": ["zlib.ll"],
       "tests/link/net_http2_tls/main.ts": ["zlib.ll"],
+      "tests/link/net_http2_tls_f64/main.ts": ["zlib.ll"],
       "tests/link/net_http3/main.ts": ["zlib.ll"],
       "tests/link/net_http3_bad_body_chunk/main.ts": ["zlib.ll"],
       "tests/link/net_http3_bad_config/main.ts": ["zlib.ll"],
@@ -15287,14 +15288,19 @@ const DECLARED = [
       "tests/link/net_http3_bad_uni_limit/main.ts": ["zlib.ll"],
       "tests/link/net_http3_bad_write_chunk/main.ts": ["zlib.ll"],
       "tests/link/net_http3_ecn/main.ts": ["zlib.ll"],
+      "tests/link/net_http3_ecn_f64/main.ts": ["zlib.ll"],
       "tests/link/net_http3_errors/main.ts": ["zlib.ll"],
+      "tests/link/net_http3_errors_f64/main.ts": ["zlib.ll"],
+      "tests/link/net_http3_f64/main.ts": ["zlib.ll"],
       "tests/link/net_http3_server/main.ts": ["zlib.ll"],
       "tests/link/net_http3_server_bad_config/main.ts": ["zlib.ll"],
       "tests/link/net_http3_server_bad_head_timeout/main.ts": ["zlib.ll"],
       "tests/link/net_http3_server_bad_idle_timeout/main.ts": ["zlib.ll"],
+      "tests/link/net_http3_server_f64/main.ts": ["zlib.ll"],
       "tests/link/net_http3_write_window/main.ts": ["zlib.ll"],
       "tests/link/net_http_app/main.ts": ["zlib.ll"],
       "tests/link/net_http_date/main.ts": ["zlib.ll"],
+      "tests/link/net_http_date_f64/main.ts": ["zlib.ll"],
       "tests/link/net_http_server/main.ts": ["zlib.ll"],
       "tests/link/net_http_server_bad_limit/main.ts": ["zlib.ll"],
       "tests/link/net_http_server_bad_param/main.ts": ["zlib.ll"],
@@ -15327,8 +15333,10 @@ const DECLARED = [
       "tests/link/net_http_server_write_unstarted/main.ts": ["zlib.ll"],
       "tests/link/net_http_server_write_window/main.ts": ["zlib.ll"],
       "tests/link/net_loopback/main.ts": ["zlib.ll"],
+      "tests/link/net_loopback_f64/main.ts": ["zlib.ll"],
       "tests/link/net_quic_prefork/main.ts": ["zlib.ll"],
       "tests/link/net_quic_server_wipes/main.ts": ["zlib.ll"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["zlib.ll"],
       "tests/link/net_quic_worker/main.ts": ["zlib.ll"],
       "tests/link/net_relay/main.ts": ["zlib.ll"],
       "tests/link/net_relay_bad_hello/main.ts": ["zlib.ll"],
@@ -15340,6 +15348,7 @@ const DECLARED = [
       "tests/link/net_relay_bad_sessions/main.ts": ["zlib.ll"],
       "tests/link/net_relay_bad_spare/main.ts": ["zlib.ll"],
       "tests/link/net_relay_bad_stats/main.ts": ["zlib.ll"],
+      "tests/link/net_relay_f64/main.ts": ["zlib.ll"],
       "tests/link/net_relay_forged/main.ts": ["zlib.ll"],
       "tests/link/net_relay_soak/main.ts": ["zlib.ll"],
       "tests/link/net_serve/main.ts": ["zlib.ll"],
@@ -15371,6 +15380,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["zlib.ll"],
+      "tests/link/net_webtransport_f64/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["zlib.ll"],
       "tests/link/region_sessions_soak/main.ts": ["zlib.ll"],
