@@ -82,7 +82,17 @@ the audit todo; line numbers approximate):
 
 **Owns:** `runtime/core/strings.mjs`, `runtime/core/checks.mjs`,
 `tests/run.js`, `tests/emit-ts/**`, `bench/emit-ts-strings/**`,
-`docs/guide/using-nish/to-typescript.md`, `docs/RUN_UNDER_NODE.md`
+`docs/guide/using-nish/to-typescript.md`, `docs/RUN_UNDER_NODE.md`,
+`tests/nish-cmp.js`, `runtime/core/arrays.mjs`, `runtime/core/arrays.d.ts`,
+`runtime/core/numbers.mjs`, `runtime/core/numbers.d.ts`, `bench/README.md`
+
+Amended 2026-11-21 (amend-respawn): `tests/nish-cmp.js` because the new
+`bench/emit-ts-strings/main.ts` joins the nish-cmp corpus and differs from the
+0.44.0 reference by src/std changes already declared for other programs, so it
+needs its own narrow `DECLARED` entries; `runtime/core/arrays.mjs` and
+`numbers.mjs` (and their `.d.ts`) because the squeeze profile names `newArray`
+and `toI32`/`convertOther` as the top remaining runtime costs; `bench/README.md`
+to list the new bench.
 
 ### Runtime
 
