@@ -16,6 +16,13 @@ service BenchmarkService {
   // Held unanswered until its deadline, capped by the server, has passed:
   // DEADLINE_EXCEEDED, with no message.
   rpc Slow(SumRequest) returns (SumReply);
+  // Client streaming: the sum of every request's a + b, once the stream ends.
+  rpc SumAll(stream SumRequest) returns (SumReply);
+  // Server streaming: `count` replies, from `start` up, each with `pad` bytes
+  // of padding (at most 4096).
+  rpc Count(CountRequest) returns (stream CountReply);
+  // Bidirectional: each request's a + b, sent back as it is read.
+  rpc Echo(stream SumRequest) returns (stream SumReply);
 }
 
 message SumRequest {
@@ -25,4 +32,15 @@ message SumRequest {
 
 message SumReply {
   int32 result = 1;
+}
+
+message CountRequest {
+  int32 count = 1;
+  int32 start = 2;
+  int32 pad = 3;
+}
+
+message CountReply {
+  int32 result = 1;
+  bytes pad = 2;
 }
