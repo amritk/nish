@@ -473,7 +473,8 @@ jobs:
           # Ready once it prints `ports tls N h2c M`, after binding both listeners.
           for _ in $(seq 1 100); do docker logs grpc 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
           docker logs grpc
-          ports=$(docker logs grpc 2>&1 | grep -m 1 -E '^ports tls [0-9]+ h2c [0-9]+$')
+          ports=$(docker logs grpc 2>&1 | grep -m 1 -E '^ports tls [0-9]+ h2c [0-9]+$') \
+            || { echo "the server printed no ports line" >&2; exit 1; }
           read -r _ _ tls _ h2c <<< "$ports"
           echo "tls=$tls" >> "$GITHUB_OUTPUT"
           echo "h2c=$h2c" >> "$GITHUB_OUTPUT"

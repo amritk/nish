@@ -131,6 +131,30 @@ row, and with a guide page under `docs/guide/` and its route.
 - **S3:** `nish/net/grpc`, unary calls, with its record and guide page.
 - **S4:** interop: a stock gRPC client (`grpcurl`, or `ghz` for load) against
   both listeners in the interop job (`.github/workflows/interop.yml`).
+
+  As built, the interop job's `grpc` job runs the server
+  `tests/link/net_grpc_interop` builds into the interop image
+  (`/grpc-server serve`). It serves S3's test service (`tests/link/net_grpc/rig.ts`)
+  on a TLS listener and an h2c one and caps every call's deadline at 1 s
+  (`CAP_MS`). `tests/interop/grpc/check.sh` calls it from
+  `tests/interop/grpc/benchmark.proto`, since the server offers no reflection.
+  It runs seven checks on each listener, and the job fails on any one:
+
+  - grpcurl's GetSum 2 + 3 answers `{"result": 5}`, and -5 + 3 answers `-2`;
+  - Denied ends PERMISSION_DENIED with the message `no 100% é`, decoded from
+    its percent-encoding;
+  - Missing ends NOT_FOUND with no message;
+  - Slow, called with a 10 s timeout, ends DEADLINE_EXCEEDED with no message,
+    in under 5 s, so it is the server's capped deadline that answered, not
+    grpc-go's own timeout;
+  - ghz makes 2000 GetSum calls, 10 at a time, and every one is OK. It is a
+    stability check: no throughput is recorded.
+
+  grpcurl 1.9.3 and ghz 0.120.0 are fetched by release and their SHA-256s
+  checked before either runs, as h2spec is. The job runs on a pull request
+  that touches any file it reads: a check in `node tests/run.js ci-scope`
+  follows the server's imports and fails on one the workflow's `paths` do
+  not name (`docs/wp10-ci.md`, "Scoped lanes").
 - **S5** *(deferred)*: message classes from a `.proto` file, written by a
   generator with their encode and decode, as `nish schema` does for JSON
   ([wp62](wp62-json-schema-classes.md)). Until then a program writes its
