@@ -167,8 +167,8 @@ both runs.
 - **Stage 4, compression:** `nish/net/compress`. Built for responses as
   `nish/net/http-compress` (`HttpCompressor`, `httpAcceptEncoding`, on
   `nish/compress/deflate`), pinned by `tests/link/std_http_compress`;
-  `deflate` as a coding and request bodies with a decompression-bomb limit
-  are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
+  `deflate` as a response coding is too ([below](#deflate-as-a-response-coding));
+  request bodies with a decompression-bomb limit are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
 - **Stage 5, middleware** *(open question)*: steps a program registers to run
   before and after its route bodies (a request id, a check on a header, a
   field added to every answer). Nothing in `std/net` has one today. HttpArena
@@ -286,3 +286,19 @@ spawn to first answer, over 20 starts each:
 
 The handler's median sits inside the carrier's spread, so it starts no
 slower; it is not claimed as faster.
+
+## Deflate as a response coding
+
+Stage 4's `deflate` is built: `HttpCompressor.compress`, `compressAnyway` and
+`Http1Connection.respondEncoded` send `HTTP_CODING_DEFLATE` as the zlib format
+(RFC 1950, RFC 9110 §8.4.1.2), so the "`deflate` as a coding ... not" in §4
+holds now only of request bodies. The compressor runs its two gzip encoders
+and reframes the member in place (a 2-byte header for the 10, an Adler-32 for
+the CRC-32 and length), so it holds no second set of tables, at the cost of a
+CRC-32 computed and dropped per deflate body; the result is 12 bytes shorter
+than the gzip member and, from the level encoder, byte for byte what
+`ZlibCompressor` writes (`deflate level N: ZlibCompressor's stream, FLEVEL and
+all` in `tests/link/std_http_compress`). `Http1Connection.acceptEncoding`
+still offers gzip alone, and `respondEncoded`'s identity-refused rule
+(`compressAnyway` below every threshold) is still gzip's only; a program
+offering deflate reads the field and calls `httpAcceptEncoding` itself.

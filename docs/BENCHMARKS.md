@@ -3857,6 +3857,38 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
 
+<!-- mul-high:begin -->
+## The `mulHigh` builtin in P-256 and the JSON tokenizer (WP41 S1)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. Base is `9996c9b1`, where `p256FiatMulxU64Hi` and `jsonTokMulHigh` build a 64 × 64 high product from four 32 × 32 products; the branch replaces both with `mulHigh`. The bench code is `9996c9b1`'s, which the branch does not change. Each side's binary is built by the same compiler from its own tree, with a byte-identical copy of the base as the noise band. Rounds are interleaved, and the order rotates every round, on one 4-core x86-64 cloud container.
+
+### P-256 (`bench/crypto/curves`, native, `--profile speed`)
+
+11 rounds; verify 200 operations a run, sign 400.
+
+| Kernel | branch / base, min | branch / base, median | base copy / base, min and median |
+| --- | ---: | ---: | --- |
+| p256-verify | 1.330x | 1.347x | 0.987x to 1.036x |
+| p256-sign | 1.357x | 1.249x | 1.010x to 1.052x |
+
+Both are faster beyond the band. The sign and verify checksums match base. On `wasm32` the module's assembly is the base's byte for byte, so the wasm32 build is unchanged and was not timed. The command, run in a worktree of `9996c9b1` and in the branch at `88d046fc` with the branch's `build/nish` in both: `build/nish tests/link/crypto_p256/plain.ts -o <dir>/ --target wasm32`, then `opt -O2 <dir>/p256.ll -o p256.bc` and `llc -mtriple=wasm32-wasi p256.bc -o p256.s` (LLVM 18.1.3). The two `p256.ll` differ (the base's calls `p256FiatMulxU64Hi` 57 times, the branch's not at all, and neither holds an `i128`); the two `p256.s` are identical, sha256 `1cadc922eb777303cae3737447f51a7a31d98a2e5662a9916c44434a401e84ca`, which `cmp` confirms.
+
+### JSON tokenizer (`node bench/json-tokenizer/measure.mjs --corpora --rounds 12 --mb 32`)
+
+Before / after is the base's time over the branch's: above 1.00x the branch is faster. Each band is that build against its byte-identical copy.
+
+| Case | before / after, min | before / after, median | after band, min / median | before band, min / median |
+| --- | ---: | ---: | ---: | ---: |
+| tokenize, twitter.json | 0.94x | 0.99x | 6.0% / 2.3% | 6.2% / 2.1% |
+| tokenize, citm_catalog.json | 1.00x | 1.00x | 1.4% / 2.4% | 0.5% / 0.6% |
+| tokenize, canada.json | 1.01x | 0.97x | 2.3% / 4.5% | 4.0% / 2.0% |
+| typed, citm_catalog.json | 1.02x | 1.01x | 3.3% / 0.7% | 0.8% / 3.3% |
+| 242-byte body (`--rounds 30`) | 1.02x | 1.01x | 1.3% / 0.6% | 2.6% / 1.2% |
+
+One figure falls outside its bands: twitter.json's minimum, 0.94x, is a 6.4% slowdown, past its 6.0% and 6.2% bands; its median, 0.99x, is inside its 2.3% and 2.1% bands. Every other figure is inside the wider of its two bands, though several are past the narrower; for instance typed citm's 1.02x minimum is past its 0.8% before band, and the 242-byte body's 1.02x minimum past its 1.3% after band. canada.json is the float-heavy corpus whose Eisel–Lemire path calls `mulHigh`. It ran 1.01x at the minimum, inside both its bands, and 0.97x at the median, a 3% slowdown inside its 4.5% after band and past its 2.0% before band.
+
+The wasm32 build of the tokenizer was not timed and is not byte-identical. After `opt -O2` and `llc -mtriple=wasm32-wasi`, `jsonTokEiselLemire` grows from 263 to 277 instructions; every other function is unchanged. The removed `jsonTokMulHigh` left one cross product unmasked, which its sum has room for. The builtin's wasm32 sequence, like the removed P-256 helper, masks both.
+<!-- mul-high:end -->
 <!-- sqlite-cursor:begin -->
 ## The feed through cursors against SQL
 
