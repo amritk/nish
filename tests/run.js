@@ -7258,6 +7258,17 @@ if (dealtHere("emitTs")) {
     unit.status === 0,
     `exit ${unit.status}\n${unit.stdout}${unit.stderr}`
   )
+  // The cache's own cases: ASCII read through its units, the `""` each slot
+  // starts as, eviction past eight strings, lone surrogates, a NaN cut.
+  const cache = spawnSync("node", ["--import", path.join(encodes, "count.mjs"), path.join(encodes, "cache.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "emit-ts: strings.mjs's cache keeps ASCII unencoded, evicts past eight strings and reads lone surrogates as U+FFFD",
+    cache.status === 0,
+    `exit ${cache.status}\n${cache.stdout}${cache.stderr}`
+  )
   const yamlOut = path.join(work, "encodes", "yaml")
   fs.rmSync(yamlOut, { recursive: true, force: true })
   const yamlTs = spawnNish([path.join(encodes, "yaml.ts"), "--allow-panics", "--emit-ts", yamlOut], { cwd: root, encoding: "utf8" })
@@ -7273,9 +7284,9 @@ if (dealtHere("emitTs")) {
   const yamlUnits = yamlRun.status === 0 ? Number(yamlRun.stdout.split(" ")[0]) : 0
   const yamlEncodes = yamlRun.status === 0 && fs.existsSync(countFile) ? Number(fs.readFileSync(countFile, "utf8")) : Infinity
   check(
-    `emit-ts: a YAML load of ${yamlUnits} UTF-16 units under --emit-ts encodes under one string per thousand units (${yamlEncodes} encodes)`,
+    "emit-ts: a YAML load of 100 KB or more under --emit-ts encodes under one string per thousand UTF-16 units",
     yamlUnits >= 100_000 && yamlEncodes * 1000 < yamlUnits,
-    `exit ${yamlRun.status}\n${yamlRun.stdout}${yamlRun.stderr}`
+    `${yamlEncodes} encodes for ${yamlUnits} units; exit ${yamlRun.status}\n${yamlRun.stdout}${yamlRun.stderr}`
   )
 }
 
