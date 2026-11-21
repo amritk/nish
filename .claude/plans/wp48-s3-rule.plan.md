@@ -29,7 +29,7 @@ stages:
         content: "`--compact off`: help rows, guide cli.md, reference regenerated, break-web site rebuilt, a tests/run.js check — see S1, CLI flag"
         status: pending
       - id: gate
-        content: Build the nish-cmp corpus and bench/goose with --compact off vs on; no program slower beyond its noise band, every picked class smaller; figures in Measured: — see S1, "Gate"
+        content: Build the nish-cmp corpus and bench/goose with --compact off vs on; no program slower beyond its noise band, every picked class smaller; figures in a Measured trailer — see S1, "Gate"
         status: pending
       - id: declared-goldens
         content: Narrow DECLARED entries in tests/nish-cmp.js for every moved program, goldens regenerated, wasi and performance runs read — see S1, "Generated and pinned"
