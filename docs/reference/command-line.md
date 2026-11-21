@@ -7,11 +7,11 @@ Every flag `nish --help` lists, in the order and the groups it lists them. [The 
 ## Usage
 
 ```text
-nish <file.ts> [more.ts ...] [flags]           compile to LLVM IR
-nish run [flags] <file.ts> [args ...]          build, cache and run it
-nish run --watch <file.ts> [args ...]          rebuild and rerun it on each edit
-nish upgrade [<version>] [--check]             install a newer release
-nish proto <file.proto> -o <out.ts> [--check]  write message classes from a .proto
+nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
+nish run [flags] <file.ts> [args ...]  build, cache and run it
+nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
+nish upgrade [<version>] [--check]     install a newer release
+nish proto <file.proto> -o <out.ts>    write message classes from .proto
 nish -v, --version | -h, --help
 ```
 
