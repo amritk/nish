@@ -83,6 +83,10 @@ on:
   pull_request:
   merge_group:
   workflow_call:
+  # release-pr.yml starts the Release PR's run this way (`release/next`): its
+  # GITHUB_TOKEN push raises `pull_request` runs that wait for approval, and a
+  # dispatch does not. A dispatched run selects every lane (ci-scope.mjs).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -1342,11 +1346,10 @@ jobs:
   #
   # The full pass runs per release, not per push: on the Release PR
   # (`release/next`) and in the run release.yml makes of this workflow at the
-  # `v*` tag, whose `release` job needs it. The Release PR's run shows a broken
-  # runner before the tag is cut without anyone approving it only when the
-  # repository has a RELEASE_PR_TOKEN secret: release-pr.yml pushes with it,
-  # and a push made with GITHUB_TOKEN instead raises runs that wait as
-  # `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
+  # `v*` tag, whose `release` job needs it. On the Release PR that is the run
+  # release-pr.yml dispatches at `release/next` (`github.ref`), since its
+  # `pull_request` runs wait for approval (`github.head_ref`, once approved).
+  # Every assertion it makes about a compiler is one the `test`
   # job makes too, so per push it was about 36 runner-minutes spent proving the
   # same corpus twice (run 44224030613). What it alone catches -- a regression in
   # the runner itself, or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`
@@ -1356,7 +1359,7 @@ jobs:
   # that expression and that release.yml still calls this workflow.
   runner:
     name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
-    if: github.ref_type == 'tag' || github.head_ref == 'release/next'
+    if: github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The runner walks the corpus one program at a time; `--shard` deals the
@@ -2233,5 +2236,5 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EXPECT_SKIP: >-
-            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
+            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
         run: node scripts/ci-scope.mjs --gate

@@ -42191,13 +42191,15 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // The `runner` job, the whole corpus through the golden runner written in
   // Nish, runs per release rather than per push: on the Release PR, and in
   // the run release.yml makes of this workflow at the tag, which its
-  // `release` job needs. The per-push proof of the runner is the
-  // `nishRunner` section above.
+  // `release` job needs. On the Release PR that is the run release-pr.yml
+  // dispatches at `release/next`, and the `pull_request` run once approved.
+  // The per-push proof of the runner is the `nishRunner` section above.
   const runnerIf = /^ {4}if: (.*)$/m.exec(ciJob(ciYmlText, "runner"))?.[1] ?? ""
   const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
   check(
     "ci.yml: the `runner` job runs on the release tag and the Release PR, and release.yml still calls ci.yml",
-    runnerIf === "github.ref_type == 'tag' || github.head_ref == 'release/next'" &&
+    runnerIf ===
+      "github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'" &&
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
   )

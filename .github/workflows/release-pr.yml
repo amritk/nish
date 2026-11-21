@@ -14,12 +14,13 @@
 # approve pull requests". Without it the API refuses `gh pr create` outright,
 # whatever this workflow's `permissions:` say. The branch is pushed either way,
 # so the step warns and links the compare page instead of failing -- a release
-# that needs one click is not a reason to paint main red on every merge. A
-# RELEASE_PR_TOKEN secret (a PAT or app token with `repo`) also lifts it.
+# that needs one click is not a reason to paint main red on every merge.
 #
-# That secret does a second job: the branch is pushed with it, so CI runs on
-# the Release PR as the token's owner. Pushed with GITHUB_TOKEN, every run on
-# it waits as `action_required` until a maintainer approves it.
+# CI on the Release PR needs no personal token either. The branch is pushed with
+# GITHUB_TOKEN, whose `pull_request` runs wait as `action_required` until a
+# maintainer approves them, so the step also dispatches ci.yml and
+# pr-title.yml at `release/next`: a dispatched run needs no approval, and its
+# checks land on the same commit, which is the PR's head.
 #
 # Why the tag is created here and not by the merge itself: a tag pushed by a
 # workflow using the default GITHUB_TOKEN does not start another workflow, so
@@ -204,12 +205,11 @@ jobs:
       - name: Open or refresh the Release pull request
         if: steps.path.outputs.mode == 'pr'
         env:
-          # RELEASE_PR_TOKEN, when the repository has one, is a token the
-          # create-pull-request switch does not apply to; the default token is
-          # the fallback, and the step below degrades rather than fails when it
-          # turns out to be refused.
-          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
-          RELEASE_PR_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
+          # The job's own token, and no secret: `pull-requests: write` opens
+          # the pull request once the repository switch above is on (the step
+          # degrades rather than fails when it is off), and `actions: write`
+          # dispatches ci.yml and pr-title.yml.
+          GH_TOKEN: ${{ github.token }}
           NEXT: ${{ steps.next.outputs.next }}
         run: |
           branch="release/next"
@@ -226,22 +226,21 @@ jobs:
             exit 0
           fi
           git commit -m "$title"
-          # The push's author decides whether CI runs on the Release PR
-          # unattended. A push made with GITHUB_TOKEN raises pull_request runs
-          # as github-actions[bot], which wait as `action_required` until
-          # someone approves them; one made with RELEASE_PR_TOKEN runs as that
-          # token's owner, like any collaborator's push. So the token reaches
-          # the push itself, not only `gh`: checkout persisted GITHUB_TOKEN as
-          # an extraheader, which the empty `-c` value clears (an empty
-          # http.extraHeader resets the list) for this one command, and the
-          # token travels in that command's URL rather than in .git/config,
-          # where the build steps above could have read it.
-          if [ -n "$RELEASE_PR_TOKEN" ]; then
-            git -c "http.https://github.com/.extraheader=" push --force \
-              "https://x-access-token:${RELEASE_PR_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
-          else
-            git push --force origin "$branch"
-          fi
+          git push --force origin "$branch"
+
+          # A push made with GITHUB_TOKEN raises the PR's `pull_request` runs
+          # as github-actions[bot], and they wait as `action_required` until
+          # someone approves them. `workflow_dispatch` is exempt, as it is for
+          # release.yml at the tag above, so start the two workflows whose
+          # checks the merge requires at the branch: they report on the commit
+          # just pushed, the PR's head, with no approval and no personal token.
+          # A refused dispatch leaves the pull request, which is still worth
+          # opening, so it warns.
+          for workflow in ci.yml pr-title.yml; do
+            if ! gh workflow run "$workflow" --ref "$branch"; then
+              echo "::warning title=Release CI not started::Pushed $branch, but dispatching $workflow at it failed. Start it with: gh workflow run $workflow --ref $branch"
+            fi
+          done
 
           # The notes are a `$(...)` away from the prose, and command
           # substitution eats trailing newlines: appending them to a preamble
@@ -265,7 +264,7 @@ jobs:
             # as a warning and hand over the link that opens it in one click.
             echo "$out"
             url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
-            echo "::warning title=Release pull request not opened::Pushed $branch for $NEXT, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
+            echo "::warning title=Release pull request not opened::Pushed $branch for $NEXT, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\". Until then, open it here: $url"
           else
             echo "$out" >&2
             exit 1
