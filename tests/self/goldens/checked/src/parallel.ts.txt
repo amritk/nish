@@ -1605,7 +1605,7 @@ function hoistArrowEdits(program: CheckedProgram, sig: FunctionSig, arrow: Node,
   callee +60:14 new Edit -> @Edit.constructor
 function hoistedName(program: CheckedProgram, sig: FunctionSig, parents: Node[]): string -> @hoistedName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: containsWord isIdentifier nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 spawnCallee
+  calls: containsWord isIdentifier nish_panic_overflow nish_str_concat nish_str_from_i32 spawnCallee
   pointer program: size=928 writesThrough=false captured=false passedTo=spawnCallee#0
   pointer sig: size=224 writesThrough=false captured=false
   pointer parents: size=0 writesThrough=true captured=false
@@ -3484,7 +3484,7 @@ function ChannelOps.add(this: ChannelOps, site: Node, ref: ChannelRef, send: boo
   pointer ref: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ChannelSummaries.constructor(this: ChannelSummaries): void -> @ChannelSummaries.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0

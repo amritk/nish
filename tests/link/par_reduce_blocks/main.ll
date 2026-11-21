@@ -16,7 +16,6 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #3
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_panic_div(i1 noundef zeroext) #4
 declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #0
 
@@ -51,27 +50,15 @@ entry:
   ret i8 %1
 }
 
-define internal noundef i32 @start(i32 noundef %n, i32 noundef %k) #1 {
+define internal noundef i32 @start(i32 noundef %n, i32 noundef %k) #0 {
 entry:
   %0 = sext i32 %n to i64
   %1 = sext i32 %k to i64
   %2 = mul nsw i64 %0, %1
   %3 = sext i32 64 to i64
-  %4 = icmp eq i64 %3, 0
-  %5 = icmp eq i64 %2, -9223372036854775808
-  %6 = icmp eq i64 %3, -1
-  %7 = and i1 %5, %6
-  %8 = or i1 %4, %7
-  br i1 %8, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %4)
-  unreachable
-
-div.ok:
-  %9 = sdiv i64 %2, %3
-  %10 = trunc i64 %9 to i32
-  ret i32 %10
+  %4 = sdiv i64 %2, %3
+  %5 = trunc i64 %4 to i32
+  ret i32 %5
 }
 
 define noundef i32 @nish_main() #1 {

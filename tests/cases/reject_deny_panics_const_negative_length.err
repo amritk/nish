@@ -1,0 +1,2 @@
+error: `array-length` may panic here
+`new Array` checks a length of this type before it allocates: give the length a type that needs no check — `u8`, `u16` or a range starting at 0, `integer<0, N>` — or write it as a literal

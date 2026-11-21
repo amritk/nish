@@ -1,0 +1,2 @@
+error: `divide` may panic here
+the divisor `b` may be 0 here: guard it with a test that reaches the division — `if (b !== 0)` proves it

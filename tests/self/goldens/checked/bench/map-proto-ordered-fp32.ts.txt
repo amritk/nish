@@ -57,15 +57,14 @@ function slotOf(h: u32, index: i32): u32 -> @slotOf
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function StrMap.probe(this: StrMap, key: string, h: u32): i32 -> @StrMap.probe [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: h
-  calls: home nish_panic nish_panic_overflow nish_str_eq
+  calls: home nish_panic nish_str_eq
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -18:11 n: i32 (const)
@@ -152,15 +151,14 @@ function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
   local +0:9 total: u32 (let)
   local +1:14 i: i32 (let)
 function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function IntMap.probe(this: IntMap, key: i32, h: u32): i32 -> @IntMap.probe [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: h
-  calls: home nish_panic nish_panic_overflow
+  calls: home nish_panic
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -18:11 n: i32 (const)

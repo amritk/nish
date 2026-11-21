@@ -10,7 +10,7 @@ function third(percent: integer<0, 100>): i32 -> @third
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: half nish_arena_mark nish_arena_release nish_panic_div nish_panic_overflow nish_print nish_str_from_i32 third
+  calls: half nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 third
   stackSites=0 stackLocals=0
   local +0:7 bytes: u8 (let)
   local +2:7 count: u32 (let)

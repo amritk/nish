@@ -652,120 +652,115 @@ if.then.2:
   %31 = shl i32 %30, 10
   %32 = load i32, i32* %lo.addr, align 4
   %33 = sub nsw i32 %32, 56320
-  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %33)
-  %35 = extractvalue { i32, i1 } %34, 0
-  %36 = extractvalue { i32, i1 } %34, 1
-  br i1 %36, label %ovf.fail, label %ovf.ok
+  %34 = add nsw i32 %31, %33
+  %35 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %34, i32 65536)
+  %36 = extractvalue { i32, i1 } %35, 0
+  %37 = extractvalue { i32, i1 } %35, 1
+  br i1 %37, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %37 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %35, i32 65536)
-  %38 = extractvalue { i32, i1 } %37, 0
-  %39 = extractvalue { i32, i1 } %37, 1
-  br i1 %39, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  ret i32 %38
+  ret i32 %36
 
 if.end.2:
   br label %if.end.1
 
 if.end.1:
-  %40 = load i32, i32* %c.addr, align 4
-  ret i32 %40
+  %38 = load i32, i32* %c.addr, align 4
+  ret i32 %38
 
 if.end:
-  %41 = call i32 @nish.termCodePointUnits(i8* %s, i32 %i, i32 %n)
-  store i32 %41, i32* %width.addr, align 4
-  %42 = load i32, i32* %c.addr, align 4
-  %43 = icmp slt i32 %42, 128
-  br i1 %43, label %if.then.3, label %if.end.3
+  %39 = call i32 @nish.termCodePointUnits(i8* %s, i32 %i, i32 %n)
+  store i32 %39, i32* %width.addr, align 4
+  %40 = load i32, i32* %c.addr, align 4
+  %41 = icmp slt i32 %40, 128
+  br i1 %41, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %44 = load i32, i32* %c.addr, align 4
-  ret i32 %44
+  %42 = load i32, i32* %c.addr, align 4
+  ret i32 %42
 
 if.end.3:
-  %45 = load i32, i32* %width.addr, align 4
-  %46 = icmp eq i32 %45, 1
-  br i1 %46, label %if.then.4, label %if.end.4
+  %43 = load i32, i32* %width.addr, align 4
+  %44 = icmp eq i32 %43, 1
+  br i1 %44, label %if.then.4, label %if.end.4
 
 if.then.4:
   ret i32 65533
 
 if.end.4:
-  %47 = load i32, i32* %c.addr, align 4
-  %48 = load i32, i32* %width.addr, align 4
-  %49 = call i32 @nish.termLeadBits(i32 %47, i32 %48)
-  store i32 %49, i32* %cp.addr, align 4
+  %45 = load i32, i32* %c.addr, align 4
+  %46 = load i32, i32* %width.addr, align 4
+  %47 = call i32 @nish.termLeadBits(i32 %45, i32 %46)
+  store i32 %47, i32* %cp.addr, align 4
   store i32 1, i32* %k.addr, align 4
-  %50 = load i32, i32* %width.addr, align 4
-  %51 = load i32, i32* %k.addr, align 4
-  %52 = sub i32 %50, 1
-  %53 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %i, i32 %51)
-  %54 = extractvalue { i32, i1 } %53, 0
-  %55 = extractvalue { i32, i1 } %53, 1
-  %56 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %i, i32 %52)
-  %57 = extractvalue { i32, i1 } %56, 0
-  %58 = extractvalue { i32, i1 } %56, 1
-  %59 = or i1 %55, %58
+  %48 = load i32, i32* %width.addr, align 4
+  %49 = load i32, i32* %k.addr, align 4
+  %50 = sub i32 %48, 1
+  %51 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %i, i32 %49)
+  %52 = extractvalue { i32, i1 } %51, 0
+  %53 = extractvalue { i32, i1 } %51, 1
+  %54 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %i, i32 %50)
+  %55 = extractvalue { i32, i1 } %54, 0
+  %56 = extractvalue { i32, i1 } %54, 1
+  %57 = or i1 %53, %56
   br label %for.cond
 
 for.cond:
-  %60 = load i32, i32* %k.addr, align 4
-  %61 = load i32, i32* %width.addr, align 4
-  %62 = icmp slt i32 %60, %61
-  br i1 %62, label %for.body, label %for.end
+  %58 = load i32, i32* %k.addr, align 4
+  %59 = load i32, i32* %width.addr, align 4
+  %60 = icmp slt i32 %58, %59
+  br i1 %60, label %for.body, label %for.end
 
 for.body:
-  %63 = load i32, i32* %cp.addr, align 4
-  %64 = shl i32 %63, 6
-  %65 = load i32, i32* %k.addr, align 4
-  br i1 %59, label %add.checked, label %add.nsw
+  %61 = load i32, i32* %cp.addr, align 4
+  %62 = shl i32 %61, 6
+  %63 = load i32, i32* %k.addr, align 4
+  br i1 %57, label %add.checked, label %add.nsw
 
 add.nsw:
-  %66 = add nsw i32 %i, %65
+  %64 = add nsw i32 %i, %63
   br label %add.join
 
 add.checked:
-  %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %i, i32 %65)
-  %68 = extractvalue { i32, i1 } %67, 0
-  %69 = extractvalue { i32, i1 } %67, 1
-  br i1 %69, label %ovf.fail, label %ovf.ok.2
+  %65 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %i, i32 %63)
+  %66 = extractvalue { i32, i1 } %65, 0
+  %67 = extractvalue { i32, i1 } %65, 1
+  br i1 %67, label %ovf.fail, label %ovf.ok.1
 
-ovf.ok.2:
+ovf.ok.1:
   br label %add.join
 
 add.join:
-  %70 = phi i32 [ %66, %add.nsw ], [ %68, %ovf.ok.2 ]
-  %71 = sext i32 %70 to i64
-  %72 = bitcast i8* %s to i64*
-  %73 = load i64, i64* %72, align 8
-  %74 = icmp ult i64 %71, %73
-  br i1 %74, label %bounds.ok.1, label %bounds.fail.1
+  %68 = phi i32 [ %64, %add.nsw ], [ %66, %ovf.ok.1 ]
+  %69 = sext i32 %68 to i64
+  %70 = bitcast i8* %s to i64*
+  %71 = load i64, i64* %70, align 8
+  %72 = icmp ult i64 %69, %71
+  br i1 %72, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 %71, i64 %73)
+  call void @nish_panic_index(i64 %69, i64 %71)
   unreachable
 
 bounds.ok.1:
-  %75 = getelementptr inbounds i8, i8* %s, i64 8
-  %76 = getelementptr inbounds i8, i8* %75, i64 %71
-  %77 = load i8, i8* %76, align 1
-  %78 = zext i8 %77 to i32
-  %79 = and i32 %78, 63
-  %80 = or i32 %64, %79
-  store i32 %80, i32* %cp.addr, align 4
+  %73 = getelementptr inbounds i8, i8* %s, i64 8
+  %74 = getelementptr inbounds i8, i8* %73, i64 %69
+  %75 = load i8, i8* %74, align 1
+  %76 = zext i8 %75 to i32
+  %77 = and i32 %76, 63
+  %78 = or i32 %62, %77
+  store i32 %78, i32* %cp.addr, align 4
   br label %for.inc
 
 for.inc:
-  %81 = load i32, i32* %k.addr, align 4
-  %82 = add nsw i32 %81, 1
-  store i32 %82, i32* %k.addr, align 4
+  %79 = load i32, i32* %k.addr, align 4
+  %80 = add nsw i32 %79, 1
+  store i32 %80, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %83 = load i32, i32* %cp.addr, align 4
-  ret i32 %83
+  %81 = load i32, i32* %cp.addr, align 4
+  ret i32 %81
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

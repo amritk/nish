@@ -569,52 +569,43 @@ cond.true:
 
 cond.false:
   %21 = load i32, i32* %nibble.addr, align 4
-  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 87, i32 %21)
-  %23 = extractvalue { i32, i1 } %22, 0
-  %24 = extractvalue { i32, i1 } %22, 1
-  br i1 %24, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
+  %22 = add nsw i32 87, %21
   br label %cond.end
 
 cond.end:
-  %25 = phi i32 [ %20, %cond.true ], [ %23, %ovf.ok ]
-  %26 = trunc i32 %25 to i8
-  %27 = bitcast i8* %6 to i8*
-  %28 = getelementptr inbounds i8, i8* %27, i64 %16
-  store i8 %26, i8* %28, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %23 = phi i32 [ %20, %cond.true ], [ %22, %cond.false ]
+  %24 = trunc i32 %23 to i8
+  %25 = bitcast i8* %6 to i8*
+  %26 = getelementptr inbounds i8, i8* %25, i64 %16
+  store i8 %24, i8* %26, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   br label %for.inc
 
 for.inc:
-  %29 = load i32, i32* %k.addr, align 4
-  %30 = add nsw i32 %29, 1
-  store i32 %30, i32* %k.addr, align 4
+  %27 = load i32, i32* %k.addr, align 4
+  %28 = add nsw i32 %27, 1
+  store i32 %28, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %31 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 0
-  %33 = load i64, i64* %32, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %34 = icmp ule i64 0, 8
-  %35 = icmp ule i64 8, %33
-  %36 = and i1 %34, %35
-  br i1 %36, label %bytes.ok, label %bytes.fail
+  %29 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 0
+  %31 = load i64, i64* %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %32 = icmp ule i64 0, 8
+  %33 = icmp ule i64 8, %31
+  %34 = and i1 %32, %33
+  br i1 %34, label %bytes.ok, label %bytes.fail
 
 bytes.fail:
-  call void @nish_panic_slice(i64 0, i64 8, i64 %33)
+  call void @nish_panic_slice(i64 0, i64 8, i64 %31)
   unreachable
 
 bytes.ok:
-  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 2
-  %38 = load i8*, i8** %37, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %39 = getelementptr inbounds i8, i8* %38, i64 0
-  %40 = sub i64 8, 0
-  %41 = call i8* @nish_str_new(i8* %39, i64 %40)
-  ret i8* %41
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 2
+  %36 = load i8*, i8** %35, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %37 = getelementptr inbounds i8, i8* %36, i64 0
+  %38 = sub i64 8, 0
+  %39 = call i8* @nish_str_new(i8* %37, i64 %38)
+  ret i8* %39
 }
 
 define noundef i32 @nish_main() #0 {

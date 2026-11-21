@@ -140,8 +140,7 @@ function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): 
   callee +0:21 slotWord -> @nish.slotWord
   callee +2:5 fileEntry -> @nish.fileEntry
 function Map<string, Node>.constructor(this: Map<string, Node>): void -> @nish.Map$str$$Node.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node>.probe(this: Map<string, Node>, key: string): i64 -> @nish.Map$str$$Node.probe [exported method instance]
@@ -272,8 +271,7 @@ function Map<string, Node>.reserveSlots(this: Map<string, Node>, n: f64): void -
   local -1:13 slots: u32[] (const)
   callee +2:7 refile -> @nish.refile
 function Map<string, Node | null>.constructor(this: Map<string, Node | null>): void -> @nish.Map$str$opt.$Node.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node | null>.probe(this: Map<string, Node | null>, key: string): i64 -> @nish.Map$str$opt.$Node.probe [exported method instance]
@@ -406,7 +404,7 @@ function Map<string, Node | null>.reserveSlots(this: Map<string, Node | null>, n
 function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key mask
-  calls: llvm.fptosi.sat.i32.f64 nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic nish_panic_overflow
+  calls: llvm.fptosi.sat.i32.f64 nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic
   pointer slots: size=0 writesThrough=false captured=false
   pointer hashes: size=0 writesThrough=false captured=false
   pointer keys: size=0 writesThrough=true captured=false

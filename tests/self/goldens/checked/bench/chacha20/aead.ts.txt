@@ -129,7 +129,7 @@ function chacha20XorInto(state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[
 function chacha20Poly1305Setup(state: u32[]): u8[] -> @chacha20Poly1305Setup
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via chacha20XorInto
-  calls: chacha20XorInto nish_panic
+  calls: chacha20XorInto
   pointer state: size=0 writesThrough=true captured=false passedTo=chacha20XorInto#0
   stackSites=0 stackLocals=0
   local +0:9 polyKey: u8[] (const)
@@ -156,7 +156,7 @@ function chacha20Block(key: u8[], counter: u32, nonce: u8[]): u8[] | null -> @ch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via chacha20XorInto
   escaping: counter
-  calls: chacha20State chacha20XorInto nish.wipe$arr.u32 nish_panic
+  calls: chacha20State chacha20XorInto nish.wipe$arr.u32
   pointer key: size=0 writesThrough=false captured=false passedTo=chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=chacha20State#2
   stackSites=0 stackLocals=0
@@ -274,7 +274,7 @@ function poly1305Absorb(h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPa
   callee +14:7 poly1305Block -> @poly1305Block
 function poly1305(key: u8[], msg: u8[]): u8[] | null -> @poly1305 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.wipe$arr.u64 nish_panic poly1305Absorb poly1305Clamp poly1305Finish
+  calls: nish.wipe$arr.u64 poly1305Absorb poly1305Clamp poly1305Finish
   pointer key: size=0 writesThrough=false captured=false passedTo=poly1305Clamp#0 poly1305Finish#1
   pointer msg: size=0 writesThrough=false captured=false passedTo=poly1305Absorb#2
   stackSites=2 stackLocals=2
@@ -301,7 +301,7 @@ function poly1305KeyGen(key: u8[], nonce: u8[]): u8[] | null -> @poly1305KeyGen 
 function chacha20Poly1305Tag(polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i32): u8[] -> @chacha20Poly1305Tag
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: at len
-  calls: nish.wipe$arr.u64 nish_panic poly1305Absorb poly1305Block poly1305Clamp poly1305Finish
+  calls: nish.wipe$arr.u64 poly1305Absorb poly1305Block poly1305Clamp poly1305Finish
   pointer polyKey: size=0 writesThrough=false captured=false passedTo=poly1305Clamp#0 poly1305Finish#1
   pointer aad: size=0 writesThrough=false captured=false passedTo=poly1305Absorb#2
   pointer ct: size=0 writesThrough=false captured=false passedTo=poly1305Absorb#2
@@ -379,7 +379,7 @@ function chacha20Poly1305Open(key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): 
 function chacha20HeaderMask(hpKey: u8[], sample: u8[]): u8[] | null -> @chacha20HeaderMask [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via chacha20XorInto
-  calls: chacha20State chacha20Word chacha20XorInto nish.wipe$arr.u32 nish_panic
+  calls: chacha20State chacha20Word chacha20XorInto nish.wipe$arr.u32
   pointer hpKey: size=0 writesThrough=false captured=false passedTo=chacha20State#0
   pointer sample: size=0 writesThrough=false captured=false passedTo=chacha20Word#0 chacha20State#2
   stackSites=0 stackLocals=0
