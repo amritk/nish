@@ -192,22 +192,30 @@ const pause = (ms: i64): void => {
   while (toI64(Date.now()) < until) {}
 }
 
+/** Two ASCII digits of `text` at `at` as a number. */
+const twoDigits = (text: string, at: i32): i64 => toI64((toI32(text.charCodeAt(at)) - 48) * 10 + toI32(text.charCodeAt(at + 1)) - 48)
+
+/** The second of the day an IMF-fixdate names (`Sun, 06 Nov 1994 08:49:37 GMT`), or -1 for another shape. */
+const secondOfDay = (date: string): i64 =>
+  toI32(date.length) === 29 ? twoDigits(date, 17) * 3600 + twoDigits(date, 20) * 60 + twoDigits(date, 23) : toI64(-1)
+
 /**
  * `If-Range` with the date of a file written this second: two versions within
  * one second share the date, so it is not a validator and the whole file is
- * sent. Tried again while the request ran past that second, so the check
- * judges only a same-second answer.
+ * sent. Tried again unless both the file's stamp and the request fell in the
+ * same second: the kernel's file clock can lag `Date.now()` into the second
+ * before, and then the date is a validator and a 206 is right.
  */
 const sameSecondCheck = (t: Suite, rig: StaticRig, key: Secret<u8[]>): void => {
   let judged = false
   for (let attempt: i32 = 0; attempt < 5 && !judged; attempt++) {
-    // Early in a second, past the few milliseconds the kernel's file clock may lag.
+    // Early in a second, so the request most likely ends within it.
     while (toI64(Date.now()) % 1000 < 20 || toI64(Date.now()) % 1000 > 400) {}
     const second: i64 = toI64(Date.now()) / 1000
     writeFileSync(`${WWW}/fresh.txt`, `fresh ${attempt}\n`)
     const modified: string = fieldOf(h1(rig, key, rig.h2.h1Port, "GET", "/static/fresh.txt", ""), "last-modified")
     const r: string = h1(rig, key, rig.h2.h1Port, "GET", "/static/fresh.txt", `Range: bytes=0-3\r\nIf-Range: ${modified}\r\n`)
-    if (toI64(Date.now()) / 1000 === second) {
+    if (toI64(Date.now()) / 1000 === second && secondOfDay(modified) === second % 86400) {
       judged = true
       t.ok("If-Range with the date of a file changed this second: the whole file", statusOf(r) === "200" && bodyOf(r) === `fresh ${attempt}\n`)
     }
