@@ -50,7 +50,15 @@
 
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
-import { HANDLER_ABSENT, HANDLER_DROPPED, HANDLER_MAX_WATCHED, HANDLER_SENT } from "nish/net/handler"
+import {
+  HANDLER_ABSENT,
+  HANDLER_ANSWERED,
+  HANDLER_DROPPED,
+  HANDLER_MAX_ADDED,
+  HANDLER_MAX_WATCHED,
+  HANDLER_NEXT,
+  HANDLER_SENT,
+} from "nish/net/handler"
 import {
   HTTP_FIELDS_OK,
   HttpFields,
@@ -350,6 +358,36 @@ export class HttpServerRequest {
    * @internal Read by `HttpServer` in this module beside `trailerNames`.
    */
   trailerValues: u8[][]
+  /**
+   * The steps `before` has still to hand out, one bit each; loaded from the router by the first `before`.
+   * @internal Moved only by `HttpServer.before` in this module.
+   */
+  stepsLeft: i32 = 0
+  /**
+   * The steps `before` handed out that `after` has still to hand out again.
+   * @internal Moved by `HttpServer.before` and `after` in this module.
+   */
+  stepsRan: i32 = 0
+  /**
+   * Whether `before` has loaded the route's steps into `stepsLeft`.
+   * @internal Set by `HttpServer.before` and cleared when a request is read into it, in this module.
+   */
+  stepped: boolean = false
+  /**
+   * How many fields `field` added: `addedNames[0 .. added)` beside `addedValues`.
+   * @internal Counted by `HttpServer.field` in this module, read by `start`, and cleared when a request is read into it.
+   */
+  added: i32 = 0
+  /**
+   * The names `field` added, kept by reference until the answer starts.
+   * @internal Grown by `HttpServer.field` in this module, to at most `HANDLER_MAX_ADDED`, and kept for the requests after.
+   */
+  addedNames: u8[][]
+  /**
+   * The values `field` added, `addedValues[k]` for `addedNames[k]`.
+   * @internal Grown beside `addedNames` by `HttpServer.field` in this module.
+   */
+  addedValues: u8[][]
 
   /**
    * An empty request for the server's pool; its buffers are made on its first use.
@@ -364,6 +402,8 @@ export class HttpServerRequest {
     this.pending = []
     this.trailerNames = []
     this.trailerValues = []
+    this.addedNames = []
+    this.addedValues = []
   }
 
   /**
@@ -1720,6 +1760,8 @@ export class HttpServer {
     r.left = -1
     r.ended = false
     r.trailing = false
+    r.stepped = false
+    r.added = 0
     this.route(r)
     const declared: i32 = this.declared(r)
     if (declared > toI32(r.body.length)) {
@@ -1923,6 +1965,98 @@ export class HttpServer {
   }
 
   /**
+   * The next step to run before `r`'s route body, lowest id first, or
+   * `HANDLER_NEXT` once every step `Router.use` bound to `r.route` has run,
+   * or `HANDLER_ANSWERED` once a step has answered `r`; the same on every
+   * version. A step reads `r`, and may answer it — `refuse`, `problem`,
+   * `empty` or any other answer — or add answer fields with `field`; call
+   * `before` again straight after each step, before the next `take`, until it
+   * answers a negative code. Only a request `take` handed over runs steps: the
+   * answers the server sends itself run none. Panics on another server's request.
+   *
+   *     let s = server.before(req)
+   *     while (s >= 0) { switch (s) { case AUTH: ... } s = server.before(req) }
+   *     if (s === HANDLER_NEXT) { switch (req.route) { ... } }
+   *
+   * @param r a request `take` handed over
+   * @returns the next step's id, `HANDLER_NEXT`, or `HANDLER_ANSWERED`
+   */
+  before(r: HttpServerRequest): i32 {
+    this.own(r, "before")
+    if (r.state !== HTTP_SERVER_HELD) {
+      return HANDLER_ANSWERED
+    }
+    if (!r.stepped) {
+      r.stepped = true
+      r.stepsLeft = this.router.steps(r.route)
+      r.stepsRan = 0
+    }
+    const left: i32 = r.stepsLeft
+    if (left === 0) {
+      return HANDLER_NEXT
+    }
+    const low: i32 = left & (0 - left)
+    r.stepsLeft = left ^ low
+    r.stepsRan = r.stepsRan | low
+    return toI32(31) - toI32(Math.clz32(toU32(low)))
+  }
+
+  /**
+   * The next step to run after `r`'s route body has chosen its answer and
+   * before it sends it: the steps `before` handed out, highest id first, then
+   * `HANDLER_NEXT`; or `HANDLER_ANSWERED` once a step has answered `r`. A
+   * step here may still `field` or answer in the body's place. A request
+   * `before` was never called for runs no step here. Panics on another
+   * server's request.
+   * @param r a request `take` handed over, not yet answered
+   * @returns the next step's id, `HANDLER_NEXT`, or `HANDLER_ANSWERED`
+   */
+  after(r: HttpServerRequest): i32 {
+    this.own(r, "after")
+    if (r.state !== HTTP_SERVER_HELD) {
+      return HANDLER_ANSWERED
+    }
+    const ran: i32 = r.stepped ? r.stepsRan : 0
+    if (ran === 0) {
+      return HANDLER_NEXT
+    }
+    const step: i32 = toI32(31) - toI32(Math.clz32(toU32(ran)))
+    r.stepsRan = ran ^ (1 << step)
+    return step
+  }
+
+  /**
+   * Adds the field `name: value` to `r`'s answer, after the fields the answer
+   * names itself, whichever answer it is and on every version; the added
+   * fields count against `maxResponseFields`. Both are kept by reference, so
+   * they stay the caller's bytes, unchanged, until the answer starts. Panics
+   * past `HANDLER_MAX_ADDED` fields, on a request not held, or on another
+   * server's request; a name or value a carrier refuses panics as the
+   * answer's own would.
+   * @param r a request `take` handed over, not yet answered
+   * @param name the field name, a lowercase token
+   * @param value the field value, field text
+   */
+  field(r: HttpServerRequest, name: u8[], value: u8[]): void {
+    this.own(r, "field")
+    if (r.state !== HTTP_SERVER_HELD) {
+      panic(`HttpServer.field: the request is not one taken and unanswered (state ${r.state})`)
+    }
+    const at: i32 = r.added
+    if (at >= HANDLER_MAX_ADDED) {
+      panic(`HttpServer.field: more than ${HANDLER_MAX_ADDED} fields added to one answer`)
+    }
+    if (at < toI32(r.addedNames.length) && at < toI32(r.addedValues.length)) {
+      r.addedNames[at] = name
+      r.addedValues[at] = value
+    } else {
+      r.addedNames.push(name)
+      r.addedValues.push(value)
+    }
+    r.added = at + 1
+  }
+
+  /**
    * Whether the client of `r` has hung up: its connection is closed or
    * reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1 and
    * HTTP/2, the peer ended its byte stream while `r` is held. On HTTP/2 that
@@ -2088,8 +2222,8 @@ export class HttpServer {
 
   /**
    * Gathers the response's fields into `outNames` and `outValues`: the
-   * program's, then Alt-Svc and content-length where they are owed and the
-   * program gave none. False when that is more than `maxResponseFields`.
+   * program's, then those `field` added, then Alt-Svc and content-length
+   * where they are owed and the program gave none. False when that is more than `maxResponseFields`.
    */
   private outFields(r: HttpServerRequest, names: u8[][], values: u8[][], bodyLength: i32): boolean {
     const given: i32 = toI32(names.length)
@@ -2106,7 +2240,8 @@ export class HttpServer {
       !r.quiet &&
       bodyLength >= 0 &&
       !this.hasField(names, this.contentLengthName)
-    const count: i32 = given + (addAlt ? 1 : 0) + (addLength ? 1 : 0)
+    const added: i32 = r.added
+    const count: i32 = given + added + (addAlt ? 1 : 0) + (addLength ? 1 : 0)
     if (count > this.maxResponseFields) {
       return false
     }
@@ -2140,6 +2275,18 @@ export class HttpServer {
       }
     }
     let at: i32 = given
+    for (let k: i32 = 0; k < added; k++) {
+      if (
+        at < toI32(outN.length) &&
+        at < toI32(outV.length) &&
+        k < toI32(r.addedNames.length) &&
+        k < toI32(r.addedValues.length)
+      ) {
+        outN[at] = r.addedNames[k]
+        outV[at] = r.addedValues[k]
+      }
+      at += 1
+    }
     if (altSvc !== null && addAlt) {
       outN[at] = this.altSvcName
       outV[at] = altSvc

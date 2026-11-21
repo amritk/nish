@@ -62,6 +62,14 @@
  * one range check; a range outside the array packs to 0, which no method is.
  * Every other read is checked.
  *
+ * **Steps run before and after route bodies.** `step` names a step, 0 for the
+ * first, and `use` binds it to a route — or to the requests no route answers,
+ * `ROUTER_NOT_FOUND` and `ROUTER_METHOD_NOT_ALLOWED` — while the table is
+ * built; `steps` answers a route's set as one bit per step, which
+ * `nish/net/handler` and `nish/net/http-server` read to hand the program each
+ * step's id (`docs/wp43-http-app-layer.md` §4, stage 5). A route bound to no
+ * step answers 0, and nothing else is looked up for it.
+ *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
@@ -89,6 +97,9 @@ export const ROUTER_TOO_MANY_PARAMS: i32 = -9
 export const ROUTER_BAD_ESCAPE: i32 = -10
 /** `routerDecode`: the decoded bytes do not fit `out`; nothing was written. */
 export const ROUTER_NO_ROOM: i32 = -11
+
+/** The most steps one table names: one bit each of an `i32`, its sign bit aside. */
+export const ROUTER_MAX_STEPS: i32 = 31
 
 /** The longest method `add` takes, as `nish/net/http1-codec`'s `HTTP1_MAX_METHOD`. */
 const ROUTER_MAX_METHOD: i32 = 32
@@ -148,6 +159,14 @@ export class Router {
   private routeMethod: i32[]
   private endpointNext: i32[]
   private routeParams: i32[]
+  /** Per route: the steps `use` bound to it, bit `s` for step `s`. */
+  private routeSteps: i32[]
+  /** The steps bound to `ROUTER_NOT_FOUND`: what `match` answers with any negative code but `ROUTER_METHOD_NOT_ALLOWED` runs them. */
+  private missSteps: i32 = 0
+  /** The steps bound to the requests `match` answers `ROUTER_METHOD_NOT_ALLOWED`. */
+  private refusedSteps: i32 = 0
+  /** How many steps `step` has named; the next answers this id. */
+  private stepCount: i32 = 0
   /**
    * The exact-path table: per slot a static route, or -1. Its length is a
    * power of two, at least four slots for each static route, and a route sits
@@ -246,6 +265,7 @@ export class Router {
     this.routeMethod = []
     this.endpointNext = []
     this.routeParams = []
+    this.routeSteps = []
     this.staticSlots = [-1, -1, -1, -1, -1, -1, -1, -1]
     this.routeHash = []
     this.routePathStart = []
@@ -304,6 +324,59 @@ export class Router {
    */
   lastVisited(): i32 {
     return this.visited
+  }
+
+  /**
+   * Names a new step and answers its id, counting from 0, or `ROUTER_FULL`
+   * once the table names `ROUTER_MAX_STEPS`. A step runs for the routes
+   * `use` binds it to, in the order of the ids.
+   * @returns the new step's id, or `ROUTER_FULL`
+   */
+  step(): i32 {
+    if (this.stepCount >= ROUTER_MAX_STEPS) {
+      return ROUTER_FULL
+    }
+    const id: i32 = this.stepCount
+    this.stepCount += 1
+    return id
+  }
+
+  /**
+   * Binds step `step` to `route`: every request `match` answers that route
+   * runs it. `ROUTER_NOT_FOUND` binds it to the requests no route matches, and
+   * `ROUTER_METHOD_NOT_ALLOWED` to those whose path only other methods'
+   * routes match. Binding a step twice binds it once. Panics on a route or a
+   * step the table does not hold.
+   * @param route a route index `add` answered, `ROUTER_NOT_FOUND` or `ROUTER_METHOD_NOT_ALLOWED`
+   * @param step a step id `step` answered
+   */
+  use(route: i32, step: i32): void {
+    if (step < 0 || step >= this.stepCount) {
+      panic(`Router.use: step ${step} is not one of the ${this.stepCount} the table names`)
+    }
+    const bit: i32 = 1 << step
+    if (route === ROUTER_NOT_FOUND) {
+      this.missSteps = this.missSteps | bit
+    } else if (route === ROUTER_METHOD_NOT_ALLOWED) {
+      this.refusedSteps = this.refusedSteps | bit
+    } else {
+      if (route < 0 || route >= this.routes()) {
+        panic(`Router.use: route ${route} is not in a table of ${this.routes()}`)
+      }
+      this.routeSteps[route] = this.routeSteps[route] | bit
+    }
+  }
+
+  /**
+   * The steps bound to what `match` answered: bit `s` is set for step `s`.
+   * @param route what `match` answered: a route index, or a negative `ROUTER_*` code
+   * @returns the route's steps; for `ROUTER_METHOD_NOT_ALLOWED` those bound to it, for any other negative code those bound to `ROUTER_NOT_FOUND`, and 0 for a route bound to none
+   */
+  steps(route: i32): i32 {
+    if (route >= 0) {
+      return route < this.routes() ? this.routeSteps[route] : 0
+    }
+    return route === ROUTER_METHOD_NOT_ALLOWED ? this.refusedSteps : this.missSteps
   }
 
   /**
@@ -381,6 +454,7 @@ export class Router {
     const route: i32 = this.routes()
     this.routeMethod.push(methodId)
     this.routeParams.push(params)
+    this.routeSteps.push(toI32(0))
     this.endpointNext.push(this.firstEndpoint[node])
     this.firstEndpoint[node] = route
     if (count > this.deepest) {
