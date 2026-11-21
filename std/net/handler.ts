@@ -634,8 +634,6 @@ export class HttpHandler {
   private problemType: u8[]
   /** Decodes `gzip` and `deflate` bodies under `HandlerLimits.maxDecoded`. */
   private decoder: HttpBodyDecoder
-  /** `HandlerLimits.maxDecoded`, 0 to decode nothing. */
-  private maxDecoded: i32 = 0
   private noFields: u8[][]
   /** Per length: the array `start` gathers an answer's fields and the fields `field` added into, kept for the answers after. */
   private namesBy: u8[][][]
@@ -665,6 +663,8 @@ export class HttpHandler {
   private queueStart: i32 = 0
   private queueCount: i32 = 0
   private owedCount: i32 = 0
+  /** `HandlerLimits.maxDecoded`, 0 to decode nothing. */
+  private maxDecoded: i32 = 0
   private sent: i64 = 0
   private outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
