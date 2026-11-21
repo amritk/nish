@@ -2027,6 +2027,21 @@
                           ]
                         }
                       },
+                      "/protobuf": {
+                        "type": "page",
+                        "title": "protobuf",
+                        "filepath": "docs/reference/net/protobuf.md",
+                        "head": {
+                          "title": "protobuf · Nish",
+                          "meta": [{ "property": "og:title", "content": "protobuf" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/net/protobuf"
+                            }
+                          ]
+                        }
+                      },
                       "/qpack": {
                         "type": "page",
                         "title": "qpack",
