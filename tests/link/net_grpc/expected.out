@@ -36,10 +36,56 @@ PASS  grpc-timeout "-1S": INTERNAL
 PASS  grpc-timeout "+1S": INTERNAL
 PASS  grpc-timeout "": INTERNAL
 PASS  the program saw the held call and the three it answered, none malformed
+PASS  streaming over TLS: a connection
+PASS  SumAll over TLS: no answer while the client's stream is open
+PASS  SumAll over TLS: a message split across three DATA frames, answered at the end of the stream
+PASS  SumAll over TLS: three messages in one DATA frame
+PASS  Echo over TLS: 200 and a reply before the client's stream ends
+PASS  Echo over TLS: the second reply, then grpc-status 0 at the end of the stream
+PASS  SumAll over TLS: RST_STREAM CANCEL ends the call, the program's read with it, and nothing is sent
+PASS  SumAll over TLS: a deadline passing mid-stream is DEADLINE_EXCEEDED
+PASS  SumAll over TLS: a length past maxMessage: grpc-status 8
+PASS  SumAll over TLS: a compressed message: grpc-status 12
+PASS  SumAll over TLS: an unknown flag byte: grpc-status 13
+PASS  SumAll over TLS: a maxMessage-long message the stream ends inside after 2 bytes: grpc-status 13
+PASS  SumAll over TLS: a prefix the stream ends inside: grpc-status 13
+PASS  SumAll over TLS: each fault ended the call, none answered by the program
+PASS  Count over TLS: three replies in order, then grpc-status 0
+PASS  Count over TLS: a slow reader stalls the sender, no more than its budget and one reply queued
+PASS  Count over TLS: the window opened, all hundred replies, then grpc-status 0
+PASS  Count over TLS: send past the deadline ends the call DEADLINE_EXCEEDED
+PASS  Count over TLS: finish past the deadline ends the call DEADLINE_EXCEEDED, after the replies queued before it
+PASS  streaming over TLS: the program saw all fourteen calls, the faulted ones too
+PASS  streaming over h2c: a connection
+PASS  SumAll over h2c: no answer while the client's stream is open
+PASS  SumAll over h2c: a message split across three DATA frames, answered at the end of the stream
+PASS  SumAll over h2c: three messages in one DATA frame
+PASS  Echo over h2c: 200 and a reply before the client's stream ends
+PASS  Echo over h2c: the second reply, then grpc-status 0 at the end of the stream
+PASS  SumAll over h2c: RST_STREAM CANCEL ends the call, the program's read with it, and nothing is sent
+PASS  SumAll over h2c: a deadline passing mid-stream is DEADLINE_EXCEEDED
+PASS  SumAll over h2c: a length past maxMessage: grpc-status 8
+PASS  SumAll over h2c: a compressed message: grpc-status 12
+PASS  SumAll over h2c: an unknown flag byte: grpc-status 13
+PASS  SumAll over h2c: a maxMessage-long message the stream ends inside after 2 bytes: grpc-status 13
+PASS  SumAll over h2c: a prefix the stream ends inside: grpc-status 13
+PASS  SumAll over h2c: each fault ended the call, none answered by the program
+PASS  Count over h2c: three replies in order, then grpc-status 0
+PASS  Count over h2c: a slow reader stalls the sender, no more than its budget and one reply queued
+PASS  Count over h2c: the window opened, all hundred replies, then grpc-status 0
+PASS  Count over h2c: send past the deadline ends the call DEADLINE_EXCEEDED
+PASS  Count over h2c: finish past the deadline ends the call DEADLINE_EXCEEDED, after the replies queued before it
+PASS  streaming over h2c: the program saw all fourteen calls, the faulted ones too
+PASS  Trailers-Only over TLS: a connection
+PASS  Trailers-Only over TLS: 150 calls on one connection, each NOT_FOUND, none refused
+PASS  SumAll over TLS: INVALID_ARGUMENT before the stream ends; the client's later DATA is not handed back, and the next call is answered
+PASS  Trailers-Only over h2c: a connection
+PASS  Trailers-Only over h2c: 150 calls on one connection, each NOT_FOUND, none refused
+PASS  SumAll over h2c: INVALID_ARGUMENT before the stream ends; the client's later DATA is not handed back, and the next call is answered
 PASS  maxTimeout 60 ms: an h2c connection to a second server
 PASS  grpc-timeout 99999999H and none: both held by the program, neither refused
 PASS  answered after 120 ms, both are past maxTimeout
 PASS  reply sends DEADLINE_EXCEEDED for each: the cap is maxTimeout, not what was asked
 PASS  HTTP/1.1: a connection
 PASS  a gRPC call over it: 505
-grpc: 44 passed, 0 failed, 0 skipped
+grpc: 90 passed, 0 failed, 0 skipped

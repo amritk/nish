@@ -203,7 +203,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/net/dns-resolver`](net/dns-resolver.md) | A DNS stub resolver with no I/O of its own: it says which bytes to send to which server, reads the bytes that came back, and answers each lookup's addresses, while the program's own loop owns the sockets and the clock. |
 | [`nish/net/dns`](net/dns.md) | The stub resolver of `nish/net/dns-resolver` driven over `nish:net` sockets on the caller's own readiness loop, and `resolveHost`, which runs a loop of its own for a program that has none. |
 | [`nish/net/fetch`](net/fetch.md) | An HTTP/1.1 client. |
-| [`nish/net/grpc`](net/grpc.md) | Unary gRPC calls on `nish/net/http-server`'s HTTP/2 listeners (`listenHttp2Tls` and `listenH2c`). |
+| [`nish/net/grpc`](net/grpc.md) | Unary and streaming gRPC calls on `nish/net/http-server`'s HTTP/2 listeners (`listenHttp2Tls` and `listenH2c`). |
 | [`nish/net/handler`](net/handler.md) | Complete requests and their responses over the HTTP/1.1 carrier, so that a server answers requests instead of driving `Http1Server`'s events by hand. |
 | [`nish/net/hpack`](net/hpack.md) | HPACK, the header compression of HTTP/2, as RFC 7541 defines it: the §5.1 integer with an N-bit prefix, the §5.2 string literal with Appendix B's Huffman code, the Appendix A static table, the §2.3.2 dynamic table with its §4 size accounting and eviction, and the four §6 representations. |
 | [`nish/net/http-compress`](net/http-compress.md) | Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a request's `Accept-Encoding` and compressing a body with `Content-Encoding: gzip` or `deflate`, for any of the three servers. |

@@ -154,6 +154,21 @@ export class H2TlsClient {
     }
     return this.log.take()
   }
+
+  /** Reads records until a frame read since the last `take` shows `marker`, or the server closes; answers them joined. */
+  awaitText(marker: string, key: Secret<u8[]>): string {
+    while (this.log.frames.join("; ").indexOf(marker) < 0) {
+      const record: u8[] = this.nextRecord(key)
+      if (toI32(record.length) === 0) {
+        break
+      }
+      const opened: Opened = openOne(this.read, record)
+      if (opened.type === TLS_CONTENT_APPLICATION_DATA) {
+        this.log.push(opened.content, ZERO, toI32(opened.content.length))
+      }
+    }
+    return this.log.take()
+  }
 }
 
 /** One cleartext HTTP/2 (h2c, prior knowledge) client: frames from `wire` straight onto a TCP socket. */
@@ -211,6 +226,14 @@ export class H2cClient {
   /** Turns the server's loop until the log holds `n` frames, or the server closes; answers them joined. */
   awaitFrames(n: i32, key: Secret<u8[]>): string {
     for (let turn: i32 = 0; turn < TURNS && toI32(this.log.frames.length) < n && !this.closed; turn++) {
+      this.turn(key)
+    }
+    return this.log.take()
+  }
+
+  /** Turns the server's loop until a frame read since the last `take` shows `marker`, or the server closes; answers them joined. */
+  awaitText(marker: string, key: Secret<u8[]>): string {
+    for (let turn: i32 = 0; turn < TURNS && this.log.frames.join("; ").indexOf(marker) < 0 && !this.closed; turn++) {
       this.turn(key)
     }
     return this.log.take()
