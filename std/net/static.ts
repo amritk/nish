@@ -184,35 +184,19 @@ const staticIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
 /** Whether `b` is a space or a tab. */
 const staticSpace = (b: i32): boolean => b === 32 || b === 9
 
-/** Writes `v` (0 or more) in lowercase hex at `out[at ..)` and answers the index past it. */
-const staticHex = (out: u8[], at: i32, v: i64): i32 => {
+/** Writes `v` (0 or more) in base `radix` (10 or 16, lowercase) at `out[at ..)` and answers the index past it. */
+const staticDigits = (out: u8[], at: i32, v: i64, radix: i64): i32 => {
   let digits: i32 = 1
-  let rest: i64 = v >> 4
+  let rest: i64 = v / radix
   while (rest > 0) {
     digits++
-    rest = rest >> 4
+    rest = rest / radix
   }
   let x: i64 = v
   for (let k: i32 = digits - 1; k >= 0; k--) {
-    const d: i32 = toI32(x & 15)
+    const d: i32 = toI32(x % radix)
     out[at + k] = toU8(d < 10 ? 48 + d : 87 + d)
-    x = x >> 4
-  }
-  return at + digits
-}
-
-/** Writes `v` (0 or more) in decimal at `out[at ..)` and answers the index past it. */
-const staticDecimal = (out: u8[], at: i32, v: i64): i32 => {
-  let digits: i32 = 1
-  let rest: i64 = v / 10
-  while (rest > 0) {
-    digits++
-    rest = rest / 10
-  }
-  let x: i64 = v
-  for (let k: i32 = digits - 1; k >= 0; k--) {
-    out[at + k] = toU8(48 + toI32(x % 10))
-    x = x / 10
+    x = x / radix
   }
   return at + digits
 }
@@ -346,6 +330,8 @@ const staticCut = (src: u8[], length: i32): u8[] => {
 export class StaticFiles {
   /** The root's real path, or `""` when it did not resolve (then every request is not found). */
   root: string
+  /** `root` with one trailing `/`: a resolved path under it starts with this. @internal */
+  under: string
   /** A copy of the limits the constructor was given, within their ranges. */
   private limits: StaticLimits
   /** Whether the last `serve` that answered `STATIC_NOT_FOUND` refused the path rather than missing the file. */
@@ -438,6 +424,7 @@ export class StaticFiles {
       limits.maxCachedBytes <= 1073741824
     const real: string | null = ok ? realpathSync(root) : null
     this.root = real === null ? "" : real
+    this.under = this.root.endsWith("/") ? this.root : this.root + "/"
     // A copy, so a program that changes its limits later cannot outgrow the arrays sized here.
     const own = new StaticLimits()
     own.maxCachedBytes = ok ? limits.maxCachedBytes : 0
@@ -670,13 +657,12 @@ export class StaticFiles {
       }
     }
     this.pathLength = m
-    const base: string = this.root + "/" + String.fromBytes(path, 0, m)
-    const prefix: string = this.root.endsWith("/") ? this.root : this.root + "/"
+    const base: string = this.under + String.fromBytes(path, 0, m)
     const real: string | null = realpathSync(base)
     if (real === null) {
       return STATIC_NOT_FOUND
     }
-    if (!real.startsWith(prefix)) {
+    if (!real.startsWith(this.under)) {
       this.refused = true
       return STATIC_NOT_FOUND
     }
@@ -697,7 +683,7 @@ export class StaticFiles {
         const q: i32 = coding === STATIC_BR ? this.qBr : this.qGzip
         if (this.coding === STATIC_IDENTITY && q > 0 && q >= this.qIdentity) {
           const sibling: string | null = realpathSync(base + (coding === STATIC_BR ? ".br" : ".gz"))
-          if (sibling !== null && sibling.startsWith(prefix)) {
+          if (sibling !== null && sibling.startsWith(this.under)) {
             const otherTime: f64 = statMtimeSync(sibling)
             const other: i32 = fileOpen(sibling)
             if (other >= 0) {
@@ -805,9 +791,9 @@ export class StaticFiles {
   staticTag(): void {
     const out: u8[] = this.etag
     out[0] = 34
-    let at: i32 = staticHex(out, 1, this.size)
+    let at: i32 = staticDigits(out, 1, this.size, 16)
     out[at] = 45
-    at = staticHex(out, at + 1, this.mtime > 0 ? toI64(this.mtime * 1000) : 0)
+    at = staticDigits(out, at + 1, this.mtime > 0 ? toI64(this.mtime * 1000) : 0, 16)
     if (this.coding !== STATIC_IDENTITY) {
       out[at] = 45
       out[at + 1] = this.coding === STATIC_BR ? 98 : 103
@@ -1043,7 +1029,7 @@ export class StaticFiles {
     }
     const scratch: u8[] = new Array<u8>(64)
     if (status === 416) {
-      const at: i32 = staticDecimal(scratch, 8, this.size)
+      const at: i32 = staticDigits(scratch, 8, this.size, 10)
       copyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
       names.push(httpFieldBytes("content-range"))
       values.push(staticCut(scratch, at))
@@ -1080,11 +1066,11 @@ export class StaticFiles {
       for (let k: i32 = 0; k < prefix.length; k++) {
         scratch[k] = toU8(prefix.charCodeAt(k))
       }
-      let at: i32 = staticDecimal(scratch, prefix.length, this.from)
+      let at: i32 = staticDigits(scratch, prefix.length, this.from, 10)
       scratch[at] = 45
-      at = staticDecimal(scratch, at + 1, this.to - 1)
+      at = staticDigits(scratch, at + 1, this.to - 1, 10)
       scratch[at] = 47
-      at = staticDecimal(scratch, at + 1, this.size)
+      at = staticDigits(scratch, at + 1, this.size, 10)
       names.push(httpFieldBytes("content-range"))
       values.push(staticCut(scratch, at))
     }

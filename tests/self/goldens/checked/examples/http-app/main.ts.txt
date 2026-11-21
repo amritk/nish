@@ -36249,43 +36249,44 @@ struct StaticLimits (class) size=16 align=4 exported
   field maxPath: i32 index=2 offset=8 initialized
   field precompressed: boolean index=3 offset=12 initialized
   field index: boolean index=4 offset=13 initialized
-struct StaticFiles (class) size=216 align=8 exported
+struct StaticFiles (class) size=224 align=8 exported
   field root: string index=0 offset=0
-  field limits: StaticLimits index=1 offset=8
-  field refused: boolean index=2 offset=16 initialized
-  field status: i32 index=3 offset=20 initialized
-  field path: u8[] index=4 offset=24
-  field pathLength: i32 index=5 offset=32 initialized
-  field etag: u8[] index=6 offset=40
-  field etagLength: i32 index=7 offset=48 initialized
-  field chunk: u8[] index=8 offset=56
-  field fd: i32 index=9 offset=64 initialized
-  field coding: i32 index=10 offset=68 initialized
-  field size: i64 index=11 offset=72 initialized
-  field mtime: f64 index=12 offset=80 initialized
-  field from: i64 index=13 offset=88 initialized
-  field to: i64 index=14 offset=96 initialized
-  field slot: i32 index=15 offset=104 initialized
-  field qBr: i32 index=16 offset=108 initialized
-  field qGzip: i32 index=17 offset=112 initialized
-  field qIdentity: i32 index=18 offset=116 initialized
-  field acceptStart: i32 index=19 offset=120 initialized
-  field acceptEnd: i32 index=20 offset=124 initialized
-  field noneMatchStart: i32 index=21 offset=128 initialized
-  field noneMatchEnd: i32 index=22 offset=132 initialized
-  field sinceStart: i32 index=23 offset=136 initialized
-  field sinceEnd: i32 index=24 offset=140 initialized
-  field rangeStart: i32 index=25 offset=144 initialized
-  field rangeEnd: i32 index=26 offset=148 initialized
-  field ifRangeStart: i32 index=27 offset=152 initialized
-  field ifRangeEnd: i32 index=28 offset=156 initialized
-  field keys: u8[] index=29 offset=160
-  field keyLength: i32[] index=30 offset=168
-  field keyCoding: i32[] index=31 offset=176
-  field bytes: u8[][] index=32 offset=184
-  field sizes: i64[] index=33 offset=192
-  field mtimes: f64[] index=34 offset=200
-  field hand: i32 index=35 offset=208 initialized
+  field under: string index=1 offset=8
+  field limits: StaticLimits index=2 offset=16
+  field refused: boolean index=3 offset=24 initialized
+  field status: i32 index=4 offset=28 initialized
+  field path: u8[] index=5 offset=32
+  field pathLength: i32 index=6 offset=40 initialized
+  field etag: u8[] index=7 offset=48
+  field etagLength: i32 index=8 offset=56 initialized
+  field chunk: u8[] index=9 offset=64
+  field fd: i32 index=10 offset=72 initialized
+  field coding: i32 index=11 offset=76 initialized
+  field size: i64 index=12 offset=80 initialized
+  field mtime: f64 index=13 offset=88 initialized
+  field from: i64 index=14 offset=96 initialized
+  field to: i64 index=15 offset=104 initialized
+  field slot: i32 index=16 offset=112 initialized
+  field qBr: i32 index=17 offset=116 initialized
+  field qGzip: i32 index=18 offset=120 initialized
+  field qIdentity: i32 index=19 offset=124 initialized
+  field acceptStart: i32 index=20 offset=128 initialized
+  field acceptEnd: i32 index=21 offset=132 initialized
+  field noneMatchStart: i32 index=22 offset=136 initialized
+  field noneMatchEnd: i32 index=23 offset=140 initialized
+  field sinceStart: i32 index=24 offset=144 initialized
+  field sinceEnd: i32 index=25 offset=148 initialized
+  field rangeStart: i32 index=26 offset=152 initialized
+  field rangeEnd: i32 index=27 offset=156 initialized
+  field ifRangeStart: i32 index=28 offset=160 initialized
+  field ifRangeEnd: i32 index=29 offset=164 initialized
+  field keys: u8[] index=30 offset=168
+  field keyLength: i32[] index=31 offset=176
+  field keyCoding: i32[] index=32 offset=184
+  field bytes: u8[][] index=33 offset=192
+  field sizes: i64[] index=34 offset=200
+  field mtimes: f64[] index=35 offset=208
+  field hand: i32 index=36 offset=216 initialized
   constructor -> @nish.StaticFiles.constructor
   method serve -> @nish.StaticFiles.serve
   method serveHandler -> @nish.StaticFiles.serveHandler
@@ -36331,11 +36332,11 @@ function staticIs(bytes: u8[], start: i32, end: i32, text: string): boolean -> @
 function staticSpace(b: i32): boolean -> @nish.staticSpace
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function staticHex(out: u8[], at: i32, v: i64): i32 -> @nish.staticHex
+function staticDigits(out: u8[], at: i32, v: i64, radix: i64): i32 -> @nish.staticDigits
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: v
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_div nish_panic_index nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -9:7 digits: i32 (let)
@@ -36343,17 +36344,6 @@ function staticHex(out: u8[], at: i32, v: i64): i32 -> @nish.staticHex
   local -3:7 x: i64 (let)
   local -2:12 k: i32 (let)
   local -1:11 d: i32 (const)
-function staticDecimal(out: u8[], at: i32, v: i64): i32 -> @nish.staticDecimal
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: v
-  calls: nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -8:7 digits: i32 (let)
-  local -7:7 rest: i64 (let)
-  local -2:7 x: i64 (let)
-  local -1:12 k: i32 (let)
 function staticTwo(b: u8[], at: i32): i32 -> @nish.staticTwo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -36421,25 +36411,25 @@ function staticCut(src: u8[], length: i32): u8[] -> @nish.staticCut
 function StaticFiles.constructor(this: StaticFiles, root: string, limits: StaticLimits): void -> @nish.StaticFiles.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_realpath
-  calls: nish_alloc_struct nish_array_grow nish_panic nish_panic_index nish_realpath
-  pointer this: size=216 writesThrough=true captured=false
+  calls: nish_alloc_struct nish_array_grow nish_panic nish_panic_index nish_realpath nish_str_at nish_str_concat
+  pointer this: size=224 writesThrough=true captured=false
   pointer limits: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 ok: boolean (const)
   local +7:11 real: string | null (const)
-  local +10:11 own: StaticLimits (const)
-  local +15:9 entries: i32 (let)
-  local +16:9 room: i32 (let)
-  local +17:11 asked: i32 (const)
-  local +18:11 longest: i32 (const)
-  local +34:11 slots: u8[][] (const)
-  local +35:14 k: i32 (let)
+  local +11:11 own: StaticLimits (const)
+  local +16:9 entries: i32 (let)
+  local +17:9 room: i32 (let)
+  local +18:11 asked: i32 (const)
+  local +19:11 longest: i32 (const)
+  local +35:11 slots: u8[][] (const)
+  local +36:14 k: i32 (let)
 function StaticFiles.serve(this: StaticFiles, server: HttpServer, r: HttpServerRequest, pathStart: i32, pathEnd: i32): i32 -> @nish.StaticFiles.serve [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: pathEnd pathStart
   calls: nish.HttpServer.end nish.HttpServer.start nish.HttpServer.write nish.HttpServerRequest.header nish.HttpServerRequest.methodIs nish.HttpServerRequest.valueEnd nish.HttpServerRequest.valueStart nish.StaticFiles.staticBodyLength nish.StaticFiles.staticClose nish.StaticFiles.staticFields nish.StaticFiles.staticFill nish.StaticFiles.staticPlan nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.StaticFiles.staticPlan#0 nish.StaticFiles.staticFields#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticFill#0 nish.StaticFiles.staticClose#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=nish.StaticFiles.staticPlan#0 nish.StaticFiles.staticFields#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticFill#0 nish.StaticFiles.staticClose#0
   pointer server: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.start#0 nish.HttpServer.write#0 nish.HttpServer.end#0
   pointer r: size=168 writesThrough=true captured=false passedTo=nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServerRequest.methodIs#0 nish.HttpServerRequest.methodIs#0 nish.HttpServer.start#1 nish.HttpServer.write#1 nish.HttpServer.end#1
   stackSites=0 stackLocals=0
@@ -36486,7 +36476,7 @@ function StaticFiles.serveHandler(this: StaticFiles, h: HttpHandler, r: HttpRequ
   sharedWrite: +0:5
   escaping: pathEnd pathStart
   calls: nish.HttpHandler.end nish.HttpHandler.start nish.HttpHandler.write nish.HttpRequest.header nish.HttpRequest.methodIs nish.HttpRequest.valueEnd nish.HttpRequest.valueStart nish.StaticFiles.staticBodyLength nish.StaticFiles.staticClose nish.StaticFiles.staticFields nish.StaticFiles.staticFill nish.StaticFiles.staticPlan nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.StaticFiles.staticPlan#0 nish.StaticFiles.staticFields#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticFill#0 nish.StaticFiles.staticClose#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=nish.StaticFiles.staticPlan#0 nish.StaticFiles.staticFields#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticBodyLength#0 nish.StaticFiles.staticFill#0 nish.StaticFiles.staticClose#0
   pointer h: size=264 writesThrough=true captured=false passedTo=nish.HttpHandler.start#0 nish.HttpHandler.write#0 nish.HttpHandler.end#0
   pointer r: size=120 writesThrough=true captured=false passedTo=nish.HttpRequest.header#0 nish.HttpRequest.valueStart#0 nish.HttpRequest.valueEnd#0 nish.HttpRequest.header#0 nish.HttpRequest.valueStart#0 nish.HttpRequest.valueEnd#0 nish.HttpRequest.header#0 nish.HttpRequest.valueStart#0 nish.HttpRequest.valueEnd#0 nish.HttpRequest.header#0 nish.HttpRequest.valueStart#0 nish.HttpRequest.valueEnd#0 nish.HttpRequest.header#0 nish.HttpRequest.valueStart#0 nish.HttpRequest.valueEnd#0 nish.HttpRequest.methodIs#0 nish.HttpRequest.methodIs#0 nish.HttpHandler.start#1 nish.HttpHandler.write#1 nish.HttpHandler.end#1
   stackSites=2 stackLocals=2
@@ -36533,7 +36523,7 @@ function StaticFiles.staticPlan(this: StaticFiles, head: u8[], pathStart: i32, p
   sharedWrite: +0:5
   escaping: pathEnd pathStart
   calls: nish.StaticFiles.staticClose nish.StaticFiles.staticLoad nish.StaticFiles.staticNoneMatch nish.StaticFiles.staticRange nish.StaticFiles.staticResolve nish.StaticFiles.staticSecond nish.StaticFiles.staticTag nish.staticDate
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.StaticFiles.staticResolve#0 nish.StaticFiles.staticClose#0 nish.StaticFiles.staticTag#0 nish.StaticFiles.staticNoneMatch#0 nish.StaticFiles.staticSecond#0 nish.StaticFiles.staticRange#0 nish.StaticFiles.staticLoad#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=nish.StaticFiles.staticResolve#0 nish.StaticFiles.staticClose#0 nish.StaticFiles.staticTag#0 nish.StaticFiles.staticNoneMatch#0 nish.StaticFiles.staticSecond#0 nish.StaticFiles.staticRange#0 nish.StaticFiles.staticLoad#0
   pointer head: size=0 writesThrough=false captured=false passedTo=nish.StaticFiles.staticResolve#1 nish.StaticFiles.staticNoneMatch#1 nish.staticDate#0 nish.StaticFiles.staticRange#1
   stackSites=0 stackLocals=0
   callee +8:35 StaticFiles.staticResolve -> @nish.StaticFiles.staticResolve
@@ -36552,7 +36542,7 @@ function StaticFiles.staticResolve(this: StaticFiles, head: u8[], pathStart: i32
   sharedWrite: +0:7
   escaping: pathStart
   calls: nish.StaticFiles.staticAccept nish.StaticFiles.staticClose nish.percentDecode nish_arena_mark nish_arena_release nish_file_close nish_file_open nish_file_size nish_panic_index nish_panic_overflow nish_panic_slice nish_realpath nish_stat_mtime nish_str_at nish_str_concat nish_str_new
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.StaticFiles.staticAccept#0 nish.StaticFiles.staticClose#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=nish.StaticFiles.staticAccept#0 nish.StaticFiles.staticClose#0
   pointer head: size=0 writesThrough=false captured=false passedTo=nish.percentDecode#0 nish.StaticFiles.staticAccept#1
   stackSites=0 stackLocals=0
   local -3:11 _scope: i64 (const)
@@ -36569,24 +36559,23 @@ function StaticFiles.staticResolve(this: StaticFiles, head: u8[], pathStart: i32
   local +25:14 k: i32 (let)
   local +33:15 b: i32 (const)
   local +41:11 base: string (const)
-  local +42:11 prefix: string (const)
-  local +43:11 real: string | null (const)
-  local +54:9 mtime: f64 (let)
-  local +55:9 fd: i32 (let)
-  callee +61:7 StaticFiles.staticAccept -> @nish.StaticFiles.staticAccept
-  local +62:13 brFirst: boolean (const)
-  local +63:16 pass: i32 (let)
-  local +64:15 coding: i32 (const)
-  local +65:15 q: i32 (const)
-  local +67:17 sibling: string | null (const)
-  local +69:19 otherTime: f64 (const)
-  local +70:19 other: i32 (const)
-  callee +86:7 StaticFiles.staticClose -> @nish.StaticFiles.staticClose
+  local +42:11 real: string | null (const)
+  local +53:9 mtime: f64 (let)
+  local +54:9 fd: i32 (let)
+  callee +60:7 StaticFiles.staticAccept -> @nish.StaticFiles.staticAccept
+  local +61:13 brFirst: boolean (const)
+  local +62:16 pass: i32 (let)
+  local +63:15 coding: i32 (const)
+  local +64:15 q: i32 (const)
+  local +66:17 sibling: string | null (const)
+  local +68:19 otherTime: f64 (const)
+  local +69:19 other: i32 (const)
+  callee +85:7 StaticFiles.staticClose -> @nish.StaticFiles.staticClose
 function StaticFiles.staticAccept(this: StaticFiles, head: u8[]): void -> @nish.StaticFiles.staticAccept [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.staticIs nish.staticLower nish.staticQ nish.staticSpace nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false
+  pointer this: size=224 writesThrough=true captured=false
   pointer head: size=0 writesThrough=false captured=false passedTo=nish.staticQ#0 nish.staticIs#0 nish.staticIs#0 nish.staticIs#0 nish.staticIs#0
   stackSites=0 stackLocals=0
   local -62:9 br: i32 (let)
@@ -36618,29 +36607,29 @@ function StaticFiles.staticAccept(this: StaticFiles, head: u8[]): void -> @nish.
 function StaticFiles.staticSecond(this: StaticFiles): i64 -> @nish.StaticFiles.staticSecond [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i64.f64
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StaticFiles.staticTag(this: StaticFiles): void -> @nish.StaticFiles.staticTag [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: llvm.fptosi.sat.i64.f64 nish.staticHex nish_panic_index
-  pointer this: size=216 writesThrough=true captured=false
+  calls: llvm.fptosi.sat.i64.f64 nish.staticDigits nish_panic_index
+  pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 out: u8[] (const)
   local +1:9 at: i32 (let)
-  callee +1:19 staticHex -> @nish.staticHex
-  callee +3:10 staticHex -> @nish.staticHex
+  callee +1:19 staticDigits -> @nish.staticDigits
+  callee +3:10 staticDigits -> @nish.staticDigits
 function StaticFiles.staticSameTag(this: StaticFiles, head: u8[], start: i32, end: i32): boolean -> @nish.StaticFiles.staticSameTag [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer head: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 k: i32 (let)
 function StaticFiles.staticNoneMatch(this: StaticFiles, head: u8[]): boolean -> @nish.StaticFiles.staticNoneMatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.StaticFiles.staticSameTag nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSameTag#0
+  pointer this: size=224 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSameTag#0
   pointer head: size=0 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSameTag#1
   stackSites=0 stackLocals=0
   local +0:9 k: i32 (let)
@@ -36652,7 +36641,7 @@ function StaticFiles.staticIfRange(this: StaticFiles, head: u8[]): boolean -> @n
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_date_now
   calls: llvm.fptosi.sat.i64.f64 nish.StaticFiles.staticSameTag nish.StaticFiles.staticSecond nish.staticDate nish.staticSpace nish_date_now nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSameTag#0 nish.StaticFiles.staticSecond#0
+  pointer this: size=224 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSameTag#0 nish.StaticFiles.staticSecond#0
   pointer head: size=0 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSameTag#1 nish.staticDate#0
   stackSites=0 stackLocals=0
   local +0:9 s: i32 (let)
@@ -36668,7 +36657,7 @@ function StaticFiles.staticRange(this: StaticFiles, head: u8[]): i32 -> @nish.St
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.StaticFiles.staticIfRange nish.staticIs nish.staticNumber nish.staticSpace nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.StaticFiles.staticIfRange#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=nish.StaticFiles.staticIfRange#0
   pointer head: size=0 writesThrough=false captured=false passedTo=nish.staticIs#0 nish.StaticFiles.staticIfRange#1 nish.staticNumber#0 nish.staticNumber#0
   stackSites=0 stackLocals=0
   local -39:9 s: i32 (let)
@@ -36689,7 +36678,7 @@ function StaticFiles.staticLoad(this: StaticFiles): void -> @nish.StaticFiles.st
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.copyBytes nish_file_read_at nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=216 writesThrough=true captured=false
+  pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -15:11 stride: i32 (const)
   local -14:11 m: i32 (const)
@@ -36708,7 +36697,7 @@ function StaticFiles.staticFill(this: StaticFiles, pos: i64): i32 -> @nish.Stati
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
   calls: nish_file_read_at nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:11 left: i64 (const)
   local -1:11 n: i32 (const)
@@ -36718,18 +36707,18 @@ function StaticFiles.staticClose(this: StaticFiles): void -> @nish.StaticFiles.s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_file_close
-  pointer this: size=216 writesThrough=true captured=false
+  pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function StaticFiles.staticBodyLength(this: StaticFiles, status: i32): i64 -> @nish.StaticFiles.staticBodyLength [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StaticFiles.staticFields(this: StaticFiles, status: i32, names: u8[][], values: u8[][]): void -> @nish.StaticFiles.staticFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.StaticFiles.staticSecond nish.copyBytes nish.httpDateWrite nish.httpFieldBytes nish.staticContentType nish.staticCut nish.staticDecimal nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_new
-  pointer this: size=216 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSecond#0
+  calls: nish.StaticFiles.staticSecond nish.copyBytes nish.httpDateWrite nish.httpFieldBytes nish.staticContentType nish.staticCut nish.staticDigits nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_new
+  pointer this: size=224 writesThrough=false captured=false passedTo=nish.StaticFiles.staticSecond#0
   pointer names: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
@@ -36737,7 +36726,7 @@ function StaticFiles.staticFields(this: StaticFiles, status: i32, names: u8[][],
   callee +1:19 httpFieldBytes -> @nish.httpFieldBytes
   local +4:11 scratch: u8[] (const)
   local +6:13 at: i32 (const)
-  callee +6:23 staticDecimal -> @nish.staticDecimal
+  callee +6:23 staticDigits -> @nish.staticDigits
   callee +7:7 copyBytes -> @nish.copyBytes
   callee +7:29 httpFieldBytes -> @nish.httpFieldBytes
   callee +8:18 httpFieldBytes -> @nish.httpFieldBytes
@@ -36762,9 +36751,9 @@ function StaticFiles.staticFields(this: StaticFiles, status: i32, names: u8[][],
   local +39:13 prefix: string (const)
   local +40:16 k: i32 (let)
   local +43:11 at: i32 (let)
-  callee +43:21 staticDecimal -> @nish.staticDecimal
-  callee +45:12 staticDecimal -> @nish.staticDecimal
-  callee +47:12 staticDecimal -> @nish.staticDecimal
+  callee +43:21 staticDigits -> @nish.staticDigits
+  callee +45:12 staticDigits -> @nish.staticDigits
+  callee +47:12 staticDigits -> @nish.staticDigits
   callee +48:18 httpFieldBytes -> @nish.httpFieldBytes
   callee +49:19 staticCut -> @nish.staticCut
 module std/net/http-server.ts [package nish]
