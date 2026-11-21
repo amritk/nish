@@ -368,6 +368,11 @@ or none that sits beside attacker-controlled text; the record is
 `req.body` then holds the decoded bytes, `req.bodyLength` their length, and
 `req.decodedFrom` the coding they came in (`HTTP_CODING_GZIP` or
 `HTTP_CODING_DEFLATE`; `HTTP_CODING_IDENTITY` for a body as it arrived).
+`deflate` is the zlib-wrapped stream RFC 9110 names; a raw deflate stream,
+with no zlib header, is answered `400 Bad Request`. The head is left as it
+came, so a decoded request still shows its `Content-Encoding` and its
+`Content-Length` (the encoded size): read `decodedFrom` and `bodyLength`, not
+the fields.
 
 The decoded body has a cap of its own, `HandlerLimits.maxDecoded`, one MiB by
 default, beside the cap on the bytes sent (`http.maxBody`). A few KB of gzip
@@ -386,8 +391,13 @@ limits.maxDecoded = 262144; // 256 KiB decoded, at most
 Any other coding (`br`, `zstd`), or two stacked (`gzip, gzip`), is not decoded:
 the body reaches your program as it arrived, with `decodedFrom`
 `HTTP_CODING_IDENTITY` and its `Content-Encoding` field in the head for you to
-read or refuse. A program that wants an unknown coding refused answers it 415
-itself.
+read or refuse. Since a decoded request keeps that field too, a program that
+wants an unknown coding refused answers 415 itself when the request has a
+`Content-Encoding` field and `decodedFrom` is `HTTP_CODING_IDENTITY`.
+
+Only `HttpHandler` decodes. `serve()` (`nish/net/serve`) and `HttpServer`
+(`nish/net/http-server`), on every HTTP version, hand a gzip body to your
+program compressed, as it arrived; their requests have no `decodedFrom`.
 
 To decode a body yourself, outside the handler, `HttpBodyDecoder` from
 `nish/net/http-compress` does what the handler does: `decode(coding, src, off,

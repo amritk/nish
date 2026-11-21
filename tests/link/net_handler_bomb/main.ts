@@ -1,13 +1,15 @@
 // `nish/net/handler` decodes a `gzip` or `deflate` request body under
 // `HandlerLimits.maxDecoded` before the program takes it, over loopback.
 //
-//   - A gzip, x-gzip or deflate body reaches the program decoded, with
-//     `decodedFrom` naming its coding.
-//   - A body of exactly `maxDecoded` bytes decoded is taken; one byte more is
-//     answered 413 by the handler, and so is a bomb, 4 MiB of zeros in about
+//   - A gzip, x-gzip or deflate body reaches the program decoded, byte for
+//     byte, with `decodedFrom` naming its coding.
+//   - A gzip or deflate body of exactly `maxDecoded` bytes decoded is taken;
+//     one byte more is answered 413 by the handler, and so is a bomb, 4 MiB of zeros in about
 //     4 KiB, under a 64 KiB cap: the program never takes either, and the
 //     connection serves the next request.
-//   - A gzip body whose CRC is wrong, and a zlib body cut short, are answered 400.
+//   - A gzip body whose CRC is wrong, a zlib body cut short, and a raw deflate
+//     body with no zlib wrapper are answered 400.
+//   - Under `maxDecoded` 0 a deflate body reaches the program as it arrived.
 //   - An unknown coding, or two stacked, reach the program as they arrived.
 //   - Bombs sent over a warm connection leave `Arena.used()` flat.
 import { DEFLATE_DEFAULT, compressBound } from "nish/compress/deflate"
@@ -51,18 +53,22 @@ class App {
   length: i32 = -1
   coding: i32 = -9
   first: i32 = -1
+  /** The bytes the next request's body should be, and whether the last one was. */
+  expect: u8[]
+  matched: boolean = false
 
-  constructor() {
+  constructor(cap: i32) {
     const router = new Router(new RouterLimits())
     router.add("POST", "/")
     const limits = new HandlerLimits()
     limits.slots = 4
-    limits.maxDecoded = CAP
+    limits.maxDecoded = cap
     const listener: i32 = tcpListen("127.0.0.1", 0, 16)
     this.port = netLocalPort(listener)
     this.h = new HttpHandler(limits, listener, router)
     this.text = ascii("text/plain")
     this.ok = ascii("ok")
+    this.expect = []
   }
 
   turn(): void {
@@ -73,6 +79,10 @@ class App {
       this.length = req.bodyLength
       this.coding = req.decodedFrom
       this.first = req.bodyLength > 0 ? toI32(req.body[0]) : -1
+      this.matched = req.bodyLength === toI32(this.expect.length) && req.bodyLength <= toI32(req.body.length)
+      for (let k: i32 = 0; this.matched && k < req.bodyLength && k < toI32(this.expect.length); k++) {
+        this.matched = req.body[k] === this.expect[k]
+      }
       this.h.send(req, 200, this.text, this.ok, ZERO, toI32(this.ok.length))
     }
   }
@@ -231,25 +241,36 @@ const zlibbed = (data: u8[]): u8[] => {
 
 export const main = (): i32 => {
   const t = new Suite("handler bomb limit")
-  const app = new App()
+  const app = new App(CAP)
   const c = connect(app)
   const hello: u8[] = ascii("hello, hello, hello, hello")
+  app.expect = hello
 
   t.eqI32("a gzip body is taken", ask(app, c, "gzip", gzipped(hello)), toI32(200))
   t.eqI32("decoded", app.length, toI32(hello.length))
   t.ok("with decodedFrom gzip and the data's first byte", app.coding === HTTP_CODING_GZIP && app.first === 104)
+  t.ok("to the bytes that were compressed", app.matched)
   t.eqI32("an x-gzip body in capitals is taken", ask(app, c, " X-GZIP ", gzipped(hello)), toI32(200))
   t.ok("decoded as gzip", app.length === toI32(hello.length) && app.coding === HTTP_CODING_GZIP)
   t.eqI32("a deflate body is taken", ask(app, c, "deflate", zlibbed(hello)), toI32(200))
   t.ok("decoded from the zlib format", app.length === toI32(hello.length) && app.coding === HTTP_CODING_DEFLATE)
+  t.ok("to the bytes that were compressed, again", app.matched)
   t.eqI32("a plain body is taken", ask(app, c, "", hello), toI32(200))
   t.ok("as it arrived", app.length === toI32(hello.length) && app.coding === HTTP_CODING_IDENTITY)
 
-  t.eqI32("a body decoding to exactly the cap is taken", ask(app, c, "gzip", gzipped(bytesOf(CAP, 7))), toI32(200))
-  t.ok("whole", app.length === CAP && app.first === 7)
+  app.expect = bytesOf(CAP, 7)
+  t.eqI32("a body decoding to exactly the cap is taken", ask(app, c, "gzip", gzipped(app.expect)), toI32(200))
+  t.ok("whole", app.length === CAP && app.first === 7 && app.matched)
   let taken: i32 = app.taken
   t.eqI32("one byte past the cap is answered 413", ask(app, c, "gzip", gzipped(bytesOf(CAP + 1, 7))), toI32(413))
   t.eqI32("and the program never takes it", app.taken, taken)
+  app.expect = bytesOf(CAP, 9)
+  t.eqI32("a deflate body decoding to exactly the cap is taken", ask(app, c, "deflate", zlibbed(app.expect)), toI32(200))
+  t.ok("whole, as deflate", app.length === CAP && app.coding === HTTP_CODING_DEFLATE && app.matched)
+  taken = app.taken
+  t.eqI32("a deflate body one byte past the cap is answered 413", ask(app, c, "deflate", zlibbed(bytesOf(CAP + 1, 9))), toI32(413))
+  t.eqI32("and is not taken either", app.taken, taken)
+  app.expect = hello
 
   const bomb: u8[] = gzipped(bytesOf(BOMB, 0))
   t.ok("the bomb is a thousandth of what it inflates to", toI32(bomb.length) * 1000 < BOMB)
@@ -267,6 +288,9 @@ export const main = (): i32 => {
   const cut: u8[] = zlibbed(hello)
   t.eqI32("a zlib body cut short is answered 400", ask(app, c, "deflate", cut.slice(0, toI32(cut.length) - 3)), toI32(400))
   t.eqI32("a plain body sent as gzip is answered 400", ask(app, c, "gzip", hello), toI32(400))
+  const wrapped: u8[] = zlibbed(hello)
+  const raw: u8[] = wrapped.slice(2, toI32(wrapped.length) - 4)
+  t.eqI32("a raw deflate body, no zlib wrapper, is answered 400", ask(app, c, "deflate", raw), toI32(400))
   t.eqI32("none of them taken", app.taken, taken)
 
   t.eqI32("an unknown coding is taken", ask(app, c, "br", hello), toI32(200))
@@ -300,5 +324,13 @@ export const main = (): i32 => {
   t.eqI32("a warm connection answers forty bodies and forty bombs", good, toI32(80))
   t.eqI64("and the arena stays flat", kept, toI64(0))
   netClose(c.fd)
+
+  // `maxDecoded` 0 decodes nothing: a deflate body arrives as it was sent.
+  const off = new App(toI32(0))
+  const d = connect(off)
+  off.expect = zlibbed(hello)
+  t.eqI32("under maxDecoded 0 a deflate body is taken", ask(off, d, "deflate", off.expect), toI32(200))
+  t.ok("undecoded, with decodedFrom identity", off.coding === HTTP_CODING_IDENTITY && off.matched)
+  netClose(d.fd)
   return t.done()
 }

@@ -955,7 +955,7 @@ const HTTP_DECODE_FIRST: i32 = 4096
  * Decodes a request body sent with `Content-Encoding: gzip` or `deflate`
  * under a limit on what it decodes to, so a small body that inflates to
  * gigabytes (a decompression bomb) is refused once `limit` bytes are out,
- * having cost at most twice that in inflating and `limit` bytes of memory.
+ * having inflated fewer than three times `limit` bytes to find that out.
  * The decompressors are built once; `output` grows, doubling, to the
  * largest body decoded and is kept. Not shared between threads.
  *
