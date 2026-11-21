@@ -10045,7 +10045,7 @@ const proverReadsDeclared = () => [
 ]
 
 /** The changelog words of WP72 S2, which ends an HTTP/2 answer of nish/net/http-server with trailers. */
-const SERVER_TRAILERS = "trailers on the nish/net/http-server façade's HTTP/2 answers"
+const SERVER_TRAILERS = "Trailers on the nish/net/http-server façade's HTTP/2 answers"
 /** WP72 S2's negatives call `HttpServer.trailers`, which the seed's std/net does not have. */
 const serverTrailersDeclared = () =>
   ["ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
