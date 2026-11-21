@@ -1,7 +1,8 @@
 // `Http2Connection.hold`, `consumeBody` and `settleCredit`, the stream
 // flow control `HttpServer.streamBody` reads a body by, driven by the
-// scripted client of `net_http2/peer.ts` with no socket. The streams'
-// window is 1024 bytes, so a WINDOW_UPDATE is owed at 512 consumed.
+// scripted client of `net_http2/peer.ts` with no socket. The config's
+// initialWindowSize is 1024 bytes, so a WINDOW_UPDATE is owed at 512
+// consumed; the output buffer is 1024 bytes too.
 //
 //   1. A partial consume: 100 of 600 bytes held credits nothing, the next
 //      500 credit all 600, and a consume past what the stream was sent is

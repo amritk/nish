@@ -276,13 +276,15 @@ passes `streamWindow()`, `max(initialWindowSize, 65535)` until the peer
 acknowledges the SETTINGS, exactly `initialWindowSize` after, and DATA past the
 window is the stream error FLOW_CONTROL_ERROR, as on any stream (§6.9.1). A
 WINDOW_UPDATE that `consumeBody` cannot fit in the output stays owed and is
-sent from a later `next` or `settleCredit` (`settleOwed`); that path is by construction, not
-pinned by a test. Tests: "never more than one stream window held", "one byte
+sent from a later `next` or `settleCredit` (`settleOwed`). Tests: "never more than one stream window held", "one byte
 past the window resets the stream FLOW_CONTROL_ERROR", "no WINDOW_UPDATE for
 a stream nothing consumed", "the stream window credited as the program
 consumed", "the connection window credited as streamed bodies arrived", each
 for both carriers, in `link/net_http_server_stream: exits
-with 0 and stdout matches expected.out`.
+with 0 and stdout matches expected.out`; the owed WINDOW_UPDATE in "a consume
+with no room for its WINDOW_UPDATE: H2_AGAIN", "nothing owed is settled before
+the output drains" and "once drained, settleCredit sends what was owed", in
+`link/net_http2_stream: exits with 0 and stdout matches expected.out`.
 
 ## What is and is not wiped
 

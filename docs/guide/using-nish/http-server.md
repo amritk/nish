@@ -256,8 +256,9 @@ An HTTP/2 request to that route comes out of `take` at its head, with
 `r.streaming` true, and comes out again each time more of its body, its
 end or a reset arrives. Its unread body is always `r.body[0 ..
 r.bodyLength)`. Call `server.consume(r, n)` when you are done with the
-first `n` bytes: the rest moves to the front, and only then may the client
-send `n` more. `r.bodyEnded` turns true once the body is complete. Keep the
+first `n` bytes: the rest moves to the front, and the client is given room
+for them again, once half a stream window has been consumed and not yet
+credited. `r.bodyEnded` turns true once the body is complete. Keep the
 request between turns, and answer it once:
 
 ```ts

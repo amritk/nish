@@ -1917,8 +1917,8 @@ export class HttpServer {
   /**
    * Queues held streaming request `r` again for the program, once until `take`
    * hands it over, to say a piece, the end of its body or a reset came. One
-   * queued for the first time is already there, and one being answered is
-   * past caring.
+   * queued for the first time is already there, and one whose answer is
+   * flushing is past caring.
    */
   private requeue(r: HttpServerRequest): void {
     if (r.again || (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING)) {
