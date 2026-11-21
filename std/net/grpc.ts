@@ -1,5 +1,5 @@
 /**
- * `nish/net/grpc` — gRPC calls, unary and streaming, on `nish/net/http-server`'s HTTP/2
+ * `nish/net/grpc` — Unary and streaming gRPC calls on `nish/net/http-server`'s HTTP/2
  * listeners (`listenHttp2Tls` and `listenH2c`). A call is a route: its
  * `:path` is `/<package>.<Service>/<Method>`, so the program adds it to the
  * server's `Router` as any other path, takes the request, and hands it here

@@ -2,7 +2,7 @@
 
 # nish/net/grpc
 
-Unary gRPC calls on `nish/net/http-server`'s HTTP/2 listeners (`listenHttp2Tls` and `listenH2c`). A call is a route: its `:path` is `/<package>.<Service>/<Method>`, so the program adds it to the server's `Router` as any other path, takes the request, and hands it here to be read as a call and answered.
+Unary and streaming gRPC calls on `nish/net/http-server`'s HTTP/2 listeners (`listenHttp2Tls` and `listenH2c`). A call is a route: its `:path` is `/<package>.<Service>/<Method>`, so the program adds it to the server's `Router` as any other path, takes the request, and hands it here to be read as a call and answered.
 
 ```ts
 import {
@@ -13,9 +13,13 @@ import {
   GRPC_CANCELLED,
   GRPC_DATA_LOSS,
   GRPC_DEADLINE_EXCEEDED,
+  GRPC_END,
+  GRPC_ENDED,
   GRPC_FAILED_PRECONDITION,
   GRPC_INTERNAL,
   GRPC_INVALID_ARGUMENT,
+  GRPC_MESSAGE,
+  GRPC_MORE,
   GRPC_NOT_FOUND,
   GRPC_OK,
   GRPC_OUT_OF_RANGE,
@@ -42,7 +46,7 @@ const getSum: i32 = router.add("POST", "/benchmark.BenchmarkService/GetSum");
 while (server.ready()) {
   const r = server.take();
   if (r.route === getSum && grpc.call(r) === GRPC_CALL) {
-    const msg = new ProtoReader(r.body, grpc.messageStart(r), r.bodyLength);
+    const msg = new ProtoReader(r.body, grpc.messageStart(r), grpc.messageEnd(r));
     // ... decode, compute, encode the reply into w ...
     grpc.reply(r, w.buf, 0, w.end);
   }
@@ -61,7 +65,7 @@ The caps a `GrpcServer` holds its calls to.
 
 <scalar-card title="Grpc​Server" icon="phosphor/regular/cube" href="#grpcserver">
 
-Reads unary gRPC calls from an `HttpServer`'s HTTP/2 requests and answers them.
+Reads gRPC calls from an `HttpServer`'s HTTP/2 requests and answers them: unary calls (`call`, `reply`, `fail`) and streaming ones (`open`, `next`, `begin`, `send`, `finish`).
 
 </scalar-card>
 
@@ -79,7 +83,7 @@ HEADERS frame carrying `grpc-status`, ending the stream): a malformed
 `grpc-encoding` is offered), a declared length past `maxMessage`
 `RESOURCE_EXHAUSTED`, and a body that is not exactly one length-prefixed
 message `INTERNAL`. It answers `GRPC_CALL` only for a call the program now
-owes an answer, whose message is `r.body[messageStart(r) .. r.bodyLength)`.
+owes an answer, whose message is `r.body[messageStart(r) .. messageEnd(r))`.
 
 </scalar-detail>
 
@@ -87,7 +91,7 @@ owes an answer, whose message is `r.body[messageStart(r) .. r.bodyLength)`.
 
 **A call's deadline** runs from when the server read its head: its
 `grpc-timeout`, capped at `limits.maxTimeout`, or `maxTimeout` when it has
-none. `reply` and `fail` answer `DEADLINE_EXCEEDED` instead of the
+none. `reply`, `fail`, `send` and `finish` answer `DEADLINE_EXCEEDED` instead of the
 program's answer once it has passed.
 
 </scalar-detail>
@@ -101,6 +105,42 @@ and a head followed by a trailer section with `grpc-status` and the
 percent-encoded `grpc-message` when it has one.
 
 </scalar-detail>
+
+<scalar-detail title="Streaming calls">
+
+A server-streaming call's request is one message, so
+`call` reads it; the program then sends its replies with `send`, one
+message each, and ends the call with `finish(r, GRPC_OK, "")`. A
+client-streaming or bidirectional call's request is a stream of messages:
+the program marks its route with `server.streamBody(route)`, reads the
+call with `open`, and its messages with `next`, each time `take` hands the
+request over:
+
+<scalar-code-group>
+
+```ts example.ts
+let s = grpc.next(r);
+while (s === GRPC_MESSAGE) {
+  const m = new ProtoReader(grpc.messageBytes(r), grpc.messageStart(r), grpc.messageEnd(r));
+  // ... decode m, perhaps send(r, ...) a reply ...
+  s = grpc.next(r);
+}
+if (s === GRPC_END) {
+  grpc.finish(r, GRPC_OK, "");
+} // GRPC_MORE: wait for the next piece; GRPC_ANSWERED: r is the server's again
+```
+
+</scalar-code-group>
+
+</scalar-detail>
+
+`next` answers the faults `call` does, message by message, and a client
+that hung up (`CANCELLED`). `send` never blocks: it answers the bytes still
+queued, and a program that sends faster than the client reads stops above
+a budget of its own until `pending(r)` drains. A body the server streams
+is not under `bodyTimeout`, so a program waiting on a slow client checks
+`expired(r)` each turn and ends the call itself; `next`, `send` and
+`finish` answer `DEADLINE_EXCEEDED` once it has passed.
 
 The record of what this module refuses and why is `docs/security/grpc.md`.
 
@@ -122,8 +162,10 @@ class GrpcLimits
 
 ### GrpcServer
 
-Reads unary gRPC calls from an `HttpServer`'s HTTP/2 requests and answers
-them. It keeps no state per call: every answer reads the request again.
+Reads gRPC calls from an `HttpServer`'s HTTP/2 requests and answers them:
+unary calls (`call`, `reply`, `fail`) and streaming ones (`open`, `next`,
+`begin`, `send`, `finish`). What it keeps per call is indexed by the
+request's `index`, and is the call's until it is answered.
 
 ```ts
 class GrpcServer
@@ -132,11 +174,18 @@ class GrpcServer
 | Member | |
 | --- | --- |
 | `new GrpcServer(server: HttpServer, limits: GrpcLimits)` | A gRPC reader and answerer over `server`. Panics on a limit outside its range. |
-| `call(r: HttpServerRequest): i32` | Reads `r` as a unary call. Answers it itself, and says so, when it is not one the program can answer: 415 for a `content-type` other than `application/grpc` or `application/grpc+proto`, 505 off HTTP/2, and otherwise a gRPC error in the Trailers-Only form (see the module's comment). Never panics on what the peer sent. |
+| `begin(r: HttpServerRequest): i32` | Sends the head of the call's answer, `:status` 200 and `content-type: application/grpc`, so its reply messages can follow with `send`; `send` begins it too. Once begun the call ends with `finish` (or `fail`). Panics on a request `open` or `call` did not answer `GRPC_CALL` for. |
+| `call(r: HttpServerRequest): i32` | Reads `r` as a unary call, or a server-streaming one: a request that is one message, whole. Answers it itself, and says so, when it is not one the program can answer: 415 for a `content-type` other than `application/grpc` or `application/grpc+proto`, 505 off HTTP/2, and otherwise a gRPC error in the Trailers-Only form (see the module's comment). Never panics on what the peer sent; panics on a request whose body comes in pieces (`streaming`), which `open` and `next` read. |
 | `expired(r: HttpServerRequest): boolean` | Whether `r`'s deadline has passed: its `grpc-timeout` capped at `maxTimeout`, from when its head was read. A malformed `grpc-timeout`, which `call` refused, counts as passed. |
-| `fail(r: HttpServerRequest, status: i32, message: string): i32` | Answers the call `r` with the gRPC error `status`: the Trailers-Only form when `message` is empty, and otherwise a head and a trailer section carrying `grpc-status` and `grpc-message`, the message's UTF-8 with every byte outside printable ASCII, and `%`, percent-encoded. Past `r`'s deadline it answers `DEADLINE_EXCEEDED` instead. Panics on a status outside 1 to 16. |
-| `messageStart(r: HttpServerRequest): i32` | Where `r`'s message starts in `r.body`; it ends at `r.bodyLength`. |
-| `reply(r: HttpServerRequest, buf: u8[], off: i32, len: i32): i32` | Answers the call `r` with the message `buf[off .. off + len)`: status 200, `content-type: application/grpc`, the length-prefixed message and a trailer section with `grpc-status: 0`. Past `r`'s deadline it answers `DEADLINE_EXCEEDED` instead. Panics on a window outside `buf` and as the server's `start` does. |
+| `fail(r: HttpServerRequest, status: i32, message: string): i32` | Answers the call `r` with the gRPC error `status`: the Trailers-Only form when `message` is empty, and otherwise a head and a trailer section carrying `grpc-status` and `grpc-message`, the message's UTF-8 with every byte outside printable ASCII, and `%`, percent-encoded. On a call whose answer has begun it ends it as `finish` does. Past `r`'s deadline it answers `DEADLINE_EXCEEDED` instead. Panics on a status outside 1 to 16. |
+| `finish(r: HttpServerRequest, status: i32, message: string): i32` | Ends the call with `status`: trailers carrying `grpc-status` and, when `message` is not empty, `grpc-message`, percent-encoded as `fail`'s is. A call whose answer has not begun is answered Trailers-Only when `message` is empty. Past the deadline it answers `DEADLINE_EXCEEDED` instead. Panics on a status outside 0 to 16, or a request `open` or `call` did not answer `GRPC_CALL` for. |
+| `messageBytes(r: HttpServerRequest): u8[]` | The array that holds the message `call` or `next` found last: `r.body`, or the call's own buffer for a message `next` copied out of pieces. |
+| `messageEnd(r: HttpServerRequest): i32` | Where the message `call` or `next` found last ends in `messageBytes(r)`; for a unary call that is `r.bodyLength`. |
+| `messageStart(r: HttpServerRequest): i32` | Where the message `call` or `next` found last starts in `messageBytes(r)`; for a unary call that is past the length prefix in `r.body`. |
+| `next(r: HttpServerRequest): i32` | Reads the call's next request message, across as many DATA frames as it came in. A message whole in `r.body` is read in place; one split across pieces is copied, piece by piece, into a buffer of the call's, each piece handed back with `consume` so the client may send more. Answers the call itself, and returns `GRPC_ANSWERED`, on a message whose prefix declares more than `maxMessage` bytes (`RESOURCE_EXHAUSTED`), a compressed one (`UNIMPLEMENTED`), an unknown flag byte or a body that ends inside a message (`INTERNAL`), a deadline past (`DEADLINE_EXCEEDED`) and a client that hung up (`CANCELLED`, which the server drops). Never panics on what the peer sent; panics on a request `open` or `call` did not answer `GRPC_CALL` for. |
+| `open(r: HttpServerRequest): i32` | Reads `r` as a call whose request is a stream of messages, client streaming or bidirectional, whether its body comes in pieces (a route `HttpServer.streamBody` marked, on HTTP/2) or whole. Answers it itself, and says so, as `call` does: 415, 505, a malformed `grpc-timeout` (`INTERNAL`) or a deadline already past. Its messages are read with `next`. Never panics on what the peer sent. |
+| `reply(r: HttpServerRequest, buf: u8[], off: i32, len: i32): i32` | Answers the call `r` with the message `buf[off .. off + len)`: status 200, `content-type: application/grpc`, the length-prefixed message and a trailer section with `grpc-status: 0`. Past `r`'s deadline it answers `DEADLINE_EXCEEDED` instead. Panics on a window outside `buf`, on a call whose answer has begun, and as the server's `start` does. |
+| `send(r: HttpServerRequest, buf: u8[], off: i32, len: i32): i32` | Sends one reply message, `buf[off .. off + len)`, length-prefixed, beginning the answer if it has not begun. It never blocks: what the connection cannot take yet is queued, and the answer is how much is, so a program sending many messages stops above a budget of its own and goes back to its wait until `HttpServer.pending(r)` drops. Past the deadline it ends the call `DEADLINE_EXCEEDED` instead. Panics on a window outside `buf`, or a request `open` or `call` did not answer `GRPC_CALL` for. |
 
 ## Constants
 
@@ -198,6 +247,22 @@ The deadline passed before the call was answered.
 
 </scalar-card>
 
+<scalar-card title="4" icon="phosphor/regular/hash">
+
+`GRPC_END: i32`
+
+`next`'s answer when the client's stream of messages ended; the program ends the call with `finish`.
+
+</scalar-card>
+
+<scalar-card title="-1" icon="phosphor/regular/hash">
+
+`GRPC_ENDED: i32`
+
+`send`'s answer once the call is over: answered past its deadline, or its stream or connection gone.
+
+</scalar-card>
+
 <scalar-card title="9" icon="phosphor/regular/hash">
 
 `GRPC_FAILED_PRECONDITION: i32`
@@ -219,6 +284,22 @@ An invariant the protocol or the server expects is broken.
 `GRPC_INVALID_ARGUMENT: i32`
 
 The caller's argument is invalid, whatever the server's state.
+
+</scalar-card>
+
+<scalar-card title="2" icon="phosphor/regular/hash">
+
+`GRPC_MESSAGE: i32`
+
+`next`'s answer when it found a request message: `messageBytes(r)[messageStart(r) .. messageEnd(r))`.
+
+</scalar-card>
+
+<scalar-card title="3" icon="phosphor/regular/hash">
+
+`GRPC_MORE: i32`
+
+`next`'s answer when the next message has not all arrived: wait until `take` hands the request over again.
 
 </scalar-card>
 
