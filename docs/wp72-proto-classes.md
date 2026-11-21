@@ -1,6 +1,6 @@
 # WP72 S5: `nish proto`, message classes from a `.proto` file
 
-**Status: in progress.** Stage S5 of [WP72](wp72-grpc.md): a generator that
+**Status: done.** Stage S5 of [WP72](wp72-grpc.md): a generator that
 reads a proto3 file and writes one Nish module of message classes, each
 encoding onto S1's `ProtoWriter` and decoding from its `ProtoReader`
 (`nish/net/protobuf`, [the security record](security/protobuf.md)).
@@ -35,17 +35,18 @@ all in Nish-0, dispatched from `src/compile.ts` beside `c-import`.
 | `uint64`, `fixed64` | `u64` |
 | `float` / `double` | `f32` / `f64` |
 | `bool` / `string` / `bytes` | `boolean` / `string` / `u8[]` |
-| `enum` | a numeric `enum`; the field is `i32`, so an unknown value read is kept as its number |
+| `enum` | an `i32` constant per value, `<Enum>_<VALUE>`; the field is `i32`, so an unknown value read is kept as its number |
 | a message field | `C \| null` |
 | `repeated T` | `T[]`; scalars written packed, read packed or unpacked |
-| `optional` scalar | the field plus a `has<Field>: boolean` presence flag |
-| `map<K, V>`, `K` an integer type or `string` | `Map<string, V>`, an integer key held as its decimal string |
-| `oneof` | each member an ordinary field, plus `<oneof>Case: i32`, the set member's number or 0 |
+| `optional` scalar | the field plus a `has_<field>: boolean` presence flag |
+| `map<K, V>`, `K` an integer type, `bool` or `string` | `Map<K, V>`, the key in its own Nish type |
+| `oneof` | each member an ordinary field, plus `<oneof>_case: i32`, the set member's number or 0 |
 | `service` | each method's path as a string constant, `/<package>.<Service>/<Method>` |
 
 An enum field is held as `i32`, not as the enum type, because proto3 enums are
-open: a reader must keep a value no member names (`17` stays `17`). The enum
-is still emitted, so code compares the field with `Color.RED`.
+open: a reader must keep a value no member names (`17` stays `17`). Its
+values are emitted as `i32` constants named after the enum, so code compares
+the field with `Color_RED`; a Nish `enum` would close the set of values.
 
 A field's default is proto3's: 0, `false`, `""`, an empty array or map, and
 `null` for a message. A singular scalar equal to its default is not written,
@@ -85,7 +86,7 @@ proto: bench.proto:3: refused: proto2 syntax (only proto3 is supported)
 | a field option (`[packed = false]`, `[deprecated = true]`, `[json_name = ...]`) | `packed = false` changes the encoding; the rest are refused rather than silently dropped |
 | `google.protobuf.*` types | well-known types need an import |
 | a type name the file does not declare | the same |
-| `stream` methods | S5 writes paths; streaming is not in WP72 |
+| `stream` methods | only unary methods are supported |
 | a map key of `float`, `double`, `bytes`, an enum or a message, or a map value that is a map | the language forbids them |
 | `repeated` or `map` inside a `oneof`, an `optional` inside a `oneof` | the language forbids them |
 | a message, enum, service or field whose Nish name would clash with a keyword or another emitted name | the module would not compile |
@@ -100,7 +101,7 @@ which only sets the method paths.
 // Regenerate: nish proto bench.proto -o bench.ts
 // Ignored options: go_package
 
-import { ProtoReader, ProtoWriter } from "nish/net/protobuf"
+import { PROTO_OK, PROTO_WIRE_VARINT, ProtoReader, ProtoWriter } from "nish/net/protobuf"
 
 export const BENCHMARK_SERVICE_GET_SUM: string = "/benchmark.BenchmarkService/GetSum"
 
@@ -115,19 +116,30 @@ export class SumRequest {
 ```
 
 - One class per message, in declaration order, a nested one after its parent
-  and named `Outer_Inner`; one `enum` per enum, named the same way.
+  and named `Outer_Inner`; one `i32` constant per enum value, named
+  `<Enum>_<VALUE>` with the enum named the same way. Fields keep the file's
+  order, which can leave padding the compiler's layout warning names; the
+  warning is about speed only.
 - Each class has a no-argument constructor (field initialisers only),
   `encode(w: ProtoWriter): void` and `decode(r: ProtoReader): boolean`.
   `decode` reads the fields of the reader's current span until `next()` is
   false, and returns false on a reader fault, the fault left in `r.failed`. A
   nested message is decoded between `r.enter()` and `r.leave()`, so S1's
-  depth bound is the generated code's.
-- `encode` writes nothing when `w.failed` is set; S1's writer already makes
-  every later call a no-op, so the generated code does not test it.
+  depth bound is the generated code's: 100 levels below the top are read, the
+  101st is refused.
+- The import names only the constants the module uses: `PROTO_OK` and the
+  wire types its fields read.
+- A `string` or `bytes` field is copied out of the reader's span byte by byte,
+  each index tested against the buffer, so a generated module builds under the
+  default panic rule.
+- `encode` does not test `w.failed`: once S1's writer has failed, every
+  later call on it is a no-op, so a failed write is seen in `w.failed` after
+  `encode` returns.
 - A service method's constant is named `<SERVICE>_<METHOD>` in upper snake
   case.
 - The header names the generator, the source file's base name and the SHA-256
-  of its bytes, and the command that regenerates it. Output is
+  of its bytes, and the command that regenerates it, and a third line lists
+  any file options it ignored. Output is
   byte-deterministic: no time, no absolute path, no map iteration order that
   is not declaration order.
 
@@ -139,7 +151,7 @@ export class SumRequest {
 | --- | --- |
 | 0 | the module was written, or `--check` found it current |
 | 1 | the file was refused, or `--check` found the output missing or different |
-| 2 | usage: no input, no `-o`, an unknown flag, `-o` naming the input, an unreadable input |
+| 2 | usage: no input, no `-o`, an unknown flag, `-o` naming the input, an unreadable input, a path holding a quote, a backslash, a comment delimiter or a byte that is not printable ASCII |
 
 `--check` writes nothing; it compares the module it would write with the file
 byte for byte and prints `proto: <out> is stale; regenerate it` on a
