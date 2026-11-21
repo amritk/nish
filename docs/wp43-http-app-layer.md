@@ -362,5 +362,5 @@ A second run adds a side, a copy of the bench at 082ebba1 the driver patched
 and kept out of the tree, whose loop calls `HttpHandler.before` and `after`
 on every request, on routes bound to no step. That pair costs 25.0 to 26.8
 instructions a request over the unpatched bench, about 0.4% of a
-`/plaintext` request and 0.3% of an `/id` one; `HttpServer`'s pair, the same
-code on its own request type, was not run.
+`/plaintext` request and 0.3% of an `/id` one. `HttpServer`'s pair runs the same
+algorithm, with an `own` check in front; its cost was not measured.

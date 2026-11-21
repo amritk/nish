@@ -4099,7 +4099,7 @@ Read by each side's least count:
 
 ### A loop that asks for steps
 
-The "loop" side is `bench/http1-server.ts` at 082ebba1 with its `run` changed by the driver, a copy kept out of the tree: before `this.answer(r)` it calls `this.h.before(r)` until it returns a negative, and on `HANDLER_NEXT` calls `this.h.after(r)` until it returns a negative, then answers. Neither route is bound to a step, so each request runs one `before` and one `after`, each answering `HANDLER_NEXT` at once. It measures `HttpHandler`'s pair only; `HttpServer`'s `before` and `after` are the same code on its own request type and were not run. The other sides and every setting are as above, with "head" `bench/http1-server.ts` unchanged at 082ebba1; the six binaries are counted in 3 interleaved rounds.
+The "loop" side is `bench/http1-server.ts` at 082ebba1 with its `run` changed by the driver, a copy kept out of the tree: before `this.answer(r)` it calls `this.h.before(r)` until it returns a negative, and on `HANDLER_NEXT` calls `this.h.after(r)` until it returns a negative, then answers. Neither route is bound to a step, so each request runs one `before` and one `after`, each answering `HANDLER_NEXT` at once. It measures `HttpHandler`'s pair only; `HttpServer`'s `before` and `after` run the same algorithm, with an `own` check in front; their cost was not measured. The other sides and every setting are as above, with "head" `bench/http1-server.ts` unchanged at 082ebba1; the six binaries are counted in 3 interleaved rounds.
 
 | route | requests | head commit | main | main copy | head | head copy | loop | loop copy |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- |
