@@ -175,16 +175,18 @@ Releases ride a train; nothing is published from a developer machine.
    `scripts/changelog-gen.test.mjs` pins the version rules.
 
    Opening the pull request needs **Settings > Actions > General > Workflow
-   permissions > "Allow GitHub Actions to create and approve pull requests"**,
-   or a `RELEASE_PR_TOKEN` secret. Without either the branch is still pushed
-   and the job warns with a link to open the pull request by hand.
+   permissions > "Allow GitHub Actions to create and approve pull requests"**.
+   Without it the branch is still pushed and the job warns with a link to open
+   the pull request by hand. The release train reads no repository secret.
 
-   CI runs on the Release pull request without approval only with
-   `RELEASE_PR_TOKEN` set: the job pushes `release/next` with it, so the runs
-   are the token owner's. Pushed with the default `GITHUB_TOKEN`, every run
-   waits as `action_required` until a maintainer approves it. A fine-grained
-   token scoped to this repository with Contents and Pull requests read and
-   write is enough.
+   CI on the Release pull request needs no token and no approval. The job
+   pushes `release/next` with the default `GITHUB_TOKEN`, whose `pull_request`
+   runs wait as `action_required` until a maintainer approves them, so it also
+   dispatches `ci.yml` and `pr-title.yml` at `release/next`. A dispatched run
+   needs no approval and reports its checks on the pull request's head commit;
+   the waiting `pull_request` runs can be left unapproved. A dispatched title
+   check reads the commit's subject, which the job also uses as the title, and
+   fails on any branch but `release/next`.
 
 2. **Merge the Release pull request.** That is the act of releasing, and it is
    a human's decision. The workflow sees `changelog/<version>.json` without a
