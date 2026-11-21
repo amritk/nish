@@ -58,8 +58,18 @@ section does not print cites it apart, `{{Section 7.1 of RFC8032}}; result
 marked `slow` is emitted skipped unless `spec emit` is given `--slow`, and the
 committed tests are emitted without it: run one by hand with `spec run --slow`;
 `node tests/run.js spec` prints a SKIP line for each clause a test skipped, and
-fails a test that passed no clause. The syntax: vector's
-`docs/guide/guides/writing-a-spec.md`, in `build/vector/`.
+fails a test that passed no clause. A vector whose `Source` cell is a single
+code span runs that command, and its expected value may be bytes, a string, an
+integer, a bool or `null`. A `u8[]` parameter followed by a `/* window */`
+comment stands for a `(buf, off, len)` triple, and one followed by `/* out CAP */`
+for an `(out, at)` buffer whose `end` is the result, declared as bytes;
+the Nish test guards both with extra bytes. Integers are written and read as
+bytes of every width and both byte orders (`le16` to `be64`, `leU16` to `beI64`),
+which is what replaced `le64` with `intBytes` in `test/spec/hex.ts` and
+`test/spec/rfc8439-chacha20-poly1305.ts`. A section that prints several cases under
+headings such as RFC 6979's `With SHA-256, message = "sample":` pairs each value
+by its heading, and a statement that wraps across lines is read as one. The
+syntax: vector's `docs/guide/guides/writing-a-spec.md`, in `build/vector/`.
 
 A spec that cites a reference not yet in `.refcache/` fails to build: run
 `bash scripts/build-spec.sh --fetch specs/<name>.md` once and commit the new
