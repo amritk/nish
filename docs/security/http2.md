@@ -272,10 +272,11 @@ arrival, the whole frame, padding included (H2-6), but credits the stream's own 
 `consumeBody` is told the program read, cut to the bytes the stream was sent
 and not yet credited (`owed`), so the peer is never given window it did not
 use. Nothing credits a held stream otherwise, so its unconsumed body never
-passes `streamWindow()`, `max(initialWindowSize, 65535)`, and DATA past the
+passes `streamWindow()`, `max(initialWindowSize, 65535)` until the peer
+acknowledges the SETTINGS, exactly `initialWindowSize` after, and DATA past the
 window is the stream error FLOW_CONTROL_ERROR, as on any stream (§6.9.1). A
 WINDOW_UPDATE that `consumeBody` cannot fit in the output stays owed and is
-sent from a later `next` (`settleOwed`); that path is by construction, not
+sent from a later `next` or `settleCredit` (`settleOwed`); that path is by construction, not
 pinned by a test. Tests: "never more than one stream window held", "one byte
 past the window resets the stream FLOW_CONTROL_ERROR", "no WINDOW_UPDATE for
 a stream nothing consumed", "the stream window credited as the program

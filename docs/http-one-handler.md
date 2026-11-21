@@ -127,7 +127,7 @@ for (;;) {
 ```ts
 export class HttpServerLimits {
   requests: i32 = 1024;          // request pool shared by all listeners
-  maxBody: i32 = 1048576;        // a request body is held whole; 413 above
+  maxBody: i32 = 1048576;        // a body held whole; 413 above, bar an h2 streamBody route
   maxHead: i32 = 32768;          // copied head (method, target, fields); 431 above
   maxFields: i32 = 100;          // fields in one request head; 431 above
   maxResponseFields: i32 = 32;   // program fields + content-length + alt-svc
@@ -509,7 +509,8 @@ length runs in bounded memory.
   `take`.
 - **The per-stream buffer cap.** A streaming request can hold at most the
   window it advertised: `max(Http2Config.initialWindowSize, 65535)` bytes
-  of unconsumed body. Its body array grows by doubling up to that cap, and
+  of unconsumed body until the peer acknowledges the server's SETTINGS,
+  and exactly `initialWindowSize` after. Its body array grows by doubling up to that cap, and
   it never grows past it. A peer that sends more than the window allows is
   answered with RST_STREAM FLOW_CONTROL_ERROR by the carrier (RFC 9113
   §6.9.1), before any byte reaches the façade. The connection window is
