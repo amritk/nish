@@ -147,7 +147,16 @@ new positive `tests/cases/*` is registered with
 `nish --help` text regenerates `examples/break-web/help.ts` and
 `docs/site/break/` with `node examples/break-web/build.mjs` in the same PR:
 the break-web checks in the `test` shards pin both against the compiler's
-`--help`.
+`--help`. `docs/IR_COOKBOOK.md` is generated too, by
+`docs/cookbook/regen.sh`, and moves with any codegen change its entries show:
+run `NISH=build/nish bash docs/cookbook/regen.sh --check` before pushing a
+`src/` change. CI's `examples` job runs it after the smoke build, so a red
+`examples` job with every example passing is usually this.
+
+**nish-cmp hides a wasm32 program behind its sidecars.** A default run reports
+a wasm32 program whose sidecar build both compilers refuse as "refused by
+both", not as a difference. Before concluding that a wasm32 change needs no
+`DECLARED` entry, run it again with `--no-sidecars`.
 
 **The emit-ts known list is Node-version-specific.** Regenerate
 `tests/differential/emit-ts-known.txt` only under the Node that
