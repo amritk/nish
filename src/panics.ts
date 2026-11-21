@@ -165,7 +165,7 @@ export class PanicSite {
   node: Node
   /** The module the site is written in, for a diagnostic that points at it from another. */
   source: SourceFile
-  /** The LLVM symbol of the function the site is in. */
+  /** The `FunctionSig.name` of the function the site is in: its package-prefixed name, `Owner.method` for a member. */
   fn: string
   /** The callee's symbol, for a `call`; `""` otherwise. */
   callee: string

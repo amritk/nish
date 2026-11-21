@@ -209,6 +209,8 @@ QUIC loss recovery, stream, connection and listener sites are cleared.
 
 Sites as of 071ed014 (541): net/quic-recovery 124, net/quic-stream 132, net/quic 203, net/quic-listener 82. Kinds: overflow 433, index 53, array-length 30, divide 17, panic 6, pop 2.
 
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `QuicStreams.borrowRecv`, `QuicStreamPools.lend`.
+
 ### S6 — HTTP/3, its frames, QPACK and the HTTP/3 server
 
 HTTP/3 and QPACK sites are cleared; malformed frames become a Result that maps to the protocol's connection error.

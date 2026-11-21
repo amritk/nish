@@ -97,3 +97,5 @@ Sites as of 071ed014 (171): term-pixels 101, term-io 24, term-rate 44, term-prob
 term.ts is cleared, so game-starter builds without --allow-panics.
 
 Sites as of 071ed014 (171): term 171. Kinds: overflow 105, index 38, array-length 11, panic 5, pop 5, divide 4, slice 3.
+
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `KeyDecoder.keep`, `Screen.flush`, `termBytesText`, `termDecodeEvents`, `termDecodeKeys`.

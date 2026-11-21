@@ -71,8 +71,12 @@ The carrier and async client sites are removed or proved; the bench programs for
 
 Sites as of 071ed014 (571): net/postgres-carrier 153, net/postgres-async 418. Kinds: index 300, overflow 171, array-length 53, panic 22, slice 20, io-exit 5.
 
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `pgAsyncAnswer`, `PgCarrier.batcher`.
+
 ### S2 — postgres
 
 The blocking client's sites are removed or proved.
 
 Sites as of 071ed014 (556): net/postgres 556. Kinds: overflow 314, index 139, panic 46, array-length 28, divide 16, slice 13.
+
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `pgFind`, `pgPutDecimal`.

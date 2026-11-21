@@ -6,8 +6,8 @@
   ],
   "total": 9796,
   "explicit": {
-    "kept": 424,
-    "toFix": 52
+    "kept": 364,
+    "toFix": 112
   },
   "modules": {
     "std/base64.ts": {
@@ -760,11 +760,6 @@
     },
     {
       "module": "std/cli-args.ts",
-      "function": "editDistance",
-      "reason": "internal invariant: the caller passes three scratch rows each at least as long as the word; a correct program never violates it"
-    },
-    {
-      "module": "std/cli-args.ts",
       "function": "FlagSpec.constructor",
       "reason": "flag spec is a static declaration literal in the program; a malformed spec string is a programmer error caught at startup"
     },
@@ -799,11 +794,6 @@
       "reason": "buf[off, off+len) must lie inside buf; a caller-controlled bounds contract"
     },
     {
-      "module": "std/compress/checksum.ts",
-      "function": "Crc32.update",
-      "reason": "Window must lie inside buf; the table-size check is an internal invariant after construction"
-    },
-    {
       "module": "std/compress/deflate.ts",
       "function": "deflateCanonical",
       "reason": "scratch tables must be at least as large as the symbol count; sizes are fixed by the compressor's own allocation"
@@ -815,63 +805,8 @@
     },
     {
       "module": "std/compress/deflate.ts",
-      "function": "deflateMatchLength",
-      "reason": "a < b and b+max must lie inside src, which the caller has checked; internal precondition"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.addLiteral",
-      "reason": "internal invariant: token buffer has room and literal is a byte; the block flush keeps it so"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.addMatch",
-      "reason": "internal invariant: token buffer has room and the match is within the format; the caller flushes blocks first"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.buildRle",
-      "reason": "hlit/hdist and scratch sizes are bounded by the format and the constructor's allocations; internal invariant"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.collectGreedy",
-      "reason": "internal invariant: all tables are their allocated sizes, fixed by the constructor"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.compressRange",
-      "reason": "start/end/histStart must be a valid range inside src; the caller computes it, internal precondition"
-    },
-    {
-      "module": "std/compress/deflate.ts",
       "function": "Deflater.constructor",
       "reason": "level must be 0 to 9; the doc forbids others and the caller picks the level statically"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.insert",
-      "reason": "internal invariant: head and prev tables are their fixed sizes, allocated by the constructor"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.longest",
-      "reason": "internal invariant: hash tables are their fixed sizes and p+4<=end, which the caller checks"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.writeBlock",
-      "reason": "internal invariant: a code-length symbol is 0 to 18 by construction of the RLE builder"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Deflater.writeSymbols",
-      "reason": "internal invariant: symbol tables are their fixed sizes and the token count fits the token buffer"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "deflateRoom",
-      "reason": "internal invariant: a block's size was checked against the room before writing, so this never fires on any input"
     },
     {
       "module": "std/compress/deflate.ts",
@@ -880,48 +815,13 @@
     },
     {
       "module": "std/compress/deflate.ts",
-      "function": "FixedDeflater.compress",
-      "reason": "internal invariant: its tables are exactly their fixed sizes, allocated by its constructor"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "inflateDouble",
-      "reason": "internal invariant: 2*end must be within the table; table size is derived from the validated code lengths"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Inflater.build",
-      "reason": "internal invariants on table scratch and code layout; malformed stream lengths return error codes before these, so no untrusted input reaches them"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Inflater.constructor",
-      "reason": "internal invariant: the fixed Huffman code is a constant and always builds"
-    },
-    {
-      "module": "std/compress/deflate.ts",
       "function": "Inflater.decompress",
       "reason": "src/out windows must lie inside their arrays and limit must be non-negative; caller-controlled arguments, stream errors return codes"
     },
     {
       "module": "std/compress/deflate.ts",
-      "function": "Inflater.fill",
-      "reason": "inPos and end must lie within src; the caller (inflate) has validated the window, internal precondition"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Inflater.huffman",
-      "reason": "internal invariant: decode tables are their enough-sized lengths, fixed by construction"
-    },
-    {
-      "module": "std/compress/deflate.ts",
       "function": "Inflater.inflate",
       "reason": "input and output windows must lie inside their arrays; the caller computes them, and malformed streams return DEFLATE_ERR codes"
-    },
-    {
-      "module": "std/compress/deflate.ts",
-      "function": "Inflater.readDynamic",
-      "reason": "window inside src and the code-length table at its fixed size; internal invariants, stream errors return codes"
     },
     {
       "module": "std/compress/gzip.ts",
@@ -947,21 +847,6 @@
       "module": "std/compress/gzip.ts",
       "function": "gzipWindow",
       "reason": "buf[off, off+len) must lie inside buf; a caller-controlled bounds contract"
-    },
-    {
-      "module": "std/compress/gzip.ts",
-      "function": "GzipWriter.finish",
-      "reason": "Not callable twice; the block-larger-than-bound panics are internal invariants after the room check"
-    },
-    {
-      "module": "std/compress/gzip.ts",
-      "function": "GzipWriter.flush",
-      "reason": "Not callable after finish; the block-bound panic is an internal unreachable invariant after the room check"
-    },
-    {
-      "module": "std/compress/gzip.ts",
-      "function": "GzipWriter.write",
-      "reason": "Not callable after finish, and the block-bound check is an internal invariant after the room check"
     },
     {
       "module": "std/compress/zlib.ts",
@@ -1120,18 +1005,8 @@
     },
     {
       "module": "std/crypto/p256.ts",
-      "function": "p256HmacInto",
-      "reason": "Internal helper: key, message and block must lie within SHA-256 block bounds; fixed by the P-256 algorithm"
-    },
-    {
-      "module": "std/crypto/p256.ts",
       "function": "p256SignSha256Into",
       "reason": "Message window and the fixed 64-byte signature window must lie inside their arrays; caller bounds contract"
-    },
-    {
-      "module": "std/crypto/scram.ts",
-      "function": "scramClientProofExposed",
-      "reason": "internal invariant: HMAC-SHA-256 always returns 32 bytes, so the length guard is unreachable"
     },
     {
       "module": "std/crypto/sha1.ts",
@@ -1144,21 +1019,6 @@
       "reason": "Message and 20-byte digest windows must lie inside their arrays and buffers be at most 2^31-1 bytes; caller bounds contract"
     },
     {
-      "module": "std/crypto/sha1.ts",
-      "function": "sha1Compress",
-      "reason": "Internal helper: the 64-byte block must lie inside the buffer; the else branch is an unreachable invariant"
-    },
-    {
-      "module": "std/crypto/sha256.ts",
-      "function": "sha256",
-      "reason": "a message over 2^31-1 bytes cannot exist in a u8[]; unreachable length invariant"
-    },
-    {
-      "module": "std/crypto/sha256.ts",
-      "function": "Sha256.copy",
-      "reason": "copy is invalid after digest, and the state arrays are always eight words; call-order contract plus internal invariant"
-    },
-    {
       "module": "std/crypto/sha256.ts",
       "function": "Sha256.digestInto",
       "reason": "digest at most once, and the 32-byte window must lie inside out; caller-controlled preconditions"
@@ -1167,21 +1027,6 @@
       "module": "std/crypto/sha256.ts",
       "function": "Sha256.update",
       "reason": "no update after digest, and the window must lie inside data; caller-controlled preconditions"
-    },
-    {
-      "module": "std/crypto/sha256.ts",
-      "function": "sha256Compress",
-      "reason": "internal invariant: the block and hash state always lie inside their buffers, so the else branch is unreachable"
-    },
-    {
-      "module": "std/crypto/sha512.ts",
-      "function": "sha384",
-      "reason": "array over 2^31-1 bytes cannot exist as an i32-indexed array; guard is a type-width invariant"
-    },
-    {
-      "module": "std/crypto/sha512.ts",
-      "function": "sha512",
-      "reason": "array over 2^31-1 bytes cannot exist as an i32-indexed array; guard is a type-width invariant"
     },
     {
       "module": "std/crypto/sha512.ts",
@@ -1465,11 +1310,6 @@
     },
     {
       "module": "std/net/http-server.ts",
-      "function": "HttpServer.carry",
-      "reason": "a carrier refusal of body bytes beyond the declared length is an internal invariant after the caller's length checks"
-    },
-    {
-      "module": "std/net/http-server.ts",
       "function": "HttpServer.checkHttp2",
       "reason": "maxHeaderListSize within limits.maxHead, no extended CONNECT, slots at least 1; static listener configuration contract"
     },
@@ -1482,26 +1322,6 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServer.field",
       "reason": "field requires a request taken and not yet answered, and at most HANDLER_MAX_ADDED fields per answer; a caller sequencing contract and a static cap"
-    },
-    {
-      "module": "std/net/http-server.ts",
-      "function": "HttpServer.h1Of",
-      "reason": "an HTTP/1.1 listener must have been configured; unreachable invariant for a request of that kind"
-    },
-    {
-      "module": "std/net/http-server.ts",
-      "function": "HttpServer.h2cOf",
-      "reason": "an h2c listener must have been configured; unreachable invariant for a request of that kind"
-    },
-    {
-      "module": "std/net/http-server.ts",
-      "function": "HttpServer.h2Of",
-      "reason": "an HTTP/2 TLS listener must have been configured; unreachable invariant for a request of that kind"
-    },
-    {
-      "module": "std/net/http-server.ts",
-      "function": "HttpServer.h3Of",
-      "reason": "an HTTP/3 listener must have been configured; unreachable invariant for a request of that kind"
     },
     {
       "module": "std/net/http-server.ts",
@@ -1587,11 +1407,6 @@
       "module": "std/net/http1-codec.ts",
       "function": "http1WriteChunk",
       "reason": "the window must lie inside data; the caller controls off and len"
-    },
-    {
-      "module": "std/net/http1-server.ts",
-      "function": "Http1Connection.respondEncoded",
-      "reason": "internal invariant: the body write was checked to fit, so a short write is unreachable"
     },
     {
       "module": "std/net/http1-server.ts",
@@ -1720,11 +1535,6 @@
     },
     {
       "module": "std/net/postgres-async.ts",
-      "function": "pgAsyncAnswer",
-      "reason": "internal ordering invariant: the answer is read only after pgAsyncTurn for the same ticket"
-    },
-    {
-      "module": "std/net/postgres-async.ts",
       "function": "pgAsyncCheckCaps",
       "reason": "pool caps must lie inside documented ranges; they are static configuration the program sets"
     },
@@ -1757,11 +1567,6 @@
       "module": "std/net/postgres-carrier.ts",
       "function": "PgCarrier.attach",
       "reason": "at most 8 batchers and 256 statements, no NUL in name or SQL, attached after the pool connects; static caller registration contract"
-    },
-    {
-      "module": "std/net/postgres-carrier.ts",
-      "function": "PgCarrier.batcher",
-      "reason": "batcher id must be one attached earlier; an internal invariant of ids the carrier issued"
     },
     {
       "module": "std/net/postgres-carrier.ts",
@@ -1915,11 +1720,6 @@
     },
     {
       "module": "std/net/postgres.ts",
-      "function": "pgFind",
-      "reason": "Internal search helper: from/end must lie inside the buffer; internal callers pass bounds they computed"
-    },
-    {
-      "module": "std/net/postgres.ts",
       "function": "pgIntWindow",
       "reason": "values[start, start+count) must lie inside values; the window is the caller's static argument contract"
     },
@@ -1937,11 +1737,6 @@
       "module": "std/net/postgres.ts",
       "function": "PgPool.constructor",
       "reason": "Pool size, queue size and maxInFlight are documented fixed ranges chosen statically by the caller"
-    },
-    {
-      "module": "std/net/postgres.ts",
-      "function": "pgPutDecimal",
-      "reason": "Internal helper: the output window must lie inside out; the caller computes n from pgDecimalLength, so a violation is a bug"
     },
     {
       "module": "std/net/qpack.ts",
@@ -1962,16 +1757,6 @@
       "module": "std/net/quic-listener.ts",
       "function": "QuicListener.handleWindow",
       "reason": "the at/len window must lie inside the datagram array; the caller's own receive-buffer bookkeeping"
-    },
-    {
-      "module": "std/net/quic-stream.ts",
-      "function": "QuicStreamPools.lend",
-      "reason": "the receive reserve must be primed before packet handling; a call-order contract on the internal caller"
-    },
-    {
-      "module": "std/net/quic-stream.ts",
-      "function": "QuicStreams.borrowRecv",
-      "reason": "pools must be primed before a packet is handled; internal call-order invariant"
     },
     {
       "module": "std/net/quic-stream.ts",
@@ -2152,31 +1937,6 @@
       "module": "std/term-pixels.ts",
       "function": "scaleFramebuffer",
       "reason": "divisor must be 1 or more, as documented; the caller chooses it"
-    },
-    {
-      "module": "std/term.ts",
-      "function": "KeyDecoder.keep",
-      "reason": "Internal invariant: the decoder never reports using more bytes than it was given; unreachable"
-    },
-    {
-      "module": "std/term.ts",
-      "function": "Screen.flush",
-      "reason": "Internal invariant: the Screen's cell buffers are all sized to its dimensions at construction"
-    },
-    {
-      "module": "std/term.ts",
-      "function": "termBytesText",
-      "reason": "Internal invariant: the byte count n never exceeds the buffer; the guard only proves the index in range"
-    },
-    {
-      "module": "std/term.ts",
-      "function": "termDecodeEvents",
-      "reason": "Internal invariant: the decode index never steps back; unreachable guard that proves the index in range"
-    },
-    {
-      "module": "std/term.ts",
-      "function": "termDecodeKeys",
-      "reason": "Internal invariant: the decode index never steps back; unreachable guard that proves the index in range"
     },
     {
       "module": "std/text.ts",

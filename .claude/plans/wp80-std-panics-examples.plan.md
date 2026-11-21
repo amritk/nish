@@ -122,6 +122,8 @@ The sites S1 of std-panic-free leaves in std/threads.ts, std/json-typed.ts and s
 
 Sites as of 071ed014 (276): threads 41, json-typed 23, cli-args 170, cli-flags 36, cli 6. Kinds: index 167, overflow 53, panic 48, array-length 4, slice 4.
 
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `editDistance (cli-args)`.
+
 ### S2 — sync/ring, sync/shm, bytes, buffer-pool and prefork
 
 The sites in the ring buffer, shared memory, byte helpers, buffer pool and prefork supervisor are removed or proved, so prefork-jobs builds without --allow-panics and the prefork half of prefork-server is clear.
@@ -139,6 +141,8 @@ Sites as of 071ed014 (459): net/http1-codec 298, net/http-fields 45, net/url 96,
 The two largest server modules are cleared, so file-server and prefork-server build without --allow-panics once S2 and S3 are in.
 
 Sites as of 071ed014 (586): net/http1-server 166, net/http-server 420. Kinds: overflow 261, index 236, panic 47, array-length 27, slice 5, divide 5, pop 3, io-exit 2.
+
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `HttpServer.carry`, `HttpServer.h1Of`, `HttpServer.h2cOf`, `HttpServer.h2Of`, `HttpServer.h3Of`, `Http1Connection.respondEncoded`.
 
 ### S5 — the handler, serve and router layer
 

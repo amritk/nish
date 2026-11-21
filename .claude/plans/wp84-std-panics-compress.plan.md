@@ -65,8 +65,12 @@ The checksum and container sites are cleared; the deflate and inflate benches la
 
 Sites as of 071ed014 (152): compress/checksum 27, compress/zlib 22, compress/gzip 103. Kinds: overflow 96, index 36, panic 16, divide 2, array-length 2.
 
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `Crc32.update`, `GzipWriter.write`, `GzipWriter.flush`, `GzipWriter.finish`.
+
 ### S2 — deflate and inflate
 
 deflate.ts is cleared without raising the deflate or inflate count.
 
 Sites as of 071ed014 (398): compress/deflate 398. Kinds: overflow 322, index 35, panic 31, range 7, array-length 3.
+
+Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `deflateMatchLength`, `deflateRoom`, `inflateDouble`, `Deflater.addLiteral`, `Deflater.addMatch`, `Deflater.buildRle`, `Deflater.collectGreedy`, `Deflater.compressRange`, `Deflater.insert`, `Deflater.longest`, `Deflater.writeBlock`, `Deflater.writeSymbols`, `FixedDeflater.compress`, `Inflater.build`, `Inflater.constructor`, `Inflater.fill`, `Inflater.huffman`, `Inflater.readDynamic`.
