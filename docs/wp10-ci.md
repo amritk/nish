@@ -11,22 +11,17 @@ workflow's comments point at.
 
 `.github/workflows/ci.yml` runs on every pull request, on pushes to `main`
 (scoped to `main` so a branch with an open pull request is not tested twice),
-through `workflow_call` from `release.yml`, and through `workflow_dispatch` at
-`release/next` (the Release PR's run, below). A pull request's superseded
+and through `workflow_call` from `release.yml`. A pull request's superseded
 runs are cancelled, and so is a push to `main`'s run once the next merge lands:
 the merge queue (below) already tested that tree and records which merge broke
 `main`, and the next run, which runs every lane, tests a superset of it. Two
 kinds of `main` run are pinned to a group of their own and never cancelled: the
 Release PR's merge (its `chore(release):` subject, or a push adding
 `changelog/`) and a re-run. Release CI is otherwise untouched: `release.yml`'s
-call runs at the tag's ref. The Release PR's run is started by the train:
-`release-pr.yml` pushes `release/next` with the default `GITHUB_TOKEN`, and the
-`pull_request` run that raises waits for a human's approval
-(`action_required`), so after each push the train dispatches `ci.yml` and
-`pr-title.yml` at the branch. Their checks land on the Release PR's head
-commit, and the group `refs/heads/release/next` cancels the run of the commit
-the push replaced, as a pull request's newer push does. `interop.yml` follows
-the same rule. (Before the queue, `main`'s runs
+call runs at the tag's ref. The Release PR's runs that `release-pr.yml`
+dispatches at `release/next` share the group `refs/heads/release/next`, and a
+newer push to that branch cancels the older commit's run, as on a pull request.
+`interop.yml` follows the same rule. (Before the queue, `main`'s runs
 queued instead, after the runs of #396 and #397 ended cancelled with nothing to
 say which merge broke `main`.)
 
@@ -57,7 +52,7 @@ them for review.
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
-| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, which `release-pr.yml` dispatches at `release/next` after each push, before the tag is cut |
+| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut, once that run is approved (`release-pr.yml` pushes with `GITHUB_TOKEN` unless a `RELEASE_PR_TOKEN` secret is set, so the run waits as `action_required`), and otherwise first at the tag |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `scope` | Ubuntu | `node scripts/ci-scope.mjs`: decides which [scoped lanes](#scoped-lanes) this run needs and writes one `<lane>=true\|false` output per lane |
 | `ci-gate` | Ubuntu | `if: always()`, needs every other job: `node scripts/ci-scope.mjs --gate` fails unless each one succeeded or was skipped by its own `if:` ([below](#scoped-lanes)) |

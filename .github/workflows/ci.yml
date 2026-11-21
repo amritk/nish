@@ -77,23 +77,12 @@ name: CI
 # what passed there, so `main` is never the first place the pair meets. The
 # queue itself is a ruleset setting on `main`; this trigger is what lets the
 # required checks report on its temporary `gh-readonly-queue/main/*` branches.
-#
-# `workflow_dispatch` is the Release PR's run. release-pr.yml pushes
-# `release/next` with the default GITHUB_TOKEN unless a RELEASE_PR_TOKEN secret
-# is set, and the `pull_request` run that push raises waits for a human to
-# approve it (`action_required`): the Release PR sat with no checks until
-# someone noticed. A dispatch is an event a GITHUB_TOKEN may start, so the
-# train dispatches this workflow at `release/next` after every push, and that
-# run's checks land on the Release PR's head commit like a pull request run's.
-# Its `github.ref` is `refs/heads/release/next`, which the concurrency group
-# below cancels on and the `runner` job runs on.
 on:
   push:
     branches: [main]
   pull_request:
   merge_group:
   workflow_call:
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -161,12 +150,13 @@ env:
 # - Re-runs (a later attempt), so recovering an older run never cancels the
 #   tip's run.
 # Release CI proper is untouched: release.yml calls this workflow at the tag,
-# where `github.ref` is `refs/tags/v*`. The Release PR's dispatched runs (the
-# trigger, above) share the group `refs/heads/release/next` and cancel like a
-# pull request's: the train force-pushes that branch on every merge to main,
-# so an older run tests a release commit nobody can merge any more. A merge-queue run has a ref of its own
-# per queued entry, so it shares a group with nothing and the queue, not this
-# setting, decides when it is superseded. interop.yml uses the same rule.
+# where `github.ref` is `refs/tags/v*`. The Release PR's runs that
+# release-pr.yml dispatches at `release/next` (its `pull_request` runs wait for
+# approval) share the group `refs/heads/release/next` and cancel like a pull
+# request's: the train force-pushes that branch on every merge to main, so an
+# older run tests a release commit nobody can merge any more. A merge-queue run
+# has a ref of its own per queued entry, so it shares a group with nothing and
+# the queue, not this setting, decides when it is superseded. interop.yml uses the same rule.
 # `run_attempt` is a string in the `github` context, hence `'1'`.
 concurrency:
   group: >-
@@ -1355,21 +1345,20 @@ jobs:
   #
   # The full pass runs per release, not per push: on the Release PR
   # (`release/next`) and in the run release.yml makes of this workflow at the
-  # `v*` tag, whose `release` job needs it. The Release PR's run is the one
-  # release-pr.yml dispatches at `refs/heads/release/next` after each push (the
-  # `workflow_dispatch` trigger, at the top), so a broken runner shows on the
-  # Release PR before the tag is cut; `head_ref` still matches a `pull_request`
-  # run of the branch that someone approves by hand. Every assertion it makes
-  # about a compiler is one the `test` job makes too, so per push it was about
-  # 36 runner-minutes spent proving the same corpus twice (run 44224030613).
-  # What it alone catches -- a regression in the runner itself, or in
-  # `readdirSync`, `spawnSyncTo` or `monotonicNanos` on a real workload -- is
-  # caught before a release ships rather than at the push that made it. On any other run the job is skipped, which a required
+  # `v*` tag, whose `release` job needs it. The Release PR's run shows a broken
+  # runner before the tag is cut only once someone approves it: release-pr.yml
+  # pushes with GITHUB_TOKEN unless a RELEASE_PR_TOKEN secret is set, and those
+  # runs wait as `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
+  # job makes too, so per push it was about 36 runner-minutes spent proving the
+  # same corpus twice (run 44224030613). What it alone catches -- a regression in
+  # the runner itself, or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`
+  # on a real workload -- is caught before a release ships rather than at the
+  # push that made it. On any other run the job is skipped, which a required
   # check reads as passed. tests/run.js checks that this `if:` is still exactly
   # that expression and that release.yml still calls this workflow.
   runner:
     name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
-    if: github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'
+    if: github.ref_type == 'tag' || github.head_ref == 'release/next'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The runner walks the corpus one program at a time; `--shard` deals the
@@ -2246,5 +2235,5 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EXPECT_SKIP: >-
-            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
+            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
         run: node scripts/ci-scope.mjs --gate

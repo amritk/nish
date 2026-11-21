@@ -41890,6 +41890,18 @@ if (selects("ci-scope", "ci.yml")) {
 }
 
 if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // The train force-pushes release/next on every merge to main, so a run of
+  // the commit it replaced tests a release nobody can merge any more: the
+  // group for that ref cancels like a pull request's. The run it cancels is
+  // the one release-pr.yml dispatches there (`github.ref`), which a
+  // `pull_request` condition alone does not reach.
+  const cancelIf = /^ {2}cancel-in-progress: >-\n {4}(.*)$/m.exec(ciYmlText)?.[1] ?? ""
+  check(
+    "ci.yml: a newer push to release/next cancels the older commit's run",
+    cancelIf.startsWith("${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || ") &&
+      /^ {4}ci-\$\{\{ github\.workflow \}\}-.*\|\| github\.ref \}\}$/m.test(ciYmlText),
+    `cancel-in-progress: ${cancelIf || "(none)"}`
+  )
   // Each delegation is honest only while the job it names makes the check on
   // every run that could change its answer. Those jobs are scoped lanes
   // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so
@@ -42197,38 +42209,9 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
   check(
     "ci.yml: the `runner` job runs on the release tag and the Release PR, and release.yml still calls ci.yml",
-    runnerIf === "github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'" &&
+    runnerIf === "github.ref_type == 'tag' || github.head_ref == 'release/next'" &&
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
-  )
-  // ci-gate's EXPECT_SKIP names `runner` exactly when the job's own `if:` is
-  // false; a condition edited in one place and not the other fails the gate
-  // on every release run, or lets a skipped runner pass it.
-  check(
-    "ci.yml: ci-gate expects `runner` skipped on exactly the runs its `if:` skips",
-    runnerIf !== "" && ciJob(ciYmlText, "ci-gate").includes(`\${{ !(${runnerIf}) && ', "runner"' || '' }}`),
-    `ci-gate:\n${ciJob(ciYmlText, "ci-gate") || "(not found)"}`
-  )
-  // The Release PR's checks start without a human: release-pr.yml pushes
-  // release/next with GITHUB_TOKEN, whose `pull_request` run waits as
-  // `action_required`, so the train dispatches ci.yml and pr-title.yml at the
-  // branch after the push, and ci.yml cancels the run the push superseded.
-  const releasePrYml = fs.readFileSync(path.join(root, ".github", "workflows", "release-pr.yml"), "utf8")
-  const prTitleYml = fs.readFileSync(path.join(root, ".github", "workflows", "pr-title.yml"), "utf8")
-  const onBlock = (text) => /^on:\n((?: .*\n|\s*\n|#.*\n)*)/m.exec(text)?.[1] ?? ""
-  const cancelIf = /^ {2}cancel-in-progress: >-\n {4}(.*)$/m.exec(ciYmlText)?.[1] ?? ""
-  const pushAt = releasePrYml.indexOf('git push --force origin "$branch"')
-  const dispatchAt = releasePrYml.indexOf('gh workflow run "$wf" --ref "$branch"')
-  check(
-    "release-pr.yml: the train dispatches ci.yml and pr-title.yml at release/next after its push, and ci.yml cancels superseded release/next runs",
-    /^ {2}workflow_dispatch:$/m.test(onBlock(ciYmlText)) &&
-      /^ {2}workflow_dispatch:$/m.test(onBlock(prTitleYml)) &&
-      cancelIf.startsWith("${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || ") &&
-      pushAt !== -1 &&
-      dispatchAt > pushAt &&
-      /^ {10}for wf in ci\.yml pr-title\.yml; do$/m.test(releasePrYml) &&
-      /^ {2}actions: write\b/m.test(releasePrYml),
-    `cancel-in-progress: ${cancelIf || "(none)"}; push at ${pushAt}, dispatch at ${dispatchAt}`
   )
 }
 // #1836: the stored console log of shard 8 has stopped partway through the

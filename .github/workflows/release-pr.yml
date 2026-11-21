@@ -38,7 +38,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write # dispatch release.yml at the tag, and ci.yml and pr-title.yml at release/next
+  actions: write # dispatch release.yml at the tag this job pushes
   # gh attestation verify, for the seed the break-web rebuild fetches.
   attestations: read
 
@@ -205,9 +205,6 @@ jobs:
           # the fallback, and the step below degrades rather than fails when it
           # turns out to be refused.
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
-          # The dispatch below needs `actions: write`, which this workflow's
-          # own token has; a RELEASE_PR_TOKEN may not.
-          DISPATCH_TOKEN: ${{ github.token }}
           NEXT: ${{ steps.next.outputs.next }}
         run: |
           branch="release/next"
@@ -225,22 +222,6 @@ jobs:
           fi
           git commit -m "$title"
           git push --force origin "$branch"
-
-          # A GITHUB_TOKEN push starts no workflow, and the `pull_request` run
-          # the Release PR gets waits for a human's approval
-          # (`action_required`), so the checks are started here instead: a
-          # dispatch is an event GITHUB_TOKEN may raise (the tag step above
-          # relies on the same thing). Each run lands on the commit just
-          # pushed, and ci.yml's concurrency group for refs/heads/release/next
-          # cancels the run for the commit this push replaced. pr-title.yml is
-          # dispatched too, so its required check reports on the head; the
-          # title is the one built above. A refused dispatch leaves the Release
-          # PR without checks rather than main red, so it warns.
-          for wf in ci.yml pr-title.yml; do
-            if ! GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$wf" --ref "$branch"; then
-              echo "::warning title=Release PR checks not started::Pushed $branch for $NEXT, but dispatching $wf was refused. Start it with: gh workflow run $wf --ref $branch"
-            fi
-          done
 
           # The notes are a `$(...)` away from the prose, and command
           # substitution eats trailing newlines: appending them to a preamble
