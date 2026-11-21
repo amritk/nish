@@ -11307,8 +11307,8 @@ if (dealtHere("bench") && (!only || "yaml-compare".includes(only) || "bench".inc
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so every program
 // bench/instructions.json lists (bench/*.ts, the four WP32 map layout prototypes,
-// the three `Map` measurements, the seven AWFY ports and the crypto kernels of
-// bench/crypto/) is built as the timing mode builds it and run once under cachegrind, and a count above
+// the three `Map` measurements, the seven AWFY ports, the crypto kernels of
+// bench/crypto/ and the three std/ module programs) is built as the timing mode builds it and run once under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
 // bench/README.md ("Instruction counts") has the determinism measurements and

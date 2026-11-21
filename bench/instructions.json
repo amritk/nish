@@ -35,6 +35,9 @@
     "crypto-p256-verify": { "size": 64, "iterations": 12, "instructions": 97534860 },
     "crypto-ed25519-sign": { "size": 64, "iterations": 25, "instructions": 97282544 },
     "crypto-tls13": { "size": 32, "iterations": 6, "instructions": 90589621 },
-    "crypto-x509-parse": { "size": 338, "iterations": 15, "instructions": 98757771 }
+    "crypto-x509-parse": { "size": 338, "iterations": 15, "instructions": 98757771 },
+    "std-threads": { "n": 20000, "instructions": 130000000 },
+    "std-json-typed": { "n": 2000, "instructions": 160000000 },
+    "std-cli-args": { "n": 20000, "instructions": 95000000 }
   }
 }

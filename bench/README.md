@@ -438,13 +438,16 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the thirty-one programs: the
+`bench/instructions.json` holds one count for each of the thirty-four programs: the
 first eight above (`treesum` is not counted), the four map layout prototypes, the three `Map` measurements,
-the seven AWFY ports and nine crypto kernels. `npm test`
+the seven AWFY ports, nine crypto kernels and three programs that drive the
+std/ modules the panic ratchet counts (`std-threads`, `std-json-typed`,
+`std-cli-args`; `--only std` names them, and the pool is pinned to one thread
+with `NISH_NUM_THREADS=1` so a runner's core count does not move the count). `npm test`
 fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all thirty-one and print them against the baseline
+node bench/run.mjs --instructions            # count all thirty-four and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
@@ -533,7 +536,7 @@ If one does not, it exits 2 and names the count it misread.
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
 version and the commit, and leaves the sizes and the tolerance alone. The
 file-level `commit` and `valgrind` describe every count, so only an update of
-all thirty-one restamps them. `--update --only Queens` stamps a `commit` and
+all thirty-four restamps them. `--update --only Queens` stamps a `commit` and
 `valgrind` on the Queens entry alone, and the next full update clears them. Those two
 are edited by hand. A pull request that runs `--update` shows the table it
 printed, the old count against the new one for every benchmark it moves, and
