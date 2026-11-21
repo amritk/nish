@@ -10,8 +10,10 @@ protobuf, which you read and write with
 any other library module
 ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
-There is no code generation and no `.proto` compiler. What a field number
-means is your code's, as it is with `nish/net/protobuf`.
+You can write each message's encode and decode by hand on
+`nish/net/protobuf`, as the example below does, or have
+[`nish proto`](protobuf-classes.md) write message classes from a `.proto`
+file.
 
 ## A first service
 

@@ -1,7 +1,9 @@
 # WP72: gRPC over the HTTP/2 server
 
-**Status: proposed, design only; nothing in `std/` is built for it.** The
-anchors are at `f2b8933f`.
+**Status: S1 to S5 built; S6, streaming calls, is designed in §7 and built
+on the façade's streaming request bodies (S6a).** §1's table is the state
+when the package was proposed, at `f2b8933f`; the stages in §5 say what each
+one added.
 
 `std/net` serves HTTP/1.1, HTTP/2 over TLS and cleartext, and HTTP/3 behind
 one handler (`nish/net/http-server`, [wp39](wp39-http-server.md) G7), but no
@@ -25,6 +27,9 @@ the port that also serves HTTP/1.1 and WebSocket, and over TLS on 8443, at
 256 and 1,024 connections with 100 streams each.
 
 ## 1. What is built and what is missing
+
+What was there when the package was proposed; S1 to S3 built the missing
+rows, and S6a gave the façade request bodies in pieces.
 
 | Piece | State at `f2b8933f` |
 | --- | --- |
@@ -155,12 +160,14 @@ row, and with a guide page under `docs/guide/` and its route.
   that touches any file it reads: a check in `node tests/run.js ci-scope`
   follows the server's imports and fails on one the workflow's `paths` do
   not name (`docs/wp10-ci.md`, "Scoped lanes").
-- **S5** *(deferred)*: message classes from a `.proto` file, written by a
-  generator with their encode and decode, as `nish schema` does for JSON
-  ([wp62](wp62-json-schema-classes.md)). Until then a program writes its
-  messages' codecs by hand on S1's reader and writer, which is all two
-  three-field messages need.
-- **S6** *(deferred)*: streaming calls, client, server and both.
+- **S5:** message classes from a `.proto` file, written by `nish proto` with
+  their encode and decode, as `nish schema` does for JSON
+  ([wp62](wp62-json-schema-classes.md)). The guide page is
+  [protobuf-classes.md](guide/using-nish/protobuf-classes.md).
+- **S6a:** request bodies in pieces on the façade's HTTP/2 listeners
+  (`HttpServer.streamBody`, `consume`).
+- **S6:** streaming calls, client, server and both, on S6a's bodies and the
+  façade's repeated writes: §7.
 
 ## 6. Decisions
 
@@ -170,6 +177,96 @@ row, and with a guide page under `docs/guide/` and its route.
 | **D2** | A generator first, or codecs by hand | **By hand first** (S1), the generator deferred (S5): HttpArena's messages are three `int32` fields, and the reader and writer are what a generator would emit calls to |
 | **D3** | A gRPC client | **Not in this package.** `nish/net/fetch` is HTTP/1.1; a client needs an HTTP/2 client first |
 | **D4** | gRPC on the port that serves HTTP/1.1 | **WP39's question, not this package's.** `unary-grpc-tls` needs no change to it; `unary-grpc` on 8080 waits on it |
+
+## 7. Streaming calls (S6)
+
+A streaming call is a route like a unary one. What changes is that the
+request, the answer or both are a sequence of length-prefixed messages
+instead of one. The program marks a client-streaming or bidirectional
+method's route with `HttpServer.streamBody`, so its request comes out of
+`take` at its head and again for each piece of body, its end or a reset
+(S6a). A server-streaming method's route needs no mark: its one request
+message arrives whole, as a unary call's does.
+
+### The calls
+
+| Method | What it does | Answers |
+| --- | --- | --- |
+| `open(r)` | Checks a call whose request is a stream of messages: HTTP/2, the content-type, `grpc-timeout`, a deadline already past; the same refusals as `call`, without its check that the body is one message | `GRPC_CALL`, or `GRPC_ANSWERED` when it answered |
+| `next(r)` | Reads the next request message | `GRPC_MESSAGE`, `GRPC_MORE`, `GRPC_END` or `GRPC_ANSWERED` |
+| `messageBytes(r)`, `messageStart(r)`, `messageEnd(r)` | The message `next` (or `call`) found, as `bytes[start .. end)` | valid until the next `next` |
+| `begin(r)` | Sends the answer's head: `:status` 200 and `content-type: application/grpc` | a handler code |
+| `send(r, buf, off, len)` | Writes one reply message, beginning the answer if it has not begun | the bytes `pending` after it, ≥ 0, or `GRPC_ENDED` (−1) once the call is over |
+| `finish(r, status, message)` | Ends the call with `grpc-status` and, when `message` is not empty, `grpc-message` | a handler code |
+
+`call` panics on a request with `streaming` set: its body is not whole, so a
+check that it is one message cannot hold. `fail` on a call that has begun
+ends it as `finish` does.
+
+### The message reader
+
+`next` reads messages across DATA frames. It keeps, per request slot, a read
+offset into `r.body`, and the length of a message it is part way through.
+
+- **Several messages in one piece** are each a window into `r.body`: no copy.
+  `next` advances its offset past each, and hands the bytes it read back with
+  `consume` only when it needs more, so a body of `n` messages is shifted
+  once, not `n` times.
+- **A message split across pieces** is copied into a per-call buffer as its
+  bytes arrive, each piece handed back with `consume` once copied, so the
+  peer is credited window for it and the body never has to hold the whole
+  message. The buffer is grown to the message's length, which `maxMessage`
+  has already bounded, and kept for the call's next messages.
+- **A prefix split across pieces** (fewer than 5 bytes) waits, unconsumed.
+
+It answers the call itself, and returns `GRPC_ANSWERED`, on a fault:
+
+| Fault | Answer |
+| --- | --- |
+| A message whose prefix declares more than `maxMessage` bytes | RESOURCE_EXHAUSTED, before any byte of it is copied |
+| A compressed message (flag 1) | UNIMPLEMENTED: no `grpc-encoding` is offered |
+| A flag byte other than 0 or 1 | INTERNAL |
+| The body ends part way through a prefix or a message | INTERNAL |
+| The deadline has passed | DEADLINE_EXCEEDED |
+| The client hung up (`hungUp`: a reset, or the connection gone) | CANCELLED, which the façade drops |
+
+Each answer is trailers when the call's answer has begun, and Trailers-Only
+when it has not. `GRPC_MORE` says to wait until `take` hands `r` over again;
+`GRPC_END` says the client's stream ended between messages, and the program
+answers with `finish`.
+
+### `send` and backpressure
+
+`send` writes the 5-byte prefix and the message with the façade's `write`.
+The façade queues what the connection cannot yet take, so `send` never
+blocks; it returns `HttpServer.pending(r)`, the bytes still queued. A
+program streaming many messages stops while that count is above a budget of
+its own and goes back to its wait, checking `pending(r)` again each turn;
+nothing wakes it when the count drains, so a program with no other work
+waits with a short timeout. A slow reader therefore costs the server the
+program's budget plus one message, not the whole answer.
+
+### `finish` and trailers
+
+`finish` on a call whose answer has begun sends trailers: `grpc-status` and,
+when `message` is not empty, `grpc-message`, percent-encoded. On one that has
+not begun it answers Trailers-Only when `message` is empty, and otherwise
+sends the head then the trailers, as `fail` does for a unary call.
+
+### Cancellation and deadlines while a call streams
+
+- **A client cancel** is RST_STREAM. The façade marks the request reset and
+  hands it over again; `hungUp(r)` is then true, and the program's next
+  `next`, `send` or `finish` gives it back (`GRPC_ANSWERED`, `GRPC_ENDED` or
+  `HANDLER_DROPPED`). A call answered before its body ended is reset with
+  NO_ERROR by the façade, so the client may stop sending.
+- **The deadline** is the call's `grpc-timeout`, capped by `maxTimeout`,
+  counted from `open` or `call`. `next`, `send` and `finish` each check it,
+  and past it end the call DEADLINE_EXCEEDED. The façade's `bodyTimeout`
+  does not cover a streamed body, so a client that sends nothing more is
+  answered only when the program asks: a program holding streaming calls
+  checks `expired(r)` for each one on every turn of its loop, as the unary
+  rig does for its held calls.
 
 ## Not planned
 
