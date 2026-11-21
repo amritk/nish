@@ -2008,25 +2008,6 @@ const jsonTokParseEight = (word: u64): u64 => {
   return ((low + high) >> toU64(32)) & jsonTokW64(0, 0xffffffff)
 }
 
-/**
- * The high 64 bits of the 128-bit product `a × b`. Each limb product is at
- * most (2^32 - 1)^2, so `cross` is at most 2^64 - 1 and the answer at most
- * 2^64 - 2: no sum here can overflow, natively or as a `bigint`.
- */
-const jsonTokMulHigh = (a: u64, b: u64): u64 => {
-  const k32: u64 = toU64(32)
-  const mask: u64 = jsonTokW64(0, 0xffffffff)
-  const aHi: u64 = a >> k32
-  const aLo: u64 = a & mask
-  const bHi: u64 = b >> k32
-  const bLo: u64 = b & mask
-  const ll: u64 = aLo * bLo
-  const hl: u64 = aHi * bLo
-  const lh: u64 = aLo * bHi
-  const cross: u64 = (ll >> k32) + (hl & mask) + lh
-  return (hl >> k32) + (cross >> k32) + aHi * bHi
-}
-
 /** The leading zero bits of a `u64`, 64 for zero. */
 const jsonTokLeadingZeros = (w: u64): i32 => {
   const hi: i32 = toI32(w >> toU64(32))
@@ -2067,14 +2048,14 @@ const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
   // cost), with the next word of the power only when those bits are all ones.
   const index: i32 = from * 2
   const five: u64 = jsonTokPowerOfFive(index)
-  let high: u64 = jsonTokMulHigh(w, five)
+  let high: u64 = mulHigh(w, five)
   // The low half: natively a `u64` product wraps to it, and as a `bigint` the
   // exact product is masked to it.
   const allOnes: u64 = jsonTokW64(0xffffffff, 0xffffffff)
   let low: u64 = (w * five) & allOnes
   const precisionMask: u64 = toU64(0x1ff)
   if ((high & precisionMask) === precisionMask) {
-    const second: u64 = jsonTokMulHigh(w, jsonTokPowerOfFive(index + 1))
+    const second: u64 = mulHigh(w, jsonTokPowerOfFive(index + 1))
     // low += second, carrying into high: `high` is at most 2^64 - 2, so the
     // carry cannot overflow it.
     const room: u64 = allOnes - low

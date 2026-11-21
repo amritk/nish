@@ -111,6 +111,28 @@ export const main = (): i32 => {
 };
 ```
 
+### The high half of a 64-bit product
+
+`a * b` on two `u64`s wraps: it keeps the low 64 bits of the product. Code
+that wants the whole 128-bit product, as field arithmetic and a decimal parser
+do, takes the low half from `a * b` and the top 64 bits from `mulHigh(a, b)`.
+Both operands are `u64`s; convert anything
+else with `toU64`. On x86-64 and AArch64 the call is one machine multiply; on
+WebAssembly it is four 32-bit products, with the same answer. Neither branches
+on its operands, so it is safe on secrets. `mulHighIsNative()` is `true` where
+it is one instruction, for code that keeps a faster algorithm for those
+targets.
+
+<!-- nish:ok -->
+```ts
+export const main = (): i32 => {
+  const all: u64 = ~toU64(0);
+  const k32: u64 = toU64(1) << toU64(32);
+  console.log(`${mulHigh(all, all)} ${mulHigh(k32, k32)}`); // 18446744073709551614 1
+  return 0;
+};
+```
+
 `f64ToBits(x)` and `f32ToBits(x)` give a float's raw IEEE-754 bits, as an
 `i64` and an `i32`; the whole list of builtins is in the reference's
 [Math table](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtins).

@@ -120,7 +120,7 @@ The settled decisions are the spec's "Decisions" table. The ones the open stages
 
 Built in [PR 1808](https://github.com/amritk/nish/pull/1808) (`feat(checker): a mulHigh builtin for the 64×64→128 high product`), which is part of [issue 1804](https://github.com/amritk/nish/issues/1804). This stage has no issue of its own: the PR carries it.
 
-What the PR lands: the two builtins with their native, wasm32 and TypeScript lowerings; the operand check (a non-`u64` operand is NL2819, with a `tests/link/mul_high_reject_operand` negative); `p256FiatMulxU64Hi` and `jsonTokMulHigh` replaced by `mulHigh`; the `docs/LANGUAGE.md` rule, IR cookbook entry, guide section and regenerated `docs/reference/`; the ECC-9 row in `docs/security/crypto-ecc.md`; the design note. Its measured result against the S1 bar: P-256 verify 1.330x and sign 1.357x at the minimum, outside the band; JSON tokenize within its band on every case; wasm32 P-256 assembly byte-identical.
+What the PR lands: the two builtins with their native, wasm32 and TypeScript lowerings; the operand check (a non-`u64` operand is NL2823, with a `tests/link/mul_high_reject_operand` negative); `p256FiatMulxU64Hi` and `jsonTokMulHigh` replaced by `mulHigh`; the `docs/LANGUAGE.md` rule, IR cookbook entry, guide section and regenerated `docs/reference/`; the ECC-9 row in `docs/security/crypto-ecc.md`; the design note. Its measured result against the S1 bar: P-256 verify 1.330x and sign 1.357x at the minimum, outside the band; JSON tokenize within its band on every case; wasm32 P-256 assembly byte-identical.
 
 S2 and S3 call `mulHigh`, so neither starts until PR 1808 is on `main`.
 

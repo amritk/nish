@@ -133,6 +133,111 @@ answer returns `HANDLER_DROPPED` and sends nothing, even when a new connection
 has taken the old one's place. Either way the request goes back to the
 handler's pool, so do not keep it after answering.
 
+## Steps before and after a route
+
+Some work belongs to many routes: checking a token, tagging every answer with
+a request id. A *step* does it once. `router.step()` names one and answers
+its id, 0 for the first; `router.use(route, step)` binds it to a route, or to
+`ROUTER_NOT_FOUND` or `ROUTER_METHOD_NOT_ALLOWED` for the requests no route
+answers. A table names at most `ROUTER_MAX_STEPS` (31); past that `step`
+answers `ROUTER_FULL`.
+
+Steps are pulled, like requests. `h.before(req)` answers the next step bound
+to `req.route`, lowest id first, then `HANDLER_NEXT` once all have run, or
+`HANDLER_ANSWERED` once one has answered the request. Run the route body only
+on `HANDLER_NEXT`. Once the body has chosen its answer, `h.after(req)` hands
+out the steps that ran, highest id first, before you send it:
+
+<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { HANDLER_ABSENT, HANDLER_NEXT, HandlerLimits, HttpHandler } from "nish/net/handler";
+import { Router, RouterLimits } from "nish/net/router";
+import { tcpListen } from "nish:net";
+
+const HELLO: i32 = 0;
+const ADMIN: i32 = 1;
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const router = new Router(new RouterLimits());
+  router.add("GET", "/");
+  router.add("GET", "/admin");
+  const AUTH: i32 = router.step();
+  const SERVED: i32 = router.step();
+  router.use(ADMIN, AUTH);
+  router.use(HELLO, SERVED);
+  router.use(ADMIN, SERVED);
+  const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
+  if (listener < 0) {
+    return 1;
+  }
+  const h = new HttpHandler(new HandlerLimits(), listener, router);
+  const text = bytesOf("text/plain");
+  const hello = bytesOf("hello\n");
+  const servedBy = bytesOf("x-served-by");
+  const name = bytesOf("nish");
+  while (true) {
+    h.wait(1000);
+    while (h.ready()) {
+      const req = h.take();
+      let s: i32 = h.before(req);
+      while (s >= 0) {
+        if (s === AUTH && req.header("authorization") === HANDLER_ABSENT) {
+          h.problem(req, 401, "Unauthorized", "send a token");
+        }
+        s = h.before(req);
+      }
+      if (s !== HANDLER_NEXT) {
+        continue; // a step answered it
+      }
+      // the route body chooses its answer; it is sent after the steps
+      const found: boolean = req.route === HELLO || req.route === ADMIN;
+      let a: i32 = h.after(req);
+      while (a >= 0) {
+        if (a === SERVED) {
+          h.field(req, servedBy, name);
+        }
+        a = h.after(req);
+      }
+      if (a !== HANDLER_NEXT) {
+        continue; // an after-step answered it
+      }
+      if (found) {
+        h.send(req, 200, text, hello, 0, toI32(hello.length));
+      } else {
+        h.refuse(req);
+      }
+    }
+  }
+};
+```
+
+`curl -i localhost:8080/admin` answers 401, and without `x-served-by`: a step
+that answers ends the request, so no step after it runs. With an
+`Authorization` field it answers 200 and `x-served-by: nish`, as `/` does.
+
+A step reads the request and does one of two things. It answers it, with
+`refuse`, `problem`, `empty` or any other answer, and the route body does not
+run. Or it adds a field to the answer with `h.field(req, name, value)`, sent
+after the answer's own fields, whichever answer the body sends; at most
+`HANDLER_MAX_ADDED` (16) to one answer, and a 17th panics. The handler keeps
+`name` and `value` by reference until the answer starts, so give it arrays
+you do not change before then. An after-step may also answer in
+the body's place; `after` then answers `HANDLER_ANSWERED`, so send the body's
+answer only on `HANDLER_NEXT`. A route bound to no step answers `HANDLER_NEXT`
+at once from both calls.
+Only a request `take` hands over runs steps: the answers the handler sends
+itself, to a malformed or oversized request, a timeout or a full pool, run
+none.
+
 ## Limits
 
 `HandlerLimits` holds what the handler refuses past:

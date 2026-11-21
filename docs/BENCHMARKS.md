@@ -3857,6 +3857,38 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
 
+<!-- mul-high:begin -->
+## The `mulHigh` builtin in P-256 and the JSON tokenizer (WP41 S1)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. Base is `9996c9b1`, where `p256FiatMulxU64Hi` and `jsonTokMulHigh` build a 64 × 64 high product from four 32 × 32 products; the branch replaces both with `mulHigh`. The bench code is `9996c9b1`'s, which the branch does not change. Each side's binary is built by the same compiler from its own tree, with a byte-identical copy of the base as the noise band. Rounds are interleaved, and the order rotates every round, on one 4-core x86-64 cloud container.
+
+### P-256 (`bench/crypto/curves`, native, `--profile speed`)
+
+11 rounds; verify 200 operations a run, sign 400.
+
+| Kernel | branch / base, min | branch / base, median | base copy / base, min and median |
+| --- | ---: | ---: | --- |
+| p256-verify | 1.330x | 1.347x | 0.987x to 1.036x |
+| p256-sign | 1.357x | 1.249x | 1.010x to 1.052x |
+
+Both are faster beyond the band. The sign and verify checksums match base. On `wasm32` the module's assembly is the base's byte for byte, so the wasm32 build is unchanged and was not timed. The command, run in a worktree of `9996c9b1` and in the branch at `88d046fc` with the branch's `build/nish` in both: `build/nish tests/link/crypto_p256/plain.ts -o <dir>/ --target wasm32`, then `opt -O2 <dir>/p256.ll -o p256.bc` and `llc -mtriple=wasm32-wasi p256.bc -o p256.s` (LLVM 18.1.3). The two `p256.ll` differ (the base's calls `p256FiatMulxU64Hi` 57 times, the branch's not at all, and neither holds an `i128`); the two `p256.s` are identical, sha256 `1cadc922eb777303cae3737447f51a7a31d98a2e5662a9916c44434a401e84ca`, which `cmp` confirms.
+
+### JSON tokenizer (`node bench/json-tokenizer/measure.mjs --corpora --rounds 12 --mb 32`)
+
+Before / after is the base's time over the branch's: above 1.00x the branch is faster. Each band is that build against its byte-identical copy.
+
+| Case | before / after, min | before / after, median | after band, min / median | before band, min / median |
+| --- | ---: | ---: | ---: | ---: |
+| tokenize, twitter.json | 0.94x | 0.99x | 6.0% / 2.3% | 6.2% / 2.1% |
+| tokenize, citm_catalog.json | 1.00x | 1.00x | 1.4% / 2.4% | 0.5% / 0.6% |
+| tokenize, canada.json | 1.01x | 0.97x | 2.3% / 4.5% | 4.0% / 2.0% |
+| typed, citm_catalog.json | 1.02x | 1.01x | 3.3% / 0.7% | 0.8% / 3.3% |
+| 242-byte body (`--rounds 30`) | 1.02x | 1.01x | 1.3% / 0.6% | 2.6% / 1.2% |
+
+One figure falls outside its bands: twitter.json's minimum, 0.94x, is a 6.4% slowdown, past its 6.0% and 6.2% bands; its median, 0.99x, is inside its 2.3% and 2.1% bands. Every other figure is inside the wider of its two bands, though several are past the narrower; for instance typed citm's 1.02x minimum is past its 0.8% before band, and the 242-byte body's 1.02x minimum past its 1.3% after band. canada.json is the float-heavy corpus whose Eisel–Lemire path calls `mulHigh`. It ran 1.01x at the minimum, inside both its bands, and 0.97x at the median, a 3% slowdown inside its 4.5% after band and past its 2.0% before band.
+
+The wasm32 build of the tokenizer was not timed and is not byte-identical. After `opt -O2` and `llc -mtriple=wasm32-wasi`, `jsonTokEiselLemire` grows from 263 to 277 instructions; every other function is unchanged. The removed `jsonTokMulHigh` left one cross product unmasked, which its sum has room for. The builtin's wasm32 sequence, like the removed P-256 helper, masks both.
+<!-- mul-high:end -->
 <!-- sqlite-cursor:begin -->
 ## The feed through cursors against SQL
 
@@ -4065,3 +4097,54 @@ Toolchains: Nish 0.42.0; Ubuntu clang version 18.1.3, OpenSSL 3.0.13 30 Jan 2024
 - Node has no portable column: node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off
 
 <!-- crypto:end -->
+
+<!-- http-steps:begin -->
+<a id="steps-on-a-route-bound-to-none-wp43-s5"></a>
+
+## Steps on a route bound to none (WP43 S5)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. WP43 S5 added steps that run before and after a route body (`Router.step`, `use`, and `before`, `after` and `field` on `HttpHandler` and `HttpServer`). `bench/http1-server.ts` binds no step and its loop calls neither `before` nor `after`, so the first table measures what a program that uses no step and never asks for one pays: the larger request objects and the router's step tables. The second table adds a side whose loop asks for steps on every request, on routes bound to none, so it measures what the `before` and `after` calls themselves cost there.
+
+| | |
+| --- | --- |
+| Date | 2026-11-21 |
+| nish | `build/nish` from `main` at 071ed014 for both sides, `--profile speed`; "main" is `bench/http1-server.ts` built against `main`'s `std/` at 071ed014, "head" against this branch's `std/` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores |
+| Runs | cachegrind `--cache-sim=no`, `NISH_SIMD=base`, glibc's string functions pinned by `GLIBC_TUNABLES`, the hash key fixed by preloading `bench/fixed-key.c`'s `getentropy`; each build and a byte-identical copy of it counted in 3 interleaved rounds |
+| Command | a driver kept out of the tree: build `bench/http1-server.ts` in a `main` worktree and in this branch with `--profile speed`, copy each binary, then for each round start each of the four under `valgrind --tool=cachegrind --cache-sim=no` as `app <port> 16 <requests>`, send `<requests>` requests one after another over one keep-alive connection, and read the `summary:` line once the server exits |
+
+The requests are `GET /plaintext` (answered `200`, 13 bytes) and `GET /id/42?name=x` (answered `200`, 4 bytes), each with only a `Host` field. Each cell is the whole process's instruction count, start-up included, as the three rounds' counts.
+
+| route | requests | head commit | main | main copy | head | head copy |
+| --- | ---: | --- | --- | --- | --- | --- |
+| `/plaintext` | 2,000 | ebe340ff | 13,629,059 13,630,684 13,629,059 | 13,629,015 13,629,015 13,630,640 | 13,634,451 13,632,826 13,632,826 | 13,632,810 13,632,810 13,634,435 |
+| `/id/42?name=x` | 2,000 | ebe340ff | 16,349,759 ×3 | 16,349,715 ×3 | 16,353,526 ×3 | 16,353,510 ×3 |
+| `/plaintext` | 4,000 | 53acc792 | 26,047,059 26,047,059 26,048,684 | 26,047,029 26,048,654 26,048,654 | 26,050,840 26,052,465 26,050,840 | 26,050,810 26,050,810 26,050,810 |
+| `/id/42?name=x` | 4,000 | 53acc792 | 31,487,759 31,489,752 31,489,752 | 31,487,729 31,487,729 31,489,722 | 31,491,540 31,493,533 31,493,533 | 31,491,510 31,493,503 31,493,503 |
+
+Read by each side's least count:
+
+- head costs 3,767 instructions more than main at 2,000 requests and 3,781 more at 4,000, the same on both routes; their copies differ by 3,795 and 3,781. The gap moves by 14 instructions over 2,000 more requests, up in one pair and down in the other, under 0.01 instructions a request; one binary's own count moves by up to 1,625 (`/plaintext`) and 1,993 (`/id`) between rounds, so the per-request difference is inside the noise.
+- The 3,767 to 3,795 instructions are paid once a process: the router's step tables and the larger request objects (`HttpServerRequest` grew from 176 to 200 bytes) are set up at start-up.
+- For scale, main's 2,000 requests more cost 12,418,000 instructions on `/plaintext` and 15,138,000 on `/id`, 6,209 and 7,569 a request.
+- The two runs measured different heads: 53acc792 only bounds a copy loop in the path that merges a step's added fields, which neither route takes.
+
+### A loop that asks for steps
+
+The "loop" side is `bench/http1-server.ts` at 082ebba1 with its `run` changed by the driver, a copy kept out of the tree: before `this.answer(r)` it calls `this.h.before(r)` until it returns a negative, and on `HANDLER_NEXT` calls `this.h.after(r)` until it returns a negative, then answers. Neither route is bound to a step, so each request runs one `before` and one `after`, each answering `HANDLER_NEXT` at once. It measures `HttpHandler`'s pair only; `HttpServer`'s `before` and `after` run the same algorithm, with an `own` check in front; their cost was not measured. The other sides and every setting are as above, with "head" `bench/http1-server.ts` unchanged at 082ebba1; the six binaries are counted in 3 interleaved rounds.
+
+| route | requests | head commit | main | main copy | head | head copy | loop | loop copy |
+| --- | ---: | --- | --- | --- | --- | --- | --- | --- |
+| `/plaintext` | 2,000 | 082ebba1 | 13,629,045 ×3 | 13,629,029 ×3 | 13,632,840 ×3 | 13,634,421 ×3 | 13,684,840 ×3 | 13,684,796 ×3 |
+| `/id/42?name=x` | 2,000 | 082ebba1 | 16,349,745 16,349,745 16,351,738 | 16,349,729 16,351,722 16,349,729 | 16,353,540 16,353,540 16,355,533 | 16,355,489 16,353,496 16,353,496 | 16,405,540 16,407,533 16,407,533 | 16,405,496 ×3 |
+| `/plaintext` | 4,000 | 082ebba1 | 26,047,045 ×3 | 26,047,029 ×3 | 26,052,465 26,052,465 26,050,840 | 26,052,421 26,052,421 26,050,796 | 26,156,465 ×3 | 26,154,796 26,156,421 26,156,421 |
+| `/id/42?name=x` | 4,000 | 082ebba1 | 31,487,745 ×3 | 31,489,722 31,489,722 31,488,032 | 31,493,533 ×3 | 31,493,489 31,491,496 31,493,489 | 31,597,533 31,595,540 31,597,533 | 31,597,489 31,595,496 31,595,496 |
+
+Read by each side's least count:
+
+- loop costs 52,000 instructions more than head at 2,000 requests on both routes; loop copy costs 50,375 (`/plaintext`) and 52,000 (`/id`) more than head copy.
+- At 4,000 requests loop costs 105,625 (`/plaintext`) and 102,007 (`/id`) more than head, and loop copy 104,000 more than head copy on both routes.
+- So the 2,000 requests more add 53,625 and 50,007 to loop's gap over head, and 53,625 and 52,000 to the copies' gap: 25.0 to 26.8 instructions a request for one `before` and one `after` on a route bound to no step. The spread is one round's move, 1,625 and 1,993 instructions, as in the first table.
+- For scale, head's 2,000 requests more cost 12,418,000 instructions on `/plaintext` and 15,139,993 on `/id`, 6,209 and 7,570 a request, so the pair adds about 0.4% on `/plaintext` and 0.3% on `/id`.
+- head against main in this run: 3,795 more at 2,000 requests on both routes, 3,795 (`/plaintext`) and 5,788 (`/id`) at 4,000; the copies 5,392 (`/plaintext`) and 3,767 (`/id`) at 2,000 and 3,767 and 3,464 at 4,000. That is the first table's once-a-process cost plus one round's move, none of it a request's.
+<!-- http-steps:end -->

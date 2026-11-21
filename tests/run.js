@@ -14411,6 +14411,222 @@ if (dealtHere("cryptoChecks")) {
     }
   }
 
+  // ---- WP41: mulHigh ----------------------------------------------------------------
+  // What the `mul_high_*` goldens cannot say. Their `.ll` is the IR; the promise
+  // is about machine code: on x86-64 one `mul` and on AArch64 one `umulh`, with
+  // no call, and on wasm32 no `__multi3` (the libcall an i128 multiply becomes
+  // there). `mul_high_basic.out` is recomputed here with BigInt, so the golden
+  // cannot drift from exact arithmetic, and the wasi build of the same program
+  // must print it byte for byte. The TypeScript reading is held to the native
+  // table and to its refusal of a number operand.
+  if (selects("mul_high", "wasi")) {
+    const workDir = path.join(buildDir, "mul-high")
+    fs.rmSync(workDir, { recursive: true, force: true })
+    fs.mkdirSync(workDir, { recursive: true })
+    const basicOut = fs.readFileSync(path.join(casesDir, "mul_high_basic.out"), "utf8")
+
+    // The program's own lines, recomputed: the edge pairs, then the fold of
+    // 10^6 xorshift64 pairs from the seed `mul_high_basic.ts` starts from.
+    const MASK = (1n << 64n) - 1n
+    const edges = [
+      [0n, 0n],
+      [0n, MASK],
+      [1n, 1n],
+      [1n, MASK],
+      [1n << 32n, 1n << 32n],
+      [(1n << 32n) - 1n, (1n << 32n) - 1n],
+      [(1n << 32n) + 1n, MASK],
+      [1n << 63n, 2n],
+      [MASK, 2n],
+      [MASK, MASK],
+    ]
+    let x = (20529n << 42n) | 1234567n
+    const step = () => {
+      x ^= (x << 13n) & MASK
+      x ^= x >> 7n
+      x ^= (x << 17n) & MASK
+    }
+    let fold = 0n
+    for (let i = 0; i < 1000000; i++) {
+      step()
+      const a = x
+      step()
+      fold = (((fold << 1n) & MASK) | (fold >> 63n)) ^ ((a * x) >> 64n)
+    }
+    const exact = `${edges.map(([a, b]) => `${a} * ${b} -> ${(a * b) >> 64n}`).join("\n")}\npairs 1000000 wrong 0 fold ${fold}\n`
+    check(
+      "mul_high: mul_high_basic.out is the BigInt high product of every pair, the 10^6 seeded ones folded",
+      basicOut === exact,
+      `--- want\n${exact}--- got\n${basicOut}`
+    )
+
+    if (!HAS_CLANG) {
+      skip("mul_high: no clang to compile mulHigh to x86-64, AArch64 and wasm32 machine code")
+    } else {
+      /** The IR `nish` writes for `name`'s case with `args`, or the failed spawn. */
+      const ir = (name, args) => {
+        const ll = path.join(workDir, `${name}.${args.length > 0 ? args[1] : "host"}.ll`)
+        const r = spawnNish([path.join(casesDir, `${name}.ts`), "-o", ll, ...args], { cwd: root, encoding: "utf8" })
+        return r.status === 0 ? { ll, text: fs.readFileSync(ll, "utf8") } : { error: shown(r) }
+      }
+      /** `clang -O2 -S` of `ll` for `triple`: the assembly, or "" with the reason in `error`. */
+      const asmOf = (ll, triple) =>
+        spawnSync("clang", ["-O2", "-S", "-Wno-override-module", `--target=${triple}`, ll, "-o", "-"], {
+          encoding: "utf8",
+          maxBuffer: 64 * 1024 * 1024,
+        })
+      /** The instruction lines of `symbol`'s body in `asm`, from its label to the next `.Lfunc_end`. */
+      const body = (asm, symbol) => {
+        const start = asm.search(new RegExp(`^_?${symbol}:`, "m"))
+        if (start < 0) {
+          return []
+        }
+        const end = asm.indexOf("func_end", start)
+        return asm
+          .slice(start, end < 0 ? undefined : end)
+          .split("\n")
+          .slice(1)
+          .map((line) => line.trim())
+          .filter((line) => line !== "" && !line.startsWith(".") && !line.startsWith("//") && !line.startsWith("#"))
+      }
+      const mnemonic = (line) => line.split(/\s+/)[0]
+
+      const host = ir("mul_high_native", ["--target", "x86_64-unknown-linux-gnu"])
+      const x86 = host.ll ? asmOf(host.ll, "x86_64-unknown-linux-gnu") : { status: 1, stdout: "", stderr: host.error }
+      const x86Body = body(x86.stdout, "high")
+      const x86Muls = x86Body.filter((line) => /^i?mul/.test(mnemonic(line)))
+      check(
+        "mul_high: on x86-64 `high` is one `mul` and no call",
+        x86.status === 0 && x86Muls.length === 1 && !x86Body.some((line) => /^(call|jmp)/.test(mnemonic(line))),
+        `${x86.stderr}\n${x86Body.join("\n")}`
+      )
+
+      const arm = ir("mul_high_aarch64", ["--target", "aarch64-unknown-linux-gnu"])
+      const a64 = arm.ll ? asmOf(arm.ll, "aarch64-unknown-linux-gnu") : { status: 1, stdout: "", stderr: arm.error }
+      const a64Body = body(a64.stdout, "high")
+      check(
+        "mul_high: on AArch64 `high` is one `umulh` and no call",
+        a64.status === 0 &&
+          a64Body.filter((line) => mnemonic(line) === "umulh").length === 1 &&
+          !a64Body.some((line) => /^(bl|blr|b)$/.test(mnemonic(line))),
+        `${a64.stderr}\n${a64Body.join("\n")}`
+      )
+
+      // The constant-time promise std/crypto/p256.ts leans on: both operands
+      // secret, `high` has no branch, call or secret-addressed memory access on
+      // either target (tests/ct-asm.js, the reader the ct_asm fixtures use).
+      for (const [name, built, asm, target] of [
+        ["mul_high_native", host, x86, CT_TARGETS[0]],
+        ["mul_high_aarch64", arm, a64, CT_TARGETS[1]],
+      ]) {
+        const [spec] = ctSpecs(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"))
+        const ctBody = asm.status === 0 ? functionBody(asm.stdout.split("\n"), "high", target) : null
+        const found = ctBody === null || spec.problems.length > 0 ? [] : ctViolations(ctBody, spec, target)
+        check(
+          `mul_high: ${name}'s \`high\` on ${target.name} is constant time in both operands`,
+          ctBody !== null && spec.problems.length === 0 && found.length === 0,
+          ctBody === null
+            ? `no symbol high in ${name}'s ${target.name} assembly${built.error ? `\n${built.error}` : ""}`
+            : `${spec.problems.join("\n")}${found.map((v) => `${v.kind}: ${v.line}`).join("\n")}\n---\n${ctBody.join("\n")}`
+        )
+      }
+
+      // The whole of `mul_high_basic` for wasm32, the loop of 10^6 included:
+      // no i128 in the IR, and no `__multi3` once LLVM has optimised it.
+      const wasmIr = ir("mul_high_basic", ["--target", "wasm32"])
+      const wasmAsm = wasmIr.ll ? asmOf(wasmIr.ll, "wasm32-wasi") : { status: 1, stdout: "", stderr: wasmIr.error }
+      check(
+        "mul_high: for wasm32 mul_high_basic has no i128 in its IR and no __multi3 in its machine code",
+        wasmAsm.status === 0 && !wasmIr.text.includes("i128") && !wasmAsm.stdout.includes("__multi3"),
+        `${wasmAsm.stderr}${wasmIr.text?.includes("i128") ? "\nthe IR has an i128" : ""}${
+          wasmAsm.stdout.includes("__multi3") ? "\nthe machine code calls __multi3" : ""
+        }`
+      )
+
+      // The two std modules that take their high products from `mulHigh`, as a
+      // wasm32 build of a program that imports each one writes them: no i128
+      // in either module's IR, and no `__multi3` in P-256's machine code or in
+      // the tokenizer's `jsonTokEiselLemire`, its one caller of `mulHigh`. The
+      // rest of the tokenizer is not held to it: `integerScan`'s checked i64
+      // multiply is an `smul.with.overflow.i64`, which wasm32 lowers to a
+      // `__multi3` call, and has nothing to do with `mulHigh`.
+      for (const [program, module, symbol] of [
+        ["tests/link/crypto_p256/plain.ts", "p256", ""],
+        ["tests/link/json_enum_string/main.ts", "json-tokenizer", "nish.jsonTokEiselLemire"],
+      ]) {
+        const dir = path.join(workDir, `wasm32-${module}`)
+        fs.rmSync(dir, { recursive: true, force: true })
+        const built = spawnNish([path.join(root, program), "-o", `${dir}${path.sep}`, "--target", "wasm32"], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const ll = path.join(dir, `${module}.ll`)
+        const text = built.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+        const asm = text === "" ? { status: 1, stdout: "", stderr: shown(built) } : asmOf(ll, "wasm32-wasi")
+        const lines = symbol === "" ? asm.stdout.split("\n") : body(asm.stdout, symbol.replaceAll(".", "\\."))
+        const calls = lines.some((line) => line.includes("__multi3"))
+        const where = symbol === "" ? "its machine code" : `\`${symbol}\``
+        check(
+          `mul_high: for wasm32 std's ${module} module has no i128 in its IR and ${where} no __multi3`,
+          asm.status === 0 && lines.length > 0 && !text.includes("i128") && !calls,
+          `${asm.stderr}${text.includes("i128") ? "\nthe IR has an i128" : ""}${
+            calls ? "\nthe machine code calls __multi3" : ""
+          }${lines.length === 0 ? `\nno ${symbol} in the machine code` : ""}`
+        )
+      }
+    }
+
+    if (WASI_SYSROOT && has("wasm-ld")) {
+      for (const [name, want] of [
+        ["mul_high_basic", basicOut],
+        ["mul_high_wasm32", "18446744073709551614 false\n"],
+      ]) {
+        const module = path.join(workDir, `${name}.wasm`)
+        const built = spawnNish(
+          [path.join(casesDir, `${name}.ts`), "-o", workDir + path.sep, "--link", module, "--profile", "wasi"],
+          { cwd: root, encoding: "utf8" }
+        )
+        const ran =
+          built.status === 0
+            ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+            : built
+        check(
+          `mul_high: the \`--profile wasi\` build of ${name} (sysroot ${WASI_SYSROOT}) prints ${JSON.stringify(want.split("\n")[0])}${name === "mul_high_basic" ? " and the rest of its .out" : ""}`,
+          ran.status === 0 && ran.stdout === want,
+          shown(ran)
+        )
+      }
+    } else {
+      skip(
+        `skipped: mul_high: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of mul_high_basic and mul_high_wasm32 are not run`
+      )
+    }
+
+    // The reading `runtime/nish.mjs` gives: BigInt in, BigInt out, the same
+    // table; a number operand is the mix that throws; and false for the
+    // question, since no JavaScript engine multiplies 64 bits natively here.
+    const probe = [
+      "const tryIt = (f) => { try { return String(f()); } catch (e) { return e.constructor.name; } };",
+      "const M = (1n << 64n) - 1n;",
+      "const lines = [];",
+      `for (const [a, b] of ${JSON.stringify(edges.map(([a, b]) => [`${a}`, `${b}`]))})`,
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: JavaScript source for the probe; the template is its own
+      "  lines.push(`${a} * ${b} -> ${mulHigh(BigInt(a), BigInt(b))}`);",
+      "lines.push(tryIt(() => mulHigh(1, M)), tryIt(() => mulHigh(M, 2)), String(mulHighIsNative()));",
+      "process.stdout.write(lines.join('\\n') + '\\n');",
+    ].join("\n")
+    const r = spawnSync("node", ["--import", path.join(root, "runtime", "nish.mjs"), "-e", probe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const want = `${basicOut.split("\n").slice(0, edges.length).join("\n")}\nTypeError\nTypeError\nfalse\n`
+    check(
+      "mul_high: under runtime/nish.mjs mulHigh on BigInts prints mul_high_basic.out's edge lines, a number operand throws a TypeError, and mulHighIsNative() is false",
+      r.status === 0 && r.stdout === want,
+      `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+    )
+  }
+
   // ---- WP18: generics ---------------------------------------------------------------
   // The acceptance test of the whole package, and a golden cannot express it: an
   // instantiation's `define` must be *byte-identical* to the `define` of the
@@ -26054,7 +26270,7 @@ if (dealtHere("cliChecks")) {
       "zlib-each":
         "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
       "request-slot":
-        "std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 176 → 176 bytes",
+        "std/net/http-server.ts:227:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
     }
     for (const [base, want] of Object.entries(holderWant)) {
       const file = `tests/layout/compact-bench/${base}.ts`

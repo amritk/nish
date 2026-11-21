@@ -11747,25 +11747,13 @@ function p256FiatSubborrowxU64(arg1: u64, arg2: u64, arg3: u64): u64 -> @nish.p2
 function p256FiatSubborrowxU64Out2(arg2: u64, arg3: u64, out1: u64): u64 -> @nish.p256FiatSubborrowxU64Out2
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function p256FiatMulxU64Hi(arg1: u64, arg2: u64): u64 -> @nish.p256FiatMulxU64Hi
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local +0:9 a0: u64 (const)
-  local +1:9 a1: u64 (const)
-  local +2:9 b0: u64 (const)
-  local +3:9 b1: u64 (const)
-  local +4:9 p00: u64 (const)
-  local +5:9 p01: u64 (const)
-  local +6:9 p10: u64 (const)
-  local +7:9 p11: u64 (const)
-  local +8:9 mid: u64 (const)
 function p256FiatCmovznzU64(arg1: u64, arg2: u64, arg3: u64): u64 -> @nish.p256FiatCmovznzU64
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256FiatMul
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatMulxU64Hi nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
+  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
   pointer out1: size=0 writesThrough=true captured=false
   pointer arg1: size=0 writesThrough=false captured=false
   pointer arg2: size=0 writesThrough=false captured=false
@@ -11784,16 +11772,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -184:9 x4: u64 (const)
   local -183:9 x5: u64 (const)
   local -182:9 x6: u64 (const)
-  callee -182:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -181:9 x7: u64 (const)
   local -180:9 x8: u64 (const)
-  callee -180:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -179:9 x9: u64 (const)
   local -178:9 x10: u64 (const)
-  callee -178:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -177:9 x11: u64 (const)
   local -176:9 x12: u64 (const)
-  callee -176:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -175:9 x13: u64 (const)
   callee -175:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -174:9 x14: u64 (const)
@@ -11810,16 +11794,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -168:9 x20: u64 (const)
   callee -168:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -167:9 x21: u64 (const)
-  callee -167:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -167:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -167:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -166:9 x22: u64 (const)
   local -165:9 x23: u64 (const)
-  callee -165:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -164:9 x24: u64 (const)
   callee -164:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -163:9 x25: u64 (const)
-  callee -163:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -163:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -163:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -162:9 x26: u64 (const)
   callee -162:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -161:9 x27: u64 (const)
@@ -11847,16 +11828,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   callee -150:20 p256FiatAddcarryxU64Out2 -> @nish.p256FiatAddcarryxU64Out2
   local -149:9 x39: u64 (const)
   local -148:9 x40: u64 (const)
-  callee -148:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -147:9 x41: u64 (const)
   local -146:9 x42: u64 (const)
-  callee -146:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -145:9 x43: u64 (const)
   local -144:9 x44: u64 (const)
-  callee -144:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -143:9 x45: u64 (const)
   local -142:9 x46: u64 (const)
-  callee -142:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -141:9 x47: u64 (const)
   callee -141:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -140:9 x48: u64 (const)
@@ -11893,16 +11870,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -124:9 x64: u64 (const)
   callee -124:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -123:9 x65: u64 (const)
-  callee -123:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -123:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -123:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -122:9 x66: u64 (const)
   local -121:9 x67: u64 (const)
-  callee -121:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -120:9 x68: u64 (const)
   callee -120:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -119:9 x69: u64 (const)
-  callee -119:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -119:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -119:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -118:9 x70: u64 (const)
   callee -118:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -117:9 x71: u64 (const)
@@ -11931,16 +11905,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -105:9 x83: u64 (const)
   local -104:9 x84: u64 (const)
   local -103:9 x85: u64 (const)
-  callee -103:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -102:9 x86: u64 (const)
   local -101:9 x87: u64 (const)
-  callee -101:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -100:9 x88: u64 (const)
   local -99:9 x89: u64 (const)
-  callee -99:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -98:9 x90: u64 (const)
   local -97:9 x91: u64 (const)
-  callee -97:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -96:9 x92: u64 (const)
   callee -96:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -95:9 x93: u64 (const)
@@ -11977,16 +11947,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -79:9 x109: u64 (const)
   callee -79:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -78:9 x110: u64 (const)
-  callee -78:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -78:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -78:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -77:9 x111: u64 (const)
   local -76:9 x112: u64 (const)
-  callee -76:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -75:9 x113: u64 (const)
   callee -75:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -74:9 x114: u64 (const)
-  callee -74:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -74:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -74:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -73:9 x115: u64 (const)
   callee -73:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -72:9 x116: u64 (const)
@@ -12015,16 +11982,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -60:9 x128: u64 (const)
   local -59:9 x129: u64 (const)
   local -58:9 x130: u64 (const)
-  callee -58:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -57:9 x131: u64 (const)
   local -56:9 x132: u64 (const)
-  callee -56:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -55:9 x133: u64 (const)
   local -54:9 x134: u64 (const)
-  callee -54:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -53:9 x135: u64 (const)
   local -52:9 x136: u64 (const)
-  callee -52:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -51:9 x137: u64 (const)
   callee -51:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -50:9 x138: u64 (const)
@@ -12061,16 +12024,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -34:9 x154: u64 (const)
   callee -34:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -33:9 x155: u64 (const)
-  callee -33:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -33:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -33:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -32:9 x156: u64 (const)
   local -31:9 x157: u64 (const)
-  callee -31:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -30:9 x158: u64 (const)
   callee -30:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -29:9 x159: u64 (const)
-  callee -29:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -29:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -29:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -28:9 x160: u64 (const)
   callee -28:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -27:9 x161: u64 (const)
@@ -12132,7 +12092,7 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
 function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatMulxU64Hi nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
+  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
   pointer out1: size=0 writesThrough=true captured=false
   pointer arg1: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -12146,16 +12106,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -184:9 x4: u64 (const)
   local -183:9 x5: u64 (const)
   local -182:9 x6: u64 (const)
-  callee -182:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -181:9 x7: u64 (const)
   local -180:9 x8: u64 (const)
-  callee -180:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -179:9 x9: u64 (const)
   local -178:9 x10: u64 (const)
-  callee -178:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -177:9 x11: u64 (const)
   local -176:9 x12: u64 (const)
-  callee -176:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -175:9 x13: u64 (const)
   callee -175:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -174:9 x14: u64 (const)
@@ -12172,16 +12128,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -168:9 x20: u64 (const)
   callee -168:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -167:9 x21: u64 (const)
-  callee -167:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -167:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -167:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -166:9 x22: u64 (const)
   local -165:9 x23: u64 (const)
-  callee -165:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -164:9 x24: u64 (const)
   callee -164:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -163:9 x25: u64 (const)
-  callee -163:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -163:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -163:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -162:9 x26: u64 (const)
   callee -162:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -161:9 x27: u64 (const)
@@ -12209,16 +12162,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   callee -150:20 p256FiatAddcarryxU64Out2 -> @nish.p256FiatAddcarryxU64Out2
   local -149:9 x39: u64 (const)
   local -148:9 x40: u64 (const)
-  callee -148:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -147:9 x41: u64 (const)
   local -146:9 x42: u64 (const)
-  callee -146:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -145:9 x43: u64 (const)
   local -144:9 x44: u64 (const)
-  callee -144:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -143:9 x45: u64 (const)
   local -142:9 x46: u64 (const)
-  callee -142:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -141:9 x47: u64 (const)
   callee -141:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -140:9 x48: u64 (const)
@@ -12255,16 +12204,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -124:9 x64: u64 (const)
   callee -124:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -123:9 x65: u64 (const)
-  callee -123:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -123:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -123:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -122:9 x66: u64 (const)
   local -121:9 x67: u64 (const)
-  callee -121:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -120:9 x68: u64 (const)
   callee -120:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -119:9 x69: u64 (const)
-  callee -119:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -119:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -119:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -118:9 x70: u64 (const)
   callee -118:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -117:9 x71: u64 (const)
@@ -12293,16 +12239,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -105:9 x83: u64 (const)
   local -104:9 x84: u64 (const)
   local -103:9 x85: u64 (const)
-  callee -103:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -102:9 x86: u64 (const)
   local -101:9 x87: u64 (const)
-  callee -101:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -100:9 x88: u64 (const)
   local -99:9 x89: u64 (const)
-  callee -99:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -98:9 x90: u64 (const)
   local -97:9 x91: u64 (const)
-  callee -97:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -96:9 x92: u64 (const)
   callee -96:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -95:9 x93: u64 (const)
@@ -12339,16 +12281,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -79:9 x109: u64 (const)
   callee -79:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -78:9 x110: u64 (const)
-  callee -78:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -78:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -78:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -77:9 x111: u64 (const)
   local -76:9 x112: u64 (const)
-  callee -76:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -75:9 x113: u64 (const)
   callee -75:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -74:9 x114: u64 (const)
-  callee -74:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -74:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -74:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -73:9 x115: u64 (const)
   callee -73:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -72:9 x116: u64 (const)
@@ -12377,16 +12316,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -60:9 x128: u64 (const)
   local -59:9 x129: u64 (const)
   local -58:9 x130: u64 (const)
-  callee -58:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -57:9 x131: u64 (const)
   local -56:9 x132: u64 (const)
-  callee -56:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -55:9 x133: u64 (const)
   local -54:9 x134: u64 (const)
-  callee -54:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -53:9 x135: u64 (const)
   local -52:9 x136: u64 (const)
-  callee -52:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -51:9 x137: u64 (const)
   callee -51:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -50:9 x138: u64 (const)
@@ -12423,16 +12358,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -34:9 x154: u64 (const)
   callee -34:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -33:9 x155: u64 (const)
-  callee -33:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -33:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -33:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -32:9 x156: u64 (const)
   local -31:9 x157: u64 (const)
-  callee -31:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -30:9 x158: u64 (const)
   callee -30:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -29:9 x159: u64 (const)
-  callee -29:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -29:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -29:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -28:9 x160: u64 (const)
   callee -28:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -27:9 x161: u64 (const)
@@ -34496,18 +34428,18 @@ function pkiLoadSystemRoots(): PkiRoots -> @nish.pkiLoadSystemRoots [exported]
 module std/net/router.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
-unsafe import 68:10 uncheckedGet from "nish:unsafe"
-unsafe import 68:24 wrappingAdd from "nish:unsafe"
-unsafe call 795:20 wrappingAdd (node 3414)
-unsafe call 827:22 wrappingAdd (node 3649)
-unsafe call 925:21 wrappingAdd (node 4171)
-unsafe call 927:24 uncheckedGet (node 4210)
-unsafe call 926:39 wrappingAdd (node 4190)
-unsafe call 1067:21 wrappingAdd (node 4935)
-unsafe call 1071:9 uncheckedGet (node 4961)
-unsafe call 1071:32 uncheckedGet (node 4967)
-unsafe call 1074:9 wrappingAdd (node 4981)
-unsafe call 1075:9 wrappingAdd (node 4994)
+unsafe import 76:10 uncheckedGet from "nish:unsafe"
+unsafe import 76:24 wrappingAdd from "nish:unsafe"
+unsafe call 869:20 wrappingAdd (node 3645)
+unsafe call 901:22 wrappingAdd (node 3880)
+unsafe call 999:21 wrappingAdd (node 4402)
+unsafe call 1001:24 uncheckedGet (node 4441)
+unsafe call 1000:39 wrappingAdd (node 4421)
+unsafe call 1141:21 wrappingAdd (node 5166)
+unsafe call 1145:9 uncheckedGet (node 5192)
+unsafe call 1145:32 uncheckedGet (node 5198)
+unsafe call 1148:9 wrappingAdd (node 5212)
+unsafe call 1149:9 wrappingAdd (node 5225)
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
 const ROUTER_TOO_LONG: i32 = -3 [exported]
@@ -34519,6 +34451,7 @@ const ROUTER_METHOD_NOT_ALLOWED: i32 = -8 [exported]
 const ROUTER_TOO_MANY_PARAMS: i32 = -9 [exported]
 const ROUTER_BAD_ESCAPE: i32 = -10 [exported]
 const ROUTER_NO_ROOM: i32 = -11 [exported]
+const ROUTER_MAX_STEPS: i32 = 31 [exported]
 const ROUTER_MAX_METHOD: i32 = 32
 const ROUTER_NONE: i32 = -1
 const ROUTER_PROBES: i32 = 8
@@ -34531,7 +34464,7 @@ struct RouterLimits (class) size=20 align=4 exported
   field maxParams: i32 index=2 offset=8 initialized
   field maxRoutes: i32 index=3 offset=12 initialized
   field maxMethods: i32 index=4 offset=16 initialized
-struct Router (class) size=272 align=8 exported
+struct Router (class) size=288 align=8 exported
   field firstChild: i32[] index=0 offset=0
   field nextSibling: i32[] index=1 offset=8
   field labelStart: i32[] index=2 offset=16
@@ -34543,42 +34476,49 @@ struct Router (class) size=272 align=8 exported
   field routeMethod: i32[] index=8 offset=64
   field endpointNext: i32[] index=9 offset=72
   field routeParams: i32[] index=10 offset=80
-  field staticSlots: i32[] index=11 offset=88
-  field routeHash: u32[] index=12 offset=96
-  field routePathStart: i32[] index=13 offset=104
-  field routePathEnd: i32[] index=14 offset=112
-  field staticPaths: u8[] index=15 offset=120
-  field methodBytes: u8[] index=16 offset=128
-  field methodStart: i32[] index=17 offset=136
-  field methodEnd: i32[] index=18 offset=144
-  field methodKey: u64[] index=19 offset=152
-  field segStart: i32[] index=20 offset=160
-  field segEnd: i32[] index=21 offset=168
-  field found: i32[] index=22 offset=176
-  field patKind: i32[] index=23 offset=184
-  field patStart: i32[] index=24 offset=192
-  field patEnd: i32[] index=25 offset=200
-  field maxPatternBytes: i32 index=26 offset=208 initialized
-  field maxSegments: i32 index=27 offset=212 initialized
-  field maxParams: i32 index=28 offset=216 initialized
-  field maxRoutes: i32 index=29 offset=220 initialized
-  field maxMethods: i32 index=30 offset=224 initialized
-  field statics: i32 index=31 offset=228 initialized
-  field staticHeld: i32 index=32 offset=232 initialized
-  field staticLongest: i32 index=33 offset=236 initialized
-  field deepest: i32 index=34 offset=240 initialized
-  field segments: i32 index=35 offset=244 initialized
-  field pathEnd: i32 index=36 offset=248 initialized
-  field wanted: i32 index=37 offset=252 initialized
-  field foundCount: i32 index=38 offset=256 initialized
-  field otherMethod: boolean index=39 offset=260 initialized
-  field visited: i32 index=40 offset=264 initialized
+  field routeSteps: i32[] index=11 offset=88
+  field staticSlots: i32[] index=12 offset=96
+  field routeHash: u32[] index=13 offset=104
+  field routePathStart: i32[] index=14 offset=112
+  field routePathEnd: i32[] index=15 offset=120
+  field staticPaths: u8[] index=16 offset=128
+  field methodBytes: u8[] index=17 offset=136
+  field methodStart: i32[] index=18 offset=144
+  field methodEnd: i32[] index=19 offset=152
+  field methodKey: u64[] index=20 offset=160
+  field segStart: i32[] index=21 offset=168
+  field segEnd: i32[] index=22 offset=176
+  field found: i32[] index=23 offset=184
+  field patKind: i32[] index=24 offset=192
+  field patStart: i32[] index=25 offset=200
+  field patEnd: i32[] index=26 offset=208
+  field maxPatternBytes: i32 index=27 offset=216 initialized
+  field maxSegments: i32 index=28 offset=220 initialized
+  field maxParams: i32 index=29 offset=224 initialized
+  field maxRoutes: i32 index=30 offset=228 initialized
+  field maxMethods: i32 index=31 offset=232 initialized
+  field missSteps: i32 index=32 offset=236 initialized
+  field refusedSteps: i32 index=33 offset=240 initialized
+  field stepCount: i32 index=34 offset=244 initialized
+  field statics: i32 index=35 offset=248 initialized
+  field staticHeld: i32 index=36 offset=252 initialized
+  field staticLongest: i32 index=37 offset=256 initialized
+  field deepest: i32 index=38 offset=260 initialized
+  field segments: i32 index=39 offset=264 initialized
+  field pathEnd: i32 index=40 offset=268 initialized
+  field wanted: i32 index=41 offset=272 initialized
+  field foundCount: i32 index=42 offset=276 initialized
+  field otherMethod: boolean index=43 offset=280 initialized
+  field visited: i32 index=44 offset=284 initialized
   constructor -> @nish.Router.constructor
   method routes -> @nish.Router.routes
   method nodeCount -> @nish.Router.nodeCount
   method paramCount -> @nish.Router.paramCount
   method staticCount -> @nish.Router.staticCount
   method lastVisited -> @nish.Router.lastVisited
+  method step -> @nish.Router.step
+  method use -> @nish.Router.use
+  method steps -> @nish.Router.steps
   method add -> @nish.Router.add
   method growStatic -> @nish.Router.growStatic
   method fileStatic -> @nish.Router.fileStatic
@@ -34597,7 +34537,7 @@ struct Router (class) size=272 align=8 exported
 function Router.constructor(this: Router, limits: RouterLimits): void -> @nish.Router.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.routerLimit nish_panic nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   pointer limits: size=20 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 routerLimit -> @nish.routerLimit
@@ -34607,35 +34547,59 @@ function Router.constructor(this: Router, limits: RouterLimits): void -> @nish.R
   callee +4:5 routerLimit -> @nish.routerLimit
 function Router.routes(this: Router): i32 -> @nish.Router.routes [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Router.nodeCount(this: Router): i32 -> @nish.Router.nodeCount [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Router.paramCount(this: Router, route: i32): i32 -> @nish.Router.paramCount [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: route
   calls: nish.Router.routes nish.routerNoRoute nish_panic_index
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.Router.routes#0 nish.Router.routes#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Router.routes#0 nish.Router.routes#0
   stackSites=0 stackLocals=0
   callee +0:31 Router.routes -> @nish.Router.routes
   callee +1:7 routerNoRoute -> @nish.routerNoRoute
   callee +1:28 Router.routes -> @nish.Router.routes
 function Router.staticCount(this: Router): i32 -> @nish.Router.staticCount [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Router.lastVisited(this: Router): i32 -> @nish.Router.lastVisited [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function Router.step(this: Router): i32 -> @nish.Router.step [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_overflow
+  pointer this: size=288 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:11 id: i32 (const)
+function Router.use(this: Router, route: i32, step: i32): void -> @nish.Router.use [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: route
+  calls: nish.Router.routes nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_str_concat nish_str_from_i32
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.routes#0 nish.Router.routes#0
+  stackSites=0 stackLocals=0
+  local -2:11 bit: i32 (const)
+  callee +4:33 Router.routes -> @nish.Router.routes
+  callee +5:66 Router.routes -> @nish.Router.routes
+function Router.steps(this: Router, route: i32): i32 -> @nish.Router.steps [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: route
+  calls: nish.Router.routes nish_panic_index
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Router.routes#0
+  stackSites=0 stackLocals=0
+  callee +0:22 Router.routes -> @nish.Router.routes
 function Router.add(this: Router, method: string, pattern: string): i32 -> @nish.Router.add [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: method pattern
   calls: nish.Router.addChild nish.Router.childFor nish.Router.fileStatic nish.Router.growStatic nish.Router.methodIndex nish.Router.routes nish.Router.splitPattern nish.routerHashOf nish.routerHashWith nish.routerMethodKey nish.routerTchar nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.splitPattern#0 nish.Router.childFor#0 nish.Router.methodIndex#0 nish.Router.routes#0 nish.Router.childFor#0 nish.Router.addChild#0 nish.Router.routes#0 nish.Router.growStatic#0 nish.Router.fileStatic#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.splitPattern#0 nish.Router.childFor#0 nish.Router.methodIndex#0 nish.Router.routes#0 nish.Router.childFor#0 nish.Router.addChild#0 nish.Router.routes#0 nish.Router.growStatic#0 nish.Router.fileStatic#0
   stackSites=0 stackLocals=0
   local -51:11 methodLength: i32 (const)
   local -47:14 k: i32 (let)
@@ -34661,18 +34625,18 @@ function Router.add(this: Router, method: string, pattern: string): i32 -> @nish
   callee +10:33 Router.addChild -> @nish.Router.addChild
   local +12:11 route: i32 (const)
   callee +12:24 Router.routes -> @nish.Router.routes
-  local +21:9 hash: u32 (let)
-  callee +21:21 routerHashOf -> @nish.routerHashOf
-  local +23:16 k: i32 (let)
-  local +24:15 c: i32 (const)
-  callee +26:16 routerHashWith -> @nish.routerHashWith
-  callee +37:9 Router.growStatic -> @nish.Router.growStatic
-  callee +39:9 Router.fileStatic -> @nish.Router.fileStatic
+  local +22:9 hash: u32 (let)
+  callee +22:21 routerHashOf -> @nish.routerHashOf
+  local +24:16 k: i32 (let)
+  local +25:15 c: i32 (const)
+  callee +27:16 routerHashWith -> @nish.routerHashWith
+  callee +38:9 Router.growStatic -> @nish.Router.growStatic
+  callee +40:9 Router.fileStatic -> @nish.Router.fileStatic
 function Router.growStatic(this: Router): void -> @nish.Router.growStatic [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Router.fileStatic nish.Router.routes nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.routes#0 nish.Router.fileStatic#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.routes#0 nish.Router.fileStatic#0
   stackSites=0 stackLocals=0
   local -1:11 slots: i32 (const)
   local +1:14 k: i32 (let)
@@ -34684,7 +34648,7 @@ function Router.fileStatic(this: Router, route: i32): void -> @nish.Router.fileS
   sharedWrite: +0:9
   escaping: route
   calls: nish.routerSlot nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 mask: i32 (const)
   local -3:9 slot: i32 (let)
@@ -34695,7 +34659,7 @@ function Router.splitPattern(this: Router, pattern: string): i32 -> @nish.Router
   sharedWrite: +0:7
   escaping: pattern
   calls: nish.routerSameName nish.routerSegmentKind nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -21:11 length: i32 (const)
   local -20:9 count: i32 (let)
@@ -34710,7 +34674,7 @@ function Router.childFor(this: Router, node: i32, pattern: string, k: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k node pattern
   calls: nish.routerLabelIsText nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 kind: i32 (const)
   local +7:11 start: i32 (const)
@@ -34723,7 +34687,7 @@ function Router.addChild(this: Router, node: i32, pattern: string, k: i32): i32 
   sharedWrite: +0:5
   escaping: k node
   calls: nish.Router.nodeCount nish_array_grow nish_panic_index
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.Router.nodeCount#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Router.nodeCount#0
   stackSites=0 stackLocals=0
   local -3:11 child: i32 (const)
   callee -3:24 Router.nodeCount -> @nish.Router.nodeCount
@@ -34735,7 +34699,7 @@ function Router.methodIndex(this: Router, method: string): i32 -> @nish.Router.m
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: method
   calls: nish.routerLabelIsText nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 length: i32 (const)
   local +1:14 m: i32 (let)
@@ -34746,7 +34710,7 @@ function Router.match(this: Router, method: u8[], mStart: i32, mEnd: i32, target
   sharedWrite: via nish.Router.enter
   escaping: mEnd mStart tEnd tStart
   calls: nish.Router.answer nish.Router.descend nish.Router.enter nish.Router.staticRoute nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.enter#0 nish.Router.staticRoute#0 nish.Router.answer#0 nish.Router.descend#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.enter#0 nish.Router.staticRoute#0 nish.Router.answer#0 nish.Router.descend#0
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#1
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#4 nish.Router.staticRoute#1 nish.Router.answer#1 nish.Router.descend#1
   pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.answer#2 nish.Router.descend#4
@@ -34761,7 +34725,7 @@ function Router.matchTree(this: Router, method: u8[], mStart: i32, mEnd: i32, ta
   sharedWrite: via nish.Router.enter
   escaping: mEnd mStart tEnd tStart
   calls: nish.Router.descend nish.Router.enter
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.enter#0 nish.Router.descend#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.enter#0 nish.Router.descend#0
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#1
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#4 nish.Router.descend#1
   pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.descend#4
@@ -34773,7 +34737,7 @@ function Router.enter(this: Router, method: u8[], mStart: i32, mEnd: i32, target
   sharedWrite: +0:5
   escaping: mEnd mStart tEnd tStart
   calls: nish.routerMethodKey nish.routerOutside nish.routerSameBytes nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerMethodKey#0 nish.routerSameBytes#2
   pointer target: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -34791,7 +34755,7 @@ function Router.descend(this: Router, target: u8[], tStart: i32, tEnd: i32, para
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: nish.Router.answer nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.answer#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.answer#0
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.answer#1
   pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.answer#2
   stackSites=0 stackLocals=0
@@ -34805,7 +34769,7 @@ function Router.answer(this: Router, target: u8[], params: i32[]): i32 -> @nish.
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Router.walk nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.walk#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.walk#0
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.walk#1
   pointer params: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -34818,7 +34782,7 @@ function Router.staticRoute(this: Router, target: u8[], tStart: i32, tEnd: i32):
   sharedWrite: +0:11
   escaping: tStart
   calls: nish.routerHashOf nish.routerHashWith nish.routerSameBytes nish.routerSlot nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.routerSameBytes#2
   stackSites=0 stackLocals=0
   local -12:9 hash: u32 (let)
@@ -34843,7 +34807,7 @@ function Router.walk(this: Router, target: u8[], node: i32, depth: i32): i32 -> 
   sharedWrite: +0:5
   escaping: depth node
   calls: nish.Router.endpointFor nish.Router.walk nish.routerSameBytes nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.Router.endpointFor#0 nish.Router.walk#0 nish.Router.walk#0 nish.Router.endpointFor#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.endpointFor#0 nish.Router.walk#0 nish.Router.walk#0 nish.Router.endpointFor#0
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.routerSameBytes#2 nish.Router.walk#1 nish.Router.walk#1
   stackSites=0 stackLocals=0
   callee +2:14 Router.endpointFor -> @nish.Router.endpointFor
@@ -34868,7 +34832,7 @@ function Router.endpointFor(this: Router, node: i32): i32 -> @nish.Router.endpoi
   sharedWrite: +0:7
   escaping: node
   calls: nish_panic_index
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:14 e: i32 (let)
 function routerDecode(target: u8[], start: i32, end: i32, out: u8[]): i32 -> @nish.routerDecode [exported]
@@ -36497,21 +36461,6 @@ function jsonTokParseEight(word: u64): u64 -> @nish.jsonTokParseEight
   local +4:9 high: u64 (const)
   callee +4:53 jsonTokW64 -> @nish.jsonTokW64
   callee +5:40 jsonTokW64 -> @nish.jsonTokW64
-function jsonTokMulHigh(a: u64, b: u64): u64 -> @nish.jsonTokMulHigh
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.jsonTokW64
-  stackSites=0 stackLocals=0
-  local +0:9 k32: u64 (const)
-  local +1:9 mask: u64 (const)
-  callee +1:21 jsonTokW64 -> @nish.jsonTokW64
-  local +2:9 aHi: u64 (const)
-  local +3:9 aLo: u64 (const)
-  local +4:9 bHi: u64 (const)
-  local +5:9 bLo: u64 (const)
-  local +6:9 ll: u64 (const)
-  local +7:9 hl: u64 (const)
-  local +8:9 lh: u64 (const)
-  local +9:9 cross: u64 (const)
 function jsonTokLeadingZeros(w: u64): i32 -> @nish.jsonTokLeadingZeros
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ctlz.i32
@@ -36520,7 +36469,7 @@ function jsonTokLeadingZeros(w: u64): i32 -> @nish.jsonTokLeadingZeros
 function jsonTokEiselLemire(w0: u64, q: i32): f64 -> @nish.jsonTokEiselLemire
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: w0
-  calls: nish.jsonTokLeadingZeros nish.jsonTokMulHigh nish.jsonTokPowerOfFive nish.jsonTokW64
+  calls: nish.jsonTokLeadingZeros nish.jsonTokPowerOfFive nish.jsonTokW64
   stackSites=0 stackLocals=0
   local +0:9 one: u64 (const)
   local +1:9 infinity: u64 (const)
@@ -36532,14 +36481,12 @@ function jsonTokEiselLemire(w0: u64, q: i32): f64 -> @nish.jsonTokEiselLemire
   local +18:9 five: u64 (const)
   callee +18:21 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
   local +19:7 high: u64 (let)
-  callee +19:19 jsonTokMulHigh -> @nish.jsonTokMulHigh
   local +22:9 allOnes: u64 (const)
   callee +22:24 jsonTokW64 -> @nish.jsonTokW64
   local +23:7 low: u64 (let)
   local +24:9 precisionMask: u64 (const)
   local +26:11 second: u64 (const)
-  callee +26:25 jsonTokMulHigh -> @nish.jsonTokMulHigh
-  callee +26:43 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
+  callee +26:36 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
   local +29:11 room: u64 (const)
   local +37:9 upperbit: i32 (const)
   local +38:9 shift: i32 (const)

@@ -30,7 +30,7 @@ follow in its section, where JSON-13 (Medium) is fixed.
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `isIntegral`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8End`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokSigned`, `jsonTokPowerOfTen`, `jsonTokW64`, `jsonTokMulHigh`, `jsonTokLeadingZeros`, `jsonTokEiselLemire`, `jsonTokPowerOfFive`, `jsonTokDigitsExceed` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `isIntegral`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8End`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokSigned`, `jsonTokPowerOfTen`, `jsonTokW64`, `jsonTokLeadingZeros`, `jsonTokEiselLemire`, `jsonTokPowerOfFive`, `jsonTokDigitsExceed` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -119,8 +119,10 @@ subnormal", "numberF64(1.7976931348623159e308) rounds up to an infinity", and
 the JSONTestSuite check's bitwise comparison).
 
 Eisel–Lemire's run time is bounded per number whatever the text: two reads of
-the power-of-five table, at most two 64×64-bit products built from four 32-bit
-limb products each, and a fixed number of shifts, with no loop and no fallback,
+the power-of-five table, at most two 64×64-bit products whose high halves are
+the `mulHigh` builtin (WP41: one multiply on x86-64 and AArch64, four 32-bit
+limb products on wasm32, branching on neither operand), and a fixed number of
+shifts, with no loop and no fallback,
 since for 19 digits Mushtak and Lemire prove the extended product always
 decides the rounding.
 

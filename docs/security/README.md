@@ -74,7 +74,7 @@ the record that found it. The notes below the table name each such finding.
 | OpenID Connect discovery and the JWK Set | [oidc.md](oidc.md) | `std/net/oidc.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ²⁹ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | Async server | [serve.md](serve.md) | `std/net/serve.ts` | 0 / 1 / 1 / 1 | 0 / 0 / 0 / 1 |
-| One HTTP server for HTTP/1.1, 2 and 3 | [http-server.md](http-server.md) | `std/net/http-server.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 1 |
+| One HTTP server for HTTP/1.1, 2 and 3 | [http-server.md](http-server.md) | `std/net/http-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 |
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 5 ²⁸ | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
@@ -295,7 +295,7 @@ the record that found it. The notes below the table name each such finding.
     `user:@` writes back as `user@`, an empty http path stays empty, the
     URL parser leaves the input's length to its caller, and a host's
     trailing dot is kept, so `a.com.` is its own origin.
-13. ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, checked
+13. ROUTE-1 to ROUTE-7, and ROUTE-10 to ROUTE-14, are the shapes an attacker's target can take, checked
     and found to hold, and are not findings. ROUTE-8 (Low), dot segments
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
     decoded, are accepted, with the reason in their record, and are not
