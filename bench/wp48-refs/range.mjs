@@ -28,6 +28,7 @@
 // Linux only (ru_maxrss in KB), run from the repository root.
 import { execFileSync } from "node:child_process"
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 const option = (name, fallback) => {
@@ -73,7 +74,9 @@ execFileSync(process.env.CC ?? "clang", ["-O2", "bench/rss.c", "-o", `${out}/rss
 // module; sibling.ts takes its size on the command line, so one serves all
 const compile = (n) => {
   if (!tree) {
-    execFileSync(nish, ["bench/wp48-refs/sibling.ts", "-o", `${out}/ir/`], { stdio: "ignore" })
+    execFileSync(nish, withAllowPanics(nish, ["bench/wp48-refs/sibling.ts", "-o", `${out}/ir/`]), {
+      stdio: "ignore",
+    })
     return `${out}/ir/sibling.ll`
   }
   const lines = readFileSync("bench/goose/tree.ts", "utf8").split("\n")
@@ -81,7 +84,7 @@ const compile = (n) => {
   lines[at] = lines[at].replace(/\b\d+\b/, String(n))
   mkdirSync(`${out}/src`, { recursive: true })
   writeFileSync(`${out}/src/tree.ts`, lines.join("\n"))
-  execFileSync(nish, [`${out}/src/tree.ts`, "-o", `${out}/ir/`], { stdio: "ignore" })
+  execFileSync(nish, withAllowPanics(nish, [`${out}/src/tree.ts`, "-o", `${out}/ir/`]), { stdio: "ignore" })
   return `${out}/ir/tree.ll`
 }
 const link = (ll, exe, extra) =>

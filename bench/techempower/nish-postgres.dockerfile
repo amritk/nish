@@ -23,6 +23,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/amritk/nish/v${NISH_VERSION}/in
 
 WORKDIR /nish
 COPY db-main.ts db-server.ts ./
+# strict: a benchmark submission is a user's program, built by a pinned release the way a user builds it
 RUN nish db-main.ts --link db-entry --profile speed
 
 EXPOSE 8080

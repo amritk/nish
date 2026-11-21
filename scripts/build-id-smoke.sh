@@ -15,9 +15,12 @@ command -v readelf >/dev/null 2>&1 || { echo "build-id-smoke: readelf not found 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 src=$root/tests/link/build_id/program.ts
+# A test fixture, so its build takes `--allow-panics` from a compiler that lists it.
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$nish"
 id_of() { readelf -n "$1" | sed -n 's/^ *Build ID: *//p'; }
 for p in speed-a:speed speed-b:speed debug:debug; do
-  log=$("$nish" "$src" -o "$work/${p%%:*}.ll" --link "$work/${p%%:*}" --profile "${p#*:}" 2>&1) ||
+  log=$("$nish" ${allow_panics[@]+"${allow_panics[@]}"} "$src" -o "$work/${p%%:*}.ll" --link "$work/${p%%:*}" --profile "${p#*:}" 2>&1) ||
     { echo "$log" >&2; exit 1; }
   id=$(id_of "$work/${p%%:*}")
   [ "${#id}" = 40 ] || { echo "build-id-smoke: ${p%%:*} has no 20-byte build id: '${id}'" >&2; exit 1; }

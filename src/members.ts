@@ -67,6 +67,7 @@ import {
   EnumInfo,
   FieldInfo,
   FunctionSig,
+  CheckedProgram,
   ROLE_CONSTRUCTOR,
   SpreadCopy,
   STRUCT_CLASS,
@@ -75,7 +76,7 @@ import {
 import { simdCompareMessage } from "./simd"
 import { refuseStorageLength } from "./module-storage"
 import { Scope } from "./symbols"
-import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
+import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /**
  * Whether `receiver` is a value rather than a builtin namespace: `x.length`
@@ -159,6 +160,9 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   // WP27 S4.1: whether the caller admits this read of a nested layout field.
   const embedded = ctx.embeddedRead === expr.id
   ctx.embeddedRead = -1
+  // WP66 S4: whether an index is about to read this member as its receiver.
+  const indexed = ctx.program.indexReceiver === expr.id
+  ctx.program.indexReceiver = -1
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
     if ((expr.flags & FLAG_OPTIONAL) !== 0) {
       ctx.errorAtProperty(expr, neverNullMessage(ctx, receiverExpr))
@@ -203,7 +207,7 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     return checkArrayProperty(ctx, expr, receiver)
   }
   if (ctx.table.isStruct(receiver)) {
-    return checkStructProperty(ctx, expr, receiver, embedded)
+    return checkStructProperty(ctx, expr, receiver, embedded, indexed)
   }
   if (ctx.table.isUnion(receiver)) {
     return checkUnionTag(ctx, expr, receiver)
@@ -254,7 +258,13 @@ const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => 
   return info.type
 }
 
-const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32, embedded: boolean): i32 => {
+const checkStructProperty = (
+  ctx: CheckContext,
+  expr: Node,
+  receiver: i32,
+  embedded: boolean,
+  indexed: boolean
+): i32 => {
   const info = structOf(ctx, receiver)
   if (info === null) {
     return T_ERROR
@@ -288,8 +298,26 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32, embed
     )
     return T_ERROR
   }
+  if (field.cLength >= 0) {
+    // WP66 S4: a fixed-length array is `[N x T]` inside its object, with no
+    // array header, so it is only ever indexed: `checkIndex` reads it as a
+    // `T[]` and the emitter addresses the element in place.
+    if (!indexed) {
+      ctx.errorAtProperty(expr, cArrayValueMessage(ctx.textOf(expr), field.cLength))
+      return T_ERROR
+    }
+    return ctx.table.arrayOf(field.type)
+  }
   return field.type
 }
+
+/**
+ * WP66 S4: a fixed-length array field read other than by index. It is C's
+ * `T h[N]` inside the struct, not an array object, so it has no `length`
+ * and cannot be held, passed or copied as a value.
+ */
+const cArrayValueMessage = (text: string, length: i32): string =>
+  `\`${text}\` is a fixed-length array of ${length} elements inside a \`declare class\`: read and write it by index (\`${text}[i]\`, i from 0 to ${length - 1}), but it cannot be held, passed or measured as a value`
 
 /**
  * `nish:secret`: what a `Secret` holds is read, written and called on only by
@@ -401,8 +429,14 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     // Against the method name, as `errorAtProperty` reports it, so that the
     // fix can carry the whole call.
     const name = new Node(NodeKind.Ident, access.end - access.text.length, access.end)
-    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`
-    ctx.errorFix(name, message, toStringFix(ctx, expr, receiver))
+    const fix = toStringFix(ctx, expr, receiver)
+    // A number's `toString()` names the spelling its fix writes (#1632).
+    const hint =
+      fix.length > 0 && isNumeric(receiver)
+        ? `; use a template literal: \`\${${ctx.textOf(unwrapParens(receiverExpr))}}\``
+        : ""
+    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}${hint}`
+    ctx.errorFix(name, message, fix)
     return T_ERROR
   }
   const info = structOf(ctx, receiver)
@@ -874,16 +908,19 @@ const checkSpreadSource = (
   let embedded: FieldInfo | null = null
   if (source.layout) {
     for (const field of source.fields) {
-      if (field.nested !== null) {
+      if (field.nested !== null || field.cLength >= 0) {
         embedded = field
         break
       }
     }
   }
   if (embedded !== null) {
+    const head = `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\``
     ctx.error(
       value,
-      `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\` is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
+      embedded.cLength >= 0
+        ? `${head} is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index`
+        : `${head} is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
     )
     return null
   }
@@ -1194,6 +1231,13 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
       `Cannot assign to \`${ctx.textOf(target)}\`: a \`declare class\` embedded in its object is written field by field`
     )
   }
+  if (field.cLength >= 0) {
+    // WP66 S4: C has no array assignment either; the elements are written one by one.
+    return ctx.errorType(
+      target,
+      `Cannot assign to \`${ctx.textOf(target)}\`: a fixed-length array inside a \`declare class\` is written element by element (\`${ctx.textOf(target)}[i] = ...\`)`
+    )
+  }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {
     const where = info.kind === STRUCT_CLASS ? " outside its constructor" : ""
     return ctx.errorType(
@@ -1374,6 +1418,44 @@ const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
     // rule from, and one sentence for a reader to recognise.
     ctx.error(arg, `\`${name}\` expects an argument of type string, got ${ctx.table.typeName(type)}`)
   }
+}
+
+/** The largest answer of `s.charCodeAt(i)`: a byte. */
+const CHAR_CODE_TOP: i32 = 255
+
+/** The largest answer of `Math.clz32(x)`, which src/builtins.ts types as `integer<0, CLZ32_TOP>`. */
+export const CLZ32_TOP: i32 = 32
+
+/**
+ * The top of the range `[0, top]` a builtin call's answer is documented to
+ * land in, or -1 for any other call. `s.charCodeAt(i)` answers the byte at `i`
+ * (a `zext` of the `i8` it loads), `[0, 255]`, as "String methods" in
+ * docs/LANGUAGE.md states and `String.fromCharCode`, its inverse on `c & 0xFF`,
+ * relies on; `Math.clz32(x)` counts bits, `[0, 32]`, and is typed
+ * `integer<0, 32>` for it in src/builtins.ts. `charCodeAt` is not typed
+ * `rangedOf(0, 255)` the same way: a ranged type reads as `i32`, which would
+ * change its documented `number` result under the default number mode, so its
+ * range lives only here. An operand is recorded as the
+ * base it is read as (`readAsBase` in src/expressions.ts), so the panic prover
+ * reads the range here rather than through the node's type. A user function or
+ * method of either name is not this, which `nodeCallees` and the receiver's
+ * type say.
+ */
+export const builtinAnswerTop = (program: CheckedProgram, table: TypeTable, call: Node): i32 => {
+  if (call.kind !== NodeKind.Call || program.nodeCallees[call.id] !== null) {
+    return -1
+  }
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Member || call.children[1].children.length !== 1) {
+    return -1
+  }
+  const receiver = callee.children[0]
+  const type = program.nodeTypes[receiver.id]
+  if (callee.text === "charCodeAt" && type >= 0 && table.baseOf(type) === T_STRING) {
+    return CHAR_CODE_TOP
+  }
+  const isMath = receiver.kind === NodeKind.Ident && receiver.text === "Math" && type < 0
+  return callee.text === "clz32" && isMath ? CLZ32_TOP : -1
 }
 
 const checkStringMethod = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {

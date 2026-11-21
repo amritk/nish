@@ -89,8 +89,11 @@ done
 # speed profile strips; they go to build/tfb/profile, not over run.sh's.
 nish=${NISH:-build/nish}
 [ -x "$nish" ] || npm run build
+# A bench program, so its build takes `--allow-panics` from a compiler that lists it.
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$nish"
 build() {
-  "$nish" "bench/techempower/$1" --link "$out/$2" --profile speed -g >"$out/compile.log" 2>&1 || {
+  "$nish" ${allow_panics[@]+"${allow_panics[@]}"} "bench/techempower/$1" --link "$out/$2" --profile speed -g >"$out/compile.log" 2>&1 || {
     cat "$out/compile.log" >&2
     exit 1
   }

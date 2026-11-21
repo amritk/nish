@@ -258,7 +258,8 @@ an integer division is neither `willreturn` nor `readnone`, exactly like one
 containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
 locals, fields, and elements. **A divisor the checker proves is left
 unchecked**, as a proven index is: one that is neither 0 nor -1 — a constant
-(`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor
+(`a / 2`, `a % -3`, a folded module constant, a `const` bound to a literal or
+a fitting conversion of one), a ranged or unsigned divisor
 whose declared range leaves both out, a local behind `d > 0` or behind
 `d !== 0 && d !== -1` — or one that is not 0 against a dividend known to be
 non-negative, which cannot be the minimum. Such a division is the bare
@@ -322,7 +323,7 @@ divide with overflow` is simply unreachable on an unsigned type.
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
   under `f64`, a negative `i32` or `i64` (a ranged integer is read as an
   `i32`, so it is checked as one), or a NaN. A narrower unsigned length and a
-  literal up to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
+  literal or named integer `const` from 0 to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
   `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](../../security/codegen.md), CG-1 and CG-2).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with

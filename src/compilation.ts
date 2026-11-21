@@ -50,7 +50,8 @@
 
 import { recordOverloads } from "./overloads"
 import { REGION_STD_SPECIFIER } from "./region"
-import { explainLayout, LayoutModule } from "./compact-rule"
+import { explainLayout, LayoutModule, LayoutReport } from "./compact-rule"
+import { computeLayout } from "./structs"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
@@ -73,7 +74,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { implementsDeclaration, spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart, templateSymbol } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -244,6 +245,7 @@ import {
   isFreestandingWasmBuild,
   isWasmBuild,
 } from "./visibility"
+import { dataModelRefusal } from "./c-import-model"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47
@@ -510,6 +512,12 @@ export class Compilation {
    * can read them even when a later refusal (`--deny-retention`) fails it.
    */
   factsSettled: boolean
+  /**
+   * WP48 stage 3: the compact-class rule's answer once
+   * `settleCompactClasses` has run, the one `--explain-layout` prints, so the
+   * report and the layout are one decision; null before.
+   */
+  layoutDecision: LayoutReport | null
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -521,10 +529,16 @@ export class Compilation {
   rootPackageDir: string
   /**
    * Per module, in `modules` order: whether it is in the no-panic scope, by
-   * `--deny-panics` (every module of the root package) or by the root
-   * package's `"nish".noPanic` (`readNoPanic`).
+   * default (every module of the root package, unless `--allow-panics`) or
+   * by the root package's `"nish".noPanic` (`readNoPanic`).
    */
   panicScope: boolean[]
+  /**
+   * Per module, in `modules` order: whether the root package's
+   * `"nish".noPanic` names it, which keeps it in the scope under
+   * `--allow-panics`. The refusals word the way out from it (`src/panics.ts`).
+   */
+  panicListed: boolean[]
   /**
    * WP36: the root package's `"nish".capabilities` policy as masks, read by
    * `readCapabilityPolicy`: what its `allow` grants (every bit when it has no
@@ -583,6 +597,7 @@ export class Compilation {
     this.analysisUnits = []
     this.rootPackageDir = ""
     this.panicScope = []
+    this.panicListed = []
     this.manifestAllow = -1
     this.manifestDeny = 0
     this.netRings = 1
@@ -596,6 +611,7 @@ export class Compilation {
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
     this.factsSettled = false
+    this.layoutDecision = null
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -887,6 +903,12 @@ export class Compilation {
       this.sink.report(source, read.start, read.end, read.problem)
       return false
     }
+    // A module `nish c-import` wrote for another data model (WP66 D3).
+    const modelRefusal = dataModelRefusal(source.text, isWasmBuild(this.opts))
+    if (modelRefusal !== null) {
+      this.sink.report(source, modelRefusal.start, modelRefusal.end, modelRefusal.message)
+      return false
+    }
     const parser = new Parser(source)
     const file = parser.parseSourceFile()
     if (host) {
@@ -947,7 +969,10 @@ export class Compilation {
     // full pointers, as on wasm32. `NISH_ASAN` is read from the environment,
     // so setting it switches compression off for every compile in the process,
     // matching the uncompressed runtime ASAN builds link.
-    checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
+    // `--compact off` lays every link out as a pointer, `implements Compact`
+    // classes' included (`Options.compact`).
+    checker.ctx.compressLinks =
+      this.opts.compact && !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
     checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
     checker.ctx.compat = this.opts.compat
@@ -1408,6 +1433,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // Every module's context, entry first: before any import is bound, because
+    // a clashing private function takes its module-qualified symbol here and an
+    // importer copies the symbol it finds, and before any template is
+    // instantiated, because its instantiations are named by the same rule.
+    const peers: CheckContext[] = []
+    for (const unit of this.modules) {
+      peers.push(unit.checker.ctx)
+    }
+    for (const unit of this.modules) {
+      unit.checker.ctx.peers = peers
+    }
+    this.qualifyClashingSymbols(peers)
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = []
       for (const imp of unit.checker.program.imports) {
@@ -1438,6 +1475,15 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.closeReachableStructs(declared)
     }
+    // A `new` field initializer may name an imported class, and a loop of
+    // them may pass through one.
+    for (const unit of this.modules) {
+      unit.checker.resolveInitializers()
+    }
+    const cycles = new StringSet()
+    for (const unit of this.modules) {
+      unit.checker.checkInitializerCycles(cycles)
+    }
     this.rejectSymbolClashes(clashed)
     if (this.sink.hasErrors()) {
       return false
@@ -1447,13 +1493,8 @@ export class Compilation {
     // every module needs to know whether the entry declares `main` before its
     // bodies are checked.
     const hasMain = this.entry().checker.program.entryMain !== null
-    const peers: CheckContext[] = []
-    for (const unit of this.modules) {
-      peers.push(unit.checker.ctx)
-    }
     for (const unit of this.modules) {
       unit.checker.ctx.entryHasMain = hasMain
-      unit.checker.ctx.peers = peers
     }
     // Constants fold once every module has its signatures, because an
     // initialiser may name a constant imported from a module checked later.
@@ -1596,6 +1637,10 @@ export class Compilation {
       layoutInlineArrays(contexts, mode)
       proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     }
+    // WP48 stage 3: the classes the compact-class rule picks, decided once
+    // every body is checked (test 4 reads them) and before anything reads
+    // a layout or `StructInfo.compact`: the attribute facts, escape, the emitter.
+    this.settleCompactClasses()
     this.factsSettled = true
     this.reportArenaLoops()
     this.reportUnboundedPasses()
@@ -1656,17 +1701,19 @@ export class Compilation {
   }
 
   /**
-   * Settle the no-panic scope: every module of the root package under
-   * `--deny-panics`, and each module the root package's `"nish".noPanic`
-   * names. The manifest is the `package.json` nearest above the entry, and an
+   * Settle the no-panic scope: every module of the root package unless
+   * `--allow-panics` relaxes it, and each module the root package's
+   * `"nish".noPanic` names, which the flag does not relax. The manifest is the `package.json` nearest above the entry, and an
    * entry is a path relative to it. One that names no module of the program is
    * refused where it is written (NL3031): a typo would otherwise leave the
    * module it meant outside the scope, and the build would say nothing.
    */
   readNoPanic(source: SourceFile | null, nish: NishManifest | null): void {
     this.panicScope = []
+    this.panicListed = []
     for (const unit of this.modules) {
       this.panicScope.push(this.opts.denyPanics && unit.packageName === ROOT_PACKAGE)
+      this.panicListed.push(false)
     }
     if (source === null || nish === null) {
       return
@@ -1679,6 +1726,7 @@ export class Compilation {
       const at = this.byPath.get(this.identityOf(joinPath([dir, entry])), -1)
       if (at >= 0 && at < this.panicScope.length) {
         this.panicScope[at] = true
+        this.panicListed[at] = true
         this.opts.noPanicListed = true
       } else {
         this.sink.report(
@@ -2783,7 +2831,14 @@ export class Compilation {
     if (!any) {
       return
     }
-    const refused = reportDeniedPanics(this.analysisUnits, this.panicScope, facts, this.table, this.sink)
+    const refused = reportDeniedPanics(
+      this.analysisUnits,
+      this.panicScope,
+      this.panicListed,
+      facts,
+      this.table,
+      this.sink
+    )
     if (refused.length === 0) {
       return
     }
@@ -3830,6 +3885,27 @@ export class Compilation {
   }
 
   /**
+   * WP57 S1 (`docs/wp57-module-scoped-names.md` §4): give each private free
+   * function whose bare symbol another of its package's free functions or
+   * templates also takes -- or, for a `main` outside the entry, the entry
+   * wrapper -- its module-qualified symbol, `<prefix><qualifier>$.<name>`. An
+   * exported party keeps its bare symbol, so what a C caller or another
+   * package links against never moves, and two exported parties are still
+   * refused by `rejectSymbolClashes`, which runs over the final symbols.
+   *
+   * Nothing qualifies under `--no-strict-exports`: every function is then
+   * external, and an external symbol is the name as written. A program with no
+   * clash is not touched, which is why no existing program's IR moves.
+   * Templates are named when instantiated, by the same predicate.
+   */
+  qualifyClashingSymbols(peers: CheckContext[]): void {
+    const entryName = this.entry().name
+    for (const unit of this.modules) {
+      unit.checker.qualifyClashing(peers, unit.name, entryName)
+    }
+  }
+
+  /**
    * A function's *symbol* must be unique across the program whether or not it
    * is exported, and the entry wrapper reserves `main` as well. An external
    * symbol is global to the link, and even an `internal` one reaches
@@ -3844,6 +3920,13 @@ export class Compilation {
    * out of one name. A program of one package is every program that existed
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
+   *
+   * WP57 S1 did the same one level down: `qualifyClashingSymbols` has already
+   * given a clashing private function its module-qualified symbol, so two
+   * modules' private `add` arrive here as `helper$.add` and `main$.add` and do
+   * not clash. What still does is two exported functions, anything under
+   * `--no-strict-exports` (nothing is qualified there) and two qualified
+   * symbols that come out alike (`clashMessage` words each).
    *
    * A `declare function` is not a package's symbol but C's, so it keeps its
    * name in every package and two packages can make one key of it. That is
@@ -3891,7 +3974,7 @@ export class Compilation {
         if (template.origin !== unit.source) {
           continue
         }
-        const symbol = unit.checker.program.symbolPrefix + template.sourceName
+        const symbol = templateSymbol(entry.checker.ctx.peers, template)
         const at = owners.get(symbol, -1)
         if (at < 0) {
           owners.set(symbol, ownerSigs.length)
@@ -3955,7 +4038,8 @@ export class Compilation {
             previousSig,
             previousModule.name,
             unit.name,
-            unit.packageName
+            unit.packageName,
+            this.opts.strictExports
           )
         }
         // Reported, not thrown: every clash is listed.
@@ -4292,13 +4376,82 @@ export class Compilation {
    * structs and changes no byte of the IR.
    */
   explainLayoutText(): string {
+    const decision = this.layoutDecision
+    return decision !== null ? decision.text : this.decideLayout().text
+  }
+
+  /** The compact-class rule over every module (`src/compact-rule.ts`). */
+  decideLayout(): LayoutReport {
     const modules: LayoutModule[] = []
     for (const unit of this.modules) {
       modules.push(
         new LayoutModule(unit.checker.program, isStdModule(this.libraryRoot(), unit.name, unit.path))
       )
     }
-    return explainLayout(this.opts, this.table, modules).text
+    return explainLayout(this.opts, this.table, modules, this.keepsPointers())
+  }
+
+  /**
+   * Why a native build still lays every link out as a pointer
+   * (`compressLinks` in `addModule`), or `""`: the rule picks nothing then.
+   */
+  keepsPointers(): string {
+    if (buildsPageModule(this.opts)) {
+      return "a page module, whose runtime reads links as pointers"
+    }
+    if (getenv("NISH_ASAN") !== null) {
+      return "NISH_ASAN, whose runtime reserves no range"
+    }
+    return ""
+  }
+
+  /**
+   * WP48 stage 3: runs the compact-class rule and makes its picks compact.
+   * Each picked class's name joins the shared names `computeLayout` reads,
+   * every module's copy of it is marked, and every struct is laid out again,
+   * so a field typed a picked class becomes a link wherever it is declared;
+   * an interface a picked class implements then promises only `align 4`,
+   * as `checkImplements` sets for a marked one. `--compact off` instead
+   * unmarks every `implements Compact` class, whose links `compressLinks`
+   * already kept as pointers, so nothing downstream treats one as compact.
+   */
+  settleCompactClasses(): void {
+    const decision = this.decideLayout()
+    this.layoutDecision = decision
+    if (!this.opts.compact) {
+      for (const unit of this.modules) {
+        for (const info of unit.checker.program.structList) {
+          info.compact = false
+          info.compactImplementer = false
+        }
+      }
+      return
+    }
+    if (decision.compact.length === 0) {
+      return
+    }
+    for (const info of decision.compact) {
+      this.compactNames.add(info.name)
+    }
+    const implemented = new StringSet()
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (this.compactNames.has(info.name)) {
+          info.compact = true
+          for (const name of info.implementsNames) {
+            implemented.add(name)
+          }
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (implemented.has(info.name)) {
+          info.compactImplementer = true
+        }
+        computeLayout(unit.checker.ctx, info)
+      }
+    }
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
@@ -4798,7 +4951,8 @@ const clashMessage = (
   previous: FunctionSig,
   previousFile: string,
   file: string,
-  packageName: string
+  packageName: string,
+  strictExports: boolean
 ): string => {
   const owner = sig.owner
   if (owner !== null) {
@@ -4819,10 +4973,24 @@ const clashMessage = (
     }
     return `Exported function ${where}; exported names must be unique within the package that declares them`
   }
-  if (packageName === ROOT_PACKAGE) {
-    return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
+  // Under `--strict-exports` a private function that clashes is qualified by
+  // its module's path (WP57 S1), so a clash left over is two paths that spell
+  // one qualifier (`lib/util.ts` and `lib_util.ts`). Without it every function
+  // keeps its bare name, so the name itself has to be unique.
+  let why = ""
+  if (strictExports) {
+    why = `, and both modules' paths qualify it to one symbol, \`${sig.name}\`, so rename one of the modules or the function`
+  } else if (packageName === ROOT_PACKAGE) {
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported"
+  } else {
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported"
   }
-  return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+  if (packageName === ROOT_PACKAGE) {
+    return `Function ${where}${why}; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name`
+  }
+  return `Function ${where}${why}; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol`
 }
 
 /**

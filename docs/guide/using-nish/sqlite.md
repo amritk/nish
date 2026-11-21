@@ -25,7 +25,15 @@ The reference is
 the file when it is missing. The path `:memory:` is a database of its own that
 lives as long as the connection. `close()` closes it.
 
-<!-- nish:ok -->
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): they unwrap each
+`Result` with `expect`, which stops the program on an error, and `nish/sqlite`
+keeps panic sites no proof removes yet. Test `r.isErr()` before reading
+`r.value` instead of calling `expect`, and the rest builds under the default
+once the standard library is made panic-free.
+
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
@@ -40,7 +48,8 @@ Settings are SQL. A file database that many readers share usually wants
 SQLite's write-ahead log, which `PRAGMA journal_mode=WAL` turns on and which
 the file keeps; `PRAGMA synchronous=NORMAL` is the usual setting beside it.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
@@ -59,7 +68,8 @@ for schema changes, settings and one-off writes. `changes()` answers how many
 rows the last `INSERT`, `UPDATE` or `DELETE` changed, and `lastInsertRowid()`
 the rowid of the last row an `INSERT` made.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
@@ -94,11 +104,14 @@ call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
 `NULL`. A parameter index the statement does not have (they count from 1) answers
 `SQLITE_RANGE`; an `off` and `len` that do not fit inside `buf` answer
 `SQLITE_MISUSE`. A `string` passed to `bindText`, `exec`, `prepare` or
-`openDatabase` that holds a NUL byte stops the program with the
+`openDatabase` that holds a NUL byte is a check the module keeps at run time,
+one reason a call to it needs `--allow-panics` for now; there it stops the
+program with the
 [`ffi-nul` panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
@@ -150,7 +163,8 @@ answer 0, `SQLITE_NULL` or `null` for a column that is not there. With no
 current row, before the first `step` or after the last, every read answers as
 for `NULL`: `columnInto` answers `Ok(0)`.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; slices with bounds it does not test; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
@@ -174,7 +188,8 @@ export const main = (): i32 => {
 Many inserts inside one transaction are written to the file once, at the
 commit, rather than once each.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
@@ -203,7 +218,8 @@ index has it, and then `rowid`. Column `n` is the `n`th name. If the list
 does not match the schema, the open fails with `SQLITE_SCHEMA`, so a
 changed schema cannot be misread.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";
 
@@ -273,7 +289,8 @@ A `SqliteError` has three fields:
   extended one;
 - `message`, SQLite's own text, such as `UNIQUE constraint failed: t.id`.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, SQLITE_CONSTRAINT, openDatabase } from "nish/sqlite";
 

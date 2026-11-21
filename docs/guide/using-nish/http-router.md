@@ -12,7 +12,15 @@ one as a pair of offsets into the target, in an `i32[]` you made once.
 
 ## A first table
 
-<!-- nish:ok -->
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router`
+keeps panic sites no proof removes yet, and so does the range check of
+`String.fromBytes`, so those calls are refused by default for now. The indexes
+and the `panic` call in your own code build under the default once a guard such
+as `i < xs.length` proves each index and the `panic` becomes an error answer.
+
+<!-- allow-panics: calls `panic`; slices with bounds it does not test; indexes an array without a guard the checker reads; calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router";
 
@@ -154,7 +162,8 @@ does not depend on the order you added routes in.
 A route table is part of your program, so a refusal is usually a bug to fix
 before the server starts. Check every index, and stop there:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { ROUTER_DUPLICATE, Router, RouterLimits } from "nish/net/router";
 
@@ -196,7 +205,8 @@ own and answers its length, or `ROUTER_BAD_ESCAPE` for a `%` not followed by
 two hex digits, or `ROUTER_NO_ROOM` when `out` is too small. `+` stays `+`:
 it means a space only in a query.
 
-<!-- nish:ok -->
+<!-- allow-panics: slices with bounds it does not test; calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Router, RouterLimits, routerDecode } from "nish/net/router";
 

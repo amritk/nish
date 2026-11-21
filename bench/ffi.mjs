@@ -16,7 +16,7 @@ import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const out = path.join(root, "build", "bench")
@@ -34,18 +34,20 @@ const run = (cmd, args) => {
 }
 
 // Compile once: IR + N-API shim + wasm typings and loader from the same signatures.
-run(nishc.cmd, [
-  ...nishc.prefix,
-  "bench/sum.ts",
-  "--number-mode",
-  "f64",
-  "-o",
-  `${out}/sum.ll`,
-  "--emit-napi",
-  `${out}/sum_napi.c`,
-  "--emit-dts",
-  `${out}/sum.d.ts`,
-])
+run(
+  nishc.cmd,
+  compileArgv(nishc, [
+    "bench/sum.ts",
+    "--number-mode",
+    "f64",
+    "-o",
+    `${out}/sum.ll`,
+    "--emit-napi",
+    `${out}/sum_napi.c`,
+    "--emit-dts",
+    `${out}/sum.d.ts`,
+  ])
+)
 run("bash", [
   "scripts/build.sh",
   `${out}/sum.ll`,

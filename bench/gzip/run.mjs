@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -50,7 +51,16 @@ if (libdeflate === undefined) {
   process.exit(1)
 }
 fs.mkdirSync(out, { recursive: true })
-run(compiler, [path.join(here, "main.ts"), "-o", `${out}/`, "--link", path.join(out, "gzip-nish")])
+run(
+  compiler,
+  withAllowPanics(compiler, [
+    path.join(here, "main.ts"),
+    "-o",
+    `${out}/`,
+    "--link",
+    path.join(out, "gzip-nish"),
+  ])
+)
 run("clang", ["-O3", path.join(here, "gzip.c"), "-o", path.join(out, "gzip-c"), "-lz", libdeflate])
 
 // row key -> { size, input, ns: [] }

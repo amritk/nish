@@ -83,17 +83,8 @@ bounds.ok:
   %10 = getelementptr inbounds i8, i8* %9, i64 %8
   %11 = load i8, i8* %10, align 1
   %12 = zext i8 %11 to i32
-  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %12)
-  %14 = extractvalue { i32, i1 } %13, 0
-  %15 = extractvalue { i32, i1 } %13, 1
-  br i1 %15, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  ret i32 %14
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  %13 = add nsw i32 %7, %12
+  ret i32 %13
 }
 
 define internal noundef i32 @lowest(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {

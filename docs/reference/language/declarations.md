@@ -302,8 +302,14 @@ having no top-level code and therefore no initialisation order.
   [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
-  There is deliberately no second, larger language inside `const`: a constant
-  can compute exactly what a runtime expression can.
+  There is deliberately no second, larger language inside `const`: what a
+  constant computes, it computes as the runtime expression would, but it
+  computes less.
+  "Arithmetic" here is `+ - * / %`, the comparisons, `!`, `&&`, `||`, unary
+  minus and string `+`. The shift and bitwise operators (`<< >> >>> & | ^ ~`)
+  are refused in a constant and in a [constant table](#constant-tables)'s
+  element alike, whatever their operands' type, not folded. Write the
+  value out (`8`, not `1 << 3`), or compute it at run time.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
   replaces computes. By default that instruction is checked, so a fold that
@@ -1554,15 +1560,40 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     (`tests/link/package_hidden_class_import`), and naming it in an annotation
     is `` Unsupported type reference `Space` ``
     (`tests/link/package_hidden_class_annotation`).
-- **A function name is unique across the whole program**, exported or not, in
-  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
-  `internal` linkage keeps a name out of the linker's way but it does not buy a
-  second namespace: the whole-program attribute analysis is keyed by symbol
-  name, so two functions sharing one would be emitted with each other's
-  attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag. A proposal to qualify a private function's
-  symbol by its module when it would clash is
-  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); the rule above holds until it ships.
+- **Two modules may each keep a private function of one name** (WP57 S1).
+  A non-exported free function or generic function whose name another
+  function of its package also defines — in another module, exported or not —
+  is emitted under a symbol qualified by its module's path:
+  `<package prefix><module>$.<name>`, where `<module>` is the module's path
+  from its package's root (the entry's directory, for the program's own
+  package) without `.ts`, every character outside `[A-Za-z0-9_]` spelled `_`.
+  So `helper.ts` and `main.ts` may each keep a private `add`, emitted as
+  `@helper$.add` and `@main$.add` (`tests/link/duplicate_internal`,
+  `module_private_helpers`); a private generic's instantiations are
+  `@a$.identity$i32` (`module_private_generic`); a task's arrow follows the
+  function it is written in (`@m$.work$arrow0`, `module_private_spawn`); and
+  a private `helper` beside an imported, exported `helper` is `@main$.helper`
+  while the exported one keeps `@helper` (`module_private_mixed`). The
+  qualifier is the module's path relative to its package root (the entry's
+  directory for the program's own modules), so a module outside that
+  directory keeps its `..` steps: `../shared/u.ts` gives
+  `@___shared_u$.helper` however the entry is named. A name no
+  other function shares keeps its bare symbol, so a program that built before
+  emits exactly what it did, and the entry's `main` is never qualified.
+- **Everything else still needs a unique symbol.** Two exported functions of
+  one name are refused (`tests/link/duplicate_export`), and so are two
+  exported generic functions. Under `--no-strict-exports` every function is
+  external and keeps its bare name, so there a function name is unique across
+  the program, exported or not
+  (`` under `--no-strict-exports` every function keeps its bare name as its symbol ``,
+  `tests/link/module_private_no_strict`). Two module paths that spell one
+  qualifier (`lib/util.ts` and `lib_util.ts`) are refused too, naming both
+  files: `` both modules' paths qualify it to one symbol ``. Each refusal is
+  the same reason: `internal` linkage keeps a name out of the linker's way but
+  the whole-program attribute analysis is keyed by symbol, so two functions
+  sharing one would be emitted with each other's attributes — a miscompile
+  rather than a link error. The design is
+  [`docs/wp57-module-scoped-names.md`](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md).
 
 ## `main`
 
@@ -1612,9 +1643,36 @@ class Point {
 ```
 
 - **Fields** need a type annotation (`` Field `x` of class `Point` needs a type annotation ``,
-  `tests/cases/reject_cls_field_no_type`). An initializer must be a literal
-  (a number, a negated number, a string, or a boolean) of the field's type
-  (`initializers must be literals` *(CLI only)*; `tests/cases/cls_initializers`).
+  `tests/cases/reject_cls_field_no_type`). An initializer is one of
+  (`tests/cases/cls_initializers`, `cls_field_init`):
+  - a literal (a number, a negated number, a string, or a boolean) of the
+    field's type, or `null`, or an enum member;
+  - `[]` when the field's type is an array (`kind: i32[] = []`): a fresh,
+    empty array of the declared element type, one per object;
+  - `new C(args)` (`child: Leaf = new Leaf(0)`) where `C` is a class with no
+    type parameters and the field's type is `C` or `C | null` (not a union or
+    interface `C` converts to), and each argument is itself a literal or enum
+    member of its parameter's type.
+
+  **An initializer reads nothing.** It may not name `this`, a constructor
+  parameter, another field, a local or a module constant; an argument of its
+  `new` is a literal too. Anything else, a call that is not `new` included,
+  is `initializers must be literals` *(CLI only)*
+  (`reject_cls_field_init_call`, `reject_cls_field_init_new_arg`), and a `new`
+  of a generic, handle or layout class is refused the same way
+  (`reject_cls_field_init_new_generic`). Assign a value computed from those
+  in the constructor. The constructor stores every initializer before the
+  first statement of its body, in declaration order; a class without a
+  constructor stores them at its `new`. So a class whose initializers
+  construct the class itself, directly or through another class's
+  initializers, would construct forever, and is refused
+  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`),
+  once per loop however many classes are on it (`tests/link/cls_field_init_cycle`).
+  An exported class with no constructor, and an exported generic class, has
+  its initializers run in the module that builds it, so a class they
+  construct is exported too (`` `Pin` is not exported, but this class's
+  initializers run in the module that builds it ``,
+  `tests/link/cls_field_init_private`, `reject_cls_field_init_private`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
 - **Constructor**: at most one, with a body
@@ -3431,8 +3489,10 @@ export const main = (): i32 => {
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
   reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
-  named after the one it is written in and a counter (`main$arrow0`), which
-  is the name a debugger or a profiler shows for the task's thread.
+  named after the symbol of the one it is written in and a counter
+  (`nish_main$arrow0` in the entry's `main`, `m$.work$arrow0` in a private
+  `work` that WP57 S1 qualified by its module `m.ts`), which is the name a
+  debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -5367,8 +5427,8 @@ ffi.copy:
   (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
   `declare function` declared to answer `CPtr` may still answer `NULL`, so
   the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
-  above. No proof removes the test, so `--deny-panics` refuses a call in its
-  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  above. No proof removes the test, so the no-panic scope refuses a call in
+  it; the copy's `oom` beside it is allowed. Declare a result that may be
   `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
@@ -5506,9 +5566,9 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
 - **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
   is a `const` local or a parameter named alone and no later argument may
   resize an array. Such a call carries no check and is not a panic site, so
-  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  `read(fd, buf, toU64(buf.length))` compiles in the no-panic scope. A field
   path, an alias of the buffer, another array's length and a literal are
-  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  checked (`tests/cases/ffi_buffer_count_proved`). The scope refuses
   any other count and names the one it accepts: `` pass `toU64(buf.length)`
   of the buffer itself, which needs no check ``.
 - **C borrows the bytes for the call, and writes through a `u8[]`.** As with
@@ -5612,9 +5672,10 @@ declare function compress(
   `CountedBy` on a parameter, so a program's own type of that name is not
   reachable there: on a `declare function` the annotation is read as this
   form, and elsewhere it is refused as above.
-- **`runtime/nish.d.ts` does not declare `CountedBy` yet,** and `nish
-  c-import` does not write it: a module that uses it under `tsc` declares the
-  alias itself.
+- **`runtime/nish.d.ts` does not declare `CountedBy` yet:** a module that
+  uses it under `tsc` declares the alias itself. `nish c-import` writes it on
+  a buffer whose override names a count that is not a `u64` straight after
+  it.
 
 ### A handle class: a class that owns a `CPtr`
 
@@ -5809,6 +5870,82 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   compiler could promise. A struct cannot embed
   itself, directly or through another (NL2749, `reject_ffi_struct_self`,
   `reject_ffi_struct_cycle`).
+- **A field typed `Record<integer<0, Hi>, T>` is a fixed-length array, C's
+  `T name[Hi + 1]`, laid out inline at `T`'s alignment**, as OpenSSL's
+  `SHA_CTX` holds `unsigned int h[5]` (`tests/cases/ffi_array_field`, whose C
+  driver fills and checks a `SHA_CTX`-shaped struct; `tests/ffi-struct.js`,
+  where clang gives that shape the offsets and size Nish's build has, natively
+  and under `--profile wasi`):
+
+  ```ts
+  declare class ShaCtx {
+    tag: u8
+    h: Record<integer<0, 4>, u32>
+  }
+  const c = new ShaCtx()
+  c.h[i] = 7
+  ```
+
+  ```llvm
+  %struct.ShaCtx = type { i8, [5 x i32] }
+    %2 = sext i32 %i to i64
+    %3 = icmp ult i64 %2, 5
+    br i1 %3, label %bounds.ok, label %bounds.fail
+  bounds.fail:
+    call void @nish_panic_index(i64 %2, i64 5)
+    unreachable
+  bounds.ok:
+    %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+    store i32 7, i32* %4, align 4
+  ```
+
+  The spelling is TypeScript's own: `tsc` checks it against
+  `runtime/nish.d.ts` with no new declaration, its key type is the index
+  type every in-range index already has, and a `Record` over a finite key
+  says every key from 0 to `Hi` is present, as every element of a C array is.
+  A `CArray<T, N>` type would need a declaration in `runtime/nish.d.ts`, a
+  tuple has no parser here, and `T[]` cannot carry its length, because `tsc`
+  refuses an initializer in a `declare class`. (A `T[]` field of a Nish
+  class is a different rule: see "Fixed-length array fields are stored
+  inline".)
+  - **It takes `(Hi + 1) × sizeof(T)` bytes**, elements back to back with no
+    padding between them, and the struct pads around the array as C pads
+    around `T name[Hi + 1]`: the array starts at `T`'s alignment, and the
+    field after it starts at its own (`tests/ffi-struct.js` holds 8-byte
+    elements after a byte, a one-element array and two arrays in a row
+    against clang).
+  - **The key is `integer<0, Hi>`**, a range from 0, with `Hi` below
+    16777216: `` its key must be `integer<0, Hi>` `` (NL2813,
+    `tests/link/ffi_array_field_key`: a range from 1, a `string` key, a
+    length past the limit).
+  - **An element is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or
+    `f64`**: `` which has no C element layout `` (NL2814,
+    `ffi_array_field_element`: a `CPtr` and a `declare class` element).
+  - **An index is checked.** The index is any value an array index takes,
+    widened to `i64` before it is compared. A constant index outside 0 to `Hi` is refused at
+    compile time: `` its indices are 0 to 4 `` (NL2818,
+    `ffi_array_field_oob`, past the end and below zero). Any other index is
+    compared, unsigned, with the length, and one outside it panics with
+    `index out of range` before memory is touched (`readH(5)`, `readH(-1)`,
+    `poke(3)` in `ffi_array_field`). An index the prover keeps inside the
+    range — a constant, an `integer<0, Hi>` value, a `for` loop's counter
+    below the length — emits no check, and `--emit-panics` lists it as proven
+    (`sumH` and `written`, pinned by `ffi_array_field.panics`, which lists
+    `readH`'s, `readData`'s and `store`'s indices as unproven). Element loads and stores carry no TBAA tag, as the struct's
+    other fields do not.
+  - **It is read and written by index and nothing else.** It is not a Nish
+    array: holding it, passing it, reading its `.length` or walking it with
+    `for...of` is `` it cannot be held, passed or measured as a value ``
+    (NL2817, `ffi_array_field_value`), replacing it whole is
+    `` is written element by element `` (NL2816, `ffi_array_field_assign`),
+    and a spread of its object is `` which a spread cannot copy `` (NL2815,
+    `ffi_array_field_spread`).
+  - **It opens no other C shape.** A union field and a bitfield stay refused:
+    `` Union types other than `T | null` are forbidden `` (NL1053,
+    `ffi_array_field_union`) and `` has type `integer<0, 7>`, which has no C
+    layout `` (NL2752, `ffi_array_field_bitfield`).
+  - Under `-g` a debugger sees C's array type, with the element count
+    (`tests/ffi-struct.js`).
 - **A field is plain and has no initializer, and a class with fields has
   nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
@@ -5887,7 +6024,7 @@ return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
 what it adds is a name, so one C pointer type is never passed where another is
 wanted** (`tests/cases/ffi_opaque_handle`,
 [cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
-`docs/roadmap/wp66-c-headers.md` S3):
+`docs/wp66-c-headers.md` S3):
 
 ```ts
 declare class Db {}
@@ -5944,7 +6081,7 @@ ffi.null:
 - **A `Name` result is checked for `NULL`.** A `declare function` that returns
   `Name` promises a pointer, so a `NULL` from C stops the program with
   `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
-  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  on stderr and exit status 1, the `ffi-null` panic the no-panic scope refuses.
   A `Name | null` result is narrowed with `!== null` before it goes back to C:
   passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
   Db, got Db | null `` (`ffi_opaque_nullable`).
@@ -6022,7 +6159,7 @@ ffi.copy:
   `reject_unsafe_read_struct_null`), but a `declare function` declared to
   answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
   `icmp eq` and the branch to `ffi.null` above.
-  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+  No proof removes the test, so the no-panic scope refuses a call in it.
 - **The rest of the pointer is not checked**: not that it is live, not the
   size it covers. The layout must be C's struct or a prefix of it. That is why
   it is in [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping):
@@ -6078,7 +6215,9 @@ or a private one whose name is not reserved to C:
 rename the defined function `` (`tests/link/ffi_package_declare_root_clash`).
 A private function named like a C library function is emitted as `abs$`, and a
 generic one's instantiations as `labs$i32`, so neither takes the C symbol and
-both are accepted (`tests/link/ffi_package_declare_apart`). The two refusals
+both are accepted (`tests/link/ffi_package_declare_apart`). A private function
+qualified by its module because another module defines its name (WP57 S1,
+`helper$.add`) holds a `$` already, so it is never one of these. The two refusals
 are refused rather than linked because the whole-program analysis keeps one
 set of facts per symbol, and the two would share it.
 

@@ -16,7 +16,7 @@ reverse a rule LANGUAGE.md states on purpose, so it waits on the owner.
 | 2 | `indexOf(byte, from)` on `u8[]` through `memchr`, and a sub-range compare through `memcmp` | Missing | S1 |
 | 3 | An array allocation that skips the zero fill, and one standard `grow` | Missing | S2 |
 | 4 | Field initializers that are not literals (`xs: i32[] = []`) | Missing | S3 |
-| 5 | `i32.toString()` | Refused by rule | S4 *(open question)* |
+| 5 | `i32.toString()` | Refused by rule | S4 *(decided: D1b)* |
 
 ## 1. Constant tables: built, and how the port missed them
 
@@ -144,13 +144,17 @@ options:
   radix from 2 to 36 it is JavaScript's. `String(n)` on a number becomes the
   same conversion. The cost is two spellings of one conversion.
 - **D1b: keep the rule and improve the refusal.**
-  `` Unknown method `toString` on i32 `` becomes
-  `` A number has no `toString`: write `${n}` ``, and `String(n)` gets the
-  same hint.
+  `` Unknown method `toString` on i32 `` names the template literal that
+  converts the number, and `String(n)` gets the same hint.
 
-The recommendation is D1a without a radix: it is what TypeScript authors write,
-and under Node it means exactly what it means natively. A radix waits for a
-program that needs one.
+The recommendation was D1a without a radix: it is what TypeScript authors
+write, and under Node it means exactly what it means natively. The owner chose
+D1b (#1632): a number's `toString()` with no argument is refused as
+`` Unknown method `toString` on i32; use a template literal: `${n}` ``,
+spelled with the receiver the program wrote, and its quick-fix writes that
+literal (`tests/cases/reject_num_tostring*`). With a radix the refusal names
+no spelling, since a template literal has none. D1b's `String(n)` half was not
+taken: `String(n)` keeps its `` Unknown function `String` `` refusal.
 
 ## 6. Stages
 
@@ -160,7 +164,7 @@ program that needs one.
 - **S2:** `withCapacity` and `grow` in `std/array`. Then the dropped fill,
   measured on its own.
 - **S3:** field initializers that are not literals.
-- **S4:** `toString` on a number, once D1 is decided *(open question)*.
+- **S4:** the `toString` refusal names the template literal (D1b).
 
 S1 to S3 do not depend on one another. Each one ships its LANGUAGE.md rule, its
 cookbook entry and its guide-page change in the same PR, as the definition of

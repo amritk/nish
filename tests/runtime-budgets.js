@@ -972,15 +972,16 @@ const RUNTIME_SQLITE_TEXT_BUDGET = 8448
  * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http1_server/startup.ts`,
  * which builds that pool on the default `Http1Config` and prints the bytes.
  *
- * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
- * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
- * connection built. Each connection is built on the first accept into its slot,
- * 752 bytes on the same defaults (2026-11-13). Built eagerly, as every slot was before, a
+ * Measured **16,928 bytes** on 2026-11-18 with clang 18 on linux-x64: the 16,384-byte
+ * read scratch every server keeps, and the pool's own bookkeeping, with no connection
+ * built (16,688 before a slot rested without one: the five slot arrays that lend a
+ * connection to a busy slot add 240). A connection is built only when a busy slot
+ * finds none spare, 752 bytes on the same defaults (2026-11-13). Built eagerly, as every slot was before, a
  * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
  * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
  * next 256-byte boundary above the measurement, as every ceiling here was set.
  */
-export const HTTP1_SERVER_START_BYTES = 16896
+export const HTTP1_SERVER_START_BYTES = 17152
 
 /**
  * Ceiling on what one idle keep-alive `Http1Server` connection holds in the arena on
@@ -996,7 +997,10 @@ export const HTTP1_SERVER_START_BYTES = 16896
  * it keeps to write again is sized to that head, not `H1_HEAD_KEEP`'s 1 KB, and
  * `Http1Config.idleInput`, now on by default, lends its input and head buffers to
  * the pools while it rests (2,232 bytes with it off). The budget is the next
- * 256-byte boundary above the measurement, as every ceiling here was set.
+ * 256-byte boundary above the measurement, as every ceiling here was set. Since
+ * 2026-11-18 a resting keep-alive slot holds no connection at all, so this is what a
+ * connection kept spare between the requests it is lent to holds, once for every
+ * request in flight at the peak rather than once for every open connection.
  */
 export const HTTP1_SERVER_IDLE_BYTES = 1024
 
@@ -1249,9 +1253,11 @@ export const RUNTIME_BUDGETS = [
  * examples/wasm-arena/client.ts is the whole-page row (WP50 stage 6, measured
  * 2026-11-10): client.ts, sim.ts and nish/host/ring compiled with `--host
  * examples/wasm-arena/host.ts --memory 4` (the page's own build), one `.ll` each,
- * linked with no runtime-wasm.c. Its 14,108-byte `.wasm` (gzip 6,356, brotli 5,814;
- * one byte and 66 brotli bytes over the build without `--memory`) is the whole
- * simulation, the renderer's instance packing and the input ring; its loader is
+ * linked with no runtime-wasm.c. Its `.wasm` is the whole simulation, the
+ * renderer's instance packing and the input ring: 13,179 bytes (gzip 6,039, brotli
+ * 5,485) since its numeric storage was proven free of panic sites (strict-by-default
+ * stage 2, measured 2026-11-20), and the inline module 39,519 (gzip 7,467, brotli
+ * 6,498); its loader is
  * 10,767 bytes (gzip 3,522, brotli 3,090), most of it the eight module-storage
  * views and the two host imports that take a string.
  */
@@ -1289,9 +1295,9 @@ export const WASM_HOST_SIZE_BUDGETS = [
     host: "examples/wasm-arena/host.ts",
     memory: 4,
     runtime: false,
-    wasm: [14108, 6356, 5814],
+    wasm: [13179, 6039, 5485],
     loader: [10767, 3522, 3090],
-    inline: [42249, 7821, 6770],
+    inline: [39519, 7467, 6498],
   },
 ]
 

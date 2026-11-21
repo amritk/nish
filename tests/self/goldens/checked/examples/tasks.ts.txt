@@ -283,91 +283,91 @@ function AtomicI64Array.compareExchange(this: AtomicI64Array, i: i32, expected: 
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 old: i64 (const)
-function ThreadScope.spawn<i32, i32, primesBelow>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow [exported method instance]
+function ThreadScope.spawn<i32, u32, primesBelow>(this: ThreadScope, entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.ThreadScope.spawn$i32$u32$fn.11.primesBelow [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.runTask$i32$i32$fn.11.primesBelow
+  sharedWrite: via nish.runTask$i32$u32$fn.11.primesBelow
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.11.primesBelow nish.slotOutOfRange nish.slotWritten nish_scope_spawn primesBelow$
+  calls: nish.runTask$i32$u32$fn.11.primesBelow nish.slotOutOfRange nish.slotWritten nish_scope_spawn primesBelow$
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.11.primesBelow#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$u32$fn.11.primesBelow#2
   stackSites=0 stackLocals=0
   callee +0:10 slotWritten -> @nish.slotWritten
   callee +3:7 primesBelow -> @primesBelow$
   callee +7:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee +9:5 runTask<i32, i32, primesBelow> -> @nish.runTask$i32$i32$fn.11.primesBelow
-function ThreadScope.spawn<i32, i32, longestCollatz>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz [exported method instance]
+  callee +9:5 runTask<i32, u32, primesBelow> -> @nish.runTask$i32$u32$fn.11.primesBelow
+function ThreadScope.spawn<i32, u32, longestCollatz>(this: ThreadScope, entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.ThreadScope.spawn$i32$u32$fn.14.longestCollatz [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.runTask$i32$i32$fn.14.longestCollatz
+  sharedWrite: via nish.runTask$i32$u32$fn.14.longestCollatz
   escaping: arg at dst entry this
-  calls: longestCollatz$ nish.runTask$i32$i32$fn.14.longestCollatz nish.slotOutOfRange nish.slotWritten nish_scope_spawn
+  calls: longestCollatz$ nish.runTask$i32$u32$fn.14.longestCollatz nish.slotOutOfRange nish.slotWritten nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.14.longestCollatz#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$u32$fn.14.longestCollatz#2
   stackSites=0 stackLocals=0
   callee +0:10 slotWritten -> @nish.slotWritten
   callee +3:7 longestCollatz -> @longestCollatz$
   callee +7:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee +9:5 runTask<i32, i32, longestCollatz> -> @nish.runTask$i32$i32$fn.14.longestCollatz
-function ThreadScope.spawn<i32, i32, digitSum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.8.digitSum [exported method instance]
+  callee +9:5 runTask<i32, u32, longestCollatz> -> @nish.runTask$i32$u32$fn.14.longestCollatz
+function ThreadScope.spawn<i32, u32, digitSum>(this: ThreadScope, entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.ThreadScope.spawn$i32$u32$fn.8.digitSum [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.runTask$i32$i32$fn.8.digitSum
+  sharedWrite: via nish.runTask$i32$u32$fn.8.digitSum
   escaping: arg at dst entry this
-  calls: digitSum$ nish.runTask$i32$i32$fn.8.digitSum nish.slotOutOfRange nish.slotWritten nish_scope_spawn
+  calls: digitSum$ nish.runTask$i32$u32$fn.8.digitSum nish.slotOutOfRange nish.slotWritten nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.8.digitSum#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$u32$fn.8.digitSum#2
   stackSites=0 stackLocals=0
   callee +0:10 slotWritten -> @nish.slotWritten
   callee +3:7 digitSum -> @digitSum$
   callee +7:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee +9:5 runTask<i32, i32, digitSum> -> @nish.runTask$i32$i32$fn.8.digitSum
-function ThreadScope.spawn<i32, i32, checksum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.8.checksum [exported method instance]
+  callee +9:5 runTask<i32, u32, digitSum> -> @nish.runTask$i32$u32$fn.8.digitSum
+function ThreadScope.spawn<i32, u32, checksum>(this: ThreadScope, entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.ThreadScope.spawn$i32$u32$fn.8.checksum [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.runTask$i32$i32$fn.8.checksum
+  sharedWrite: via nish.runTask$i32$u32$fn.8.checksum
   escaping: arg at dst entry this
-  calls: checksum$ nish.runTask$i32$i32$fn.8.checksum nish.slotOutOfRange nish.slotWritten nish_scope_spawn
+  calls: checksum$ nish.runTask$i32$u32$fn.8.checksum nish.slotOutOfRange nish.slotWritten nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.8.checksum#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$u32$fn.8.checksum#2
   stackSites=0 stackLocals=0
   callee +0:10 slotWritten -> @nish.slotWritten
   callee +3:7 checksum -> @checksum$
   callee +7:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee +9:5 runTask<i32, i32, checksum> -> @nish.runTask$i32$i32$fn.8.checksum
-function runTask<i32, i32, primesBelow>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.11.primesBelow [instance]
+  callee +9:5 runTask<i32, u32, checksum> -> @nish.runTask$i32$u32$fn.8.checksum
+function runTask<i32, u32, primesBelow>(entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.runTask$i32$u32$fn.11.primesBelow [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.storeResult$i32
+  sharedWrite: via nish.storeResult$u32
   escaping: arg at
-  calls: nish.storeResult$i32 primesBelow$
-  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$i32#0
+  calls: nish.storeResult$u32 primesBelow$
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$u32#0
   stackSites=0 stackLocals=0
-  callee +0:3 storeResult<i32> -> @nish.storeResult$i32
+  callee +0:3 storeResult<u32> -> @nish.storeResult$u32
   callee +0:24 primesBelow -> @primesBelow$
-function runTask<i32, i32, longestCollatz>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.14.longestCollatz [instance]
+function runTask<i32, u32, longestCollatz>(entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.runTask$i32$u32$fn.14.longestCollatz [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.storeResult$i32
+  sharedWrite: via nish.storeResult$u32
   escaping: arg at
-  calls: longestCollatz$ nish.storeResult$i32
-  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$i32#0
+  calls: longestCollatz$ nish.storeResult$u32
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$u32#0
   stackSites=0 stackLocals=0
-  callee +0:3 storeResult<i32> -> @nish.storeResult$i32
+  callee +0:3 storeResult<u32> -> @nish.storeResult$u32
   callee +0:24 longestCollatz -> @longestCollatz$
-function runTask<i32, i32, digitSum>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.8.digitSum [instance]
+function runTask<i32, u32, digitSum>(entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.runTask$i32$u32$fn.8.digitSum [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.storeResult$i32
+  sharedWrite: via nish.storeResult$u32
   escaping: arg at
-  calls: digitSum$ nish.storeResult$i32
-  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$i32#0
+  calls: digitSum$ nish.storeResult$u32
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$u32#0
   stackSites=0 stackLocals=0
-  callee +0:3 storeResult<i32> -> @nish.storeResult$i32
+  callee +0:3 storeResult<u32> -> @nish.storeResult$u32
   callee +0:24 digitSum -> @digitSum$
-function runTask<i32, i32, checksum>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.8.checksum [instance]
+function runTask<i32, u32, checksum>(entry: void, arg: i32, dst: u32[], at: i32): void -> @nish.runTask$i32$u32$fn.8.checksum [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.storeResult$i32
+  sharedWrite: via nish.storeResult$u32
   escaping: arg at
-  calls: checksum$ nish.storeResult$i32
-  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$i32#0
+  calls: checksum$ nish.storeResult$u32
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$u32#0
   stackSites=0 stackLocals=0
-  callee +0:3 storeResult<i32> -> @nish.storeResult$i32
+  callee +0:3 storeResult<u32> -> @nish.storeResult$u32
   callee +0:24 checksum -> @checksum$
-function storeResult<i32>(dst: i32[], at: i32, r: i32): void -> @nish.storeResult$i32 [instance]
+function storeResult<u32>(dst: u32[], at: i32, r: u32): void -> @nish.storeResult$u32 [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at r
@@ -380,42 +380,38 @@ const PRIMES: i32 = 3000000
 const COLLATZ: i32 = 400000
 const DIGITS: i32 = 18000000
 const CHECKSUM: i32 = 120000000
-function primesBelow(n: i32): i32 -> @primesBelow$
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+function primesBelow(n: i32): u32 -> @primesBelow$
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:7 count: i32 (let)
-  local +1:12 k: i32 (let)
+  local +0:7 count: u32 (let)
+  local +1:12 k: u32 (let)
   local +2:9 prime: boolean (let)
-  local +3:14 d: i32 (let)
-function longestCollatz(n: i32): i32 -> @longestCollatz$
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  local +5:14 d: u32 (let)
+function longestCollatz(n: i32): u32 -> @longestCollatz$
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:7 best: i32 (let)
+  local +0:7 best: u32 (let)
   local +1:12 start: i32 (let)
   local +2:9 x: f64 (let)
-  local +3:9 steps: i32 (let)
-function digitSum(n: i32): i32 -> @digitSum$
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  local +3:9 steps: u32 (let)
+function digitSum(n: i32): u32 -> @digitSum$
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:7 total: i32 (let)
-  local +1:12 k: i32 (let)
-  local +2:9 rest: i32 (let)
-  local +4:13 digit: i32 (const)
-function checksum(n: i32): i32 -> @checksum$
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  local +0:7 total: u32 (let)
+  local +1:12 k: u32 (let)
+  local +2:9 rest: u32 (let)
+  local +4:13 digit: u32 (const)
+function checksum(n: i32): u32 -> @checksum$
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:7 acc: i32 (let)
-  local +1:12 i: i32 (let)
+  local +0:7 acc: u32 (let)
+  local +1:12 i: u32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: checksum$ digitSum$ longestCollatz$ nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz nish.ThreadScope.spawn$i32$i32$fn.8.checksum nish.ThreadScope.spawn$i32$i32$fn.8.digitSum nish.scope nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 primesBelow$
+  calls: checksum$ digitSum$ longestCollatz$ nish.ThreadScope.spawn$i32$u32$fn.11.primesBelow nish.ThreadScope.spawn$i32$u32$fn.14.longestCollatz nish.ThreadScope.spawn$i32$u32$fn.8.checksum nish.ThreadScope.spawn$i32$u32$fn.8.digitSum nish.scope nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_u64 primesBelow$
   stackSites=0 stackLocals=0
-  local -3:9 answers: i32[] (const)
+  local -3:9 answers: u32[] (const)
   local -2:9 args: string[] (const)
   callee +0:18 primesBelow -> @primesBelow$
   callee +1:18 longestCollatz -> @longestCollatz$
@@ -423,7 +419,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee +3:18 checksum -> @checksum$
   local +5:11 s: ThreadScope (const)
   callee +5:15 scope -> @nish.scope
-  callee +6:5 ThreadScope.spawn<i32, i32, primesBelow> -> @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow
-  callee +7:5 ThreadScope.spawn<i32, i32, longestCollatz> -> @nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz
-  callee +8:5 ThreadScope.spawn<i32, i32, digitSum> -> @nish.ThreadScope.spawn$i32$i32$fn.8.digitSum
-  callee +9:5 ThreadScope.spawn<i32, i32, checksum> -> @nish.ThreadScope.spawn$i32$i32$fn.8.checksum
+  callee +6:5 ThreadScope.spawn<i32, u32, primesBelow> -> @nish.ThreadScope.spawn$i32$u32$fn.11.primesBelow
+  callee +7:5 ThreadScope.spawn<i32, u32, longestCollatz> -> @nish.ThreadScope.spawn$i32$u32$fn.14.longestCollatz
+  callee +8:5 ThreadScope.spawn<i32, u32, digitSum> -> @nish.ThreadScope.spawn$i32$u32$fn.8.digitSum
+  callee +9:5 ThreadScope.spawn<i32, u32, checksum> -> @nish.ThreadScope.spawn$i32$u32$fn.8.checksum

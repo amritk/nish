@@ -137,9 +137,10 @@
 
 import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
+import { builtinAnswerTop } from "./members"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
-import { isOptionalChain, unwrapParens } from "./emit-util"
+import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
 import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringMap } from "./map"
@@ -156,8 +157,10 @@ import {
   T_STRING,
   T_U16,
   T_U32,
+  T_U64,
   T_U8,
   TypeTable,
+  intBits,
   isInteger,
   isNumeric,
   isUnsigned,
@@ -1244,16 +1247,69 @@ export const isBuiltinConversion = (program: CheckedProgram, call: Node, name: s
  * `i32` (WP31 §8), or `null`. `u8` and `u16` widen with `zext`, and a ranged
  * value is already the `i32` it converts to, so the declaration bounds the
  * result. `u32` and `u64` declare a range past `INT_MAX`, where the
- * conversion keeps the low 32 bits and reads them signed, so they state
- * nothing here.
+ * conversion keeps the low 32 bits and reads them signed, so their declared
+ * range states nothing here. An unsigned value whose shape bounds it below
+ * 2^31 (`unsignedRange`) converts to itself, though: `toI32(w & 16777215)`
+ * is in `[0, 16777215]` whatever `w` is. A builtin whose answer is documented
+ * to land in `[0, top]` (`builtinAnswerTop`) converts to itself in either
+ * number mode: `toI32(s.charCodeAt(i))` is a byte.
  */
 const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
   const e = unwrapBoundsParens(expr)
   if (e.kind !== NodeKind.Call || !isBuiltinToI32(walk.ctx.program, e)) {
     return null
   }
-  const declared = walk.ctx.table.declaredRange(walk.ctx.program.nodeTypes[e.children[1].children[0].id])
+  const arg = e.children[1].children[0]
+  const top = builtinAnswerTop(walk.ctx.program, walk.ctx.table, unwrapBoundsParens(arg))
+  if (top >= 0) {
+    return new DeclaredRange(toI64(0), toI64(top))
+  }
+  const declared = unsignedRange(walk, arg)
   return declared !== null && declared.hi <= I32_MAX ? declared : null
+}
+
+/**
+ * The range an unsigned expression's shape bounds it to whatever its operands
+ * hold, or its type's declared range, or `null` for a value of any other type.
+ * A constant (`constantValue`) is the one value it is, `x & y` is at most the
+ * smaller of the two sides' tops — so `x & C` is in `[0, C]` —, `x >>> k` is
+ * below `2^(bits - k)` and `x % C` below `C`. A `u64`'s declared range stops
+ * at 2^63 - 1 (`TypeTable.declaredRange`) where the type does not, so it
+ * bounds nothing here. `maskedRange` reads the same three operators on a
+ * signed operand, from the walk's state: this one has no state to read, only
+ * the shape and the declared type, and answers in the declared domain that
+ * `convertedRange` compares with `INT_MAX`.
+ */
+const unsignedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
+  const ctx = walk.ctx
+  const e = unwrapBoundsParens(expr)
+  const c = constantValue(walk, e)
+  if (c >= 0) {
+    return new DeclaredRange(toI64(c), toI64(c))
+  }
+  const type = ctx.program.nodeTypes[e.id]
+  if (type < 0 || !isUnsigned(type)) {
+    return type < 0 ? null : ctx.table.declaredRange(type)
+  }
+  if (e.kind === NodeKind.Binary && e.text === "&") {
+    const a = unsignedRange(walk, e.children[0])
+    const b = unsignedRange(walk, e.children[1])
+    if (a !== null && (b === null || a.hi <= b.hi)) {
+      return new DeclaredRange(toI64(0), a.hi)
+    }
+    if (b !== null) {
+      return new DeclaredRange(toI64(0), b.hi)
+    }
+  }
+  const k = e.kind === NodeKind.Binary ? constantValue(walk, e.children[1]) : -1
+  // A count past 62 bits wide would leave `2^(bits - k)` outside an `i64`.
+  if (e.text === ">>>" && k >= 1 && k < intBits(type) && intBits(type) - k <= 62) {
+    return new DeclaredRange(toI64(0), (toI64(1) << toI64(intBits(type) - k)) - toI64(1))
+  }
+  if (e.text === "%" && k >= 1) {
+    return new DeclaredRange(toI64(0), toI64(k - 1))
+  }
+  return type === T_U64 ? null : ctx.table.declaredRange(type)
 }
 
 /**
@@ -1396,6 +1452,84 @@ const isMinusOne = (expr: Node): boolean => {
 }
 
 /**
+ * The value of `expr` when it is a non-negative integer constant below
+ * `INT_MAX`, read as a literal is (`literalValue`), or -1. A constant is
+ *
+ *   - a literal;
+ *   - a builtin integer conversion of one that fits its target type:
+ *     `toU64(0)`, `toU8(255)`, but never `toU8(300)`, which keeps the low
+ *     byte;
+ *   - a folded module constant of an integer type (`program.nodeConstants`);
+ *   - a function-level `const` of an integer type whose initialiser is one of
+ *     these (`BoundsWalk.constLocals`). A `const` is never rebound, so its
+ *     value holds wherever it is read. A `let` never counts, even one nothing
+ *     writes again, and neither does a field.
+ */
+const constantValue = (walk: BoundsWalk, expr: Node): i32 => {
+  const e = unwrapBoundsParens(expr)
+  const n = literalValue(e)
+  if (n >= 0) {
+    return n
+  }
+  const program = walk.ctx.program
+  if (e.kind === NodeKind.Call) {
+    return convertedConstant(program, e)
+  }
+  if (e.kind !== NodeKind.Ident) {
+    return -1
+  }
+  const constant = program.nodeConstants[e.id]
+  if (constant !== null) {
+    const fits = constant.intValue >= toI64(0) && constant.intValue < I32_MAX
+    return constant.folded && isInteger(constant.type) && fits ? toI32(constant.intValue) : -1
+  }
+  const v = program.nodeLocals[e.id]
+  let k = 0
+  while (v !== null && k < walk.constLocals.length) {
+    if (walk.constLocals[k] === v) {
+      return walk.constValues[k]
+    }
+    k = k + 1
+  }
+  return -1
+}
+
+/** The literal a builtin integer conversion `call` converts, when it fits the target type, or -1. */
+const convertedConstant = (program: CheckedProgram, call: Node): i32 => {
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Ident) {
+    return -1
+  }
+  const name = callee.text
+  let most = -1
+  if (name === "toU8") {
+    most = 255
+  } else if (name === "toU16") {
+    most = 65535
+  } else if (name === "toI32" || name === "toU32" || name === "toI64" || name === "toU64") {
+    // `literalValue` answers below `INT_MAX`, which fits each of them.
+    most = 2147483647
+  }
+  if (most < 0 || !isBuiltinConversion(program, call, name)) {
+    return -1
+  }
+  const n = literalValue(call.children[1].children[0])
+  return n >= 0 && n <= most ? n : -1
+}
+
+/**
+ * `declaredValueRange`, with a constant (`constantValue`) read as the one
+ * value it is.
+ */
+const constantOrDeclaredRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
+  const n = constantValue(walk, expr)
+  if (n >= 0) {
+    return new DeclaredRange(toI64(n), toI64(n))
+  }
+  return declaredValueRange(walk.ctx, expr)
+}
+
+/**
  * The values `expr` can have whatever the state says, or `null` when only a
  * fact could tell: one value for a literal, a negated literal or a folded
  * integer constant, and the declared range of a ranged or unsigned type.
@@ -1435,7 +1569,7 @@ const rangeExcludes = (range: DeclaredRange | null, n: i64): boolean =>
  */
 const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: Node): boolean => {
   const ctx = walk.ctx
-  const range = declaredValueRange(ctx, divisor)
+  const range = constantOrDeclaredRange(walk, divisor)
   const d = indexLocal(ctx, divisor)
   const zero: i64 = 0
   const minusOne: i64 = -1
@@ -1450,7 +1584,7 @@ const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: 
   ) {
     return true
   }
-  const top = declaredValueRange(ctx, dividend)
+  const top = constantOrDeclaredRange(walk, dividend)
   const x = indexLocal(ctx, dividend)
   return (top !== null && top.lo >= zero) || (x !== null && knownNonNegative(state, x))
 }
@@ -1704,7 +1838,7 @@ const equalityFacts = (walk: BoundsWalk, left: Node, right: Node): Fact[] => {
 }
 
 const addEqualityFacts = (walk: BoundsWalk, out: Fact[], value: Node, other: Node): void => {
-  const n = literalValue(other)
+  const n = constantValue(walk, other)
   if (n < 0) {
     return
   }
@@ -1733,7 +1867,7 @@ const disequalityFacts = (walk: BoundsWalk, state: State, left: Node, right: Nod
 }
 
 const addDisequalityFacts = (walk: BoundsWalk, state: State, out: Fact[], value: Node, other: Node): void => {
-  const n = literalValue(other)
+  const n = constantValue(walk, other)
   const v = indexLocal(walk.ctx, value)
   if (v === null) {
     return
@@ -2649,6 +2783,13 @@ export class BoundsWalk {
    */
   literalStrings: Local[]
   literalLengths: i32[]
+  /**
+   * The function-level `const` locals of an integer type this body binds to a
+   * constant, beside its value (`constantValue`). A `const` is never rebound,
+   * so nothing has to forget one.
+   */
+  constLocals: Local[]
+  constValues: i32[]
   /** Every call to a function taking entry facts, with what this site proves for it. */
   sites: RangeSite[]
   /** This body's program's callee table (`RangeTables.calleesOf`), or empty in pass 2. */
@@ -2696,6 +2837,8 @@ export class BoundsWalk {
     this.sliceClamps = null
     this.literalStrings = []
     this.literalLengths = []
+    this.constLocals = []
+    this.constValues = []
     this.sites = []
     this.callees = []
     this.stopAfter = -1
@@ -2773,17 +2916,20 @@ const isSimdCall = (program: CheckedProgram, call: Node): boolean =>
  * record of the imported name is the whole test (`isVectorAccess` in
  * `src/emit-arrays.ts`).
  */
-const vectorAccessLanes = (ctx: CheckContext, call: Node): i32 => {
-  const args = call.children[1].children
-  if (call.kind !== NodeKind.Call || args.length < 2) {
+export const vectorAccessLanes = (program: CheckedProgram, table: TypeTable, call: Node): i32 => {
+  if (call.kind !== NodeKind.Call) {
     return 0
   }
-  const name = ctx.program.nodeBuiltins[call.id]
+  const args = call.children[1].children
+  if (args.length < 2) {
+    return 0
+  }
+  const name = program.nodeBuiltins[call.id]
   if (name === "store" && args.length === 3) {
-    return ctx.table.laneCount(ctx.program.nodeTypes[args[0].id])
+    return table.laneCount(program.nodeTypes[args[0].id])
   }
   if (simdTypeLane(simdSuffix(name, "load")).length > 0) {
-    return ctx.table.laneCount(ctx.program.nodeTypes[call.id])
+    return table.laneCount(program.nodeTypes[call.id])
   }
   return 0
 }
@@ -2897,6 +3043,31 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
 }
 
 /**
+ * WP66 S4: whether `index` is inside a fixed-length array of `length`
+ * elements whatever it runs as. The length is fixed by the field's type and
+ * nothing can change it, so, as for a constant table, the index's declared
+ * range (an `integer<0, 4>` into five elements), a literal or folded
+ * constant, or the range the state gives an `i32` or `i64` index, below the
+ * length is the proof.
+ */
+const provesCArrayIndex = (walk: BoundsWalk, state: State, index: Node, length: i32): boolean => {
+  const declared = constantOrDeclaredRange(walk, index)
+  if (declared !== null) {
+    return declared.lo >= toI64(0) && declared.hi < toI64(length)
+  }
+  const written = walk.ctx.program.nodeTypes[index.id]
+  if (written < 0 || writesSomething(index)) {
+    return false
+  }
+  const type = walk.ctx.table.baseOf(written)
+  if (type !== T_I32 && type !== T_I64) {
+    return false
+  }
+  const range = valueRange(walk, state, index, type)
+  return range.lo >= toI64(0) && range.hi < toI64(length)
+}
+
+/**
  * Record the verdict for one access. A proof goes into the side table the
  * emitter reads; the absence of one inside a loop goes on the list the WP15 §8
  * walk reports from, but only for the shape the analysis could have proved —
@@ -2919,6 +3090,15 @@ const judge = (
   const ctx = walk.ctx
   if (provesTableIndex(walk, state, receiver, index)) {
     noteProof(walk, node)
+    return
+  }
+  // WP66 S4: a fixed-length array field has a length the type spells, and no
+  // holder a fact could name; a constant or a range inside it is proved here.
+  const array = cArrayField(ctx.program, ctx.table, receiver)
+  if (array !== null) {
+    if (provesCArrayIndex(walk, state, index, array.cLength)) {
+      noteProof(walk, node)
+    }
     return
   }
   const holder = holderOf(walk, receiver)
@@ -3340,6 +3520,21 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
     const top = maxIndexOf(state, offset.v)
     return top >= 0 && toI64(top) + toI64(offset.c) < I32_MAX && knownMinLength(state, holder, top + offset.c)
   }
+  // `w[v - c]`: a floor of at least `c` keeps the difference non-negative, so
+  // it cannot wrap, and with `c >= 1` a `v <= w.length` puts it below the
+  // length. `const j = v - c; w[j]` is proved the same way (`differenceFacts`).
+  const e = unwrapBoundsParens(index)
+  if (e.kind === NodeKind.Binary && e.text === "-") {
+    const c = literalValue(e.children[1])
+    const v = indexLocal(ctx, e.children[0])
+    if (c < 1 || v === null || minValueOf(state, v) < c) {
+      return false
+    }
+    return (
+      knownAtMost(state, v, holder) ||
+      (maxIndexOf(state, v) >= 0 && knownMinLength(state, holder, maxIndexOf(state, v) - c))
+    )
+  }
   const i = indexLocal(ctx, index)
   if (i === null || !knownNonNegative(state, i)) {
     return false
@@ -3478,7 +3673,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
-    const lanes = vectorAccessLanes(ctx, e)
+    const lanes = vectorAccessLanes(ctx.program, ctx.table, e)
     if (lanes > 0) {
       judgeVectorAccess(walk, state, e, lanes)
     }
@@ -4640,6 +4835,12 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
   }
   forgetLocal(walk, state, v)
   addFacts(state, facts)
+  const value =
+    v.mutable || !isInteger(v.type) || init.kind === NodeKind.Empty ? -1 : constantValue(walk, init)
+  if (value >= 0) {
+    walk.constLocals.push(v)
+    walk.constValues.push(value)
+  }
   // `const t = "abcdef"`: what `asciiLiteralLength` reads `t.slice(1, 3)` against.
   if (walk.sliceClamps === null || v.mutable || v.type !== T_STRING) {
     return
@@ -4990,6 +5191,10 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
       return new Interval(-negated, -negated)
     }
   }
+  const named = constantValue(walk, e)
+  if (named >= 0) {
+    return new Interval(toI64(named), toI64(named))
+  }
   if (e.kind === NodeKind.Ident) {
     const constant = ctx.program.nodeConstants[e.id]
     if (constant !== null) {
@@ -5039,9 +5244,10 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     const a = valueRange(walk, state, e.children[0], type)
     return combinedRange("neg", a, a, type)
   }
-  const counted = bitCountRange(ctx.program, e, type)
-  if (counted !== null) {
-    return counted
+  // `s.charCodeAt(i)` and `Math.clz32(x)` answer a documented `[0, top]`.
+  const top = builtinAnswerTop(ctx.program, ctx.table, e)
+  if (top >= 0 && ctx.table.baseOf(ctx.program.nodeTypes[e.id]) === type) {
+    return new Interval(toI64(0), toI64(top))
   }
   if (e.kind === NodeKind.Call) {
     const returned = callRange(walk, state, e, type)
@@ -5055,29 +5261,6 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     return new Interval(declared.lo, declared.hi)
   }
   return new Interval(typeMin(type), typeMax(type))
-}
-
-/**
- * `Math.clz32(x)` counts bits, so it lands in `[0, 32]`. The checker gives the
- * call `integer<0, 32>`, but an operand is recorded as the base it is read as
- * (`readAsBase` in src/expressions.ts), so the range reaches the prover here
- * rather than through the node's type: `31 - Math.clz32(b)`, the index of a
- * bit, then needs no overflow check. A user function called `clz32` on a value
- * named `Math` is not this, which `nodeCallees` and the receiver's type say.
- */
-const bitCountRange = (program: CheckedProgram, e: Node, type: i32): Interval | null => {
-  if (type !== T_I32 || e.kind !== NodeKind.Call || program.nodeCallees[e.id] !== null) {
-    return null
-  }
-  const callee = e.children[0]
-  if (callee.kind !== NodeKind.Member || callee.text !== "clz32") {
-    return null
-  }
-  const receiver = callee.children[0]
-  if (receiver.kind !== NodeKind.Ident || receiver.text !== "Math" || program.nodeTypes[receiver.id] >= 0) {
-    return null
-  }
-  return new Interval(toI64(0), toI64(32))
 }
 
 // ---- Return ranges ----------------------------------------------------------------
@@ -5282,7 +5465,9 @@ const payloadRange = (walk: BoundsWalk, state: State, arg: Node, type: i32): Int
  * cannot overflow at all: `x & c`, `x >> c`, `x >>> c`, `x % c` and `x / c`
  * for a non-negative literal `c`, or `null` for anything else. These are what
  * a hash folded into a table size or a byte pulled out of a word look like,
- * and the sum they feed is then proven.
+ * and the sum they feed is then proven. `unsignedRange` reads the same
+ * operators by shape alone, for the unsigned operand of `toI32`, where no
+ * state is at hand.
  */
 const maskedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interval | null => {
   const ctx = walk.ctx

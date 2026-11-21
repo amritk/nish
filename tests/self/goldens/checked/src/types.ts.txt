@@ -72,6 +72,7 @@ struct TypeTable (class) size=168 align=8 exported
   method kindOf -> @TypeTable.kindOf
   method refOf -> @TypeTable.refOf
   method nameOf -> @TypeTable.nameOf
+  method symbolOf -> @TypeTable.symbolOf
   method derivedKey -> @TypeTable.derivedKey
   method intern -> @TypeTable.intern
   method internAll -> @TypeTable.internAll
@@ -79,6 +80,7 @@ struct TypeTable (class) size=168 align=8 exported
   method readonlyArrayOf -> @TypeTable.readonlyArrayOf
   method isReadonlyArray -> @TypeTable.isReadonlyArray
   method structOf -> @TypeTable.structOf
+  method declaredStructOf -> @TypeTable.declaredStructOf
   method markOpaque -> @TypeTable.markOpaque
   method isOpaque -> @TypeTable.isOpaque
   method setDisplayName -> @TypeTable.setDisplayName
@@ -236,7 +238,7 @@ function accessAlign(align: i32): i32 -> @accessAlign [exported]
   escaping: align
   stackSites=0 stackLocals=0
 function TypeTable.constructor(this: TypeTable): void -> @TypeTable.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct nish_array_grow
   pointer this: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -260,6 +262,12 @@ function TypeTable.refOf(this: TypeTable, type: i32): i32 -> @TypeTable.refOf [e
   pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TypeTable.nameOf(this: TypeTable, type: i32): string -> @TypeTable.nameOf [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: nish_panic_index
+  pointer this: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function TypeTable.symbolOf(this: TypeTable, type: i32): string -> @TypeTable.symbolOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: nish_panic_index
@@ -314,14 +322,24 @@ function TypeTable.isReadonlyArray(this: TypeTable, type: i32): boolean -> @Type
   calls: nish_panic_index
   pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function TypeTable.structOf(this: TypeTable, name: string): i32 -> @TypeTable.structOf [exported method]
+function TypeTable.structOf(this: TypeTable, symbol: string): i32 -> @TypeTable.structOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.intern
-  escaping: name
+  escaping: symbol
   calls: TypeTable.intern
   pointer this: size=168 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
   callee +0:12 TypeTable.intern -> @TypeTable.intern
+function TypeTable.declaredStructOf(this: TypeTable, symbol: string, display: string): i32 -> @TypeTable.declaredStructOf [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via TypeTable.structOf
+  escaping: display symbol
+  calls: TypeTable.setDisplayName TypeTable.structOf
+  pointer this: size=168 writesThrough=false captured=false passedTo=TypeTable.structOf#0 TypeTable.setDisplayName#0
+  stackSites=0 stackLocals=0
+  local +0:11 type: i32 (const)
+  callee +0:18 TypeTable.structOf -> @TypeTable.structOf
+  callee +1:5 TypeTable.setDisplayName -> @TypeTable.setDisplayName
 function TypeTable.markOpaque(this: TypeTable, type: i32): void -> @TypeTable.markOpaque [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

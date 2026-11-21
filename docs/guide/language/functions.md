@@ -8,7 +8,14 @@ reference's [Functions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 
 ## Declaring a function
 
-<!-- nish:ok -->
+Several examples on this page add and index with nothing bounding them, so the
+compiler cannot prove them safe and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands and
+testing `i < xs.length` before an index, as the compile error suggests, builds
+them under the default.
+
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const add = (a: i32, b: i32): i32 => {
   return a + b;
@@ -51,7 +58,8 @@ passes. A default is a constant — a number, `true`/`false`, a string, an enum
 member — or the name of an earlier parameter, and the parameter keeps its type
 annotation:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const scale = (x: i32, by: i32 = 2): i32 => x * by;
 const area = (w: i32, h: i32 = w): i32 => w * h;
@@ -66,7 +74,8 @@ export const main = (): i32 => {
 The last parameter may instead be a **rest parameter**, an array that gathers
 every remaining argument. A call with none passes an empty array:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const total = (...xs: i32[]): i32 => {
   let sum = 0;
@@ -178,7 +187,8 @@ A program starts at `export const main` in the file you compile. It takes no
 parameters and returns either `void` (exit status 0) or an `i32`, which is
 the process's exit status:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   if (process.argv.length < 2) {
@@ -212,7 +222,8 @@ holds a [function reference](function-references.md#as-a-function-argument).
 A field or element is refused (`NL2759`): read it into a `const` first, as in
 `const op = ops[0]`, and pass the `const`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {
   let n = 0;

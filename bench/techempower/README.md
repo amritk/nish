@@ -12,12 +12,21 @@ upstream's `benchmark_config.json` when it is copied into that layout (WP39
 D2). It is WP39's E5
 ([docs/wp39-http-server.md](../../docs/wp39-http-server.md)).
 
-**It is not submitted.** Sending an entry to TechEmpower/FrameworkBenchmarks
-puts a public number on the project, so whether and when to do it is an
-open question (WP39 D1). The entry is run and measured from this directory,
-and nothing here is sent upstream: no pull request against
-TechEmpower/FrameworkBenchmarks, and no rank claimed from a run whose load
-generator shares the server's machine.
+**It is not submitted, and cannot be.** TechEmpower archived
+TechEmpower/FrameworkBenchmarks on 2026-03-24
+([issue 10932](https://github.com/TechEmpower/FrameworkBenchmarks/issues/10932)),
+and the project takes no entries. The entry stays here as a benchmark of this
+repository: it is run and measured from this directory, and no rank is
+claimed from a run whose load generator shares the server's machine. A public
+comparison goes through HttpArena instead
+([WP71](../../docs/wp71-httparena.md)).
+
+**The database entry coalesces its reads.** `db` and `queries` fetch every
+in-flight request's `World` rows through one `PgBatcher` query per batch
+(`select ... from unnest($1) ... cross join lateral (...)`, in
+`std/net/postgres.ts`). TechEmpower's rules refused a multi-row select in
+place of one query per row, so these two tests would not have passed review
+as written.
 
 ## What it answers
 
@@ -59,12 +68,13 @@ curl -i http://127.0.0.1:8080/json
 ```
 
 The image builds from a released compiler, installed by the `install.sh` of
-that release's tag. Its `NISH_VERSION` build argument must name a release after
-0.18.0, which has neither `tcpListenFlags` nor `JsonWriter`. 0.19.0 is the first
-release to have both, so the image builds only once 0.19.0 is out:
+that release's tag. Its `NISH_VERSION` build argument must name 0.31.0 or later
+(0.30.0 or later for `nish-postgres.dockerfile`), as each Dockerfile's header
+says: 0.31.0 is the first release whose `nish/net/prefork` binds the workers'
+shared listeners and pins them:
 
 ```bash
-docker build -f bench/techempower/nish.dockerfile --build-arg NISH_VERSION=0.19.0 -t nish-tfb bench/techempower
+docker build -f bench/techempower/nish.dockerfile --build-arg NISH_VERSION=0.31.0 -t nish-tfb bench/techempower
 docker run --rm -p 8080:8080 nish-tfb
 ```
 

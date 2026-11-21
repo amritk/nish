@@ -43,6 +43,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -141,7 +142,10 @@ for (const [label, nish] of Object.entries(compilers)) {
   fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(path.join(dir, "main.ts"), sourceFor(trees[label]))
   const exe = path.join(dir, "conn")
-  run(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
+  run(
+    nish,
+    withAllowPanics(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
+  )
   binaries.push({ label, exe })
 }
 const copy = path.join(out, "old-copy")

@@ -54,8 +54,7 @@ function home(h: u32, mask: i32): i32 -> @home
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function StrMap.probe(this: StrMap, key: string): i32 -> @StrMap.probe [method]
@@ -141,8 +140,7 @@ function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
   local +0:9 total: u32 (let)
   local +1:14 i: i32 (let)
 function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function IntMap.probe(this: IntMap, key: i32): i32 -> @IntMap.probe [method]

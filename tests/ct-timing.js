@@ -73,6 +73,7 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { withAllowPanics } from "./allow-panics.js"
 import { ctSpecs } from "./ct-asm.js"
 
 const root = path.resolve(import.meta.dirname, "..")
@@ -531,10 +532,14 @@ for (const file of fixtures) {
     continue
   }
   const ll = path.join(workDir, `${name}.ll`)
-  const built = spawnSync(nish, [path.join(casesDir, file), ...caseArgs(name), "-o", ll], {
-    cwd: root,
-    encoding: "utf8",
-  })
+  const built = spawnSync(
+    nish,
+    withAllowPanics(nish, [path.join(casesDir, file), ...caseArgs(name), "-o", ll]),
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
   if (built.status !== 0) {
     fail(`${name} does not compile:\n${built.stderr}`)
   }

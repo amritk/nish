@@ -1,7 +1,7 @@
 # WP62: Nish classes from a JSON Schema, keeping everything the schema says
 
 **Status: proposed, design only.** Nothing here is built. The stages are in
-§12 and on [the roadmap page](roadmap/wp62-json-schema-classes.md). S5 waits
+§12 and on [its open-work issue](https://github.com/amritk/nish/issues/1860). S5 waits
 on the owner (§10). The plan that tracks the stages is
 [`.claude/plans/wp62-json-schema-classes.plan.md`](../.claude/plans/wp62-json-schema-classes.plan.md).
 
@@ -250,7 +250,7 @@ the generator translates nothing: WP61's "The decision" takes JSON Schema's keyw
 | `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | integers, `f64`, `JsonNumber` | **WP62's own rule:** a bound equal to the narrowed type's own range (`minimum: 0` on a `u32`, `maximum: 4294967295` on a `u32`) is already the type's `RANGE` check and is not written as a constraint. A bound inside the range is written. The reverse generator writes the dropped bound back from the type (§8.1) |
 | `minItems`, `maxItems`, `uniqueItems` | arrays | `uniqueItems` on an array of objects is refused, as WP61's "Where the check goes, and the strict error" refuses it |
 | `minProperties`, `maxProperties` | `Map` | |
-| `enum` | `string`; integers, which narrow to `i32` or `i64` (WP61 takes `enum` on `string`, `i32` and `i64` only) | the field keeps its type and gains an `enum` constraint: Nish has no string enums (NL1043, `docs/LANGUAGE.md:13485`). An integer `enum` with a value outside `i64` is refused, under `--exact-numbers` too (§4.3). Before S4 the values are kept as a `@enum` tag and the field is refused unless `--before-constraints` (§9.2) |
+| `enum` | `string`; integers, which narrow to `i32` or `i64` (WP61 takes `enum` on `string`, `i32` and `i64` only) | the field keeps its type and gains an `enum` constraint. When this was written, at `798636cb`, Nish had no string enums (NL1043); they have since landed ([String enums](LANGUAGE.md#string-enums)), and this design does not yet generate one. An integer `enum` with a value outside `i64` is refused, under `--exact-numbers` too (§4.3). Before S4 the values are kept as a `@enum` tag and the field is refused unless `--before-constraints` (§9.2) |
 | `const` | `string`, integers as `enum` | an `enum` constraint of one value, or a union's tag (§4.5) |
 | `enum` or `const` on anything else | refused, except one case | refused on a `boolean`, a non-integer `number`, an object or an array, on a mixed `enum` (strings and numbers), and on an `enum` holding `null`. WP61 has no constraint for any of them, and a tag would let the class accept what the schema refuses. The one case kept: `enum: [true, false]` on a `boolean`, which is the type itself and is typed |
 | `contentEncoding`, `contentMediaType`, `contentSchema` | `string` | kept as `@contentEncoding`, `@contentMediaType` tags; the field stays a `string`. `contentSchema` is refused: it is a schema for the decoded content, which the class does not decode |
@@ -1005,7 +1005,7 @@ could now reach the decoded value.
 
 ## 12. Stages
 
-Each stage is a PR, ticked on [the roadmap page](roadmap/wp62-json-schema-classes.md)
+Each stage is a PR that closes its sub-issue of [the open-work issue](https://github.com/amritk/nish/issues/1860)
 when it lands. S1 adds two typed JSON language options (the
 constructor-assigned optional default and the per-class `unknown`), each with
 its `docs/LANGUAGE.md` rule, a golden `.ll` and an `llvm-as` pass. S2 to S5
@@ -1140,8 +1140,10 @@ taken; the owner's answers to §10 recorded here.
 
 ## 13. Not planned
 
-A runtime schema interpreter or validating a `JsonDocument` against a schema;
-untagged unions by trial decoding; string enums as a language feature;
+A runtime schema interpreter or validating a `JsonDocument` against a schema
+([WP69](wp69-json-schema-runtime.md));
+untagged unions by trial decoding; string enums as a language feature (they
+landed outside this package, [String enums](LANGUAGE.md#string-enums));
 leaving absent optional keys out of the encoding (a typed JSON change); one
 file per `$defs` entry; JSON Schema drafts before draft-07; OpenAPI 3.0 beyond folding `nullable`; generating servers or clients from OpenAPI paths; a
 schema fetched over the network.

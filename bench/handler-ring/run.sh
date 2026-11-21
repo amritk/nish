@@ -126,12 +126,16 @@ fi
 
 mkdir -p "$out"
 gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
-"$compiler" "$root/bench/handler-ring/server.ts" --link "$out/server" >/dev/null
+# The server is a bench program, not an example: it builds the way the suite
+# builds its cases (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$compiler"
+"$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server" >/dev/null
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"
 case " $designs_arg " in
 *" h1 "* | *" h1-copy "*)
-  "$compiler" "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
+  "$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
   cp "$out/h1" "$out/h1-copy"
   cmp "$out/h1" "$out/h1-copy"
   ;;

@@ -132,8 +132,7 @@ function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): 
   callee +0:21 slotWord -> @nish.slotWord
   callee +2:5 fileEntry -> @nish.fileEntry
 function Set<string>.constructor(this: Set<string>): void -> @nish.Set$str.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Set<string>.probe(this: Set<string>, key: string): i64 -> @nish.Set$str.probe [exported method instance]
@@ -234,8 +233,7 @@ function Set<string>.rebuild(this: Set<string>): void -> @nish.Set$str.rebuild [
   callee -2:7 compactHashes -> @nish.compactHashes
   callee +2:5 refile -> @nish.refile
 function Map<string, boolean>.constructor(this: Map<string, boolean>): void -> @nish.Map$str$bool.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Map<string, boolean>.probe(this: Map<string, boolean>, key: string): i64 -> @nish.Map$str$bool.probe [exported method instance]
@@ -364,7 +362,7 @@ function Map<string, boolean>.reserveSlots(this: Map<string, boolean>, n: i32): 
 function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key mask
-  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic nish_panic_overflow
+  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic
   pointer slots: size=0 writesThrough=false captured=false
   pointer hashes: size=0 writesThrough=false captured=false
   pointer keys: size=0 writesThrough=true captured=false
@@ -428,19 +426,18 @@ function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [in
 import Map from "nish/collections" -> generic class Map
 import Set from "nish/collections" -> generic class Set
 function words(text: string): string[] -> @words
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_panic_overflow nish_panic_slice nish_str_new
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   local +1:7 start: i32 (let)
-  local +2:9 n: i32 (const)
-  local +3:12 i: i32 (let)
-  local +4:11 c: i32 (const)
-  local +5:11 letter: boolean (const)
+  local +2:12 i: i32 (let)
+  local +3:11 c: i32 (const)
+  local +4:11 letter: boolean (const)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish.Map$str$bool.constructor nish.Map$str$bool.delete nish.Map$str$bool.set nish.Set$str.add nish.Set$str.constructor nish.Set$str.has nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 words
+  calls: nish.Map$str$bool.constructor nish.Map$str$bool.delete nish.Map$str$bool.set nish.Set$str.add nish.Set$str.constructor nish.Set$str.has nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 words
   stackSites=2 stackLocals=2
   local +0:9 text: string (const)
   local +1:9 all: string[] (const)
@@ -457,6 +454,6 @@ function main(): void -> @nish_main [exported entry]
   local +12:14 word: string (const)
   callee +15:9 Map<string, boolean>.delete -> @nish.Map$str$bool.delete
   local +20:9 pets: string[] (const)
-  local +21:7 common: i32 (let)
-  local +22:14 pet: string (const)
-  callee +23:9 Set<string>.has -> @nish.Set$str.has
+  local +22:7 common: u32 (let)
+  local +23:14 pet: string (const)
+  callee +24:9 Set<string>.has -> @nish.Set$str.has

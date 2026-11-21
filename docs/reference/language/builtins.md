@@ -560,16 +560,17 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
   rather than the source (`tests/self/goldens/checked/`, one file per module).
-- **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
-  or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
+- **The import is the opt-in the no-panic scope takes.** In the scope — every
+  module of the package by default, the `"nish".noPanic` list under
+  `--allow-panics` — `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](semantics-decisions.md#the-no-panic-scope),
   `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
   its pointer for `NULL`, an `ffi-null` site no proof removes
   (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
-  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
-  refuses a call to either in its scope. The
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so the scope
+  refuses a call to either. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -1443,18 +1444,53 @@ class Cell implements Compact {
 - **A generic field instantiated as exactly a compact class is narrowed.**
   `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
   interface view of the field and its implementer agree on the layout.
-- **A compact class is refused where C, Node or the runtime would read its
-  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
-  `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`); as a
+- **A C host reaches a compact class only through a handle.** A
+  `--emit-header` build keeps every class that holds a link opaque
+  (`typedef struct Cell Cell;`): the compact class, a class with a field of
+  it, and an instantiation such as `Box<Cell>`. An export takes and returns
+  one as a full `struct Cell *`. The C host links the range runtime
+  (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
+  default runtime a program fails to link as soon as one of its modules
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
+  shared library another process loads is not supported.
+- **A compact class is refused where Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-napi` or
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and each
+  constructor and method of an exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
   class, whose instantiations keep full-pointer links (NL2798,
   `compact_reject_generic`).
 
-`Wide` is accepted and changes nothing yet; it is reserved for a class to
-refuse a compact layout the compiler would pick on its own.
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2819, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
 
 Reference: [`nish:compact`](../nish-compact.md).
 
@@ -1581,7 +1617,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   panic and never a double free. A child's handle is dead once its parent is
   freed (`tests/link/region_child_stale`), and `child` with no region entered
   stops the program. Each call
-  is a `region` site under [`--deny-panics`](semantics-decisions.md#panic-sites)
+  is a `region` site the [no-panic scope](semantics-decisions.md#the-no-panic-scope) refuses
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
 - A program run under Node as it is written (`runtime/nish.mjs`) gets a
@@ -3850,7 +3886,7 @@ default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
 message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
 `slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
-proof at the call removes, and `--deny-panics` refuses it
+proof at the call removes, and the no-panic scope refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,
@@ -4892,7 +4928,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program

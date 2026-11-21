@@ -62,6 +62,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--plain", "", "the IR without LLVM's attributes")
   menu.row("--no-strict-exports", "", "keep every function externally visible")
   menu.row("--no-stack-alloc", "", "keep every value off the stack")
+  menu.row("--compact", "on|off", "off keeps every class's links full pointers")
 
   menu.section("Output")
   menu.row("-o, --output", "<file.ll>|<dir>/", "where the IR goes; a dir gets one per module")
@@ -90,7 +91,8 @@ export const helpText = (style: Style, guide: string): string => {
   menu.section("Policy")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
-  menu.row("--deny-panics", "", "refuse an unproven panic in your package")
+  menu.row("--deny-panics", "", "refuse an unproven panic site (the default)")
+  menu.row("--allow-panics", "", "hold only the noPanic list to no panic")
   menu.row("--deny-retention", "", "refuse retained arena memory in your package")
   menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
@@ -103,6 +105,8 @@ export const helpText = (style: Style, guide: string): string => {
     menu.row("--json", "", "diagnostics as JSON lines, fixes included")
     menu.row("--fix", "", "apply those fixes; read only what is left")
     menu.row(`${CLI} run <file.ts>`, "", "what the program prints, once it compiles")
+    menu.note("a panic refused (NL2457, NL2458): add the guard it names; never")
+    menu.note("--allow-panics, nish:unsafe or a guard that proves nothing")
   }
 
   menu.section("Exit codes")

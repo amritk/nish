@@ -1327,86 +1327,77 @@ if.end:
 if.then.1:
   %224 = load i32, i32* %word.addr, align 4
   %225 = and i32 %224, 16777215
-  %226 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %225, i32 1)
-  %227 = extractvalue { i32, i1 } %226, 0
-  %228 = extractvalue { i32, i1 } %226, 1
-  br i1 %228, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  store i32 %227, i32* %at.addr, align 4
-  %229 = load i32, i32* %at.addr, align 4
-  %230 = icmp sge i32 %229, 0
-  br i1 %230, label %land.rhs.4, label %land.end.4
+  %226 = sub nsw i32 %225, 1
+  store i32 %226, i32* %at.addr, align 4
+  %227 = load i32, i32* %at.addr, align 4
+  %228 = icmp sge i32 %227, 0
+  br i1 %228, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %231 = load i32, i32* %at.addr, align 4
-  %232 = trunc i64 %197 to i32
-  %233 = icmp slt i32 %231, %232
+  %229 = load i32, i32* %at.addr, align 4
+  %230 = trunc i64 %197 to i32
+  %231 = icmp slt i32 %229, %230
   br label %land.end.4
 
 land.end.4:
-  %234 = phi i1 [ false, %ovf.ok ], [ %233, %land.rhs.4 ]
-  br i1 %234, label %land.rhs.3, label %land.end.3
+  %232 = phi i1 [ false, %if.then.1 ], [ %231, %land.rhs.4 ]
+  br i1 %232, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %235 = load i32, i32* %at.addr, align 4
-  %236 = sext i32 %235 to i64
-  %237 = bitcast i8* %199 to i32*
-  %238 = getelementptr inbounds i32, i32* %237, i64 %236
-  %239 = load i32, i32* %238, align 4, !alias.scope !4, !noalias !3, !tbaa !15
-  %240 = load i32, i32* %h.addr, align 4
-  %241 = icmp eq i32 %239, %240
+  %233 = load i32, i32* %at.addr, align 4
+  %234 = sext i32 %233 to i64
+  %235 = bitcast i8* %199 to i32*
+  %236 = getelementptr inbounds i32, i32* %235, i64 %234
+  %237 = load i32, i32* %236, align 4, !alias.scope !4, !noalias !3, !tbaa !15
+  %238 = load i32, i32* %h.addr, align 4
+  %239 = icmp eq i32 %237, %238
   br label %land.end.3
 
 land.end.3:
-  %242 = phi i1 [ false, %land.end.4 ], [ %241, %land.rhs.3 ]
-  br i1 %242, label %land.rhs.2, label %land.end.2
+  %240 = phi i1 [ false, %land.end.4 ], [ %239, %land.rhs.3 ]
+  br i1 %240, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %243 = load i32, i32* %at.addr, align 4
-  %244 = trunc i64 %201 to i32
-  %245 = icmp slt i32 %243, %244
+  %241 = load i32, i32* %at.addr, align 4
+  %242 = trunc i64 %201 to i32
+  %243 = icmp slt i32 %241, %242
   br label %land.end.2
 
 land.end.2:
-  %246 = phi i1 [ false, %land.end.3 ], [ %245, %land.rhs.2 ]
-  br i1 %246, label %land.rhs.1, label %land.end.1
+  %244 = phi i1 [ false, %land.end.3 ], [ %243, %land.rhs.2 ]
+  br i1 %244, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %247 = load i32, i32* %at.addr, align 4
-  %248 = sext i32 %247 to i64
-  %249 = bitcast i8* %203 to i8**
-  %250 = getelementptr inbounds i8*, i8** %249, i64 %248
-  %251 = load i8*, i8** %250, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %252 = call zeroext i1 @nish_str_eq(i8* %251, i8* %key)
+  %245 = load i32, i32* %at.addr, align 4
+  %246 = sext i32 %245 to i64
+  %247 = bitcast i8* %203 to i8**
+  %248 = getelementptr inbounds i8*, i8** %247, i64 %246
+  %249 = load i8*, i8** %248, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %250 = call zeroext i1 @nish_str_eq(i8* %249, i8* %key)
   br label %land.end.1
 
 land.end.1:
-  %253 = phi i1 [ false, %land.end.2 ], [ %252, %land.rhs.1 ]
-  br i1 %253, label %if.then.2, label %if.end.2
+  %251 = phi i1 [ false, %land.end.2 ], [ %250, %land.rhs.1 ]
+  br i1 %251, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %254 = load i32, i32* %bucket.addr, align 4
-  %255 = load i32, i32* %at.addr, align 4
-  %256 = tail call i64 @nish.foundAt(i32 %254, i32 %255)
-  ret i64 %256
+  %252 = load i32, i32* %bucket.addr, align 4
+  %253 = load i32, i32* %at.addr, align 4
+  %254 = tail call i64 @nish.foundAt(i32 %252, i32 %253)
+  ret i64 %254
 
 if.end.2:
   br label %if.end.1
 
 if.end.1:
-  %257 = load i32, i32* %bucket.addr, align 4
-  %258 = add nsw i32 %257, 1
-  %259 = and i32 %258, %mask
-  store i32 %259, i32* %bucket.addr, align 4
+  %255 = load i32, i32* %bucket.addr, align 4
+  %256 = add nsw i32 %255, 1
+  %257 = and i32 %256, %mask
+  store i32 %257, i32* %bucket.addr, align 4
   br label %while.cond
 
 while.end:
   call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.4 to i8*))
-  unreachable
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 1)
   unreachable
 }
 

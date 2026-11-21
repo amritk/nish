@@ -27,10 +27,17 @@ export const distance2 = (a: Point, b: Point): i32 => {
 };
 ```
 
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): most do `i32` arithmetic
+nothing bounds, which bounding the operands would fix, and the `nish/text` one
+calls standard-library code that keeps panic sites no proof removes yet, which
+will build under the default once that code is made panic-free.
+
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts main.ts
 // main.ts
 import { distance2, Point } from "./geometry";
@@ -78,10 +85,10 @@ export const main = (): i32 => 0;
 
 Four more rules come from compiling the whole program at once:
 
-- **A function's name is unique across the program**, exported or not. Two
-  files of your program cannot each have a private `helper`; name them apart.
-  (Packages are kept apart for you, so a dependency's `helper` does not
-  clash with yours.)
+- **An exported function's name is unique across the program.** A private
+  one need not be: two files may each keep their own private `helper`, as
+  [the next section](#private-functions-of-one-name) shows. (Packages are kept
+  apart for you too, so a dependency's `helper` does not clash with yours.)
 - **A class or interface name is unique across the program too**, for the
   same reason.
 - **Classes and interfaces cannot be renamed on import.** `import { Point as P }`
@@ -112,6 +119,39 @@ export const main = (): i32 => write("hello");
 
 Rename it (`writeLine`, say), or drop the `export` if no other module needs it.
 
+## Private functions of one name
+
+Two files may each declare a private function, or a private generic
+function, of the same name; each file calls its own.
+
+<!-- nish:ok -->
+```ts helper.ts
+// helper.ts
+const add = (a: i32, b: i32): i32 => a + b;
+
+export const sum3 = (a: i32, b: i32, c: i32): i32 => add(add(a, b), c);
+```
+
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts main.ts
+// main.ts
+import { sum3 } from "./helper";
+
+const add = (a: i32, b: i32): i32 => a * 10 + b;
+
+export const main = (): i32 => {
+  console.log(`${sum3(1, 2, 3)} ${add(1, 2)}`);
+  return 0;
+};
+```
+
+This prints `6 12`. Each private `add` gets a symbol named after its file
+(`helper$.add` and `main$.add`), so a native debugger or profiler shows which
+one ran. Exported functions are still unique across the program, and so are
+private ones when you build with `--no-strict-exports`, which keeps every
+function's own name as its symbol so a C driver can call it.
+
 ## Built-in modules: `nish:`
 
 Some built-in functions can be imported from a module whose name starts with
@@ -129,7 +169,8 @@ local name:
 | `nish:simd` | sixteen-byte vectors and the calls that make, load and store them ([Vectors](simd.md)), available only through the import |
 | `nish:async` | `spawn` and `awaitAll` for `async` functions ([Async functions](async.md)), available only through the import |
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { argv } from "nish:process";
 import { write } from "nish:io";
@@ -158,7 +199,8 @@ and you import it as `nish/` followed by the module's name: `nish/text`,
 and so on. It is compiled into your program like your own code, so a module
 you import but never call costs nothing.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/text.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { splitWhitespace, trim } from "nish/text";
 

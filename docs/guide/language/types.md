@@ -49,10 +49,17 @@ const total = (a: i32, b: i64): i64 => {
 };
 ```
 
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): most do `i32` arithmetic
+nothing bounds, which bounding the operands would fix, and the `Math` one calls
+`std/math.ts` code that keeps panic sites no proof removes yet, which will
+build under the default once that code is made panic-free.
+
 Convert explicitly with `toI32`, `toI64`, `toF64` (and `toU8`, `toU16`,
 `toU32`, `toU64`, `toF32`):
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const total = (a: i32, b: i64): i64 => {
   return toI64(a) + b;
@@ -93,7 +100,8 @@ JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
 `std/math.ts` rather than called from the C library, so they answer the same
 on every target, WebAssembly included, within one unit in the last place.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/math.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const angle: f64 = Math.atan2(1.0, 1.0);
@@ -233,7 +241,8 @@ The fallback runs only when it is needed, as in TypeScript. If the fallback
 may itself be `null`, the result stays `T | null`. One form is refused: a
 default for an array element, `xs[i] ?? fallback`. TypeScript programs use it
 for "past the end", where Node reads `undefined` and takes the fallback, but
-Nish checks the index and stops the program instead. Test the index against
+Nish checks the index: it refuses one it cannot prove in range, and under
+`--allow-panics` stops the program instead. Test the index against
 `xs.length` first:
 
 <!-- nish:err-body NL2489 -->
@@ -296,8 +305,9 @@ nothing, returns a `Result` instead — see
 `integer<Lo, Hi>` is an `i32` the compiler knows stays between `Lo` and `Hi`
 inclusive — a byte value as `integer<0, 255>`, a digit as `integer<0, 9>`.
 Putting a literal outside the range into one is a compile error; putting any
-other `i32` into one is checked once, and the program panics if it is out of
-range. Taking a value out is free, and every operator reads it as a plain
+other `i32` into one is checked once: by default the compiler must prove it in
+range, from a guard such as `if (n >= 0 && n <= 9)`, and under
+`--allow-panics` the program panics if it is out of range. Taking a value out is free, and every operator reads it as a plain
 `i32`. Because the compiler knows the bounds, a ranged value used as an
 index can also spare the bounds check:
 
@@ -335,8 +345,8 @@ export const main = (): i32 => {
 ```
 
 An enum whose members are all strings is a **string enum**. Every member
-gives its string, and `String(r)` reads it back; it costs one load, not a
-copy:
+gives its string, and `String(r)` gives that string back without making a
+new one:
 
 <!-- nish:ok -->
 ```ts

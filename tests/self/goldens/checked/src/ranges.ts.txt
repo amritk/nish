@@ -143,7 +143,7 @@ function keepReturn(tables: RangeTables, bodies: RangeBody[], at: i32, walk: Bou
   calls: RangeTables.returnOf RangeTables.setReturn gatheredReturn nish_panic_overflow sameReturn
   pointer tables: size=64 writesThrough=false captured=false passedTo=RangeTables.returnOf#0 RangeTables.setReturn#0
   pointer bodies: size=0 writesThrough=true captured=false
-  pointer walk: size=184 writesThrough=false captured=false passedTo=gatheredReturn#0
+  pointer walk: size=200 writesThrough=false captured=false passedTo=gatheredReturn#0
   stackSites=0 stackLocals=0
   local -8:9 body: RangeBody (const)
   local -4:7 next: ReturnSummary | null (let)
@@ -486,7 +486,7 @@ function noteStore(program: CheckedProgram, ctx: CheckContext, target: Node, sca
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_str_eq recordStoreType unwrapBoundsParens
-  pointer program: size=912 writesThrough=false captured=false passedTo=recordStoreType#0
+  pointer program: size=928 writesThrough=false captured=false passedTo=recordStoreType#0
   pointer ctx: size=448 writesThrough=false captured=false
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer scan: size=88 writesThrough=true captured=false

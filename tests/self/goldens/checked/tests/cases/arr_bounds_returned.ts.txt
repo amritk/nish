@@ -15,7 +15,7 @@ function filled(n: i32, v: i32): i32[] -> @filled
   local +1:12 i: i32 (let)
 function sized(): i32[] -> @sized
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_index
+  calls: nish_panic_index
   stackSites=0 stackLocals=0
   local +0:9 arr: i32[] (const)
 function grown(n: i32): i32[] -> @grown

@@ -14,7 +14,8 @@ only the guide your task touches; the rules there are authoritative:
 | copy or port code in | [`.claude/licensing.md`](.claude/licensing.md) |
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
-| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package"; tick its box in the PR that lands the stage |
+| pick up a work package ("pick up WP50", `/feature --next`) | its parent issue under the [Roadmap issue](https://github.com/amritk/nish/issues/1849), its plan `.claude/plans/<slug>.plan.md`, [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package", and the `pickup` skill; the PR `Fixes` the stage's issue |
+| change a workflow skill or agent (`feature`, `plan-issues`, `pickup`, `decide`, the reviewers) | they are the `ai` plugin (`ai@amritk`, enabled in `.claude/settings.json`), from [`amritk/ai`](https://github.com/amritk/ai): change them there, not here |
 
 **An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
 types only through `walk.typeAt`, and treat a null binding table
@@ -32,18 +33,30 @@ the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
 and say so in the PR body.
 
+**`npm run lint` is not CI's lint job.** Before pushing, also run
+`npm run lint:dead` and `node docs/check-links.mjs` (the job's full list is in
+`.github/workflows/ci.yml`). knip fails on an export your change leaves unused,
+and the link check fails when a renamed heading breaks an anchor in a file you
+never opened; `npm run lint` passes both.
+
 A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
 narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
 release-note words) in the same PR; run nish-cmp before pushing.
+
+A change that makes a refused program compile (or a compiling one refuse)
+adds `file: "exit"` `DECLARED` entries to `tests/nish-cmp.js` for each corpus
+program it flips, and greps `docs/wp*.md`, `docs/MASTER_PLAN.md` and
+`tests/**` comments for the old rule's wording and its test names, not only
+`docs/LANGUAGE.md` and the guide.
 
 **`std/` line moves and panic proofs are pinned.** An edit that adds or
 removes lines in a `std/*.ts` file moves every `std/<file>.ts:LINE:COL` in
 `tests/link/*/expected.caps.json`, `tests/wordings/*.err` and
 `docs/reference/diagnostics/`: grep `std/<file>.ts:[0-9]` and regenerate them
-from the compiler's output in the same PR. A `nish:simd` load is always
-recorded as an unproven index site (`src/attributes.ts`), so `std/` code a
-`--deny-panics` caller can reach does not use one; lane-wise helpers for test
-tooling live under `tests/`.
+from the compiler's output in the same PR. A `nish:simd` access whose
+lanes `bounds.ts` proves in range is recorded as a proven index site and an
+unguarded one as unproven (`src/attributes.ts`), so `std/` code a
+`--deny-panics` caller can reach uses only guarded ones.
 
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every
@@ -59,6 +72,13 @@ was run. Every `docs/BENCHMARKS.md` table names the commit whose bench code
 produced it and claims only the fields that version prints. A per-second
 maximum is quoted as a maximum, never as a typical cost. Each "up to",
 "every" or "lower than" is checked against the table it summarises.
+
+**A bench side is the code it names.** A side called an existing copy calls
+the shipped function itself, with its callers' argument types and input
+shapes, and the native kernel where one replaces it; a loop the bench wrote
+says so. A claimed gain names its callers, found with `git grep` through
+every wrapper, and a stage's gate names a bench that reaches the changed
+function.
 
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
@@ -113,14 +133,21 @@ count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 `node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
 `build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
 merges, regenerates the goldens and stages them without committing. Sync after
-any `src/` or `std/` change lands on `main`, even with no textual conflict. A
+any `src/` or `std/` change lands on `main`, even with no textual conflict.
+A sync can stale a fact the branch pins without a conflict: after it, run
+`node scripts/gen-diagnostic-codes.mjs --check` (a code the branch adds may now
+be taken). A
 new positive `tests/cases/*` is registered with
 `node tests/differential/goldens.js --update` in the same commit. Details:
 `.claude/selfhost.md` → "The goldens". `docs/reference/` (and its routes in
 `scalar.config.json`) moves with any change to `std/`, `runtime/nish.d.ts` or
 `docs/LANGUAGE.md`: rewrite it with `node scripts/gen-reference.mjs`; CI's
 `--check` fails on a stale, extra or hand-edited page
-([`docs/README.md`](docs/README.md#the-library-reference)).
+([`docs/README.md`](docs/README.md#the-library-reference)). A change to
+`nish --help` text regenerates `examples/break-web/help.ts` and
+`docs/site/break/` with `node examples/break-web/build.mjs` in the same PR:
+the break-web checks in the `test` shards pin both against the compiler's
+`--help`.
 
 **`--help` and `scripts/build.sh` are inputs of `examples/break-web`'s
 committed build.** A change to either, or a merge of `main` that touches
@@ -147,6 +174,13 @@ the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
 A builtin whose answer changes greps its old answer across
 `docs/LANGUAGE.md`, `docs/guide/` and `runtime/nish.d.ts`. A security record
 whose counts change updates its row in `docs/security/README.md`.
+
+**A sweep of "every site" lands with a check that fails on a missed one.**
+A change that must reach every compile of a program, every call of a helper
+or every guide sentence about a behaviour proves it with a check that fails
+on a missed site, not with a grep: multi-line calls, other variable names,
+the Nish-written harnesses in `tests/nish/`, Dockerfiles and guide prose all
+count.
 
 ## Spending tokens
 

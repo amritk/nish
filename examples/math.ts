@@ -1,10 +1,9 @@
-const square = (x: number): number => x * x
+// Ranged integers state how large each input may be, so the compiler proves
+// every `*`, `+` and `-` below fits an `i32` and none of them can overflow.
+const square = (x: integer<-1000, 1000>): i32 => x * x
 
-const polynomial = (x: number, k: number): number => {
-  let acc: number = square(x) * 3
-  acc = acc + k * 2
-  const bias = 7
-  return acc - bias
-}
+// One expression: a range is read through the operators of an expression, not
+// through a local it was stored in, so the sum is written where it is returned.
+const polynomial = (x: integer<-1000, 1000>, k: integer<-1000, 1000>): i32 => x * x * 3 + k * 2 - 7
 
 const isPositive = (n: number): boolean => n > 0
