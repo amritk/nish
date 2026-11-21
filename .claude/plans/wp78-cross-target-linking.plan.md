@@ -3,11 +3,13 @@ name: WP78 — linking a Nish program for another target, and a recipe for relea
 overview: nish --link builds only for the machine it runs on. --target stamps the IR's triple and data layout, but scripts/build.sh has no --target passthrough and lets clang fill in the host, so a program's author needs one runner per platform even for Linux on two architectures. Pass the target through to the runtime and the link with a sysroot (S1 for Linux to Linux, S2 for the other macOS architecture on a macOS host), refuse what cannot work with a clear error, and document a four-platform release workflow for a Nish program (S3); a macOS binary is built on a macOS host, by the owner's decision.
 priority: 150
 labels: [ready]
+issue: 2089
 stages:
   - id: s1-linux-cross
     title: WP78 S1 — nish --link --target for the other Linux architecture, with a sysroot
     goal: On a Linux host, nish --link --target aarch64-unknown-linux-gnu (or x86_64 from aarch64) with a glibc sysroot compiles the runtime and SQLite for that triple, links with lld, and the binary runs under qemu-user with the same output as a native build; a cross link without a sysroot or lld is a usage error naming what is missing.
     verification: node tests/run.js cross_link && node tests/run.js link && node tests/run.js wasi && node tests/run.js performance && node scripts/gen-diagnostic-codes.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2090
     todos:
       - id: s1-build-sh
         content: Add --target and --sysroot to scripts/build.sh, passing --target= and --sysroot= to every clang compile and link, and requiring lld for a foreign Linux triple — see WP78 S1
@@ -31,6 +33,7 @@ stages:
     title: WP78 S2 — the other macOS architecture on a macOS host
     goal: On a macOS host, nish --link --target x86_64-apple-darwin or aarch64-apple-darwin builds a Mach-O binary for that architecture against the SDK xcrun reports, with the runtime's CPU-feature kernels compiled for it.
     verification: node tests/run.js cross_link && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2091
     todos:
       - id: s2-sdk
         content: Resolve the SDK with xcrun --show-sdk-path in scripts/build.sh for a darwin triple and pass --target= and -isysroot to every compile and the ld64 link — see WP78 S2
@@ -45,6 +48,7 @@ stages:
     title: WP78 S3 — a four-platform release recipe for a Nish program
     goal: Linking for macOS from Linux stays refused with a diagnostic that points to a macOS runner, and docs/guide/using-nish/releasing-binaries.md gives a working GitHub Actions workflow that builds a Nish program for the four prebuilt platforms, checksums and attests the archives, exercised by a CI check on a sample program.
     verification: node docs/check-links.mjs && npm run lint && npm run lint:dead
+    issue: 2092
     todos:
       - id: s3-refusal-wording
         content: Make the darwin-triple-on-Linux refusal from S1 say that macOS binaries are built on a macOS host and name the guide page — see WP78 S3

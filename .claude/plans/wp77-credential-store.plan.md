@@ -3,11 +3,13 @@ name: WP77 — nish/credential, a credential store for command-line programs
 overview: A Nish CLI that signs in has nowhere safe to keep the token. The builtins it needs landed with credential-cli-builtins (spawnPiped, writeFileSyncMode, mkdirSyncMode, createFileExclusiveSync, renameSync), but no std module puts them together. Add nish/credential with a locked 0600 file backend (S1), the macOS Keychain through /usr/bin/security (S2) and the Linux Secret Service through secret-tool with a fallback to the file (S3), with its security record.
 priority: 130
 labels: [ready]
+issue: 2081
 stages:
   - id: s1-file-backend
     title: WP77 S1 — nish/credential's API and its file backend, with its security record
     goal: std/credential.ts stores, reads and deletes a secret by service and account in a 0600 file inside a 0700 directory, written atomically under a cross-process lock, with secrets handed in and out as Secret values.
     verification: node tests/run.js std_credential && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2082
     todos:
       - id: s1-api
         content: Add std/credential.ts with CredentialStore (get, set, delete, accounts) and the CRED_BACKEND and CRED_E codes, registered in src/std-modules.ts stdModuleNames — see WP77 S1
@@ -31,6 +33,7 @@ stages:
     title: WP77 S2 — the macOS Keychain backend through /usr/bin/security -i
     goal: On macOS the store keeps secrets in the login Keychain by sending security's interactive commands on stdin, so no secret reaches argv, and it tells a missing item from a locked or unreachable Keychain by exit status.
     verification: node tests/run.js std_credential && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2083
     todos:
       - id: s2-commands
         content: Send add-generic-password with -U, find-generic-password with -w and delete-generic-password to /usr/bin/security -i through spawnPipedWithin, never by bare name — see WP77 S2
@@ -48,6 +51,7 @@ stages:
     title: WP77 S3 — the Linux Secret Service backend through secret-tool, and the auto backend
     goal: On Linux the store keeps secrets through secret-tool found on an absolute PATH entry with the secret on stdin, and the auto backend falls back to the file backend when no Secret Service answers, recording which backend holds each account.
     verification: node tests/run.js std_credential && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2084
     todos:
       - id: s3-secret-tool
         content: Run secret-tool store, lookup and clear with the secret on stdin, resolving secret-tool on absolute PATH entries only and finding nothing when PATH is unset — see WP77 S3

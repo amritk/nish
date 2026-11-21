@@ -54,6 +54,7 @@ stages:
     title: WP75 S3 — the opt-in TLS 1.2 profile, written down before any code
     goal: docs/wp75-tls-client-reach.md fixes the opt-in TLS 1.2 client profile (suites, groups, signatures, required and refused extensions, downgrade rules) that S4 and S5 build, and docs/security/tls.md records the owner's decision to allow it as an exception to TLS-7.
     verification: node docs/check-links.mjs && npm run lint
+    issue: 2078
     todos:
       - id: s3-profile
         content: Write the profile into docs/wp75-tls-client-reach.md (ECDHE only, AEAD suites only, extended_master_secret required, no renegotiation or resumption, the downgrade sentinel still checked) — see WP75 S3
@@ -65,6 +66,7 @@ stages:
     title: WP75 S4 — the TLS 1.2 PRF and AEAD record protection
     goal: std/net/tls gains the RFC 5246 PRF over HMAC-SHA256 and HMAC-SHA384, the extended master secret of RFC 7627, and TLS 1.2 AEAD record protection for AES-GCM and ChaCha20-Poly1305, each matching published vectors.
     verification: node tests/run.js net_tls12 && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2079
     todos:
       - id: s4-prf
         content: Add std/net/tls/prf12.ts with the P_SHA256 and P_SHA384 PRF, the extended master secret, key expansion and verify_data, secrets as Secret and wiped — see WP75 S4
@@ -79,6 +81,7 @@ stages:
     title: WP75 S5 — the opt-in TLS 1.2 client handshake and HttpOptions.minTlsVersion
     goal: With HttpOptions.minTlsVersion set to TLS 1.2, fetch offers TLS 1.3 and the S3 profile of TLS 1.2, completes a TLS 1.2 handshake with a server that picks it, and refuses every shape the profile refuses; the default stays TLS 1.3 only.
     verification: node tests/run.js net_tls12 && node tests/run.js net_tls_client && node tests/run.js net_http_fetch_tls && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2080
     todos:
       - id: s5-handshake
         content: Add std/net/tls/client12.ts, the sans-IO TLS 1.2 client from ServerHello to Finished for the S3 profile, with ServerKeyExchange signatures checked by the existing verifiers and rsaVerifyPkcs1v15 — see WP75 S5

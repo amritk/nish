@@ -3,11 +3,13 @@ name: WP79 — Windows as a target for Nish programs, cross-linked from Linux
 overview: Nish has no Windows support at all. There is no Windows triple in src/target.ts and no _WIN32 code in runtime/, and the guide sends Windows users to WSL. So a Nish CLI cannot ship a Windows binary. Settle the ABI and scope in a design note (S1), then port the runtime in layers a program can use as each lands, cross-linked from Linux and run under Wine and on a real Windows runner. The layers are the core with console, clock and entropy (S2), files, environment and processes (S3), then sockets, the async executor and fetch with Windows' root store (S4). Running the compiler itself on Windows stays out of scope.
 priority: 160
 labels: [ready]
+issue: 2093
 stages:
   - id: s1-design
     title: WP79 S1 — the design note, the mingw-w64 target and what Windows refuses
     goal: docs/wp79-windows-target.md records the owner's decisions (mingw-w64 cross-linked from Linux, x86_64 only, programs not the compiler), which builtins and std modules Windows supports or refuses at compile time, how each runtime file is ported, and how CI tests it, so S2 to S4 build to a written contract.
     verification: node docs/check-links.mjs && npm run lint
+    issue: 2094
     todos:
       - id: s1-decisions
         content: Write the owner's decisions into docs/wp79-windows-target.md (x86_64-w64-windows-gnu through the mingw-w64 sysroot, x86_64 only, the compiler stays on Linux and macOS) — see WP79 S1
@@ -25,6 +27,7 @@ stages:
     title: WP79 S2 — the triple, a cross link through WP78's sysroot path, and the core runtime
     goal: nish --link --target x86_64-w64-windows-gnu on Linux produces a .exe whose arena, strings, console output, process.exit, clock and entropy work, and every positive tests/cases program that uses only those runs under Wine with the same stdout as on Linux.
     verification: node tests/run.js windows && node tests/run.js link && node tests/run.js wasi && node tests/run.js performance && node tests/run.js c-symbols && node scripts/security-scope.mjs && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2095
     todos:
       - id: s2-triple
         content: Add x86_64-w64-windows-gnu and its data layout to src/target.ts and its link recipe against the mingw-w64 sysroot to scripts/build.sh, reusing WP78 S1's --target and --sysroot path — see WP79 S2
@@ -48,6 +51,7 @@ stages:
     title: WP79 S3 — files, environment, terminal and processes on Windows
     goal: The file, directory, environment, terminal and spawn builtins work on the Windows triple with the semantics S1 wrote down, including spawnPiped with argv quoted for CreateProcessW, and their tests/link programs pass under Wine and on the windows-latest job.
     verification: node tests/run.js windows && node tests/run.js c-symbols && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2096
     todos:
       - id: s3-files
         content: Port runtime-os.c's file and directory builtins to the wide Win32 API with UTF-8 paths, mapping the mode arguments as S1 specifies and refusing a reparse point where the POSIX build refuses a symlink — see WP79 S3
@@ -68,6 +72,7 @@ stages:
     title: WP79 S4 — sockets, the async executor and fetch with Windows' root store
     goal: nish:net and the async executor run on Winsock, so fetchSync and fetch reach an https server from a Windows binary that trusts the roots in Windows' certificate store, proven against a local server under Wine and on the windows-latest job.
     verification: node tests/run.js windows && node tests/run.js net_http_fetch && node tests/run.js c-symbols && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2097
     todos:
       - id: s4-sockets
         content: Port runtime-net.c's sockets to Winsock with WSAPoll or IOCP as S1 chooses, translating errors to the Linux numbers the std code already expects — see WP79 S4

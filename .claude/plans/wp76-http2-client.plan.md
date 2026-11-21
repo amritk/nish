@@ -3,11 +3,13 @@ name: WP76 — an HTTP/2 client, sans-IO first, then under both fetch clients
 overview: std/net speaks HTTP/2 only as a server; nish/net/fetch is HTTP/1.1, so a Nish client cannot multiplex requests on one connection, reach an h2-only endpoint, or carry a gRPC call (WP72 D3). Build a sans-IO client connection on the existing frame and HPACK code (S1), negotiate h2 by ALPN under both fetch clients by default, with an option to turn it off (S2), and multiplex the async fetch's concurrent requests over one pooled connection (S3).
 priority: 140
 labels: [ready]
+issue: 2085
 stages:
   - id: s1-connection
     title: WP76 S1 — nish/net/http2-client, a sans-IO HTTP/2 client connection, with its security record
     goal: std/net/http2-client.ts opens streams, sends requests and bodies under both flow-control windows, and answers response heads, data, trailers, resets and GOAWAY as events, driven in-process against the existing Http2Connection server and refusing every protocol error of RFC 9113 a client can see with a code.
     verification: node tests/run.js net_http2_client && node tests/run.js net_http2 && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2086
     todos:
       - id: s1-module
         content: Add std/net/http2-client.ts with Http2ClientConnection (feed, next, request, writeData, writeTrailers, reset, goaway, output window) and Http2ClientConfig, registered in stdModuleNames — see WP76 S1
@@ -28,6 +30,7 @@ stages:
     title: WP76 S2 — h2 negotiated by ALPN under fetchSync, FetchSyncClient and fetch, on by default
     goal: Unless HttpOptions.http2 is cleared, an https fetch offers h2 and http/1.1 by ALPN and, when the server picks h2, sends the request as one stream and answers the same HttpResponse or FetchResponse an HTTP/1.1 fetch would, with redirects, proxies, timeouts and the body limit unchanged.
     verification: node tests/run.js net_http_fetch && node tests/run.js net_http2_client && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2087
     todos:
       - id: s2-option
         content: Add HttpOptions.http2, default true, to std/net/fetch.ts and offer ALPN h2 and http/1.1 in httpClientTlsStart unless it is cleared — see WP76 S2
@@ -48,6 +51,7 @@ stages:
     title: WP76 S3 — concurrent async fetches multiplexed over one pooled h2 connection
     goal: Async fetches to one origin share one h2 connection from a FetchPool, up to the server's SETTINGS_MAX_CONCURRENT_STREAMS, so awaitAll of N fetches opens one TLS connection, and a GOAWAY or a dead connection retries only the streams the server did not process.
     verification: node tests/run.js net_http_fetch && node tests/run.js net_http2_client && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2088
     todos:
       - id: s3-pool
         content: Let FetchPool in std/net/fetch.ts hold one h2 connection per origin and hand a stream to each fetch, parking a fetch past the concurrent-stream cap until one closes — see WP76 S3
