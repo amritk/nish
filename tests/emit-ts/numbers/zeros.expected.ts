@@ -9,6 +9,6 @@ export const main = (): number => {
   const b: i32 = 0
   const o: i32 = 0
   const w: i64 = 0n
-  console.log(`${one / toF64(d)} ${one / toF64(h)} ${one / toF64(b)} ${one / toF64(o)} ${w}`)
+  console.log(`${one / (d)} ${one / (h)} ${one / (b)} ${one / (o)} ${w}`)
   return 0
 }

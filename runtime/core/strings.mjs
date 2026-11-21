@@ -101,6 +101,8 @@ export function substring(s, a, b) {
   const clamp = (v) => Math.max(0, Math.min(toIndex(v), len));
   const from = clamp(a);
   const to = b === undefined ? len : clamp(b);
+  // A NaN index cuts nothing, as native's does; JavaScript's would read it as 0.
+  if (from !== from || to !== to) return "";
   if (bytes === null) return s.substring(from, to);
   return DECODER.decode(bytes.subarray(Math.min(from, to), Math.max(from, to)));
 }

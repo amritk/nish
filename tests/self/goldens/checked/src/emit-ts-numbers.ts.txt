@@ -488,21 +488,70 @@ function exactWidth(width: string): boolean -> @exactWidth
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+function smallInt(width: string): boolean -> @smallInt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function bigWidth(width: string): boolean -> @bigWidth
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function narrowMask(width: string): string -> @narrowMask
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function widthBits(width: string): string -> @widthBits
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: width
+  calls: bigWidth nish_str_eq
+  stackSites=0 stackLocals=0
+  callee +0:10 bigWidth -> @bigWidth
+function rereadable(arg: Node, changed: boolean): boolean -> @rereadable
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer arg: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 receiver: Node (const)
+function integerConversion(x: string, from: string, to: string): string -> @integerConversion
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: bigWidth narrowMask nish_str_concat nish_str_eq smallInt widthBits
+  stackSites=0 stackLocals=0
+  local +0:9 value: string (const)
+  callee +7:7 smallInt -> @smallInt
+  callee +28:27 narrowMask -> @narrowMask
+  callee +30:8 bigWidth -> @bigWidth
+  callee +36:7 bigWidth -> @bigWidth
+  callee +39:8 smallInt -> @smallInt
+  local +42:9 method: string (const)
+  callee +43:37 widthBits -> @widthBits
+function floatToI32(x: string, arg: Node, changed: boolean): string | null -> @floatToI32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: changed
+  calls: nish_str_concat rereadable
+  pointer arg: size=40 writesThrough=false captured=false passedTo=rereadable#0
+  stackSites=0 stackLocals=0
+  callee +0:8 rereadable -> @rereadable
 function conversion(walk: Walk, name: string, args: Node, operands: Operands): string | null -> @conversion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via typeOf
   escaping: name
-  calls: Operands.at conversionWidth exactWidth helper kindName nish_str_concat nish_str_eq typeOf
+  calls: Operands.at conversionWidth exactWidth floatToI32 helper integerConversion kindName nish_panic_index nish_str_concat nish_str_eq typeOf
   pointer walk: size=264 writesThrough=true captured=false passedTo=typeOf#0 helper#0
   pointer args: size=40 writesThrough=false captured=false
-  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
   local +0:9 to: string (const)
   callee +0:14 conversionWidth -> @conversionWidth
   local +4:9 from: string (const)
   callee +4:16 kindName -> @kindName
   callee +4:25 typeOf -> @typeOf
-  callee +8:7 exactWidth -> @exactWidth
-  callee +8:26 exactWidth -> @exactWidth
-  callee +11:10 helper -> @helper
-  callee +11:37 Operands.at -> @Operands.at
+  local +8:9 inline: string (const)
+  callee +8:18 integerConversion -> @integerConversion
+  callee +8:36 Operands.at -> @Operands.at
+  callee +13:12 floatToI32 -> @floatToI32
+  callee +13:23 Operands.at -> @Operands.at
+  callee +15:7 exactWidth -> @exactWidth
+  callee +15:26 exactWidth -> @exactWidth
+  callee +18:10 helper -> @helper
+  callee +18:37 Operands.at -> @Operands.at

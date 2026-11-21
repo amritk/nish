@@ -15,7 +15,7 @@ const f = (s: string): Result<i32, string> => {
 
 const half = (s: string): Result<f64, string> => {
   console.log(`half ${s}`)
-  return strLen(s) > 0 ? Ok(toF64(1) / 2.0) : Err("empty")
+  return strLen(s) > 0 ? Ok((1) / 2.0) : Err("empty")
 }
 
 const divide = (a: i32, b: i32, s: string): Result<i32, string> => { try {
