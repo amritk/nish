@@ -16431,7 +16431,9 @@ when signed
   module constant, or a `const` binding at module or function level whose
   initializer is an integer literal, a folded constant, or a conversion such
   as `toU64(0)` of a literal that fits — never a `let`, a field, a call, or a
-  conversion that wraps), a ranged or unsigned divisor whose declared range leaves
+  conversion that wraps; a named one is read as its value only from 0 to
+  2^31 − 2, below the 2^31 − 1 an array length takes), a ranged or unsigned
+  divisor whose declared range leaves
   those values out, or a guard on a local divisor —
   `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned
   one, or the other arm of an equality test against a named zero,
@@ -16447,11 +16449,12 @@ siblings
 - *What proves it away:* the overflow proof of [Semantics
   decisions](#semantics-decisions): an operation the bounds walk proves fits
   is `nsw` with no check (`tests/cases/panics_overflow_proven`). The proof
-  reads `x & C` as `[0, C]`, `x >>> k` as `[0, 2^(bits - k) - 1]`, `toI32` of
+  reads `x & C` as `[0, C]`, `x >>> k` as `[0, 2^(bits - k) - 1]` (`C` and
+  `k` may be named constants, read from 0 to 2^31 - 2), `toI32` of
   a `u32` whose range fits as that range, and the builtins with a documented
   range: `s.charCodeAt(i)` as `[0, 255]` (it answers a byte) and
   `Math.clz32(x)` as `[0, 32]` (`tests/cases/deny_panics_mask`,
-  `deny_panics_charcode`); every other
+  `deny_panics_i32_mask_const`, `deny_panics_charcode`); every other
   one is checked (`tests/cases/panics_overflow`). A `nish:unsafe`
   `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not
   a site
@@ -16470,7 +16473,8 @@ header or a negative byte count (an `i64`, a float, an `i32` or a ranged
 integer, a `u32` under `--number-mode i32`)
 
 - *What proves it away:* a narrower unsigned length, or a literal or named
-  integer constant (as for `divide`) from 0 to 2^31 - 1, which is not checked
+  integer constant (as for `divide`) from 0 to 2^31 - 1 inclusive, one more
+  than a named divisor or `&`/`>>>` operand is read up to, which is not checked
   and not a site (`tests/cases/panics_array_length`, `deny_panics_const_names`;
   a negative constant stays refused, `reject_deny_panics_const_negative_length`)
 

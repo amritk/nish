@@ -1432,7 +1432,10 @@ export const CLZ32_TOP: i32 = 32
  * (a `zext` of the `i8` it loads), `[0, 255]`, as "String methods" in
  * docs/LANGUAGE.md states and `String.fromCharCode`, its inverse on `c & 0xFF`,
  * relies on; `Math.clz32(x)` counts bits, `[0, 32]`, and is typed
- * `integer<0, 32>` for it in src/builtins.ts. An operand is recorded as the
+ * `integer<0, 32>` for it in src/builtins.ts. `charCodeAt` is not typed
+ * `rangedOf(0, 255)` the same way: a ranged type reads as `i32`, which would
+ * change its documented `number` result under the default number mode, so its
+ * range lives only here. An operand is recorded as the
  * base it is read as (`readAsBase` in src/expressions.ts), so the panic prover
  * reads the range here rather than through the node's type. A user function or
  * method of either name is not this, which `nodeCallees` and the receiver's
