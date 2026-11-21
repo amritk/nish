@@ -263,6 +263,13 @@ PASS  deflate fields: then gzip again
 PASS  deflate fields: four bytes, not seven
 PASS  deflate segments: a one-segment body is skipped
 PASS  deflate segments: identity is not
+PASS  deflate edge: keep + 12 lies inside output
+PASS  deflate edge: gzip at maxLength is 12 over keep
+PASS  deflate edge: deflate at maxLength is keep exactly
+PASS  deflate edge: and inflates back
+PASS  deflate edge: noise at maxLength is too little saved
+PASS  deflate edge: TOO_LITTLE_SAVED
+PASS  deflate edge: through the level encoder too
 PASS  h1 deflate: the request is read
 PASS  h1 deflate: the request takes deflate
 PASS  h1 deflate: respondEncoded
@@ -275,13 +282,19 @@ PASS  h1 deflate wide: the request is read
 PASS  h1 deflate wide: respondEncoded
 PASS  h1 deflate wide: sent as it is
 PASS  h1 deflate wide: http1IdentityHead is the head written
+PASS  h1 deflate refused: the request is read
+PASS  h1 deflate refused: deflate, identity refused
+PASS  h1 deflate refused: respondEncoded
+PASS  h1 deflate refused: 100 bytes sent as they are
+PASS  h1 deflate refused: compressAnyway sends deflate
 PASS  accept: deflate;q=1 over gzip;q=0.9
 PASS  accept: deflate;q=0.001 over gzip;q=0
 PASS  accept: x-gzip;q=0 leaves deflate
 PASS  accept: *;q=0.5 and deflate;q=0 give gzip
 PASS  accept: * alone is a tie, so gzip
+PASS  accept: gzip, deflate is a tie, so gzip
 PASS  accept: DEFLATE in capitals
 PASS  accept: deflate offered alone takes *
 PASS  accept: deflate offered alone, gzip asked, is identity
 PASS  accept: deflate;q=0 and identity;q=0 is none
-http-compress: 286 passed, 0 failed, 0 skipped
+http-compress: 299 passed, 0 failed, 0 skipped

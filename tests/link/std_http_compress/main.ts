@@ -15,7 +15,9 @@
 // deflate: the zlib body from each encoder round tripping through
 // `ZlibDecompressor`, the level encoder's byte for byte `ZlibCompressor`'s,
 // the 12 bytes it saves over gzip at the saving threshold, its fields and its
-// HTTP/1.1 response, head arithmetic included, and more q-value negotiation.
+// HTTP/1.1 response, head arithmetic included, deflate with `identity;q=0`
+// answered as identity (COMP-17), the room at `maxLength`, and more q-value
+// negotiation.
 import { DEFLATE_FAST, DEFLATE_NO_ROOM } from "nish/compress/deflate"
 import { GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
 import { ZlibCompressor, ZlibDecompressor } from "nish/compress/zlib"
@@ -681,6 +683,23 @@ export const main = (): number => {
     t.eqI32("deflate fields: four bytes, not seven", toI32(d.values[1].length), 4)
     t.ok("deflate segments: a one-segment body is skipped", d.oneSegment(HTTP_CODING_DEFLATE, 1000, 0) && d.decision === HTTP_COMPRESS_NO_FEWER_SEGMENTS)
     t.ok("deflate segments: identity is not", !d.oneSegment(HTTP_CODING_IDENTITY, 1000, 0))
+    // At maxLength: a gzip member 12 bytes over keep is room enough for deflate.
+    const edge = new HttpCompressor(DEFLATE_FAST, 0, 5221)
+    t.ok("deflate edge: keep + 12 lies inside output", 5221 + 12 < toI32(edge.output.length))
+    const ge: i32 = edge.compress(HTTP_CODING_GZIP, body, 0, 5221)
+    edge.minSaving = 5221 - (ge - 12)
+    t.eqI32("deflate edge: gzip at maxLength is 12 over keep", edge.compress(HTTP_CODING_GZIP, body, 0, 5221), -1)
+    t.eqI32("deflate edge: deflate at maxLength is keep exactly", edge.compress(HTTP_CODING_DEFLATE, body, 0, 5221), ge - 12)
+    t.ok("deflate edge: and inflates back", inflate.decompress(edge.output, 0, ge - 12, back, 0, 70000) === 5221 && same(body, back, 0, 5221))
+    edge.minSaving = 1
+    const noisy: u8[] = new Array<u8>(5221)
+    for (let i: i32 = 0; i < 5221; i += 1) {
+      noisy[i] = toU8(rng.nextInt(0, 255))
+    }
+    t.eqI32("deflate edge: noise at maxLength is too little saved", edge.compress(HTTP_CODING_DEFLATE, noisy, 0, 5221), -1)
+    t.eqI32("deflate edge: TOO_LITTLE_SAVED", edge.decision, HTTP_COMPRESS_TOO_LITTLE_SAVED)
+    edge.encoder = HTTP_ENCODER_LEVEL
+    t.eqI32("deflate edge: through the level encoder too", edge.compress(HTTP_CODING_DEFLATE, noisy, 0, 5221), -1)
   }
   {
     // A deflate response on HTTP/1.1, negotiated off the request's field.
@@ -707,6 +726,19 @@ export const main = (): number => {
     t.ok("h1 deflate wide: sent as it is", w.head.indexOf("content-encoding") < 0 && p.decision === HTTP_COMPRESS_NO_FEWER_SEGMENTS)
     p.compress(HTTP_CODING_DEFLATE, body, 0, 5221)
     t.eqI32("h1 deflate wide: http1IdentityHead is the head written", p.http1IdentityHead(r.bodyStart - conn.outputStart, n, 5221), w.bodyStart - wide.outputStart)
+    // identity;q=0 forces gzip only: deflate under minLength goes as it is,
+    // which RFC 9110 §12.5.3 allows; a program that must send deflate calls
+    // compressAnyway itself.
+    const q = new HttpCompressor(DEFLATE_FAST, 256, 65536)
+    const strict = request(t, "h1 deflate refused", config, "GET", "accept-encoding: deflate, identity;q=0\r\n")
+    const sfield: string | null = strict.parser.header("accept-encoding")
+    const scoding: i32 = sfield === null ? HTTP_CODING_NONE : pick(sfield)
+    t.ok("h1 deflate refused: deflate, identity refused", strict.identityRefused() && scoding === HTTP_CODING_DEFLATE)
+    t.eqI32("h1 deflate refused: respondEncoded", strict.respondEncoded(200, names, values, body, 0, 100, q, scoding), 0)
+    const s: Response = queued(strict)
+    t.ok("h1 deflate refused: 100 bytes sent as they are", s.head.indexOf("content-encoding") < 0 && s.has("content-length: 100") && q.decision === HTTP_COMPRESS_TOO_SMALL)
+    const forced: i32 = q.compressAnyway(HTTP_CODING_DEFLATE, body, 0, 100)
+    t.ok("h1 deflate refused: compressAnyway sends deflate", forced > 0 && inflate.decompress(q.output, 0, forced, back, 0, 70000) === 100)
   }
   {
     // More negotiation: deflate's q against gzip's, aliases and `*`.
@@ -715,6 +747,7 @@ export const main = (): number => {
     t.eqI32("accept: x-gzip;q=0 leaves deflate", pick("x-gzip;q=0, deflate"), HTTP_CODING_DEFLATE)
     t.eqI32("accept: *;q=0.5 and deflate;q=0 give gzip", pick("*;q=0.5, deflate;q=0"), HTTP_CODING_GZIP)
     t.eqI32("accept: * alone is a tie, so gzip", pick("*"), HTTP_CODING_GZIP)
+    t.eqI32("accept: gzip, deflate is a tie, so gzip", pick("gzip, deflate"), HTTP_CODING_GZIP)
     t.eqI32("accept: DEFLATE in capitals", pick("DEFLATE"), HTTP_CODING_DEFLATE)
     t.eqI32("accept: deflate offered alone takes *", httpAcceptEncoding(ascii("*"), 0, 1, HTTP_OFFER_DEFLATE), HTTP_CODING_DEFLATE)
     t.eqI32("accept: deflate offered alone, gzip asked, is identity", httpAcceptEncoding(ascii("gzip"), 0, 4, HTTP_OFFER_DEFLATE), HTTP_CODING_IDENTITY)
