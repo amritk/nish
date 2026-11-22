@@ -2099,11 +2099,7 @@ const p256CurveB = (): u32[] => {
  * The plain 1, `[1, 0, …, 0]`. A Montgomery multiply by it divides by R, which
  * takes an element out of the Montgomery domain: fiat's `from_montgomery`.
  */
-const p256PlainOne = (): u32[] => {
-  const out: u32[] = p256Limbs()
-  out[0] = 1
-  return out
-}
+const p256PlainOne = (): u32[] => [1, 0, 0, 0, 0, 0, 0, 0]
 
 /** `out = a`, limb by limb. */
 const p256Copy = (out: u32[], a: u32[]): void => {
@@ -2725,9 +2721,14 @@ const p256TableStore = (table: u32[], at: i32, a: u32[]): void => {
   if (toI32(a.length) < 8 || at < 0 || at > toI32(table.length) - 8) {
     return
   }
-  for (let i: i32 = 0; i < 8; i++) {
-    table[at + i] = a[i]
-  }
+  table[at] = a[0]
+  table[at + 1] = a[1]
+  table[at + 2] = a[2]
+  table[at + 3] = a[3]
+  table[at + 4] = a[4]
+  table[at + 5] = a[5]
+  table[at + 6] = a[6]
+  table[at + 7] = a[7]
 }
 
 /** Table entry `i` (limbs `24i` to `24i + 23`, X then Y then Z) = `p`. */
@@ -2765,18 +2766,17 @@ const p256TableBuild = (
  * way, at an offset that is the caller's loop position, never the secret.
  */
 const p256TableMove = (out: u32[], table: u32[], at: i32, hit: u32): void => {
-  const p: u32 = toU32(at)
   if (toI32(out.length) < 8 || at < 0 || at > toI32(table.length) - 8) {
     return
   }
-  out[0] = p256FiatCmovznzU32(hit, out[0], table[p])
-  out[1] = p256FiatCmovznzU32(hit, out[1], table[p + 1])
-  out[2] = p256FiatCmovznzU32(hit, out[2], table[p + 2])
-  out[3] = p256FiatCmovznzU32(hit, out[3], table[p + 3])
-  out[4] = p256FiatCmovznzU32(hit, out[4], table[p + 4])
-  out[5] = p256FiatCmovznzU32(hit, out[5], table[p + 5])
-  out[6] = p256FiatCmovznzU32(hit, out[6], table[p + 6])
-  out[7] = p256FiatCmovznzU32(hit, out[7], table[p + 7])
+  out[0] = p256FiatCmovznzU32(hit, out[0], table[at])
+  out[1] = p256FiatCmovznzU32(hit, out[1], table[at + 1])
+  out[2] = p256FiatCmovznzU32(hit, out[2], table[at + 2])
+  out[3] = p256FiatCmovznzU32(hit, out[3], table[at + 3])
+  out[4] = p256FiatCmovznzU32(hit, out[4], table[at + 4])
+  out[5] = p256FiatCmovznzU32(hit, out[5], table[at + 5])
+  out[6] = p256FiatCmovznzU32(hit, out[6], table[at + 6])
+  out[7] = p256FiatCmovznzU32(hit, out[7], table[at + 7])
 }
 
 /**
@@ -3580,13 +3580,15 @@ const p256BaseDigit = (m: u32[], c: i32, i: i32): u32 => {
   }
   let digit: u32 = 0
   for (let j: i32 = 0; j < P256_COMB_TEETH; j++) {
-    const bit: i32 = (c * P256_COMB_TEETH + j) * P256_COMB_SPACING + i
-    const limb: i32 = bit >> 5
-    // `limb` is below 16 (the comb covers fewer than 512 bits), so
+    // In u32: the caller's `c` and `i` are its loop positions, so `bit` is
+    // below 512 and no sum wraps.
+    const bit: u32 = (toU32(c) * toU32(P256_COMB_TEETH) + toU32(j)) * toU32(P256_COMB_SPACING) + toU32(i)
+    const limb: u32 = bit >> 5
+    // `limb` is below 16 (the comb covers fewer than 512 bits), so the u32
     // `(limb >> 3) - 1` is all ones below 8 and 0 past the top, with no branch.
-    const at: i32 = limb & 7
-    const word: u32 = m[at] & toU32((limb >> 3) - 1)
-    digit = digit | (((word >> toU32(bit & 31)) & 1) << toU32(j))
+    const at: i32 = toI32(limb & 7)
+    const word: u32 = m[at] & ((limb >> 3) - 1)
+    digit = digit | (((word >> (bit & 31)) & 1) << toU32(j))
   }
   return digit
 }
@@ -3604,10 +3606,13 @@ const p256BaseMove = (out: P256ProjectivePoint, table: u32[], at: i32, mask: u32
   if (toI32(x.length) < 8 || toI32(y.length) < 8 || at < 0 || at > toI32(table.length) - P256_BASE_ENTRY) {
     return
   }
-  const p: u32 = toU32(at)
-  for (let i: u32 = 0; i < 8; i++) {
-    x[i] = x[i] | (table[p + i] & mask)
-    y[i] = y[i] | (table[p + 8 + i] & mask)
+  // The entry check above keeps `k` below the table's length less 8 for all
+  // eight limbs; the loop states it for the prover.
+  let k: i32 = at
+  for (let i: i32 = 0; i < 8 && k < toI32(table.length) - 8; i++) {
+    x[i] = x[i] | (table[k] & mask)
+    y[i] = y[i] | (table[k + 8] & mask)
+    k++
   }
 }
 
@@ -3635,7 +3640,9 @@ const p256BaseSelect = (
   p256SetZero(out.x)
   p256SetZero(out.y)
   for (let j: i32 = 0; j < entries; j++) {
-    p256BaseMove(out, table, (c * entries + j) * P256_BASE_ENTRY, ctEq(toU32(j), u))
+    // In u32: `c` is a comb below P256_COMBS, so the offset is inside the table.
+    const at: i32 = toI32((toU32(c) * toU32(entries) + toU32(j)) * toU32(P256_BASE_ENTRY))
+    p256BaseMove(out, table, at, ctEq(toU32(j), u))
   }
   p256SetZero(s.t1)
   p256FiatSub(s.t0, s.t1, out.y)
@@ -3838,11 +3845,16 @@ const p256ScalarInRange = (bytes: u8[]): boolean => {
  */
 const p256DigestScalar = (out: u32[], digest: u8[]): void => {
   const length: i32 = toI32(digest.length)
-  const bytes: u8[] = new Array<u8>(32)
-  const take: i32 = length < 32 ? length : 32
-  const skip: i32 = 32 - take
-  for (let i: i32 = 0; i < take && i < length && skip + i < 32; i++) {
-    bytes[skip + i] = digest[i]
+  let take: i32 = 32
+  if (length < 32) {
+    take = length
+  }
+  const bytes: u8[] = []
+  for (let i: i32 = take; i < 32; i++) {
+    bytes.push(0)
+  }
+  for (let i: i32 = 0; i < take && i < toI32(digest.length); i++) {
+    bytes.push(digest[i])
   }
   const a: u32[] = p256Limbs()
   p256LimbsFromBytes(a, bytes, 0)
@@ -4137,26 +4149,35 @@ const p256Wnaf = (out: i32[], k: u8[]): void => {
   if (toI32(out.length) <= P256_WNAF_BITS || toI32(k.length) < 32) {
     return
   }
+  // 256 and 5 are P256_WNAF_BITS and P256_WNAF_WIDTH, written out so the
+  // prover sees the bounds of `bit`, `now` and `word`.
   let carry: i32 = 0
   let bit: i32 = 0
-  while (bit < P256_WNAF_BITS) {
+  while (bit >= 0 && bit < 256) {
     if (p256ByteBit(k, bit) === carry) {
       bit++
       continue
     }
-    const left: i32 = P256_WNAF_BITS - bit
-    const now: i32 = left < P256_WNAF_WIDTH ? left : P256_WNAF_WIDTH
-    let word: i32 = carry
+    let now: i32 = 5
+    if (bit > 251) {
+      now = 256 - bit
+    }
+    let bits: i32 = 0
     for (let j: i32 = 0; j < now; j++) {
-      word = word + (p256ByteBit(k, bit + j) << j)
+      bits = bits | (p256ByteBit(k, bit + j) << j)
     }
-    carry = (word >> (P256_WNAF_WIDTH - 1)) & 1
-    if (bit >= 0 && bit < toI32(out.length)) {
-      out[bit] = word - (carry << P256_WNAF_WIDTH)
+    // The window's bits and the carry in: at most 31 + 1.
+    const word: i32 = (bits & 31) + (carry & 1)
+    carry = (word >> 4) & 1
+    if (bit < toI32(out.length)) {
+      out[bit] = word - (carry & 1) * 32
     }
-    bit = bit + now
+    // `bit` is below 256 and `now` at most 5, so the i64 sum is the next bit.
+    bit = toI32(toI64(bit) + toI64(now))
   }
-  out[P256_WNAF_BITS] = carry
+  if (toI32(out.length) > 256) {
+    out[256] = carry
+  }
 }
 
 /** Bit `i` of the 32 big-endian bytes `k`, 0 the least significant. */
@@ -4174,12 +4195,12 @@ const p256OddMultiples = (
   p: P256ProjectivePoint,
   s: P256PointScratch
 ): void => {
-  if (toI32(table.length) < P256_WNAF_TABLE) {
+  if (toI32(table.length) < P256_WNAF_TABLE || toI32(table.length) < 1) {
     return
   }
+  p256PointCopy(table[0], p)
   const twice = new P256ProjectivePoint()
   p256PointDouble(twice, p, s)
-  p256PointCopy(table[0], p)
   for (let j: i32 = 1; j < toI32(table.length); j++) {
     p256PointAdd(table[j], table[j - 1], twice, s)
   }
@@ -4197,7 +4218,9 @@ const p256WnafAdd = (
   neg: P256ProjectivePoint,
   s: P256PointScratch
 ): void => {
-  const at: i32 = (digit < 0 ? -digit : digit) >> 1
+  // For an odd digit, (|digit| - 1) / 2: digit >> 1 when it is positive, and
+  // ~digit >> 1 when it is negative, since ~digit = -digit - 1.
+  const at: i32 = (digit ^ (digit >> 31)) >> 1
   if (at < 0 || at >= toI32(table.length)) {
     return
   }
@@ -4228,8 +4251,13 @@ const p256DoubleMultPublic = (
   q: P256ProjectivePoint,
   s: P256PointScratch
 ): void => {
-  const wa: i32[] = new Array<i32>(P256_WNAF_BITS + 1)
-  const wb: i32[] = new Array<i32>(P256_WNAF_BITS + 1)
+  const wa: i32[] = []
+  const wb: i32[] = []
+  // 257 digits: P256_WNAF_BITS and the carry out.
+  for (let i: i32 = 0; i < 257; i++) {
+    wa.push(0)
+    wb.push(0)
+  }
   p256Wnaf(wa, a)
   p256Wnaf(wb, b)
   const tableG: P256ProjectivePoint[] = []
@@ -4375,18 +4403,22 @@ export const p256VerifySha256 = (pub: u8[], msg: u8[], sig: u8[]): boolean =>
 // steps e, g and h, the nonce's multiple of G and its inverse — runs on the
 // scratch outside `expose`, on values derived from the key but not the key.
 
-/** The shift of a word's top byte, typed for `--number-mode f64`. */
-const P256_WORD_TOP: i32 = 24
-
 /** RFC 6979 §3.2 steps d and f hash `V || sep || x || h1`: 32 + 1 + 32 + 32 bytes. */
 const P256_NONCE_MESSAGE: i32 = 97
 
 /** ROTR^n(x) of FIPS 180-4 §3.2, `0 < n < 32`. */
 const p256Rotr = (x: u32, n: u32): u32 => (x >>> n) | (x << (32 - n))
 
-/** The big-endian word at `buf[at .. at + 4)`; the caller has checked the window. */
-const p256LoadWord = (buf: u8[], at: i32): u32 =>
-  (toU32(buf[at]) << 24) | (toU32(buf[at + 1]) << 16) | (toU32(buf[at + 2]) << 8) | toU32(buf[at + 3])
+/**
+ * The big-endian word at `buf[at .. at + 4)`. The caller has checked the
+ * window, a public position; outside it the answer is 0.
+ */
+const p256LoadWord = (buf: u8[], at: i32): u32 => {
+  if (at < 0 || at > toI32(buf.length) - 4) {
+    return 0
+  }
+  return (toU32(buf[at]) << 24) | (toU32(buf[at + 1]) << 16) | (toU32(buf[at + 2]) << 8) | toU32(buf[at + 3])
+}
 
 /**
  * FIPS 180-4 §6.2.2 steps 1 to 4 for the block at `src[at .. at + 64)`, folded
@@ -4402,7 +4434,8 @@ const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): voi
     at <= toI32(src.length) - SHA256_BLOCK
   ) {
     for (let t: i32 = 0; t < 16; t++) {
-      w[t] = p256LoadWord(src, at + 4 * t)
+      // at <= src.length - 64 and 4 * t < 64: the sum is inside `src`, an i32.
+      w[t] = p256LoadWord(src, toI32(toI64(at) + toI64(4 * t)))
     }
     for (let t: i32 = 16; t < 64; t++) {
       const w2: u32 = w[t - 2]
@@ -4474,25 +4507,35 @@ const p256ShaInto = (
     0x1f83d9ab,
     0x5be0cd19
   )
-  let from: i32 = off
-  while (len - (from - off) >= SHA256_BLOCK) {
-    p256ShaCompress(h, w, kt, data, from)
-    from = from + SHA256_BLOCK
+  if (off < 0 || len < 0 || off > toI32(data.length) - len) {
+    return
   }
-  const rest: i32 = len - (from - off)
+  // Whole blocks: len >> 6 of them (SHA256_BLOCK is 64), at most 2^25, so
+  // each start, off + 64 b, is below off + len, inside `data`.
+  const blocks: i32 = len >> 6
+  for (let b: i32 = 0; b < blocks; b++) {
+    p256ShaCompress(h, w, kt, data, toI32(toI64(off) + toI64(b) * 64))
+  }
+  const rest: i32 = len & 63
   const tailLength: i32 = toI32(tail.length)
-  const dataLength: i32 = toI32(data.length)
   for (let i: i32 = 0; i < tailLength; i++) {
     tail[i] = 0
   }
-  for (let i: i32 = 0; i < rest && i < tailLength && from + i >= 0 && from + i < dataLength; i++) {
-    tail[i] = data[from + i]
+  // The part block starts at off + len - rest, inside `data` with the window.
+  let k: i32 = toI32(toI64(off) + toI64(len) - toI64(rest))
+  for (let i: i32 = 0; i < rest && i < toI32(tail.length) && k >= 0 && k < toI32(data.length); i++) {
+    tail[i] = data[k]
+    k++
   }
-  if (rest >= 0 && rest < tailLength) {
+  if (rest < toI32(tail.length)) {
     tail[rest] = 0x80
   }
-  const end: i32 = rest < SHA256_BLOCK - 8 ? SHA256_BLOCK : 2 * SHA256_BLOCK
-  const bits: u64 = toU64(len) << 3
+  // One padded block, or two when the 8-byte length no longer fits (rest >= 56).
+  let end: i32 = 128
+  if (rest < 56) {
+    end = 64
+  }
+  const bits: u64 = toU64(toU32(len)) << 3
   for (let i: i32 = 0; i < 8; i++) {
     const j: i32 = end - 1 - i
     if (j >= 0 && j < tailLength) {
@@ -4500,16 +4543,17 @@ const p256ShaInto = (
     }
   }
   p256ShaCompress(h, w, kt, tail, 0)
-  if (end > SHA256_BLOCK) {
-    p256ShaCompress(h, w, kt, tail, SHA256_BLOCK)
+  if (end > 64) {
+    p256ShaCompress(h, w, kt, tail, 64)
   }
   const outLength: i32 = toI32(out.length)
   for (let i: i32 = 0; i < 8 && i < toI32(h.length); i++) {
     const word: u32 = h[i]
     for (let b: i32 = 0; b < 4; b++) {
-      const j: i32 = at + 4 * i + b
+      const j: i32 = toI32(toI64(at) + toI64(4 * i + b))
       if (j >= 0 && j < outLength) {
-        out[j] = toU8(word >>> toU32(P256_WORD_TOP - 8 * b))
+        const top: i32 = 24
+        out[j] = toU8(word >>> toU32(top - 8 * b))
       }
     }
   }
@@ -4536,20 +4580,26 @@ const p256HmacInto = (
   const blockLength: i32 = toI32(block.length)
   const keyLength: i32 = toI32(key.length)
   const messageLength: i32 = toI32(message.length)
-  if (blockLength < SHA256_BLOCK + len || keyLength > SHA256_BLOCK || len > messageLength) {
-    panic("p256HmacInto: a key, message or block outside its bounds")
+  // Both callers pass a 32-byte key, a message of at most P256_NONCE_MESSAGE
+  // (97) bytes and the scratch's 64 + 97 byte block, so this always holds.
+  if (len < 0 || len > 97 || blockLength < 64 + len || keyLength > 64 || len > messageLength) {
+    return
   }
-  for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
+  for (let i: i32 = 0; i < 64 && i < blockLength; i++) {
     block[i] = i < keyLength ? key[i] ^ 0x36 : 0x36
   }
-  for (let i: i32 = 0; i < len && i < messageLength && SHA256_BLOCK + i < blockLength; i++) {
-    block[SHA256_BLOCK + i] = message[i]
+  let k: i32 = 64
+  for (let i: i32 = 0; i < len && i < messageLength && k < toI32(block.length); i++) {
+    block[k] = message[i]
+    k++
   }
-  p256ShaInto(block, SHA256_BLOCK, block, P256_FROM, SHA256_BLOCK + len, kt, h, w, tail)
-  for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
+  p256ShaInto(block, 64, block, P256_FROM, 64 + len, kt, h, w, tail)
+  for (let i: i32 = 0; i < 64 && i < blockLength; i++) {
     block[i] = i < keyLength ? key[i] ^ 0x5c : 0x5c
   }
-  p256ShaInto(out, P256_FROM, block, P256_FROM, SHA256_BLOCK + SHA256_SIZE, kt, h, w, tail)
+  // The outer message: the 64-byte padded key, then the 32-byte inner digest.
+  const outerLength: i32 = 96
+  p256ShaInto(out, P256_FROM, block, P256_FROM, outerLength, kt, h, w, tail)
   wipe(block)
   wipe(h)
   wipe(w)
@@ -4564,7 +4614,8 @@ const p256CopyBytes = (out: u8[], from: u8[], n: i32): void => {
 }
 
 /** Whether `[at, at + len)` is a window inside an array of `length` elements. */
-const p256WindowFits = (length: i32, at: i32, len: i32): boolean => at >= 0 && len >= 0 && at <= length - len
+const p256WindowFits = (length: i32, at: i32, len: i32): boolean =>
+  at >= 0 && len >= 0 && toI64(at) <= toI64(length) - toI64(len)
 
 /**
  * Everything `p256SignSha256Into` signs in, made once and reused: RFC 6979's
@@ -4708,9 +4759,10 @@ export class P256SignScratch {
     ]
     this.hash = p256Limbs()
     this.schedule = new Array<u32>(64)
-    this.tail = new Array<u8>(2 * SHA256_BLOCK)
-    this.block = new Array<u8>(SHA256_BLOCK + P256_NONCE_MESSAGE)
-    this.message = new Array<u8>(SHA256_SIZE + 1)
+    // 2 * SHA256_BLOCK, SHA256_BLOCK + P256_NONCE_MESSAGE and SHA256_SIZE + 1.
+    this.tail = new Array<u8>(128)
+    this.block = new Array<u8>(161)
+    this.message = new Array<u8>(33)
     this.k = new Array<u8>(SHA256_SIZE)
     this.v = new Array<u8>(SHA256_SIZE)
     this.h1 = new Array<u8>(SHA256_SIZE)
@@ -4737,12 +4789,13 @@ const p256SignMac = (sc: P256SignScratch, out: u8[], message: u8[], len: i32): v
  * hashing's work arrays are fresh and wiped, and the new `K` is the answer.
  */
 const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
-  const message: u8[] = new Array<u8>(P256_NONCE_MESSAGE)
+  const message: u8[] = new Array<u8>(97)
   p256CopyBytes(message, sc.message, SHA256_SIZE + 1)
-  for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(priv.length) && i < toI32(sc.h1.length); i++) {
-    const j: i32 = SHA256_SIZE + 1 + i
-    const l: i32 = j + SHA256_SIZE
-    if (j >= 0 && l >= 0 && j < toI32(message.length) && l < toI32(message.length)) {
+  for (let i: i32 = 0; i < 32 && i < toI32(priv.length) && i < toI32(sc.h1.length); i++) {
+    // V || sep is SHA256_SIZE + 1 bytes; the key, then h1, follow it.
+    const j: i32 = 33 + i
+    const l: i32 = j + 32
+    if (j < toI32(message.length) && l < toI32(message.length)) {
       message[j] = priv[i]
       message[l] = sc.h1[i]
     }
@@ -4756,8 +4809,8 @@ const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
     sc.kt,
     p256Limbs(),
     new Array<u32>(64),
-    new Array<u8>(2 * SHA256_BLOCK),
-    new Array<u8>(SHA256_BLOCK + P256_NONCE_MESSAGE)
+    new Array<u8>(128),
+    new Array<u8>(161)
   )
   wipe(message)
   return key
@@ -4784,8 +4837,12 @@ const p256SignSExposed = (priv: u8[], sc: P256SignScratch): u32[] => {
 
 /** `sc.message = V || sep`, the start of every key update's message (RFC 6979 §3.2 steps d, f and h.3). */
 const p256NonceSeparated = (sc: P256SignScratch, sep: u8): void => {
-  p256CopyBytes(sc.message, sc.v, SHA256_SIZE)
-  sc.message[SHA256_SIZE] = sep
+  const message: u8[] = sc.message
+  p256CopyBytes(message, sc.v, SHA256_SIZE)
+  // The scratch's message is SHA256_SIZE + 1 bytes, so this always holds.
+  if (toI32(message.length) > 32) {
+    message[32] = sep
+  }
 }
 
 /** Steps d and f: `K` replaced by what the exposed step answers, which is wiped once copied. */
@@ -4874,7 +4931,8 @@ export const p256SignSha256Into = (
       const s: u32[] = exposeWith(priv, sc, p256SignSExposed)
       if (p256FiatNonzero(sc.r) !== 0 && p256FiatNonzero(s) !== 0) {
         p256LimbsToBytes(out, at, sc.r)
-        p256LimbsToBytes(out, at + 32, s)
+        // The window was checked: at + 64 fits in `out`, an i32.
+        p256LimbsToBytes(out, toI32(toI64(at) + 32), s)
         p256WipeSignScratch(sc)
         return true
       }
