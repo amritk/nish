@@ -39256,7 +39256,38 @@ struct PgCarrierLimits (class) size=16 align=4 exported
   field executions: i32 index=1 offset=4 initialized
   field connectTimeoutMs: i32 index=2 offset=8 initialized
   field watch: i32 index=3 offset=12 initialized
-struct PgCarrier (class) size=376 align=8 exported
+struct PgCarrierSlot (class) size=48 align=8
+  field deadline: i64 index=0 offset=0 initialized
+  field tls: TlsRecordClient | null index=1 offset=8 initialized
+  field index: i32 index=2 offset=16 readonly
+  field fd: i32 index=3 offset=20 initialized
+  field connected: boolean index=4 offset=24 initialized
+  field interest: i32 index=5 offset=28 initialized
+  field made: boolean index=6 offset=32 initialized
+  field error: i32 index=7 offset=36 initialized
+  field tlsPhase: i32 index=8 offset=40 initialized
+  field tlsAsked: i32 index=9 offset=44 initialized
+  constructor -> @nish.PgCarrierSlot.constructor
+struct PgCarrierQuery (class) size=24 align=8
+  field index: i32 index=0 offset=0 readonly
+  field tag: i32 index=1 offset=4 initialized
+  field request: HttpRequest | null index=2 offset=8 initialized
+  field ticket: i32 index=3 offset=16 initialized
+  field failed: boolean index=4 offset=20 initialized
+  constructor -> @nish.PgCarrierQuery.constructor
+struct PgCarrierExecution (class) size=20 align=4
+  field index: i32 index=0 offset=0 readonly
+  field value: i32 index=1 offset=4 readonly
+  field batcher: i32 index=2 offset=8 initialized
+  field run: i32 index=3 offset=12 initialized
+  field ended: boolean index=4 offset=16 initialized
+  constructor -> @nish.PgCarrierExecution.constructor
+struct PgCarrierBatch (class) size=16 align=8
+  field batcher: PgBatcher index=0 offset=0 readonly
+  field queued: boolean index=1 offset=8 initialized
+  field stalled: boolean index=2 offset=9 initialized
+  constructor -> @nish.PgCarrierBatch.constructor
+struct PgCarrier (class) size=248 align=8 exported
   field pool: PgPool index=0 offset=0 readonly
   field handler: HttpHandler index=1 offset=8 readonly
   field path: string index=2 offset=16 readonly
@@ -39264,59 +39295,42 @@ struct PgCarrier (class) size=376 align=8 exported
   field nonce: u8[] index=4 offset=32 readonly
   field ready: i32[] index=5 offset=40 readonly
   field timeoutNs: i64 index=6 offset=48 readonly
-  field fds: i32[] index=7 offset=56 readonly
-  field connected: boolean[] index=8 offset=64 readonly
-  field interest: i32[] index=9 offset=72 readonly
-  field made: boolean[] index=10 offset=80 readonly
-  field deadlines: i64[] index=11 offset=88 readonly
-  field errors: i32[] index=12 offset=96 readonly
-  field tlsName: string index=13 offset=104 readonly
-  field trust: TlsClientTrust | null index=14 offset=112 readonly
-  field tlsPhase: i32[] index=15 offset=120 readonly
-  field tlsConns: TlsRecordClient | null[] index=16 offset=128 readonly
-  field tlsAsked: i32[] index=17 offset=136 readonly
-  field sslRequest: u8[] index=18 offset=144 readonly
-  field tlsAnswer: u8[] index=19 offset=152 readonly
-  field tlsInput: u8[] index=20 offset=160 readonly
-  field qTags: i32[] index=21 offset=168 readonly
-  field qRequests: HttpRequest | null[] index=22 offset=176 readonly
-  field qTickets: i32[] index=23 offset=184 readonly
-  field qFailed: boolean[] index=24 offset=192 readonly
-  field qFree: i32[] index=25 offset=200 readonly
-  field eBatchers: i32[] index=26 offset=208 readonly
-  field eRuns: i32[] index=27 offset=216 readonly
-  field eEnded: boolean[] index=28 offset=224 readonly
-  field eFree: i32[] index=29 offset=232 readonly
-  field mapKeys: i32[] index=30 offset=240 readonly
-  field mapValues: i32[] index=31 offset=248 readonly
-  field batchers: PgBatcher[] index=32 offset=256 readonly
-  field batchQueued: boolean[] index=33 offset=264 readonly
-  field batchStalled: boolean[] index=34 offset=272 readonly
-  field conn: PgConnection | null index=35 offset=280 initialized
-  field query: i32 index=36 offset=288 initialized
-  field tag: i32 index=37 offset=292 initialized
-  field failure: i32 index=38 offset=296 initialized
-  field socketError: i32 index=39 offset=300 initialized
-  field tlsMode: i32 index=40 offset=304 readonly
-  field watchId: i32 index=41 offset=308 readonly
-  field loop: i32 index=42 offset=312 readonly
-  field qFreeCount: i32 index=43 offset=316 initialized
-  field eFreeCount: i32 index=44 offset=320 initialized
-  field mapMask: i32 index=45 offset=324 readonly
-  field building: i32 index=46 offset=328 initialized
-  field dropped: i32 index=47 offset=332 initialized
-  field finished: i32 index=48 offset=336 initialized
-  field drainBatcher: i32 index=49 offset=340 initialized
-  field drainRun: i32 index=50 offset=344 initialized
-  field drainFailure: i32 index=51 offset=348 initialized
-  field drainError: i32 index=52 offset=352 initialized
-  field shedBatcher: i32 index=53 offset=356 initialized
-  field shedLeft: i32 index=54 offset=360 initialized
-  field phase: i32 index=55 offset=364 initialized
-  field at: i32 index=56 offset=368 initialized
-  field unix: boolean index=57 offset=372 readonly
-  field connecting: boolean index=58 offset=373 initialized
-  field closed: boolean index=59 offset=374 initialized
+  field sockets: PgCarrierSlot[] index=7 offset=56 readonly
+  field tlsName: string index=8 offset=64 readonly
+  field trust: TlsClientTrust | null index=9 offset=72 readonly
+  field sslRequest: u8[] index=10 offset=80 readonly
+  field tlsAnswer: u8[] index=11 offset=88 readonly
+  field tlsInput: u8[] index=12 offset=96 readonly
+  field held: PgCarrierQuery[] index=13 offset=104 readonly
+  field qFree: PgCarrierQuery[] index=14 offset=112 readonly
+  field executions: PgCarrierExecution[] index=15 offset=120 readonly
+  field eFree: PgCarrierExecution[] index=16 offset=128 readonly
+  field mapKeys: i32[] index=17 offset=136 readonly
+  field mapValues: i32[] index=18 offset=144 readonly
+  field batchers: PgCarrierBatch[] index=19 offset=152 readonly
+  field conn: PgConnection | null index=20 offset=160 initialized
+  field mapMask: u32 index=21 offset=168 readonly
+  field query: i32 index=22 offset=172 initialized
+  field tag: i32 index=23 offset=176 initialized
+  field failure: i32 index=24 offset=180 initialized
+  field socketError: i32 index=25 offset=184 initialized
+  field tlsMode: i32 index=26 offset=188 readonly
+  field watchId: i32 index=27 offset=192 readonly
+  field loop: i32 index=28 offset=196 readonly
+  field building: i32 index=29 offset=200 initialized
+  field dropped: i32 index=30 offset=204 initialized
+  field finished: i32 index=31 offset=208 initialized
+  field drainBatcher: i32 index=32 offset=212 initialized
+  field drainRun: i32 index=33 offset=216 initialized
+  field drainFailure: i32 index=34 offset=220 initialized
+  field drainError: i32 index=35 offset=224 initialized
+  field shedBatcher: i32 index=36 offset=228 initialized
+  field shedLeft: i32 index=37 offset=232 initialized
+  field phase: i32 index=38 offset=236 initialized
+  field at: i32 index=39 offset=240 initialized
+  field unix: boolean index=40 offset=244 readonly
+  field connecting: boolean index=41 offset=245 initialized
+  field closed: boolean index=42 offset=246 initialized
   constructor -> @nish.PgCarrier.constructor
   method attach -> @nish.PgCarrier.attach
   method run -> @nish.PgCarrier.run
@@ -39348,6 +39362,9 @@ struct PgCarrier (class) size=376 align=8 exported
   method announce -> @nish.PgCarrier.announce
   method dropSocket -> @nish.PgCarrier.dropSocket
   method final -> @nish.PgCarrier.final
+  method slotAt -> @nish.PgCarrier.slotAt
+  method queryAt -> @nish.PgCarrier.queryAt
+  method executionAt -> @nish.PgCarrier.executionAt
   method batcher -> @nish.PgCarrier.batcher
   method take -> @nish.PgCarrier.take
   method free -> @nish.PgCarrier.free
@@ -39355,19 +39372,33 @@ struct PgCarrier (class) size=376 align=8 exported
   method mapPut -> @nish.PgCarrier.mapPut
   method mapGet -> @nish.PgCarrier.mapGet
   method mapRemove -> @nish.PgCarrier.mapRemove
-function fillFree(a: i32[]): void -> @nish.fillFree
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  pointer a: size=0 writesThrough=true captured=false
+function PgCarrierSlot.constructor(this: PgCarrierSlot, index: i32): void -> @nish.PgCarrierSlot.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: index
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -2:9 n: i32 (const)
-  local -1:12 k: i32 (let)
+function PgCarrierQuery.constructor(this: PgCarrierQuery, index: i32): void -> @nish.PgCarrierQuery.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: index
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function PgCarrierExecution.constructor(this: PgCarrierExecution, index: i32, value: i32): void -> @nish.PgCarrierExecution.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: index value
+  pointer this: size=20 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function PgCarrierBatch.constructor(this: PgCarrierBatch, batcher: PgBatcher): void -> @nish.PgCarrierBatch.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: batcher
+  pointer this: size=16 writesThrough=true captured=false
+  pointer batcher: size=160 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
 function PgCarrier.constructor(this: PgCarrier, limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler): void -> @nish.PgCarrier.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_net_address
   escaping: handler pool
-  calls: nish.HttpHandler.watch nish.PgPool.carryTls nish.PgPool.settings nish.fillFree nish.pgCarrierTrust nish.pgSslRequest nish_net_address nish_panic nish_panic_overflow nish_poll_create
-  pointer this: size=376 writesThrough=true captured=false
+  calls: nish.HttpHandler.watch nish.PgCarrierExecution.constructor nish.PgCarrierQuery.constructor nish.PgCarrierSlot.constructor nish.PgPool.carryTls nish.PgPool.settings nish.pgCarrierTrust nish.pgSslRequest nish_alloc_struct nish_array_grow nish_net_address nish_panic nish_poll_create
+  pointer this: size=248 writesThrough=true captured=false
   pointer limits: size=16 writesThrough=false captured=false
   pointer pool: size=96 writesThrough=true captured=true passedTo=nish.PgPool.settings#0 nish.PgPool.carryTls#0
   pointer target: size=32 writesThrough=false captured=false
@@ -39379,88 +39410,103 @@ function PgCarrier.constructor(this: PgCarrier, limits: PgCarrierLimits, pool: P
   callee +21:30 PgPool.settings -> @nish.PgPool.settings
   callee +27:7 PgPool.carryTls -> @nish.PgPool.carryTls
   callee +30:56 pgCarrierTrust -> @nish.pgCarrierTrust
-  local +38:11 size: i32 (const)
-  callee +49:23 pgSslRequest -> @nish.pgSslRequest
-  local +54:14 s: i32 (let)
-  callee +62:5 fillFree -> @nish.fillFree
-  callee +68:5 fillFree -> @nish.fillFree
-  local +71:9 mapSize: i32 (let)
-  local +77:14 i: i32 (let)
-  callee +88:5 HttpHandler.watch -> @nish.HttpHandler.watch
+  local +40:11 size: i32 (const)
+  local +41:11 ready: i32[] (const)
+  local +42:11 sockets: PgCarrierSlot[] (const)
+  local +43:14 s: i32 (let)
+  callee +46:20 new PgCarrierSlot -> @nish.PgCarrierSlot.constructor
+  callee +50:23 pgSslRequest -> @nish.pgSslRequest
+  local +58:11 held: PgCarrierQuery[] (const)
+  local +59:11 qFree: PgCarrierQuery[] (const)
+  local +60:14 q: i32 (let)
+  callee +61:17 new PgCarrierQuery -> @nish.PgCarrierQuery.constructor
+  local +63:9 k: i32 (let)
+  local +72:11 runs: PgCarrierExecution[] (const)
+  local +73:11 eFree: PgCarrierExecution[] (const)
+  local +74:14 e: i32 (let)
+  callee +75:17 new PgCarrierExecution -> @nish.PgCarrierExecution.constructor
+  local +87:11 tickets: u32 (const)
+  local +88:9 mapSize: u32 (let)
+  local +92:11 keys: i32[] (const)
+  local +93:11 values: i32[] (const)
+  local +94:14 i: u32 (let)
+  callee +106:5 HttpHandler.watch -> @nish.HttpHandler.watch
 function PgCarrier.attach(this: PgCarrier, batcher: PgBatcher): i32 -> @nish.PgCarrier.attach [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: batcher
-  calls: nish.PgPool.register nish_array_grow nish_panic
-  pointer this: size=376 writesThrough=false captured=false
-  pointer batcher: size=160 writesThrough=true captured=true
+  calls: nish.PgCarrierBatch.constructor nish.PgPool.register nish_alloc_struct nish_array_grow nish_panic
+  pointer this: size=248 writesThrough=false captured=false
+  pointer batcher: size=160 writesThrough=true captured=true passedTo=nish.PgCarrierBatch.constructor#1
   stackSites=1 stackLocals=1
   local -7:11 id: i32 (const)
   local -6:11 types: i32[] (const)
   callee -5:43 PgPool.register -> @nish.PgPool.register
+  callee +0:24 new PgCarrierBatch -> @nish.PgCarrierBatch.constructor
 function PgCarrier.run(this: PgCarrier, req: HttpRequest | null, tag: i32): i32 -> @nish.PgCarrier.run [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: tag
-  calls: nish.PgCarrier.free nish.PgCarrier.mapPut nish.PgCarrier.take nish.PgPool.request nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.take#0 nish.PgCarrier.free#0 nish.PgCarrier.mapPut#0
+  calls: nish.PgCarrier.free nish.PgCarrier.mapPut nish.PgCarrier.take nish.PgPool.request
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.take#0 nish.PgCarrier.free#0 nish.PgCarrier.mapPut#0
   pointer req: size=160 writesThrough=true captured=true passedTo=nish.PgCarrier.take#1
   stackSites=0 stackLocals=0
-  local -9:11 q: i32 (const)
-  callee -9:20 PgCarrier.take -> @nish.PgCarrier.take
+  local -9:11 held: PgCarrierQuery | null (const)
+  callee -9:41 PgCarrier.take -> @nish.PgCarrier.take
   local -5:11 ticket: i32 (const)
   callee -5:25 PgPool.request -> @nish.PgPool.request
   callee -3:7 PgCarrier.free -> @nish.PgCarrier.free
   callee +1:5 PgCarrier.mapPut -> @nish.PgCarrier.mapPut
 function PgCarrier.runInt(this: PgCarrier, req: HttpRequest | null, batcher: i32, key: i64, tag: i32): i32 -> @nish.PgCarrier.runInt [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgCarrier.take
   escaping: batcher key tag
-  calls: nish.PgBatcher.addInt nish.PgCarrier.batcher nish.PgCarrier.free nish.PgCarrier.take
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
+  calls: nish.PgBatcher.addInt nish.PgCarrier.batcher nish.PgCarrier.free nish.PgCarrier.take nish_panic
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
   pointer req: size=160 writesThrough=true captured=true passedTo=nish.PgCarrier.take#1
   stackSites=0 stackLocals=0
-  local +0:11 b: PgBatcher (const)
-  callee +0:26 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  local +1:11 q: i32 (const)
-  callee +1:20 PgCarrier.take -> @nish.PgCarrier.take
-  callee +5:10 PgBatcher.addInt -> @nish.PgBatcher.addInt
-  callee +6:7 PgCarrier.free -> @nish.PgCarrier.free
+  local +0:11 batch: PgCarrierBatch | null (const)
+  callee +0:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
+  local +4:11 held: PgCarrierQuery | null (const)
+  callee +4:41 PgCarrier.take -> @nish.PgCarrier.take
+  callee +8:10 PgBatcher.addInt -> @nish.PgBatcher.addInt
+  callee +9:7 PgCarrier.free -> @nish.PgCarrier.free
 function PgCarrier.runText(this: PgCarrier, req: HttpRequest | null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32): i32 -> @nish.PgCarrier.runText [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgCarrier.take
   escaping: batcher length start tag
-  calls: nish.PgBatcher.addText nish.PgCarrier.batcher nish.PgCarrier.free nish.PgCarrier.take
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
+  calls: nish.PgBatcher.addText nish.PgCarrier.batcher nish.PgCarrier.free nish.PgCarrier.take nish_panic
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
   pointer req: size=160 writesThrough=true captured=true passedTo=nish.PgCarrier.take#1
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.PgBatcher.addText#1
   stackSites=0 stackLocals=0
-  local +0:11 b: PgBatcher (const)
-  callee +0:26 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  local +1:11 q: i32 (const)
-  callee +1:20 PgCarrier.take -> @nish.PgCarrier.take
-  callee +5:10 PgBatcher.addText -> @nish.PgBatcher.addText
-  callee +6:7 PgCarrier.free -> @nish.PgCarrier.free
+  local +0:11 batch: PgCarrierBatch | null (const)
+  callee +0:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
+  local +4:11 held: PgCarrierQuery | null (const)
+  callee +4:41 PgCarrier.take -> @nish.PgCarrier.take
+  callee +8:10 PgBatcher.addText -> @nish.PgBatcher.addText
+  callee +9:7 PgCarrier.free -> @nish.PgCarrier.free
 function PgCarrier.request(this: PgCarrier): HttpRequest -> @nish.PgCarrier.request [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=160
-  calls: nish_panic
-  pointer this: size=376 writesThrough=false captured=false
+  calls: nish.PgCarrier.queryAt nish_panic
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.queryAt#0
   stackSites=0 stackLocals=0
-  local +0:11 q: i32 (const)
+  local +0:11 held: PgCarrierQuery | null (const)
+  callee +0:41 PgCarrier.queryAt -> @nish.PgCarrier.queryAt
   local +1:11 req: HttpRequest | null (const)
 function PgCarrier.connection(this: PgCarrier): PgConnection -> @nish.PgCarrier.connection [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=216
   calls: nish_panic
-  pointer this: size=376 writesThrough=false captured=false
+  pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 conn: PgConnection | null (const)
 function PgCarrier.send(this: PgCarrier): boolean -> @nish.PgCarrier.send [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgCarrier.connection nish.PgCarrier.mapRemove nish.PgConnection.bindCancel nish.PgPool.send nish_panic nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.connection#0 nish.PgCarrier.mapRemove#0
+  calls: nish.PgCarrier.connection nish.PgCarrier.mapRemove nish.PgCarrier.queryAt nish.PgConnection.bindCancel nish.PgPool.send nish_panic
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.queryAt#0 nish.PgCarrier.connection#0 nish.PgCarrier.mapRemove#0
   stackSites=0 stackLocals=0
-  local -4:11 q: i32 (const)
+  local -4:11 held: PgCarrierQuery | null (const)
+  callee -4:41 PgCarrier.queryAt -> @nish.PgCarrier.queryAt
   callee +1:9 PgPool.send -> @nish.PgPool.send
   local +4:11 conn: PgConnection (const)
   callee +4:32 PgCarrier.connection -> @nish.PgCarrier.connection
@@ -39470,65 +39516,81 @@ function PgCarrier.send(this: PgCarrier): boolean -> @nish.PgCarrier.send [expor
 function PgCarrier.next(this: PgCarrier): i32 -> @nish.PgCarrier.next [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgBatcher.shed nish.PgCarrier.batcher nish.PgCarrier.connectAndFlush nish.PgCarrier.dispatch nish.PgCarrier.drain nish.PgCarrier.final nish.PgCarrier.free nish.PgCarrier.poll nish.PgCarrier.slots nish_panic nish_panic_overflow
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.free#0 nish.PgCarrier.final#0 nish.PgCarrier.drain#0 nish.PgCarrier.batcher#0 nish.PgCarrier.final#0 nish.PgCarrier.poll#0 nish.PgCarrier.slots#0 nish.PgCarrier.dispatch#0 nish.PgCarrier.connectAndFlush#0
+  calls: nish.PgBatcher.shed nish.PgCarrier.batcher nish.PgCarrier.connectAndFlush nish.PgCarrier.dispatch nish.PgCarrier.drain nish.PgCarrier.final nish.PgCarrier.free nish.PgCarrier.poll nish.PgCarrier.queryAt nish.PgCarrier.slots nish_panic
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.queryAt#0 nish.PgCarrier.free#0 nish.PgCarrier.queryAt#0 nish.PgCarrier.final#0 nish.PgCarrier.drain#0 nish.PgCarrier.batcher#0 nish.PgCarrier.queryAt#0 nish.PgCarrier.final#0 nish.PgCarrier.poll#0 nish.PgCarrier.slots#0 nish.PgCarrier.dispatch#0 nish.PgCarrier.connectAndFlush#0
   stackSites=0 stackLocals=0
-  callee -1:7 PgCarrier.free -> @nish.PgCarrier.free
-  local +4:15 q: i32 (const)
-  callee +8:16 PgCarrier.final -> @nish.PgCarrier.final
-  local +11:15 event: i32 (const)
-  callee +11:28 PgCarrier.drain -> @nish.PgCarrier.drain
-  local +18:15 q: i32 (const)
-  callee +18:24 PgBatcher.shed -> @nish.PgBatcher.shed
-  callee +18:24 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  callee +20:18 PgCarrier.final -> @nish.PgCarrier.final
-  callee +25:9 PgCarrier.poll -> @nish.PgCarrier.poll
-  local +30:15 event: i32 (const)
-  callee +30:28 PgCarrier.slots -> @nish.PgCarrier.slots
-  local +40:15 event: i32 (const)
-  callee +40:28 PgCarrier.dispatch -> @nish.PgCarrier.dispatch
-  local +52:13 failed: boolean (const)
-  callee +52:31 PgCarrier.connectAndFlush -> @nish.PgCarrier.connectAndFlush
+  local -4:13 done: PgCarrierQuery | null (const)
+  callee -4:43 PgCarrier.queryAt -> @nish.PgCarrier.queryAt
+  callee -2:9 PgCarrier.free -> @nish.PgCarrier.free
+  local +4:15 held: PgCarrierQuery | null (const)
+  callee +4:45 PgCarrier.queryAt -> @nish.PgCarrier.queryAt
+  callee +9:18 PgCarrier.final -> @nish.PgCarrier.final
+  local +13:15 event: i32 (const)
+  callee +13:28 PgCarrier.drain -> @nish.PgCarrier.drain
+  local +18:13 left: i32 (const)
+  local +21:15 batch: PgCarrierBatch | null (const)
+  callee +21:46 PgCarrier.batcher -> @nish.PgCarrier.batcher
+  local +22:15 held: PgCarrierQuery | null (const)
+  callee +22:62 PgCarrier.queryAt -> @nish.PgCarrier.queryAt
+  callee +22:75 PgBatcher.shed -> @nish.PgBatcher.shed
+  callee +24:18 PgCarrier.final -> @nish.PgCarrier.final
+  callee +29:9 PgCarrier.poll -> @nish.PgCarrier.poll
+  local +34:15 event: i32 (const)
+  callee +34:28 PgCarrier.slots -> @nish.PgCarrier.slots
+  local +44:15 event: i32 (const)
+  callee +44:28 PgCarrier.dispatch -> @nish.PgCarrier.dispatch
+  local +56:13 failed: boolean (const)
+  callee +56:31 PgCarrier.connectAndFlush -> @nish.PgCarrier.connectAndFlush
 function PgCarrier.close(this: PgCarrier): void -> @nish.PgCarrier.close [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgCarrier.dropSocket nish.PgCarrier.flushSlot nish.PgCarrier.flushTls nish.PgConnection.terminate nish.PgPool.connection nish.TlsRecordClient.close nish_net_close nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.flushSlot#0 nish.PgCarrier.flushTls#0 nish.PgCarrier.dropSocket#0
+  calls: nish.PgCarrier.dropSocket nish.PgCarrier.flushSlot nish.PgCarrier.flushTls nish.PgConnection.terminate nish.PgPool.connection nish.TlsRecordClient.close nish_net_close
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.flushSlot#0 nish.PgCarrier.flushTls#0 nish.PgCarrier.dropSocket#0
   stackSites=0 stackLocals=0
-  local +1:14 s: i32 (let)
-  local +2:13 fd: i32 (const)
-  local +4:15 conn: PgConnection (const)
-  callee +4:36 PgPool.connection -> @nish.PgPool.connection
-  local +5:15 tls: TlsRecordClient | null (const)
-  callee +7:11 PgConnection.terminate -> @nish.PgConnection.terminate
-  callee +8:11 PgCarrier.flushSlot -> @nish.PgCarrier.flushSlot
-  callee +11:11 TlsRecordClient.close -> @nish.TlsRecordClient.close
-  callee +12:11 PgCarrier.flushTls -> @nish.PgCarrier.flushTls
-  callee +14:9 PgCarrier.dropSocket -> @nish.PgCarrier.dropSocket
+  local +1:11 sockets: PgCarrierSlot[] (const)
+  local +2:14 s: i32 (let)
+  local +3:13 slot: PgCarrierSlot (const)
+  local +4:13 fd: i32 (const)
+  local +6:15 conn: PgConnection (const)
+  callee +6:36 PgPool.connection -> @nish.PgPool.connection
+  local +7:15 tls: TlsRecordClient | null (const)
+  callee +9:11 PgConnection.terminate -> @nish.PgConnection.terminate
+  callee +10:11 PgCarrier.flushSlot -> @nish.PgCarrier.flushSlot
+  callee +13:11 TlsRecordClient.close -> @nish.TlsRecordClient.close
+  callee +14:11 PgCarrier.flushTls -> @nish.PgCarrier.flushTls
+  callee +16:9 PgCarrier.dropSocket -> @nish.PgCarrier.dropSocket
 function PgCarrier.poll(this: PgCarrier): void -> @nish.PgCarrier.poll [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
-  calls: nish.HttpHandler.fired nish.PgCarrier.fail nish.PgCarrier.service nish.PgPool.connection nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_poll_wait
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.service#0 nish.PgCarrier.fail#0
+  calls: nish.HttpHandler.fired nish.PgCarrier.fail nish.PgCarrier.service nish.PgCarrier.slotAt nish.PgPool.connection nish_monotonic_nanos nish_poll_wait
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.slotAt#0 nish.PgCarrier.service#0 nish.PgCarrier.fail#0
   stackSites=0 stackLocals=0
-  callee -1:9 HttpHandler.fired -> @nish.HttpHandler.fired
+  callee -2:9 HttpHandler.fired -> @nish.HttpHandler.fired
+  local -1:13 ready: i32[] (const)
   local +0:13 n: i32 (const)
-  local +1:16 k: i32 (let)
-  local +2:15 s: i32 (const)
-  local +3:15 bits: i32 (const)
-  callee +5:11 PgCarrier.service -> @nish.PgCarrier.service
-  local +9:9 now: i64 (let)
-  local +10:14 s: i32 (let)
-  local +11:13 deadline: i64 (const)
-  callee +17:32 PgPool.connection -> @nish.PgPool.connection
-  callee +18:11 PgCarrier.fail -> @nish.PgCarrier.fail
-  local +22:14 b: i32 (let)
-function PgCarrier.service(this: PgCarrier, s: i32, bits: i32): void -> @nish.PgCarrier.service [exported method]
+  local +4:11 k: u32 (let)
+  local +5:11 left: i32 (let)
+  local +8:15 i: i32 (const)
+  local +13:15 at: i32 (const)
+  local +14:15 bits: i32 (const)
+  local +15:15 slot: PgCarrierSlot | null (const)
+  callee +15:44 PgCarrier.slotAt -> @nish.PgCarrier.slotAt
+  callee +17:11 PgCarrier.service -> @nish.PgCarrier.service
+  local +21:9 now: i64 (let)
+  local +22:11 sockets: PgCarrierSlot[] (const)
+  local +23:14 s: i32 (let)
+  local +24:13 slot: PgCarrierSlot (const)
+  local +25:13 deadline: i64 (const)
+  callee +31:32 PgPool.connection -> @nish.PgPool.connection
+  callee +32:11 PgCarrier.fail -> @nish.PgCarrier.fail
+  local +36:11 batchers: PgCarrierBatch[] (const)
+  local +37:14 b: i32 (let)
+function PgCarrier.service(this: PgCarrier, slot: PgCarrierSlot, bits: i32): void -> @nish.PgCarrier.service [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: s
-  calls: nish.PgCarrier.fail nish.PgCarrier.serviceTls nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.received nish.PgPool.connection nish_connect_result nish_net_read nish_panic_index nish_panic_slice
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.fail#0 nish.PgCarrier.serviceTls#0 nish.PgCarrier.fail#0
+  calls: nish.PgCarrier.fail nish.PgCarrier.serviceTls nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.received nish.PgPool.connection nish_connect_result nish_net_read nish_panic_slice
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.fail#0 nish.PgCarrier.serviceTls#0 nish.PgCarrier.fail#0
+  pointer slot: size=48 writesThrough=true captured=false passedTo=nish.PgCarrier.fail#1 nish.PgCarrier.serviceTls#1 nish.PgCarrier.fail#1
   stackSites=0 stackLocals=0
   local -11:11 conn: PgConnection (const)
   callee -11:32 PgPool.connection -> @nish.PgPool.connection
@@ -39543,42 +39605,45 @@ function PgCarrier.service(this: PgCarrier, s: i32, bits: i32): void -> @nish.Pg
   callee +10:56 PgConnection.inputEnd -> @nish.PgConnection.inputEnd
   callee +12:9 PgConnection.received -> @nish.PgConnection.received
   callee +14:9 PgCarrier.fail -> @nish.PgCarrier.fail
-function PgCarrier.fail(this: PgCarrier, s: i32, error: i32): void -> @nish.PgCarrier.fail [exported method]
+function PgCarrier.fail(this: PgCarrier, slot: PgCarrierSlot, error: i32): void -> @nish.PgCarrier.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: error s
-  calls: nish.PgConnection.closed nish.PgPool.connection nish_panic_index
-  pointer this: size=376 writesThrough=false captured=false
+  escaping: error
+  calls: nish.PgConnection.closed nish.PgPool.connection
+  pointer this: size=248 writesThrough=false captured=false
+  pointer slot: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:5 PgConnection.closed -> @nish.PgConnection.closed
   callee -1:5 PgPool.connection -> @nish.PgPool.connection
-function PgCarrier.serviceTls(this: PgCarrier, s: i32, fd: i32, conn: PgConnection): void -> @nish.PgCarrier.serviceTls [exported method]
+function PgCarrier.serviceTls(this: PgCarrier, slot: PgCarrierSlot, fd: i32, conn: PgConnection): void -> @nish.PgCarrier.serviceTls [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:24
-  escaping: s
-  calls: nish.PgCarrier.advanceTls nish.PgCarrier.fail nish.PgCarrier.failTls nish.TlsRecordClient.abort nish.TlsRecordClient.end nish.TlsRecordClient.receive nish.TlsRecordClient.space nish.pgCarrierTlsStart nish_net_read nish_panic_index nish_panic_slice
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.fail#0 nish.PgCarrier.failTls#0 nish.PgCarrier.fail#0 nish.PgCarrier.advanceTls#0
+  calls: nish.PgCarrier.advanceTls nish.PgCarrier.fail nish.PgCarrier.failTls nish.TlsRecordClient.abort nish.TlsRecordClient.end nish.TlsRecordClient.receive nish.TlsRecordClient.space nish.pgCarrierTlsStart nish_net_read nish_panic_slice
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.fail#0 nish.PgCarrier.failTls#0 nish.PgCarrier.fail#0 nish.PgCarrier.advanceTls#0
+  pointer slot: size=48 writesThrough=true captured=false passedTo=nish.PgCarrier.fail#1 nish.PgCarrier.failTls#1 nish.PgCarrier.fail#1 nish.PgCarrier.advanceTls#1
   pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgCarrier.advanceTls#3
   stackSites=0 stackLocals=0
+  local -1:13 answer: u8[] (const)
   local +0:13 got: i32 (const)
   callee +5:9 PgCarrier.fail -> @nish.PgCarrier.fail
-  callee +7:9 PgCarrier.failTls -> @nish.PgCarrier.failTls
-  callee +9:28 pgCarrierTlsStart -> @nish.pgCarrierTlsStart
+  callee +7:20 pgCarrierTlsStart -> @nish.pgCarrierTlsStart
+  callee +10:9 PgCarrier.failTls -> @nish.PgCarrier.failTls
   local +14:11 tls: TlsRecordClient | null (const)
-  local +18:9 room: i32 (let)
-  callee +18:21 TlsRecordClient.space -> @nish.TlsRecordClient.space
-  local +23:13 got: i32 (const)
-  callee +25:9 TlsRecordClient.receive -> @nish.TlsRecordClient.receive
-  callee +27:9 TlsRecordClient.end -> @nish.TlsRecordClient.end
-  callee +29:9 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
-  callee +30:9 PgCarrier.fail -> @nish.PgCarrier.fail
-  callee +34:5 PgCarrier.advanceTls -> @nish.PgCarrier.advanceTls
-function PgCarrier.advanceTls(this: PgCarrier, s: i32, tls: TlsRecordClient, conn: PgConnection): boolean -> @nish.PgCarrier.advanceTls [exported method]
+  local +18:11 input: u8[] (const)
+  local +19:9 room: i32 (let)
+  callee +19:21 TlsRecordClient.space -> @nish.TlsRecordClient.space
+  local +24:13 got: i32 (const)
+  callee +26:9 TlsRecordClient.receive -> @nish.TlsRecordClient.receive
+  callee +28:9 TlsRecordClient.end -> @nish.TlsRecordClient.end
+  callee +30:9 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
+  callee +31:9 PgCarrier.fail -> @nish.PgCarrier.fail
+  callee +35:5 PgCarrier.advanceTls -> @nish.PgCarrier.advanceTls
+function PgCarrier.advanceTls(this: PgCarrier, slot: PgCarrierSlot, tls: TlsRecordClient, conn: PgConnection): boolean -> @nish.PgCarrier.advanceTls [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: s
-  calls: nish.PgCarrier.fail nish.PgCarrier.failTls nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.received nish.TlsRecordClient.authenticate nish.TlsRecordClient.failure nish.TlsRecordClient.interest nish.TlsRecordClient.read nish.TlsRecordClient.reject nish.tlsClientVerdict nish_panic_index nish_wall_clock_nanos
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.failTls#0 nish.PgCarrier.fail#0 nish.PgCarrier.failTls#0
+  calls: nish.PgCarrier.fail nish.PgCarrier.failTls nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.received nish.TlsRecordClient.authenticate nish.TlsRecordClient.failure nish.TlsRecordClient.interest nish.TlsRecordClient.read nish.TlsRecordClient.reject nish.tlsClientVerdict nish_wall_clock_nanos
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.failTls#0 nish.PgCarrier.fail#0 nish.PgCarrier.failTls#0
+  pointer slot: size=48 writesThrough=true captured=false passedTo=nish.PgCarrier.failTls#1 nish.PgCarrier.fail#1 nish.PgCarrier.failTls#1
   pointer tls: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.interest#0 nish.TlsRecordClient.reject#0 nish.TlsRecordClient.authenticate#0 nish.TlsRecordClient.authenticate#0 nish.TlsRecordClient.failure#0 nish.TlsRecordClient.read#0 nish.TlsRecordClient.failure#0
   pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.inputRoom#0 nish.PgConnection.inputBuffer#0 nish.PgConnection.inputEnd#0 nish.PgConnection.received#0 nish.PgConnection.inputRoom#0
   stackSites=0 stackLocals=0
@@ -39590,7 +39655,7 @@ function PgCarrier.advanceTls(this: PgCarrier, s: i32, tls: TlsRecordClient, con
   callee -13:11 TlsRecordClient.authenticate -> @nish.TlsRecordClient.authenticate
   callee -8:9 TlsRecordClient.authenticate -> @nish.TlsRecordClient.authenticate
   callee -4:7 PgCarrier.failTls -> @nish.PgCarrier.failTls
-  callee -4:23 TlsRecordClient.failure -> @nish.TlsRecordClient.failure
+  callee -4:26 TlsRecordClient.failure -> @nish.TlsRecordClient.failure
   local +5:9 moved: boolean (let)
   local +6:9 room: i32 (let)
   callee +6:21 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
@@ -39601,14 +39666,15 @@ function PgCarrier.advanceTls(this: PgCarrier, s: i32, tls: TlsRecordClient, con
   callee +10:9 PgConnection.received -> @nish.PgConnection.received
   callee +14:9 PgCarrier.fail -> @nish.PgCarrier.fail
   callee +18:11 PgCarrier.failTls -> @nish.PgCarrier.failTls
-  callee +18:27 TlsRecordClient.failure -> @nish.TlsRecordClient.failure
+  callee +18:30 TlsRecordClient.failure -> @nish.TlsRecordClient.failure
   callee +23:14 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
-function PgCarrier.failTls(this: PgCarrier, s: i32, alert: i32): void -> @nish.PgCarrier.failTls [exported method]
+function PgCarrier.failTls(this: PgCarrier, slot: PgCarrierSlot, alert: i32): void -> @nish.PgCarrier.failTls [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: alert s
-  calls: nish.PgCarrier.flushTls nish.PgConnection.tlsFailed nish.PgPool.connection nish_panic_index
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.flushTls#0
+  escaping: alert
+  calls: nish.PgCarrier.flushTls nish.PgConnection.tlsFailed nish.PgPool.connection
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.flushTls#0
+  pointer slot: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:5 PgConnection.tlsFailed -> @nish.PgConnection.tlsFailed
   callee -1:5 PgPool.connection -> @nish.PgPool.connection
@@ -39618,20 +39684,23 @@ function PgCarrier.failTls(this: PgCarrier, s: i32, alert: i32): void -> @nish.P
 function PgCarrier.slots(this: PgCarrier): i32 -> @nish.PgCarrier.slots [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.PgCarrier.route nish.PgPool.next nish_panic_index nish_panic_overflow
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.route#0
+  calls: nish.PgCarrier.route nish.PgPool.next
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.route#0
   stackSites=0 stackLocals=0
-  local -2:13 s: i32 (const)
+  local -8:11 sockets: PgCarrierSlot[] (const)
+  local -6:13 s: i32 (const)
+  local -2:13 slot: PgCarrierSlot (const)
   local +3:13 event: i32 (const)
   callee +3:26 PgPool.next -> @nish.PgPool.next
   local +8:13 routed: i32 (const)
   callee +8:27 PgCarrier.route -> @nish.PgCarrier.route
-function PgCarrier.route(this: PgCarrier, s: i32, event: i32): i32 -> @nish.PgCarrier.route [exported method]
+function PgCarrier.route(this: PgCarrier, slot: PgCarrierSlot, event: i32): i32 -> @nish.PgCarrier.route [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: event s
-  calls: nish.PgCarrier.dropSocket nish.PgCarrier.mapGet nish.PgCarrier.routeBatch nish.PgCarrier.routePlain nish.PgPool.connection nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.dropSocket#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.routePlain#0 nish.PgCarrier.routeBatch#0
+  escaping: event
+  calls: nish.PgCarrier.dropSocket nish.PgCarrier.executionAt nish.PgCarrier.mapGet nish.PgCarrier.routeBatch nish.PgCarrier.routePlain nish.PgPool.connection
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.dropSocket#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.routePlain#0 nish.PgCarrier.executionAt#0 nish.PgCarrier.routeBatch#0
+  pointer slot: size=48 writesThrough=true captured=false passedTo=nish.PgCarrier.dropSocket#1 nish.PgCarrier.routePlain#1 nish.PgCarrier.routeBatch#1
   stackSites=0 stackLocals=0
   local -2:11 conn: PgConnection (const)
   callee -2:32 PgPool.connection -> @nish.PgPool.connection
@@ -39640,15 +39709,20 @@ function PgCarrier.route(this: PgCarrier, s: i32, event: i32): i32 -> @nish.PgCa
   local +11:11 ticket: i32 (const)
   local +12:11 v: i32 (const)
   callee +12:38 PgCarrier.mapGet -> @nish.PgCarrier.mapGet
-  local +18:11 queries: i32 (const)
-  callee +20:14 PgCarrier.routePlain -> @nish.PgCarrier.routePlain
-  callee +22:12 PgCarrier.routeBatch -> @nish.PgCarrier.routeBatch
-function PgCarrier.routePlain(this: PgCarrier, s: i32, q: i32, ticket: i32, event: i32, conn: PgConnection): i32 -> @nish.PgCarrier.routePlain [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +13:11 held: PgCarrierQuery[] (const)
+  local +14:11 queries: i32 (const)
+  callee +17:14 PgCarrier.routePlain -> @nish.PgCarrier.routePlain
+  local +19:11 exec: PgCarrierExecution | null (const)
+  callee +20:48 PgCarrier.executionAt -> @nish.PgCarrier.executionAt
+  callee +26:12 PgCarrier.routeBatch -> @nish.PgCarrier.routeBatch
+function PgCarrier.routePlain(this: PgCarrier, slot: PgCarrierSlot, held: PgCarrierQuery, ticket: i32, event: i32, conn: PgConnection): i32 -> @nish.PgCarrier.routePlain [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: q s ticket
-  calls: nish.PgCarrier.announce nish.PgCarrier.final nish.PgCarrier.mapRemove nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.announce#0 nish.PgCarrier.announce#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.final#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.final#0
+  escaping: ticket
+  calls: nish.PgCarrier.announce nish.PgCarrier.final nish.PgCarrier.mapRemove
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.announce#0 nish.PgCarrier.announce#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.final#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.final#0
+  pointer slot: size=48 writesThrough=false captured=false
+  pointer held: size=24 writesThrough=true captured=false passedTo=nish.PgCarrier.announce#1 nish.PgCarrier.announce#1 nish.PgCarrier.final#1 nish.PgCarrier.final#1
   pointer conn: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -4:7 PgCarrier.announce -> @nish.PgCarrier.announce
@@ -39658,17 +39732,20 @@ function PgCarrier.routePlain(this: PgCarrier, s: i32, q: i32, ticket: i32, even
   callee +9:14 PgCarrier.final -> @nish.PgCarrier.final
   callee +12:7 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
   callee +15:14 PgCarrier.final -> @nish.PgCarrier.final
-function PgCarrier.routeBatch(this: PgCarrier, s: i32, e: i32, ticket: i32, event: i32, conn: PgConnection): i32 -> @nish.PgCarrier.routeBatch [exported method]
+function PgCarrier.routeBatch(this: PgCarrier, slot: PgCarrierSlot, exec: PgCarrierExecution, ticket: i32, event: i32, conn: PgConnection): i32 -> @nish.PgCarrier.routeBatch [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: e s ticket
-  calls: nish.PgBatcher.end nish.PgBatcher.fail nish.PgBatcher.row nish.PgCarrier.batcher nish.PgCarrier.freeExecution nish.PgCarrier.mapRemove nish.PgCarrier.startDrain nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0 nish.PgCarrier.startDrain#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
+  escaping: ticket
+  calls: nish.PgBatcher.end nish.PgBatcher.fail nish.PgBatcher.row nish.PgCarrier.batcher nish.PgCarrier.freeExecution nish.PgCarrier.mapRemove nish.PgCarrier.startDrain
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0 nish.PgCarrier.startDrain#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
+  pointer slot: size=48 writesThrough=false captured=false
+  pointer exec: size=20 writesThrough=true captured=true passedTo=nish.PgCarrier.freeExecution#1 nish.PgCarrier.freeExecution#1
   pointer conn: size=216 writesThrough=false captured=false passedTo=nish.PgBatcher.row#2
   stackSites=0 stackLocals=0
-  local -8:11 id: i32 (const)
+  local -13:11 id: i32 (const)
+  local -12:11 batch: PgCarrierBatch | null (const)
+  callee -12:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
   local -7:11 b: PgBatcher (const)
-  callee -7:26 PgCarrier.batcher -> @nish.PgCarrier.batcher
   local -6:11 r: i32 (const)
   callee -2:7 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
   callee -1:7 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
@@ -39685,222 +39762,268 @@ function PgCarrier.startDrain(this: PgCarrier, id: i32, r: i32, failure: i32, er
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: error failure id r
-  pointer this: size=376 writesThrough=true captured=false
+  pointer this: size=248 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgCarrier.drain(this: PgCarrier): i32 -> @nish.PgCarrier.drain [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgBatcher.next nish.PgCarrier.announce nish.PgCarrier.batcher nish.PgCarrier.final
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.announce#0 nish.PgCarrier.final#0 nish.PgCarrier.final#0
+  calls: nish.PgBatcher.next nish.PgCarrier.announce nish.PgCarrier.batcher nish.PgCarrier.final nish.PgCarrier.queryAt
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.queryAt#0 nish.PgCarrier.announce#0 nish.PgCarrier.final#0 nish.PgCarrier.final#0
   stackSites=0 stackLocals=0
-  local -4:11 b: PgBatcher (const)
-  callee -4:26 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  local -3:11 event: i32 (const)
-  callee -3:24 PgBatcher.next -> @nish.PgBatcher.next
-  local -2:11 q: i32 (const)
-  callee +4:7 PgCarrier.announce -> @nish.PgCarrier.announce
-  callee +10:14 PgCarrier.final -> @nish.PgCarrier.final
-  callee +14:12 PgCarrier.final -> @nish.PgCarrier.final
+  local -2:11 batch: PgCarrierBatch | null (const)
+  callee -2:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
+  local +3:11 b: PgBatcher (const)
+  local +4:11 event: i32 (const)
+  callee +4:24 PgBatcher.next -> @nish.PgBatcher.next
+  local +5:11 held: PgCarrierQuery | null (const)
+  callee +5:41 PgCarrier.queryAt -> @nish.PgCarrier.queryAt
+  callee +11:7 PgCarrier.announce -> @nish.PgCarrier.announce
+  callee +17:14 PgCarrier.final -> @nish.PgCarrier.final
+  callee +21:12 PgCarrier.final -> @nish.PgCarrier.final
 function PgCarrier.dispatch(this: PgCarrier): i32 -> @nish.PgCarrier.dispatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: nish.PgBatcher.fail nish.PgBatcher.take nish.PgBatcher.waiting nish.PgCarrier.announce nish.PgCarrier.batcher nish.PgCarrier.freeExecution nish.PgCarrier.mapGet nish.PgCarrier.mapPut nish.PgCarrier.mapRemove nish.PgCarrier.startDrain nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.request nish.PgPool.send nish_panic_index nish_panic_overflow
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.mapPut#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.announce#0 nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
+  sharedWrite: +0:9
+  calls: nish.PgBatcher.fail nish.PgBatcher.take nish.PgBatcher.waiting nish.PgCarrier.announce nish.PgCarrier.batcher nish.PgCarrier.executionAt nish.PgCarrier.freeExecution nish.PgCarrier.mapGet nish.PgCarrier.mapPut nish.PgCarrier.mapRemove nish.PgCarrier.startDrain nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.request nish.PgPool.send nish_array_grow
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.mapPut#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.announce#0 nish.PgCarrier.executionAt#0 nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
   stackSites=0 stackLocals=0
-  local -13:14 id: i32 (let)
-  callee -9:9 PgBatcher.waiting -> @nish.PgBatcher.waiting
-  local -4:13 ticket: i32 (const)
-  callee -4:27 PgPool.request -> @nish.PgPool.request
-  local +1:13 e: i32 (const)
-  callee +5:7 PgCarrier.mapPut -> @nish.PgCarrier.mapPut
-  local +8:11 slot: i32 (const)
-  callee +8:23 PgPool.dispatch -> @nish.PgPool.dispatch
-  local +12:11 conn: PgConnection (const)
-  callee +12:32 PgPool.connection -> @nish.PgPool.connection
-  local +13:11 ticket: i32 (const)
-  local +14:11 v: i32 (const)
-  callee +14:20 PgCarrier.mapGet -> @nish.PgCarrier.mapGet
-  local +15:11 queries: i32 (const)
-  callee +19:7 PgCarrier.announce -> @nish.PgCarrier.announce
-  callee +23:7 PgPool.send -> @nish.PgPool.send
-  local +26:11 e: i32 (const)
-  local +27:11 id: i32 (const)
-  local +28:11 b: PgBatcher (const)
-  callee +28:26 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  local +30:11 r: i32 (const)
-  callee +30:20 PgBatcher.take -> @nish.PgBatcher.take
-  callee +35:7 PgPool.send -> @nish.PgPool.send
-  callee +37:9 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
-  callee +38:9 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
-  callee +43:10 PgPool.send -> @nish.PgPool.send
-  callee +44:7 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
-  callee +45:7 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
-  callee +46:7 PgBatcher.fail -> @nish.PgBatcher.fail
-  callee +47:7 PgCarrier.startDrain -> @nish.PgCarrier.startDrain
+  local -10:11 batchers: PgCarrierBatch[] (const)
+  local -9:11 eFree: PgCarrierExecution[] (const)
+  local -8:14 id: i32 (let)
+  local -7:13 batch: PgCarrierBatch (const)
+  callee -6:44 PgBatcher.waiting -> @nish.PgBatcher.waiting
+  local -3:13 lastExec: i32 (const)
+  local -1:15 exec: PgCarrierExecution (const)
+  local +1:15 ticket: i32 (const)
+  callee +1:29 PgPool.request -> @nish.PgPool.request
+  callee +9:9 PgCarrier.mapPut -> @nish.PgCarrier.mapPut
+  local +13:11 slot: i32 (const)
+  callee +13:23 PgPool.dispatch -> @nish.PgPool.dispatch
+  local +17:11 conn: PgConnection (const)
+  callee +17:32 PgPool.connection -> @nish.PgPool.connection
+  local +18:11 ticket: i32 (const)
+  local +19:11 v: i32 (const)
+  callee +19:20 PgCarrier.mapGet -> @nish.PgCarrier.mapGet
+  local +20:11 held: PgCarrierQuery[] (const)
+  local +21:11 queries: i32 (const)
+  callee +25:7 PgCarrier.announce -> @nish.PgCarrier.announce
+  local +28:11 exec: PgCarrierExecution | null (const)
+  callee +29:48 PgCarrier.executionAt -> @nish.PgCarrier.executionAt
+  local +30:11 batch: PgCarrierBatch | null (const)
+  callee +30:58 PgCarrier.batcher -> @nish.PgCarrier.batcher
+  callee +32:7 PgPool.send -> @nish.PgPool.send
+  local +35:11 b: PgBatcher (const)
+  local +37:11 r: i32 (const)
+  callee +37:20 PgBatcher.take -> @nish.PgBatcher.take
+  callee +42:7 PgPool.send -> @nish.PgPool.send
+  callee +44:9 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
+  callee +45:9 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
+  callee +50:10 PgPool.send -> @nish.PgPool.send
+  callee +51:7 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
+  callee +52:7 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
+  callee +53:7 PgBatcher.fail -> @nish.PgBatcher.fail
+  callee +54:7 PgCarrier.startDrain -> @nish.PgCarrier.startDrain
 function PgCarrier.connectAndFlush(this: PgCarrier, connect: boolean): boolean -> @nish.PgCarrier.connectAndFlush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.PgCarrier.advanceTls nish.PgCarrier.fail nish.PgCarrier.flushSlot nish.PgCarrier.pending nish.PgPool.connect nish.PgPool.connection nish.PgPool.wanted nish.TlsRecordClient.abort nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_poll_add nish_poll_modify nish_random_fill nish_tcp_connect nish_unix_connect
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.fail#0 nish.PgCarrier.fail#0 nish.PgCarrier.advanceTls#0 nish.PgCarrier.flushSlot#0 nish.PgCarrier.fail#0 nish.PgCarrier.pending#0
+  calls: nish.PgCarrier.advanceTls nish.PgCarrier.fail nish.PgCarrier.flushSlot nish.PgCarrier.pending nish.PgPool.connect nish.PgPool.connection nish.PgPool.wanted nish.TlsRecordClient.abort nish_monotonic_nanos nish_poll_add nish_poll_modify nish_random_fill nish_tcp_connect nish_unix_connect
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.fail#0 nish.PgCarrier.fail#0 nish.PgCarrier.advanceTls#0 nish.PgCarrier.flushSlot#0 nish.PgCarrier.fail#0 nish.PgCarrier.pending#0
   stackSites=0 stackLocals=0
-  local -5:9 failed: boolean (let)
-  local -3:11 slot: i32 (let)
-  callee -3:23 PgPool.wanted -> @nish.PgPool.wanted
-  local -2:13 deadline: i64 (const)
+  local -9:9 failed: boolean (let)
+  local -8:11 sockets: PgCarrierSlot[] (const)
+  local -6:11 want: i32 (let)
+  callee -6:23 PgPool.wanted -> @nish.PgPool.wanted
+  local -3:13 deadline: i64 (const)
+  local -1:15 slot: PgCarrierSlot (const)
   callee +1:9 PgPool.connect -> @nish.PgPool.connect
   local +9:15 fd: i32 (const)
   callee +12:11 PgCarrier.fail -> @nish.PgCarrier.fail
   callee +15:11 PgCarrier.fail -> @nish.PgCarrier.fail
   callee +18:16 PgPool.wanted -> @nish.PgPool.wanted
   local +21:14 s: i32 (let)
-  local +22:13 fd: i32 (const)
-  local +26:13 conn: PgConnection (const)
-  callee +26:34 PgPool.connection -> @nish.PgPool.connection
-  local +30:13 tls: TlsRecordClient | null (const)
-  callee +31:27 PgCarrier.advanceTls -> @nish.PgCarrier.advanceTls
-  local +39:13 written: i32 (const)
-  callee +39:28 PgCarrier.flushSlot -> @nish.PgCarrier.flushSlot
-  callee +42:11 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
-  callee +44:9 PgCarrier.fail -> @nish.PgCarrier.fail
-  local +48:13 wants: i32 (const)
-  callee +48:26 PgCarrier.pending -> @nish.PgCarrier.pending
-function PgCarrier.pending(this: PgCarrier, s: i32, conn: PgConnection): boolean -> @nish.PgCarrier.pending [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: s
-  calls: nish.PgConnection.outputEnd nish.PgConnection.outputStart nish_panic_index
-  pointer this: size=376 writesThrough=false captured=false
+  local +22:13 slot: PgCarrierSlot (const)
+  local +23:13 fd: i32 (const)
+  local +27:13 conn: PgConnection (const)
+  callee +27:34 PgPool.connection -> @nish.PgPool.connection
+  local +31:13 tls: TlsRecordClient | null (const)
+  callee +32:27 PgCarrier.advanceTls -> @nish.PgCarrier.advanceTls
+  local +40:13 written: i32 (const)
+  callee +40:28 PgCarrier.flushSlot -> @nish.PgCarrier.flushSlot
+  callee +43:11 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
+  callee +45:9 PgCarrier.fail -> @nish.PgCarrier.fail
+  local +49:13 wants: i32 (const)
+  callee +49:26 PgCarrier.pending -> @nish.PgCarrier.pending
+function PgCarrier.pending(this: PgCarrier, slot: PgCarrierSlot, conn: PgConnection): boolean -> @nish.PgCarrier.pending [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.PgConnection.outputEnd nish.PgConnection.outputStart
+  pointer this: size=248 writesThrough=false captured=false
+  pointer slot: size=48 writesThrough=false captured=false
   pointer conn: size=216 writesThrough=false captured=false passedTo=nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0
   stackSites=0 stackLocals=0
   local +0:11 phase: i32 (const)
   local +4:11 tls: TlsRecordClient | null (const)
   callee +9:74 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
   callee +9:93 PgConnection.outputStart -> @nish.PgConnection.outputStart
-function PgCarrier.flushSlot(this: PgCarrier, s: i32, conn: PgConnection, fd: i32): i32 -> @nish.PgCarrier.flushSlot [exported method]
+function PgCarrier.flushSlot(this: PgCarrier, slot: PgCarrierSlot, conn: PgConnection, fd: i32): i32 -> @nish.PgCarrier.flushSlot [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  escaping: fd s
-  calls: nish.PgCarrier.flush nish.PgCarrier.flushTls nish.PgConnection.outputBuffer nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.sent nish.TlsRecordClient.write nish_net_write nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=376 writesThrough=false captured=false passedTo=nish.PgCarrier.flush#0 nish.PgCarrier.flushTls#0
-  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgCarrier.flush#1 nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0 nish.PgConnection.outputBuffer#0 nish.PgConnection.outputStart#0 nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0 nish.PgConnection.sent#0
+  escaping: fd
+  calls: nish.PgCarrier.flush nish.PgCarrier.flushTls nish.PgConnection.outputBuffer nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.sent nish.TlsRecordClient.write nish_net_write nish_panic_slice
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.flush#0 nish.PgCarrier.flushTls#0
+  pointer slot: size=48 writesThrough=true captured=false
+  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgCarrier.flush#1 nish.PgConnection.outputStart#0 nish.PgConnection.outputEnd#0 nish.PgConnection.outputBuffer#0 nish.PgConnection.sent#0
   stackSites=0 stackLocals=0
-  local -14:11 phase: i32 (const)
-  callee -12:14 PgCarrier.flush -> @nish.PgCarrier.flush
-  local -9:13 request: u8[] (const)
-  local -7:15 n: i32 (const)
+  local -19:11 phase: i32 (const)
+  callee -17:14 PgCarrier.flush -> @nish.PgCarrier.flush
+  local -14:13 request: u8[] (const)
+  local -13:13 length: i32 (const)
+  local -12:11 asked: i32 (let)
+  local -10:15 n: i32 (const)
+  local -2:15 sent: i64 (const)
   local +4:11 tls: TlsRecordClient | null (const)
   local +9:13 written: i32 (const)
   callee +9:28 PgCarrier.flushTls -> @nish.PgCarrier.flushTls
-  callee +13:44 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
-  callee +13:64 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  local +16:13 sealed: i32 (const)
-  callee +16:27 TlsRecordClient.write -> @nish.TlsRecordClient.write
-  callee +17:9 PgConnection.outputBuffer -> @nish.PgConnection.outputBuffer
-  callee +18:9 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  callee +19:9 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
-  callee +19:28 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  callee +24:7 PgConnection.sent -> @nish.PgConnection.sent
+  local +13:13 start: i32 (const)
+  callee +13:26 PgConnection.outputStart -> @nish.PgConnection.outputStart
+  local +14:13 end: i32 (const)
+  callee +14:24 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
+  local +18:13 sealed: i32 (const)
+  callee +18:27 TlsRecordClient.write -> @nish.TlsRecordClient.write
+  callee +18:37 PgConnection.outputBuffer -> @nish.PgConnection.outputBuffer
+  callee +22:7 PgConnection.sent -> @nish.PgConnection.sent
 function PgCarrier.flushTls(this: PgCarrier, tls: TlsRecordClient, fd: i32): i32 -> @nish.PgCarrier.flushTls [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_write
-  calls: nish.TlsRecordClient.consume nish_net_write nish_panic_overflow nish_panic_slice
-  pointer this: size=376 writesThrough=false captured=false
+  calls: nish.TlsRecordClient.consume nish_net_write nish_panic_slice
+  pointer this: size=248 writesThrough=false captured=false
   pointer tls: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.consume#0
   stackSites=0 stackLocals=0
-  local +0:13 n: i32 (const)
-  callee +7:7 TlsRecordClient.consume -> @nish.TlsRecordClient.consume
+  local +0:13 start: i32 (const)
+  local +1:13 end: i32 (const)
+  local +5:13 n: i32 (const)
+  callee +12:7 TlsRecordClient.consume -> @nish.TlsRecordClient.consume
 function PgCarrier.flush(this: PgCarrier, conn: PgConnection, fd: i32): i32 -> @nish.PgCarrier.flush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_write
-  calls: nish.PgConnection.outputBuffer nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.sent nish_net_write nish_panic_overflow nish_panic_slice
-  pointer this: size=376 writesThrough=false captured=false
-  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0 nish.PgConnection.outputBuffer#0 nish.PgConnection.outputStart#0 nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0 nish.PgConnection.sent#0
+  calls: nish.PgConnection.outputBuffer nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.sent nish_net_write nish_panic_slice
+  pointer this: size=248 writesThrough=false captured=false
+  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.outputStart#0 nish.PgConnection.outputEnd#0 nish.PgConnection.outputBuffer#0 nish.PgConnection.sent#0
   stackSites=0 stackLocals=0
-  callee +0:12 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
-  callee +0:31 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  local +1:13 n: i32 (const)
-  callee +3:9 PgConnection.outputBuffer -> @nish.PgConnection.outputBuffer
-  callee +4:9 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  callee +5:9 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
-  callee +5:28 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  callee +13:7 PgConnection.sent -> @nish.PgConnection.sent
-function PgCarrier.announce(this: PgCarrier, q: i32): void -> @nish.PgCarrier.announce [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +0:13 start: i32 (const)
+  callee +0:26 PgConnection.outputStart -> @nish.PgConnection.outputStart
+  local +1:13 end: i32 (const)
+  callee +1:24 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
+  local +5:13 n: i32 (const)
+  callee +5:35 PgConnection.outputBuffer -> @nish.PgConnection.outputBuffer
+  callee +12:7 PgConnection.sent -> @nish.PgConnection.sent
+function PgCarrier.announce(this: PgCarrier, held: PgCarrierQuery): void -> @nish.PgCarrier.announce [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: q
-  calls: nish_panic_index
-  pointer this: size=376 writesThrough=true captured=false
+  pointer this: size=248 writesThrough=true captured=false
+  pointer held: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function PgCarrier.dropSocket(this: PgCarrier, s: i32, fd: i32): void -> @nish.PgCarrier.dropSocket [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function PgCarrier.dropSocket(this: PgCarrier, slot: PgCarrierSlot, fd: i32): void -> @nish.PgCarrier.dropSocket [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: s
-  calls: nish.TlsRecordClient.wipe nish_net_close nish_panic_index nish_poll_remove
-  pointer this: size=376 writesThrough=false captured=false
+  calls: nish.TlsRecordClient.wipe nish_net_close nish_poll_remove
+  pointer this: size=248 writesThrough=false captured=false
+  pointer slot: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +1:11 tls: TlsRecordClient | null (const)
   callee +3:7 TlsRecordClient.wipe -> @nish.TlsRecordClient.wipe
-function PgCarrier.final(this: PgCarrier, q: i32, event: i32): i32 -> @nish.PgCarrier.final [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function PgCarrier.final(this: PgCarrier, held: PgCarrierQuery, event: i32): i32 -> @nish.PgCarrier.final [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: event q
+  escaping: event
   calls: nish.PgCarrier.announce
-  pointer this: size=376 writesThrough=true captured=false passedTo=nish.PgCarrier.announce#0
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.announce#0
+  pointer held: size=24 writesThrough=false captured=false passedTo=nish.PgCarrier.announce#1
   stackSites=0 stackLocals=0
   callee -1:5 PgCarrier.announce -> @nish.PgCarrier.announce
-function PgCarrier.batcher(this: PgCarrier, id: i32): PgBatcher -> @nish.PgCarrier.batcher [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=160
-  escaping: id
-  calls: nish_panic
-  pointer this: size=376 writesThrough=false captured=false
+function PgCarrier.slotAt(this: PgCarrier, s: i32): PgCarrierSlot | null -> @nish.PgCarrier.slotAt [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function PgCarrier.take(this: PgCarrier, req: HttpRequest | null, tag: i32): i32 -> @nish.PgCarrier.take [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  local +0:11 sockets: PgCarrierSlot[] (const)
+function PgCarrier.queryAt(this: PgCarrier, q: i32): PgCarrierQuery | null -> @nish.PgCarrier.queryAt [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: q
+  pointer this: size=248 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 held: PgCarrierQuery[] (const)
+function PgCarrier.executionAt(this: PgCarrier, e: i32): PgCarrierExecution | null -> @nish.PgCarrier.executionAt [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: e
+  pointer this: size=248 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 runs: PgCarrierExecution[] (const)
+function PgCarrier.batcher(this: PgCarrier, id: i32): PgCarrierBatch | null -> @nish.PgCarrier.batcher [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: id
+  pointer this: size=248 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 batchers: PgCarrierBatch[] (const)
+function PgCarrier.take(this: PgCarrier, req: HttpRequest | null, tag: i32): PgCarrierQuery | null -> @nish.PgCarrier.take [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: req tag
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=376 writesThrough=true captured=false
+  pointer this: size=248 writesThrough=false captured=false
   pointer req: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local +1:11 q: i32 (const)
-function PgCarrier.free(this: PgCarrier, q: i32): void -> @nish.PgCarrier.free [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local -7:11 free: PgCarrierQuery[] (const)
+  local -3:11 last: i32 (const)
+  local -1:13 held: PgCarrierQuery (const)
+function PgCarrier.free(this: PgCarrier, held: PgCarrierQuery): void -> @nish.PgCarrier.free [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: q
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=376 writesThrough=true captured=false
+  escaping: held
+  calls: nish_array_grow
+  pointer this: size=248 writesThrough=false captured=false
+  pointer held: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function PgCarrier.freeExecution(this: PgCarrier, e: i32): void -> @nish.PgCarrier.freeExecution [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function PgCarrier.freeExecution(this: PgCarrier, exec: PgCarrierExecution): void -> @nish.PgCarrier.freeExecution [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: e
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=376 writesThrough=true captured=false
+  escaping: exec
+  calls: nish_array_grow
+  pointer this: size=248 writesThrough=false captured=false
+  pointer exec: size=20 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PgCarrier.mapPut(this: PgCarrier, key: i32, value: i32): void -> @nish.PgCarrier.mapPut [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:11
   escaping: key value
-  calls: nish_panic_index
-  pointer this: size=376 writesThrough=false captured=false
+  pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -5:11 mask: i32 (const)
-  local -4:9 i: i32 (let)
+  local -11:11 keys: i32[] (const)
+  local -10:11 values: i32[] (const)
+  local -9:11 mask: u32 (const)
+  local -8:9 b: u32 (let)
+  local -6:13 i: i32 (const)
 function PgCarrier.mapGet(this: PgCarrier, key: i32): i32 -> @nish.PgCarrier.mapGet [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer this: size=376 writesThrough=false captured=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 mask: i32 (const)
-  local +1:9 i: i32 (let)
+  local +0:11 keys: i32[] (const)
+  local +1:11 values: i32[] (const)
+  local +2:11 mask: u32 (const)
+  local +3:9 b: u32 (let)
+  local +5:13 i: i32 (const)
+  local +9:13 k: i32 (const)
 function PgCarrier.mapRemove(this: PgCarrier, key: i32): void -> @nish.PgCarrier.mapRemove [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=376 writesThrough=false captured=false
+  pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -19:11 mask: i32 (const)
-  local -18:9 i: i32 (let)
-  local -11:9 j: i32 (let)
+  local -35:11 keys: i32[] (const)
+  local -34:11 values: i32[] (const)
+  local -33:11 mask: u32 (const)
+  local -32:9 b: u32 (let)
+  local -31:9 hole: i32 (let)
+  local -29:13 i: i32 (const)
+  local -25:13 k: i32 (const)
+  local -15:9 j: u32 (let)
+  local -12:13 at: i32 (const)
   local -8:13 k: i32 (const)
   local -3:13 home: i32 (const)
   local -2:13 stays: boolean (const)

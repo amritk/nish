@@ -221,11 +221,76 @@ export class PgCarrierLimits {
   watch: i32 = 0
 }
 
-// Fills free stack `a` highest first, so that the lowest is handed out first.
-const fillFree = (a: i32[]): void => {
-  const n: i32 = toI32(a.length)
-  for (let k: i32 = 0; k < n; k++) {
-    a[k] = n - 1 - k
+// One pool slot's socket and what the carrier knows of it, one object per
+// slot so that a slot's number is checked against the table once and its
+// fields read without a check each.
+class PgCarrierSlot {
+  // When its connect times out, 0 for no deadline.
+  deadline: i64 = 0
+  // Its TLS client, once the server agreed to TLS.
+  tls: TlsRecordClient | null = null
+  // The slot's number in the pool.
+  readonly index: i32
+  // The socket, -1 for none.
+  fd: i32 = -1
+  // Whether its connect finished.
+  connected: boolean = false
+  // The events the socket is watched for, so that one unchanged is not
+  // asked for again.
+  interest: i32 = 0
+  // Whether a connection was ever made in it.
+  made: boolean = false
+  // The socket error that failed it.
+  error: i32 = 0
+  // Its TLS phase (`PG_CARRIER_TLS_*`), and how much of the SSLRequest has
+  // gone out.
+  tlsPhase: i32 = 0
+  tlsAsked: i32 = 0
+
+  constructor(index: i32) {
+    this.index = index
+  }
+}
+
+// One query number's state: its tag, request, pool ticket (-1 for a batched
+// one), and whether the server failed it.
+class PgCarrierQuery {
+  readonly index: i32
+  tag: i32 = -1
+  request: HttpRequest | null = null
+  ticket: i32 = -1
+  failed: boolean = false
+
+  constructor(index: i32) {
+    this.index = index
+  }
+}
+
+// One batched execution's state: its batcher, run (-1 before `take`), and
+// whether its run was ended. `value` is what the ticket map holds for it,
+// the query count plus its number, so that it is told apart from a query.
+class PgCarrierExecution {
+  readonly index: i32
+  readonly value: i32
+  batcher: i32 = -1
+  run: i32 = -1
+  ended: boolean = false
+
+  constructor(index: i32, value: i32) {
+    this.index = index
+    this.value = value
+  }
+}
+
+// An attached batcher, whether an execution of it is queued on the pool,
+// and whether it stalled this turn with every run in flight.
+class PgCarrierBatch {
+  readonly batcher: PgBatcher
+  queued: boolean = false
+  stalled: boolean = false
+
+  constructor(batcher: PgBatcher) {
+    this.batcher = batcher
   }
 }
 
@@ -258,50 +323,30 @@ export class PgCarrier {
   private readonly nonce: u8[]
   private readonly ready: i32[]
   private readonly timeoutNs: i64
-  // Each pool slot's socket (-1 for none), whether its connect finished,
-  // whether a connection was ever made in it, when its connect times out
-  // (0 for no deadline), and the socket error that failed it.
-  private readonly fds: i32[]
-  private readonly connected: boolean[]
-  // The events each slot's socket is watched for, so that one unchanged
-  // is not asked for again.
-  private readonly interest: i32[]
-  private readonly made: boolean[]
-  private readonly deadlines: i64[]
-  private readonly errors: i32[]
+  // Each pool slot's socket and state, by slot number.
+  private readonly sockets: PgCarrierSlot[]
   // TLS (`PgConfig.tls`): the name checked and the roots it is checked
-  // against, each slot's phase (`PG_CARRIER_TLS_*`), its client, how much of
-  // the SSLRequest has gone out; the SSLRequest itself, the one byte its
-  // answer is read into, and the buffer ciphertext is read through.
+  // against; the SSLRequest, the one byte its answer is read into, and the
+  // buffer ciphertext is read through.
   private readonly tlsName: string
   private readonly trust: TlsClientTrust | null
-  private readonly tlsPhase: i32[]
-  private readonly tlsConns: (TlsRecordClient | null)[]
-  private readonly tlsAsked: i32[]
   private readonly sslRequest: u8[]
   private readonly tlsAnswer: u8[]
   private readonly tlsInput: u8[]
-  // Each query's tag, request, pool ticket (-1 for a batched one), whether
-  // the server failed it, and the stack of free ones.
-  private readonly qTags: i32[]
-  private readonly qRequests: (HttpRequest | null)[]
-  private readonly qTickets: i32[]
-  private readonly qFailed: boolean[]
-  private readonly qFree: i32[]
-  // Each batched execution's batcher, run (-1 before `take`), whether its run
-  // was ended, and the stack of free ones.
-  private readonly eBatchers: i32[]
-  private readonly eRuns: i32[]
-  private readonly eEnded: boolean[]
-  private readonly eFree: i32[]
+  // Each query by number, and the stack of free ones, lowest on top.
+  private readonly held: PgCarrierQuery[]
+  private readonly qFree: PgCarrierQuery[]
+  // Each batched execution by number, and the stack of free ones.
+  private readonly executions: PgCarrierExecution[]
+  private readonly eFree: PgCarrierExecution[]
   // Pool tickets to what they carry: a query, or `queries` plus an
-  // execution. Open addressing, -1 for an empty slot.
+  // execution. Open addressing, -1 for an empty slot, probed in `u32` so
+  // that the step wraps under the mask.
   private readonly mapKeys: i32[]
   private readonly mapValues: i32[]
-  private readonly batchers: PgBatcher[]
-  private readonly batchQueued: boolean[]
-  private readonly batchStalled: boolean[]
+  private readonly batchers: PgCarrierBatch[]
   private conn: PgConnection | null = null
+  private readonly mapMask: u32
   /** The query the last event is about, as `run` answered it; -1 for none. */
   query: i32 = -1
   /** The tag `query` was run with. */
@@ -313,9 +358,6 @@ export class PgCarrier {
   private readonly tlsMode: i32
   private readonly watchId: i32
   private readonly loop: i32
-  private qFreeCount: i32 = 0
-  private eFreeCount: i32 = 0
-  private readonly mapMask: i32
   // What a call owes: the query being built, one dropped unsent, the query
   // whose final event was answered last, a run's events, and requests shed
   // from a batcher whose execution was lost.
@@ -389,52 +431,70 @@ export class PgCarrier {
     this.path = target.path
     this.nonce = new Array<u8>(PG_CARRIER_NONCE_BYTES)
     this.timeoutNs = toI64(limits.connectTimeoutMs) * toI64(1000000)
+    // Every table is filled by `push` to the size the caps give, so that no
+    // length is computed.
     const size: i32 = pool.size
-    this.ready = new Array<i32>(2 * size)
-    this.fds = new Array<i32>(size)
-    this.connected = new Array<boolean>(size)
-    this.interest = new Array<i32>(size)
-    this.made = new Array<boolean>(size)
-    this.deadlines = new Array<i64>(size)
-    this.errors = new Array<i32>(size)
-    this.tlsPhase = new Array<i32>(size)
-    this.tlsConns = new Array<TlsRecordClient | null>(size)
-    this.tlsAsked = new Array<i32>(size)
+    const ready: i32[] = []
+    const sockets: PgCarrierSlot[] = []
+    for (let s: i32 = 0; s < size; s++) {
+      ready.push(0)
+      ready.push(0)
+      sockets.push(new PgCarrierSlot(s))
+    }
+    this.ready = ready
+    this.sockets = sockets
     this.sslRequest = pgSslRequest()
     this.tlsAnswer = new Array<u8>(1)
-    this.tlsInput = new Array<u8>(
-      this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_READ_BYTES : PG_CARRIER_ZERO
-    )
-    for (let s: i32 = 0; s < size && s < toI32(this.fds.length); s++) {
-      this.fds[s] = -1
+    this.tlsInput =
+      this.tlsMode !== PG_TLS_DISABLE
+        ? new Array<u8>(PG_CARRIER_TLS_READ_BYTES)
+        : new Array<u8>(PG_CARRIER_ZERO)
+    // The free stacks are filled highest first, so that the lowest number is
+    // handed out first.
+    const held: PgCarrierQuery[] = []
+    const qFree: PgCarrierQuery[] = []
+    for (let q: i32 = 0; q < queries; q++) {
+      held.push(new PgCarrierQuery(q))
     }
-    this.qTags = new Array<i32>(queries)
-    this.qRequests = new Array<HttpRequest | null>(queries)
-    this.qTickets = new Array<i32>(queries)
-    this.qFailed = new Array<boolean>(queries)
-    this.qFree = new Array<i32>(queries)
-    fillFree(this.qFree)
-    this.qFreeCount = queries
-    this.eBatchers = new Array<i32>(executions)
-    this.eRuns = new Array<i32>(executions)
-    this.eEnded = new Array<boolean>(executions)
-    this.eFree = new Array<i32>(executions)
-    fillFree(this.eFree)
-    this.eFreeCount = executions
+    let k: i32 = toI32(held.length)
+    while (k > 0) {
+      k -= 1
+      if (k < toI32(held.length)) {
+        qFree.push(held[k])
+      }
+    }
+    this.held = held
+    this.qFree = qFree
+    const runs: PgCarrierExecution[] = []
+    const eFree: PgCarrierExecution[] = []
+    for (let e: i32 = 0; e < executions; e++) {
+      runs.push(new PgCarrierExecution(e, toI32(toU32(queries) + toU32(e))))
+    }
+    k = toI32(runs.length)
+    while (k > 0) {
+      k -= 1
+      if (k < toI32(runs.length)) {
+        eFree.push(runs[k])
+      }
+    }
+    this.executions = runs
+    this.eFree = eFree
     // At least twice the tickets ever held, a power of two for the mask.
-    let mapSize: i32 = 2
-    while (mapSize / 2 < queries + executions) {
-      mapSize *= 2
+    const tickets: u32 = toU32(queries) + toU32(executions)
+    let mapSize: u32 = 2
+    while (mapSize / 2 < tickets) {
+      mapSize = mapSize << 1
     }
-    this.mapKeys = new Array<i32>(mapSize)
-    this.mapValues = new Array<i32>(mapSize)
-    for (let i: i32 = 0; i < mapSize && i < toI32(this.mapKeys.length); i++) {
-      this.mapKeys[i] = -1
+    const keys: i32[] = []
+    const values: i32[] = []
+    for (let i: u32 = 0; i < mapSize; i++) {
+      keys.push(-1)
+      values.push(-1)
     }
+    this.mapKeys = keys
+    this.mapValues = values
     this.mapMask = mapSize - 1
     this.batchers = []
-    this.batchQueued = new Array<boolean>(PG_CARRIER_MAX_BATCHERS)
-    this.batchStalled = new Array<boolean>(PG_CARRIER_MAX_BATCHERS)
     this.loop = pollCreate()
     if (this.loop < 0) {
       panic("nish/net/postgres-carrier: PgCarrier could not create its poll set")
@@ -460,7 +520,7 @@ export class PgCarrier {
         "nish/net/postgres-carrier: PgCarrier.attach past 8 batchers, after the pool connected, on a NUL in the name or SQL, or past 256 statements"
       )
     }
-    this.batchers.push(batcher)
+    this.batchers.push(new PgCarrierBatch(batcher))
     return id
   }
 
@@ -478,18 +538,18 @@ export class PgCarrier {
    *   final event has passed, or `PG_CARRIER_FULL`.
    */
   run(req: HttpRequest | null, tag: i32): i32 {
-    const q: i32 = this.take(req, tag)
-    if (q < 0) {
+    const held: PgCarrierQuery | null = this.take(req, tag)
+    if (held === null) {
       return PG_CARRIER_FULL
     }
     const ticket: i32 = this.pool.request()
     if (ticket < 0) {
-      this.free(q)
+      this.free(held)
       return PG_CARRIER_FULL
     }
-    this.qTickets[q] = ticket
-    this.mapPut(ticket, q)
-    return q
+    held.ticket = ticket
+    this.mapPut(ticket, held.index)
+    return held.index
   }
 
   /**
@@ -506,16 +566,19 @@ export class PgCarrier {
    *   waiting, the batcher's queue is full or the carrier is closed.
    */
   runInt(req: HttpRequest | null, batcher: i32, key: i64, tag: i32): i32 {
-    const b: PgBatcher = this.batcher(batcher)
-    const q: i32 = this.take(req, tag)
-    if (q < 0) {
+    const batch: PgCarrierBatch | null = this.batcher(batcher)
+    if (batch === null) {
+      panic("nish/net/postgres-carrier: PgCarrier batcher id out of range")
+    }
+    const held: PgCarrierQuery | null = this.take(req, tag)
+    if (held === null) {
       return PG_CARRIER_FULL
     }
-    if (!b.addInt(key, q)) {
-      this.free(q)
+    if (!batch.batcher.addInt(key, held.index)) {
+      this.free(held)
       return PG_CARRIER_FULL
     }
-    return q
+    return held.index
   }
 
   /**
@@ -537,16 +600,19 @@ export class PgCarrier {
    *   key too long for one execution.
    */
   runText(req: HttpRequest | null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32): i32 {
-    const b: PgBatcher = this.batcher(batcher)
-    const q: i32 = this.take(req, tag)
-    if (q < 0) {
+    const batch: PgCarrierBatch | null = this.batcher(batcher)
+    if (batch === null) {
+      panic("nish/net/postgres-carrier: PgCarrier batcher id out of range")
+    }
+    const held: PgCarrierQuery | null = this.take(req, tag)
+    if (held === null) {
       return PG_CARRIER_FULL
     }
-    if (!b.addText(bytes, start, length, q)) {
-      this.free(q)
+    if (!batch.batcher.addText(bytes, start, length, held.index)) {
+      this.free(held)
       return PG_CARRIER_FULL
     }
-    return q
+    return held.index
   }
 
   /**
@@ -557,8 +623,8 @@ export class PgCarrier {
    *   the `next()` after the query's final event.
    */
   request(): HttpRequest {
-    const q: i32 = this.query
-    const req: HttpRequest | null = q >= 0 && q < toI32(this.qRequests.length) ? this.qRequests[q] : null
+    const held: PgCarrierQuery | null = this.queryAt(this.query)
+    const req: HttpRequest | null = held !== null ? held.request : null
     if (req === null) {
       panic("nish/net/postgres-carrier: PgCarrier.request with no request for the query")
     }
@@ -592,8 +658,8 @@ export class PgCarrier {
    *   nothing was written and the query fails.
    */
   send(): boolean {
-    const q: i32 = this.building
-    if (q < 0 || q >= toI32(this.qTickets.length)) {
+    const held: PgCarrierQuery | null = this.queryAt(this.building)
+    if (held === null) {
       panic("nish/net/postgres-carrier: PgCarrier.send with no PG_CARRIER_BUILD open")
     }
     this.building = -1
@@ -603,7 +669,7 @@ export class PgCarrier {
     const conn: PgConnection = this.connection()
     if (conn.bindCancel()) {
       // The group may hold the connection's prepares, which still go; the query does not.
-      this.qFailed[q] = true
+      held.failed = true
       if (this.pool.send()) {
         return true
       }
@@ -611,8 +677,8 @@ export class PgCarrier {
     // Nothing was written: a live connection dropped the query, and a failed
     // one reports it lost with the rest.
     if (conn.failure === PG_ERR_NONE) {
-      this.mapRemove(this.qTickets[q])
-      this.dropped = q
+      this.mapRemove(held.ticket)
+      this.dropped = held.index
     }
     return false
   }
@@ -638,16 +704,21 @@ export class PgCarrier {
       panic("nish/net/postgres-carrier: PgCarrier.next before send() ended the PG_CARRIER_BUILD")
     }
     if (this.finished >= 0) {
-      this.free(this.finished)
+      const done: PgCarrierQuery | null = this.queryAt(this.finished)
+      if (done !== null) {
+        this.free(done)
+      }
       this.finished = -1
     }
     while (true) {
       if (this.dropped >= 0) {
-        const q: i32 = this.dropped
+        const held: PgCarrierQuery | null = this.queryAt(this.dropped)
         this.dropped = -1
-        this.failure = PG_ERR_NONE
-        this.socketError = 0
-        return this.final(q, PG_CARRIER_FAILED)
+        if (held !== null) {
+          this.failure = PG_ERR_NONE
+          this.socketError = 0
+          return this.final(held, PG_CARRIER_FAILED)
+        }
       }
       if (this.drainRun >= 0) {
         const event: i32 = this.drain()
@@ -655,11 +726,13 @@ export class PgCarrier {
           return event
         }
       }
-      if (this.shedLeft > 0) {
-        this.shedLeft -= 1
-        const q: i32 = this.batcher(this.shedBatcher).shed()
-        if (q >= 0) {
-          return this.final(q, PG_CARRIER_FAILED)
+      const left: i32 = this.shedLeft
+      if (left > 0) {
+        this.shedLeft = left - 1
+        const batch: PgCarrierBatch | null = this.batcher(this.shedBatcher)
+        const held: PgCarrierQuery | null = batch !== null ? this.queryAt(batch.batcher.shed()) : null
+        if (held !== null) {
+          return this.final(held, PG_CARRIER_FAILED)
         }
         this.shedLeft = 0
       }
@@ -717,20 +790,22 @@ export class PgCarrier {
       return
     }
     this.closed = true
-    for (let s: i32 = 0; s < toI32(this.fds.length); s++) {
-      const fd: i32 = this.fds[s]
+    const sockets: PgCarrierSlot[] = this.sockets
+    for (let s: i32 = 0; s < toI32(sockets.length); s++) {
+      const slot: PgCarrierSlot = sockets[s]
+      const fd: i32 = slot.fd
       if (fd >= 0) {
-        const conn: PgConnection = this.pool.connection(s)
-        const tls: TlsRecordClient | null = this.tlsConns[s]
-        if (this.tlsPhase[s] === PG_CARRIER_TLS_OFF || this.tlsPhase[s] === PG_CARRIER_TLS_OPEN) {
+        const conn: PgConnection = this.pool.connection(slot.index)
+        const tls: TlsRecordClient | null = slot.tls
+        if (slot.tlsPhase === PG_CARRIER_TLS_OFF || slot.tlsPhase === PG_CARRIER_TLS_OPEN) {
           conn.terminate()
-          this.flushSlot(s, conn, fd)
+          this.flushSlot(slot, conn, fd)
         }
         if (tls !== null) {
           tls.close()
           this.flushTls(tls, fd)
         }
-        this.dropSocket(s, fd)
+        this.dropSocket(slot, fd)
       }
     }
     netClose(this.loop)
@@ -740,51 +815,67 @@ export class PgCarrier {
   // connects, and fails the connections past their connect timeout.
   private poll(): void {
     if (this.handler.fired(this.watchId)) {
-      const n: i32 = pollWait(this.loop, this.ready, toI32(0))
-      for (let k: i32 = 0; k < n && 2 * k + 1 < toI32(this.ready.length); k++) {
-        const s: i32 = this.ready[2 * k]
-        const bits: i32 = this.ready[2 * k + 1]
-        if (s >= 0 && s < toI32(this.fds.length) && this.fds[s] >= 0) {
-          this.service(s, bits)
+      const ready: i32[] = this.ready
+      const n: i32 = pollWait(this.loop, ready, toI32(0))
+      // `ready` holds a slot and its event bits for each of the `n` sockets.
+      // In `u32`, which wraps by definition, and checked against `ready`
+      // before each read.
+      let k: u32 = 0
+      let left: i32 = n
+      while (left > 0) {
+        left -= 1
+        const i: i32 = toI32(k)
+        k += 2
+        if (i < 0 || i >= toI32(ready.length) - 1) {
+          break
+        }
+        const at: i32 = ready[i]
+        const bits: i32 = ready[i + 1]
+        const slot: PgCarrierSlot | null = this.slotAt(at)
+        if (slot !== null && slot.fd >= 0) {
+          this.service(slot, bits)
         }
       }
     }
     let now: i64 = 0
-    for (let s: i32 = 0; s < toI32(this.deadlines.length); s++) {
-      const deadline: i64 = this.deadlines[s]
+    const sockets: PgCarrierSlot[] = this.sockets
+    for (let s: i32 = 0; s < toI32(sockets.length); s++) {
+      const slot: PgCarrierSlot = sockets[s]
+      const deadline: i64 = slot.deadline
       if (deadline > 0) {
         if (now === 0) {
           now = monotonicNanos()
         }
         // A connection the server already failed keeps that failure.
-        if (now >= deadline && this.pool.connection(s).failure === PG_ERR_NONE) {
-          this.fail(s, PG_CARRIER_TIMED_OUT)
+        if (now >= deadline && this.pool.connection(slot.index).failure === PG_ERR_NONE) {
+          this.fail(slot, PG_CARRIER_TIMED_OUT)
         }
       }
     }
-    for (let b: i32 = 0; b < toI32(this.batchStalled.length); b++) {
-      this.batchStalled[b] = false
+    const batchers: PgCarrierBatch[] = this.batchers
+    for (let b: i32 = 0; b < toI32(batchers.length); b++) {
+      batchers[b].stalled = false
     }
   }
 
   // One ready socket: a connect finished, or input to read.
-  private service(s: i32, bits: i32): void {
-    const conn: PgConnection = this.pool.connection(s)
+  private service(slot: PgCarrierSlot, bits: i32): void {
+    const conn: PgConnection = this.pool.connection(slot.index)
     if (conn.failure !== PG_ERR_NONE) {
       return
     }
-    const fd: i32 = this.fds[s]
-    if (!this.connected[s]) {
+    const fd: i32 = slot.fd
+    if (!slot.connected) {
       const result: i32 = connectResult(fd)
       if (result !== 0) {
-        this.fail(s, result)
+        this.fail(slot, result)
         return
       }
-      this.connected[s] = true
+      slot.connected = true
     }
-    if (this.tlsPhase[s] !== PG_CARRIER_TLS_OFF) {
+    if (slot.tlsPhase !== PG_CARRIER_TLS_OFF) {
       if ((bits & PG_CARRIER_READ_BITS) !== 0) {
-        this.serviceTls(s, fd, conn)
+        this.serviceTls(slot, fd, conn)
       }
       return
     }
@@ -794,24 +885,24 @@ export class PgCarrier {
       if (got > 0) {
         conn.received(got)
       } else if (got !== PG_CARRIER_AGAIN) {
-        this.fail(s, got)
+        this.fail(slot, got)
       }
     }
   }
 
-  // Ends slot `s`'s connection for `error`: its events then say so.
-  private fail(s: i32, error: i32): void {
-    this.pool.connection(s).closed()
-    this.errors[s] = error
-    this.deadlines[s] = 0
+  // Ends `slot`'s connection for `error`: its events then say so.
+  private fail(slot: PgCarrierSlot, error: i32): void {
+    this.pool.connection(slot.index).closed()
+    slot.error = error
+    slot.deadline = 0
   }
 
-  // Reads slot `s`'s socket under TLS: the one byte answering the
+  // Reads `slot`'s socket under TLS: the one byte answering the
   // SSLRequest, else ciphertext for the record layer, whose plaintext is
   // then moved into the connection's input.
-  private serviceTls(s: i32, fd: i32, conn: PgConnection): void {
-    if (this.tlsPhase[s] === PG_CARRIER_TLS_ASK) {
-      if (this.tlsAsked[s] < toI32(this.sslRequest.length)) {
+  private serviceTls(slot: PgCarrierSlot, fd: i32, conn: PgConnection): void {
+    if (slot.tlsPhase === PG_CARRIER_TLS_ASK) {
+      if (slot.tlsAsked < toI32(this.sslRequest.length)) {
         // The answer is read only once the whole SSLRequest is out.
         return
       }
@@ -820,47 +911,49 @@ export class PgCarrier {
       // never read, and bytes after `S` go to the record layer as the start
       // of the handshake, which a TLS server's ServerHello must be, so
       // anything else fails it.
-      const got: i32 = netRead(fd, this.tlsAnswer, 0, 1)
+      const answer: u8[] = this.tlsAnswer
+      const got: i32 = netRead(fd, answer, 0, 1)
       if (got === PG_CARRIER_AGAIN) {
         return
       }
       if (got <= 0) {
-        this.fail(s, got)
-      } else if (toI32(this.tlsAnswer[0]) !== PG_CARRIER_TLS_YES) {
-        this.failTls(s, PG_CARRIER_ZERO)
+        this.fail(slot, got)
+      } else if (answer.length > 0 && toI32(answer[0]) === PG_CARRIER_TLS_YES) {
+        slot.tls = pgCarrierTlsStart(this.tlsName)
+        slot.tlsPhase = PG_CARRIER_TLS_HANDSHAKE
       } else {
-        this.tlsConns[s] = pgCarrierTlsStart(this.tlsName)
-        this.tlsPhase[s] = PG_CARRIER_TLS_HANDSHAKE
+        this.failTls(slot, PG_CARRIER_ZERO)
       }
       return
     }
-    const tls: TlsRecordClient | null = this.tlsConns[s]
+    const tls: TlsRecordClient | null = slot.tls
     if (tls === null) {
       return
     }
+    const input: u8[] = this.tlsInput
     let room: i32 = tls.space()
-    if (room > toI32(this.tlsInput.length)) {
-      room = toI32(this.tlsInput.length)
+    if (room > toI32(input.length)) {
+      room = toI32(input.length)
     }
     if (room > 0) {
-      const got: i32 = netRead(fd, this.tlsInput, 0, room)
+      const got: i32 = netRead(fd, input, 0, room)
       if (got > 0) {
-        tls.receive(this.tlsInput, PG_CARRIER_ZERO, got)
+        tls.receive(input, PG_CARRIER_ZERO, got)
       } else if (got === 0) {
         tls.end()
       } else if (got !== PG_CARRIER_AGAIN) {
         tls.abort()
-        this.fail(s, got)
+        this.fail(slot, got)
         return
       }
     }
-    this.advanceTls(s, tls, conn)
+    this.advanceTls(slot, tls, conn)
   }
 
-  // Gives slot `s`'s handshake the verdict it waits on, notes it open, and
+  // Gives `slot`'s handshake the verdict it waits on, notes it open, and
   // moves what plaintext `conn` has room for into its input: whether any
   // moved, so that `next()` looks at the slot again.
-  private advanceTls(s: i32, tls: TlsRecordClient, conn: PgConnection): boolean {
+  private advanceTls(slot: PgCarrierSlot, tls: TlsRecordClient, conn: PgConnection): boolean {
     if ((tls.interest() & TLS_RECORD_AUTH) !== 0) {
       const trust: TlsClientTrust | null = this.trust
       if (trust !== null) {
@@ -877,13 +970,13 @@ export class PgCarrier {
       }
     }
     if (tls.state === TLS_RECORD_STATE_FAILED) {
-      this.failTls(s, tls.failure())
+      this.failTls(slot, tls.failure())
       return false
     }
-    if (this.tlsPhase[s] === PG_CARRIER_TLS_HANDSHAKE && tls.state === TLS_RECORD_STATE_OPEN) {
-      this.tlsPhase[s] = PG_CARRIER_TLS_OPEN
+    if (slot.tlsPhase === PG_CARRIER_TLS_HANDSHAKE && tls.state === TLS_RECORD_STATE_OPEN) {
+      slot.tlsPhase = PG_CARRIER_TLS_OPEN
     }
-    if (this.tlsPhase[s] !== PG_CARRIER_TLS_OPEN) {
+    if (slot.tlsPhase !== PG_CARRIER_TLS_OPEN) {
       return false
     }
     let moved: boolean = false
@@ -895,11 +988,11 @@ export class PgCarrier {
         moved = true
       } else if (got === 0) {
         // The server's close_notify: the stream ended cleanly.
-        this.fail(s, PG_CARRIER_ZERO)
+        this.fail(slot, PG_CARRIER_ZERO)
         return true
       } else {
         if (tls.state === TLS_RECORD_STATE_FAILED) {
-          this.failTls(s, tls.failure())
+          this.failTls(slot, tls.failure())
           return true
         }
         return moved
@@ -909,15 +1002,15 @@ export class PgCarrier {
     return moved
   }
 
-  // Fails slot `s` with `PG_ERR_TLS`: `alert` the TLS alert behind it, 0
+  // Fails `slot` with `PG_ERR_TLS`: `alert` the TLS alert behind it, 0
   // for a refused SSLRequest. One write sends the alert a refusal sealed,
   // when the socket has room for it.
-  private failTls(s: i32, alert: i32): void {
-    this.pool.connection(s).tlsFailed()
-    this.errors[s] = alert
-    this.deadlines[s] = 0
-    const tls: TlsRecordClient | null = this.tlsConns[s]
-    const fd: i32 = this.fds[s]
+  private failTls(slot: PgCarrierSlot, alert: i32): void {
+    this.pool.connection(slot.index).tlsFailed()
+    slot.error = alert
+    slot.deadline = 0
+    const tls: TlsRecordClient | null = slot.tls
+    const fd: i32 = slot.fd
     if (tls !== null && fd >= 0) {
       this.flushTls(tls, fd)
     }
@@ -925,95 +1018,120 @@ export class PgCarrier {
 
   // The events of every slot's connection, resuming at `at`.
   private slots(): i32 {
-    while (this.at < toI32(this.made.length)) {
+    const sockets: PgCarrierSlot[] = this.sockets
+    while (true) {
       const s: i32 = this.at
-      if (!this.made[s]) {
-        this.at += 1
+      if (s < 0 || s >= toI32(sockets.length)) {
+        return PG_CARRIER_NONE
+      }
+      const slot: PgCarrierSlot = sockets[s]
+      if (!slot.made) {
+        this.at = s + 1
         continue
       }
       const event: i32 = this.pool.next(s)
       if (event === PG_NEED_MORE) {
-        this.at += 1
+        this.at = s + 1
         continue
       }
-      const routed: i32 = this.route(s, event)
+      const routed: i32 = this.route(slot, event)
       if (routed !== PG_CARRIER_NONE) {
         return routed
       }
     }
-    return PG_CARRIER_NONE
   }
 
-  // One pool event from slot `s`, as the carrier's own; `PG_CARRIER_NONE`
+  // One pool event from `slot`, as the carrier's own; `PG_CARRIER_NONE`
   // for one it keeps, `PG_CARRIER_AGAIN_PASS` when a run's events are owed.
-  private route(s: i32, event: i32): i32 {
-    const conn: PgConnection = this.pool.connection(s)
+  private route(slot: PgCarrierSlot, event: i32): i32 {
+    const conn: PgConnection = this.pool.connection(slot.index)
     if (event === PG_READY) {
-      this.deadlines[s] = 0
+      slot.deadline = 0
       return PG_CARRIER_NONE
     }
     if (event === PG_FAILED) {
-      const fd: i32 = this.fds[s]
+      const fd: i32 = slot.fd
       if (fd >= 0) {
-        this.dropSocket(s, fd)
+        this.dropSocket(slot, fd)
       }
-      this.deadlines[s] = 0
+      slot.deadline = 0
       return PG_CARRIER_NONE
     }
     const ticket: i32 = this.pool.ticket
     const v: i32 = ticket < 0 ? -1 : this.mapGet(ticket)
-    if (v < 0) {
+    const held: PgCarrierQuery[] = this.held
+    const queries: i32 = toI32(held.length)
+    if (v >= 0 && v < queries) {
+      this.conn = conn
+      return this.routePlain(slot, held[v], ticket, event, conn)
+    }
+    const exec: PgCarrierExecution | null =
+      queries >= 0 && v >= queries && v >= 0 ? this.executionAt(v - queries) : null
+    if (exec === null) {
       // A notice, or the event of a query no longer held.
       return PG_CARRIER_NONE
     }
     this.conn = conn
-    const queries: i32 = toI32(this.qTags.length)
-    if (v < queries) {
-      return this.routePlain(s, v, ticket, event, conn)
-    }
-    return this.routeBatch(s, v - queries, ticket, event, conn)
+    return this.routeBatch(slot, exec, ticket, event, conn)
   }
 
-  private routePlain(s: i32, q: i32, ticket: i32, event: i32, conn: PgConnection): i32 {
+  private routePlain(
+    slot: PgCarrierSlot,
+    held: PgCarrierQuery,
+    ticket: i32,
+    event: i32,
+    conn: PgConnection
+  ): i32 {
     if (event === PG_ROW || event === PG_COMPLETE) {
-      this.announce(q)
+      this.announce(held)
       return event === PG_ROW ? PG_CARRIER_ROW : PG_CARRIER_COMPLETE
     }
     if (event === PG_ERROR) {
-      this.qFailed[q] = true
-      this.announce(q)
+      held.failed = true
+      this.announce(held)
       return PG_CARRIER_ERROR
     }
     if (event === PG_GROUP_DONE) {
       this.mapRemove(ticket)
-      const failed: boolean = this.qFailed[q] || conn.groupFailed
+      const failed: boolean = held.failed || conn.groupFailed
       this.failure = PG_ERR_NONE
       this.socketError = 0
-      return this.final(q, failed ? PG_CARRIER_FAILED : PG_CARRIER_DONE)
+      return this.final(held, failed ? PG_CARRIER_FAILED : PG_CARRIER_DONE)
     }
     if (event === PG_LOST) {
       this.mapRemove(ticket)
       this.failure = conn.failure
-      this.socketError = this.errors[s]
-      return this.final(q, PG_CARRIER_FAILED)
+      this.socketError = slot.error
+      return this.final(held, PG_CARRIER_FAILED)
     }
     return PG_CARRIER_NONE
   }
 
-  private routeBatch(s: i32, e: i32, ticket: i32, event: i32, conn: PgConnection): i32 {
-    const id: i32 = this.eBatchers[e]
-    const b: PgBatcher = this.batcher(id)
-    const r: i32 = this.eRuns[e]
+  private routeBatch(
+    slot: PgCarrierSlot,
+    exec: PgCarrierExecution,
+    ticket: i32,
+    event: i32,
+    conn: PgConnection
+  ): i32 {
+    const id: i32 = exec.batcher
+    const batch: PgCarrierBatch | null = this.batcher(id)
+    if (batch === null) {
+      // An execution no batcher holds is no longer held either.
+      return PG_CARRIER_NONE
+    }
+    const b: PgBatcher = batch.batcher
+    const r: i32 = exec.run
     if (event === PG_LOST && r < 0) {
       // Lost before a connection took it: its requests would wait on a
       // server that cannot be reached, so one execution's worth fail now.
       this.mapRemove(ticket)
-      this.freeExecution(e)
-      this.batchQueued[id] = false
+      this.freeExecution(exec)
+      batch.queued = false
       this.shedBatcher = id
       this.shedLeft = b.maxRequests
       this.failure = conn.failure
-      this.socketError = this.errors[s]
+      this.socketError = slot.error
       return PG_CARRIER_AGAIN_PASS
     }
     if (r < 0) {
@@ -1028,7 +1146,7 @@ export class PgCarrier {
     }
     if (event === PG_COMPLETE) {
       b.end(r)
-      this.eEnded[e] = true
+      exec.ended = true
       this.startDrain(id, r, PG_ERR_NONE, toI32(0))
       return PG_CARRIER_AGAIN_PASS
     }
@@ -1036,12 +1154,12 @@ export class PgCarrier {
       const lost: boolean = event === PG_LOST
       if (event !== PG_ERROR) {
         this.mapRemove(ticket)
-        this.freeExecution(e)
+        this.freeExecution(exec)
       }
-      if (!this.eEnded[e]) {
+      if (!exec.ended) {
         b.fail(r)
-        this.eEnded[e] = true
-        this.startDrain(id, r, lost ? conn.failure : PG_ERR_NONE, lost ? this.errors[s] : toI32(0))
+        exec.ended = true
+        this.startDrain(id, r, lost ? conn.failure : PG_ERR_NONE, lost ? slot.error : toI32(0))
         return PG_CARRIER_AGAIN_PASS
       }
     }
@@ -1057,51 +1175,58 @@ export class PgCarrier {
 
   // The next of the events a run owes, as the carrier's own.
   private drain(): i32 {
-    const b: PgBatcher = this.batcher(this.drainBatcher)
+    const batch: PgCarrierBatch | null = this.batcher(this.drainBatcher)
+    if (batch === null) {
+      this.drainRun = -1
+      return PG_CARRIER_NONE
+    }
+    const b: PgBatcher = batch.batcher
     const event: i32 = b.next(this.drainRun)
-    const q: i32 = b.tag
-    if (event === PG_BATCH_NONE || q < 0 || q >= toI32(this.qTags.length)) {
+    const held: PgCarrierQuery | null = this.queryAt(b.tag)
+    if (event === PG_BATCH_NONE || held === null) {
       this.drainRun = -1
       return PG_CARRIER_NONE
     }
     if (event === PG_BATCH_ROW) {
-      this.announce(q)
+      this.announce(held)
       return PG_CARRIER_ROW
     }
     if (event === PG_BATCH_FAILED) {
       this.failure = this.drainFailure
       this.socketError = this.drainError
-      return this.final(q, PG_CARRIER_FAILED)
+      return this.final(held, PG_CARRIER_FAILED)
     }
     this.failure = PG_ERR_NONE
     this.socketError = 0
-    return this.final(q, event === PG_BATCH_DONE ? PG_CARRIER_DONE : PG_CARRIER_MISSING)
+    return this.final(held, event === PG_BATCH_DONE ? PG_CARRIER_DONE : PG_CARRIER_MISSING)
   }
 
   // Queues an execution for each batcher with requests waiting, then hands
   // waiting tickets to connections: a plain query's is the program's to
   // build, an execution's is bound here.
   private dispatch(): i32 {
-    for (let id: i32 = 0; id < toI32(this.batchers.length) && id < PG_CARRIER_MAX_BATCHERS; id++) {
-      if (
-        this.batchQueued[id] ||
-        this.batchStalled[id] ||
-        this.batchers[id].waiting() === 0 ||
-        this.eFreeCount === 0
-      ) {
+    const batchers: PgCarrierBatch[] = this.batchers
+    const eFree: PgCarrierExecution[] = this.eFree
+    for (let id: i32 = 0; id < toI32(batchers.length); id++) {
+      const batch: PgCarrierBatch = batchers[id]
+      if (batch.queued || batch.stalled || batch.batcher.waiting() === 0) {
         continue
       }
-      const ticket: i32 = this.pool.request()
-      if (ticket < 0) {
-        break
+      const lastExec: i32 = toI32(eFree.length) - 1
+      if (lastExec >= 0 && eFree.length > 0) {
+        const exec: PgCarrierExecution = eFree[lastExec]
+        eFree.pop()
+        const ticket: i32 = this.pool.request()
+        if (ticket < 0) {
+          eFree.push(exec)
+          break
+        }
+        exec.batcher = id
+        exec.run = -1
+        exec.ended = false
+        this.mapPut(ticket, exec.value)
+        batch.queued = true
       }
-      this.eFreeCount -= 1
-      const e: i32 = this.eFree[this.eFreeCount]
-      this.eBatchers[e] = id
-      this.eRuns[e] = -1
-      this.eEnded[e] = false
-      this.mapPut(ticket, toI32(this.qTags.length) + e)
-      this.batchQueued[id] = true
     }
     const slot: i32 = this.pool.dispatch()
     if (slot < 0) {
@@ -1110,39 +1235,41 @@ export class PgCarrier {
     const conn: PgConnection = this.pool.connection(slot)
     const ticket: i32 = this.pool.ticket
     const v: i32 = this.mapGet(ticket)
-    const queries: i32 = toI32(this.qTags.length)
+    const held: PgCarrierQuery[] = this.held
+    const queries: i32 = toI32(held.length)
     if (v >= 0 && v < queries) {
       this.conn = conn
       this.building = v
-      this.announce(v)
+      this.announce(held[v])
       return PG_CARRIER_BUILD
     }
-    if (v < 0) {
+    const exec: PgCarrierExecution | null =
+      queries >= 0 && v >= queries && v >= 0 ? this.executionAt(v - queries) : null
+    const batch: PgCarrierBatch | null = exec !== null ? this.batcher(exec.batcher) : null
+    if (exec === null || batch === null) {
       this.pool.send()
       return PG_CARRIER_AGAIN_PASS
     }
-    const e: i32 = v - queries
-    const id: i32 = this.eBatchers[e]
-    const b: PgBatcher = this.batcher(id)
-    this.batchQueued[id] = false
+    const b: PgBatcher = batch.batcher
+    batch.queued = false
     const r: i32 = b.take(conn)
     if (r < 0) {
       // Every run is in flight, or the connection had no room for the bind:
       // the requests stay queued for the next turn.
-      this.batchStalled[id] = true
+      batch.stalled = true
       this.pool.send()
       if (conn.failure === PG_ERR_NONE) {
         this.mapRemove(ticket)
-        this.freeExecution(e)
+        this.freeExecution(exec)
       }
       return PG_CARRIER_AGAIN_PASS
     }
-    this.eRuns[e] = r
+    exec.run = r
     if (!this.pool.send() && conn.failure === PG_ERR_NONE) {
       this.mapRemove(ticket)
-      this.freeExecution(e)
+      this.freeExecution(exec)
       b.fail(r)
-      this.startDrain(id, r, PG_ERR_NONE, toI32(0))
+      this.startDrain(exec.batcher, r, PG_ERR_NONE, toI32(0))
     }
     return PG_CARRIER_AGAIN_PASS
   }
@@ -1152,42 +1279,47 @@ export class PgCarrier {
   // True when a socket failed and its events are owed.
   private connectAndFlush(connect: boolean): boolean {
     let failed: boolean = false
+    const sockets: PgCarrierSlot[] = this.sockets
     if (connect) {
-      let slot: i32 = this.pool.wanted()
-      const deadline: i64 = slot >= 0 ? monotonicNanos() + this.timeoutNs : toI64(0)
-      while (slot >= 0 && slot < toI32(this.fds.length)) {
+      let want: i32 = this.pool.wanted()
+      // In `u64`, which wraps by definition: a monotonic clock is centuries
+      // short of the top.
+      const deadline: i64 = want >= 0 ? toI64(toU64(monotonicNanos()) + toU64(this.timeoutNs)) : toI64(0)
+      while (want >= 0 && want < toI32(sockets.length)) {
+        const slot: PgCarrierSlot = sockets[want]
         crypto.getRandomValues(this.nonce)
-        this.pool.connect(slot, this.nonce)
-        this.made[slot] = true
-        this.connected[slot] = false
-        this.interest[slot] = H1_WANT_WRITE
-        this.errors[slot] = 0
-        this.deadlines[slot] = deadline
-        this.tlsPhase[slot] = this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_ASK : PG_CARRIER_TLS_OFF
-        this.tlsAsked[slot] = 0
+        this.pool.connect(want, this.nonce)
+        slot.made = true
+        slot.connected = false
+        slot.interest = H1_WANT_WRITE
+        slot.error = 0
+        slot.deadline = deadline
+        slot.tlsPhase = this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_ASK : PG_CARRIER_TLS_OFF
+        slot.tlsAsked = 0
         const fd: i32 = this.unix ? unixConnect(this.path) : tcpConnect(this.address)
-        this.fds[slot] = fd
+        slot.fd = fd
         if (fd < 0) {
           this.fail(slot, fd)
           failed = true
-        } else if (pollAdd(this.loop, fd, H1_WANT_WRITE, slot) < 0) {
+        } else if (pollAdd(this.loop, fd, H1_WANT_WRITE, want) < 0) {
           this.fail(slot, toI32(-1))
           failed = true
         }
-        slot = this.pool.wanted()
+        want = this.pool.wanted()
       }
     }
-    for (let s: i32 = 0; s < toI32(this.fds.length); s++) {
-      const fd: i32 = this.fds[s]
-      if (fd < 0 || !this.connected[s]) {
+    for (let s: i32 = 0; s < toI32(sockets.length); s++) {
+      const slot: PgCarrierSlot = sockets[s]
+      const fd: i32 = slot.fd
+      if (fd < 0 || !slot.connected) {
         continue
       }
       const conn: PgConnection = this.pool.connection(s)
       if (conn.failure !== PG_ERR_NONE) {
         continue
       }
-      const tls: TlsRecordClient | null = this.tlsConns[s]
-      if (tls !== null && this.advanceTls(s, tls, conn)) {
+      const tls: TlsRecordClient | null = slot.tls
+      if (tls !== null && this.advanceTls(slot, tls, conn)) {
         // Plaintext the record layer held, which no poll would report.
         failed = true
       }
@@ -1195,31 +1327,31 @@ export class PgCarrier {
         failed = true
         continue
       }
-      const written: i32 = this.flushSlot(s, conn, fd)
+      const written: i32 = this.flushSlot(slot, conn, fd)
       if (written < 0) {
         if (tls !== null) {
           tls.abort()
         }
-        this.fail(s, written)
+        this.fail(slot, written)
         failed = true
         continue
       }
-      const wants: i32 = this.pending(s, conn) ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
-      if (wants !== this.interest[s]) {
+      const wants: i32 = this.pending(slot, conn) ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
+      if (wants !== slot.interest) {
         pollModify(this.loop, fd, wants, s)
-        this.interest[s] = wants
+        slot.interest = wants
       }
     }
     return failed
   }
 
-  // Whether slot `s` has bytes for the socket that it has not taken.
-  private pending(s: i32, conn: PgConnection): boolean {
-    const phase: i32 = this.tlsPhase[s]
+  // Whether `slot` has bytes for the socket that it has not taken.
+  private pending(slot: PgCarrierSlot, conn: PgConnection): boolean {
+    const phase: i32 = slot.tlsPhase
     if (phase === PG_CARRIER_TLS_ASK) {
-      return this.tlsAsked[s] < toI32(this.sslRequest.length)
+      return slot.tlsAsked < toI32(this.sslRequest.length)
     }
-    const tls: TlsRecordClient | null = this.tlsConns[s]
+    const tls: TlsRecordClient | null = slot.tls
     if (tls !== null && tls.outputEnd > tls.outputStart) {
       return true
     }
@@ -1228,29 +1360,34 @@ export class PgCarrier {
     )
   }
 
-  // Writes what slot `s` owes its socket, as its TLS phase has it: the
+  // Writes what `slot` owes its socket, as its TLS phase has it: the
   // SSLRequest, the handshake, `conn`'s bytes sealed, or `conn`'s bytes as
   // they are. The socket error when it fails, else 0.
-  private flushSlot(s: i32, conn: PgConnection, fd: i32): i32 {
-    const phase: i32 = this.tlsPhase[s]
+  private flushSlot(slot: PgCarrierSlot, conn: PgConnection, fd: i32): i32 {
+    const phase: i32 = slot.tlsPhase
     if (phase === PG_CARRIER_TLS_OFF) {
       return this.flush(conn, fd)
     }
     if (phase === PG_CARRIER_TLS_ASK) {
       const request: u8[] = this.sslRequest
-      while (this.tlsAsked[s] < toI32(request.length)) {
-        const n: i32 = netWrite(fd, request, this.tlsAsked[s], toI32(request.length) - this.tlsAsked[s])
+      const length: i32 = toI32(request.length)
+      let asked: i32 = slot.tlsAsked
+      while (asked >= 0 && asked < length) {
+        const n: i32 = netWrite(fd, request, asked, length - asked)
         if (n === PG_CARRIER_AGAIN) {
           return 0
         }
         if (n <= 0) {
           return n < 0 ? n : -1
         }
-        this.tlsAsked[s] += n
+        // A write takes at most what it was given, so this is at most `length`.
+        const sent: i64 = toI64(asked) + toI64(n)
+        asked = sent < toI64(length) ? toI32(sent) : length
+        slot.tlsAsked = asked
       }
       return 0
     }
-    const tls: TlsRecordClient | null = this.tlsConns[s]
+    const tls: TlsRecordClient | null = slot.tls
     if (tls === null) {
       return 0
     }
@@ -1259,14 +1396,12 @@ export class PgCarrier {
       if (written !== 0 || tls.outputEnd > tls.outputStart) {
         return written
       }
-      if (phase !== PG_CARRIER_TLS_OPEN || conn.outputEnd() <= conn.outputStart()) {
+      const start: i32 = conn.outputStart()
+      const end: i32 = conn.outputEnd()
+      if (phase !== PG_CARRIER_TLS_OPEN || start < 0 || end < 0 || end <= start) {
         return 0
       }
-      const sealed: i32 = tls.write(
-        conn.outputBuffer(),
-        conn.outputStart(),
-        conn.outputEnd() - conn.outputStart()
-      )
+      const sealed: i32 = tls.write(conn.outputBuffer(), start, end - start)
       if (sealed <= 0) {
         return 0
       }
@@ -1277,8 +1412,13 @@ export class PgCarrier {
   // Writes the records `tls` has sealed until the socket takes no more; the
   // socket error when it fails, else 0.
   private flushTls(tls: TlsRecordClient, fd: i32): i32 {
-    while (tls.outputEnd > tls.outputStart) {
-      const n: i32 = netWrite(fd, tls.output, tls.outputStart, tls.outputEnd - tls.outputStart)
+    while (true) {
+      const start: i32 = tls.outputStart
+      const end: i32 = tls.outputEnd
+      if (start < 0 || end < 0 || end <= start) {
+        return 0
+      }
+      const n: i32 = netWrite(fd, tls.output, start, end - start)
       if (n === PG_CARRIER_AGAIN) {
         return 0
       }
@@ -1287,19 +1427,18 @@ export class PgCarrier {
       }
       tls.consume(n)
     }
-    return 0
   }
 
   // Writes what `conn` queued until the socket takes no more; the socket
   // error when it fails, else 0.
   private flush(conn: PgConnection, fd: i32): i32 {
-    while (conn.outputEnd() > conn.outputStart()) {
-      const n: i32 = netWrite(
-        fd,
-        conn.outputBuffer(),
-        conn.outputStart(),
-        conn.outputEnd() - conn.outputStart()
-      )
+    while (true) {
+      const start: i32 = conn.outputStart()
+      const end: i32 = conn.outputEnd()
+      if (start < 0 || end < 0 || end <= start) {
+        return 0
+      }
+      const n: i32 = netWrite(fd, conn.outputBuffer(), start, end - start)
       if (n === PG_CARRIER_AGAIN) {
         return 0
       }
@@ -1308,116 +1447,177 @@ export class PgCarrier {
       }
       conn.sent(n)
     }
-    return 0
   }
 
-  // Names query `q` as the one the event is about.
-  private announce(q: i32): void {
-    this.query = q
-    this.tag = this.qTags[q]
+  // Names `held` as the query the event is about.
+  private announce(held: PgCarrierQuery): void {
+    this.query = held.index
+    this.tag = held.tag
   }
 
-  // Takes slot `s`'s socket `fd` off the poll set and closes it.
-  private dropSocket(s: i32, fd: i32): void {
+  // Takes `slot`'s socket `fd` off the poll set and closes it.
+  private dropSocket(slot: PgCarrierSlot, fd: i32): void {
     pollRemove(this.loop, fd)
     netClose(fd)
-    this.fds[s] = -1
-    const tls: TlsRecordClient | null = this.tlsConns[s]
+    slot.fd = -1
+    const tls: TlsRecordClient | null = slot.tls
     if (tls !== null) {
       tls.wipe()
-      this.tlsConns[s] = null
+      slot.tls = null
     }
   }
 
-  // Answers query `q`'s final `event`; the query is freed on the next call.
-  private final(q: i32, event: i32): i32 {
-    this.announce(q)
-    this.finished = q
+  // Answers `held`'s final `event`; the query is freed on the next call.
+  private final(held: PgCarrierQuery, event: i32): i32 {
+    this.announce(held)
+    this.finished = held.index
     return event
   }
 
-  private batcher(id: i32): PgBatcher {
-    if (id < 0 || id >= toI32(this.batchers.length)) {
-      panic("nish/net/postgres-carrier: PgCarrier batcher id out of range")
+  // The slot numbered `s`, or null for a number no slot has.
+  private slotAt(s: i32): PgCarrierSlot | null {
+    const sockets: PgCarrierSlot[] = this.sockets
+    return s >= 0 && s < toI32(sockets.length) ? sockets[s] : null
+  }
+
+  // The query numbered `q`, or null for a number no query has.
+  private queryAt(q: i32): PgCarrierQuery | null {
+    const held: PgCarrierQuery[] = this.held
+    return q >= 0 && q < toI32(held.length) ? held[q] : null
+  }
+
+  // The execution numbered `e`, or null for a number no execution has.
+  private executionAt(e: i32): PgCarrierExecution | null {
+    const runs: PgCarrierExecution[] = this.executions
+    return e >= 0 && e < toI32(runs.length) ? runs[e] : null
+  }
+
+  // The batcher `attach` numbered `id`, or null for an id it never gave.
+  private batcher(id: i32): PgCarrierBatch | null {
+    const batchers: PgCarrierBatch[] = this.batchers
+    return id >= 0 && id < toI32(batchers.length) ? batchers[id] : null
+  }
+
+  // A free query for `req` and `tag`, or null when none is free or the carrier is closed.
+  private take(req: HttpRequest | null, tag: i32): PgCarrierQuery | null {
+    const free: PgCarrierQuery[] = this.qFree
+    if (this.closed || free.length === 0) {
+      return null
     }
-    return this.batchers[id]
-  }
-
-  // A free query for `req` and `tag`, or -1 when none is free or the carrier is closed.
-  private take(req: HttpRequest | null, tag: i32): i32 {
-    if (this.closed || this.qFreeCount === 0) {
-      return -1
+    const last: i32 = toI32(free.length) - 1
+    if (last >= 0 && free.length > 0) {
+      const held: PgCarrierQuery = free[last]
+      free.pop()
+      held.tag = tag
+      held.request = req
+      held.ticket = -1
+      held.failed = false
+      return held
     }
-    this.qFreeCount -= 1
-    const q: i32 = this.qFree[this.qFreeCount]
-    this.qTags[q] = tag
-    this.qRequests[q] = req
-    this.qTickets[q] = -1
-    this.qFailed[q] = false
-    return q
+    return null
   }
 
-  private free(q: i32): void {
-    this.qRequests[q] = null
-    this.qFree[this.qFreeCount] = q
-    this.qFreeCount += 1
+  private free(held: PgCarrierQuery): void {
+    held.request = null
+    this.qFree.push(held)
   }
 
-  private freeExecution(e: i32): void {
-    this.eFree[this.eFreeCount] = e
-    this.eFreeCount += 1
+  private freeExecution(exec: PgCarrierExecution): void {
+    this.eFree.push(exec)
   }
 
+  // The map's size is twice the tickets ever held, so a probe always meets
+  // an empty slot and every loop below ends. A slot index outside the
+  // arrays cannot occur, since the mask is their length less one; the
+  // guards on it take the path for a key not found.
   private mapPut(key: i32, value: i32): void {
-    const mask: i32 = this.mapMask
-    let i: i32 = key & mask
-    while (this.mapKeys[i] !== -1) {
-      i = (i + 1) & mask
+    const keys: i32[] = this.mapKeys
+    const values: i32[] = this.mapValues
+    const mask: u32 = this.mapMask
+    let b: u32 = toU32(key) & mask
+    while (true) {
+      const i: i32 = toI32(b)
+      if (i < 0 || i >= toI32(keys.length)) {
+        return
+      }
+      if (keys[i] === -1) {
+        if (i < toI32(values.length)) {
+          keys[i] = key
+          values[i] = value
+        }
+        return
+      }
+      b = (b + 1) & mask
     }
-    this.mapKeys[i] = key
-    this.mapValues[i] = value
   }
 
   private mapGet(key: i32): i32 {
-    const mask: i32 = this.mapMask
-    let i: i32 = key & mask
-    while (this.mapKeys[i] !== -1) {
-      if (this.mapKeys[i] === key) {
-        return this.mapValues[i]
+    const keys: i32[] = this.mapKeys
+    const values: i32[] = this.mapValues
+    const mask: u32 = this.mapMask
+    let b: u32 = toU32(key) & mask
+    while (true) {
+      const i: i32 = toI32(b)
+      if (i < 0 || i >= toI32(keys.length)) {
+        return -1
       }
-      i = (i + 1) & mask
+      const k: i32 = keys[i]
+      if (k === key) {
+        return i < toI32(values.length) ? values[i] : -1
+      }
+      if (k === -1) {
+        return -1
+      }
+      b = (b + 1) & mask
     }
-    return -1
   }
 
   // Removes `key`, shifting back the entries after it that would no longer
   // be found past the hole, so that no tombstone is ever left.
   private mapRemove(key: i32): void {
-    const mask: i32 = this.mapMask
-    let i: i32 = key & mask
-    while (this.mapKeys[i] !== key) {
-      if (this.mapKeys[i] === -1) {
+    const keys: i32[] = this.mapKeys
+    const values: i32[] = this.mapValues
+    const mask: u32 = this.mapMask
+    let b: u32 = toU32(key) & mask
+    let hole: i32 = -1
+    while (true) {
+      const i: i32 = toI32(b)
+      if (i < 0 || i >= toI32(keys.length)) {
         return
       }
-      i = (i + 1) & mask
+      const k: i32 = keys[i]
+      if (k === key) {
+        hole = i
+        break
+      }
+      if (k === -1) {
+        return
+      }
+      b = (b + 1) & mask
     }
-    let j: i32 = i
+    let j: u32 = b
     while (true) {
       j = (j + 1) & mask
-      const k: i32 = this.mapKeys[j]
+      const at: i32 = toI32(j)
+      if (at < 0 || at >= toI32(keys.length) || at >= toI32(values.length)) {
+        break
+      }
+      const k: i32 = keys[at]
       if (k === -1) {
         break
       }
-      // The entry at `j` stays when its home is cyclically within (i, j].
-      const home: i32 = k & mask
-      const stays: boolean = i <= j ? home > i && home <= j : home > i || home <= j
-      if (!stays) {
-        this.mapKeys[i] = k
-        this.mapValues[i] = this.mapValues[j]
-        i = j
+      // The entry at `at` stays when its home is cyclically within (hole, at].
+      const home: i32 = toI32(toU32(k) & mask)
+      const stays: boolean = hole <= at ? home > hole && home <= at : home > hole || home <= at
+      if (!stays && hole >= 0 && hole < toI32(keys.length) && hole < toI32(values.length)) {
+        keys[hole] = k
+        values[hole] = values[at]
+        hole = at
       }
     }
-    this.mapKeys[i] = -1
+    if (hole >= 0 && hole < toI32(keys.length)) {
+      keys[hole] = -1
+    }
   }
 }
 

@@ -172,7 +172,7 @@ import {
 } from "nish:net"
 import { monotonicNanos } from "nish:process"
 import { Secret } from "nish:secret"
-import { copyBytes, getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
+import { copyBytes, getI32BE, getU16BE, tryCopyBytes } from "nish/bytes"
 import {
   PG_ERR_CLOSED,
   PG_ERR_ENCODING,
@@ -214,7 +214,7 @@ export const PG_ASYNC_MAX_STATEMENTS: i32 = 64
 export const PG_ASYNC_MAX_DEPTH: i32 = 16
 /**
  * `pgAsyncSend`'s answer for a statement it did not send because a parameter
- * holds a NUL; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
+ * holds a NUL, or its Bind would pass 2^30 bytes; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
  * connection is reused.
  */
 export const PG_ASYNC_UNSENT: i32 = -1
@@ -256,6 +256,41 @@ const PG_ASYNC_MAX_CAP: i32 = 1073741823
 const PG_ASYNC_MAX_ROWS: i32 = 16777216
 // What a kept cell costs `maxResultBytes` beyond its bytes: its string and its NULL flag.
 const PG_ASYNC_CELL_COST: i32 = 16
+// Every wrap above is a power of two, so a count steps with a mask one below it.
+const PG_ASYNC_CLAIM_MASK: i32 = PG_ASYNC_CLAIM_WRAP - 1
+const PG_ASYNC_SEAT_MASK: i32 = PG_ASYNC_SEAT_WRAP - 1
+const PG_ASYNC_SEQ_MASK: i32 = PG_ASYNC_SEQ_WRAP - 1
+const PG_ASYNC_QUEUE_MASK: i32 = PG_ASYNC_QUEUE_WRAP - 1
+
+/**
+ * `n` plus one, wrapped below `mask` plus one, a power of two: for `n` below
+ * that wrap it is `(n + 1) % wrap`. The sum is `u32`, which wraps by
+ * definition, so it needs no overflow check.
+ */
+const pgAsyncStep = (n: i32, mask: i32): i32 => toI32((toU32(n) + toU32(1)) & toU32(mask))
+
+/**
+ * How far `from` is behind `to`, two counts that wrap below `mask` plus one,
+ * a power of two: `(to - from + wrap) % wrap` for counts below the wrap,
+ * taken in `u32`, which wraps by definition.
+ */
+const pgAsyncGap = (to: i32, from: i32, mask: i32): i32 => toI32((toU32(to) - toU32(from)) & toU32(mask))
+
+/**
+ * Where wake `w`'s socket pair starts in `wakes`, `2w`: in `u32` the double
+ * wraps rather than checks, and a wake past 2^30 comes out negative, which
+ * every caller checks against `wakes` before it reads.
+ */
+const pgAsyncPair = (w: i32): i32 => toI32(toU32(w) * toU32(2))
+
+/** `n` plus one, held at the `i32` ceiling: a statistic that counts on, never back. */
+const pgAsyncCount = (n: i32): i32 => (n < 2147483647 ? n + 1 : n)
+
+/**
+ * `n` less 1, but not below 0: a waiter count is above 0 when a task takes
+ * itself off it, and a ring's unseen count only ever compares with 0.
+ */
+const pgAsyncUncount = (n: i32): i32 => (n > 0 ? n - 1 : 0)
 
 /**
  * Authenticated PostgreSQL connections that spawned tasks share. Build one
@@ -306,13 +341,20 @@ export class PgAsyncPool {
    * 1 to `PG_ASYNC_MAX_DEPTH`.
    */
   depth: i32 = 8
-  /** How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. */
+  /**
+   * How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live
+   * connection had room, held at 2^31 - 1 rather than wrapping.
+   */
   waits: i32 = 0
-  /** How many times `pgAsyncTurn` waited for the answers seated ahead of its own. */
+  /**
+   * How many times `pgAsyncTurn` waited for the answers seated ahead of its
+   * own, held at 2^31 - 1 rather than wrapping.
+   */
   turnWaits: i32 = 0
   /**
    * How many connections were closed rather than given back: by
-   * `pgAsyncRelease`, or once a lost pipeline emptied.
+   * `pgAsyncRelease`, or once a lost pipeline emptied. It is held at
+   * 2^31 - 1 rather than wrapping.
    */
   dropped: i32 = 0
   /**
@@ -321,7 +363,7 @@ export class PgAsyncPool {
    * for as long as the server takes.
    */
   connectWaitMs: i32 = 10000
-  /** How many connections `pgAsyncConnect` made, in all. */
+  /** How many connections `pgAsyncConnect` made, in all, held at 2^31 - 1 rather than wrapping. */
   connects: i32 = 0
   /**
    * The queue number of the first task still waiting for a seat. Of the
@@ -416,31 +458,36 @@ export class PgAsyncPool {
       panic("nish/net/postgres-async: a PgAsyncPool size out of range")
     }
     this.size = size
-    this.fds = new Array<i32>(size)
-    this.claimed = new Array<u8>(size)
-    this.claims = new Array<i32>(size)
+    // As `u16`s the lengths need no check: the size is 1 to 64 here, so the
+    // most any of them holds is 64 seats of 64 statements.
+    const slots: u16 = toU16(size)
+    const statements: u16 = slots * toU16(PG_ASYNC_MAX_STATEMENTS)
+    const seats: u16 = slots * toU16(PG_ASYNC_MAX_DEPTH)
+    const wakes: u16 = toU16(PG_ASYNC_WAKES)
+    this.fds = new Array<i32>(slots)
+    this.claimed = new Array<u8>(slots)
+    this.claims = new Array<i32>(slots)
     this.statements = []
-    this.prepared = new Array<u8>(size * PG_ASYNC_MAX_STATEMENTS)
+    this.prepared = new Array<u8>(statements)
     this.inputs = []
-    this.inStart = new Array<i32>(size)
-    this.inEnd = new Array<i32>(size)
-    this.inAnswer = new Array<i32>(size)
-    this.inParsed = new Array<u8>(size)
-    this.nextSeq = new Array<i32>(size)
-    this.served = new Array<i32>(size)
-    this.doomAt = new Array<i32>(size)
-    this.seated = new Array<i32>(size)
-    this.writing = new Array<u8>(size)
-    this.seatUsed = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
-    this.seatSeq = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
-    this.seatStatement = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
-    this.seatParse = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
-    this.seatWaiting = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
-    this.seatClaims = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
-    this.seatAbandoned = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
-    this.skipping = new Array<u8>(size)
-    const wakes: i32 = PG_ASYNC_WAKES
-    this.wakes = new Array<i32>(wakes * 2)
+    this.inStart = new Array<i32>(slots)
+    this.inEnd = new Array<i32>(slots)
+    this.inAnswer = new Array<i32>(slots)
+    this.inParsed = new Array<u8>(slots)
+    this.nextSeq = new Array<i32>(slots)
+    this.served = new Array<i32>(slots)
+    this.doomAt = new Array<i32>(slots)
+    this.seated = new Array<i32>(slots)
+    this.writing = new Array<u8>(slots)
+    this.seatUsed = new Array<u8>(seats)
+    this.seatSeq = new Array<i32>(seats)
+    this.seatStatement = new Array<i32>(seats)
+    this.seatParse = new Array<u8>(seats)
+    this.seatWaiting = new Array<u8>(seats)
+    this.seatClaims = new Array<i32>(seats)
+    this.seatAbandoned = new Array<u8>(seats)
+    this.skipping = new Array<u8>(slots)
+    this.wakes = new Array<i32>(wakes * toU16(2))
     this.wakePending = new Array<u8>(wakes)
     this.wakeBytes = new Array<u8>(8)
     this.wakePair = new Array<i32>(2)
@@ -448,12 +495,12 @@ export class PgAsyncPool {
     this.wakeRings = new Array<i32>(wakes)
     this.wakeUnseen = new Array<i32>(wakes)
     this.seatGone = new Array<u8>(PG_ASYNC_QUEUE)
-    for (let s: i32 = 0; s < size; s++) {
+    for (let s: i32 = 0; s < toI32(this.fds.length) && s < toI32(this.doomAt.length); s++) {
       this.fds[s] = -1
       this.doomAt[s] = -1
       this.inputs.push(new Array<u8>(PG_ASYNC_INPUT_SIZE))
     }
-    for (let w: i32 = 0; w < wakes * 2; w++) {
+    for (let w: i32 = 0; w < toI32(this.wakes.length); w++) {
       this.wakes[w] = -1
     }
   }
@@ -463,13 +510,14 @@ export class PgAsyncPool {
    * @returns The count, 0 to `size`.
    */
   live(): i32 {
-    let n: i32 = 0
-    for (let s: i32 = 0; s < this.size; s++) {
+    // A `u32` count wraps rather than checks: it never passes `size`.
+    let n: u32 = 0
+    for (let s: i32 = 0; s < toI32(this.fds.length); s++) {
       if (this.fds[s] >= 0) {
         n += 1
       }
     }
-    return n
+    return toI32(n)
   }
 
   /**
@@ -479,28 +527,41 @@ export class PgAsyncPool {
    */
   close(): void {
     const terminate: u8[] = [88, 0, 0, 0, 4]
-    for (let s: i32 = 0; s < this.size; s++) {
+    for (
+      let s: i32 = 0;
+      s < toI32(this.fds.length) && s < toI32(this.claimed.length) && s < toI32(this.claims.length);
+      s++
+    ) {
+      // The slot is marked closed before the calls, which the bounds above do not outlive.
       const fd: i32 = this.fds[s]
-      if (fd >= 0) {
-        netWrite(fd, terminate, 0, 5)
-        netClose(fd)
-        this.fds[s] = -1
-      }
+      this.fds[s] = -1
       this.claimed[s] = 0
-      this.claims[s] = (this.claims[s] + 1) % PG_ASYNC_CLAIM_WRAP
-      for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-        const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
-        this.seatUsed[seat] = 0
-        this.seatWaiting[seat] = 0
-        this.seatAbandoned[seat] = 0
-        this.seatClaims[seat] = (this.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
+      this.claims[s] = pgAsyncStep(this.claims[s], PG_ASYNC_CLAIM_MASK)
+      if (fd >= 0) {
+        netWrite(fd, terminate, 0, toI32(terminate.length))
+        netClose(fd)
       }
       pgAsyncForget(this, s)
     }
+    // Every slot's seats, which lie one after another.
+    for (
+      let seat: i32 = 0;
+      seat < toI32(this.seatUsed.length) &&
+      seat < toI32(this.seatWaiting.length) &&
+      seat < toI32(this.seatAbandoned.length) &&
+      seat < toI32(this.seatClaims.length);
+      seat++
+    ) {
+      this.seatUsed[seat] = 0
+      this.seatWaiting[seat] = 0
+      this.seatAbandoned[seat] = 0
+      this.seatClaims[seat] = pgAsyncStep(this.seatClaims[seat], PG_ASYNC_SEAT_MASK)
+    }
     for (let w: i32 = 0; w < toI32(this.wakes.length); w++) {
-      if (this.wakes[w] >= 0) {
-        netClose(this.wakes[w])
-        this.wakes[w] = -1
+      const fd: i32 = this.wakes[w]
+      this.wakes[w] = -1
+      if (fd >= 0) {
+        netClose(fd)
       }
     }
   }
@@ -508,6 +569,35 @@ export class PgAsyncPool {
 
 /** Resets slot `s`'s pipeline: nothing in flight, nothing prepared, nothing buffered. */
 const pgAsyncForget = (pool: PgAsyncPool, s: i32): void => {
+  // 64 is PG_ASYNC_MAX_SIZE, written as a literal: the prover takes a bound
+  // from a literal but not from a module constant, and the bound proves the
+  // `prepared` offsets below cannot overflow.
+  if (s < 0 || s >= 64) {
+    return
+  }
+  if (
+    s >= toI32(pool.nextSeq.length) ||
+    s >= toI32(pool.served.length) ||
+    s >= toI32(pool.doomAt.length) ||
+    s >= toI32(pool.seated.length) ||
+    s >= toI32(pool.writing.length) ||
+    s >= toI32(pool.inStart.length) ||
+    s >= toI32(pool.inEnd.length) ||
+    s >= toI32(pool.inAnswer.length) ||
+    s >= toI32(pool.inParsed.length) ||
+    s >= toI32(pool.skipping.length)
+  ) {
+    // No such slot: nothing to reset.
+    return
+  }
+  const first: i32 = s * PG_ASYNC_MAX_STATEMENTS
+  // 64 is PG_ASYNC_MAX_STATEMENTS, a literal for the same reason.
+  for (let q: i32 = 0; q < 64; q++) {
+    const at: i32 = first + q
+    if (at < toI32(pool.prepared.length)) {
+      pool.prepared[at] = 0
+    }
+  }
   pool.nextSeq[s] = 0
   pool.served[s] = 0
   pool.doomAt[s] = -1
@@ -518,9 +608,6 @@ const pgAsyncForget = (pool: PgAsyncPool, s: i32): void => {
   pool.inAnswer[s] = -1
   pool.inParsed[s] = 0
   pool.skipping[s] = 0
-  for (let q: i32 = 0; q < PG_ASYNC_MAX_STATEMENTS; q++) {
-    pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + q] = 0
-  }
 }
 
 /**
@@ -618,7 +705,11 @@ export class PgAsyncResult {
    * @returns The text the server sent.
    */
   text(row: i32, column: i32): string {
-    return this.values[this.cell(row, column)]
+    const at: i32 = this.cell(row, column)
+    if (at < 0 || at >= toI32(this.values.length)) {
+      panic("nish/net/postgres-async: a cell out of range")
+    }
+    return this.values[at]
   }
 
   /**
@@ -628,11 +719,16 @@ export class PgAsyncResult {
    * @returns True for a NULL.
    */
   isNull(row: i32, column: i32): boolean {
-    return this.nulls[this.cell(row, column)]
+    const at: i32 = this.cell(row, column)
+    if (at < 0 || at >= toI32(this.nulls.length)) {
+      panic("nish/net/postgres-async: a cell out of range")
+    }
+    return this.nulls[at]
   }
 
   /**
-   * A cell read as a decimal `i32`, or `fallback` when it is NULL or not one.
+   * A cell read as a decimal `i32`, or `fallback` when it is NULL or not one;
+   * panics on a row or column out of range.
    * @param row The row, from 0.
    * @param column The column, from 0.
    * @param fallback The answer for a NULL or a cell that is not a decimal `i32`.
@@ -640,51 +736,60 @@ export class PgAsyncResult {
    */
   int(row: i32, column: i32, fallback: i32): i32 {
     const at: i32 = this.cell(row, column)
+    if (at < 0 || at >= toI32(this.nulls.length) || at >= toI32(this.values.length)) {
+      panic("nish/net/postgres-async: a cell out of range")
+    }
     if (this.nulls[at]) {
       return fallback
     }
     return pgAsyncDecimal(this.values[at], fallback)
   }
 
-  /** The index into `values` of a cell, after the bounds check. */
+  /**
+   * The index into `values` of a cell, or -1 for a row or column out of
+   * range; the caller panics on -1, as its contract says.
+   */
   private cell(row: i32, column: i32): i32 {
     if (row < 0 || row >= this.rows || column < 0 || column >= this.columns) {
-      panic("nish/net/postgres-async: a cell out of range")
+      return -1
     }
-    return row * this.columns + column
+    // In `i64` the sum cannot overflow; past the cells kept it is out of range too.
+    const at: i64 = toI64(row) * toI64(this.columns) + toI64(column)
+    return at < toI64(this.values.length) ? toI32(at) : -1
   }
 }
 
 /** `s` as a decimal `i32`, or `fallback` when it is not one. */
 const pgAsyncDecimal = (s: string, fallback: i32): i32 => {
   const n: i32 = toI32(s.length)
-  if (n === 0 || n > 11) {
+  if (n < 1 || n > 11) {
     return fallback
   }
-  let at: i32 = 0
-  const negative: boolean = s.charCodeAt(0) === 45
-  if (negative) {
-    at = 1
-    if (n === 1) {
-      return fallback
-    }
-  }
-  let v: i64 = 0
-  while (at < n) {
+  let negative: boolean = false
+  // At most 11 digits fit a `u64` with room to spare, and `u64` arithmetic
+  // wraps rather than checks, so the sum needs no overflow test.
+  let v: u64 = 0
+  for (let at: i32 = 0; at < n; at++) {
     const c: i32 = toI32(s.charCodeAt(at))
-    if (c < 48 || c > 57) {
+    if (at === 0 && c === 45) {
+      negative = true
+    } else if (c < 48 || c > 57) {
       return fallback
+    } else {
+      v = v * toU64(10) + toU64(c - 48)
     }
-    v = v * toI64(10) + toI64(c - 48)
-    at += 1
   }
-  if (negative) {
-    v = -v
-  }
-  if (v < toI64(-2147483648) || v > toI64(2147483647)) {
+  const w: i64 = toI64(v)
+  if (w < 0 || w > 2147483648) {
     return fallback
   }
-  return toI32(v)
+  if (negative && n === 1) {
+    return fallback
+  }
+  if (negative) {
+    return toI32(-w)
+  }
+  return w > toI64(2147483647) ? fallback : toI32(w)
 }
 
 /**
@@ -705,7 +810,8 @@ const pgAsyncSlot = (pool: PgAsyncPool, ticket: i32): i32 => {
   const slot: i32 = ticket >= 0 ? ticket % PG_ASYNC_MAX_SIZE : -1
   if (
     slot < 0 ||
-    slot >= pool.size ||
+    slot >= toI32(pool.claimed.length) ||
+    slot >= toI32(pool.claims.length) ||
     toI32(pool.claimed[slot]) !== 1 ||
     toI32(ticket / PG_ASYNC_MAX_SIZE) !== pool.claims[slot]
   ) {
@@ -743,7 +849,7 @@ export const pgAsyncConnect = async (
     panic("nish/net/postgres-async: a TCP host must be a numeric address")
   }
   const nonce: u8[] = new Array<u8>(PG_ASYNC_NONCE_BYTES)
-  for (let s: i32 = 0; s < pool.size; s++) {
+  for (let s: i32 = 0; s < toI32(pool.fds.length); s++) {
     if (pool.fds[s] >= 0) {
       continue
     }
@@ -756,10 +862,11 @@ export const pgAsyncConnect = async (
     }
     const made: boolean = await pgAsyncStartup(conn, fd, monotonicNanos(), pool.connectWaitMs)
     conn.dispose()
-    if (made) {
+    // The handshake awaited, so the slot is checked against the arrays again.
+    if (made && s < toI32(pool.fds.length) && s < toI32(pool.claimed.length)) {
       pool.fds[s] = fd
       pool.claimed[s] = 0
-      pool.connects += 1
+      pool.connects = pgAsyncCount(pool.connects)
       pgAsyncForget(pool, s)
     } else {
       netClose(fd)
@@ -779,13 +886,14 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32, began: i64, waitMs: i
     return false
   }
   while (true) {
-    while (conn.outputEnd() > conn.outputStart()) {
-      const n: i32 = netWrite(
-        fd,
-        conn.outputBuffer(),
-        conn.outputStart(),
-        conn.outputEnd() - conn.outputStart()
-      )
+    while (true) {
+      const start: i32 = conn.outputStart()
+      const end: i32 = conn.outputEnd()
+      if (start < 0 || end <= start) {
+        break
+      }
+      // Both are at least 0 and `end` is past `start`, so the `u32` difference is exact.
+      const n: i32 = netWrite(fd, conn.outputBuffer(), start, toI32(toU32(end) - toU32(start)))
       if (n === PG_ASYNC_AGAIN) {
         const waited: boolean = await pgAsyncWaitUntil(fd, true, began, waitMs)
         if (!waited) {
@@ -837,10 +945,11 @@ const pgAsyncWaitUntil = async (fd: i32, write: boolean, began: i64, waitMs: i32
   } else if (waitMs <= 0) {
     waited = await readable(fd)
   } else {
-    const left: i32 = waitMs - pgAsyncSince(began)
-    if (left <= 0) {
+    const since: i32 = pgAsyncSince(began)
+    if (since < 0 || since >= waitMs) {
       return false
     }
+    const left: i32 = waitMs - since
     if (write) {
       waited = await writableWithin(fd, left)
     } else {
@@ -852,7 +961,9 @@ const pgAsyncWaitUntil = async (fd: i32, write: boolean, began: i64, waitMs: i32
 
 /** Milliseconds since `began`, a `monotonicNanos` reading. */
 const pgAsyncSince = (began: i64): i32 => {
-  const ms: i64 = (monotonicNanos() - began) / toI64(1000000)
+  // `u64` arithmetic wraps rather than checks; a clock read after `began`
+  // is never behind it, so the difference is the real one.
+  const ms: i64 = toI64((toU64(monotonicNanos()) - toU64(began)) / toU64(1000000))
   return ms > toI64(1073741823) ? 1073741823 : toI32(ms)
 }
 
@@ -864,7 +975,20 @@ const pgAsyncSince = (began: i64): i32 => {
  * many would leave the rest waiting until their time ran out.
  */
 const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
-  const fd: i32 = pool.wakes[w * 2 + 1]
+  if (w < 0 || w >= toI32(pool.waiters.length) || w >= toI32(pool.wakePending.length)) {
+    // No such wake: nobody waits on it.
+    return
+  }
+  // A wake's pair is `wakes[2w]` (read end) and `wakes[2w + 1]` (write end).
+  const start: i32 = pgAsyncPair(w)
+  if (start < 0 || start >= toI32(pool.wakes.length)) {
+    return
+  }
+  const end: i32 = start + 1
+  if (end >= toI32(pool.wakes.length) || toI32(pool.wakeBytes.length) < 1) {
+    return
+  }
+  const fd: i32 = pool.wakes[end]
   if (pool.waiters[w] <= 0 || fd < 0) {
     return
   }
@@ -873,13 +997,22 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
     if (netWrite(fd, pool.wakeBytes, 0, 1) !== 1) {
       return
     }
-    pool.wakePending[w] = 1
   }
+  // The write was a call, so the wake is checked against the arrays again.
+  if (
+    w >= toI32(pool.waiters.length) ||
+    w >= toI32(pool.wakePending.length) ||
+    w >= toI32(pool.wakeUnseen.length) ||
+    w >= toI32(pool.wakeRings.length)
+  ) {
+    return
+  }
+  pool.wakePending[w] = 1
   // Rung again while its byte is there, the byte now stays for every task
   // waiting at this ring too: one that waited again after the last ring would
   // otherwise see the byte read back before it was polled, and wait for ever.
   pool.wakeUnseen[w] = pool.waiters[w]
-  pool.wakeRings[w] = (pool.wakeRings[w] + 1) % PG_ASYNC_QUEUE_WRAP
+  pool.wakeRings[w] = pgAsyncStep(pool.wakeRings[w], PG_ASYNC_QUEUE_MASK)
 }
 
 /**
@@ -890,7 +1023,15 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
  */
 const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
   let free: i32 = 0
-  for (let s: i32 = 0; s < pool.size; s++) {
+  for (
+    let s: i32 = 0;
+    s < toI32(pool.fds.length) &&
+    s < toI32(pool.claimed.length) &&
+    s < toI32(pool.doomAt.length) &&
+    s < toI32(pool.writing.length) &&
+    s < toI32(pool.seated.length);
+    s++
+  ) {
     if (
       pool.fds[s] >= 0 &&
       toI32(pool.claimed[s]) === 0 &&
@@ -898,7 +1039,9 @@ const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
       toI32(pool.writing[s]) === 0 &&
       pool.seated[s] < pool.depth
     ) {
-      free += pool.depth - pool.seated[s]
+      // In `i64` the sum cannot overflow; it never passes 64 slots of 16 seats.
+      const next: i64 = toI64(free) + toI64(pool.depth) - toI64(pool.seated[s])
+      free = next > toI64(2147483647) ? 2147483647 : toI32(next)
     }
   }
   return free
@@ -911,7 +1054,7 @@ const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
  */
 const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   pgAsyncSignal(pool, PG_ASYNC_POOL_WAKE)
-  const queued: i32 = (pool.seatTail - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP
+  const queued: i32 = pgAsyncGap(pool.seatTail, pool.seatHead, PG_ASYNC_QUEUE_MASK)
   if (queued === 0) {
     return
   }
@@ -920,16 +1063,26 @@ const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   wake = wake > queued ? queued : wake
   wake = wake > PG_ASYNC_LANES ? PG_ASYNC_LANES : wake
   for (let k: i32 = 0; k < wake; k++) {
-    pgAsyncSignal(pool, PG_ASYNC_POOL_WAKE + 1 + ((pool.seatHead + k) % PG_ASYNC_LANES))
+    // The queue lane of the `k`th task waiting, after the pool's own wake.
+    const lane: u32 = (toU32(pool.seatHead) + toU32(k)) & toU32(PG_ASYNC_LANES - 1)
+    pgAsyncSignal(pool, toI32(toU32(PG_ASYNC_POOL_WAKE + 1) + lane))
   }
 }
 
 /** Reads wake `w`'s byte back once every task it was written for has woken, so its waiters wait again. */
 const pgAsyncDrain = (pool: PgAsyncPool, w: i32): void => {
-  const fd: i32 = pool.wakes[w * 2]
+  if (w < 0 || w >= toI32(pool.wakeUnseen.length) || w >= toI32(pool.wakePending.length)) {
+    // No such wake: no byte to read back.
+    return
+  }
+  const start: i32 = pgAsyncPair(w)
+  if (start < 0 || start >= toI32(pool.wakes.length)) {
+    return
+  }
+  const fd: i32 = pool.wakes[start]
   if (toI32(pool.wakePending[w]) === 1 && pool.wakeUnseen[w] <= 0 && fd >= 0) {
-    netRead(fd, pool.wakeBytes, 0, 8)
     pool.wakePending[w] = 0
+    netRead(fd, pool.wakeBytes, 0, 8)
   }
 }
 
@@ -939,24 +1092,60 @@ const pgAsyncDrain = (pool: PgAsyncPool, w: i32): void => {
  * A cancelled task returns at once.
  */
 const pgAsyncPark = async (pool: PgAsyncPool, w: i32, ms: i32): Promise<void> => {
-  if (pool.wakes[w * 2] < 0 && unixSocketPair(NET_UNIX_STREAM, pool.wakePair) >= 0) {
-    // Opened before this task counts as waiting, so no byte is written to a
-    // wake without a pair. Out of descriptors, it sleeps 1 ms and tries again.
-    pool.wakes[w * 2] = pool.wakePair[0]
-    pool.wakes[w * 2 + 1] = pool.wakePair[1]
+  const start: i32 = pgAsyncPair(w)
+  if (
+    w < 0 ||
+    start < 0 ||
+    start >= toI32(pool.wakes.length) ||
+    w >= toI32(pool.waiters.length) ||
+    w >= toI32(pool.wakeRings.length)
+  ) {
+    // No such wake: wait as a task with no pair does, then look again.
+    await sleep(1)
+    return
   }
-  const fd: i32 = pool.wakes[w * 2]
+  const end: i32 = start + 1
+  if (pool.wakes[start] < 0 && end < toI32(pool.wakes.length) && toI32(pool.wakePair.length) >= 2) {
+    if (unixSocketPair(NET_UNIX_STREAM, pool.wakePair) >= 0) {
+      // Opened before this task counts as waiting, so no byte is written to a
+      // wake without a pair. Out of descriptors, it sleeps 1 ms and tries again.
+      if (
+        start < toI32(pool.wakes.length) &&
+        end < toI32(pool.wakes.length) &&
+        toI32(pool.wakePair.length) >= 2
+      ) {
+        pool.wakes[start] = pool.wakePair[0]
+        pool.wakes[end] = pool.wakePair[1]
+      }
+    }
+  }
+  if (
+    start >= toI32(pool.wakes.length) ||
+    w >= toI32(pool.waiters.length) ||
+    w >= toI32(pool.wakeRings.length)
+  ) {
+    return
+  }
+  const fd: i32 = pool.wakes[start]
   const rings: i32 = pool.wakeRings[w]
-  pool.waiters[w] += 1
+  pool.waiters[w] = pgAsyncCount(pool.waiters[w])
   if (fd < 0) {
     await sleep(1)
   } else {
     await readableWithin(fd, ms)
   }
-  pool.waiters[w] -= 1
+  // The wait was a call, so the wake is checked against the arrays again.
+  if (
+    w >= toI32(pool.waiters.length) ||
+    w >= toI32(pool.wakeRings.length) ||
+    w >= toI32(pool.wakeUnseen.length)
+  ) {
+    return
+  }
+  pool.waiters[w] = pgAsyncUncount(pool.waiters[w])
   if (pool.wakeRings[w] !== rings) {
     // Waiting when the byte was written: one fewer it waits for.
-    pool.wakeUnseen[w] -= 1
+    pool.wakeUnseen[w] = pgAsyncUncount(pool.wakeUnseen[w])
   }
 }
 
@@ -982,33 +1171,46 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
       return PG_ASYNC_CANCELLED
     }
     let live: boolean = false
-    for (let s: i32 = 0; s < pool.size; s++) {
+    for (
+      let s: i32 = 0;
+      s < toI32(pool.fds.length) &&
+      s < toI32(pool.claimed.length) &&
+      s < toI32(pool.claims.length) &&
+      s < toI32(pool.seated.length) &&
+      s < toI32(pool.doomAt.length);
+      s++
+    ) {
       if (pool.fds[s] < 0) {
         continue
       }
       live = true
       if (toI32(pool.claimed[s]) === 0 && pool.seated[s] === 0 && pool.doomAt[s] < 0) {
+        // The claim count wraps below 2^24, so in `u32` the ticket, the count
+        // times 64 slots plus the slot, is exact and below 2^30.
+        const claim: u32 = (toU32(pool.claims[s]) + toU32(1)) & toU32(PG_ASYNC_CLAIM_MASK)
         pool.claimed[s] = 1
-        pool.claims[s] = (pool.claims[s] + 1) % PG_ASYNC_CLAIM_WRAP
+        pool.claims[s] = toI32(claim)
         if (waited) {
           // Another waiter may find room this one did not take.
           pgAsyncWakePool(pool)
         }
-        return pool.claims[s] * PG_ASYNC_MAX_SIZE + s
+        return toI32(claim * toU32(PG_ASYNC_MAX_SIZE) + toU32(s))
       }
     }
     if (!live) {
       return PG_POOL_NONE
     }
-    const left: i32 = pool.claimWaitMs - pgAsyncSince(began)
-    if (left <= 0) {
+    const limit: i32 = pool.claimWaitMs
+    const since: i32 = pgAsyncSince(began)
+    if (limit <= 0 || since < 0 || since >= limit) {
       return PG_CARRIER_FULL
     }
+    const left: i32 = limit - since
     const skipped: boolean = await pgAsyncSkipAny(pool)
     if (skipped) {
       continue
     }
-    pool.waits += 1
+    pool.waits = pgAsyncCount(pool.waits)
     waited = true
     await pgAsyncPark(pool, PG_ASYNC_POOL_WAKE, left)
     pgAsyncDrain(pool, PG_ASYNC_POOL_WAKE)
@@ -1027,14 +1229,24 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
  */
 export const pgAsyncRelease = (pool: PgAsyncPool, ticket: i32, reusable: boolean): void => {
   const slot: i32 = pgAsyncSlot(pool, ticket)
+  if (
+    slot < 0 ||
+    slot >= toI32(pool.fds.length) ||
+    slot >= toI32(pool.claimed.length) ||
+    slot >= toI32(pool.claims.length)
+  ) {
+    // `pgAsyncSlot` panicked already on a ticket with no slot.
+    return
+  }
+  const fd: i32 = pool.fds[slot]
+  pool.claimed[slot] = 0
+  pool.claims[slot] = pgAsyncStep(pool.claims[slot], PG_ASYNC_CLAIM_MASK)
   if (!reusable) {
-    netClose(pool.fds[slot])
     pool.fds[slot] = -1
-    pool.dropped += 1
+    pool.dropped = pgAsyncCount(pool.dropped)
+    netClose(fd)
     pgAsyncForget(pool, slot)
   }
-  pool.claimed[slot] = 0
-  pool.claims[slot] = (pool.claims[slot] + 1) % PG_ASYNC_CLAIM_WRAP
   pgAsyncWakePool(pool)
 }
 
@@ -1068,13 +1280,20 @@ const pgAsyncUnqueue = (pool: PgAsyncPool, n: i32): void => {
     return
   }
   if (n !== pool.seatHead) {
-    pool.seatGone[n % PG_ASYNC_QUEUE] = 1
+    const at: i32 = n % PG_ASYNC_QUEUE
+    if (at >= 0 && at < toI32(pool.seatGone.length)) {
+      pool.seatGone[at] = 1
+    }
     return
   }
-  pool.seatHead = (pool.seatHead + 1) % PG_ASYNC_QUEUE_WRAP
-  while (pool.seatHead !== pool.seatTail && toI32(pool.seatGone[pool.seatHead % PG_ASYNC_QUEUE]) !== 0) {
-    pool.seatGone[pool.seatHead % PG_ASYNC_QUEUE] = 0
-    pool.seatHead = (pool.seatHead + 1) % PG_ASYNC_QUEUE_WRAP
+  pool.seatHead = pgAsyncStep(pool.seatHead, PG_ASYNC_QUEUE_MASK)
+  while (pool.seatHead !== pool.seatTail) {
+    const at: i32 = pool.seatHead % PG_ASYNC_QUEUE
+    if (at < 0 || at >= toI32(pool.seatGone.length) || toI32(pool.seatGone[at]) === 0) {
+      break
+    }
+    pool.seatGone[at] = 0
+    pool.seatHead = pgAsyncStep(pool.seatHead, PG_ASYNC_QUEUE_MASK)
   }
   pgAsyncWakePool(pool)
 }
@@ -1119,21 +1338,34 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     }
     let live: boolean = false
     let best: i32 = -1
+    let bestSeated: i32 = 0
     let free: i32 = 0
-    for (let s: i32 = 0; s < pool.size; s++) {
+    for (
+      let s: i32 = 0;
+      s < toI32(pool.fds.length) &&
+      s < toI32(pool.claimed.length) &&
+      s < toI32(pool.doomAt.length) &&
+      s < toI32(pool.seated.length) &&
+      s < toI32(pool.writing.length);
+      s++
+    ) {
       if (pool.fds[s] < 0) {
         continue
       }
       live = true
-      if (toI32(pool.claimed[s]) !== 0 || pool.doomAt[s] >= 0 || pool.seated[s] >= pool.depth) {
+      const seated: i32 = pool.seated[s]
+      if (toI32(pool.claimed[s]) !== 0 || pool.doomAt[s] >= 0 || seated >= pool.depth) {
         continue
       }
-      free += pool.depth - pool.seated[s]
+      // In `i64` the sum cannot overflow; it never passes 64 slots of 16 seats.
+      const next: i64 = toI64(free) + toI64(pool.depth) - toI64(seated)
+      free = next > toI64(2147483647) ? 2147483647 : toI32(next)
       if (toI32(pool.writing[s]) !== 0) {
         continue
       }
-      if (best < 0 || pool.seated[s] < pool.seated[best]) {
+      if (best < 0 || seated < bestSeated) {
         best = s
+        bestSeated = seated
       }
     }
     // First come, first seated: under load a task that lost the seat it was
@@ -1143,52 +1375,77 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     // takes one only while none waits.
     const turn: boolean =
       queued >= 0
-        ? (queued - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP < free
+        ? pgAsyncGap(queued, pool.seatHead, PG_ASYNC_QUEUE_MASK) < free
         : pool.seatHead === pool.seatTail
     if (best >= 0 && turn) {
+      // `best` is below 64 and `statement` below 64, so in `u32` these
+      // offsets are exact; each is then checked against its arrays.
+      const known: i32 = toI32(toU32(best) * toU32(PG_ASYNC_MAX_STATEMENTS) + toU32(statement))
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-        const seat: i32 = best * PG_ASYNC_MAX_DEPTH + k
+        const seat: i32 = toI32(toU32(best) * toU32(PG_ASYNC_MAX_DEPTH) + toU32(k))
+        if (
+          seat < 0 ||
+          seat >= toI32(pool.seatUsed.length) ||
+          seat >= toI32(pool.seatWaiting.length) ||
+          seat >= toI32(pool.seatSeq.length) ||
+          seat >= toI32(pool.seatStatement.length) ||
+          seat >= toI32(pool.seatParse.length) ||
+          seat >= toI32(pool.seatClaims.length) ||
+          known < 0 ||
+          known >= toI32(pool.prepared.length) ||
+          best >= toI32(pool.nextSeq.length) ||
+          best >= toI32(pool.seated.length) ||
+          best >= toI32(pool.writing.length)
+        ) {
+          // Past the slot's seats: none free on it.
+          break
+        }
         if (toI32(pool.seatUsed[seat]) !== 0) {
           continue
         }
-        const known: i32 = best * PG_ASYNC_MAX_STATEMENTS + statement
+        // The seat claim count wraps below 2^20, so the ticket, the count
+        // times 1024 seats plus the seat, is exact in `u32` and below 2^30.
+        const claim: u32 = (toU32(pool.seatClaims[seat]) + toU32(1)) & toU32(PG_ASYNC_SEAT_MASK)
         pool.seatUsed[seat] = 1
         pool.seatWaiting[seat] = 0
         pool.seatSeq[seat] = pool.nextSeq[best]
         pool.seatStatement[seat] = statement
         pool.seatParse[seat] = toI32(pool.prepared[known]) === 0 ? 1 : 0
         pool.prepared[known] = 1
-        pool.nextSeq[best] = (pool.nextSeq[best] + 1) % PG_ASYNC_SEQ_WRAP
-        pool.seated[best] += 1
+        pool.nextSeq[best] = pgAsyncStep(pool.nextSeq[best], PG_ASYNC_SEQ_MASK)
+        pool.seated[best] = pgAsyncCount(pool.seated[best])
         pool.writing[best] = 1
-        pool.seatClaims[seat] = (pool.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
+        pool.seatClaims[seat] = toI32(claim)
         // The next in the queue may find a seat this one did not take.
         pgAsyncUnqueue(pool, queued)
-        return pool.seatClaims[seat] * PG_ASYNC_SEATS + seat
+        return toI32(claim * toU32(PG_ASYNC_SEATS) + toU32(seat))
       }
     }
     if (!live) {
       pgAsyncUnqueue(pool, queued)
       return PG_POOL_NONE
     }
-    const left: i32 = pool.claimWaitMs - pgAsyncSince(began)
-    if (left <= 0) {
+    const limit: i32 = pool.claimWaitMs
+    const since: i32 = pgAsyncSince(began)
+    if (limit <= 0 || since < 0 || since >= limit) {
       pgAsyncUnqueue(pool, queued)
       return PG_CARRIER_FULL
     }
-    if (
-      queued < 0 &&
-      (pool.seatTail - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP < PG_ASYNC_QUEUE
-    ) {
+    const left: i32 = limit - since
+    if (queued < 0 && pgAsyncGap(pool.seatTail, pool.seatHead, PG_ASYNC_QUEUE_MASK) < PG_ASYNC_QUEUE) {
       queued = pool.seatTail
-      pool.seatTail = (pool.seatTail + 1) % PG_ASYNC_QUEUE_WRAP
+      pool.seatTail = pgAsyncStep(pool.seatTail, PG_ASYNC_QUEUE_MASK)
     }
     const skipped: boolean = await pgAsyncSkipAny(pool)
     if (skipped) {
       continue
     }
-    const w: i32 = queued >= 0 ? PG_ASYNC_POOL_WAKE + 1 + (queued % PG_ASYNC_LANES) : PG_ASYNC_POOL_WAKE
-    pool.waits += 1
+    // A queued task waits on its queue lane, after the pool's own wake.
+    const w: i32 =
+      queued >= 0
+        ? toI32(toU32(PG_ASYNC_POOL_WAKE + 1) + (toU32(queued) & toU32(PG_ASYNC_LANES - 1)))
+        : PG_ASYNC_POOL_WAKE
+    pool.waits = pgAsyncCount(pool.waits)
     await pgAsyncPark(pool, w, left)
     pgAsyncDrain(pool, w)
   }
@@ -1199,7 +1456,8 @@ const pgAsyncSeatOf = (pool: PgAsyncPool, ticket: i32): i32 => {
   const seat: i32 = ticket >= 0 ? ticket % PG_ASYNC_SEATS : -1
   if (
     seat < 0 ||
-    seat >= pool.size * PG_ASYNC_MAX_DEPTH ||
+    seat >= toI32(pool.seatUsed.length) ||
+    seat >= toI32(pool.seatClaims.length) ||
     toI32(pool.seatUsed[seat]) !== 1 ||
     toI32(ticket / PG_ASYNC_SEATS) !== pool.seatClaims[seat]
   ) {
@@ -1227,7 +1485,23 @@ export const pgAsyncSend = async (pool: PgAsyncPool, ticket: i32, params: PgAsyn
   if (cancelled()) {
     return PG_ASYNC_UNSENT_CANCELLED
   }
+  const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (
+    seat < 0 ||
+    seat >= toI32(pool.seatStatement.length) ||
+    seat >= toI32(pool.seatParse.length) ||
+    s < 0 ||
+    s >= toI32(pool.fds.length)
+  ) {
+    // `pgAsyncSeatOf` panicked already on a ticket with no seat.
+    return PG_ASYNC_UNSENT
+  }
   const statement: i32 = pool.seatStatement[seat]
+  if (statement < 0 || statement >= toI32(pool.statements.length)) {
+    // `pgAsyncSeat` seats only a registered statement.
+    return PG_ASYNC_UNSENT
+  }
+  const fd: i32 = pool.fds[s]
   const out: u8[] | null = pgAsyncEncode(
     pool.statements[statement],
     statement,
@@ -1237,10 +1511,10 @@ export const pgAsyncSend = async (pool: PgAsyncPool, ticket: i32, params: PgAsyn
   if (out === null) {
     return PG_ASYNC_UNSENT
   }
-  const fd: i32 = pool.fds[toI32(seat / PG_ASYNC_MAX_DEPTH)]
   let sent: i32 = 0
-  while (sent < toI32(out.length)) {
-    const n: i32 = netWrite(fd, out, sent, toI32(out.length) - sent)
+  while (sent >= 0 && sent < toI32(out.length)) {
+    // Both are at least 0 and `sent` is short of the end, so the `u32` difference is exact.
+    const n: i32 = netWrite(fd, out, sent, toI32(toU32(toI32(out.length)) - toU32(sent)))
     if (n === PG_ASYNC_AGAIN) {
       const waited: boolean = await writable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
@@ -1248,26 +1522,73 @@ export const pgAsyncSend = async (pool: PgAsyncPool, ticket: i32, params: PgAsyn
         return PG_ASYNC_UNSENT_CANCELLED
       }
       if (failed !== 0) {
-        return PG_ASYNC_BROKEN + failed
+        return pgAsyncBroken(failed)
       }
     } else if (n <= 0) {
-      return PG_ASYNC_BROKEN + (n < PG_ASYNC_BROKEN ? n : 0)
+      return n < PG_ASYNC_BROKEN ? pgAsyncBroken(n) : PG_ASYNC_BROKEN
     } else {
-      sent += n
+      // A write takes no more than it was given, so `sent` stays within `out`.
+      const next: i64 = toI64(sent) + toI64(n)
+      sent = next > toI64(out.length) ? toI32(out.length) : toI32(next)
     }
   }
   return sent
 }
 
-/** How far `seq` is past slot `s`'s next answer, in the order of its pipeline. */
-const pgAsyncAhead = (pool: PgAsyncPool, s: i32, seq: i32): i32 =>
-  (seq - pool.served[s] + PG_ASYNC_SEQ_WRAP) % PG_ASYNC_SEQ_WRAP
+/**
+ * What `pgAsyncSend` answers for a broken write: `PG_ASYNC_BROKEN` beside
+ * the failure `e` (0 or below), so it stays below -15, and no lower than
+ * the least `i32`.
+ */
+const pgAsyncBroken = (e: i32): i32 => {
+  const sum: i64 = toI64(PG_ASYNC_BROKEN) + toI64(e)
+  return sum < toI64(-2147483648) ? -2147483648 : toI32(sum)
+}
 
-/** Whether seat `seat`'s answer is lost: its connection failed at or before it. */
+/**
+ * How far `seq` is past `served`, a slot's next answer, in the order of its
+ * pipeline: both wrap below `PG_ASYNC_SEQ_WRAP`.
+ */
+const pgAsyncAhead = (served: i32, seq: i32): i32 => pgAsyncGap(seq, served, PG_ASYNC_SEQ_MASK)
+
+/**
+ * Where slot `s`'s `k`th seat is in the seat arrays, `s * PG_ASYNC_MAX_DEPTH
+ * + k`: in `u32` the sum wraps rather than checks, and every caller checks
+ * the seat against the arrays it reads.
+ */
+const pgAsyncSeatAt = (s: i32, k: i32): i32 => toI32(toU32(s) * toU32(PG_ASYNC_MAX_DEPTH) + toU32(k))
+
+/**
+ * Whether seat `seat`'s answer is lost: its connection failed at or before
+ * it. A seat that is not in the pool has no answer to read, so it counts as
+ * lost.
+ */
 const pgAsyncLostSeat = (pool: PgAsyncPool, seat: i32): boolean => {
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (
+    seat < 0 ||
+    s < 0 ||
+    seat >= toI32(pool.seatSeq.length) ||
+    s >= toI32(pool.doomAt.length) ||
+    s >= toI32(pool.served.length)
+  ) {
+    return true
+  }
   const at: i32 = pool.doomAt[s]
-  return at >= 0 && pgAsyncAhead(pool, s, pool.seatSeq[seat]) >= pgAsyncAhead(pool, s, at)
+  const served: i32 = pool.served[s]
+  return at >= 0 && pgAsyncAhead(served, pool.seatSeq[seat]) >= pgAsyncAhead(served, at)
+}
+
+/**
+ * Whether seat `seat`'s answer is the next its connection gives and is not
+ * lost. A seat that is not in the pool never has its turn.
+ */
+const pgAsyncInTurn = (pool: PgAsyncPool, seat: i32): boolean => {
+  const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (seat < 0 || s < 0 || seat >= toI32(pool.seatSeq.length) || s >= toI32(pool.served.length)) {
+    return false
+  }
+  return pool.served[s] === pool.seatSeq[seat] && !pgAsyncLostSeat(pool, seat)
 }
 
 /** The turn lane seat `seat` waits on: distinct for the seats of any eight slots in a row. */
@@ -1276,16 +1597,24 @@ const pgAsyncTurnLane = (seat: i32): i32 => seat % PG_ASYNC_LANES
 /**
  * Whether a task waiting on slot `s`, other than `except`'s, may go on: its
  * turn came, its answer is lost, or an abandoned answer ahead of it waits to
- * be read past.
+ * be read past. No task waits on a slot that is not in the pool.
  */
 const pgAsyncReady = (pool: PgAsyncPool, s: i32, except: i32): boolean => {
+  if (s < 0 || s >= toI32(pool.served.length)) {
+    return false
+  }
+  const served: i32 = pool.served[s]
   let waiting: boolean = false
   for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-    const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
+    const seat: i32 = pgAsyncSeatAt(s, k)
+    if (seat < 0 || seat >= toI32(pool.seatWaiting.length) || seat >= toI32(pool.seatSeq.length)) {
+      // Past the pool's seats: none more on this slot.
+      break
+    }
     if (seat === except || toI32(pool.seatWaiting[seat]) === 0) {
       continue
     }
-    if (pool.seatSeq[seat] === pool.served[s] || pgAsyncLostSeat(pool, seat)) {
+    if (pool.seatSeq[seat] === served || pgAsyncLostSeat(pool, seat)) {
       return true
     }
     waiting = true
@@ -1310,11 +1639,20 @@ const pgAsyncWakeTurns = (pool: PgAsyncPool, s: i32, except: i32): void => {
   }
   let after: i32 = -1
   for (let n: i32 = 0; n < PG_ASYNC_MAX_DEPTH; n++) {
+    // Read again each round: the signal below is a call.
+    if (s < 0 || s >= toI32(pool.served.length)) {
+      return
+    }
+    const served: i32 = pool.served[s]
     let next: i32 = -1
     let nextAhead: i32 = PG_ASYNC_SEQ_WRAP
     for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-      const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
-      const ahead: i32 = pgAsyncAhead(pool, s, pool.seatSeq[seat])
+      const seat: i32 = pgAsyncSeatAt(s, k)
+      if (seat < 0 || seat >= toI32(pool.seatSeq.length) || seat >= toI32(pool.seatWaiting.length)) {
+        // Past the pool's seats: none more on this slot.
+        break
+      }
+      const ahead: i32 = pgAsyncAhead(served, pool.seatSeq[seat])
       if (seat !== except && toI32(pool.seatWaiting[seat]) === 1 && ahead > after && ahead < nextAhead) {
         next = seat
         nextAhead = ahead
@@ -1330,16 +1668,34 @@ const pgAsyncWakeTurns = (pool: PgAsyncPool, s: i32, except: i32): void => {
 
 /**
  * Marks slot `s` lost from sequence number `seq` on, settles the abandoned
- * seats it loses, and wakes those it fails.
+ * seats it loses, and wakes those it fails. A slot that is not in the pool
+ * has nothing to lose.
  */
 const pgAsyncDoom = (pool: PgAsyncPool, s: i32, seq: i32): void => {
-  if (pool.doomAt[s] < 0 || pgAsyncAhead(pool, s, seq) < pgAsyncAhead(pool, s, pool.doomAt[s])) {
+  if (s < 0 || s >= toI32(pool.doomAt.length) || s >= toI32(pool.served.length)) {
+    return
+  }
+  const at: i32 = pool.doomAt[s]
+  const served: i32 = pool.served[s]
+  if (at < 0 || pgAsyncAhead(served, seq) < pgAsyncAhead(served, at)) {
     pool.doomAt[s] = seq
   }
   // A seat freed here closes the connection only once no seat is left on it;
   // the one being read past is settled by its reader.
   for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-    const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
+    const seat: i32 = pgAsyncSeatAt(s, k)
+    // Checked each round: settling a seat is a call.
+    if (
+      seat < 0 ||
+      seat >= toI32(pool.seatAbandoned.length) ||
+      seat >= toI32(pool.seatSeq.length) ||
+      seat >= toI32(pool.seatUsed.length) ||
+      s >= toI32(pool.skipping.length) ||
+      s >= toI32(pool.served.length)
+    ) {
+      // Past the pool's seats: none more on this slot.
+      break
+    }
     const state: i32 = toI32(pool.seatAbandoned[seat])
     const reading: boolean = toI32(pool.skipping[s]) === 1 && pool.seatSeq[seat] === pool.served[s]
     if (
@@ -1357,9 +1713,13 @@ const pgAsyncDoom = (pool: PgAsyncPool, s: i32, seq: i32): void => {
 /**
  * Leaves seat `seat` to the pool: its task was cancelled with its answer
  * unread, so the next task to wait on the connection, or for a seat on it,
- * reads past that answer instead of the connection being closed.
+ * reads past that answer instead of the connection being closed. A seat that
+ * is not in the pool has nothing to leave.
  */
 const pgAsyncAbandon = (pool: PgAsyncPool, seat: i32): void => {
+  if (seat < 0 || seat >= toI32(pool.seatAbandoned.length)) {
+    return
+  }
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
   pool.seatAbandoned[seat] = 1
   pgAsyncWakeTurns(pool, s, seat)
@@ -1368,9 +1728,13 @@ const pgAsyncAbandon = (pool: PgAsyncPool, seat: i32): void => {
 
 /**
  * An abandoned seat whose answer is read past or lost: freed once its ticket is
- * spent, else marked so `pgAsyncDone` frees it.
+ * spent, else marked so `pgAsyncDone` frees it. A seat that is not in the pool
+ * has nothing to settle.
  */
 const pgAsyncSettle = (pool: PgAsyncPool, seat: i32): void => {
+  if (seat < 0 || seat >= toI32(pool.seatAbandoned.length)) {
+    return
+  }
   if (toI32(pool.seatAbandoned[seat]) === 2) {
     pgAsyncFree(pool, seat)
   } else {
@@ -1380,16 +1744,34 @@ const pgAsyncSettle = (pool: PgAsyncPool, seat: i32): void => {
 
 /** The abandoned seat in turn on slot `s` when no task reads past it yet, or -1. */
 const pgAsyncSkippable = (pool: PgAsyncPool, s: i32): i32 => {
+  if (
+    s < 0 ||
+    s >= toI32(pool.fds.length) ||
+    s >= toI32(pool.skipping.length) ||
+    s >= toI32(pool.served.length)
+  ) {
+    return -1
+  }
   if (pool.fds[s] < 0 || toI32(pool.skipping[s]) !== 0) {
     return -1
   }
+  const served: i32 = pool.served[s]
   for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-    const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
+    const seat: i32 = pgAsyncSeatAt(s, k)
+    if (
+      seat < 0 ||
+      seat >= toI32(pool.seatAbandoned.length) ||
+      seat >= toI32(pool.seatUsed.length) ||
+      seat >= toI32(pool.seatSeq.length)
+    ) {
+      // Past the pool's seats: none more on this slot.
+      break
+    }
     const state: i32 = toI32(pool.seatAbandoned[seat])
     if (
       toI32(pool.seatUsed[seat]) === 1 &&
       (state === 1 || state === 2) &&
-      pool.seatSeq[seat] === pool.served[s] &&
+      pool.seatSeq[seat] === served &&
       !pgAsyncLostSeat(pool, seat)
     ) {
       return seat
@@ -1399,40 +1781,148 @@ const pgAsyncSkippable = (pool: PgAsyncPool, s: i32): i32 => {
 }
 
 /**
+ * Moves the unread bytes of slot `s` to the front of `input`, its input, and
+ * answers where the next read goes. It answers -1 when the input has no room
+ * left, when its marks are out of order (`pgAsyncAnswer` then fails the
+ * answer, or the reader past it loses the connection), and for a slot that
+ * is not in the pool.
+ */
+const pgAsyncRoom = (pool: PgAsyncPool, s: i32, input: u8[]): i32 => {
+  if (s < 0 || s >= toI32(pool.inStart.length) || s >= toI32(pool.inEnd.length)) {
+    return -1
+  }
+  const start: i32 = pool.inStart[s]
+  const end: i32 = pool.inEnd[s]
+  if (start < 0 || end < start || end > toI32(input.length)) {
+    return -1
+  }
+  let room: i32 = end
+  if (start > 0) {
+    // In `u32`: `end` is at or past `start`, so the difference is the bytes kept.
+    room = toI32(toU32(end) - toU32(start))
+    pool.inEnd[s] = room
+    pool.inStart[s] = 0
+    copyBytes(input, 0, input, start, room)
+  }
+  return room < toI32(input.length) ? room : -1
+}
+
+/**
+ * Records `got` more bytes read into slot `s`'s input at `end`, where
+ * `pgAsyncRoom` put the read: a read takes no more than it was given, so the
+ * sum stays within the input's `length`.
+ */
+const pgAsyncTook = (pool: PgAsyncPool, s: i32, end: i32, got: i32, length: i32): void => {
+  if (s < 0 || s >= toI32(pool.inEnd.length)) {
+    return
+  }
+  const next: i64 = toI64(end) + toI64(got)
+  pool.inEnd[s] = next > toI64(length) ? length : toI32(next)
+}
+
+/**
+ * Marks the statement seat `seat` runs on slot `s` as not prepared, so the
+ * next seat that runs it sends its Parse again. A seat or statement out of
+ * the pool's range has nothing prepared.
+ */
+const pgAsyncUnprepare = (pool: PgAsyncPool, s: i32, seat: i32): void => {
+  // 64 is both PG_ASYNC_MAX_SIZE and PG_ASYNC_MAX_STATEMENTS, written as a
+  // literal: the prover takes a bound from a literal but not from a module
+  // constant, and the bounds prove the offset below cannot overflow.
+  if (s < 0 || s >= 64 || seat < 0 || seat >= toI32(pool.seatStatement.length)) {
+    return
+  }
+  const q: i32 = pool.seatStatement[seat]
+  if (q < 0 || q >= 64) {
+    return
+  }
+  const at: i32 = s * PG_ASYNC_MAX_STATEMENTS + q
+  if (at < toI32(pool.prepared.length)) {
+    pool.prepared[at] = 0
+  }
+}
+
+/**
+ * Moves slot `s` past the answer in turn, seat `seat`'s at sequence number
+ * `seq`: its input to where the answer ends, and its order to the next seat.
+ * A Parse in the seat's write the answer does not show taken marks its
+ * statement for parsing again. A slot or seat that is not in the pool has
+ * nothing to move past.
+ */
+const pgAsyncPast = (pool: PgAsyncPool, s: i32, seat: i32, seq: i32): void => {
+  if (
+    s < 0 ||
+    s >= toI32(pool.inStart.length) ||
+    s >= toI32(pool.inEnd.length) ||
+    s >= toI32(pool.inAnswer.length) ||
+    s >= toI32(pool.inParsed.length) ||
+    s >= toI32(pool.served.length) ||
+    seat < 0 ||
+    seat >= toI32(pool.seatParse.length)
+  ) {
+    return
+  }
+  const end: i32 = pool.inEnd[s]
+  const start: i32 = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : end
+  if (start === end) {
+    pool.inStart[s] = 0
+    pool.inEnd[s] = 0
+  } else {
+    pool.inStart[s] = start
+  }
+  pool.served[s] = pgAsyncStep(seq, PG_ASYNC_SEQ_MASK)
+  if (toI32(pool.seatParse[seat]) === 1 && toI32(pool.inParsed[s]) === 0) {
+    pgAsyncUnprepare(pool, s, seat)
+  }
+}
+
+/** Marks slot `s` as read by no task, when it is in the pool. */
+const pgAsyncUnskip = (pool: PgAsyncPool, s: i32): void => {
+  if (s >= 0 && s < toI32(pool.skipping.length)) {
+    pool.skipping[s] = 0
+  }
+}
+
+/**
  * Reads past the answer of `seat`, an abandoned seat in turn on slot `s`,
  * and serves the next. An answer that is not a plain one ending idle (a
  * frame this module does not expect, a transaction left open, a setting
  * changed) or larger than the pool's input loses the connection from it on,
  * as does a socket error. A cancelled reader stops and leaves the bytes read
- * for the next.
+ * for the next. A slot that is not in the pool has nothing to read past.
  */
 const pgAsyncSkip = async (pool: PgAsyncPool, s: i32, seat: i32): Promise<void> => {
+  if (
+    s < 0 ||
+    s >= toI32(pool.served.length) ||
+    s >= toI32(pool.fds.length) ||
+    s >= toI32(pool.inputs.length) ||
+    s >= toI32(pool.skipping.length)
+  ) {
+    return
+  }
   const seq: i32 = pool.served[s]
   const fd: i32 = pool.fds[s]
   const input: u8[] = pool.inputs[s]
   pool.skipping[s] = 1
   let fit: boolean = true
   while (!pgAsyncScan(pool, s)) {
-    if (pool.inStart[s] > 0) {
-      copyBytes(input, 0, input, pool.inStart[s], pool.inEnd[s] - pool.inStart[s])
-      pool.inEnd[s] -= pool.inStart[s]
-      pool.inStart[s] = 0
-    }
-    if (pool.inEnd[s] >= toI32(input.length)) {
+    const end: i32 = pgAsyncRoom(pool, s, input)
+    if (end < 0 || end >= toI32(input.length)) {
       fit = false
       break
     }
-    const got: i32 = netRead(fd, input, pool.inEnd[s], toI32(input.length) - pool.inEnd[s])
+    const got: i32 = netRead(fd, input, end, toI32(input.length) - end)
     if (got === PG_ASYNC_AGAIN) {
       const waited: boolean = await readable(fd)
       if (pgAsyncLostSeat(pool, seat)) {
-        pool.skipping[s] = 0
+        pgAsyncUnskip(pool, s)
         pgAsyncSettle(pool, seat)
         return
       }
       if (!waited && cancelled()) {
         // Another task reads on from where this one stopped.
-        pool.skipping[s] = 0
+        pgAsyncUnskip(pool, s)
         pgAsyncWakeTurns(pool, s, -1)
         pgAsyncWakePool(pool)
         return
@@ -1445,23 +1935,16 @@ const pgAsyncSkip = async (pool: PgAsyncPool, s: i32, seat: i32): Promise<void> 
       fit = false
       break
     } else {
-      pool.inEnd[s] += got
+      pgAsyncTook(pool, s, end, got, toI32(input.length))
     }
   }
-  pool.skipping[s] = 0
-  if (!fit || pool.inAnswer[s] < 0 || !pgAsyncPlain(pool, s)) {
+  pgAsyncUnskip(pool, s)
+  // `pgAsyncPlain` answers false for an answer with no end found.
+  if (!fit || !pgAsyncPlain(pool, s)) {
     pgAsyncDoom(pool, s, seq)
     return
   }
-  pool.inStart[s] = pool.inAnswer[s]
-  if (pool.inStart[s] === pool.inEnd[s]) {
-    pool.inStart[s] = 0
-    pool.inEnd[s] = 0
-  }
-  pool.served[s] = (seq + 1) % PG_ASYNC_SEQ_WRAP
-  if (toI32(pool.seatParse[seat]) === 1 && toI32(pool.inParsed[s]) === 0) {
-    pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]] = 0
-  }
+  pgAsyncPast(pool, s, seat, seq)
   pgAsyncSettle(pool, seat)
   pgAsyncWakeTurns(pool, s, -1)
   pgAsyncWakePool(pool)
@@ -1470,22 +1953,47 @@ const pgAsyncSkip = async (pool: PgAsyncPool, s: i32, seat: i32): Promise<void> 
 /**
  * Whether the answer in turn on slot `s`, at `[inStart, inAnswer)`, leaves
  * the connection as it found it: only the frames a statement's answer has,
- * ending with a ReadyForQuery that is idle.
+ * ending with a ReadyForQuery that is idle. An answer with no end found, or
+ * a slot that is not in the pool, is not one.
  */
 const pgAsyncPlain = (pool: PgAsyncPool, s: i32): boolean => {
+  if (
+    s < 0 ||
+    s >= toI32(pool.inputs.length) ||
+    s >= toI32(pool.inAnswer.length) ||
+    s >= toI32(pool.inStart.length)
+  ) {
+    return false
+  }
   const input: u8[] = pool.inputs[s]
+  const length: i32 = toI32(input.length)
   const stop: i32 = pool.inAnswer[s]
+  if (stop < 0 || stop > length) {
+    return false
+  }
   let at: i32 = pool.inStart[s]
-  while (at >= 0 && at + 5 < toI32(input.length) && at + 5 <= stop && stop <= toI32(input.length)) {
+  // `at < length - 5` and `at <= stop - 5` are `at + 5 < length` and
+  // `at + 5 <= stop`, written so they cannot overflow.
+  while (at >= 0 && at < length - 5 && at <= stop - 5) {
     const type: i32 = toI32(input[at])
-    const next: i32 = at + 1 + getI32BE(input, at + 1)
-    // Not reached: `pgAsyncScan` refused a length under 4 before this answer
-    // could be read past. Kept so this walk does not rest on that.
-    if (next < at + 5) {
+    // The frame's length, read here rather than with `getI32BE`, whose call
+    // would end what the prover knows of `input`.
+    const size: i32 =
+      (toI32(input[at + 1]) << 24) |
+      (toI32(input[at + 2]) << 16) |
+      (toI32(input[at + 3]) << 8) |
+      toI32(input[at + 4])
+    // Not reached for a length under 4: `pgAsyncScan` refused one before this
+    // answer could be read past. Kept so this walk does not rest on that. A
+    // frame past `stop` is not one of this answer's.
+    const left: i32 = stop - at
+    if (size < 4 || size >= left) {
       return false
     }
+    // In `u32`: the frame ends at or before `stop`, so the sum cannot wrap.
+    const next: i32 = toI32(toU32(at) + toU32(1) + toU32(size))
     if (type === 90) {
-      return next === stop && next - at === 6 && toI32(input[at + 5]) === PG_ASYNC_IDLE
+      return next === stop && size === 5 && toI32(input[at + 5]) === PG_ASYNC_IDLE
     }
     if (
       type !== 49 &&
@@ -1523,20 +2031,35 @@ const pgAsyncSkipAny = async (pool: PgAsyncPool): Promise<boolean> => {
 
 /**
  * Gives seat `seat` back; the connection closes once a lost one has no seat
- * left. Wakes the tasks waiting for room.
+ * left. Wakes the tasks waiting for room. A seat that is not in the pool has
+ * nothing to give back.
  */
 const pgAsyncFree = (pool: PgAsyncPool, seat: i32): void => {
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (
+    seat < 0 ||
+    s < 0 ||
+    seat >= toI32(pool.seatUsed.length) ||
+    seat >= toI32(pool.seatWaiting.length) ||
+    seat >= toI32(pool.seatAbandoned.length) ||
+    seat >= toI32(pool.seatClaims.length) ||
+    s >= toI32(pool.seated.length) ||
+    s >= toI32(pool.doomAt.length) ||
+    s >= toI32(pool.fds.length)
+  ) {
+    return
+  }
   pool.seatUsed[seat] = 0
   pool.seatWaiting[seat] = 0
   pool.seatAbandoned[seat] = 0
-  pool.seatClaims[seat] = (pool.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
-  pool.seated[s] -= 1
+  pool.seatClaims[seat] = pgAsyncStep(pool.seatClaims[seat], PG_ASYNC_SEAT_MASK)
+  pool.seated[s] = pgAsyncUncount(pool.seated[s])
   if (pool.doomAt[s] >= 0 && pool.seated[s] === 0) {
-    if (pool.fds[s] >= 0) {
-      netClose(pool.fds[s])
+    const fd: i32 = pool.fds[s]
+    if (fd >= 0) {
       pool.fds[s] = -1
-      pool.dropped += 1
+      pool.dropped = pgAsyncCount(pool.dropped)
+      netClose(fd)
     }
     pgAsyncForget(pool, s)
   }
@@ -1546,24 +2069,53 @@ const pgAsyncFree = (pool: PgAsyncPool, seat: i32): void => {
 /**
  * Whether the answer in turn on slot `s` lies whole in its input, from
  * `inStart`: `inAnswer` is set to where it ends, past its ReadyForQuery, or
- * to -1 for a frame length no answer has, which `pgAsyncAnswer` fails.
+ * to -1 for a frame length no answer has, which `pgAsyncAnswer` fails. A
+ * slot that is not in the pool, or whose marks are out of order, holds no
+ * whole answer.
  */
 const pgAsyncScan = (pool: PgAsyncPool, s: i32): boolean => {
+  if (
+    s < 0 ||
+    s >= toI32(pool.inputs.length) ||
+    s >= toI32(pool.inEnd.length) ||
+    s >= toI32(pool.inStart.length) ||
+    s >= toI32(pool.inParsed.length) ||
+    s >= toI32(pool.inAnswer.length)
+  ) {
+    return false
+  }
   const input: u8[] = pool.inputs[s]
+  const length: i32 = toI32(input.length)
   const end: i32 = pool.inEnd[s]
+  const most: i32 = pool.maxMessage
+  if (end < 0 || end > length) {
+    return false
+  }
   let at: i32 = pool.inStart[s]
   pool.inParsed[s] = 0
-  while (end - at >= 5 && at >= 0 && at + 5 <= toI32(input.length)) {
-    const length: i32 = getI32BE(input, at + 1)
-    if (length < 4 || length > pool.maxMessage) {
+  // `at < length - 4` is `at + 5 <= length`, written so it cannot overflow.
+  while (at >= 0 && at < length - 4) {
+    const left: i32 = end - at
+    if (left < 5) {
+      return false
+    }
+    // Read here rather than with `getI32BE`, whose call would end what the
+    // prover knows of `input` and the pool's arrays.
+    const size: i32 =
+      (toI32(input[at + 1]) << 24) |
+      (toI32(input[at + 2]) << 16) |
+      (toI32(input[at + 3]) << 8) |
+      toI32(input[at + 4])
+    if (size < 4 || size > most) {
       pool.inAnswer[s] = -1
       return true
     }
-    if (end - at - 1 < length) {
+    if (left - 1 < size) {
       return false
     }
     const type: i32 = toI32(input[at])
-    at += 1 + length
+    // In `u32`: the frame ends at or before `end`, so the sum cannot wrap.
+    at = toI32(toU32(at) + toU32(1) + toU32(size))
     if (type === 49) {
       pool.inParsed[s] = 1
     }
@@ -1598,6 +2150,17 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
   pgAsyncCheckCaps(pool)
   const seat: i32 = pgAsyncSeatOf(pool, ticket)
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (
+    seat < 0 ||
+    s < 0 ||
+    seat >= toI32(pool.seatSeq.length) ||
+    seat >= toI32(pool.seatWaiting.length) ||
+    s >= toI32(pool.writing.length)
+  ) {
+    // Not reached: `pgAsyncSeatOf` panicked on a ticket of no seat. A seat
+    // out of the pool's arrays has no answer to wait for.
+    return PG_ASYNC_BROKEN
+  }
   const seq: i32 = pool.seatSeq[seat]
   if (sent === PG_ASYNC_UNSENT || sent === PG_ASYNC_UNSENT_CANCELLED) {
     // Nothing went out; `pgAsyncDone` hands its place in the order back
@@ -1605,15 +2168,17 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     return sent
   }
   pool.writing[s] = 0
+  if (sent >= 0) {
+    pool.seatWaiting[seat] = 1
+  }
   pgAsyncWakePool(pool)
   if (sent < 0) {
     pgAsyncDoom(pool, s, seq)
     return sent <= PG_ASYNC_BROKEN ? sent : PG_ASYNC_BROKEN
   }
-  pool.seatWaiting[seat] = 1
   let gaveUp: boolean = false
   let yields: i32 = 0
-  while (pool.served[s] !== seq && !pgAsyncLostSeat(pool, seat)) {
+  while (!pgAsyncInTurn(pool, seat) && !pgAsyncLostSeat(pool, seat)) {
     if (cancelled()) {
       gaveUp = true
       break
@@ -1627,54 +2192,60 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
       yields += 1
       await sleep(0)
     } else {
-      pool.turnWaits += 1
+      pool.turnWaits = pgAsyncCount(pool.turnWaits)
       await pgAsyncPark(pool, pgAsyncTurnLane(seat), -1)
       // The last of the waiters the byte woke reads it, as in the claim and
       // seat loops: a seat that waits again must not park on a byte nobody reads.
       pgAsyncDrain(pool, pgAsyncTurnLane(seat))
     }
   }
-  pool.seatWaiting[seat] = 0
+  // Checked again: the waits above are calls.
+  if (seat < toI32(pool.seatWaiting.length)) {
+    pool.seatWaiting[seat] = 0
+  }
   pgAsyncDrain(pool, pgAsyncTurnLane(seat))
   if (pgAsyncLostSeat(pool, seat)) {
-    return PG_ASYNC_BROKEN + (cancelled() ? PG_ASYNC_CANCELLED : 0)
+    return pgAsyncBroken(cancelled() ? PG_ASYNC_CANCELLED : 0)
   }
   if (gaveUp) {
     // Its answer is on its way and this task will not read it: the next one does.
     pgAsyncAbandon(pool, seat)
     return PG_ASYNC_BROKEN + PG_ASYNC_CANCELLED
   }
+  if (s >= toI32(pool.fds.length) || s >= toI32(pool.inputs.length)) {
+    // Not reached: the slot's arrays are as long as `seatSeq` is in slots.
+    pgAsyncDoom(pool, s, seq)
+    return PG_ASYNC_BROKEN
+  }
   const fd: i32 = pool.fds[s]
   const input: u8[] = pool.inputs[s]
   while (!pgAsyncScan(pool, s)) {
-    if (pool.inStart[s] > 0) {
-      copyBytes(input, 0, input, pool.inStart[s], pool.inEnd[s] - pool.inStart[s])
-      pool.inEnd[s] -= pool.inStart[s]
-      pool.inStart[s] = 0
-    }
-    if (pool.inEnd[s] >= toI32(input.length)) {
+    const end: i32 = pgAsyncRoom(pool, s, input)
+    if (end < 0 || end >= toI32(input.length)) {
       // Past the input: `pgAsyncAnswer` reads the rest of it alone.
-      pool.inAnswer[s] = -1
+      if (s < toI32(pool.inAnswer.length)) {
+        pool.inAnswer[s] = -1
+      }
       return 0
     }
-    const got: i32 = netRead(fd, input, pool.inEnd[s], toI32(input.length) - pool.inEnd[s])
+    const got: i32 = netRead(fd, input, end, toI32(input.length) - end)
     if (got === PG_ASYNC_AGAIN) {
       const waited: boolean = await readable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
       if (failed === PG_ASYNC_CANCELLED) {
         // The bytes read stay in the input for the task that reads past the rest.
         pgAsyncAbandon(pool, seat)
-        return PG_ASYNC_BROKEN + failed
+        return pgAsyncBroken(failed)
       }
       if (failed !== 0) {
         pgAsyncDoom(pool, s, seq)
-        return PG_ASYNC_BROKEN + failed
+        return pgAsyncBroken(failed)
       }
     } else if (got <= 0) {
       pgAsyncDoom(pool, s, seq)
-      return PG_ASYNC_BROKEN + (got < 0 ? got : 0)
+      return pgAsyncBroken(got)
     } else {
-      pool.inEnd[s] += got
+      pgAsyncTook(pool, s, end, got, toI32(input.length))
     }
   }
   return 0
@@ -1690,8 +2261,9 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
  * with `reusable` false. It only reads the pool, so a spawned task may call
  * it.
  * @param pool The pool the ticket came from; a cap out of its range panics.
- * @param ticket The ticket `pgAsyncTurn` used; any other panics, as does a
- *   ticket whose turn has not come.
+ * @param ticket The ticket `pgAsyncTurn` used; any other panics. One whose
+ *   turn has not come, or whose connection failed at or before it, fails the
+ *   answer without reading, with `PG_ERR_CLOSED` and `reusable` false.
  * @param turn What `pgAsyncTurn` answered; one below 0 fails the answer
  *   without reading, with `PG_ERR_ENCODING` for a parameter that could not be
  *   sent and `PG_ERR_CLOSED` otherwise.
@@ -1712,20 +2284,37 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
     }
     return pgAsyncLost(result, PG_ERR_CLOSED, turn <= PG_ASYNC_BROKEN ? turn - PG_ASYNC_BROKEN : 0)
   }
-  if (pool.served[s] !== pool.seatSeq[seat] || pgAsyncLostSeat(pool, seat)) {
-    panic("nish/net/postgres-async: an answer read before its turn")
+  if (
+    !pgAsyncInTurn(pool, seat) ||
+    s < 0 ||
+    s >= toI32(pool.inputs.length) ||
+    s >= toI32(pool.inStart.length) ||
+    s >= toI32(pool.inEnd.length) ||
+    s >= toI32(pool.inAnswer.length) ||
+    s >= toI32(pool.fds.length)
+  ) {
+    // Read before its turn, or after its connection failed: there is no
+    // answer of its own to read.
+    return pgAsyncLost(new PgAsyncResult(), PG_ERR_CLOSED, 0)
   }
   // Copied into the task's memory: the spawn rules read an array of the pool
   // handed across an `await` as one the callee may grow.
   const input: u8[] = pool.inputs[s]
+  const fd: i32 = pool.fds[s]
   const from: i32 = pool.inStart[s]
   const to: i32 = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : pool.inEnd[s]
-  const carried: u8[] = new Array<u8>(
-    from >= 0 && from <= to && to <= toI32(input.length) ? to - from : toI32(0)
-  )
+  // In `u32`: `to` is at or past `from` here, so the difference is the bytes.
+  const count: i32 = from >= 0 && from <= to && to <= toI32(input.length) ? toI32(toU32(to) - toU32(from)) : 0
+  if (count < 0 || count > 65535) {
+    // Not reached: an input is `PG_ASYNC_INPUT_SIZE` bytes. `pgAsyncZeroed`
+    // would build a longer one by `push`, which the spawn rules read as
+    // growing the pool, so this answer is failed as one too big to carry.
+    return pgAsyncLost(new PgAsyncResult(), PG_ERR_TOO_BIG, 0)
+  }
+  const carried: u8[] = new Array<u8>(toU16(count))
   copyBytes(carried, 0, input, from, toI32(carried.length))
   return await pgAsyncRead(
-    pool.fds[s],
+    fd,
     carried,
     true,
     pool.maxMessage,
@@ -1752,13 +2341,27 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
 export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable: boolean): void => {
   const seat: i32 = pgAsyncSeatOf(pool, ticket)
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (
+    seat < 0 ||
+    s < 0 ||
+    seat >= toI32(pool.seatSeq.length) ||
+    seat >= toI32(pool.seatAbandoned.length) ||
+    seat >= toI32(pool.seatClaims.length) ||
+    seat >= toI32(pool.seatParse.length) ||
+    s >= toI32(pool.nextSeq.length) ||
+    s >= toI32(pool.writing.length) ||
+    s >= toI32(pool.served.length)
+  ) {
+    // Not reached: `pgAsyncSeatOf` panicked on a ticket of no seat. A seat
+    // out of the pool's arrays holds nothing to spend.
+    return
+  }
   const seq: i32 = pool.seatSeq[seat]
-  const statement: i32 = s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]
   const abandoned: i32 = toI32(pool.seatAbandoned[seat])
   if (abandoned === 1) {
     // Its answer is not read past yet: the ticket is spent, the seat stays until it is.
     pool.seatAbandoned[seat] = 2
-    pool.seatClaims[seat] = (pool.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
+    pool.seatClaims[seat] = pgAsyncStep(pool.seatClaims[seat], PG_ASYNC_SEAT_MASK)
     return
   }
   if (abandoned === 3) {
@@ -1769,28 +2372,20 @@ export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable:
     // No other seat was taken here while it was being written, so its place
     // in the order is handed back.
     pool.nextSeq[s] = seq
-    if (toI32(pool.seatParse[seat]) === 1) {
-      pool.prepared[statement] = 0
-    }
     pool.writing[s] = 0
+    if (toI32(pool.seatParse[seat]) === 1) {
+      pgAsyncUnprepare(pool, s, seat)
+    }
     pgAsyncFree(pool, seat)
     return
   }
   if (turn >= 0 && pool.served[s] === seq) {
-    pool.inStart[s] = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : pool.inEnd[s]
-    if (pool.inStart[s] === pool.inEnd[s]) {
-      pool.inStart[s] = 0
-      pool.inEnd[s] = 0
-    }
-    pool.served[s] = (seq + 1) % PG_ASYNC_SEQ_WRAP
-    if (toI32(pool.seatParse[seat]) === 1 && toI32(pool.inParsed[s]) === 0) {
-      pool.prepared[statement] = 0
-    }
+    pgAsyncPast(pool, s, seat, seq)
     if (!reusable) {
       // A lost frame, a transaction left open or a setting changed: the
       // statements behind this one would be read out of step, or run in a
       // session they did not ask for.
-      pgAsyncDoom(pool, s, pool.served[s])
+      pgAsyncDoom(pool, s, pgAsyncStep(seq, PG_ASYNC_SEQ_MASK))
     }
     pgAsyncWakeTurns(pool, s, seat)
   }
@@ -1808,7 +2403,7 @@ export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable:
  * @param sql One statement, `$1`, `$2`, ... naming the parameters; a NUL in
  *   it fails the query with `PG_ERR_ENCODING` without sending anything.
  * @param params The parameters, as many as the statement names; a NUL in
- *   a text one fails the query the same way.
+ *   a text one, or a Bind past 2^30 bytes, fails the query the same way.
  * @returns The answer; its `reusable` goes to `pgAsyncRelease`.
  */
 export const pgAsyncQuery = async (
@@ -1818,8 +2413,14 @@ export const pgAsyncQuery = async (
   params: PgAsyncParams
 ): Promise<PgAsyncResult> => {
   pgAsyncCheckCaps(pool)
-  const fd: i32 = pool.fds[pgAsyncSlot(pool, ticket)]
+  const slot: i32 = pgAsyncSlot(pool, ticket)
   const result = new PgAsyncResult()
+  if (slot < 0 || slot >= toI32(pool.fds.length)) {
+    // Not reached: `pgAsyncSlot` panicked on a ticket of no slot. A slot out
+    // of the pool's arrays has no connection to send on.
+    return pgAsyncLost(result, PG_ERR_CLOSED, 0)
+  }
+  const fd: i32 = pool.fds[slot]
   if (cancelled()) {
     // Nothing is sent, so the connection is still in step and is given back.
     result.code = PG_CARRIER_FAILED
@@ -1837,8 +2438,9 @@ export const pgAsyncQuery = async (
     return result
   }
   let sent: i32 = 0
-  while (sent < toI32(out.length)) {
-    const n: i32 = netWrite(fd, out, sent, toI32(out.length) - sent)
+  while (sent >= 0 && sent < toI32(out.length)) {
+    // In `u32`: `sent` is below the `length` here, so the difference is the rest.
+    const n: i32 = netWrite(fd, out, sent, toI32(toU32(out.length) - toU32(sent)))
     if (n === PG_ASYNC_AGAIN) {
       const waited: boolean = await writable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
@@ -1848,7 +2450,9 @@ export const pgAsyncQuery = async (
     } else if (n <= 0) {
       return pgAsyncLost(result, PG_ERR_CLOSED, n)
     } else {
-      sent += n
+      // A write takes no more than it was given, so `sent` stays within `out`.
+      const next: i64 = toI64(sent) + toI64(n)
+      sent = next > toI64(out.length) ? toI32(out.length) : toI32(next)
     }
   }
   const none: u8[] = []
@@ -1894,119 +2498,139 @@ const pgAsyncLost = (result: PgAsyncResult, failure: i32, socketError: i32): PgA
 
 /**
  * Parse (when `parse`), Bind, Execute and Sync for the statement `sql` and
- * `params`, or null for a NUL in a parameter. `name` -1 is the unnamed
+ * `params`, or null for a NUL in a parameter, more than 65535 of them, or
+ * SQL or a Bind past 2^30 bytes, more than one message holds. `name` -1 is the unnamed
  * statement; 0 or more names it `n<name>`, which the connection keeps.
  */
 const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncParams): u8[] | null => {
-  const count: i32 = toI32(params.values.length)
+  const values: string[] = params.values
+  const nulls: boolean[] = params.nulls
+  const count: i32 = toI32(values.length)
   if (count > 65535) {
     return null
   }
-  // The statement's name: none, or `n` and its decimal digits (at most 2).
-  const label: u8[] = pgAsyncLabel(name)
-  const named: i32 = toI32(label.length)
-  const values: u8[][] = []
+  // A message's length is an i32 on the wire; each kept under 2^30 leaves the sums below room.
+  const cap: i32 = 1073741823
+  const sqlLength: i32 = toI32(sql.length)
+  if (sqlLength > cap) {
+    return null
+  }
+  // The statement's name: none, or `n` and its decimal digits (at most 2), as `pgAsyncLabel` writes it.
+  let named: i32 = 0
+  if (name >= 10) {
+    named = 3
+  } else if (name >= 0) {
+    named = 2
+  }
   // The length, "" portal, the statement's name and NUL, no parameter formats,
-  // the count, no result formats: 4 + 1 + named + 1 + 2 + 2 + 2, held as an
-  // i32 in either number mode.
+  // the count, no result formats: 4 + 1 + named + 1 + 2 + 2 + 2. Each sum is
+  // counted in i64, where no two i32s can wrap it, before it is kept.
   let bind: i32 = toI32(12) + named
-  for (let i: i32 = 0; i < count; i++) {
-    const v = pgAsyncBytes(params.values[i])
-    if (v === null) {
+  for (let i: i32 = 0; i < toI32(values.length) && i < toI32(nulls.length); i++) {
+    const size: i32 = nulls[i] ? toI32(0) : toI32(values[i].length)
+    const next: i64 = toI64(bind) + toI64(4) + toI64(size)
+    if (next > toI64(cap)) {
       return null
     }
-    values.push(v)
-    bind += toI32(4)
-    if (!params.nulls[i]) {
-      bind += toI32(v.length)
-    }
+    bind = toI32(next)
   }
-  const sqlLength: i32 = toI32(sql.length)
-  // The length, the statement's name and NUL, the SQL and its NUL, no parameter types.
-  const parseLength: i32 = parse ? sqlLength + named + toI32(8) : 0
-  // Parse, Bind, Execute ("" portal, no row limit: 4 + 1 + 4), Sync (4).
-  const total: i32 = (parse ? toI32(1) + parseLength : toI32(0)) + toI32(16) + bind
-  const out: u8[] = new Array<u8>(total)
-  let at: i32 = 0
+  // Each part is pushed in order, so no write needs a position the prover must follow.
+  const out: u8[] = []
   if (parse) {
-    out[at] = 80
-    setI32BE(out, at + 1, parseLength)
-    at += 5
-    for (let i: i32 = 0; i < toI32(label.length); i++) {
-      out[at + i] = label[i]
+    // The length, the statement's name and NUL, the SQL and its NUL, no parameter types.
+    out.push(80)
+    pgAsyncPushI32(out, sqlLength + named + toI32(8))
+    pgAsyncLabel(out, name)
+    out.push(0)
+    for (let i: i32 = 0; i < toI32(sql.length); i++) {
+      out.push(sql[i])
     }
-    at += named
-    out[at] = 0
-    at += 1
-    for (let i: i32 = 0; i < sqlLength && at + i < total; i++) {
-      out[at + i] = sql[i]
-    }
-    at += sqlLength
-    out[at] = 0
-    out[at + 1] = 0
-    out[at + 2] = 0
-    at += 3
+    out.push(0)
+    out.push(0)
+    out.push(0)
   }
-  out[at] = 66
-  setI32BE(out, at + 1, bind)
-  at += 5
-  // The unnamed portal, the statement's name, no parameter format codes (all text).
-  out[at] = 0
-  at += 1
-  for (let i: i32 = 0; i < toI32(label.length); i++) {
-    out[at + i] = label[i]
-  }
-  at += named
-  out[at] = 0
-  out[at + 1] = 0
-  out[at + 2] = 0
-  setU16BE(out, at + 3, toU16(count))
-  at += 5
-  // Bounded by `values` rather than `count`, which it equals, so the prover reads the index.
-  const encoded: i32 = toI32(values.length)
-  for (let i: i32 = 0; i < encoded; i++) {
-    if (params.nulls[i]) {
-      setI32BE(out, at, -1)
-      at += 4
+  // The unnamed portal, the statement's name, no parameter format codes (all text), the count.
+  out.push(66)
+  pgAsyncPushI32(out, bind)
+  out.push(0)
+  pgAsyncLabel(out, name)
+  out.push(0)
+  out.push(0)
+  out.push(0)
+  out.push(toU8(count >> 8))
+  out.push(toU8(count & 255))
+  for (let i: i32 = 0; i < toI32(values.length) && i < toI32(nulls.length); i++) {
+    if (nulls[i]) {
+      pgAsyncPushI32(out, -1)
       continue
     }
-    const v: u8[] = values[i]
-    setI32BE(out, at, toI32(v.length))
-    copyBytes(out, at + 4, v, 0, toI32(v.length))
-    at += 4 + toI32(v.length)
+    const v: string = values[i]
+    pgAsyncPushI32(out, toI32(v.length))
+    for (let j: i32 = 0; j < toI32(v.length); j++) {
+      const c: i32 = toI32(v.charCodeAt(j))
+      if (c === 0) {
+        return null
+      }
+      out.push(toU8(c))
+    }
   }
   // No result format codes: every column in text.
-  out[at] = 0
-  out[at + 1] = 0
-  at += 2
-  out[at] = 69
-  setI32BE(out, at + 1, 9)
-  out[at + 5] = 0
-  setI32BE(out, at + 6, 0)
-  at += 10
-  out[at] = 83
-  setI32BE(out, at + 1, 4)
+  out.push(0)
+  out.push(0)
+  // Execute ("" portal, no row limit) and Sync.
+  out.push(69)
+  pgAsyncPushI32(out, 9)
+  out.push(0)
+  pgAsyncPushI32(out, 0)
+  out.push(83)
+  pgAsyncPushI32(out, 4)
   return out
 }
 
+/** Appends `v`'s four bytes to `out`, most significant first, as the protocol sends an Int32. */
+const pgAsyncPushI32 = (out: u8[], v: i32): void => {
+  const u: u32 = toU32(v)
+  out.push(toU8(u >> 24))
+  out.push(toU8((u >> 16) & 255))
+  out.push(toU8((u >> 8) & 255))
+  out.push(toU8(u & 255))
+}
+
 /**
- * A prepared statement's name, `n` and the decimal digits of `name` (at most
- * 2), or none for a negative `name`.
+ * Appends a prepared statement's name to `out`: `n` and the decimal digits
+ * of `name` (at most 2), or nothing for a negative `name`.
  */
-const pgAsyncLabel = (name: i32): u8[] => {
+const pgAsyncLabel = (out: u8[], name: i32): void => {
   if (name >= 10) {
-    return [110, toU8(toI32(48) + toI32(name / 10)), toU8(toI32(48) + (name % 10))]
+    out.push(110)
+    out.push(toU8(toI32(48) + toI32(name / 10)))
+    out.push(toU8(toI32(48) + (name % 10)))
+  } else if (name >= 0) {
+    out.push(110)
+    out.push(toU8(toI32(48) + name))
   }
-  if (name >= 0) {
-    return [110, toU8(toI32(48) + name)]
+}
+
+/**
+ * A zeroed byte array of `n` bytes, or an empty one for a negative `n`. Up to
+ * 64 KiB it is one `new Array` of a `u16` length, which needs no check; a
+ * longer one, the rare buffer for a message past that, is built by `push`.
+ */
+const pgAsyncZeroed = (n: i32): u8[] => {
+  if (n >= 0 && n <= 65535) {
+    return new Array<u8>(toU16(n))
   }
-  return []
+  const out: u8[] = []
+  while (toI32(out.length) < n) {
+    out.push(0)
+  }
+  return out
 }
 
 /** `s`'s UTF-8 bytes, or null when one is zero, which a C string in the protocol cannot hold. */
 const pgAsyncBytes = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
-  const b: u8[] = new Array<u8>(n)
+  const b: u8[] = pgAsyncZeroed(n)
   const room: i32 = toI32(b.length)
   // Bounded by each length it indexes, which are equal, so the prover reads both.
   for (let i: i32 = 0; i < n && i < room; i++) {
@@ -2039,24 +2663,65 @@ const pgAsyncRead = async (
   maxResultBytes: i32
 ): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
+  // `pgAsyncCheckCaps` has already held every cap inside its range, so this
+  // never fails; it is what lets the prover bound the sums below by the caps.
+  if (
+    maxMessage < 4 ||
+    maxMessage > PG_ASYNC_MAX_CAP ||
+    maxRows > PG_ASYNC_MAX_ROWS ||
+    maxResultBytes < 0 ||
+    maxResultBytes > PG_ASYNC_MAX_CAP
+  ) {
+    return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
+  }
+  // The seed is part of the pool's input, far shorter than this.
+  if (toI32(seed.length) > PG_ASYNC_MAX_CAP) {
+    return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
+  }
+  // `PG_ASYNC_MAX_CAP`, one past it, and five short of one past it, as
+  // literals: inside a loop the prover takes a bound from a literal or a local
+  // constant, not from a module constant.
+  const cap: i32 = 1073741823
+  const capEnd: i32 = 1073741824
+  const capHead: i32 = 1073741819
   // The buffer starts the size of the seed, not a zero-filled 8 KiB: an answer
   // already scanned whole is parsed without clearing memory it never reads, and
   // only a read past it grows the buffer.
-  let buf: u8[] = new Array<u8>(toI32(seed.length))
-  copyBytes(buf, 0, seed, 0, toI32(seed.length))
+  let buf: u8[] = pgAsyncZeroed(toI32(seed.length))
+  if (!tryCopyBytes(buf, 0, seed, 0, toI32(seed.length))) {
+    return pgAsyncLost(result, PG_ERR_FRAME, 0)
+  }
   let start: i32 = 0
   let end: i32 = toI32(seed.length)
   let refused: boolean = false
   let tooBig: boolean = false
   let changed: boolean = false
   let shaped: boolean = false
-  // The bytes of rows, tags and error fields kept, under `maxResultBytes`.
-  let kept: i32 = 0
+  // What is left of `maxResultBytes` for the rows, tags and error fields kept.
+  let left: i32 = maxResultBytes
   while (true) {
-    // Every whole message in [start, end).
-    while (end - start >= 5) {
-      // Always true, since `end` never passes the buffer; it proves the reads below.
-      if (start < 0 || start + 5 > toI32(buf.length)) {
+    // Always false: `start` never passes `end`, `end` never passes the
+    // buffer, the buffer is never longer than the seed or `maxMessage + 1`, and
+    // `left` only shrinks from `maxResultBytes`. Each bound is stated on its
+    // own because the prover reads ranges, not the chain between them.
+    if (
+      start < 0 ||
+      end < 0 ||
+      start > end ||
+      start > capEnd ||
+      end > capEnd ||
+      end > toI32(buf.length) ||
+      left < 0 ||
+      left > cap
+    ) {
+      return pgAsyncLost(result, PG_ERR_FRAME, 0)
+    }
+    // A whole message at `start` is taken here; anything short of one reads more below.
+    const have: i32 = end - start
+    if (have >= 5) {
+      // Always false, since five bytes lie between `start` and `end`; it
+      // proves the header's reads and, with `length`, the frame's end.
+      if (start > toI32(buf.length) - 5 || start > capHead) {
         return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
       const type: i32 = toI32(buf[start])
@@ -2064,119 +2729,142 @@ const pgAsyncRead = async (
       if (length < 4) {
         return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
-      if (length > maxMessage) {
+      // `maxMessage` is never past `PG_ASYNC_MAX_CAP`; the second test bounds the sums below.
+      if (length > maxMessage || length > cap) {
         return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
       }
-      if (end - start - 1 < length) {
-        break
-      }
-      const body: i32 = start + 5
-      const stop: i32 = start + 1 + length
-      start = stop
-      if (type === 90) {
-        // 'Z': ReadyForQuery, the end of the answer.
-        if (stop - body !== 1 || body < 0 || body >= toI32(buf.length)) {
-          return pgAsyncLost(result, PG_ERR_FRAME, 0)
+      if (have - 1 >= length) {
+        const body: i32 = start + 5
+        const stop: i32 = start + 1 + length
+        // The body's length, `stop - body`, which the prover bounds by `maxMessage`.
+        const size: i32 = length - 4
+        start = stop
+        if (type === 90) {
+          // 'Z': ReadyForQuery, the end of the answer.
+          if (size !== 1 || body < 0 || body >= toI32(buf.length)) {
+            return pgAsyncLost(result, PG_ERR_FRAME, 0)
+          }
+          // Bytes after the ReadyForQuery answer no statement this one sent,
+          // so the connection is out of step and closed rather than given
+          // back. A pipelined read stops at the ReadyForQuery, so none are
+          // read here unless the server sent them inside this answer.
+          result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed && start === end
+          if (refused || tooBig) {
+            result.code = PG_CARRIER_FAILED
+            result.failure = tooBig ? PG_ERR_TOO_BIG : PG_ERR_NONE
+          }
+          return result
         }
-        // Bytes after the ReadyForQuery answer no statement this one sent,
-        // so the connection is out of step and closed rather than given
-        // back. A pipelined read stops at the ReadyForQuery, so none are
-        // read here unless the server sent them inside this answer.
-        result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed && start === end
-        if (refused || tooBig) {
-          result.code = PG_CARRIER_FAILED
-          result.failure = tooBig ? PG_ERR_TOO_BIG : PG_ERR_NONE
-        }
-        return result
-      }
-      if (type === 68) {
-        // 'D': DataRow, a count then each column's length (-1 for NULL) and bytes.
-        if (stop - body < 2) {
-          return pgAsyncLost(result, PG_ERR_FRAME, 0)
-        }
-        const columns: i32 = toI32(getU16BE(buf, body))
-        if (columns > maxColumns) {
-          return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
-        }
-        if (shaped && columns !== result.columns) {
-          return pgAsyncLost(result, PG_ERR_FRAME, 0)
-        }
-        // The frame's length bounds its cells' bytes; each cell costs its string besides.
-        const cost: i32 = stop - body + columns * PG_ASYNC_CELL_COST
-        if (tooBig || result.rows >= maxRows || cost > maxResultBytes - kept) {
-          tooBig = true
+        if (type === 68) {
+          // 'D': DataRow, a count then each column's length (-1 for NULL) and bytes.
+          if (size < 2) {
+            return pgAsyncLost(result, PG_ERR_FRAME, 0)
+          }
+          const columns: i32 = toI32(getU16BE(buf, body))
+          if (columns > maxColumns) {
+            return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
+          }
+          if (shaped && columns !== result.columns) {
+            return pgAsyncLost(result, PG_ERR_FRAME, 0)
+          }
+          // The frame's length bounds its cells' bytes; each cell costs its string besides.
+          const cost: i32 = size + columns * PG_ASYNC_CELL_COST
+          const rows: i32 = result.rows
+          if (tooBig || rows < 0 || rows >= maxRows || cost < 0 || cost > left) {
+            tooBig = true
+            continue
+          }
+          left -= cost
+          if (!pgAsyncRow(buf, body + 2, stop, columns, result)) {
+            return pgAsyncLost(result, PG_ERR_FRAME, 0)
+          }
+          result.columns = columns
+          shaped = true
+          result.rows = rows + 1
           continue
         }
-        kept += cost
-        if (!pgAsyncRow(buf, body + 2, stop, columns, result)) {
-          return pgAsyncLost(result, PG_ERR_FRAME, 0)
-        }
-        result.columns = columns
-        shaped = true
-        result.rows += 1
-        continue
-      }
-      if (type === 67) {
-        // 'C': CommandComplete, a NUL-ended tag.
-        if (stop - body < 1 || toI32(buf[stop - 1]) !== 0) {
-          return pgAsyncLost(result, PG_ERR_FRAME, 0)
-        }
-        // A tag is kept, so it costs the budget too; past it, the answer fails.
-        if (stop - body > maxResultBytes - kept) {
-          tooBig = true
+        if (type === 67) {
+          // 'C': CommandComplete, a NUL-ended tag.
+          if (size < 1 || stop > toI32(buf.length) || toI32(buf[stop - 1]) !== 0) {
+            return pgAsyncLost(result, PG_ERR_FRAME, 0)
+          }
+          // A tag is kept, so it costs the budget too; past it, the answer fails.
+          if (size > left) {
+            tooBig = true
+            continue
+          }
+          left -= size
+          result.tag = String.fromBytes(buf, body, stop - 1)
           continue
         }
-        kept += stop - body
-        result.tag = String.fromBytes(buf, body, stop - 1)
-        continue
-      }
-      if (type === 69) {
-        // 'E': ErrorResponse, fields of a code byte and a NUL-ended value.
-        // Its kept fields cost the budget, bounded by the frame; past it, none is kept.
-        refused = true
-        if (stop - body > maxResultBytes - kept) {
-          tooBig = true
+        if (type === 69) {
+          // 'E': ErrorResponse, fields of a code byte and a NUL-ended value.
+          // Its kept fields cost the budget, bounded by the frame; past it, none is kept.
+          refused = true
+          if (size > left) {
+            tooBig = true
+            continue
+          }
+          left -= size
+          if (!pgAsyncError(buf, body, stop, result)) {
+            return pgAsyncLost(result, PG_ERR_FRAME, 0)
+          }
           continue
         }
-        kept += stop - body
-        if (!pgAsyncError(buf, body, stop, result)) {
-          return pgAsyncLost(result, PG_ERR_FRAME, 0)
+        if (type === 83) {
+          // 'S': a ParameterStatus after startup is a session setting a statement changed.
+          changed = true
+          continue
         }
-        continue
+        if (type === 49 || type === 50 || type === 73 || type === 78 || type === 65) {
+          // ParseComplete, BindComplete, EmptyQueryResponse, a notice, a notification.
+          continue
+        }
+        return pgAsyncLost(result, PG_ERR_UNEXPECTED, 0)
       }
-      if (type === 83) {
-        // 'S': a ParameterStatus after startup is a session setting a statement changed.
-        changed = true
-        continue
-      }
-      if (type === 49 || type === 50 || type === 73 || type === 78 || type === 65) {
-        // ParseComplete, BindComplete, EmptyQueryResponse, a notice, a notification.
-        continue
-      }
-      return pgAsyncLost(result, PG_ERR_UNEXPECTED, 0)
     }
     // Room for the rest of the message at `start`, then more input.
     if (start > 0) {
-      copyBytes(buf, 0, buf, start, end - start)
+      if (!tryCopyBytes(buf, 0, buf, start, end - start)) {
+        return pgAsyncLost(result, PG_ERR_FRAME, 0)
+      }
       end -= start
       start = 0
     }
     if (end === toI32(buf.length)) {
-      const twice: i32 = toI32(buf.length) < PG_ASYNC_INPUT_SIZE ? PG_ASYNC_INPUT_SIZE : toI32(buf.length) * 2
-      const grown: u8[] = new Array<u8>(
-        twice > maxMessage + 1 && end < maxMessage + 1 ? maxMessage + 1 : twice
-      )
-      copyBytes(grown, 0, buf, 0, end)
+      // A full buffer holds less than one whole message, so it is shorter
+      // than `maxMessage + 1`; the test lets the prover read that.
+      if (end < 0 || end > maxMessage || end > cap || maxMessage > cap) {
+        return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
+      }
+      const twice: i32 = end < PG_ASYNC_INPUT_SIZE ? PG_ASYNC_INPUT_SIZE : end * 2
+      const grown: u8[] = pgAsyncZeroed(twice > maxMessage + 1 ? maxMessage + 1 : twice)
+      if (!tryCopyBytes(grown, 0, buf, 0, end)) {
+        return pgAsyncLost(result, PG_ERR_FRAME, 0)
+      }
       buf = grown
+    }
+    // Always false, as above; it proves the read's range below.
+    if (start < 0 || end < 0 || start > end || start > capEnd || end > capEnd || end > toI32(buf.length)) {
+      return pgAsyncLost(result, PG_ERR_FRAME, 0)
     }
     const room: i32 = toI32(buf.length) - end
     let want: i32 = room
     if (bounded) {
       // The rest of the frame at `start`, and the next header unless it is the ReadyForQuery.
-      want = toI32(5) - (end - start)
-      if (end - start >= 5 && start >= 0 && start < toI32(buf.length)) {
+      const held: i32 = end - start
+      want = toI32(5) - held
+      if (held >= 5 && start < toI32(buf.length) - 5) {
         const length: i32 = getI32BE(buf, start + 1)
-        want = toI32(1) + length - (end - start) + (toI32(buf[start]) === 90 ? toI32(0) : toI32(5))
+        // A length past `maxMessage` was failed before this read.
+        if (length < 4) {
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
+        }
+        if (length > maxMessage || length > cap) {
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
+        }
+        const rest: i32 = toI32(1) + length - held
+        want = toI32(buf[start]) === 90 ? rest : rest + 5
       }
       if (want > room) {
         want = room
@@ -2194,32 +2882,51 @@ const pgAsyncRead = async (
     } else if (got <= 0) {
       return pgAsyncLost(result, PG_ERR_CLOSED, got)
     } else {
-      end += got
+      // A read never passes the room it was given, so this never fails; the
+      // sum is taken in `i64` because the prover cannot chain `got <= want <= room`.
+      const next: i64 = toI64(end) + toI64(got)
+      if (next > toI64(buf.length)) {
+        return pgAsyncLost(result, PG_ERR_FRAME, 0)
+      }
+      end = toI32(next)
     }
   }
 }
 
 /** One DataRow's `columns` cells in `[at, stop)` into `result`; false for a frame that does not add up. */
 const pgAsyncRow = (buf: u8[], at: i32, stop: i32, columns: i32, result: PgAsyncResult): boolean => {
+  // `stop` never passes the buffer; the test lets the prover read each cell's range.
+  if (at < 0 || at > stop || stop > toI32(buf.length)) {
+    return false
+  }
+  // `PG_ASYNC_MAX_CAP`, and the last place a cell's length can start in a
+  // frame that ends by one past it, as literals, which the prover reads inside
+  // a loop where it does not read a module constant.
+  const cap: i32 = 1073741823
+  const lastCell: i32 = 1073741820
   let p: i32 = at
   for (let c: i32 = 0; c < columns; c++) {
-    if (stop - p < 4 || p < 0 || p + 3 >= toI32(buf.length)) {
+    if (p < 0 || p > stop - 4 || p > toI32(buf.length) - 4 || p > lastCell) {
       return false
     }
     const n: i32 =
       (toI32(buf[p]) << 24) | (toI32(buf[p + 1]) << 16) | (toI32(buf[p + 2]) << 8) | toI32(buf[p + 3])
-    p += 4
+    const from: i32 = p + 4
     if (n === -1) {
       result.values.push("")
       result.nulls.push(true)
+      p = from
       continue
     }
-    if (n < 0 || n > stop - p) {
+    // A cell never passes the frame, which is never past `PG_ASYNC_MAX_CAP`;
+    // the second test is what lets the prover bound the sum below.
+    if (n < 0 || n > stop - from || n > cap) {
       return false
     }
-    result.values.push(String.fromBytes(buf, p, p + n))
+    const cellEnd: i32 = from + n
+    result.values.push(String.fromBytes(buf, from, cellEnd))
     result.nulls.push(false)
-    p += n
+    p = cellEnd
   }
   return p === stop
 }

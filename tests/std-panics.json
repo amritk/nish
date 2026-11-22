@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9866,
+  "total": 9344,
   "explicit": {
-    "kept": 343,
-    "toFix": 138
+    "kept": 355,
+    "toFix": 128
   },
   "modules": {
     "std/base64.ts": {
@@ -378,19 +378,13 @@
       "slice": 2
     },
     "std/net/postgres-async.ts": {
-      "array-length": 31,
-      "index": 213,
       "io-exit": 1,
-      "overflow": 149,
-      "panic": 10,
+      "panic": 11,
       "slice": 14
     },
     "std/net/postgres-carrier.ts": {
-      "array-length": 22,
-      "index": 87,
       "io-exit": 4,
-      "overflow": 22,
-      "panic": 12,
+      "panic": 13,
       "slice": 6
     },
     "std/net/postgres.ts": {
@@ -1501,8 +1495,23 @@
     },
     {
       "module": "std/net/postgres-async.ts",
-      "function": "PgAsyncResult.cell",
+      "function": "PgAsyncResult.int",
       "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "PgAsyncResult.isNull",
+      "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "PgAsyncResult.text",
+      "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncConnect",
+      "reason": "the target must resolve and a TCP host must be a numeric address; static configuration the program sets"
     },
     {
       "module": "std/net/postgres-async.ts",
@@ -1531,6 +1540,11 @@
     },
     {
       "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.constructor",
+      "reason": "caps and watch id within their documented ranges, a numeric TCP address, no TLS on a Unix socket, and a poll set that opens; static configuration the program sets"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
       "function": "PgCarrier.next",
       "reason": "next() must not be called before send() ends PG_CARRIER_BUILD; a call-order contract the caller controls"
     },
@@ -1541,8 +1555,23 @@
     },
     {
       "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.runInt",
+      "reason": "the batcher id must be one attach answered; a static registration contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.runText",
+      "reason": "the batcher id must be one attach answered; a static registration contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
       "function": "PgCarrier.send",
       "reason": "send() requires an open PG_CARRIER_BUILD; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "pgCarrierTrust",
+      "reason": "PG_TLS_VERIFY_FULL needs a readable root certificate; static TLS configuration the program sets"
     },
     {
       "module": "std/net/postgres.ts",

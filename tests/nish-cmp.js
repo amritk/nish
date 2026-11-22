@@ -18450,6 +18450,18 @@ const DECLARED = [
     changelog: "postgres-carrier and postgres-async panic-free",
     why: "a new instruction bench driving std/net/postgres-carrier.ts: the reference compiles it against the seed's std/bytes.ts, std/json.ts and std/net/ server modules, which differ from this tree's, and the seed's std/ has no zlib module, so the modules it reaches and its own header and IR differ",
   })),
+  ...[
+    "tests/link/std_postgres_async/main.ts",
+    "tests/link/std_postgres_async_depth_panic/main.ts",
+    "tests/link/std_postgres_async_pipeline/main.ts",
+    "tests/link/std_postgres_async_seat_statement_panic/main.ts",
+    "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "postgres-carrier and postgres-async panic-free",
+    why: "the program calls std/net/postgres-async.ts, whose sites are now proved or bounded by small helpers: `PgAsyncPool.live` is declared readonly, so the attribute groups renumber, and the frames the program's async functions keep change size",
+  })),
   {
     program: "tests/link/spawn_slot_proven/main.ts",
     file: "exit",
