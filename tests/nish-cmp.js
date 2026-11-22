@@ -10108,6 +10108,13 @@ const serverTrailersDeclared = () =>
     why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
   }))
 
+/** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
+const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
+const http3PanicFree = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: HTTP3_PANIC_FREE, why }))
+  )
+
 // The std/ modules a strict module calls (Map and Set, text, JSON, array,
 // regex, bytes) prove or drop their panic sites under this PR's subject.
 const STD_PANIC_FREE = "std/ panic-free for strict modules"
@@ -11151,6 +11158,34 @@ const DECLARED = [
   ...hashMacKdfDeclared(),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
+  ...http3PanicFree(
+    "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
+    {
+      "tests/link/net_http3_malformed/main.ts": [
+        "bytes.ll",
+        "ct.ll",
+        "hkdf.ll",
+        "hmac.ll",
+        "http3-frame.ll",
+        "main.ll",
+        "qpack.ll",
+      ],
+    }
+  ),
+  ...http3PanicFree(
+    "Http3CidIndex's lookups and QPACK's decoder and encoder steps can no longer panic, so the declarations this module imports carry the attributes of a function that cannot",
+    {
+      "tests/link/net_http3_server/main.ts": ["units.ll"],
+      "tests/link/net_http3_server_f64/main.ts": ["units.ll"],
+      "tests/link/net_qpack/main.ts": ["checks.ll"],
+      "tests/link/net_qpack_bad_decoder_stream_window/main.ts": ["main.ll"],
+      "tests/link/net_qpack_bad_encoder_stream_window/main.ts": ["main.ll"],
+      "tests/link/net_qpack_bad_field_window/main.ts": ["main.ll"],
+      "tests/link/net_qpack_bad_limit/main.ts": ["main.ll"],
+      "tests/link/net_qpack_bad_value_window/main.ts": ["main.ll"],
+      "tests/link/net_qpack_bad_window/main.ts": ["main.ll"],
+    }
+  ),
   ...stdPanicFree(
     "Map and Set probe until a bucket answers instead of counting steps, and rebuild a small table into a fresh u16-sized array, so the inlined table walk changes",
     {
