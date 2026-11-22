@@ -665,7 +665,8 @@ const pgIsText = (b: u8[], from: i32, end: i32): boolean => {
     } else {
       return false
     }
-    if (more > end - i - 1) {
+    // `more` bytes must follow `i` before `end`.
+    if (toI64(more) >= toI64(end) - toI64(i)) {
       return false
     }
     // `k` walks the continuation bytes, `i + 1` to `i + more`.
@@ -2918,10 +2919,16 @@ export class PgConnection {
     // Each loop is bounded by `values.length` as well as by the window's end,
     // which the guard above keeps inside it: that names the bound the compiler
     // proves `values[i]` against, where the guard alone does not reach it.
-    const end: i32 = start + count
-    // Its exact size first, so that room is asked for once and a refusal writes nothing.
-    let size: i64 = count > 0 ? toI64(count + 1) : toI64(2)
-    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
+    // The window is inside `values`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(count))
+    // Its exact size first, so that room is asked for once and a refusal writes nothing. The
+    // count stops once past `PG_MAX_CAP` (2^30 - 1), which `startParam` refuses whatever the rest.
+    let size: i64 = count > 0 ? toI64(count) + toI64(1) : toI64(2)
+    for (
+      let i: i32 = start;
+      i >= 0 && i < end && i < toI32(values.length) && size >= 0 && size <= 1073741823;
+      i++
+    ) {
       size += toI64(pgDecimalLength(values[i]))
     }
     const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
@@ -2952,11 +2959,15 @@ export class PgConnection {
    */
   paramTextArray(items: string[]): boolean {
     // Its exact size first, so that room is asked for once and a refusal writes nothing.
+    // The count stops once past `PG_MAX_CAP` (2^30 - 1), which `startParam` refuses whatever the rest.
     let size: i64 = 2
     for (const item of items) {
-      size += toI64(item.length) + 3
       const n: i32 = toI32(item.length)
-      for (let i: i32 = 0; i < n; i++) {
+      if (size < 0 || size > 1073741823 || n < 0) {
+        break
+      }
+      size += toI64(n) + toI64(3)
+      for (let i: i32 = 0; i < n && size >= 0 && size <= 1073741823; i++) {
         const c: i32 = toI32(item.charCodeAt(i))
         if (c === 34 || c === 92) {
           size += 1
@@ -3012,7 +3023,8 @@ export class PgConnection {
    */
   paramInt4Array(values: i64[], start: i32, count: i32): boolean {
     pgIntWindow(values, start, count)
-    const end: i32 = start + count
+    // `pgIntWindow` kept the window inside `values`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(count))
     for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       if (!pgFitsInt4(values[i])) {
         panic("nish/net/postgres: paramInt4Array() with an element outside int4")
@@ -3136,6 +3148,10 @@ export class PgConnection {
 
   /** Whether the open array has room for an element of `size` bytes, its comma, and the `}` it owes. */
   private elementRoom(size: i64): boolean {
+    // An element past `PG_MAX_CAP` (2^30 - 1) has no room in any buffer.
+    if (size < 0 || size > 1073741823) {
+      return false
+    }
     const total: i64 = size + toI64(this.arrayCount > 0 ? 2 : 1)
     return total <= toI64(PG_MAX_CAP) && this.room(total)
   }
@@ -3209,10 +3225,11 @@ export class PgConnection {
   }
 
   private elementComma(): void {
-    if (this.arrayCount > 0) {
+    const count: i32 = this.arrayCount
+    if (count > 0) {
       this.putByte(PG_COMMA)
     }
-    this.arrayCount += 1
+    this.arrayCount = pgCountUp(count)
   }
 
   /**
@@ -3293,11 +3310,16 @@ export class PgConnection {
     if (width === 4) {
       this.putI32(toI32(value))
     } else {
-      this.reserve(toI64(this.outEnd) + toI64(8))
-      setI64BE(this.out, this.outEnd, value)
-      this.outEnd += 8
+      const at: i32 = this.outEnd
+      this.reserve(toI64(at) + toI64(8))
+      // `room` and `reserve` made the eight bytes; the test states that bound for the prover.
+      if (at < 0 || at > toI32(this.out.length) - 8) {
+        return false
+      }
+      setI64BE(this.out, at, value)
+      this.outEnd = toI32(toI64(at) + toI64(8))
     }
-    this.arrayCount += 1
+    this.arrayCount = pgCountUp(this.arrayCount)
     return true
   }
 
@@ -3314,7 +3336,7 @@ export class PgConnection {
     }
     this.putI32(toI32(-1))
     this.arrayNulls = true
-    this.arrayCount += 1
+    this.arrayCount = pgCountUp(this.arrayCount)
     return true
   }
 
@@ -3329,13 +3351,17 @@ export class PgConnection {
     }
     if (this.arrayOid !== 0) {
       // The header follows the parameter's length word: ndim, the NULL flag, the OID, then the dimension.
-      const header: i32 = this.arrayAt + 4
-      if (this.arrayCount === 0) {
-        setI32BE(this.out, header, PG_ZERO)
-        this.outEnd = header + PG_ARRAY_HEADER
-      } else {
-        setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
-        setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+      // `binaryArrayStart` wrote all 24 bytes inside `out`; the test states that bound for the prover.
+      const at: i32 = this.arrayAt
+      if (at >= 0 && at <= toI32(this.out.length) - 24) {
+        const header: i32 = at + 4
+        if (this.arrayCount === 0) {
+          setI32BE(this.out, header, PG_ZERO)
+          this.outEnd = header + PG_ARRAY_HEADER
+        } else {
+          setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
+          setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+        }
       }
       this.arrayOid = 0
     } else {
@@ -5680,6 +5706,8 @@ export class PgBatchClock {
     if (size < 1 || size > count || size > this.maxCount) {
       panic("nish/net/postgres: PgBatchClock.started with a size out of range")
     }
+    // Measured to the oldest item before the batch takes it.
+    const waited: i64 = this.waited(nowUs)
     const ring: i32 = toI32(this.times.length)
     const head: i32 = this.head
     const starts: i64[] = this.starts
@@ -5693,7 +5721,6 @@ export class PgBatchClock {
     const sum: i64 = toI64(head) + toI64(size)
     this.head = toI32(sum < toI64(ring) ? sum : sum - toI64(ring))
     this.count = count - size
-    const waited: i64 = this.waited(nowUs)
     this.lastWaitUs = waited < 0 ? 0 : waited
     const n: f64 = toF64(size)
     this.average = this.lastSize === 0 ? n : this.average + this.weight * (n - this.average)
@@ -5771,6 +5798,13 @@ export class PgBatchClock {
     return now - oldest
   }
 }
+
+/**
+ * `count + 1` for an array's element count. An element takes at least two
+ * bytes of a buffer held below 2^30, so the count never nears 2^31 - 1; the
+ * test states that bound for the prover.
+ */
+const pgCountUp = (count: i32): i32 => (count >= 0 && count < 2147483647 ? count + 1 : count)
 
 /** `t` as a `PgBatchClock` time: from 0 to 2^52 microseconds, a time outside counting as the nearest end. */
 const pgClockTime = (t: i64): i64 => {
@@ -6033,10 +6067,11 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
   if (port < 1 || port > 65535) {
     return pgTargetFailed(PG_TARGET_BAD_PORT)
   }
-  const n: i32 = toI32(host.length)
-  if (n === 0) {
+  if (host.length < 1) {
     return pgTargetFailed(PG_TARGET_BAD_HOST)
   }
+  const n: i32 = toI32(host.length)
+  const first: i32 = toI32(host.charCodeAt(0))
   for (let i: i32 = 0; i < n; i++) {
     const c: i32 = toI32(host.charCodeAt(i))
     if (c === 0 || c === 44) {
@@ -6046,7 +6081,6 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
   const t = new PgTarget()
   t.host = host
   t.port = port
-  const first: i32 = toI32(host.charCodeAt(0))
   if (first === 47 || first === 64) {
     const path: string = `${host}/.s.PGSQL.${port}`
     // An `@` name's NUL-free bytes after the `@` fill what a path's NUL would.
@@ -6073,7 +6107,8 @@ const pgPortValue = (text: string): i32 => {
   let v: i32 = 0
   for (let i: i32 = 0; i < n; i++) {
     const c: i32 = toI32(text.charCodeAt(i))
-    if (c < 48 || c > 57) {
+    // Past 6553 another digit is past 65535; `v` is never negative, which the test states for the prover.
+    if (c < 48 || c > 57 || v < 0 || v > 6553) {
       return -1
     }
     v = v * 10 + (c - 48)
@@ -6168,18 +6203,31 @@ export const pgTargetUrl = (url: string): PgTarget => {
   let hostEnd: i32 = authorityEnd
   let portStart: i32 = -1
   let bracketed: boolean = false
-  if (hostStart < authorityEnd && toI32(url.charCodeAt(hostStart)) === 91) {
+  // Inside an IPv6 address's brackets.
+  let nameStart: i32 = hostStart
+  let nameEnd: i32 = authorityEnd
+  if (
+    hostStart >= 0 &&
+    hostStart < authorityEnd &&
+    hostStart < n &&
+    toI32(url.charCodeAt(hostStart)) === 91
+  ) {
     let close: i32 = hostStart + 1
     while (close >= 0 && close < authorityEnd && close < n && toI32(url.charCodeAt(close)) !== 93) {
       close += 1
     }
-    if (close === authorityEnd) {
+    // The loop stops at the `]` or at `authorityEnd`, which is at most `n`; the test states that
+    // bound for the prover.
+    if (close < 0 || close >= authorityEnd) {
       return pgTargetFailed(PG_TARGET_BAD_HOST)
     }
     bracketed = true
+    nameStart = hostStart + 1
+    nameEnd = close
     hostEnd = close + 1
     if (hostEnd < authorityEnd) {
-      if (toI32(url.charCodeAt(hostEnd)) !== 58) {
+      // `hostEnd` is below `n` as `authorityEnd` is at most `n`; the test states that for the prover.
+      if (hostEnd >= n || toI32(url.charCodeAt(hostEnd)) !== 58) {
         return pgTargetFailed(PG_TARGET_BAD_HOST)
       }
       portStart = hostEnd + 1
@@ -6194,7 +6242,7 @@ export const pgTargetUrl = (url: string): PgTarget => {
     }
   }
   const decodedHost: string | null = bracketed
-    ? pgDecoded(url, hostStart + 1, hostEnd - 1)
+    ? pgDecoded(url, nameStart, nameEnd)
     : pgDecoded(url, hostStart, hostEnd)
   if (decodedHost === null) {
     return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
@@ -6212,7 +6260,10 @@ export const pgTargetUrl = (url: string): PgTarget => {
     }
   }
   // The query: `key=value` pairs split at `&`.
-  let i: i32 = queryStart + 1
+  let i: i32 = n
+  if (queryStart < n) {
+    i = queryStart + 1
+  }
   while (i >= 0 && i < n) {
     let end: i32 = i
     let eq: i32 = -1
@@ -6223,7 +6274,8 @@ export const pgTargetUrl = (url: string): PgTarget => {
       end += 1
     }
     if (end > i) {
-      if (eq < 0) {
+      // `eq` is a `=` found before `end`; the test states that bound for the prover.
+      if (eq < 0 || eq >= end) {
         return pgTargetFailed(PG_TARGET_BAD_URL)
       }
       const key: string | null = pgDecoded(url, i, eq)
@@ -6239,6 +6291,9 @@ export const pgTargetUrl = (url: string): PgTarget => {
           return pgTargetFailed(PG_TARGET_BAD_PORT)
         }
       }
+    }
+    if (end >= n) {
+      break
     }
     i = end + 1
   }
