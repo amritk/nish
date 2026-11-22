@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9866,
+  "total": 9647,
   "explicit": {
     "kept": 343,
-    "toFix": 138
+    "toFix": 137
   },
   "modules": {
     "std/base64.ts": {
@@ -111,20 +111,11 @@
       "panic": 14
     },
     "std/crypto/jwt.ts": {
-      "array-length": 7,
-      "index": 7,
-      "overflow": 74,
+      "array-length": 3,
       "panic": 1
     },
     "std/crypto/p256.ts": {
-      "array-length": 7,
-      "index": 22,
-      "overflow": 32,
-      "panic": 3
-    },
-    "std/crypto/p384.ts": {
-      "index": 4,
-      "overflow": 3
+      "panic": 2
     },
     "std/crypto/pki-roots.ts": {
       "index": 6,
@@ -137,11 +128,6 @@
       "overflow": 31,
       "pop": 1,
       "slice": 7
-    },
-    "std/crypto/rsa.ts": {
-      "array-length": 10,
-      "index": 23,
-      "overflow": 32
     },
     "std/crypto/scram.ts": {
       "panic": 1
