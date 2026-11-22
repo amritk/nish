@@ -29,6 +29,30 @@
 import { quicPutDatagram } from "nish/net/quic-frame"
 import { quicPacketCopy } from "nish/net/quic-packet"
 
+/** `n` zeroed bytes, allocated at once when `n` fits a u16 and grown otherwise. */
+const quicDatagramBytes = (n: i32): u8[] => {
+  if (n >= 0 && n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = []
+  for (let k: i32 = 0; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/** `n` zeroed lengths, allocated at once when `n` fits a u16 and grown otherwise. */
+const quicDatagramLengths = (n: i32): i32[] => {
+  if (n >= 0 && n <= 65535) {
+    return new Array<i32>(toU16(n))
+  }
+  const out: i32[] = []
+  for (let k: i32 = 0; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
 /** A ring of `entries` datagram payloads of at most `entrySize` bytes each, oldest first. */
 export class QuicDatagramQueue {
   /** Entry `k`'s bytes are `data[k * entrySize ..]`, `lengths[k]` of them. */
@@ -49,15 +73,42 @@ export class QuicDatagramQueue {
 
   /**
    * Makes an empty ring, allocating all of its storage now: `entries * entrySize` bytes of
-   * payload and a 4-byte length per entry.
+   * payload and a 4-byte length per entry. A negative size, or a product past 2^31 - 1 bytes, makes a
+   * ring of no entries, which refuses every `push`.
    *
    * @param entries How many datagrams the ring holds at most before `push` refuses the next.
    * @param entrySize The largest payload, in bytes, an entry holds; a longer one is dropped, not split.
    */
   constructor(entries: i32, entrySize: i32) {
-    this.data = new Array<u8>(entries * entrySize)
-    this.lengths = new Array<i32>(entries)
+    // Two i32s, so the product fits an i64.
+    const bytes: i64 = toI64(entries) * toI64(entrySize)
+    const fits: boolean = entries >= 0 && entrySize >= 0 && bytes <= 2147483647
+    // `bytes` is at most 2^31 - 1 when it fits.
+    this.data = quicDatagramBytes(fits ? toI32(bytes) : 0)
+    this.lengths = quicDatagramLengths(fits ? entries : 0)
     this.entrySize = entrySize
+  }
+
+  /**
+   * Where entry `k`'s bytes start in `data`. Every entry lies inside `data`, whose length is an
+   * i32, so for an entry the offset fits; any other `k` gives an offset `quicPacketCopy` refuses.
+   */
+  private offset(k: i32): i32 {
+    const at: i64 = toI64(k) * toI64(this.entrySize)
+    // Past 2^31 - 1 it is no entry's, and -1 is an offset every copy refuses.
+    return at < 0 || at > 2147483647 ? -1 : toI32(at)
+  }
+
+  /**
+   * The entry `j` places after `head`, wrapped around the ring; 0 for a ring of no entries.
+   * Unsigned, because `head` and `j` are each below 2^31, so the sum cannot wrap.
+   */
+  private slot(j: i32): i32 {
+    const entries: u32 = toU32(this.lengths.length)
+    if (entries === 0) {
+      return 0
+    }
+    return toI32((toU32(this.head) + toU32(j)) % entries)
   }
 
   /** Empties the ring, for a connection slot reused for another peer. */
@@ -87,26 +138,24 @@ export class QuicDatagramQueue {
    * @returns True when the datagram was queued; false when it was dropped instead.
    */
   push(buf: u8[], from: i32, length: i32): boolean {
-    const entries: i32 = this.capacity()
+    const entries: i32 = toI32(this.lengths.length)
+    const count: i32 = this.count
     if (
-      this.count >= entries ||
+      count >= entries ||
       length < 0 ||
       length > this.entrySize ||
       from < 0 ||
       from > toI32(buf.length) - length
     ) {
-      if (this.dropped < 2147483647) {
-        this.dropped = this.dropped + 1
-      }
+      this.countDropped()
       return false
     }
-    const k: i32 = (this.head + this.count) % entries
-    const base: i32 = k * this.entrySize
-    quicPacketCopy(this.data, base, buf, from, length)
+    const k: i32 = this.slot(count)
+    quicPacketCopy(this.data, this.offset(k), buf, from, length)
     if (k >= 0 && k < entries) {
       this.lengths[k] = length
     }
-    this.count = this.count + 1
+    this.count = count + 1
     return true
   }
 
@@ -125,10 +174,18 @@ export class QuicDatagramQueue {
    * that no packet can carry any more; an empty ring is left as it is.
    */
   dropOldest(): void {
-    if (this.count > 0 && this.dropped < 2147483647) {
-      this.dropped = this.dropped + 1
+    if (this.count > 0) {
+      this.countDropped()
     }
     this.drop()
+  }
+
+  /** Counts one datagram in `dropped`, which stops at 2^31 - 1 rather than wrap. */
+  private countDropped(): void {
+    const dropped: i32 = this.dropped
+    if (dropped < 2147483647) {
+      this.dropped = dropped + 1
+    }
   }
 
   /**
@@ -137,24 +194,30 @@ export class QuicDatagramQueue {
    * for now that a later packet may carry. A ring of one is left as it is.
    */
   deferOldest(): void {
-    const entries: i32 = this.capacity()
-    if (this.count < 2) {
+    const entries: i32 = toI32(this.lengths.length)
+    const count: i32 = this.count
+    const head: i32 = this.head
+    // `head` is an entry whenever `count` is 1 or more; the test says so for the bounds proof.
+    if (count < 2 || head < 0 || head >= entries) {
       return
     }
-    if (this.count < entries) {
-      const k: i32 = (this.head + this.count) % entries
-      const length: i32 = this.lengths[this.head]
-      quicPacketCopy(this.data, k * this.entrySize, this.data, this.head * this.entrySize, length)
-      this.lengths[k] = length
+    if (count < entries) {
+      const k: i32 = this.slot(count)
+      const length: i32 = this.lengths[head]
+      quicPacketCopy(this.data, this.offset(k), this.data, this.offset(head), length)
+      if (k >= 0 && k < entries) {
+        this.lengths[k] = length
+      }
     }
-    this.head = (this.head + 1) % entries
+    this.head = this.slot(toI32(1))
   }
 
   /** Forgets the oldest datagram. */
   private drop(): void {
-    if (this.count > 0) {
-      this.head = (this.head + 1) % this.capacity()
-      this.count = this.count - 1
+    const count: i32 = this.count
+    if (count > 0) {
+      this.head = this.slot(toI32(1))
+      this.count = count - 1
     }
   }
 
@@ -177,7 +240,7 @@ export class QuicDatagramQueue {
     if (at < 0 || cap < length || at > toI32(buf.length) - length) {
       return -2
     }
-    quicPacketCopy(buf, at, this.data, this.head * this.entrySize, length)
+    quicPacketCopy(buf, at, this.data, this.offset(this.head), length)
     this.drop()
     return length
   }
@@ -197,7 +260,7 @@ export class QuicDatagramQueue {
     if (length < 0) {
       return at
     }
-    const next: i32 = quicPutDatagram(buf, at, end, this.data, this.head * this.entrySize, length)
+    const next: i32 = quicPutDatagram(buf, at, end, this.data, this.offset(this.head), length)
     if (next < 0) {
       return at
     }
