@@ -1115,8 +1115,17 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * QUIC-10, `docs/security/quic.md`): each of the three spaces' `QuicAckRanges`
  * counts ECT(0), ECT(1) and CE, and the connection and the server each keep
  * the codepoint the datagram in hand arrived with.
+ *
+ * Moved to **111,240 bytes** (+80) by the panic-free QUIC wire helpers (WP82 S4,
+ * `docs/security/quic.md`): `quicDatagramBytes`, `quicDatagramLengths`,
+ * `quicPacketTake` and `quicCidSequences` grow a long array with `push` or return
+ * another call's array, so the layout pass cannot prove they return a fresh array
+ * (`freshReturnOf`, `src/inline-arrays.ts`) and the fields they fill keep a
+ * pointer to a header of their own instead of a boxed `len` and `data`: the
+ * datagram ring takes 32 bytes more, the packet header 32 and the
+ * connection-ID retire list 16.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111160
+export const HTTP3_SERVER_SLOT_BYTES = 111240
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
