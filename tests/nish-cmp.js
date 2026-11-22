@@ -18483,6 +18483,25 @@ const DECLARED = [
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
   },
+  // WP82 S3: the HTTP/1 client codec refuses more than 2^30 buffered bytes
+  // with the new `HTTP1_E_MEMORY_LIMIT` code where it used to panic, and
+  // `Http1ResponseParser.buffered` no longer reaches a panic site.
+  ...["tests/link/net_http1_client/main.ts", "tests/link/net_http1_client_f64/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "std/net TLS, fetch and outbound client side panic-free",
+    why: "the checks name `HTTP1_E_MEMORY_LIMIT`, which the seed's nish/net/http1-client-codec lacks, so the seed refuses the program (WP82 S3)",
+  })),
+  ...[
+    "tests/link/net_http1_client_feed_window/main.ts",
+    "tests/link/net_http1_client_feed_window_len/main.ts",
+    "tests/link/net_http1_client_feed_window_off/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "std/net TLS, fetch and outbound client side panic-free",
+    why: "`Http1ResponseParser.buffered` no longer reaches a panic site, so its declaration takes the `nounwind willreturn readonly` attribute group (#2) in place of plain `nounwind` (#0) (WP82 S3)",
+  })),
 ]
 
 /**
