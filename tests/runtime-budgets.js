@@ -1053,8 +1053,13 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * connections and address are built on the first Initial accepted into it, which
  * `HTTP3_SERVER_SLOT_BYTES` pins. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * Moved to **16,437,152 bytes** (+256 on main's 16,436,896) by WP82's panic
+ * proofs in the server (`docs/security/http3.md`, "Panic sites"): the
+ * constructor builds its per-slot tables to a length the prover can see, and
+ * the budget is again the next 256-byte boundary above.
  */
-export const HTTP3_SERVER_START_BYTES = 17501696
+export const HTTP3_SERVER_START_BYTES = 16437248
 
 /**
  * What one `Http3Server` slot's QUIC and HTTP/3 connections and address take from
@@ -1115,8 +1120,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * QUIC-10, `docs/security/quic.md`): each of the three spaces' `QuicAckRanges`
  * counts ECT(0), ECT(1) and CE, and the connection and the server each keep
  * the codepoint the datagram in hand arrived with.
+ *
+ * Moved to **111,040 bytes** (-120) by WP82's panic proofs
+ * (`docs/security/http3.md`, "Panic sites"): an `Http3Connection` keeps one
+ * per-request `contentLeft` table where it kept `dataTotal` and
+ * `contentLength`.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111160
+export const HTTP3_SERVER_SLOT_BYTES = 111040
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

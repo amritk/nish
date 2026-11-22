@@ -673,7 +673,8 @@ export class Http3Wheel {
       }
       if (bits[word] === 0) {
         // An empty word: on to the next one.
-        offset = offset + (64 - (b & 63))
+        const word64: i32 = 64
+        offset = offset + (word64 - (b & 63))
       } else if (head[b] !== 0) {
         return http3ServerWait(from, offset, now)
       } else {
