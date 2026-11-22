@@ -1199,8 +1199,11 @@ export class PgBinaryArray {
     this.seen = 0
     this.start = 0
     this.length = 0
-    this.bad = !(start >= 0 && length >= PG_ARRAY_HEADER && start <= toI32(b.length) - length)
-    if (this.bad) {
+    // Two `i32`s summed in `i64` cannot overflow; the test on `end` and the
+    // one against the header state for the prover what the one on `last` proves.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
+    if (start < 0 || length < PG_ARRAY_HEADER || last > toI64(b.length) || end > toI32(b.length) || start > toI32(b.length) - 12) {
       this.refuse()
       return
     }
@@ -1225,16 +1228,19 @@ export class PgBinaryArray {
     }
     this.elementOid = oid
     this.hasNull = hasNull === 1
-    this.pos = start + PG_ARRAY_HEADER
-    this.end = start + length
+    const pos: i32 = start + PG_ARRAY_HEADER
+    this.pos = pos
+    this.end = end
     if (ndim === 1) {
-      const dim: i32 = getI32BE(b, start + PG_ARRAY_HEADER)
-      if (dim < 0) {
+      const dim: i32 = getI32BE(b, pos)
+      // The length test above keeps the dimension inside the column; this one
+      // states that bound for the prover.
+      if (dim < 0 || pos > toI32(b.length) - 8) {
         this.refuse()
         return
       }
       this.count = dim
-      this.pos += PG_ARRAY_DIM
+      this.pos = pos + PG_ARRAY_DIM
     }
   }
 
@@ -1255,32 +1261,40 @@ export class PgBinaryArray {
     if (this.bad) {
       return PG_ARRAY_BAD
     }
-    if (this.seen === this.count) {
-      if (this.pos === this.end) {
+    const seen: i32 = this.seen
+    const pos: i32 = this.pos
+    const end: i32 = this.end
+    if (seen < 0 || seen >= this.count) {
+      if (seen >= 0 && pos === end) {
         return PG_ARRAY_END
       }
       return this.refuse()
     }
-    if (this.end - this.pos < 4) {
+    // `begin` keeps `seen` and `pos` from going negative; summed in `i64`,
+    // a length cannot overflow on its way to the test against `end`.
+    const p: i64 = toI64(pos) + toI64(4)
+    if (pos < 0 || p > toI64(end)) {
       return this.refuse()
     }
-    const n: i32 = getI32BE(this.b, this.pos)
-    this.pos += 4
-    this.seen += 1
+    const n: i32 = getI32BE(this.b, pos)
+    const at: i32 = toI32(p)
+    this.pos = at
+    this.seen = seen + 1
     if (n === -1) {
       if (!this.hasNull) {
         return this.refuse()
       }
-      this.start = this.pos
+      this.start = at
       this.length = 0
       return PG_ARRAY_NULL
     }
-    if (n !== this.size || this.end - this.pos < n) {
+    const q: i64 = toI64(at) + toI64(n)
+    if (n !== this.size || q > toI64(end)) {
       return this.refuse()
     }
-    this.start = this.pos
+    this.start = at
     this.length = n
-    this.pos += n
+    this.pos = toI32(q)
     return PG_ARRAY_ELEMENT
   }
 
@@ -1338,12 +1352,19 @@ export class PgArrayWalker {
   begin(b: u8[], start: i32, length: i32): void {
     this.b = b
     this.first = true
-    this.bad = !(start >= 0 && length >= 2 && start + length <= toI32(b.length))
-    if (!this.bad) {
-      this.bad = toI32(b[start]) !== 123 || toI32(b[start + length - 1]) !== 125
+    this.pos = 0
+    this.end = 0
+    // Two `i32`s summed in `i64` cannot overflow; the tests on `end` state for
+    // the prover what the ones on `start`, `length` and `last` prove.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
+    if (start < 0 || length < 2 || last > toI64(b.length) || end > toI32(b.length) || end < 2 || start >= toI32(b.length)) {
+      this.bad = true
+      return
     }
+    this.bad = toI32(b[start]) !== 123 || toI32(b[end - 1]) !== 125
     this.pos = start + 1
-    this.end = start + length - 1
+    this.end = end - 1
   }
 
   private refuse(): i32 {
@@ -1363,49 +1384,50 @@ export class PgArrayWalker {
     }
     const b: u8[] = this.b
     const end: i32 = this.end
-    if (this.pos < 0 || end > toI32(b.length)) {
+    let p: i32 = this.pos
+    if (p < 0 || p > end || end > toI32(b.length)) {
       return this.refuse()
+    }
+    if (p >= end) {
+      this.first = false
+      return PG_ARRAY_END
     }
     if (this.first) {
       this.first = false
-      if (this.pos === end) {
-        return PG_ARRAY_END
-      }
     } else {
-      if (this.pos === end) {
-        return PG_ARRAY_END
-      }
-      if (toI32(b[this.pos]) !== 44) {
+      if (toI32(b[p]) !== 44) {
         return this.refuse()
       }
-      this.pos += 1
-    }
-    let p: i32 = this.pos
-    if (p < 0) {
-      return this.refuse()
+      p++
     }
     this.escaped = false
     if (p < end && toI32(b[p]) === 34) {
       p++
-      this.start = p
+      const first: i32 = p
       while (p < end && toI32(b[p]) !== 34) {
         if (toI32(b[p]) === 92) {
           this.escaped = true
           p++
+          // An escape needs a byte after it before the closing quote.
+          if (p >= end) {
+            return this.refuse()
+          }
         }
         p++
       }
       if (p >= end) {
         return this.refuse()
       }
-      this.length = p - this.start
-      this.pos = p + 1
-      if (this.pos !== end && toI32(b[this.pos]) !== 44) {
+      this.start = first
+      this.length = p - first
+      p++
+      this.pos = p
+      if (p < end && toI32(b[p]) !== 44) {
         return this.refuse()
       }
       return PG_ARRAY_ELEMENT
     }
-    this.start = p
+    const first: i32 = p
     while (p < end && toI32(b[p]) !== 44) {
       const c: i32 = toI32(b[p])
       if (c === 123 || c === 125 || c === 34 || c === 92 || c === 32) {
@@ -1413,12 +1435,15 @@ export class PgArrayWalker {
       }
       p++
     }
-    this.length = p - this.start
+    this.start = first
+    this.length = p - first
     this.pos = p
-    if (this.length === 0) {
+    if (p === first) {
       return this.refuse()
     }
-    if (this.length === 4 && p >= 4) {
+    // The scan stopped at or before `end`, inside the buffer; the test on `p`
+    // states that bound for the prover.
+    if (this.length === 4 && p >= 4 && p <= toI32(b.length)) {
       const n: i32 = toI32(b[p - 4]) | 32
       const u: i32 = toI32(b[p - 3]) | 32
       const l1: i32 = toI32(b[p - 2]) | 32
@@ -1440,24 +1465,25 @@ export class PgArrayWalker {
    */
   copy(out: u8[], at: i32): i32 {
     const b: u8[] = this.b
-    let n: i32 = 0
     let p: i32 = this.start
-    const end: i32 = this.start + this.length
-    if (p < 0 || end > toI32(b.length)) {
+    const last: i64 = toI64(p) + toI64(this.length)
+    const end: i32 = toI32(last)
+    if (p < 0 || at < 0 || last > toI64(b.length) || end > toI32(b.length)) {
       return -1
     }
+    let k: i32 = at
     while (p < end) {
       if (toI32(b[p]) === 92) {
         p++
       }
-      if (p >= end || at + n >= toI32(out.length) || at < 0) {
+      if (p >= end || k >= toI32(out.length)) {
         return -1
       }
-      out[at + n] = b[p]
-      n++
+      out[k] = b[p]
+      k++
       p++
     }
-    return n
+    return k - at
   }
 }
 
