@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9866,
+  "total": 9677,
   "explicit": {
     "kept": 343,
-    "toFix": 138
+    "toFix": 136
   },
   "modules": {
     "std/base64.ts": {
@@ -23,18 +23,10 @@
       "panic": 1
     },
     "std/cli-args.ts": {
-      "index": 114,
-      "overflow": 20,
-      "panic": 36
+      "panic": 34
     },
     "std/cli-flags.ts": {
-      "index": 21,
-      "overflow": 5,
-      "panic": 9,
-      "slice": 1
-    },
-    "std/cli.ts": {
-      "overflow": 6
+      "panic": 9
     },
     "std/compress/checksum.ts": {
       "divide": 2,
@@ -202,8 +194,6 @@
       "slice": 1
     },
     "std/json-typed.ts": {
-      "array-length": 2,
-      "overflow": 18,
       "slice": 3
     },
     "std/json-value.ts": {
