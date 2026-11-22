@@ -169,6 +169,12 @@ export const P256_POINT_SIZE: i32 = 65
 /** The length in bytes of a signature: `r` then `s`, 32 big-endian bytes each. */
 export const P256_SIGNATURE_SIZE: i32 = 64
 
+/**
+ * The most RFC 6979 candidates `p256SignSha256Into` draws before it refuses a
+ * scratch that cannot sign: one is used up only by a 2^-31 event.
+ */
+const P256_SIGN_ROUNDS: i32 = 64
+
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const P256_FROM: i32 = 0
 
@@ -2113,13 +2119,13 @@ const p256Copy = (out: u32[], a: u32[]): void => {
 
 /**
  * The plain limbs of the 32 big-endian bytes `bytes[at .. at + 32)`, limb 0
- * the least significant. Every caller passes a window inside its array (a
- * 32-byte scalar, or a 65-byte point at 1 and 33) and an 8-limb `out`; one
- * outside stops the program, checked once before any byte is read.
+ * the least significant. Answers `false`, having read and written nothing,
+ * for a window outside `bytes` or an `out` shorter than 8 limbs (a scratch
+ * array an importer resized), and every caller refuses on it.
  */
-const p256LimbsFromBytes = (out: u32[], bytes: u8[], at: i32): void => {
+const p256LimbsFromBytes = (out: u32[], bytes: u8[], at: i32): boolean => {
   if (toI32(out.length) < 8 || at < 0 || at > toI32(bytes.length) - 32) {
-    panic("p256LimbsFromBytes: the 32-byte window is outside its array")
+    return false
   }
   // Unrolled so each index is the checked `at` plus a constant, which the
   // bounds prover discharges from the one check above.
@@ -2163,16 +2169,18 @@ const p256LimbsFromBytes = (out: u32[], bytes: u8[], at: i32): void => {
     (toU32(bytes[at + 1]) << 16) |
     (toU32(bytes[at + 2]) << 8) |
     toU32(bytes[at + 3])
+  return true
 }
 
 /**
- * The plain limbs `a` as 32 big-endian bytes at `out[at .. at + 32)`. Every
- * caller passes an 8-limb `a` and a window inside `out`; one outside stops
- * the program, checked once before any byte is written.
+ * The plain limbs `a` as 32 big-endian bytes at `out[at .. at + 32)`. Answers
+ * `false`, having written nothing, for an `a` shorter than 8 limbs or a
+ * window outside `out` (a scratch array an importer resized), and every
+ * caller refuses on it.
  */
-const p256LimbsToBytes = (out: u8[], at: i32, a: u32[]): void => {
+const p256LimbsToBytes = (out: u8[], at: i32, a: u32[]): boolean => {
   if (toI32(a.length) < 8 || at < 0 || at > toI32(out.length) - 32) {
-    panic("p256LimbsToBytes: the 32-byte window is outside its array")
+    return false
   }
   // Unrolled so each index is the checked `at` plus a constant, which the
   // bounds prover discharges from the one check above.
@@ -2216,6 +2224,7 @@ const p256LimbsToBytes = (out: u8[], at: i32, a: u32[]): void => {
   out[at + 1] = toU8(a7 >> 16)
   out[at + 2] = toU8(a7 >> 8)
   out[at + 3] = toU8(a7)
+  return true
 }
 
 /**
@@ -3627,16 +3636,20 @@ const P256_BASE_ENTRY: i32 = 16
  * is first taken mod n by a subtraction kept or dropped by fiat's
  * conditional move; the halving is a scalar Montgomery multiply by
  * `2^-1 R`. Every step runs whatever `k` is. `s.t0` (`k - n`) and `s.t1`
- * (the constants) are left to the caller's `p256WipeScratch`.
+ * (the constants) are left to the caller's `p256WipeScratch`. Answers `false`,
+ * having read nothing, when `k` or `m` is too short to hold a scalar.
  */
-const p256BaseRecode = (m: u32[], k: u8[], s: P256PointScratch): void => {
-  p256LimbsFromBytes(m, k, 0)
+const p256BaseRecode = (m: u32[], k: u8[], s: P256PointScratch): boolean => {
+  if (!p256LimbsFromBytes(m, k, 0)) {
+    return false
+  }
   p256SetOrder(s.t1)
   p256FiatSelectznz(m, p256SubBorrow(s.t0, m, s.t1), s.t0, m)
   p256BaseOffset(s.t1)
   p256FiatScalarAdd(m, m, s.t1)
   p256BaseHalf(s.t1)
   p256FiatScalarMul(m, m, s.t1)
+  return true
 }
 
 /**
@@ -3794,9 +3807,9 @@ const p256PointAddMixed = (p: P256ProjectivePoint, q: P256ProjectivePoint, s: P2
  * `p256ScalarMult(out, k, G, s)`, which tests/link/crypto_p256_agree checks
  * bit for bit.
  */
-const p256BaseMult = (out: P256ProjectivePoint, k: u8[], s: P256PointScratch): void => {
+const p256BaseMult = (out: P256ProjectivePoint, k: u8[], s: P256PointScratch): boolean => {
   const table: u32[] = p256BaseTable()
-  p256BaseMultWith(out, k, s, table)
+  return p256BaseMultWith(out, k, s, table)
 }
 
 /**
@@ -3806,14 +3819,15 @@ const p256BaseMult = (out: P256ProjectivePoint, k: u8[], s: P256PointScratch): v
  * scalar in `s.comb` and the entry selected into `s.entry` follow `k`, so
  * both are wiped before this returns, and `s.sum` with the rest of `s` by
  * the caller's `p256WipeScratch`; the table is a function of G alone, and
- * kept.
+ * kept. Answers `false`, with `out` untouched, for a `k` shorter than 32
+ * bytes, an `s.comb` too short to recode it into, or a table not
+ * `p256BaseTable()`'s length; every caller refuses on it.
  */
-const p256BaseMultWith = (out: P256ProjectivePoint, k: u8[], s: P256PointScratch, table: u32[]): void => {
-  if (toI32(k.length) < 32) {
-    return
-  }
+const p256BaseMultWith = (out: P256ProjectivePoint, k: u8[], s: P256PointScratch, table: u32[]): boolean => {
   const m: u32[] = s.comb
-  p256BaseRecode(m, k, s)
+  if (toI32(table.length) !== P256_COMBS * P256_COMB_ENTRIES * P256_BASE_ENTRY || !p256BaseRecode(m, k, s)) {
+    return false
+  }
   p256SetIdentity(out)
   for (let i: i32 = P256_COMB_SPACING - 1; i >= 0; i--) {
     if (i < P256_COMB_SPACING - 1) {
@@ -3827,6 +3841,7 @@ const p256BaseMultWith = (out: P256ProjectivePoint, k: u8[], s: P256PointScratch
   }
   wipe(m)
   p256WipePoint(s.entry)
+  return true
 }
 
 /**
@@ -3857,8 +3872,9 @@ const p256DecodePoint = (bytes: u8[]): P256ProjectivePoint | null => {
   const prime: u32[] = p256Prime()
   const r2: u32[] = p256FieldR2()
   const p = new P256ProjectivePoint()
-  p256LimbsFromBytes(p.x, bytes, 1)
-  p256LimbsFromBytes(p.y, bytes, 33)
+  if (!p256LimbsFromBytes(p.x, bytes, 1) || !p256LimbsFromBytes(p.y, bytes, 33)) {
+    return null
+  }
   if (p256Below(p.x, prime) === 0 || p256Below(p.y, prime) === 0) {
     return null
   }
@@ -3883,8 +3899,11 @@ const p256DecodePoint = (bytes: u8[]): P256ProjectivePoint | null => {
   return p
 }
 
-/** `p` as its 65-byte uncompressed SEC 1 encoding; `p` is never the identity here. */
-const p256EncodePoint = (p: P256ProjectivePoint): u8[] => {
+/**
+ * `p` as its 65-byte uncompressed SEC 1 encoding; `p` is never the identity
+ * here. Answers `null` for a coordinate shorter than 8 limbs.
+ */
+const p256EncodePoint = (p: P256ProjectivePoint): u8[] | null => {
   const zInverse: u32[] = p256Limbs()
   const one: u32[] = p256PlainOne()
   const x: u32[] = p256Limbs()
@@ -3896,8 +3915,9 @@ const p256EncodePoint = (p: P256ProjectivePoint): u8[] => {
   p256FiatMul(y, y, one)
   const out: u8[] = new Array<u8>(65)
   out[0] = 4
-  p256LimbsToBytes(out, 1, x)
-  p256LimbsToBytes(out, 33, y)
+  if (!p256LimbsToBytes(out, 1, x) || !p256LimbsToBytes(out, 33, y)) {
+    return null
+  }
   return out
 }
 
@@ -3911,7 +3931,9 @@ const p256ScalarInRange = (bytes: u8[]): boolean => {
     return false
   }
   const a: u32[] = p256Limbs()
-  p256LimbsFromBytes(a, bytes, 0)
+  if (!p256LimbsFromBytes(a, bytes, 0)) {
+    return false
+  }
   const below: u32 = p256Below(a, p256Order())
   const zero: u32 = ctEq(p256FiatNonzero(a), 0) & 1
   wipe(a) // a private key's limbs, when `bytes` is one
@@ -3922,9 +3944,10 @@ const p256ScalarInRange = (bytes: u8[]): boolean => {
  * bits2int of RFC 6979 §2.3.2 for qlen = 256, then reduced mod n: the leftmost
  * 256 bits of `digest` as an integer, as FIPS 186-4 §6.4 takes a hash, and
  * then n subtracted once if it is at least n. A digest shorter than 32 bytes
- * is its own value, zero-extended on the left. Answers plain limbs.
+ * is its own value, zero-extended on the left. Answers plain limbs, and
+ * `false`, with `out` untouched, for an `out` shorter than 8 limbs.
  */
-const p256DigestScalar = (out: u32[], digest: u8[]): void => {
+const p256DigestScalar = (out: u32[], digest: u8[]): boolean => {
   const length: i32 = toI32(digest.length)
   let take: i32 = 32
   if (length < 32) {
@@ -3938,8 +3961,11 @@ const p256DigestScalar = (out: u32[], digest: u8[]): void => {
     bytes.push(digest[i])
   }
   const a: u32[] = p256Limbs()
-  p256LimbsFromBytes(a, bytes, 0)
+  if (toI32(out.length) < 8 || !p256LimbsFromBytes(a, bytes, 0)) {
+    return false
+  }
   p256ReduceOnce(out, a, p256Order())
+  return true
 }
 
 /** RFC 2104's key block for SHA-256: `k` zero-extended to 64 bytes, each byte XOR `pad`. */
@@ -4020,12 +4046,17 @@ const p256NonceValue = (k: u8[], v: u8[]): u8[] => {
  * again through step h.3, as the RFC says. Whether a candidate is below n is a
  * branch on the secret, and the one the RFC prescribes: it is taken once in
  * about 2^32 signatures and says only that a discarded value was large.
+ *
+ * Answers `null` for a `priv` or `z` too short to hold a scalar, with every
+ * value derived from the key wiped as on the signing exit.
  */
-const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
+const p256SignScalar = (priv: u8[], z: u32[]): u8[] | null => {
   const n: u32[] = p256Order()
   const r2: u32[] = p256ScalarR2()
   const h1: u8[] = new Array<u8>(32)
-  p256LimbsToBytes(h1, 0, z)
+  if (!p256LimbsToBytes(h1, 0, z)) {
+    return null
+  }
   const empty: u8[] = new Array<u8>(0)
   let v: u8[] = new Array<u8>(32)
   let k: u8[] = new Array<u8>(32)
@@ -4048,7 +4079,7 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
   v = next
 
   const dM: u32[] = p256Limbs()
-  p256LimbsFromBytes(dM, priv, 0)
+  let failed: boolean = !p256LimbsFromBytes(dM, priv, 0)
   p256FiatScalarMul(dM, dM, r2)
   const scratch = new P256PointScratch()
   const point = new P256ProjectivePoint()
@@ -4056,45 +4087,53 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
   const r: u32[] = p256Limbs()
   const kM: u32[] = p256Limbs()
   const s: u32[] = p256Limbs()
-  while (true) {
+  let sig: u8[] | null = null
+  while (!failed && sig === null) {
     next = p256NonceValue(k, v) // step h.2
     wipe(v)
     v = next
     if (p256ScalarInRange(v)) {
-      p256BaseMult(point, v, scratch)
-      p256AffineX(x, point)
-      p256ReduceOnce(r, x, n)
-      // s = k^-1 (z + r d) mod n. A Montgomery multiply of a plain value by
-      // one in the Montgomery domain answers a plain value, so only d and
-      // k^-1 are converted: r d and then (z + r d) k^-1 come out plain.
-      p256LimbsFromBytes(kM, v, 0)
-      p256FiatScalarMul(kM, kM, r2)
-      p256ScalarInverse(kM, kM)
-      p256FiatScalarMul(s, r, dM)
-      p256FiatScalarAdd(s, s, z)
-      p256FiatScalarMul(s, s, kM)
-      if (p256FiatNonzero(r) !== 0 && p256FiatNonzero(s) !== 0) {
-        const sig: u8[] = new Array<u8>(64)
-        p256LimbsToBytes(sig, 0, r)
-        p256LimbsToBytes(sig, 32, s)
-        // ECC-2: the private key's limbs, the nonce and its inverse, RFC
-        // 6979's K and V, the nonce point and the scratch it was built in.
-        wipe(k)
-        wipe(v)
-        wipe(dM)
-        wipe(kM)
-        p256WipePoint(point)
-        p256WipeScratch(scratch)
-        return sig
+      // A 32-byte `v` and 8-limb `kM` are what both take, so neither refuses
+      // here; a refusal still leaves through the wipes below.
+      failed = !p256BaseMult(point, v, scratch) || !p256LimbsFromBytes(kM, v, 0)
+      if (!failed) {
+        p256AffineX(x, point)
+        p256ReduceOnce(r, x, n)
+        // s = k^-1 (z + r d) mod n. A Montgomery multiply of a plain value by
+        // one in the Montgomery domain answers a plain value, so only d and
+        // k^-1 are converted: r d and then (z + r d) k^-1 come out plain.
+        p256FiatScalarMul(kM, kM, r2)
+        p256ScalarInverse(kM, kM)
+        p256FiatScalarMul(s, r, dM)
+        p256FiatScalarAdd(s, s, z)
+        p256FiatScalarMul(s, s, kM)
+        if (p256FiatNonzero(r) !== 0 && p256FiatNonzero(s) !== 0) {
+          const encoded: u8[] = new Array<u8>(64)
+          failed = !p256LimbsToBytes(encoded, 0, r) || !p256LimbsToBytes(encoded, 32, s)
+          if (!failed) {
+            sig = encoded
+          }
+        }
       }
     }
-    next = p256NonceKey(k, v, 0, empty, empty) // step h.3
-    wipe(k)
-    k = next
-    next = p256NonceValue(k, v)
-    wipe(v)
-    v = next
+    if (!failed && sig === null) {
+      next = p256NonceKey(k, v, 0, empty, empty) // step h.3
+      wipe(k)
+      k = next
+      next = p256NonceValue(k, v)
+      wipe(v)
+      v = next
+    }
   }
+  // ECC-2, on every exit: the private key's limbs, the nonce and its inverse,
+  // RFC 6979's K and V, the nonce point and the scratch it was built in.
+  wipe(k)
+  wipe(v)
+  wipe(dM)
+  wipe(kM)
+  p256WipePoint(point)
+  p256WipeScratch(scratch)
+  return sig
 }
 
 /**
@@ -4118,9 +4157,12 @@ const p256PublicKeyExposed = (priv: u8[]): u8[] | null => {
   }
   const point = new P256ProjectivePoint()
   const scratch = new P256PointScratch()
-  p256BaseMult(point, priv, scratch)
+  const multiplied: boolean = p256BaseMult(point, priv, scratch)
   p256WipeScratch(scratch)
-  const encoded: u8[] = p256EncodePoint(point)
+  let encoded: u8[] | null = null
+  if (multiplied) {
+    encoded = p256EncodePoint(point)
+  }
   p256WipePoint(point)
   return encoded
 }
@@ -4177,11 +4219,11 @@ const p256EcdhExposed = (priv: u8[], peerPoint: u8[]): u8[] | null => {
   p256FiatMul(x, point.x, acc)
   p256FiatMul(x, x, p256PlainOne())
   const out: u8[] = new Array<u8>(P256_SCALAR_SIZE)
-  p256LimbsToBytes(out, 0, x)
+  const written: boolean = p256LimbsToBytes(out, 0, x)
   wipe(x)
   wipe(acc)
   p256WipePoint(point)
-  if (infinity) {
+  if (infinity || !written) {
     wipe(out)
     return null
   }
@@ -4209,7 +4251,9 @@ const p256SignExposed = (priv: u8[], digest: u8[]): u8[] | null => {
     return null
   }
   const z: u32[] = p256Limbs()
-  p256DigestScalar(z, digest)
+  if (!p256DigestScalar(z, digest)) {
+    return null
+  }
   return p256SignScalar(priv, z)
 }
 
@@ -4414,9 +4458,13 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   const r: u32[] = p256Limbs()
   const w: u32[] = p256Limbs()
   const z: u32[] = p256Limbs()
-  p256LimbsFromBytes(r, rBytes, 0)
-  p256LimbsFromBytes(w, sBytes, 0)
-  p256DigestScalar(z, digest)
+  if (
+    !p256LimbsFromBytes(r, rBytes, 0) ||
+    !p256LimbsFromBytes(w, sBytes, 0) ||
+    !p256DigestScalar(z, digest)
+  ) {
+    return false
+  }
   // w = s^-1 in the Montgomery domain; u1 = z w and u2 = r w multiply a
   // plain value by it, so they come out plain.
   p256FiatScalarMul(w, w, r2)
@@ -4427,8 +4475,9 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   p256FiatScalarMul(u2, r, w)
   const u1Bytes: u8[] = new Array<u8>(32)
   const u2Bytes: u8[] = new Array<u8>(32)
-  p256LimbsToBytes(u1Bytes, 0, u1)
-  p256LimbsToBytes(u2Bytes, 0, u2)
+  if (!p256LimbsToBytes(u1Bytes, 0, u1) || !p256LimbsToBytes(u2Bytes, 0, u2)) {
+    return false
+  }
 
   const scratch = new P256PointScratch()
   const sum = new P256ProjectivePoint()
@@ -4442,8 +4491,7 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   p256AffineX(x, sum)
   p256ReduceOnce(x, x, n)
   const vBytes: u8[] = new Array<u8>(32)
-  p256LimbsToBytes(vBytes, 0, x)
-  return timingSafeEqual(vBytes, rBytes)
+  return p256LimbsToBytes(vBytes, 0, x) && timingSafeEqual(vBytes, rBytes)
 }
 
 /**
@@ -4961,11 +5009,14 @@ const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
  * with `p256SignScalar`'s arithmetic: `d` taken into the Montgomery domain,
  * multiplied by the plain `r`, `z` added, and the sum multiplied by `k^-1`,
  * which is in the Montgomery domain, so `s` comes out plain. The key's limbs
- * are wiped; `s` is half of the signature, and public.
+ * are wiped; `s` is half of the signature, and public. Answers `null` for a
+ * key too short to hold a scalar.
  */
-const p256SignSExposed = (priv: u8[], sc: P256SignScratch): u32[] => {
+const p256SignSExposed = (priv: u8[], sc: P256SignScratch): u32[] | null => {
   const dM: u32[] = p256Limbs()
-  p256LimbsFromBytes(dM, priv, 0)
+  if (!p256LimbsFromBytes(dM, priv, 0)) {
+    return null
+  }
   p256FiatScalarMul(dM, dM, sc.r2)
   const s: u32[] = p256Limbs()
   p256FiatScalarMul(s, sc.r, dM)
@@ -5012,6 +5063,36 @@ const p256SignNonceKey = (sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): boo
   }
   wipe(next)
   return made
+}
+
+/** Whether each of `p`'s coordinates holds 8 limbs. */
+const p256PointSized = (p: P256ProjectivePoint): boolean =>
+  toI32(p.x.length) === 8 && toI32(p.y.length) === 8 && toI32(p.z.length) === 8
+
+/**
+ * Whether every limb array the signing loop computes in holds 8 limbs. The
+ * field arithmetic reads and writes as many limbs as an array has, so a
+ * resized one would compute a wrong `r` or `s` and sign with it; the signer
+ * refuses such a scratch first.
+ */
+const p256SignScratchSized = (sc: P256SignScratch): boolean => {
+  const s: P256PointScratch = sc.points
+  const scalars: boolean =
+    toI32(sc.z.length) === 8 &&
+    toI32(sc.r.length) === 8 &&
+    toI32(sc.x.length) === 8 &&
+    toI32(sc.kM.length) === 8 &&
+    toI32(sc.n.length) === 8 &&
+    toI32(sc.r2.length) === 8
+  const points: boolean =
+    toI32(s.t0.length) === 8 &&
+    toI32(s.t1.length) === 8 &&
+    toI32(s.t2.length) === 8 &&
+    toI32(s.t3.length) === 8 &&
+    toI32(s.t4.length) === 8 &&
+    toI32(s.comb.length) === 8 &&
+    toI32(s.b.length) === 8
+  return scalars && points && p256PointSized(sc.point) && p256PointSized(s.sum) && p256PointSized(s.entry)
 }
 
 /** Zero every secret the scratch held: `K`, `V`, `k^-1`, the nonce point and its scratch (ECC-2). */
@@ -5074,11 +5155,16 @@ export const p256SignSha256Into = (
   // Each hashing step answers `false` only for a scratch whose arrays an
   // importer resized; the signer then stops rather than derive a nonce from
   // stale state. Every way out passes the one wipe below.
+  // A resized `h1` or `z`, or a limb array the loop computes in, fails a step
+  // here, and the signer answers false through the one wipe below, as every
+  // later step's refusal does.
   let ok: boolean =
-    p256ShaInto(msg, off, len, sc.kt, sc.hash, sc.schedule, sc.tail) && p256DigestInto(sc.h1, sc.hash)
-  if (ok) {
-    p256DigestScalar(sc.z, sc.h1)
+    p256SignScratchSized(sc) &&
+    p256ShaInto(msg, off, len, sc.kt, sc.hash, sc.schedule, sc.tail) &&
+    p256DigestInto(sc.h1, sc.hash) &&
+    p256DigestScalar(sc.z, sc.h1) &&
     p256LimbsToBytes(sc.h1, 0, sc.z)
+  if (ok) {
     p256FillBytes(sc.v, 1)
     p256FillBytes(sc.k, 0)
   }
@@ -5089,26 +5175,42 @@ export const p256SignSha256Into = (
     p256SignNonceKey(sc, priv, 1) && // step f
     p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step g
   let signed: boolean = false
+  let rounds: i32 = 0
   while (ok && !signed) {
     ok = p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step h.2
     if (ok && p256ScalarInRange(sc.v)) {
-      p256BaseMultWith(sc.point, sc.v, sc.points, sc.table)
-      p256AffineX(sc.x, sc.point)
-      p256ReduceOnce(sc.r, sc.x, sc.n)
-      p256LimbsFromBytes(sc.kM, sc.v, 0)
-      p256FiatScalarMul(sc.kM, sc.kM, sc.r2)
-      p256ScalarInverse(sc.kM, sc.kM)
-      const s: u32[] = exposeWith(priv, sc, p256SignSExposed)
-      if (p256FiatNonzero(sc.r) !== 0 && p256FiatNonzero(s) !== 0) {
-        p256LimbsToBytes(out, at, sc.r)
-        // The window was checked: at + 64 fits in `out`, an i32.
-        p256LimbsToBytes(out, toI32(toI64(at) + 32), s)
-        signed = true
+      ok = p256BaseMultWith(sc.point, sc.v, sc.points, sc.table)
+      if (ok) {
+        p256AffineX(sc.x, sc.point)
+        p256ReduceOnce(sc.r, sc.x, sc.n)
+        ok = p256LimbsFromBytes(sc.kM, sc.v, 0)
+      }
+      if (ok) {
+        p256FiatScalarMul(sc.kM, sc.kM, sc.r2)
+        p256ScalarInverse(sc.kM, sc.kM)
+        const s: u32[] | null = exposeWith(priv, sc, p256SignSExposed)
+        if (s === null) {
+          ok = false
+        } else if (p256FiatNonzero(sc.r) !== 0 && p256FiatNonzero(s) !== 0) {
+          // The window was checked: at + 64 fits in `out`, an i32.
+          ok = p256LimbsToBytes(out, at, sc.r) && p256LimbsToBytes(out, toI32(toI64(at) + 32), s)
+          signed = ok
+        }
       }
     }
     if (ok && !signed) {
+      // A sound scratch retries with chance under 2^-31 a round, so the cap
+      // is never met by one: a limb array or constant an importer resized or
+      // overwrote can make r or s zero on every round, and is refused here
+      // rather than looped on.
+      if (rounds < P256_SIGN_ROUNDS) {
+        rounds += 1
+      } else {
+        ok = false
+      }
       // step h.3: K = HMAC_K(V || 0x00), then V = HMAC_K(V).
       ok =
+        ok &&
         p256NonceSeparated(sc, 0) &&
         p256SignMac(sc, sc.k, sc.message, SHA256_SIZE + 1) &&
         p256SignMac(sc, sc.v, sc.v, SHA256_SIZE)

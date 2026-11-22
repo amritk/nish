@@ -1,8 +1,14 @@
 // `P256SignScratch`'s arrays are public fields, so an importer can replace
 // one with an array of the wrong length. `p256SignSha256Into` then answers
 // `false` and leaves the signature unwritten, rather than panicking or
-// signing with the part that fits. The same scratch signs before the swap
-// and after it is put right, so each `false` is the refusal it names.
+// signing with the part that fits: a limb array the signing loop computes in
+// (the affine `x`, the half `r`, the nonce limbs `kM`, the comb digits) is
+// refused before the first step, each helper that reads a resized buffer (the
+// digest bytes `h1`, the nonce `v`, the comb table) refuses, and every
+// refusal leaves through the scratch's one wipe. A constant of the right
+// length overwritten so that r or s is zero on every round (R^2 zeroed) is
+// refused once the RFC 6979 rounds run out, not looped on. The same scratch signs before the swap and
+// after it is put right, so each `false` is the refusal it names.
 import { Secret, secret, wipe } from "nish:secret";
 import { P256SignScratch, p256SignSha256Into } from "nish/crypto/p256";
 
@@ -40,6 +46,42 @@ export const main = (): i32 => {
   scratch.message = new Array<u8>(32);
   sign("nonce message shortened", scratch);
   scratch.message = message;
+  const h1: u8[] = scratch.h1;
+  scratch.h1 = new Array<u8>(16);
+  sign("digest bytes shortened", scratch);
+  scratch.h1 = h1;
+  const z: u32[] = scratch.z;
+  scratch.z = new Array<u32>(4);
+  sign("digest scalar shortened", scratch);
+  scratch.z = z;
+  const v: u8[] = scratch.v;
+  scratch.v = new Array<u8>(16);
+  sign("nonce shortened", scratch);
+  scratch.v = v;
+  const kM: u32[] = scratch.kM;
+  scratch.kM = new Array<u32>(4);
+  sign("nonce limbs shortened", scratch);
+  scratch.kM = kM;
+  const r: u32[] = scratch.r;
+  scratch.r = new Array<u32>(4);
+  sign("signature half shortened", scratch);
+  scratch.r = r;
+  const x: u32[] = scratch.x;
+  scratch.x = new Array<u32>(4);
+  sign("affine x shortened", scratch);
+  scratch.x = x;
+  const r2: u32[] = scratch.r2;
+  scratch.r2 = new Array<u32>(8);
+  sign("Montgomery constant zeroed", scratch);
+  scratch.r2 = r2;
+  const comb: u32[] = scratch.points.comb;
+  scratch.points.comb = new Array<u32>(4);
+  sign("comb digits shortened", scratch);
+  scratch.points.comb = comb;
+  const table: u32[] = scratch.table;
+  scratch.table = new Array<u32>(16);
+  sign("table shortened", scratch);
+  scratch.table = table;
   sign("put right", scratch);
   return 0;
 };

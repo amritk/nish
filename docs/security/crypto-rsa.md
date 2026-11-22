@@ -20,7 +20,7 @@ it on base `2cdef4f`. No `file:line` anchor is used.
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/rsa.ts` | `rsaParsePublicKey` and its DER readers (`rsaDerContents`, `rsaDerLength`, `rsaDerUnsigned`, `rsaBitLength`, `rsaBytesBelow`); `rsaVerifyPkcs1v15` and `rsaVerifyPss` and everything they reach: `rsaOpen` (RSAVP1), the Montgomery arithmetic (`rsaLimbsFromBytes`, `rsaBytesFromLimbs`, `rsaMontInverse`, `rsaAtLeast`, `rsaSubInPlace`, `rsaMontMul`, `rsaDoubleMod`, `rsaMontR2`, `rsaModPow`), and the encodings (`rsaHashSize`, `rsaDigest`, `rsaDigestInfoPrefix`, `rsaSameBytes`, `rsaMgf1`); the class `RsaPublicKey` |
+| `std/crypto/rsa.ts` | `rsaParsePublicKey` and its DER readers (`rsaDerElement`, `rsaDerUnsigned`, `rsaBitLength`); `rsaVerifyPkcs1v15` and `rsaVerifyPss` and everything they reach: `rsaOpen` (RSAVP1), the Montgomery arithmetic (`rsaLimbsFromBytes`, `rsaBytesFromLimbs`, `rsaMontInverse`, `rsaAtLeast`, `rsaSubInPlace`, `rsaMontMul`, `rsaDoubleMod`, `rsaMontR2`, `rsaModPow`), and the encodings (`rsaHashSize`, `rsaDigest`, `rsaDigestInfoPrefix`, `rsaMgf1Xor`); the classes `RsaPublicKey` and `RsaDerSpan` |
 
 Out of scope: `std/crypto/sha256.ts` and `sha512.ts`, which the module calls
 (the K1 stage audits them), and every caller. Three call it, and each
@@ -205,13 +205,13 @@ Four guards were removed and nothing failed. **None of them can be caught**,
 because another rule makes each one unreachable. They stay as defences that
 state a rule where the code relies on it:
 
-- `rsaDerContents`'s `length > end - start`. The checks that the exponent
+- `rsaDerElement`'s `length > end - start`. The checks that the exponent
   ends the SEQUENCE and the SEQUENCE ends the DER, and the next element's own
   bounds, refuse every length this guard refuses.
-- `rsaVerifyPkcs1v15`'s `hashSize === 0`. With an unknown hash id, the
+- `rsaVerifyPkcs1v15`'s `hashSize < 1`. With an unknown hash id, the
   expected block is k + 32 bytes long, and no opened block of k bytes can
   match it.
-- `rsaVerifyPss`'s `hashSize === 0`. With an unknown hash id, H is empty, and
+- `rsaVerifyPss`'s `hashSize < 1`. With an unknown hash id, H is empty, and
   no digest matches an empty H.
 - `rsaOpen`'s `size < 0 || size > k`. PKCS#1 v1.5 passes `size = k`, and PSS
   passes `0 < emLen ≤ k`.

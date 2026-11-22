@@ -3,4 +3,13 @@ block emptied: false, signature unwritten
 tail shortened: false, signature unwritten
 round constants shortened: false, signature unwritten
 nonce message shortened: false, signature unwritten
+digest bytes shortened: false, signature unwritten
+digest scalar shortened: false, signature unwritten
+nonce shortened: false, signature unwritten
+nonce limbs shortened: false, signature unwritten
+signature half shortened: false, signature unwritten
+affine x shortened: false, signature unwritten
+Montgomery constant zeroed: false, signature unwritten
+comb digits shortened: false, signature unwritten
+table shortened: false, signature unwritten
 put right: true, signature written

@@ -10945,6 +10945,7 @@ const DECLARED = [
     "examples/prefork-server.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "examples/relay/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/crypto_jwt/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/crypto_jwt_refusals/main.ts": ["p384.ll", "main.h"],
     "tests/link/crypto_jwt_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/crypto_p256/main.ts": ["p256.ll", "suite.ll"],
     "tests/link/crypto_p256_ecdh/main.ts": ["p256.ll"],
@@ -11205,6 +11206,14 @@ const DECLARED = [
       why: WP83_S3_WHY[file],
     }))
   ),
+  // tests/link/crypto_jwt_refusals is new in WP83 S3; the seed writes its jwt
+  // module and its declarations of it from the JwtJson before the proofs.
+  ...["jwt.ll", "main.ll"].map((file) => ({
+    program: "tests/link/crypto_jwt_refusals/main.ts",
+    file,
+    changelog: "P-256, P-384, RSA and JWT",
+    why: "std/crypto/jwt.ts proves every index, length and overflow site: JwtJson gains step, top and advance and HmacSha256 lays out its inner-digest buffer, so the jwt module and this test's declarations of its methods have new functions and renumbered values",
+  })),
   // A `for` loop whose body is one `dst.push(src[P + j])` copies the range in
   // one `memcpy` behind its guards, and keeps the loop as the fallback, so each
   // module with such a loop gains the guard blocks and the memcpy declaration.

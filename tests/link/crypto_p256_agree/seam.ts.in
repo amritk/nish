@@ -5,18 +5,27 @@
 // so tests/link/crypto_p256_agree can hold them to each other without the
 // module growing a public API for it.
 
+/** `p256EncodePoint`, panicking where it refuses: a refusal here fails the check. */
+const p256SeamEncode = (p: P256ProjectivePoint): u8[] => {
+  const encoded: u8[] | null = p256EncodePoint(p)
+  if (encoded === null) {
+    panic("p256 seam: p256EncodePoint refused a point")
+  }
+  return encoded
+}
+
 /** k G by the fixed-base comb (`p256BaseMult`), encoded. */
 export const p256SeamBase = (k: u8[]): u8[] => {
   const point = new P256ProjectivePoint()
   p256BaseMult(point, k, new P256PointScratch())
-  return p256EncodePoint(point)
+  return p256SeamEncode(point)
 }
 
 /** k G by the variable-base window (`p256ScalarMult` on G), encoded: the reference. */
 export const p256SeamReference = (k: u8[]): u8[] => {
   const point = new P256ProjectivePoint()
   p256ScalarMult(point, k, p256Generator(), new P256PointScratch())
-  return p256EncodePoint(point)
+  return p256SeamEncode(point)
 }
 
 /** The x coordinate of k Q, the ECDH shared secret, or `null` when `pub` does not decode. */
@@ -27,7 +36,7 @@ export const p256SeamShared = (k: u8[], pub: u8[]): u8[] | null => {
   }
   const point = new P256ProjectivePoint()
   p256ScalarMult(point, k, q, new P256PointScratch())
-  const encoded: u8[] = p256EncodePoint(point)
+  const encoded: u8[] = p256SeamEncode(point)
   const x: u8[] = new Array<u8>(32)
   for (let i: i32 = 0; i < 32; i++) {
     x[i] = encoded[i + 1]
@@ -82,8 +91,8 @@ export const p256SeamTableRebuilt = (): i32 => {
         entry.y[i] = table[at + 8 + i]
       }
       p256FiatSetOne(entry.z)
-      const want: u8[] = p256EncodePoint(point)
-      const got: u8[] = p256EncodePoint(entry)
+      const want: u8[] = p256SeamEncode(point)
+      const got: u8[] = p256SeamEncode(entry)
       let same: boolean = toI32(want.length) === toI32(got.length)
       for (let i: i32 = 0; same && i < toI32(want.length); i++) {
         same = want[i] === got[i]
