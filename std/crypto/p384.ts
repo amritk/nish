@@ -5582,11 +5582,7 @@ const p384CurveB = (): u32[] => [
  * The plain 1, `[1, 0, …, 0]`. A Montgomery multiply by it divides by R, which
  * takes an element out of the Montgomery domain: fiat's `from_montgomery`.
  */
-const p384PlainOne = (): u32[] => {
-  const out: u32[] = p384Limbs()
-  out[0] = 1
-  return out
-}
+const p384PlainOne = (): u32[] => [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 /** `out = a`, limb by limb. */
 const p384Copy = (out: u32[], a: u32[]): void => {
@@ -5682,8 +5678,12 @@ const p384Bit = (e: u32[], i: i32): boolean => {
  * which are a constant.
  */
 const p384FieldInvert = (out: u32[], a: u32[]): void => {
-  const e: u32[] = p384Prime()
-  e[0] = 0xfffffffd
+  // p - 2: `p384Prime` with its low limb lowered by 2, spelled out so the
+  // array's length is the literal's.
+  const e: u32[] = [
+    0xfffffffd, 0x0, 0x0, 0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+    0xffffffff, 0xffffffff,
+  ]
   const acc: u32[] = p384Limbs()
   p384FiatSetOne(acc)
   for (let i: i32 = 383; i >= 0; i--) {
@@ -5697,8 +5697,11 @@ const p384FieldInvert = (out: u32[], a: u32[]): void => {
 
 /** `out = 1 / a` mod n, as `a^(n - 2)` with the scalar Montgomery multiply. */
 const p384ScalarInvert = (out: u32[], a: u32[]): void => {
-  const e: u32[] = p384Order()
-  e[0] = 0xccc52971
+  // n - 2: `p384Order` with its low limb lowered by 2.
+  const e: u32[] = [
+    0xccc52971, 0xecec196a, 0x48b0a77a, 0x581a0db2, 0xf4372ddf, 0xc7634d81, 0xffffffff, 0xffffffff, 0xffffffff,
+    0xffffffff, 0xffffffff, 0xffffffff,
+  ]
   const acc: u32[] = p384Limbs()
   p384FiatScalarSetOne(acc)
   for (let i: i32 = 383; i >= 0; i--) {
@@ -5991,10 +5994,15 @@ const p384ScalarInRange = (out: u32[], bytes: u8[], at: i32): boolean => {
 const p384DigestScalar = (out: u32[], digest: u8[]): void => {
   const length: i32 = toI32(digest.length)
   const bytes: u8[] = new Array<u8>(48)
-  const take: i32 = length < 48 ? length : 48
-  const skip: i32 = 48 - take
-  for (let i: i32 = 0; i < take && i < length && skip + i < 48; i++) {
-    bytes[skip + i] = digest[i]
+  let take: i32 = 48
+  if (length < 48) {
+    take = length
+  }
+  for (let i: i32 = 0; i < take && i < length; i++) {
+    const j: i32 = 48 - take + i
+    if (j >= 0 && j < 48) {
+      bytes[j] = digest[i]
+    }
   }
   const a: u32[] = p384Limbs()
   p384LimbsFromBytes(a, bytes, 0)
