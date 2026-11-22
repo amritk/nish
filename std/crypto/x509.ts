@@ -550,7 +550,7 @@ const x509DerContentsAre = (der: u8[], e: X509DerElement, expected: u8[]): boole
   }
   let k: i32 = 0
   for (let i: i32 = start; i < end; i++) {
-    if (k >= expected.length || der[i] !== expected[k]) {
+    if (k >= toI32(expected.length) || der[i] !== expected[k]) {
       return false
     }
     k++
@@ -708,8 +708,8 @@ const x509DerTime = (der: u8[], e: X509DerElement): i64 => {
 /**
  * The OID's contents octets (X.690 §8.19): each subidentifier in base 128,
  * big-endian, with the top bit set on every octet but its last. The caller
- * joins the first two arcs into the first subidentifier, `40 * a + b`, so the
- * join is folded where the arcs are written.
+ * writes the first two arcs joined into the first subidentifier, `40 * a + b`:
+ * 42 is 1.2, 43 is 1.3, 85 is 2.5 and 96 is 2.16.
  */
 const x509DerOidContents = (subids: i32[]): u8[] => {
   const out: u8[] = []
@@ -729,31 +729,31 @@ const x509DerOidContents = (subids: i32[]): u8[] => {
 }
 
 /** ecdsa-with-SHA256, 1.2.840.10045.4.3.2 (RFC 5758 §3.2). */
-const x509OidEcdsaSha256 = (): u8[] => x509DerOidContents([40 * 1 + 2, 840, 10045, 4, 3, 2])
+const x509OidEcdsaSha256 = (): u8[] => x509DerOidContents([42, 840, 10045, 4, 3, 2])
 
 /** id-ecPublicKey, 1.2.840.10045.2.1 (RFC 5480 §2.1.1). */
-const x509OidEcPublicKey = (): u8[] => x509DerOidContents([40 * 1 + 2, 840, 10045, 2, 1])
+const x509OidEcPublicKey = (): u8[] => x509DerOidContents([42, 840, 10045, 2, 1])
 
 /** secp256r1, also called prime256v1 and P-256: 1.2.840.10045.3.1.7 (RFC 5480 §2.1.1.1). */
-const x509OidPrime256v1 = (): u8[] => x509DerOidContents([40 * 1 + 2, 840, 10045, 3, 1, 7])
+const x509OidPrime256v1 = (): u8[] => x509DerOidContents([42, 840, 10045, 3, 1, 7])
 
 /** id-at-commonName, 2.5.4.3 (RFC 5280 Appendix A). */
-const x509OidCommonName = (): u8[] => x509DerOidContents([40 * 2 + 5, 4, 3])
+const x509OidCommonName = (): u8[] => x509DerOidContents([85, 4, 3])
 
 /** ecdsa-with-SHA384, 1.2.840.10045.4.3.3 (RFC 5758 §3.2). */
-const x509OidEcdsaSha384 = (): u8[] => x509DerOidContents([40 * 1 + 2, 840, 10045, 4, 3, 3])
+const x509OidEcdsaSha384 = (): u8[] => x509DerOidContents([42, 840, 10045, 4, 3, 3])
 
 /** secp384r1, 1.3.132.0.34 (RFC 5480 §2.1.1.1). */
-const x509OidSecp384r1 = (): u8[] => x509DerOidContents([40 * 1 + 3, 132, 0, 34])
+const x509OidSecp384r1 = (): u8[] => x509DerOidContents([43, 132, 0, 34])
 
 /** The PKCS #1 arc 1.2.840.113549.1.1.`n` (RFC 4055 §2.1 and §5): 1 rsaEncryption, 5, 11, 12 and 13 the PKCS#1 v1.5 signatures, 8 MGF1, 10 RSASSA-PSS. */
-const x509OidPkcs1 = (n: i32): u8[] => x509DerOidContents([40 * 1 + 2, 840, 113549, 1, 1, n])
+const x509OidPkcs1 = (n: i32): u8[] => x509DerOidContents([42, 840, 113549, 1, 1, n])
 
 /** id-Ed25519, 1.3.101.112 (RFC 8410 §3). */
-const x509OidEd25519 = (): u8[] => x509DerOidContents([40 * 1 + 3, 101, 112])
+const x509OidEd25519 = (): u8[] => x509DerOidContents([43, 101, 112])
 
 /** The NIST hash arc 2.16.840.1.101.3.4.2.`n` (RFC 4055 §2.1): 1 SHA-256, 2 SHA-384, 3 SHA-512. */
-const x509OidNistHash = (n: i32): u8[] => x509DerOidContents([40 * 2 + 16, 840, 1, 101, 3, 4, 2, n])
+const x509OidNistHash = (n: i32): u8[] => x509DerOidContents([96, 840, 1, 101, 3, 4, 2, n])
 
 // The extensions decoded, by their arc under 2.5.29 (RFC 5280 §4.2.1).
 const X509_CE_SUBJECT_KEY_ID: i32 = 14
@@ -771,13 +771,13 @@ const X509_EXT_SOUND: i32 = 1
 const X509_EXT_MALFORMED: i32 = 2
 
 /** id-pe-authorityInfoAccess, 1.3.6.1.5.5.7.1.1 (RFC 5280 §4.2.2.1). */
-const x509OidAuthorityInfoAccess = (): u8[] => x509DerOidContents([40 * 1 + 3, 6, 1, 5, 5, 7, 1, 1])
+const x509OidAuthorityInfoAccess = (): u8[] => x509DerOidContents([43, 6, 1, 5, 5, 7, 1, 1])
 
 /** id-kp-serverAuth, 1.3.6.1.5.5.7.3.1 (RFC 5280 §4.2.1.12). */
-const x509OidServerAuth = (): u8[] => x509DerOidContents([40 * 1 + 3, 6, 1, 5, 5, 7, 3, 1])
+const x509OidServerAuth = (): u8[] => x509DerOidContents([43, 6, 1, 5, 5, 7, 3, 1])
 
 /** anyExtendedKeyUsage, 2.5.29.37.0 (RFC 5280 §4.2.1.12). */
-const x509OidAnyEku = (): u8[] => x509DerOidContents([40 * 2 + 5, 29, 37, 0])
+const x509OidAnyEku = (): u8[] => x509DerOidContents([85, 29, 37, 0])
 
 /**
  * Whether an OID's contents are X.690 §8.19's: at least one octet, the last
@@ -1039,12 +1039,15 @@ export const x509DerSignatureRSWidth = (sig: u8[], width: i32): u8[] | null => {
   if (s === null || s.end !== seq.end) {
     return null
   }
-  const rOctets: u8[] | null = x509DerUnsignedPadded(sig, r, width)
+  const out: u8[] | null = x509DerUnsignedPadded(sig, r, width)
   const sOctets: u8[] | null = x509DerUnsignedPadded(sig, s, width)
-  if (rOctets === null || sOctets === null) {
+  if (out === null || sOctets === null) {
     return null
   }
-  return x509DerConcat([rOctets, sOctets])
+  for (const b of sOctets) {
+    out.push(b)
+  }
+  return out
 }
 
 /**
