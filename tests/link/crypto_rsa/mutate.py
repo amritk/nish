@@ -5,7 +5,8 @@
 
 Each mutation replaces one rule's text, which must occur exactly once, by a
 form that no longer refuses; builds tests/link/crypto_rsa and
-tests/link/crypto_rsa_der_refusals with build/nish in the debug profile; and
+tests/link/crypto_rsa_der_refusals with build/nish in the debug profile
+with --allow-panics, as tests/run.js builds a case; and
 runs both. A mutation is caught when either run exits nonzero: a failing
 check, or a debug-profile panic. The file is restored in a `finally`, so
 `git diff std/crypto/rsa.ts` is empty afterwards. The rules in UNREACHABLE are
@@ -135,7 +136,7 @@ try:
         notes = []
         for program in PROGRAMS:
             app = f"build/mut/{program}"
-            build = ["build/nish", f"tests/link/{program}/main.ts", "-o", "build/mut/", "--link", app, "--profile", "debug"]
+            build = ["build/nish", f"tests/link/{program}/main.ts", "-o", "build/mut/", "--link", app, "--profile", "debug", "--allow-panics"]
             r = subprocess.run(build, capture_output=True, text=True, timeout=600)
             if r.returncode:
                 print(f"{name}: {program} does not compile: {r.stderr[:200]}", flush=True)
