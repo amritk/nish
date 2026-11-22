@@ -25,7 +25,7 @@
 //                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 34 programs executes
+//     --instructions    count the instructions each of the 37 programs executes
 //                       (the crypto kernels among them) under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
@@ -618,20 +618,25 @@ const PINNED_CRYPTO = { NISH_AES: "soft", NISH_CHACHA20: "soft", NISH_SHA256: "s
  * bench/crypto/<family>/main.ts, under the contract of bench/crypto/README.md
  * (`main <kernel> <size> <iterations>`), at the size and iterations
  * bench/instructions.json names beside the count. One kernel stands for each
- * code path std/crypto has: AES-GCM, ChaCha20-Poly1305, SHA-256, SHA-512, the
- * three curves, a TLS 1.3 handshake and an X.509 parse. `--only crypto`
- * names them all.
+ * code path std/crypto has: AES-GCM, ChaCha20-Poly1305, SHA-256, SHA-512,
+ * HMAC-SHA-256, an HKDF extract and expand, the three curves, a TLS 1.3
+ * handshake and an X.509 parse; `crypto-jwt-verify` is bench/jwt-verify's
+ * program (`main`), whose `size` is its token shape. `--only crypto` names
+ * them all.
  */
 const CRYPTO_COUNTED = [
   { name: "crypto-aes128gcm-seal", family: "aead", kernel: "aes128gcm-seal" },
   { name: "crypto-chacha20poly1305-seal", family: "aead", kernel: "chacha20poly1305-seal" },
   { name: "crypto-sha256", family: "hash", kernel: "sha256" },
   { name: "crypto-sha512", family: "hash", kernel: "sha512" },
+  { name: "crypto-hmac-sha256", family: "hash", kernel: "hmac-sha256" },
+  { name: "crypto-hkdf-sha256", family: "hash", kernel: "hkdf-sha256" },
   { name: "crypto-x25519", family: "curves", kernel: "x25519" },
   { name: "crypto-p256-verify", family: "curves", kernel: "p256-verify" },
   { name: "crypto-ed25519-sign", family: "curves", kernel: "ed25519-sign" },
   { name: "crypto-tls13", family: "handshake", kernel: "tls13" },
   { name: "crypto-x509-parse", family: "x509", kernel: "x509-parse" },
+  { name: "crypto-jwt-verify", family: "jwt-verify", kernel: "verify", main: "jwt-verify/main.ts" },
 ]
 
 /**
@@ -806,7 +811,7 @@ const runInstructions = () => {
       run(
         nishc.cmd,
         compileArgv(nishc, [
-          rel(path.join(benchDir, "crypto", b.family, "main.ts")),
+          rel(path.join(benchDir, b.main ?? path.join("crypto", b.family, "main.ts"))),
           "-o",
           `${rel(path.join(src, `crypto-${b.family}`))}${path.sep}`,
           "--link",
