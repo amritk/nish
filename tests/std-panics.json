@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 8879,
+  "total": 9220,
   "explicit": {
-    "kept": 352,
-    "toFix": 131
+    "kept": 333,
+    "toFix": 135
   },
   "modules": {
     "std/base64.ts": {
@@ -23,18 +23,10 @@
       "panic": 1
     },
     "std/cli-args.ts": {
-      "index": 114,
-      "overflow": 20,
-      "panic": 36
+      "panic": 14
     },
     "std/cli-flags.ts": {
-      "index": 21,
-      "overflow": 5,
-      "panic": 9,
-      "slice": 1
-    },
-    "std/cli.ts": {
-      "overflow": 6
+      "panic": 9
     },
     "std/compress/checksum.ts": {
       "divide": 2,
@@ -202,8 +194,6 @@
       "slice": 1
     },
     "std/json-typed.ts": {
-      "array-length": 2,
-      "overflow": 18,
       "slice": 3
     },
     "std/json-value.ts": {
@@ -278,11 +268,13 @@
       "overflow": 28
     },
     "std/net/http-server.ts": {
-      "array-length": 3,
-      "index": 5,
+      "array-length": 22,
+      "divide": 8,
+      "index": 193,
       "io-exit": 2,
-      "overflow": 8,
-      "panic": 43,
+      "overflow": 175,
+      "panic": 48,
+      "pop": 2,
       "slice": 1
     },
     "std/net/http1-client-codec.ts": {
@@ -298,7 +290,11 @@
       "panic": 5
     },
     "std/net/http1-server.ts": {
-      "panic": 2,
+      "array-length": 6,
+      "index": 51,
+      "overflow": 101,
+      "panic": 3,
+      "pop": 1,
       "slice": 4
     },
     "std/net/http2-cleartext.ts": {
@@ -644,7 +640,7 @@
       "array-length": 2,
       "index": 32,
       "overflow": 4,
-      "panic": 3
+      "panic": 4
     },
     "std/yaml-json.ts": {
       "index": 18,
@@ -683,16 +679,6 @@
     },
     {
       "module": "std/cli-args.ts",
-      "function": "Cli.addCommand",
-      "reason": "command name, parent and duplicates are declaration-time choices the program fixes statically; a bad declaration is a bug"
-    },
-    {
-      "module": "std/cli-args.ts",
-      "function": "Cli.addFlag",
-      "reason": "flag must not clash with reserved or existing flags; a static declaration-time precondition of the program"
-    },
-    {
-      "module": "std/cli-args.ts",
       "function": "Cli.alias",
       "reason": "alias must be a valid, non-clashing command name on a non-root command; a static declaration choice"
     },
@@ -705,11 +691,6 @@
       "module": "std/cli-args.ts",
       "function": "Cli.checkArgument",
       "reason": "argument handle must be one this Cli returned; handles come from declarations, not from argv"
-    },
-    {
-      "module": "std/cli-args.ts",
-      "function": "Cli.checkCommand",
-      "reason": "command handle must be one this Cli returned; handles are program-declared, not parsed from argv"
     },
     {
       "module": "std/cli-args.ts",
@@ -728,6 +709,31 @@
     },
     {
       "module": "std/cli-args.ts",
+      "function": "Cli.epilog",
+      "reason": "command handle must be one this Cli returned; handles are program-declared, and tryEpilog returns the mistake as a Result"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.flag",
+      "reason": "flag spec, command handle and name clashes are static declaration choices; tryFlag returns the same mistake as a Result"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.globalFlag",
+      "reason": "flag spec and name clashes are static declaration choices; tryGlobalFlag returns the same mistake as a Result"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.group",
+      "reason": "group name and parent are static declaration choices; tryGroup returns the same mistake as a Result for a caller that wants one"
+    },
+    {
+      "module": "std/cli-args.ts",
+      "function": "Cli.helpText",
+      "reason": "command handle must be one this Cli returned; handles are program-declared, not parsed from argv"
+    },
+    {
+      "module": "std/cli-args.ts",
       "function": "Cli.negatable",
       "reason": "only a plain boolean flag can be negated and the --no- name must be free; a static declaration contract"
     },
@@ -740,11 +746,6 @@
       "module": "std/cli-args.ts",
       "function": "Cli.required",
       "reason": "required flag must not be on a group or have a default; a static declaration contract"
-    },
-    {
-      "module": "std/cli-args.ts",
-      "function": "FlagSpec.constructor",
-      "reason": "flag spec is a static declaration literal in the program; a malformed spec string is a programmer error caught at startup"
     },
     {
       "module": "std/cli-flags.ts",
@@ -1865,6 +1866,11 @@
       "module": "std/threads.ts",
       "function": "dstTooShort",
       "reason": "parallelMapInto dst must be at least as long as src; each call is a parallel-length site its caller proves with src.length <= dst.length"
+    },
+    {
+      "module": "std/threads.ts",
+      "function": "negativeAtomicLength",
+      "reason": "an atomic array's length must not be negative; the caller chooses it, as for new Array, and the message is the one new Array prints"
     },
     {
       "module": "std/threads.ts",
