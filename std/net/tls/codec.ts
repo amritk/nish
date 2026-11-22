@@ -1193,12 +1193,31 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
  * write it again, and a server that keeps its output in a buffer of its own
  * makes room first and writes in place. The `tlsPut*` helpers are the same
  * shape: they take the position and answer the next.
+ *
+ * A position is never past `TLS_WRITE_LIMIT`. A step that would pass it, or
+ * that starts from a negative position, answers -1, and every later step
+ * from -1 answers -1 again: so a writer handed a field too long for any
+ * message, or an offset no array reaches, answers -1 and writes nothing past
+ * the failure, and its caller tests the end once.
  */
+const tlsAdvance = (at: i32, n: i32): i32 => {
+  // 2^30 - 1 each, `TLS_WRITE_LIMIT`: the sum stays inside an `i32`.
+  if (at < 0 || at > 1073741823 || n < 0 || n > 1073741823) {
+    return -1
+  }
+  const next: i32 = at + n
+  return next > 1073741823 ? -1 : next
+}
+
+/** The largest position a writer answers: 2^30 - 1, far past any TLS message (§4, 2^24 - 1 a body). */
+const TLS_WRITE_LIMIT: i32 = 1073741823
+
 const tlsPutU8 = (out: u8[], at: i32, v: i32): i32 => {
-  if (at >= 0 && at < toI32(out.length)) {
+  const next: i32 = tlsAdvance(at, 1)
+  if (next >= 0 && at >= 0 && at < toI32(out.length)) {
     out[at] = toU8(v & 255)
   }
-  return at + 1
+  return next
 }
 
 const tlsPutU16 = (out: u8[], at: i32, v: i32): i32 => tlsPutU8(out, tlsPutU8(out, at, v >> 8), v)
@@ -1208,16 +1227,21 @@ const tlsPutU32 = (out: u8[], at: i32, v: u32): i32 => {
   return tlsPutU16(out, p, toI32(v & 0xffff))
 }
 
-/** `bytes[off .. off + len)`, at `out[at]`. */
+/** `bytes[off .. off + len)`, at `out[at]`; -1 when `off .. off + len` is not inside `bytes`. */
 const tlsPutWindow = (out: u8[], at: i32, bytes: u8[], off: i32, len: i32): i32 => {
+  const size: i32 = toI32(bytes.length)
+  if (off < 0 || off > size || len < 0 || len > size - off) {
+    return -1
+  }
+  const next: i32 = tlsAdvance(at, len)
   // Measuring over an empty array: nothing would land, so nothing is copied.
-  if (toI32(out.length) === 0) {
-    return at + len
+  if (next < 0 || toI32(out.length) === 0) {
+    return next
   }
-  for (let k: i32 = 0; k < len && off + k >= 0 && off + k < toI32(bytes.length); k++) {
-    tlsPutU8(out, at + k, toI32(bytes[off + k]))
+  for (let j: i32 = off; j < size && j - off < len; j++) {
+    tlsPutU8(out, toI32(toI64(at) + toI64(j - off)), toI32(bytes[j]))
   }
-  return at + len
+  return next
 }
 
 const tlsPutBytes = (out: u8[], at: i32, b: u8[]): i32 =>
@@ -1226,36 +1250,55 @@ const tlsPutBytes = (out: u8[], at: i32, b: u8[]): i32 =>
 /** The bytes of `text`, one a character: ASCII here, an ALPN protocol id. */
 const tlsPutAscii = (out: u8[], at: i32, text: string): i32 => {
   const length: i32 = toI32(text.length)
-  for (let k: i32 = 0; k < length; k++) {
-    tlsPutU8(out, at + k, toI32(text.charCodeAt(k)))
+  const next: i32 = tlsAdvance(at, length)
+  if (next < 0) {
+    return next
   }
-  return at + length
+  for (let k: i32 = 0; k < length; k++) {
+    tlsPutU8(out, toI32(toI64(at) + toI64(k)), toI32(text.charCodeAt(k)))
+  }
+  return next
 }
 
 /**
  * Writes the `width`-byte length of the vector whose contents run from
  * `start` to `end`, into the `width` bytes before `start` that the caller
- * left for it.
+ * left for it. A failed writer (`end` -1) or a vector longer than `width`
+ * bytes can say answers -1; otherwise `end`.
  */
-const tlsPutLength = (out: u8[], start: i32, end: i32, width: i32): void => {
+const tlsPutLength = (out: u8[], start: i32, end: i32, width: i32): i32 => {
+  if (start < 3 || start > 1073741823 || end < start || end > 1073741823 || width < 1 || width > 3) {
+    return -1
+  }
   let n: i32 = end - start
-  for (let at: i32 = start - 1; at >= start - width; at--) {
-    tlsPutU8(out, at, n)
+  if (n >= 1 << (8 * width)) {
+    return -1
+  }
+  for (let k: i32 = 1; k <= width; k++) {
+    tlsPutU8(out, start - k, n)
     n = n >> 8
   }
+  return end
 }
 
-/** The handshake header (§4): `type`, then a 24-bit length of the body that follows it to `end`. */
-const tlsPutHeader = (out: u8[], at: i32, type: i32, end: i32): void => {
+/**
+ * The handshake header (§4): `type`, then a 24-bit length of the body that
+ * follows it to `end`. Answers `end`, or -1 for a failed writer or a body
+ * past 2^24 - 1 bytes.
+ */
+const tlsPutHeader = (out: u8[], at: i32, type: i32, end: i32): i32 => {
   tlsPutU8(out, at, type)
-  tlsPutLength(out, at + 4, end, 3)
+  return tlsPutLength(out, tlsAdvance(at, 4), end, 3)
 }
 
 /** The fixed `random` that marks a ServerHello as a HelloRetryRequest: SHA-256 of "HelloRetryRequest" (§4.1.3). */
 const TLS_HELLO_RETRY_RANDOM: string = "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
 
 /** The value of one lowercase hex digit. */
-const tlsHexNibble = (c: i32): i32 => (c <= 57 ? c - 48 : c - 87)
+const tlsHexNibble = (c: u8): i32 => {
+  const v: i32 = toI32(c)
+  return v <= 57 ? v - 48 : v - 87
+}
 
 /**
  * Writes the bytes the lowercase hex constant `text` spells at `out[at]` and
@@ -1268,13 +1311,20 @@ const tlsHexNibble = (c: i32): i32 => (c <= 57 ? c - 48 : c - 87)
  * @returns `at` plus the number of bytes `text` spells, written or not.
  */
 export const tlsHexInto = (text: string, out: u8[], at: i32): i32 => {
-  const length: i32 = toI32(text.length) >> 1
-  for (let k: i32 = 0; k < length; k++) {
-    const hi: i32 = tlsHexNibble(toI32(text.charCodeAt(2 * k)))
-    const lo: i32 = tlsHexNibble(toI32(text.charCodeAt(2 * k + 1)))
-    tlsPutU8(out, at + k, (hi << 4) | lo)
+  const digits: i32 = toI32(text.length)
+  const next: i32 = tlsAdvance(at, digits >> 1)
+  if (next < 0) {
+    return next
   }
-  return at + length
+  // Every odd index closes a byte: the digit before it is the high nibble.
+  for (let i: i32 = 1; i < digits; i++) {
+    if ((i & 1) === 1) {
+      const hi: i32 = tlsHexNibble(toU8(text.charCodeAt(i - 1)))
+      const lo: i32 = tlsHexNibble(toU8(text.charCodeAt(i)))
+      tlsPutU8(out, toI32(toI64(at) + toI64(i >> 1)), (hi << 4) | lo)
+    }
+  }
+  return next
 }
 
 /** The `supported_versions` a server hello carries: TLS 1.3 alone (§4.2.1). */
@@ -1323,24 +1373,23 @@ const tlsPutServerHello = (
   publicKey: u8[],
   selectedIdentity: i32
 ): i32 => {
-  let p: i32 = tlsPutHelloHead(out, at + 4, random, false, sessionId, sessionIdOff, sessionIdLength, suite)
-  const extensions: i32 = p + 2
+  let p: i32 = tlsPutHelloHead(out, tlsAdvance(at, 4), random, false, sessionId, sessionIdOff, sessionIdLength, suite)
+  const extensions: i32 = tlsAdvance(p, 2)
   p = extensions
   if (selectedIdentity >= 0) {
     p = tlsPutU16(out, tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_PRE_SHARED_KEY), 2), selectedIdentity)
   }
   p = tlsPutU16(out, p, TLS_EXT_KEY_SHARE)
-  const share: i32 = p + 2
+  const share: i32 = tlsAdvance(p, 2)
   const group: i32 = toI32(publicKey.length) === TLS_P256_SHARE_SIZE ? TLS_GROUP_SECP256R1 : TLS_GROUP_X25519
   p = tlsPutU16(out, share, group)
-  const key: i32 = p + 2
+  const key: i32 = tlsAdvance(p, 2)
   p = tlsPutBytes(out, key, publicKey)
-  tlsPutLength(out, key, p, 2)
-  tlsPutLength(out, share, p, 2)
+  p = tlsPutLength(out, key, p, 2)
+  p = tlsPutLength(out, share, p, 2)
   p = tlsPutSelectedVersion(out, p)
-  tlsPutLength(out, extensions, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_SERVER_HELLO, p)
-  return p
+  p = tlsPutLength(out, extensions, p, 2)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_SERVER_HELLO, p)
 }
 
 /**
@@ -1441,15 +1490,14 @@ export const tlsWriteHelloRetryRequest = (
   group: i32
 ): i32 => {
   const none: u8[] = []
-  let p: i32 = tlsPutHelloHead(out, at + 4, none, true, sessionId, sessionIdOff, sessionIdLength, suite)
-  const extensions: i32 = p + 2
+  let p: i32 = tlsPutHelloHead(out, tlsAdvance(at, 4), none, true, sessionId, sessionIdOff, sessionIdLength, suite)
+  const extensions: i32 = tlsAdvance(p, 2)
   p = tlsPutU16(out, extensions, TLS_EXT_KEY_SHARE)
   p = tlsPutU16(out, p, 2)
   p = tlsPutU16(out, p, group)
   p = tlsPutSelectedVersion(out, p)
-  tlsPutLength(out, extensions, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_SERVER_HELLO, p)
-  return p
+  p = tlsPutLength(out, extensions, p, 2)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_SERVER_HELLO, p)
 }
 
 /**
@@ -1480,33 +1528,32 @@ export const tlsWriteEncryptedExtensions = (
   quicTransportParameters: u8[] | null,
   recordSizeLimit: i32
 ): i32 => {
-  const extensions: i32 = at + 6
+  const extensions: i32 = tlsAdvance(at, 6)
   let p: i32 = tlsPutBytes(out, extensions, extra)
   if (toI32(alpn.length) > 0) {
     p = tlsPutU16(out, p, TLS_EXT_ALPN)
-    const body: i32 = p + 2
-    const list: i32 = body + 2
-    const name: i32 = list + 1
+    const body: i32 = tlsAdvance(p, 2)
+    const list: i32 = tlsAdvance(body, 2)
+    const name: i32 = tlsAdvance(list, 1)
     p = tlsPutAscii(out, name, alpn)
-    tlsPutLength(out, name, p, 1)
-    tlsPutLength(out, list, p, 2)
-    tlsPutLength(out, body, p, 2)
+    p = tlsPutLength(out, name, p, 1)
+    p = tlsPutLength(out, list, p, 2)
+    p = tlsPutLength(out, body, p, 2)
   }
   if (acknowledgeServerName) {
     p = tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_SERVER_NAME), 0)
   }
   if (quicTransportParameters !== null) {
     p = tlsPutU16(out, p, TLS_EXT_QUIC_TRANSPORT_PARAMETERS)
-    const body: i32 = p + 2
+    const body: i32 = tlsAdvance(p, 2)
     p = tlsPutBytes(out, body, quicTransportParameters)
-    tlsPutLength(out, body, p, 2)
+    p = tlsPutLength(out, body, p, 2)
   }
   if (recordSizeLimit !== 0) {
     p = tlsPutU16(out, tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_RECORD_SIZE_LIMIT), 2), recordSizeLimit)
   }
-  tlsPutLength(out, extensions, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, p)
-  return p
+  p = tlsPutLength(out, extensions, p, 2)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, p)
 }
 
 /**
@@ -1520,17 +1567,16 @@ export const tlsWriteEncryptedExtensions = (
  * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
-  const list: i32 = tlsPutU8(out, at + 4, 0) + 3
+  const list: i32 = tlsAdvance(tlsPutU8(out, tlsAdvance(at, 4), 0), 3)
   let p: i32 = list
   for (const certificate of chain) {
-    const entry: i32 = p + 3
+    const entry: i32 = tlsAdvance(p, 3)
     p = tlsPutBytes(out, entry, certificate)
-    tlsPutLength(out, entry, p, 3)
+    p = tlsPutLength(out, entry, p, 3)
     p = tlsPutU16(out, p, 0)
   }
-  tlsPutLength(out, list, p, 3)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_CERTIFICATE, p)
-  return p
+  p = tlsPutLength(out, list, p, 3)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_CERTIFICATE, p)
 }
 
 /**
@@ -1544,11 +1590,10 @@ export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
  * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signature: u8[]): i32 => {
-  const body: i32 = tlsPutU16(out, at + 4, scheme) + 2
-  const p: i32 = tlsPutBytes(out, body, signature)
-  tlsPutLength(out, body, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_CERTIFICATE_VERIFY, p)
-  return p
+  const body: i32 = tlsAdvance(tlsPutU16(out, tlsAdvance(at, 4), scheme), 2)
+  let p: i32 = tlsPutBytes(out, body, signature)
+  p = tlsPutLength(out, body, p, 2)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_CERTIFICATE_VERIFY, p)
 }
 
 /**
@@ -1562,9 +1607,8 @@ export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signa
  * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32, len: i32): i32 => {
-  const p: i32 = tlsPutWindow(out, at + 4, verifyData, off, len)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_FINISHED, p)
-  return p
+  const p: i32 = tlsPutWindow(out, tlsAdvance(at, 4), verifyData, off, len)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_FINISHED, p)
 }
 
 /**
@@ -1601,16 +1645,15 @@ export const tlsWriteNewSessionTicket = (
   ticketLength: i32,
   extra: u8[]
 ): i32 => {
-  let p: i32 = tlsPutU32(out, tlsPutU32(out, at + 4, lifetime), ageAdd)
+  let p: i32 = tlsPutU32(out, tlsPutU32(out, tlsAdvance(at, 4), lifetime), ageAdd)
   p = tlsPutU8(out, p, nonceLength)
   p = tlsPutWindow(out, p, nonce, nonceOff, nonceLength)
   p = tlsPutU16(out, p, ticketLength)
   p = tlsPutWindow(out, p, ticket, ticketOff, ticketLength)
-  const extensions: i32 = p + 2
+  const extensions: i32 = tlsAdvance(p, 2)
   p = tlsPutBytes(out, extensions, extra)
-  tlsPutLength(out, extensions, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_NEW_SESSION_TICKET, p)
-  return p
+  p = tlsPutLength(out, extensions, p, 2)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_NEW_SESSION_TICKET, p)
 }
 
 /**
@@ -1968,78 +2011,77 @@ export const tlsWriteClientHello = (
   alpn: string[],
   cookie: u8[]
 ): i32 => {
-  let p: i32 = tlsPutU16(out, at + 4, TLS_LEGACY_VERSION)
+  let p: i32 = tlsPutU16(out, tlsAdvance(at, 4), TLS_LEGACY_VERSION)
   p = tlsPutBytes(out, p, random)
   p = tlsPutU8(out, p, toI32(sessionId.length))
   p = tlsPutBytes(out, p, sessionId)
-  const suiteList: i32 = p + 2
+  const suiteList: i32 = tlsAdvance(p, 2)
   p = suiteList
   for (const suite of suites) {
     p = tlsPutU16(out, p, suite)
   }
-  tlsPutLength(out, suiteList, p, 2)
+  p = tlsPutLength(out, suiteList, p, 2)
   p = tlsPutU8(out, tlsPutU8(out, p, 1), 0)
-  const extensions: i32 = p + 2
+  const extensions: i32 = tlsAdvance(p, 2)
   p = extensions
   if (toI32(serverName.length) > 0) {
     p = tlsPutU16(out, p, TLS_EXT_SERVER_NAME)
-    const body: i32 = p + 2
-    const list: i32 = body + 2
-    const name: i32 = tlsPutU8(out, list, 0) + 2
+    const body: i32 = tlsAdvance(p, 2)
+    const list: i32 = tlsAdvance(body, 2)
+    const name: i32 = tlsAdvance(tlsPutU8(out, list, 0), 2)
     p = tlsPutAscii(out, name, serverName)
-    tlsPutLength(out, name, p, 2)
-    tlsPutLength(out, list, p, 2)
-    tlsPutLength(out, body, p, 2)
+    p = tlsPutLength(out, name, p, 2)
+    p = tlsPutLength(out, list, p, 2)
+    p = tlsPutLength(out, body, p, 2)
   }
   p = tlsPutU16(out, p, TLS_EXT_SUPPORTED_GROUPS)
-  const groupsBody: i32 = p + 2
-  const groupList: i32 = groupsBody + 2
+  const groupsBody: i32 = tlsAdvance(p, 2)
+  const groupList: i32 = tlsAdvance(groupsBody, 2)
   p = groupList
   for (const group of groups) {
     p = tlsPutU16(out, p, group)
   }
-  tlsPutLength(out, groupList, p, 2)
-  tlsPutLength(out, groupsBody, p, 2)
+  p = tlsPutLength(out, groupList, p, 2)
+  p = tlsPutLength(out, groupsBody, p, 2)
   p = tlsPutU16(out, p, TLS_EXT_SIGNATURE_ALGORITHMS)
-  const schemesBody: i32 = p + 2
-  const schemeList: i32 = schemesBody + 2
+  const schemesBody: i32 = tlsAdvance(p, 2)
+  const schemeList: i32 = tlsAdvance(schemesBody, 2)
   p = tlsPutClientSchemes(out, schemeList)
-  tlsPutLength(out, schemeList, p, 2)
-  tlsPutLength(out, schemesBody, p, 2)
+  p = tlsPutLength(out, schemeList, p, 2)
+  p = tlsPutLength(out, schemesBody, p, 2)
   if (toI32(alpn.length) > 0) {
     p = tlsPutU16(out, p, TLS_EXT_ALPN)
-    const body: i32 = p + 2
-    const list: i32 = body + 2
+    const body: i32 = tlsAdvance(p, 2)
+    const list: i32 = tlsAdvance(body, 2)
     p = list
     for (const protocol of alpn) {
-      const name: i32 = p + 1
+      const name: i32 = tlsAdvance(p, 1)
       p = tlsPutAscii(out, name, protocol)
-      tlsPutLength(out, name, p, 1)
+      p = tlsPutLength(out, name, p, 1)
     }
-    tlsPutLength(out, list, p, 2)
-    tlsPutLength(out, body, p, 2)
+    p = tlsPutLength(out, list, p, 2)
+    p = tlsPutLength(out, body, p, 2)
   }
   p = tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_SUPPORTED_VERSIONS), 3)
   p = tlsPutU16(out, tlsPutU8(out, p, 2), TLS_VERSION_13)
   p = tlsPutU16(out, p, TLS_EXT_KEY_SHARE)
-  const shareBody: i32 = p + 2
-  const shareList: i32 = shareBody + 2
-  const key: i32 = tlsPutU16(out, shareList, shareGroup) + 2
+  const shareBody: i32 = tlsAdvance(p, 2)
+  const shareList: i32 = tlsAdvance(shareBody, 2)
+  const key: i32 = tlsAdvance(tlsPutU16(out, shareList, shareGroup), 2)
   p = tlsPutBytes(out, key, sharePublic)
-  tlsPutLength(out, key, p, 2)
-  tlsPutLength(out, shareList, p, 2)
-  tlsPutLength(out, shareBody, p, 2)
+  p = tlsPutLength(out, key, p, 2)
+  p = tlsPutLength(out, shareList, p, 2)
+  p = tlsPutLength(out, shareBody, p, 2)
   if (toI32(cookie.length) > 0) {
     p = tlsPutU16(out, p, TLS_EXT_COOKIE)
-    const body: i32 = p + 2
-    const value: i32 = body + 2
+    const body: i32 = tlsAdvance(p, 2)
+    const value: i32 = tlsAdvance(body, 2)
     p = tlsPutBytes(out, value, cookie)
-    tlsPutLength(out, value, p, 2)
-    tlsPutLength(out, body, p, 2)
+    p = tlsPutLength(out, value, p, 2)
+    p = tlsPutLength(out, body, p, 2)
   }
-  tlsPutLength(out, extensions, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_CLIENT_HELLO, p)
-  return p
+  p = tlsPutLength(out, extensions, p, 2)
+  return tlsPutHeader(out, at, TLS_HANDSHAKE_CLIENT_HELLO, p)
 }
 
 /**
@@ -2386,11 +2428,16 @@ const tlsWindowIsHex = (data: u8[], at: i32, text: string): boolean => {
   if (at < 0 || at > toI32(data.length) - length) {
     return false
   }
-  for (let k: i32 = 0; k < length; k++) {
-    const hi: i32 = tlsHexNibble(toI32(text.charCodeAt(2 * k)))
-    const lo: i32 = tlsHexNibble(toI32(text.charCodeAt(2 * k + 1)))
-    if (toI32(data[at + k]) !== ((hi << 4) | lo)) {
-      return false
+  const digits: i32 = toI32(text.length)
+  const size: i32 = toI32(data.length)
+  for (let i: i32 = 1; i < digits; i++) {
+    const k: i32 = toI32(toI64(at) + toI64(i >> 1))
+    if ((i & 1) === 1 && k < size) {
+      const hi: i32 = tlsHexNibble(toU8(text.charCodeAt(i - 1)))
+      const lo: i32 = tlsHexNibble(toU8(text.charCodeAt(i)))
+      if (toI32(data[k]) !== ((hi << 4) | lo)) {
+        return false
+      }
     }
   }
   return true
