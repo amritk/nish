@@ -177,7 +177,8 @@ export const tlsRecordWindowFits = (length: i32, off: i32, len: i32): boolean =>
 
 /** The five header bytes of a record of `type` and body length `len`, written at `out[at]`. */
 const tlsWriteRecordHeader = (out: u8[], at: i32, type: i32, len: i32): void => {
-  // A position past 2^30 - 1 is none any buffer this layer writes reaches.
+  // Every caller checks the whole header window first (`tlsRecordWindowFits`, or a five-byte `aad` at 0), so
+  // this return is never taken; a position past 2^30 - 1 is none any buffer this layer writes reaches.
   if (at < 0 || at > 1073741823 || at + 4 >= toI32(out.length)) {
     return
   }

@@ -190,6 +190,7 @@ export class TlsTicketKeyInfo {
   copyFrom(other: TlsTicketKeyInfo): void {
     const to: u8[] = this.id
     const from: u8[] = other.id
+    // Both ids are `TLS_TICKET_KEY_ID_SIZE` bytes from the constructor, so the length bounds never stop the copy.
     for (let k: i32 = 0; k < TLS_TICKET_KEY_ID_SIZE && k < toI32(to.length) && k < toI32(from.length); k++) {
       to[k] = from[k]
     }
@@ -248,7 +249,7 @@ export class TlsTicketState {
    *   one past the `i64` range is held at its end.
    */
   expiresAt(): i64 {
-    return tlsTicketAdd(this.issuedAt, toI64(this.lifetime) * 1000000000)
+    return tlsTicketAdd(this.issuedAt, toI64(this.lifetime) * TLS_TICKET_NANOS)
   }
 }
 
@@ -331,27 +332,31 @@ export const tlsTicketSize = (state: TlsTicketState): i32 => {
 }
 
 /**
- * Writes `value`'s low `size` bytes, 0 to 8, big-endian at `at`. Every caller has
- * sized `buf` to hold them, so the bounds below only let the prover see it.
+ * Writes `value`'s low `size` bytes, 0 to 8, big-endian at `at`, and answers
+ * true; false, writing nothing, when they do not all fit in `buf`. Every
+ * caller has sized `buf` to hold them and refuses on false.
  */
-const tlsTicketPut = (buf: u8[], at: i32, value: i64, size: i32): void => {
-  if (at < 0 || size < 0 || size > 8) {
-    return
+const tlsTicketPut = (buf: u8[], at: i32, value: i64, size: i32): boolean => {
+  if (at < 0 || size < 0 || size > 8 || at > toI32(buf.length) - size) {
+    return false
   }
   for (let j: i32 = at; j < toI32(buf.length) && j - at < size; j++) {
     const shift: i64 = toI64(size - 1) * 8 - toI64(j - at) * 8
     buf[j] = toU8(toI32((value >> shift) & 255))
   }
+  return true
 }
 
 /**
- * Reads `size` bytes, 0 to 8, big-endian at `at`. Every caller has checked
- * that `buf` holds them, so the bounds below only let the prover see it.
+ * Reads `size` bytes, 0 to 8, big-endian at `at`, or -1 when they do not all
+ * lie inside `buf`. `tlsTicketParse` checks every window before it reads, so
+ * no read reaches the -1; an 8-byte value may itself be -1, and only that
+ * entry check stands for those.
  */
 const tlsTicketGet = (buf: u8[], at: i32, size: i32): i64 => {
   let value: i64 = 0
-  if (at < 0 || size < 0 || size > 8) {
-    return value
+  if (at < 0 || size < 0 || size > 8 || at > toI32(buf.length) - size) {
+    return -1
   }
   for (let j: i32 = at; j < toI32(buf.length) && j - at < size; j++) {
     value = (value << 8) | toI64(buf[j])
@@ -360,10 +365,21 @@ const tlsTicketGet = (buf: u8[], at: i32, size: i32): i64 => {
 }
 
 /**
- * Copies `length` bytes from `src[srcAt]` to `dst[dstAt]`. Every caller has
- * checked that both windows fit, so the bounds below only let the prover see it.
+ * Copies `length` bytes from `src[srcAt]` to `dst[dstAt]` and answers true;
+ * false, copying nothing, when either window does not fit. Every caller has
+ * checked both windows and refuses on false; the bounds in the loop are the
+ * prover's.
  */
-const tlsTicketCopy = (dst: u8[], dstAt: i32, src: u8[], srcAt: i32, length: i32): void => {
+const tlsTicketCopy = (dst: u8[], dstAt: i32, src: u8[], srcAt: i32, length: i32): boolean => {
+  if (
+    length < 0 ||
+    dstAt < 0 ||
+    srcAt < 0 ||
+    toI64(dstAt) + toI64(length) > toI64(dst.length) ||
+    toI64(srcAt) + toI64(length) > toI64(src.length)
+  ) {
+    return false
+  }
   for (let k: i32 = 0; k < length; k++) {
     // A position past an `i32` wraps negative and is skipped like one past the array.
     const to: i32 = toI32(toI64(dstAt) + toI64(k))
@@ -372,6 +388,7 @@ const tlsTicketCopy = (dst: u8[], dstAt: i32, src: u8[], srcAt: i32, length: i32
       dst[to] = src[from]
     }
   }
+  return true
 }
 
 /**
@@ -390,7 +407,9 @@ const tlsTicketRange = (buf: u8[], from: i32, to: i32): u8[] => {
     return none
   }
   const out: u8[] = new Array<u8>(toU16(length))
-  tlsTicketCopy(out, 0, buf, from, toI32(out.length))
+  if (!tlsTicketCopy(out, 0, buf, from, toI32(out.length))) {
+    return none
+  }
   return out
 }
 
@@ -470,23 +489,32 @@ export const tlsTicketSeal = (
   const input: u8[] = new Array<u8>(toU16(head + plainLength))
   const nonce: u8[] = new Array<u8>(TLS_TICKET_NONCE_SIZE)
   crypto.getRandomValues(nonce)
-  tlsTicketCopy(input, 0, id, 0, TLS_TICKET_KEY_ID_SIZE)
-  tlsTicketCopy(input, TLS_TICKET_KEY_ID_SIZE, nonce, 0, TLS_TICKET_NONCE_SIZE)
-  tlsTicketPut(input, head, toI64(state.suite), 2)
-  tlsTicketPut(input, head + 2, now, 8)
-  tlsTicketPut(input, head + 10, toI64(state.lifetime), 4)
-  tlsTicketPut(input, head + 14, state.chainStart, 8)
   const nameAt: i32 = head + TLS_TICKET_NAME_AT
-  tlsTicketPut(input, nameAt, toI64(nameLength), 1)
-  tlsTicketCopy(input, nameAt + 1, state.serverName, 0, nameLength)
   const pskAt: i32 = nameAt + 1 + nameLength
-  tlsTicketPut(input, pskAt, toI64(pskLength), 1)
-  tlsTicketCopy(input, pskAt + 1, state.psk, 0, pskLength)
+  // `input` was made at the plaintext's size, so every field fits; a state
+  // whose arrays are shorter than its lengths is refused, not sealed short.
+  const filled: boolean =
+    tlsTicketCopy(input, 0, id, 0, TLS_TICKET_KEY_ID_SIZE) &&
+    tlsTicketCopy(input, TLS_TICKET_KEY_ID_SIZE, nonce, 0, TLS_TICKET_NONCE_SIZE) &&
+    tlsTicketPut(input, head, toI64(state.suite), 2) &&
+    tlsTicketPut(input, head + 2, now, 8) &&
+    tlsTicketPut(input, head + 10, toI64(state.lifetime), 4) &&
+    tlsTicketPut(input, head + 14, state.chainStart, 8) &&
+    tlsTicketPut(input, nameAt, toI64(nameLength), 1) &&
+    tlsTicketCopy(input, nameAt + 1, state.serverName, 0, nameLength) &&
+    tlsTicketPut(input, pskAt, toI64(pskLength), 1) &&
+    tlsTicketCopy(input, pskAt + 1, state.psk, 0, pskLength)
+  if (!filled) {
+    secureZero(input)
+    return 0
+  }
   const sealed: u8[] = exposeWith(key, input, tlsTicketSealExposed)
   let written: i32 = 0
-  if (toI32(sealed.length) === plainLength + POLY1305_TAG_SIZE) {
-    tlsTicketCopy(out, 0, input, 0, head)
+  if (
+    toI32(sealed.length) === plainLength + POLY1305_TAG_SIZE &&
+    tlsTicketCopy(out, 0, input, 0, head) &&
     tlsTicketCopy(out, head, sealed, 0, toI32(sealed.length))
+  ) {
     // Under its cap, so the count never reaches the `i64` top `tlsTicketAdd` would hold it at.
     info.sealed = tlsTicketAdd(info.sealed, 1)
     written = size
@@ -530,7 +558,8 @@ const tlsTicketParse = (plain: u8[], now: i64, out: TlsTicketState): boolean => 
   const issuedAt: i64 = tlsTicketGet(plain, 2, 8)
   const lifetime: i64 = tlsTicketGet(plain, 10, 4)
   const chainStart: i64 = tlsTicketGet(plain, 14, 8)
-  // Each length is one byte, so its bound below never refuses.
+  // Each length is one byte, so its bound below never refuses. The name's bound stays the literal 255
+  // (`TLS_TICKET_SERVER_NAME_MAX`): the prover reads literal guards, and the sums below need it.
   const nameLength: i32 = toI32(tlsTicketGet(plain, TLS_TICKET_NAME_AT, 1))
   if (nameLength < 0 || nameLength > 255) {
     return false
@@ -558,9 +587,14 @@ const tlsTicketParse = (plain: u8[], now: i64, out: TlsTicketState): boolean => 
   out.lifetime = toI32(lifetime)
   out.chainStart = chainStart
   out.serverNameLength = nameLength
-  tlsTicketCopy(out.serverName, 0, plain, TLS_TICKET_NAME_AT + 1, nameLength)
   out.pskLength = pskLength
-  tlsTicketCopy(out.psk, 0, plain, pskAt + 1, pskLength)
+  // Both windows were checked above; a copy that cannot land whole refuses.
+  if (
+    !tlsTicketCopy(out.serverName, 0, plain, TLS_TICKET_NAME_AT + 1, nameLength) ||
+    !tlsTicketCopy(out.psk, 0, plain, pskAt + 1, pskLength)
+  ) {
+    return false
+  }
   return (
     lifetime <= toI64(TLS_TICKET_LIFETIME_SECONDS) &&
     chainStart <= issuedAt &&
@@ -625,10 +659,10 @@ export const tlsTicketOpen = (
   }
   using _scope = arena()
   const plain: u8[] = exposeWith(key, ticket, tlsTicketOpenExposed)
-  const opened: boolean = tlsTicketParse(plain, now, out)
-  if (opened) {
+  const opened: boolean =
+    tlsTicketParse(plain, now, out) &&
     tlsTicketCopy(out.id, 0, ticket, TLS_TICKET_KEY_ID_SIZE, TLS_TICKET_NONCE_SIZE)
-  } else {
+  if (!opened) {
     secureZero(out.psk)
   }
   secureZero(plain)
@@ -737,7 +771,7 @@ export class TlsTicketStrikes {
     if (slot < 0 || slot > 178956969) {
       return false
     }
-    const at: i32 = slot * 12
+    const at: i32 = slot * TLS_TICKET_NONCE_SIZE
     for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
       const j: i32 = toI32(toI64(at) + toI64(k))
       if (j < 0 || j >= toI32(ids.length) || ids[j] !== id[k]) {
@@ -858,8 +892,8 @@ export class TlsTicketStrikes {
     if (free >= toI32(used.length) || free >= toI32(expires.length) || free > 178956969) {
       return false
     }
-    const at: i32 = free * 12
-    if (at > toI32(ids.length) - 12) {
+    const at: i32 = free * TLS_TICKET_NONCE_SIZE
+    if (at > toI32(ids.length) - TLS_TICKET_NONCE_SIZE) {
       return false
     }
     if (used[free] === 0) {

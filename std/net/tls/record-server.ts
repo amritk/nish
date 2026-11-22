@@ -794,7 +794,8 @@ export class TlsRecordServer {
     const end: i32 = this.plainEnd
     // Both stay inside the 2^15-byte buffer: a record is copied in only
     // after this made room for it, and `read` moves `start` up to `end`.
-    if (start < 0 || start > 32768 || end < 0 || end > 32768) {
+    if (start < 0 || start > 32768 || end < 0 || end > 32768 || start > end) {
+      this.fail(TLS_ALERT_INTERNAL_ERROR)
       return false
     }
     if (capacity - (end - start) < TLS_MAX_PLAINTEXT) {
@@ -803,6 +804,12 @@ export class TlsRecordServer {
     if (capacity - end < TLS_MAX_PLAINTEXT) {
       const held: i32 = end - start
       const plain: u8[] = this.plain
+      // What is held lies inside the buffer it is held in, so the move below
+      // copies all of it; the guards inside the loop are the prover's.
+      if (end > toI32(plain.length)) {
+        this.fail(TLS_ALERT_INTERNAL_ERROR)
+        return false
+      }
       for (let k: i32 = 0; k < held && k < toI32(plain.length); k++) {
         const from: i32 = start + k
         if (from < toI32(plain.length)) {
@@ -821,11 +828,13 @@ export class TlsRecordServer {
   /** Counts a record that carried nothing for the caller: 0, or `unexpected_message` once there are too many in a row. */
   private idle(): i32 {
     const seen: i32 = this.idleRecords
-    // The record past the limit fails the connection, so the count never
-    // passes 17 and the guard never binds.
-    const next: i32 = seen < 0 || seen > 16 ? 17 : seen + 1
-    this.idleRecords = next
-    return next > TLS_RECORD_IDLE_LIMIT ? TLS_ALERT_UNEXPECTED_MESSAGE : 0
+    // The record past `TLS_RECORD_IDLE_LIMIT` fails the connection, so the
+    // count never passes it; the literal bound is the prover's.
+    if (seen < 0 || seen >= TLS_RECORD_IDLE_LIMIT || seen > 1073741823) {
+      return TLS_ALERT_UNEXPECTED_MESSAGE
+    }
+    this.idleRecords = seen + 1
+    return 0
   }
 
   /**
@@ -925,11 +934,16 @@ export class TlsRecordServer {
         const end: i32 = this.plainEnd
         // `process` made room for a whole record past `end`, and `open`
         // answers at most 2^14 bytes of content.
-        if (end < 0 || end > 32768 || length > 16384) {
+        if (end < 0 || end > 32768 || length < 0 || length > 16384) {
           return TLS_ALERT_INTERNAL_ERROR
         }
         const plain: u8[] = this.plain
         const scratch: u8[] = this.scratch
+        // The whole record lands, or the connection fails: the guards inside
+        // the loop are the prover's, and never drop a byte past this check.
+        if (end + length > toI32(plain.length) || length > toI32(scratch.length)) {
+          return TLS_ALERT_INTERNAL_ERROR
+        }
         for (let k: i32 = 0; k < length && k < toI32(scratch.length); k++) {
           const to: i32 = end + k
           if (to < toI32(plain.length)) {
@@ -1035,8 +1049,8 @@ export class TlsRecordServer {
         }
         this.postHandshakeLength = 0
         const updates: i32 = this.keyUpdates
-        // 64, `TLS_RECORD_MAX_KEY_UPDATES`: the count never passes it.
-        if (updates < 0 || updates >= 64) {
+        // The count never passes `TLS_RECORD_MAX_KEY_UPDATES`.
+        if (updates < 0 || updates >= TLS_RECORD_MAX_KEY_UPDATES) {
           return TLS_ALERT_UNEXPECTED_MESSAGE
         }
         this.keyUpdates = updates + 1
@@ -1148,6 +1162,12 @@ export class TlsRecordServer {
     if (end + need > capacity && start > 0) {
       const held: i32 = end - start
       const output: u8[] = this.output
+      // What is unsent lies inside the buffer it is held in, so the move
+      // below copies all of it; the guards inside the loop are the prover's.
+      if (held < 0 || end > toI32(output.length)) {
+        this.fail(TLS_ALERT_INTERNAL_ERROR)
+        return false
+      }
       for (let k: i32 = 0; k < held && k < toI32(output.length); k++) {
         const from: i32 = start + k
         if (from < toI32(output.length)) {
@@ -1600,6 +1620,12 @@ export class TlsRecordServer {
     if (avail > 0) {
       const n: i32 = avail < len ? avail : len
       const plain: u8[] = this.plain
+      // All `n` bytes are copied or none: the guards inside the loop are the
+      // prover's, and never skip a byte past this check.
+      if (end > toI32(plain.length) || toI64(off) + toI64(n) > toI64(buf.length)) {
+        this.fail(TLS_ALERT_INTERNAL_ERROR)
+        return TLS_RECORD_RESET
+      }
       for (let j: i32 = off; j < toI32(buf.length) && j - off < n; j++) {
         // `j - off` is below `n`, so this never wraps.
         const from: i32 = toI32(toI64(start) + toI64(j - off))

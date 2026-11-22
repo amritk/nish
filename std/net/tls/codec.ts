@@ -974,6 +974,9 @@ export const tlsSelectPskIdentity = (hello: TlsClientHelloView, index: i32): boo
   let at: i32 = hello.pskIdentitiesAt
   for (let k: i32 = 0; k <= index && at >= 0 && at < toI32(data.length) - 1; k++) {
     const length: i32 = tlsWindowU16(data, at)
+    if (length < 0) {
+      return false
+    }
     // Past 2^31 - 1 the sum wraps negative, which is refused with the rest.
     const age: i32 = toI32(toI64(at) + 2 + toI64(length))
     if (age < 0 || age > toI32(data.length) - 4) {
@@ -982,7 +985,13 @@ export const tlsSelectPskIdentity = (hello: TlsClientHelloView, index: i32): boo
     if (k === index) {
       hello.pskIdentityAt = at + 2
       hello.pskIdentityLength = length
-      hello.pskTicketAge = tlsWindowU32(data, age)
+      const ticketAge: i64 = tlsWindowU32(data, age)
+      if (ticketAge < 0 || ticketAge > 4294967295) {
+        hello.pskIdentityAt = 0
+        hello.pskIdentityLength = 0
+        return false
+      }
+      hello.pskTicketAge = toU32(ticketAge)
       break
     }
     at = age + 4
@@ -1106,22 +1115,26 @@ export class TlsClientHello {
 }
 
 /**
- * The big-endian 16-bit value at `data[at]`, `data[at + 1]`, which the caller
- * has checked lie inside `data`.
+ * The big-endian 16-bit value at `data[at]`, `data[at + 1]`, or -1 when
+ * those bytes do not both lie inside `data`.
  */
 const tlsWindowU16 = (data: u8[], at: i32): i32 => toI32(tlsWindowUint(data, at, 2))
 
-/** The big-endian 32-bit value at `data[at .. at + 4)`, which the caller has checked lie inside `data`. */
-const tlsWindowU32 = (data: u8[], at: i32): u32 => tlsWindowUint(data, at, 4)
+/** The big-endian 32-bit value at `data[at .. at + 4)`, or -1 when those bytes do not all lie inside `data`. */
+const tlsWindowU32 = (data: u8[], at: i32): i64 => tlsWindowUint(data, at, 4)
 
-/** The big-endian value of the `width` bytes (at most 4) from `data[at]` that lie inside `data`. */
-const tlsWindowUint = (data: u8[], at: i32, width: i32): u32 => {
-  let v: u32 = toU32(0)
-  if (at < 0) {
-    return v
+/**
+ * The big-endian value of the `width` bytes (1 to 4) from `data[at]`, or -1
+ * when they do not all lie inside `data`: every caller has checked the window,
+ * and the -1 refuses rather than read a shorter value.
+ */
+const tlsWindowUint = (data: u8[], at: i32, width: i32): i64 => {
+  if (at < 0 || width < 1 || width > 4 || at > toI32(data.length) - width) {
+    return -1
   }
+  let v: i64 = 0
   for (let j: i32 = at; j < toI32(data.length) && j - at < width; j++) {
-    v = (v << 8) | toU32(data[j])
+    v = (v << 8) | toI64(data[j])
   }
   return v
 }
@@ -1214,7 +1227,14 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   const sharesEnd: i64 = toI64(view.sharesAt) + toI64(view.sharesLength)
   while (at >= 0 && at < toI32(data.length) - 3 && toI64(at) + 4 <= sharesEnd) {
     const skip: i32 = tlsWindowU16(data, toI32(toI64(at) + 2))
-    hello.shareGroups.push(tlsWindowU16(data, at))
+    const entry: i32 = tlsWindowU16(data, at)
+    // The loop's test keeps both inside `data`; were it not to, the copy is
+    // refused rather than left short.
+    if (skip < 0 || entry < 0) {
+      hello.alert = TLS_ALERT_INTERNAL_ERROR
+      return hello
+    }
+    hello.shareGroups.push(entry)
     at = toI32(toI64(at) + 4 + toI64(skip))
   }
   at = view.alpnAt
@@ -1228,7 +1248,14 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   const extensionsEnd: i64 = toI64(view.extensionsAt) + toI64(view.extensionsLength)
   while (at >= 0 && at < toI32(data.length) - 3 && toI64(at) + 4 <= extensionsEnd) {
     const skip: i32 = tlsWindowU16(data, toI32(toI64(at) + 2))
-    hello.extensionTypes.push(tlsWindowU16(data, at))
+    const entry: i32 = tlsWindowU16(data, at)
+    // The loop's test keeps both inside `data`; were it not to, the copy is
+    // refused rather than left short.
+    if (skip < 0 || entry < 0) {
+      hello.alert = TLS_ALERT_INTERNAL_ERROR
+      return hello
+    }
+    hello.extensionTypes.push(entry)
     at = toI32(toI64(at) + 4 + toI64(skip))
   }
   hello.nullCompressionOnly = view.nullCompressionOnly
@@ -1499,7 +1526,8 @@ const tlsPutServerHello = (
  * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteServerHello = (
   out: u8[],
@@ -1531,7 +1559,8 @@ export const tlsWriteServerHello = (
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteServerHelloPsk = (
   out: u8[],
@@ -1570,7 +1599,8 @@ export const tlsWriteServerHelloPsk = (
  * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
  * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteHelloRetryRequest = (
   out: u8[],
@@ -1619,7 +1649,8 @@ export const tlsWriteHelloRetryRequest = (
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
  * @param recordSizeLimit The largest record plaintext the server takes, content type included, written as a `uint16`; 0 to send none.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteEncryptedExtensions = (
   out: u8[],
@@ -1667,7 +1698,8 @@ export const tlsWriteEncryptedExtensions = (
  * @param at Where the message, handshake header first, starts in `out`.
  * @param chain The DER certificates, leaf first, each written as it is.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
   const list: i32 = tlsAdvance(tlsPutU8(out, tlsAdvance(at, 4), 0), 3)
@@ -1691,7 +1723,8 @@ export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
  * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
  * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signature: u8[]): i32 => {
   const body: i32 = tlsAdvance(tlsPutU16(out, tlsAdvance(at, 4), scheme), 2)
@@ -1709,7 +1742,8 @@ export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signa
  * @param off Where the `verify_data` starts in `verifyData`.
  * @param len How many bytes it is: the suite's hash length, 32 or 48.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32, len: i32): i32 => {
   const p: i32 = tlsPutWindow(out, tlsAdvance(at, 4), verifyData, off, len)
@@ -1736,7 +1770,8 @@ export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32,
  * @param ticketLength How many bytes the ticket is: §4.6.1 allows 1 to 65535, not checked here.
  * @param extra Whole extensions, type and length included, written unchecked; empty for none.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteNewSessionTicket = (
   out: u8[],
@@ -1774,7 +1809,8 @@ export const tlsWriteNewSessionTicket = (
  * @param off Where the hash starts in `transcriptHash`.
  * @param len How many bytes the hash is: the suite's hash length.
  * @returns Where the content ends in `out`: `at` plus 98 plus `len`, written or not; -1
- *   when `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   when `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificateVerifyContent = (
   out: u8[],
@@ -1795,7 +1831,7 @@ export const tlsWriteCertificateVerifyContent = (
 /**
  * `n` zero bytes in a fresh array, the buffer a `tlsEncode*` fills after its
  * writer measured it; a negative `n`, the measure of a message past 2^30 - 1
- * bytes, gives an empty one, which the writer then leaves empty.
+ * bytes or with a vector its length field cannot hold, gives an empty one, which the writer then leaves empty.
  */
 const tlsZeros = (n: i32): u8[] => {
   const out: u8[] = []
@@ -1818,7 +1854,9 @@ const tlsBytesString = (name: u8[]): string => tlsWindowString(name, TLS_CODEC_F
  * @param suite The cipher suite the server chose.
  * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, serverShare: u8[]): u8[] => {
   const none: u8[] = []
@@ -1859,7 +1897,9 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeServerHelloPsk = (
   random: u8[],
@@ -1904,7 +1944,9 @@ export const tlsEncodeServerHelloPsk = (
  * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
  * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
  * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i32): u8[] => {
   const none: u8[] = []
@@ -1925,7 +1967,9 @@ export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
  * @param recordSizeLimit The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeEncryptedExtensions = (
   extra: u8[],
@@ -1963,7 +2007,9 @@ export const tlsEncodeEncryptedExtensions = (
  * A server's Certificate (§4.4.2) in a fresh array (`tlsWriteCertificate`).
  *
  * @param chain The DER certificates, leaf first, each written as it is.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
   const none: u8[] = []
@@ -1977,7 +2023,9 @@ export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
  *
  * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
  * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] => {
   const none: u8[] = []
@@ -1990,7 +2038,9 @@ export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] =
  * A Finished (§4.4.4) carrying `verifyData`, in a fresh array (`tlsWriteFinished`).
  *
  * @param verifyData The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
   const none: u8[] = []
@@ -2008,7 +2058,9 @@ export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
  * @param nonce The whole `ticket_nonce`, 0 to 255 bytes.
  * @param ticket The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes, not checked here.
  * @param extra Whole extensions, type and length included, written unchecked; empty for none.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeNewSessionTicket = (
   lifetime: u32,
@@ -2117,7 +2169,8 @@ export const tlsClientOffersScheme = (scheme: i32): boolean =>
  * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
  * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
  * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
+ *   `at` is negative, a window is outside its buffer, a vector is longer than
+ *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
  */
 export const tlsWriteClientHello = (
   out: u8[],
@@ -2217,7 +2270,9 @@ export const tlsWriteClientHello = (
  * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
  * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
  * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
+ *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
+ *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
  */
 export const tlsEncodeClientHello = (
   random: u8[],

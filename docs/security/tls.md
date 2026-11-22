@@ -1400,7 +1400,10 @@ interop server does not.
   PSKs SHOULD be ignored). So does every ticket after the process restarts,
   since keys never leave memory. A ticket longer than 65,535 bytes, which no
   `identity<1..2^16-1>` can carry (§4.2.11), and a key record whose id is
-  not 16 bytes fail the same way, before the key is exposed.
+  not 16 bytes fail the same way, before the key is exposed
+  (`tlsTicketNamesKey`). On the seal side a key record whose id is not
+  16 bytes seals nothing: `tlsTicketSeal` answers 0, so the server issues
+  no ticket rather than one no key could open.
 - **Nonces, enforced.** Each ticket is sealed under a fresh 12-byte random
   nonce. Under one key, n tickets collide with probability about n² / 2^97.
   The issue window bounds time, not the number of connections, so the count

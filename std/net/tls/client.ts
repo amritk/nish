@@ -739,7 +739,9 @@ export class TlsClient {
       if (alert !== 0) {
         return alert
       }
-      this.consume(whole)
+      if (!this.consume(whole)) {
+        return TLS_ALERT_INTERNAL_ERROR
+      }
       const endsFlight: boolean = type === TLS_HANDSHAKE_SERVER_HELLO || type === TLS_HANDSHAKE_FINISHED
       if (endsFlight && this.inputLength > 0) {
         return TLS_ALERT_UNEXPECTED_MESSAGE
@@ -748,16 +750,24 @@ export class TlsClient {
     return 0
   }
 
-  /** Drops the first `count` bytes of `input`, moving the rest to its front. */
-  private consume(count: i32): void {
+  /**
+   * Drops the first `count` bytes of `input`, moving the rest to its front;
+   * false, dropping nothing, for a `count` past what is held, which `drain`
+   * then answers with `internal_error`.
+   */
+  private consume(count: i32): boolean {
     const held: i32 = this.inputLength
     // `drain` drops a whole message it holds, so `count` is never past `held`.
     if (count < 0 || count > 65540 || held < 0 || held > 65540 || count > held) {
-      this.inputLength = 0
-      return
+      return false
     }
     const rest: i32 = held - count
     const input: u8[] = this.input
+    // What is held lies inside `input`, so the move below copies all of it;
+    // the guards inside the loop are the prover's.
+    if (held > toI32(input.length)) {
+      return false
+    }
     for (let k: i32 = 0; k < rest && k < toI32(input.length); k++) {
       const at: i32 = count + k
       if (at >= toI32(input.length)) {
@@ -766,6 +776,7 @@ export class TlsClient {
       input[k] = input[at]
     }
     this.inputLength = rest
+    return true
   }
 
   /** Dispatches one whole message, `input[0 .. 4 + length)`, of type `type`, by state. */
