@@ -93,19 +93,20 @@ const nowMs = (): i64 => monotonicNanos() / 1000000
 /** The wall clock in Unix milliseconds. */
 const wallMs = (): i64 => toI64(Date.now())
 
-/** Writes the `--cert-out` file for `id`, when one is asked for. */
-const writeCertOut = (o: RelayOptions, id: RelayIdentity): void => {
+/** Writes the `--cert-out` file for `id`, when one is asked for: false when it could not. */
+const writeCertOut = (o: RelayOptions, id: RelayIdentity): boolean => {
   if (o.certOut.length === 0) {
-    return
+    return true
   }
   const wrote: i32 = writeFileSyncMode(o.certOut, relayCertOutBody(id), 0o644)
   if (wrote < 0) {
     writeError(`[relay] could not write ${o.certOut} (${wrote})\n`)
-    return
+    return false
   }
   write(
     `[relay] ${id.pinned ? "certificate hash" : "a note saying there is no hash to pin"} written to ${o.certOut}\n`
   )
+  return true
 }
 
 /** The client socket: the address asked for, or dual-stack and then IPv4. GRO is asked for, and done without where refused. */
@@ -195,7 +196,11 @@ export const main = (): i32 => {
     return 2
   }
   let key: Secret<u8[]> = first
-  writeCertOut(o, id)
+  // At boot a file that cannot be written fails the start, exit 1 as `writeFileSync`'s was: a script waiting on it to pin the hash would otherwise wait forever.
+  if (!writeCertOut(o, id)) {
+    wipe(key)
+    return 1
+  }
   const watch = new RelayWatch(source)
   if (source.pem) {
     watch.mark()
@@ -251,6 +256,7 @@ export const main = (): i32 => {
       wipe(key)
       key = next
       write("[relay] certificate reloaded; live sessions kept\n")
+      // A renewal keeps serving when the file cannot be written: the error line says so.
       writeCertOut(o, fresh)
     }
   }

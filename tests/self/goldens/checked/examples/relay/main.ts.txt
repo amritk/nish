@@ -11133,9 +11133,10 @@ function QuicStreams.giveSend(this: QuicStreams, stream: QuicStream): void -> @n
   pointer this: size=344 writesThrough=false captured=false
   pointer stream: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -3:11 pools: QuicStreamPools | null (const)
-  callee -1:7 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
-  callee -1:58 quicStreamMin -> @nish.quicStreamMin
+  local -6:11 pools: QuicStreamPools | null (const)
+  local -4:13 used: i32 (const)
+  callee -4:31 quicStreamMin -> @nish.quicStreamMin
+  callee -3:12 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
 function QuicStreams.reset(this: QuicStreams): void -> @nish.QuicStreams.reset [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -46358,7 +46359,7 @@ function wallMs(): i64 -> @wallMs
   sharedWrite: via nish_date_now
   calls: llvm.fptosi.sat.i64.f64 nish_date_now
   stackSites=0 stackLocals=0
-function writeCertOut(o: RelayOptions, id: RelayIdentity): void -> @writeCertOut
+function writeCertOut(o: RelayOptions, id: RelayIdentity): boolean -> @writeCertOut
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file_mode
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 nish_write nish_write_file_mode relayCertOutBody
@@ -46403,21 +46404,22 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: +0:7
   calls: GrantVerifier.constructor Relay.constructor Relay.shutdown Relay.watchSignals RelayIdentity.constructor RelayOptions.constructor RelayWatch.constructor RelayWatch.mark bindClient nish.httpFieldBytes nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_alloc_struct nish_arena_mark nish_arena_release nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_write nowMs random relayLoadPem relayMintIdentity relayNamed relayOptionsFromEnv relayParseArgs relayQuicConfig relayRenew relaySourceFrom serveUntilPoll wallMs writeCertOut
   stackSites=5 stackLocals=5
-  local -89:9 o: RelayOptions (const)
-  callee -89:13 new RelayOptions -> @RelayOptions.constructor
-  callee -88:3 relayOptionsFromEnv -> @relayOptionsFromEnv
-  callee -87:3 relayParseArgs -> @relayParseArgs
-  callee -77:9 relayNamed -> @relayNamed
-  local -69:9 source: RelaySource (const)
-  callee -69:31 relaySourceFrom -> @relaySourceFrom
-  local -60:9 id: RelayIdentity (const)
-  callee -60:14 new RelayIdentity -> @RelayIdentity.constructor
-  local -59:9 first: Secret<u8[]> | null (const)
-  callee -59:51 relayLoadPem -> @relayLoadPem
-  callee -59:78 relayMintIdentity -> @relayMintIdentity
-  callee -59:96 wallMs -> @wallMs
-  local -53:7 key: Secret<u8[]> (let)
-  callee -52:3 writeCertOut -> @writeCertOut
+  local -93:9 o: RelayOptions (const)
+  callee -93:13 new RelayOptions -> @RelayOptions.constructor
+  callee -92:3 relayOptionsFromEnv -> @relayOptionsFromEnv
+  callee -91:3 relayParseArgs -> @relayParseArgs
+  callee -81:9 relayNamed -> @relayNamed
+  local -73:9 source: RelaySource (const)
+  callee -73:31 relaySourceFrom -> @relaySourceFrom
+  local -64:9 id: RelayIdentity (const)
+  callee -64:14 new RelayIdentity -> @RelayIdentity.constructor
+  local -63:9 first: Secret<u8[]> | null (const)
+  callee -63:51 relayLoadPem -> @relayLoadPem
+  callee -63:78 relayMintIdentity -> @relayMintIdentity
+  callee -63:96 wallMs -> @wallMs
+  local -57:7 key: Secret<u8[]> (let)
+  callee -55:8 writeCertOut -> @writeCertOut
+  callee -54:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   local -51:9 watch: RelayWatch (const)
   callee -51:17 new RelayWatch -> @RelayWatch.constructor
   callee -49:5 RelayWatch.mark -> @RelayWatch.mark
@@ -46447,8 +46449,8 @@ function main(): i32 -> @nish_main [exported entry]
   callee -10:39 relayRenew -> @relayRenew
   local -5:15 a: i64 (const)
   callee +1:7 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee +4:7 writeCertOut -> @writeCertOut
-  callee +8:3 Relay.shutdown -> @Relay.shutdown
-  callee +8:18 nowMs -> @nowMs
-  callee +9:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee +5:7 writeCertOut -> @writeCertOut
+  callee +9:3 Relay.shutdown -> @Relay.shutdown
+  callee +9:18 nowMs -> @nowMs
   callee +10:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee +11:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
