@@ -19964,6 +19964,17 @@ const DECLARED = [
     changelog: HTTP1_SERVER_PANIC_FREE,
     why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it), so those modules and the header and IR after them differ (WP80 S4)",
   })),
+  // The same two probes reach std/net's buffer pool and the TLS modules
+  // through std/net/http1-server.ts, and main has changed those since the
+  // 0.44.0 seed.
+  ...["std_http1_encoded_window", "std_http1_output_bytes"].flatMap((name) =>
+    ["buffer-pool.ll", "client.ll", "ct.ll", "hkdf.ll", "hmac.ll", "record.ll", "tls.ll"].map((file) => ({
+      program: `tests/link/${name}/main.ts`,
+      file,
+      changelog: HTTP1_SERVER_PANIC_FREE,
+      why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/net/buffer-pool.ts, std/crypto and std/net/tls modules, which differ from this tree's, so those modules' IR differs (WP80 S4)",
+    }))
+  ),
   // Reported only under `--no-sidecars`.
   {
     program: "bench/http1-conn/main.ts",
