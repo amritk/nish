@@ -318,3 +318,60 @@ stores), so the assembly check reads the code that ships, and
 `crypto_base64url_k1_copies` holds it to the module on 4,000 generated
 groups. The short final group is not in the fixture; it is listed above with
 what the fixtures do not reach.
+
+## Addendum: panic sites (WP83 S1, #2147)
+
+WP83 S1 cleared `sha1.ts`, `sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`,
+`ct.ts`, `base64url.ts` and `scram.ts` of the panic sites `--emit-panics`
+reports. It used no `nish:unsafe` and no guard that makes up a value: an
+index the prover could not discharge became a loop whose condition bounds it,
+a failure a caller can hit became a `boolean` or `null`, and the panics the
+API states (a window outside its array, `update` after `digest`, a label or
+length outside HKDF-Expand-Label's bounds) stay. `tests/std-panics.json` holds
+the counts.
+
+Two findings change:
+
+- **K1-1, now hashed whole.** The one-shot `sha1`, `sha256`, `sha512`,
+  `sha384`, `hmacSha256`, `hmacSha384` and `hmacSha512`, and HMAC's long-key
+  path, no longer panic on an array longer than 2^31 − 1 bytes. They hash it
+  whole through `Sha256.updateAll` and `Sha512Engine.absorbAll`, which walk
+  an array that long a block at a time with a `number` offset. No
+  prefix is ever hashed as the whole, so the collision K1-1 found stays
+  closed. Tests: `crypto_sha256_long_f64`, `crypto_sha512_long_f64`,
+  `crypto_sha384_long_f64`, `crypto_hmac_sha256_long_f64`,
+  `crypto_hmac_sha256_long_key_f64` and `crypto_hmac_sha384_long_f64` now
+  print the digest of the whole 2^31-byte message, checked against Python's
+  `hashlib` and `hmac`, and exit 0. Before, they exited 1 on the panic.
+- **K1-4, the extract side.** `hkdfExtractInto` MACs the whole IKM through
+  the same calls. Before, it panicked past 2^31 − 1 bytes. Test:
+  `crypto_hkdf_scratch_long_f64` prints the PRK of a 2^31-byte IKM (checked
+  against Python). The expand of a 2^31-byte `info` still answers `false`, as
+  K1-4 fixed it.
+
+`Sha256.digestInto` answers `false` for a window outside `out` instead of
+panicking. It writes nothing and leaves the hasher as it was. A second
+`digest` answers the same digest, and a `copy` of a finished hasher is
+finished too. `update` after `digest` still panics. Tests: the
+`crypto_sha256_digest_into_*` programs and `crypto_sha256_copy_after_digest`.
+
+Kept, because the prover cannot bound an array length wider than 16 bits
+without a change to `src/`:
+
+- the dk array in `pbkdf2HmacSha256Exposed` (`std/crypto/hmac.ts:888`);
+- the output array of `base64urlDecode` (`std/crypto/base64url.ts:193`);
+- the output array of `base64StdPadDecode` (`std/crypto/base64url.ts:440`).
+
+Each length is a `u32` computed from an `i32`, so it cannot be negative or
+past 2^31 − 1 elements. The site is the allocation's own length check.
+
+Unchanged: every wipe (`tests/wipes/crypto.js` counts pass as before) and
+the constant-time property. `timingSafeEqual`, `timingSafeEqualAt` and
+`base64urlDecode` gained index guards on public positions and lengths only,
+and `ct_asm_k1_ct` and `ct_asm_k1_base64url` hold their loop bodies as
+before. `crypto_ct_k1_copies` and `crypto_base64url_k1_copies` pass.
+
+`std/README.md` and `std/crypto/ed25519.ts` are not this stage's to edit.
+Their lines that say `sha1`, `sha256`, `sha512`, `sha384` or the one-shot HMACs
+panic on an array longer than 2^31 − 1 bytes (and `ed25519.ts`'s "as in
+`sha512`") are now stale. Those functions hash such an array whole.

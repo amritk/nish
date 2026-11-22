@@ -3039,7 +3039,7 @@ test vectors. A byte string is a `u8[]`.
 
 | Module | Main exports |
 | --- | --- |
-| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array) |
+| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `updateAll(data)` for a whole array, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array and answers `false` when the window does not fit) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes (`HmacSha256.digestInto(out, at)` writes the tag into your array and allocates nothing), and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
