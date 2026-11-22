@@ -522,7 +522,12 @@ const pkiParseIpv6 = (s: string): u8[] | null => {
  */
 const pkiParseIp = (host: string): u8[] | null => {
   const n: i32 = toI32(host.length)
-  if (n >= 2 && toI32(host.length) >= 2 && toI32(host.charCodeAt(0)) === 91 && toI32(host.charCodeAt(n - 1)) === 93) {
+  if (
+    n >= 2 &&
+    toI32(host.length) >= 2 &&
+    toI32(host.charCodeAt(0)) === 91 &&
+    toI32(host.charCodeAt(n - 1)) === 93
+  ) {
     return pkiParseIpv6(host.substring(1, n - 1))
   }
   if (host.indexOf(":") >= 0) {
@@ -750,7 +755,12 @@ const pkiDnsWithin = (name: string, base: string): boolean => {
   }
   // The octet before the base's last nb: nn > nb >= 1, so it lies in name.
   const dot: i32 = nn - nb - 1
-  return dot >= 0 && dot < toI32(name.length) && toI32(name.charCodeAt(dot)) === 46 && pkiFoldEqualAt(name, nn - nb, b, 0, nb)
+  return (
+    dot >= 0 &&
+    dot < toI32(name.length) &&
+    toI32(name.charCodeAt(dot)) === 46 &&
+    pkiFoldEqualAt(name, nn - nb, b, 0, nb)
+  )
 }
 
 /** `base` as the name its subtree is rooted at: without its leading dot. */

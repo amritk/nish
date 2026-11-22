@@ -188,7 +188,6 @@ const X509_MAX_EXTENSIONS: i32 = 64
 /** What a time field reads as when it is not a valid RFC 5280 time: before any year the reader accepts. */
 const X509_NO_TIME: i64 = -1000000000000
 
-
 // DER tags (X.690 §8, and the context tags RFC 5280 gives them).
 const X509_TAG_BOOLEAN: i32 = 0x01
 const X509_TAG_INTEGER: i32 = 0x02
@@ -545,7 +544,12 @@ const x509BytesEqual = (a: u8[], b: u8[]): boolean => {
 const x509DerContentsAre = (der: u8[], e: X509DerElement, expected: u8[]): boolean => {
   const start: i32 = e.start
   const end: i32 = e.end
-  if (start < 0 || end < start || end > toI32(der.length) || toU32(end) - toU32(start) !== toU32(expected.length)) {
+  if (
+    start < 0 ||
+    end < start ||
+    end > toI32(der.length) ||
+    toU32(end) - toU32(start) !== toU32(expected.length)
+  ) {
     return false
   }
   let k: i32 = 0
@@ -1070,7 +1074,14 @@ const x509DerTlv = (tag: i32, contents: u8[]): u8[] => {
   if (n < 0x80) {
     out.push(toU8(n))
   } else {
-    const count: i32 = n > 0xffffff ? 4 : n > 0xffff ? 3 : n > 0xff ? 2 : 1
+    let count: i32 = 1
+    if (n > 0xffffff) {
+      count = 4
+    } else if (n > 0xffff) {
+      count = 3
+    } else if (n > 0xff) {
+      count = 2
+    }
     out.push(toU8(0x80 | count))
     if (count >= 4) {
       out.push(toU8((n >> 24) & 0xff))
@@ -1317,7 +1328,12 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
     // Unsigned: `lineEnd` is at most the text's length, so the sum cannot wrap.
     const next: i32 = toI32(toU32(lineEnd) + 1)
     // `lineEnd` is in the text, said again for the bounds proof.
-    if (lineEnd > lineStart && lineEnd >= 1 && lineEnd <= toI32(pem.length) && toI32(pem.charCodeAt(lineEnd - 1)) === 13) {
+    if (
+      lineEnd > lineStart &&
+      lineEnd >= 1 &&
+      lineEnd <= toI32(pem.length) &&
+      toI32(pem.charCodeAt(lineEnd - 1)) === 13
+    ) {
       lineEnd--
     }
     const line: string = x509Part(pem, lineStart, lineEnd)
@@ -1751,7 +1767,12 @@ const x509ReadSubjectAltName = (der: u8[], start: i32, end: i32, out: X509Certif
  */
 const x509DerNonNegative = (der: u8[], e: X509DerElement): i32 => {
   const n: i32 = x509DerSize(der, e)
-  if (e.tag !== X509_TAG_INTEGER || !x509DerIntegerMinimal(der, e) || x509DerOctet(der, e, 0) >= 0x80 || n > 4) {
+  if (
+    e.tag !== X509_TAG_INTEGER ||
+    !x509DerIntegerMinimal(der, e) ||
+    x509DerOctet(der, e, 0) >= 0x80 ||
+    n > 4
+  ) {
     return -1
   }
   let value: i32 = 0
