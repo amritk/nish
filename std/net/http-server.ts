@@ -561,9 +561,8 @@ export class HttpServerRequest {
    */
   queryIndex(name: string): i32 {
     const head: u8[] = this.head
-    const size: i32 = toI32(head.length)
-    // The target lies within `head`, so clamping to it never moves the end.
-    const end: i32 = this.targetEnd < size ? this.targetEnd : size
+    // Each scan below also stops at the end of `head`, so `end` needs no clamp.
+    const end: i32 = this.targetEnd
     const from: i32 = this.pathEnd
     if (from >= end) {
       return -1
@@ -600,7 +599,7 @@ export class HttpServerRequest {
     const count: i32 = this.headerCount
     // `spans` holds four entries per field, so `k` never stops the loop before `count` does.
     let k: i32 = 0
-    for (let i: i32 = 0; i < count && k >= 0 && k + 3 < toI32(this.spans.length); i++) {
+    for (let i: i32 = 0; i < count && k >= 0 && k < toI32(this.spans.length) - 3; i++) {
       if (httpServerSpanIs(this.head, this.spans[k], this.spans[k + 1], name)) {
         return i
       }
@@ -748,6 +747,23 @@ const httpServerCell = (row: i32, width: i32, col: i32, length: i32): i32 => {
   const wide: i64 = toI64(row) * toI64(width) + toI64(col)
   return wide < toI64(0) || wide >= toI64(length) ? -1 : toI32(wide)
 }
+
+/**
+ * The `monotonicNanos` instant `ns` nanoseconds after `at`. Worked in `u64`,
+ * whose wrapping sum has the bits of the signed one: an instant is centuries
+ * short of 2^63 and every delay a constant or a checked limit, so neither wraps.
+ */
+const httpServerAfter = (at: i64, ns: i64): i64 => toI64(toU64(at) + toU64(ns))
+
+/** `until - now` in nanoseconds, worked in `u64` for the same reason as `httpServerAfter`. */
+const httpServerLeft = (until: i64, now: i64): i64 => toI64(toU64(until) - toU64(now))
+
+/**
+ * Whether more than `ns` nanoseconds lie between the `monotonicNanos`
+ * instants `since` and `now`; a `now` at or before `since` is no time at all.
+ */
+const httpServerPast = (now: i64, since: i64, ns: i64): boolean =>
+  now > since && toU64(now) - toU64(since) > toU64(ns)
 
 /** Whether `bytes[start .. end)` is exactly `text`. */
 const httpServerSpanIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
@@ -1500,7 +1516,7 @@ export class HttpServer {
     }
     this.feedStarved()
     if (now >= this.sweepAt) {
-      this.sweepAt = now + HTTP_SERVER_SWEEP
+      this.sweepAt = httpServerAfter(now, HTTP_SERVER_SWEEP)
       this.expireAll(now)
     }
     return this.queueCount
@@ -1516,7 +1532,7 @@ export class HttpServer {
     if (this.connections() === 0) {
       return timeout
     }
-    const left: i64 = this.sweepAt - now
+    const left: i64 = httpServerLeft(this.sweepAt, now)
     const ms: i64 = left / HTTP_SERVER_NANOS_PER_MS
     const whole: i32 = ms >= 0 && ms < 2147483647 ? toI32(ms) : 2147483646
     let cap: i32 = HTTP_SERVER_ZERO
@@ -1550,7 +1566,7 @@ export class HttpServer {
     if (this.draining) {
       return timeout
     }
-    const wait: i64 = (until - now) / HTTP_SERVER_NANOS_PER_MS
+    const wait: i64 = httpServerLeft(until, now) / HTTP_SERVER_NANOS_PER_MS
     const ms: i32 = wait >= 0 && wait < 2147483647 ? toI32(wait) : 2147483646
     const rest: i32 = ms < 2147483647 ? ms + 1 : ms
     return timeout < 0 || rest < timeout ? rest : timeout
@@ -1857,12 +1873,11 @@ export class HttpServer {
     }
     const p = conn.parser
     copyBytes(r.head, HTTP_SERVER_ZERO, p.head, HTTP_SERVER_ZERO, p.headLength)
-    for (
-      let k: i32 = 0;
-      toI64(k) < toI64(p.headerCount) * toI64(4) && k < toI32(p.spans.length) && k < toI32(r.spans.length);
-      k++
-    ) {
-      r.spans[k] = p.spans[k]
+    const from: i32[] = p.spans
+    const into: i32[] = r.spans
+    const used: i64 = toI64(p.headerCount) * toI64(4)
+    for (let k: i32 = 0; toI64(k) < used && k < toI32(from.length) && k < toI32(into.length); k++) {
+      into[k] = from[k]
     }
     r.headerCount = p.headerCount
     r.methodStart = p.methodStart
@@ -3552,8 +3567,13 @@ export class HttpServer {
 
   /** Copies field `n`, `name`: `value`, into `r`'s head and spans; false when either has no room for it. */
   private putField(r: HttpServerRequest, n: i32, name: u8[], value: u8[]): boolean {
-    const at: i64 = toI64(4) * toI64(n)
-    if (at < toI64(0) || at + toI64(3) >= toI64(r.spans.length)) {
+    // Four spans per field, and `spans` is far shorter than 2^31, so `4 * n` fits.
+    if (n < 0 || n > 536870911) {
+      return false
+    }
+    const k: i32 = n * 4
+    const spans: i32[] = r.spans
+    if (k > toI32(spans.length) - 4) {
       return false
     }
     const nameStart: i32 = this.headAt
@@ -3564,11 +3584,10 @@ export class HttpServer {
     if (!this.put(r, value)) {
       return false
     }
-    const k: i32 = toI32(at)
-    r.spans[k] = nameStart
-    r.spans[k + 1] = nameEnd
-    r.spans[k + 2] = nameEnd
-    r.spans[k + 3] = this.headAt
+    spans[k] = nameStart
+    spans[k + 1] = nameEnd
+    spans[k + 2] = nameEnd
+    spans[k + 3] = this.headAt
     return true
   }
 
@@ -3629,7 +3648,7 @@ export class HttpServer {
    */
   private rest(fd: i32, token: i32): void {
     pollRemove(this.loop, fd)
-    const until: i64 = monotonicNanos() + HTTP_SERVER_ACCEPT_REST
+    const until: i64 = httpServerAfter(monotonicNanos(), HTTP_SERVER_ACCEPT_REST)
     const rests: i64[] = this.restUntil
     const at: i32 = this.restAt(token)
     if (at >= 0 && at < toI32(rests.length)) {
@@ -4450,7 +4469,7 @@ export class HttpServer {
 
   /** Whether `r` is still reading its body past `bodyTimeout`. */
   private late(r: HttpServerRequest, now: i64): boolean {
-    return r.state === HTTP_SERVER_READING && now - r.since > this.bodyTimeout
+    return r.state === HTTP_SERVER_READING && httpServerPast(now, r.since, this.bodyTimeout)
   }
 
   /** `expireAll` for HTTP/2 slot `s`. */
@@ -4482,7 +4501,7 @@ export class HttpServer {
     }
     const idleSince: i64[] = this.h2IdleSince
     const since: i64 = s >= 0 && s < toI32(idleSince.length) ? idleSince[s] : 0
-    if (httpServerAt(this.h2Count, s) === 0 && since > 0 && now - since > this.idleTimeout) {
+    if (httpServerAt(this.h2Count, s) === 0 && since > 0 && httpServerPast(now, since, this.idleTimeout)) {
       this.h2Close(s)
       return
     }
