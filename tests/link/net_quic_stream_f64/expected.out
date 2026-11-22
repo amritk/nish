@@ -180,6 +180,8 @@ PASS  a table of its own: its bytes go out from the buffer it borrowed
 PASS  two tables sharing pools: every buffer made, the finished streams' four in the reserve
 PASS  two tables sharing pools: a new stream's send side borrows the reserve's last, making none past the ceiling
 PASS  two tables sharing pools: its bytes go out from the buffer it borrowed
+PASS  a reserve full when the send side is acknowledged: the stream keeps the pair, zeroed
+PASS  reset after a full reserve, every buffer is back
 PASS  connected
 PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no arena memory
 PASS  and the echo is all there: 32,000 bytes sent back
@@ -194,4 +196,4 @@ PASS  what is in flight straddles the 1,001-byte ring's end, round after round
 PASS  every chunk off a 1,001-byte ring carries the bytes written at its offset
 PASS  the send base stops at the first unacknowledged byte through out-of-order, mid-byte acknowledgements
 PASS  once every byte and the FIN are acknowledged nothing is left to send
-quic streams: 196 passed, 0 failed, 0 skipped
+quic streams: 198 passed, 0 failed, 0 skipped

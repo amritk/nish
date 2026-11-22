@@ -1,1 +1,2 @@
 hkdfExpandInto: a 2^31-byte info answers false
+hkdfExtractInto: a 2^31-byte IKM gives 94127c2f94564c7cea57cb579b968e9d8c9b0c2fa559d41712050b759ab38244

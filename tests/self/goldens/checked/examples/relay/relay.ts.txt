@@ -270,7 +270,7 @@ function Relay.step(this: Relay, now: i64, wall: i64, key: Secret<u8[]>, grantKe
   callee +17:14 Http3Server.ready -> @nish.Http3Server.ready
   callee +19:5 Relay.flush -> @Relay.flush
 function Relay.timeout(this: Relay, now: i64): i32 -> @Relay.timeout [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.Http3Server.timeout nish.Http3Wheel.next
   pointer this: size=424 writesThrough=false captured=false

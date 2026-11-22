@@ -26,6 +26,7 @@ import {
   preforkWith,
   preforkWorkerCount,
   preforkWorkers,
+  tryPreforkWith,
 } from "nish/net/prefork";
 ```
 
@@ -116,6 +117,12 @@ How many workers to start: `env` (`NISH_WORKERS`, `null` when unset) when it is 
 <scalar-card title="prefork​Workers" icon="phosphor/regular/function" href="#preforkworkers">
 
 `preforkWith` with the default `PreforkConfig`.
+
+</scalar-card>
+
+<scalar-card title="try​Prefork​With" icon="phosphor/regular/function" href="#trypreforkwith">
+
+`preforkWith` for a caller built without `--allow-panics`: a config that breaks `preforkSupervise`'s contract is answered as `Err`, naming the field and the limit it passed, before any worker starts, rather than a panic.
 
 </scalar-card>
 
@@ -596,6 +603,40 @@ the process's arguments, `process.argv`
 
 in a worker, its index at once; in the supervisor, once it is done,
   `PREFORK_STOPPED` or `PREFORK_SPAWN_FAILED`
+
+</scalar-field>
+
+### tryPreforkWith
+
+`preforkWith` for a caller built without `--allow-panics`: a config that
+breaks `preforkSupervise`'s contract is answered as `Err`, naming the field
+and the limit it passed, before any worker starts, rather than a panic.
+
+```ts
+const tryPreforkWith: (
+  args: string[],
+  config: PreforkConfig,
+) => Result<i32, string>
+```
+
+<scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
+</scalar-field>
+
+<scalar-field name="config" type="PreforkConfig" required>
+
+the supervisor's settings, checked in the supervisor and
+  each worker alike as `preforkWith` checks them
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;i32, string&gt;">
+
+`Ok` with what `preforkWith` answers (a worker's index, or the
+  supervisor's `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or
+  `PREFORK_SPAWN_FAILED`), or `Err` with why the config was refused
 
 </scalar-field>
 

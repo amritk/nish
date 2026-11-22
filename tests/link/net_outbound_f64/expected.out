@@ -30,6 +30,10 @@ PASS  a bracketed IPv6 entry matches the URL's host
 PASS  a dotted entry is never a suffix of an IPv4 literal
 PASS  outboundFilter keeps a lookup's public addresses, in order, and drops the rest
 PASS  and keeps none of an answer with no public address, which is left in place to be named
+PASS  outboundFilter keeps only the records that fit, and none for a negative count
+PASS  an address whose sixteen bytes do not fit at the offset is neither public nor allowed, and has no text
+PASS  permit refuses a prefix longer than its address, more than three digits, an oversized address and an empty one
+PASS  a prefix that ends inside a byte covers exactly its bits
 PASS  without a policy, a loopback address is reached
 PASS  with one, a loopback address is HTTP_E_BLOCKED, naming 127.0.0.1
 PASS    and no connection was made
@@ -73,4 +77,4 @@ PASS  without a policy, the same body in chunks is read
 PASS  and under the 10-byte cap, chunks declaring no total length are HTTP_E_BODY_TOO_LARGE as they stream
 PASS  without a policy, a body dripped over most of a second is read
 PASS  under a policy of 200 ms with no total timeout of the options', it is HTTP_E_TOTAL_TIMEOUT
-outbound: 75 passed, 0 failed, 0 skipped
+outbound: 79 passed, 0 failed, 0 skipped

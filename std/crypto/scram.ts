@@ -73,11 +73,10 @@ const scramClientProofExposed = (salted: u8[], authMessage: u8[]): u8[] => {
   const clientKey: u8[] = hmacSha256(salted, scramAscii("Client Key"))
   const storedKey: u8[] = scramSha256Wiped(clientKey)
   const clientSignature: u8[] = hmacSha256(storedKey, authMessage)
-  if (clientKey.length < 32 || clientSignature.length < 32) {
-    panic("nish/crypto/scram: an HMAC-SHA-256 shorter than 32 bytes")
-  }
+  // Both are HMAC-SHA-256 tags, 32 bytes each; the bounds below only let the
+  // prover see that, and never stop the loop early.
   const proof: u8[] = new Array<u8>(32)
-  for (let i: i32 = 0; i < 32; i++) {
+  for (let i: i32 = 0; i < 32 && i < toI32(clientKey.length) && i < toI32(clientSignature.length); i++) {
     proof[i] = clientKey[i] ^ clientSignature[i]
   }
   wipe(clientKey)

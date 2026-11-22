@@ -45,3 +45,12 @@ PASS  its query is held until the next read
 PASS  and once read past, it takes another
 PASS  a refused connect fails the query
 PASS  without waiting for the timeout
+PASS  a DataRow with a truncated length is the program's 503
+PASS  as PG_CARRIER_FAILED with failure PG_ERR_FRAME
+PASS  the next query is answered on a new connection
+PASS  a DataRow with a column count past the frame is the program's 503
+PASS  as PG_CARRIER_FAILED with failure PG_ERR_FRAME
+PASS  the next query is answered on a new connection
+PASS  a DataRow with a cell cut short is the program's 503
+PASS  as PG_CARRIER_FAILED with failure PG_ERR_FRAME
+PASS  the next query is answered on a new connection
