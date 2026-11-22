@@ -256,7 +256,7 @@ export const main = (): i32 => {
       wipe(key)
       key = next
       write("[relay] certificate reloaded; live sessions kept\n")
-      // A renewal keeps serving when the file cannot be written: the error line says so.
+      // A renewal keeps serving when the file cannot be written; the error line names the file.
       writeCertOut(o, fresh)
     }
   }
