@@ -1539,7 +1539,7 @@ export class HttpServer {
       // The carrier and `h1Open` are sized together by `listenHttp1`.
       if (slot >= 0 && slot < toI32(open.length)) {
         open[slot] = true
-        this.h1Set(slot, -1)
+        this.h1Set(slot, toI32(-1))
         pollAdd(this.loop, h1.fd(slot), H1_WANT_READ, slot)
       }
       slot = h1.accept()
@@ -1850,7 +1850,7 @@ export class HttpServer {
     if (conn.end() === H1_AGAIN) {
       return
     }
-    this.h1Set(r.slot, -1)
+    this.h1Set(r.slot, toI32(-1))
     this.release(r)
   }
 
@@ -1858,7 +1858,7 @@ export class HttpServer {
   private releaseReading(slot: i32): void {
     const r: HttpServerRequest | null = this.requestAt(this.h1Reading(slot))
     if (r !== null && r.state === HTTP_SERVER_READING) {
-      this.h1Set(slot, -1)
+      this.h1Set(slot, toI32(-1))
       this.release(r)
     }
   }
@@ -1886,7 +1886,7 @@ export class HttpServer {
     const was: i32 = gen[slot]
     gen[slot] = was < 2147483647 ? was + 1 : 0
     const r: HttpServerRequest | null = this.requestAt(this.h1Reading(slot))
-    this.h1Set(slot, -1)
+    this.h1Set(slot, toI32(-1))
     if (r !== null) {
       this.drop(r)
     }
@@ -3466,7 +3466,7 @@ export class HttpServer {
       if (slot >= 0) {
         // `h2Grow` gave the listener `[h2TlsBase, h2TlsBase + slots)`; `h2Opened` drops a slot past it.
         const v: i64 = toI64(this.h2TlsBase) + toI64(slot)
-        this.h2Opened(v <= 2147483647 ? toI32(v) : -1, h2.fd(slot))
+        this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2.fd(slot))
       } else if (slot === HTTP_SERVER_ACCEPT_NONE) {
         return
       } else if (slot !== TLS_TCP_POOL_FULL && slot !== HTTP_SERVER_ACCEPT_ABORTED) {
@@ -3488,7 +3488,7 @@ export class HttpServer {
       if (slot >= 0) {
         // `h2Grow` gave the listener `[h2cBase, h2cBase + slots)`; `h2Opened` drops a slot past it.
         const v: i64 = toI64(this.h2cBase) + toI64(slot)
-        this.h2Opened(v <= 2147483647 ? toI32(v) : -1, h2c.fd(slot))
+        this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2c.fd(slot))
       }
       slot = h2c.accept()
     }
