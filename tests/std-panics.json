@@ -4,7 +4,7 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9866,
+  "total": 9599,
   "explicit": {
     "kept": 343,
     "toFix": 138
@@ -413,43 +413,12 @@
       "overflow": 29,
       "panic": 3
     },
-    "std/net/quic-conn-ack.ts": {
-      "array-length": 1,
-      "overflow": 19
-    },
-    "std/net/quic-conn-cid.ts": {
-      "array-length": 2,
-      "divide": 1,
-      "index": 2,
-      "overflow": 16
-    },
-    "std/net/quic-conn-params.ts": {
-      "index": 1,
-      "overflow": 8
-    },
-    "std/net/quic-datagram.ts": {
-      "array-length": 2,
-      "divide": 4,
-      "index": 3,
-      "overflow": 14
-    },
-    "std/net/quic-frame.ts": {
-      "array-length": 1,
-      "index": 2,
-      "overflow": 64
-    },
     "std/net/quic-listener.ts": {
       "array-length": 2,
       "index": 18,
       "overflow": 60,
       "panic": 1,
       "pop": 1
-    },
-    "std/net/quic-packet.ts": {
-      "array-length": 5,
-      "index": 18,
-      "overflow": 100,
-      "slice": 4
     },
     "std/net/quic-recovery.ts": {
       "array-length": 7,

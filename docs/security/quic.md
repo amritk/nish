@@ -140,6 +140,15 @@ runs under `--number-mode f64` in `net_quic_packet_f64`.
   [0, 2^62) at both ends of the space, including the input RFC 9000 §A.3's
   pseudocode lets out (2^62 − 1 as the largest packet number), and
   `quicPacketNumberLength` refuses more than 2^31 packets in flight.
+- **The wire layer holds no panic site.** `quic-packet.ts`, `quic-frame.ts`,
+  `quic-conn-ack.ts`, `quic-conn-cid.ts`, `quic-conn-params.ts` and
+  `quic-datagram.ts` compile with no index, slice, array-length, divide or
+  overflow site the prover leaves open: each is proven by a guard, or the
+  input that would reach it is refused with -1, `null`, `false` or an empty
+  answer. Sites of kind call, oom and unchecked are not counted. None of the
+  six is listed in `tests/std-panics.json`, so a new site fails
+  `std-panics: no std/ module gains its first panic site` (this one is pinned
+  there, not in `net_quic_packet`).
 
 ### Q2's connection
 
