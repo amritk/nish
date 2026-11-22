@@ -167,6 +167,9 @@ const TLS_CLIENT_FROM: i32 = 0
 /** The legacy_session_id the client sends (§4.1.2, §D.4): 32 bytes, so that middleboxes see a resumption. */
 const TLS_CLIENT_SESSION_ID_SIZE: i32 = 32
 
+/** The client's longest Finished: its header (4) and a SHA-384 verify_data. */
+const TLS_CLIENT_FINISHED_MAX: i32 = 4 + SHA384_SIZE
+
 /** The longest `server_name` a ClientHello carries: a DNS name's 253 characters, under the extension's own bound. */
 const TLS_CLIENT_SERVER_NAME_MAX: i32 = 253
 
@@ -397,7 +400,7 @@ export class TlsClient {
     this.firstHello = []
     this.input = new Array<u8>(1024)
     this.outputInitial = []
-    this.outputHandshake = new Array<u8>(4 + SHA384_SIZE)
+    this.outputHandshake = new Array<u8>(TLS_CLIENT_FINISHED_MAX)
     this.secrets256 = new TlsSecretPool(SHA256_SIZE)
     this.secrets384 = new TlsSecretPool(SHA384_SIZE)
     this.view = new TlsServerFlightView()
@@ -433,7 +436,8 @@ export class TlsClient {
     }
     const at: i32 = this.outputInitialLength
     const end: i32 = this.writeHello()
-    if (end < 0) {
+    // writeHello ends a hello at or below 2^30 - 1 and after `at`, so these never fail.
+    if (at < 0 || at > 1073741823 || end < 0 || end > 1073741823) {
       return this.fail(TLS_ALERT_INTERNAL_ERROR)
     }
     this.firstHello = tlsCopyWindow(this.outputInitial, at, end - at)
@@ -471,9 +475,15 @@ export class TlsClient {
       this.config.alpn,
       this.cookie
     )
-    const before: i32 =
-      TLS_CLIENT_HELLO_FIXED + toI32(this.sessionId.length) + 2 * toI32(this.config.suites.length)
-    if (length - before > 65535) {
+    // The writer answers -1 past 2^30 - 1, and the Initial output never grows past it.
+    if (length < 0 || length > 1073741823 || at < 0 || at > 1073741823) {
+      return -1
+    }
+    const before: i64 =
+      toI64(TLS_CLIENT_HELLO_FIXED) +
+      toI64(toI32(this.sessionId.length)) +
+      toI64(2) * toI64(toI32(this.config.suites.length))
+    if (toI64(length) - before > toI64(65535)) {
       return -1
     }
     this.reserveOutput(at + length)
@@ -490,7 +500,9 @@ export class TlsClient {
       this.config.alpn,
       this.cookie
     )
-    this.sent(TLS_LEVEL_INITIAL, at, end)
+    if (end < 0 || !this.sent(TLS_LEVEL_INITIAL, at, end)) {
+      return -1
+    }
     return end
   }
 
@@ -591,14 +603,18 @@ export class TlsClient {
     if (need <= capacity) {
       return
     }
-    let size: i32 = capacity
-    while (size < need) {
+    // `most` is 65,540, so the doubling stops long before it could overflow.
+    const most: i32 = TLS_MAX_HANDSHAKE_MESSAGE + 4
+    let size: i32 = capacity < 1 ? 1 : capacity
+    while (size < need && size < most && size >= 1 && size <= 1073741823) {
       size = size * 2
     }
-    const most: i32 = TLS_MAX_HANDSHAKE_MESSAGE + 4
-    const grown: u8[] = new Array<u8>(size > most ? most : size)
-    for (let k: i32 = 0; k < this.inputLength && k < toI32(grown.length) && k < capacity; k++) {
-      grown[k] = this.input[k]
+    const target: i32 = size > most ? most : size
+    const old: u8[] = this.input
+    const held: i32 = this.inputLength
+    const grown: u8[] = []
+    for (let k: i32 = 0; k < target; k++) {
+      grown.push(k < held && k < toI32(old.length) ? old[k] : 0)
     }
     this.input = grown
   }
@@ -609,9 +625,11 @@ export class TlsClient {
     if (need <= capacity) {
       return
     }
-    const grown: u8[] = new Array<u8>(need)
-    for (let k: i32 = 0; k < toI32(grown.length) && k < this.outputInitialLength && k < capacity; k++) {
-      grown[k] = this.outputInitial[k]
+    const old: u8[] = this.outputInitial
+    const held: i32 = this.outputInitialLength
+    const grown: u8[] = []
+    for (let k: i32 = 0; k < need; k++) {
+      grown.push(k < held && k < toI32(old.length) ? old[k] : 0)
     }
     this.outputInitial = grown
   }
@@ -651,28 +669,42 @@ export class TlsClient {
       return this.fail(TLS_ALERT_UNEXPECTED_MESSAGE)
     }
     const most: i32 = TLS_MAX_HANDSHAKE_MESSAGE + 4
-    let taken: i32 = 0
-    while (taken < len) {
+    // `off + len` is within `data`, so stepping `from` through it never wraps.
+    let from: i32 = off
+    let rest: i32 = len
+    while (rest > 0) {
       // A level's bytes may hold several messages, so they are taken a
       // largest message at a time, each read before the next is copied in.
       if (level !== this.expectedLevel()) {
         return this.fail(TLS_ALERT_UNEXPECTED_MESSAGE)
       }
-      const room: i32 = most - this.inputLength
-      if (room <= 0) {
+      const held: i32 = this.inputLength
+      // `drain` keeps `input` below one largest message, so `held` is never out of range.
+      if (held < 0 || held > 65540 || from < 0 || rest < 1) {
+        return this.fail(TLS_ALERT_INTERNAL_ERROR)
+      }
+      const room: i32 = most - held
+      if (room <= 0 || room > 65540) {
         return this.fail(TLS_ALERT_DECODE_ERROR)
       }
-      const take: i32 = len - taken < room ? len - taken : room
-      this.reserveInput(this.inputLength + take)
-      for (
-        let k: i32 = 0;
-        k < take && off + taken + k < toI32(data.length) && this.inputLength < toI32(this.input.length);
-        k++
-      ) {
-        this.input[this.inputLength] = data[off + taken + k]
-        this.inputLength = this.inputLength + 1
+      let take: i32 = room
+      if (rest < room) {
+        take = rest
       }
-      taken = taken + take
+      this.reserveInput(held + take)
+      const input: u8[] = this.input
+      let at: i32 = held
+      for (
+        let j: i32 = from;
+        j < toI32(data.length) && j - from < take && at >= 0 && at < toI32(input.length);
+        j++
+      ) {
+        input[at] = data[j]
+        at++
+      }
+      this.inputLength = at
+      from = toI32(toI64(from) + toI64(take))
+      rest = rest - take
       const alert: i32 = this.drain()
       if (alert !== 0) {
         return this.fail(alert)
@@ -688,15 +720,21 @@ export class TlsClient {
    */
   private drain(): i32 {
     while (this.state !== TLS_CLIENT_STATE_WAIT_AUTH && this.inputLength >= 4) {
-      const length: i32 = (toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])
-      if (length > TLS_MAX_HANDSHAKE_MESSAGE) {
+      const input: u8[] = this.input
+      // `input` holds at least `inputLength` bytes, so this never answers.
+      if (toI32(input.length) < 4) {
+        return TLS_ALERT_INTERNAL_ERROR
+      }
+      const length: i32 = (toI32(input[1]) << 16) | (toI32(input[2]) << 8) | toI32(input[3])
+      // A 24-bit length is never negative; the second bound is the prover's copy of the first.
+      if (length > TLS_MAX_HANDSHAKE_MESSAGE || length < 0 || length > 65536) {
         return TLS_ALERT_DECODE_ERROR
       }
       const whole: i32 = 4 + length
       if (this.inputLength < whole) {
         return 0
       }
-      const type: i32 = toI32(this.input[0])
+      const type: i32 = toI32(input[0])
       const alert: i32 = this.handleMessage(type, length)
       if (alert !== 0) {
         return alert
@@ -712,9 +750,20 @@ export class TlsClient {
 
   /** Drops the first `count` bytes of `input`, moving the rest to its front. */
   private consume(count: i32): void {
-    const rest: i32 = this.inputLength - count
-    for (let k: i32 = 0; k < rest && count + k < toI32(this.input.length); k++) {
-      this.input[k] = this.input[count + k]
+    const held: i32 = this.inputLength
+    // `drain` drops a whole message it holds, so `count` is never past `held`.
+    if (count < 0 || count > 65540 || held < 0 || held > 65540 || count > held) {
+      this.inputLength = 0
+      return
+    }
+    const rest: i32 = held - count
+    const input: u8[] = this.input
+    for (let k: i32 = 0; k < rest && k < toI32(input.length); k++) {
+      const at: i32 = count + k
+      if (at >= toI32(input.length)) {
+        break
+      }
+      input[k] = input[at]
     }
     this.inputLength = rest
   }
@@ -794,6 +843,15 @@ export class TlsClient {
     return 0
   }
 
+  /** Hashes the message `input[0 .. 4 + length)` into the transcript. */
+  private hashMessage(length: i32): void {
+    // `drain` refuses a length past 65,536, so this never skips a message.
+    if (length < 0 || length > 65536) {
+      return
+    }
+    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+  }
+
   /** A ServerHello or HelloRetryRequest, `input[0 .. 4 + length)`. */
   private handleServerHello(length: i32): i32 {
     const view: TlsServerFlightView = this.view
@@ -822,7 +880,7 @@ export class TlsClient {
     if (!this.retried) {
       this.startTranscript(view.suite)
     }
-    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    this.hashMessage(length)
     const alert: i32 = this.exchangeKeys()
     if (alert !== 0) {
       return alert
@@ -871,7 +929,7 @@ export class TlsClient {
     this.retried = true
     this.startTranscript(view.suite)
     this.transcript.restartWithMessageHash()
-    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    this.hashMessage(length)
     if (view.hasCookie) {
       this.cookie = tlsCopyWindow(view.data, view.cookieAt, view.cookieLength)
     }
@@ -957,7 +1015,7 @@ export class TlsClient {
       }
       this.alpnChosen = chosen
     }
-    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    this.hashMessage(length)
     this.state = TLS_CLIENT_STATE_WAIT_CERTIFICATE
     return 0
   }
@@ -976,7 +1034,7 @@ export class TlsClient {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
     this.certificates = tlsCopyCertificates(view)
-    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    this.hashMessage(length)
     this.content = tlsCertificateVerifyContent(this.transcript.hash())
     this.state = TLS_CLIENT_STATE_WAIT_CERTIFICATE_VERIFY
     return 0
@@ -994,7 +1052,7 @@ export class TlsClient {
     }
     this.scheme = view.scheme
     this.signature = tlsCopyWindow(view.data, view.signatureAt, view.signatureLength)
-    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    this.hashMessage(length)
     this.state = TLS_CLIENT_STATE_WAIT_AUTH
     return 0
   }
@@ -1018,7 +1076,7 @@ export class TlsClient {
     if (!matches) {
       return TLS_ALERT_DECRYPT_ERROR
     }
-    this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    this.hashMessage(length)
     this.transcript.hashInto(this.hashes, TLS_CLIENT_FROM)
     // The master secret is derived over the handshake secret, which has no
     // other use left.
@@ -1045,7 +1103,9 @@ export class TlsClient {
     const at: i32 = this.outputHandshakeLength
     const end: i32 = tlsWriteFinished(this.outputHandshake, at, verifyData, TLS_CLIENT_FROM, h)
     secureZero(verifyData)
-    this.sent(TLS_LEVEL_HANDSHAKE, at, end)
+    if (!this.sent(TLS_LEVEL_HANDSHAKE, at, end)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     this.held =
       (this.held |
         (1 << TLS_SECRET_CLIENT_APPLICATION) |
@@ -1158,8 +1218,15 @@ export class TlsClient {
     return this.fail(alert >= 1 && alert <= 255 ? alert : TLS_ALERT_BAD_CERTIFICATE)
   }
 
-  /** A message the client wrote at `level`, `output[at .. end)`, goes into the transcript once its hash is known and stays on the output. */
-  private sent(level: i32, at: i32, end: i32): void {
+  /**
+   * A message the client wrote at `level`, `output[at .. end)`, goes into the transcript once its hash
+   * is known and stays on the output. Answers false, taking nothing, for a window past 2^30 - 1.
+   */
+  private sent(level: i32, at: i32, end: i32): boolean {
+    // Every writer ends at or below 2^30 - 1, so this never refuses.
+    if (at < 0 || at > 1073741823 || end < 0 || end > 1073741823) {
+      return false
+    }
     if (level === TLS_LEVEL_INITIAL) {
       if (this.hashLength !== 0) {
         this.transcript.update(this.outputInitial, at, end - at)
@@ -1169,6 +1236,7 @@ export class TlsClient {
       this.transcript.update(this.outputHandshake, at, end - at)
       this.outputHandshakeLength = end
     }
+    return true
   }
 
   /**
