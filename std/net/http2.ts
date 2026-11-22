@@ -394,18 +394,15 @@ export class Http2Stream {
   owed: i32 = 0
 }
 
-/** Whether `buf[off ..]` holds the preface. */
+/** Whether `buf[off ..]` holds the whole preface; a buffer that ends before it is not one. */
 const http2IsPreface = (buf: u8[], off: i32): boolean => {
   const preface: string = H2_PREFACE
   const length: i32 = toI32(buf.length)
   // `at` walks `buf` beside `k`; it stays in `[0, length)` when read, so `at + 1` cannot wrap.
   let at: i32 = off
   for (let k: i32 = 0; k < toI32(preface.length); k++) {
-    if (at < 0) {
+    if (at < 0 || at >= length) {
       return false
-    }
-    if (at >= length) {
-      return true
     }
     if (toI32(buf[at]) !== toI32(preface.charCodeAt(k))) {
       return false

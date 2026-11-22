@@ -9,7 +9,9 @@ import {
   HPACK_ERR_TABLE_SIZE,
   HPACK_ERR_TRUNCATED,
   HPACK_OK,
+  HpackCursor,
   HpackDecoder,
+  hpackDecodeInteger,
 } from "nish/net/hpack"
 
 const check = (name: string, got: i32, want: i32): boolean => {
@@ -35,6 +37,11 @@ export const main = (): i32 => {
   ok = refuse("a truncated integer", [0xff], HPACK_ERR_TRUNCATED) && ok
   // An integer whose continuation bytes pass 2^31 - 1.
   ok = refuse("an integer past 2^31 - 1", [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f], HPACK_ERR_INTEGER_OVERFLOW) && ok
+  // The largest integer HPACK reads, 2^31 - 1: a full 7-bit prefix and four continuation bytes.
+  const largest: u8[] = [0xff, 0x80, 0xff, 0xff, 0xff, 0x07]
+  ok = check("2^31 - 1 is read as an integer", hpackDecodeInteger(new HpackCursor(largest, 0, 6), 7), 2147483647) && ok
+  // As an index it is read whole, then refused as past the table.
+  ok = refuse("index 2^31 - 1", largest, HPACK_ERR_INDEX) && ok
   // Index 0 is not an entry (RFC 7541 §6.1).
   ok = refuse("index 0", [0x80], HPACK_ERR_INDEX) && ok
   // Index 70 with an empty dynamic table.

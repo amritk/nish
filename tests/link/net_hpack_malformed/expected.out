@@ -2,6 +2,9 @@ PASS a truncated integer
 PASS a truncated integer, and the spent decoder answers it again
 PASS an integer past 2^31 - 1
 PASS an integer past 2^31 - 1, and the spent decoder answers it again
+PASS 2^31 - 1 is read as an integer
+PASS index 2^31 - 1
+PASS index 2^31 - 1, and the spent decoder answers it again
 PASS index 0
 PASS index 0, and the spent decoder answers it again
 PASS an index past the table
