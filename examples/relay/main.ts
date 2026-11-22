@@ -37,7 +37,7 @@
  */
 // smoke: args --allow-panics
 // smoke: argv --help
-import { writeFileSync } from "nish:fs"
+import { writeFileSyncMode } from "nish:fs"
 import { udpBind } from "nish:net"
 import { monotonicNanos, signalFd } from "nish:process"
 import { write, writeError } from "nish:io"
@@ -60,6 +60,16 @@ import {
 import { DEV_SECRET, RelayOptions, relayNamed, relayOptionsFromEnv, relayParseArgs } from "./options"
 import { Relay, RelayConfig, relayQuicConfig } from "./relay"
 
+/**
+ * `a + b` for two readings of the millisecond clock, `nowMs`'s nanoseconds
+ * over a million and so far inside `i64`: the sum wraps through `u64` where
+ * `+` would check, and a wrap past the `i64` ceiling stops at it.
+ */
+const msSum = (a: i64, b: i64): i64 => {
+  const sum: i64 = toI64(toU64(a) + toU64(b))
+  return a >= 0 && b >= 0 && sum < 0 ? toI64((toU64(1) << toU64(63)) - toU64(1)) : sum
+}
+
 /** How often the certificate files are looked at for a renewal, ms (main.rs's `CERT_POLL_INTERVAL`). */
 const CERT_POLL_INTERVAL: i64 = 60000
 
@@ -69,7 +79,10 @@ const USAGE: string =
 
 /** `n` bytes of entropy. */
 const random = (n: i32): u8[] => {
-  const out: u8[] = new Array<u8>(n)
+  const out: u8[] = []
+  while (toI32(out.length) < n) {
+    out.push(toU8(0))
+  }
   crypto.getRandomValues(out)
   return out
 }
@@ -85,7 +98,11 @@ const writeCertOut = (o: RelayOptions, id: RelayIdentity): void => {
   if (o.certOut.length === 0) {
     return
   }
-  writeFileSync(o.certOut, relayCertOutBody(id))
+  const wrote: i32 = writeFileSyncMode(o.certOut, relayCertOutBody(id), 0o644)
+  if (wrote < 0) {
+    writeError(`[relay] could not write ${o.certOut} (${wrote})\n`)
+    return
+  }
   write(
     `[relay] ${id.pinned ? "certificate hash" : "a note saying there is no hash to pin"} written to ${o.certOut}\n`
   )
@@ -121,13 +138,15 @@ const serveUntilPoll = (
   key: Secret<u8[]>,
   grantKey: Secret<u8[]>
 ): boolean => {
-  const nextPoll: i64 = nowMs() + CERT_POLL_INTERVAL
+  const nextPoll: i64 = msSum(nowMs(), CERT_POLL_INTERVAL)
   let signalled: boolean = false
   while (!signalled) {
     const now: i64 = nowMs()
     let wait: i32 = relay.timeout(now)
     if (source.pem) {
-      const untilPoll: i32 = nextPoll > now ? toI32(nextPoll - now) : 0
+      // `nextPoll - now` in `u64`, where it cannot wrap once `nextPoll > now`, and never past the interval.
+      const gap: u64 = nextPoll > now ? toU64(nextPoll) - toU64(now) : 0
+      const untilPoll: i32 = toI32(gap < toU64(CERT_POLL_INTERVAL) ? gap : toU64(CERT_POLL_INTERVAL))
       wait = wait < 0 || untilPoll < wait ? untilPoll : wait
     }
     signalled = relay.step(now, wallMs(), key, grantKey, wait)
