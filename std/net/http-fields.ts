@@ -711,9 +711,13 @@ export const HTTP_DATE_LAST_SECOND: i64 = 253402300799
 const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJulAugSepOctNovDec"
 
 /**
- * Writes `b` at `out[at + k]`. `httpDateWrite` measured the room first, so the
- * test always holds; it is what proves the index, and nothing is allocated.
- * `at + k` stays inside `out`, so the u32 sum does not wrap.
+ * Writes `b` at `out[at + k]`. Its one caller, `httpDateWrite`, has checked
+ * `0 <= at` and `at + HTTP_DATE_SIZE <= out.length` before the first write,
+ * and every `k` it passes is a constant from 0 to 28, under `HTTP_DATE_SIZE`:
+ * so `at + k` is inside `out`, the u32 sum does not wrap and the test always
+ * holds. The test is what proves the index; nothing is allocated, and a byte
+ * it skipped would show in the `httpDateWrite` round trips `tests/run.js`
+ * pins byte for byte (`tests/link/net_http_date`).
  */
 const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
   const pos: i32 = toI32(toU32(at) + toU32(k))
@@ -724,7 +728,10 @@ const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
 
 /**
  * Writes the three letters at `HTTP_FIELDS_DATE_NAMES[3 * index ..)` at
- * `out[at + k ..)`. Every weekday and month names a slot inside the table.
+ * `out[at + k ..)`. `httpDateWrite` passes a weekday, `(days + 4) % 7`, so 0
+ * to 6, or `6 + month` with `month` 1 to 12 by the 153-day rule, so 7 to 18:
+ * `3 * index + 2` is at most 56, under the table's 57 letters, and the test
+ * always holds. It is what proves the index.
  */
 const httpFieldsPutName = (out: u8[], at: i32, k: i32, index: u32): void => {
   const names: string = HTTP_FIELDS_DATE_NAMES

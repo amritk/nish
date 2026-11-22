@@ -456,16 +456,33 @@ export class Http1Parser {
    * @param len how many bytes from `off` to append
    */
   feed(data: u8[], off: i32, len: i32): void {
-    const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
+    if (!this.tryFeed(data, off, len)) {
       panic("Http1Parser: the window is outside the buffer")
     }
+  }
+
+  /**
+   * `feed` that answers false, taking nothing and leaving the parser as it
+   * was, where `feed` panics: a window outside `data`. A caller a strict
+   * module reaches uses this one.
+   *
+   * @param data the bytes the socket gave, which the parser copies and does not keep
+   * @param off where in `data` the new bytes start
+   * @param len how many bytes from `off` to append
+   * @returns false when the window lies outside `data`; true otherwise, the
+   *   bytes taken, dropped (a closed or refused parser) or refused with a 413
+   */
+  tryFeed(data: u8[], off: i32, len: i32): boolean {
+    const size: i32 = toI32(data.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return false
+    }
     if (this.state === HTTP1_S_CLOSED || this.state === HTTP1_S_ERROR) {
-      return
+      return true
     }
     if (!http1Reserve(this, len)) {
       http1Fail(this, 413, "more than 2^30 bytes buffered")
-      return
+      return true
     }
     const buf: u8[] = this.buf
     const at: i32 = this.end
@@ -474,10 +491,11 @@ export class Http1Parser {
     // parser refuses rather than drop the bytes.
     if (!tryCopyBytes(buf, at, data, off, len)) {
       http1Fail(this, 413, "the buffer could not take the input")
-      return
+      return true
     }
     // In range, because the move fit: `at + len` is at most `buf.length`.
     this.end = toI32(toU32(at) + toU32(len))
+    return true
   }
 
   /**
@@ -701,9 +719,10 @@ const http1Reserve = (p: Http1Parser, len: i32): boolean => {
 }
 
 /**
- * A buffer of `size` bytes whose first `live` are `old[from ..]`. Built by
- * `push`, so no length is computed for `new Array`; the first input buffer,
- * `HTTP1_FIRST_INPUT` bytes, is the common one and copies nothing.
+ * A buffer of `size` bytes whose first `live` are `old[from ..]`. A size past
+ * a `u16` is built by `push`, so no unchecked length reaches `new Array`; the
+ * first input buffer, `HTTP1_FIRST_INPUT` bytes, is the common one and copies
+ * nothing.
  */
 const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_INPUT)) {
@@ -712,8 +731,18 @@ const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_HEAD)) {
     return new Array<u8>(HTTP1_FIRST_HEAD)
   }
-  const buf: u8[] = []
   const to: i32 = toI32(toU32(from) + live)
+  if (size <= toU32(65535)) {
+    // A size that fits a `u16` is one allocation whose length needs no check.
+    const sized: u8[] = new Array<u8>(toU16(toI32(size)))
+    let at: i32 = 0
+    for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to && at < toI32(sized.length); k += 1) {
+      sized[at] = old[k]
+      at += 1
+    }
+    return sized
+  }
+  const buf: u8[] = []
   for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to; k += 1) {
     buf.push(old[k])
   }
@@ -803,7 +832,9 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
   const end: i32 = p.end
   const from: i32 = p.start
   if (from < 0 || end < from) {
-    // Never taken: the parser keeps `0 <= start <= end`.
+    // The parser keeps `0 <= start <= end`. The fields are public, so a caller may
+    // have moved them: such a parser is refused with a 400 rather than read
+    // outside `buf`.
     return http1Fail(p, 400, "the input window is out of order")
   }
   let i: i32 = from
@@ -1377,7 +1408,9 @@ const http1MethodOverrun = (p: Http1Parser): boolean => {
   // in time if there were more than `HTTP1_MAX_METHOD` of them.
   const from: i32 = p.start
   if (from < 0 || p.scan < from) {
-    // Never taken: `0 <= start <= scan`.
+    // The parser keeps `0 <= start <= scan`. The fields are public, so a
+    // caller may have moved them: such a window says nothing about the
+    // method, and `http1TakeLine` refuses the parser with a 400.
     return false
   }
   if (toU32(p.scan) - toU32(from) > toU32(HTTP1_MAX_METHOD)) {
@@ -1417,7 +1450,9 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
   if (a < 0 || b < a) {
-    // Never taken: `http1TakeLine` hands out a line inside `buf`.
+    // `http1TakeLine` hands out a line inside `buf`. The fields are public, so a
+    // caller may have moved them: such a parser is refused with a 400 rather than
+    // read outside `buf`.
     return http1Fail(p, 400, "the request line is out of order")
   }
   // The method is tchars, sixteen at a time as a field name is read; the
@@ -1553,7 +1588,9 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
   if (a < 0 || b < a) {
-    // Never taken: `http1Section` hands out a line inside `buf`.
+    // `http1Section` hands out a line inside `buf`. The fields are public, so a
+    // caller may have moved them: such a parser is refused with a 400 rather than
+    // read outside `buf`.
     return http1Fail(p, 400, "a field line out of order")
   }
   // Every offset below is in the line, `a` to `b`, or its copy in the head,
@@ -1985,7 +2022,9 @@ const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
   }
   const total: i32 = p.bodyTotal
   if (take < 0 || total < 0) {
-    // Never taken: `left` and the body's total are not negative.
+    // The parser keeps `left` and the body's total 0 or more. The fields are
+    // public, so a caller may have moved them: such a parser is refused with a 400
+    // rather than read outside `buf`.
     return http1Fail(p, 400, "the body window is out of order")
   }
   p.body = p.buf
@@ -2429,9 +2468,30 @@ const http1HexDigits = (len: i32): i32 => {
  * @returns the offset in `out` just past the chunk, or `HTTP1_NO_ROOM` when it does not fit
  */
 export const http1WriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 => {
+  const end: i32 = http1TryWriteChunk(out, at, data, off, len)
+  if (end === HTTP1_BAD_WINDOW) {
+    panic("http1WriteChunk: the window is outside the buffer")
+  }
+  return end
+}
+
+/**
+ * `http1WriteChunk` that answers `HTTP1_BAD_WINDOW`, with `out` untouched,
+ * where `http1WriteChunk` panics: a window outside `data`. A caller a strict
+ * module reaches uses this one.
+ *
+ * @param out the caller's buffer the chunk is written into
+ * @param at where in `out` the chunk starts
+ * @param data the body bytes to send
+ * @param off where in `data` the chunk's bytes start
+ * @param len how many bytes of `data` the chunk carries
+ * @returns the offset in `out` just past the chunk, `HTTP1_NO_ROOM` when it
+ *   does not fit, or `HTTP1_BAD_WINDOW` when the window lies outside `data`
+ */
+export const http1TryWriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 => {
   const size: i32 = toI32(data.length)
   if (off < 0 || len < 0 || off > size || toU32(len) > toU32(size) - toU32(off)) {
-    panic("http1WriteChunk: the window is outside the buffer")
+    return HTTP1_BAD_WINDOW
   }
   if (len === 0) {
     return at
@@ -2523,6 +2583,8 @@ export const http1WriteLastChunk = (out: u8[], at: i32): i32 => {
 export const HTTP1_NO_ROOM: i32 = -1
 /** `http1WriteResponseHead`: a head the writer refuses to write. */
 export const HTTP1_REFUSED: i32 = -2
+/** `http1TryWriteChunk`: the window lies outside the body bytes; nothing is written. */
+export const HTTP1_BAD_WINDOW: i32 = -3
 
 /** Whether `bytes` is a non-empty run of tchars. */
 const http1BytesAreToken = (bytes: u8[]): boolean => {

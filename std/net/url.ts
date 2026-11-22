@@ -96,6 +96,8 @@ export const URL_DECODE_ERR_ESCAPE: i32 = -1
 export const URL_DECODE_ERR_NUL: i32 = -2
 /** `out` has no room for the next byte; nothing is written at or past `out.length`. */
 export const URL_DECODE_ERR_SPACE: i32 = -3
+/** `tryPercentDecode` only: the window lies outside `src`, or `at` outside `out`; nothing is written. */
+export const URL_DECODE_ERR_WINDOW: i32 = -4
 
 /** `next()` found a pair; the iterator's windows bound it. */
 export const URL_QUERY_PAIR: i32 = 1
@@ -155,6 +157,14 @@ const urlEscapeAt = (bytes: u8[], i: i32, end: i32): i32 => {
   return (hi << 4) | lo
 }
 
+/** Panics on `URL_DECODE_ERR_WINDOW`, as the decoders that are not `tryPercentDecode` do, and answers `result` otherwise. */
+const urlDecodeChecked = (result: i32, who: string): i32 => {
+  if (result === URL_DECODE_ERR_WINDOW) {
+    panic(who + ": the window is outside the array")
+  }
+  return result
+}
+
 /**
  * `percentDecode`'s loop, shared with `percentDecodeErrorAt` so the two agree
  * on where an error is: with `wantPos` it answers the input offset of the
@@ -169,17 +179,18 @@ const urlDecodeRun = (
   flags: i32,
   wantPos: boolean
 ): i32 => {
-  const end: i32 = urlCheckWindow(src, off, len, "percentDecode")
+  const n: i32 = toI32(src.length)
   const size: i32 = toI32(out.length)
-  if (at < 0 || at > size) {
-    panic("percentDecode: at is outside out")
+  if (off < 0 || len < 0 || off > n || len > n - off || at < 0 || at > size) {
+    return URL_DECODE_ERR_WINDOW
   }
+  // The test above bounds the sum by `src.length`, so it cannot wrap.
+  const end: i32 = toI32(toU32(off) + toU32(len))
   const form: boolean = (flags & URL_DECODE_FORM) !== 0
   const lenient: boolean = (flags & URL_DECODE_LENIENT) !== 0
   const allowNul: boolean = (flags & URL_DECODE_ALLOW_NUL) !== 0
   let i: i32 = off
   let w: i32 = at
-  const n: i32 = toI32(src.length)
   while (i >= 0 && i < end && i < n) {
     let b: i32 = toI32(src[i])
     let step: i32 = 1
@@ -210,18 +221,8 @@ const urlDecodeRun = (
   return wantPos ? -1 : toI32(toU32(w) - toU32(at))
 }
 
-/**
- * The index of the first `?` in `bytes[off, off + len)`, or -1 when there is
- * none. The path is `[off, q)` and the query `(q, off + len)`; nothing is
- * copied. A `#` is not looked for: a request target holds no fragment.
- *
- * @param bytes The array holding the request target.
- * @param off Where the target starts in `bytes`.
- * @param len The target's length in bytes; a window outside `bytes` panics.
- * @returns The index in `bytes` of the `?`, or -1 when the target has no query.
- */
-export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 => {
-  const end: i32 = urlCheckWindow(bytes, off, len, "urlQueryStart")
+/** `urlQueryStart` of `bytes[off, end)`, for a caller that built the window from `bytes.length` and so has nothing to check. */
+const urlQueryScan = (bytes: u8[], off: i32, end: i32): i32 => {
   const n: i32 = toI32(bytes.length)
   let i: i32 = off
   while (i >= 0 && i < end && i < n) {
@@ -232,6 +233,19 @@ export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 => {
   }
   return -1
 }
+
+/**
+ * The index of the first `?` in `bytes[off, off + len)`, or -1 when there is
+ * none. The path is `[off, q)` and the query `(q, off + len)`; nothing is
+ * copied. A `#` is not looked for: a request target holds no fragment.
+ *
+ * @param bytes The array holding the request target.
+ * @param off Where the target starts in `bytes`.
+ * @param len The target's length in bytes; a window outside `bytes` panics.
+ * @returns The index in `bytes` of the `?`, or -1 when the target has no query.
+ */
+export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 =>
+  urlQueryScan(bytes, off, urlCheckWindow(bytes, off, len, "urlQueryStart"))
 
 /**
  * Percent-decodes `src[off, off + len)` into `out` from `out[at]` on, and
@@ -251,6 +265,22 @@ export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 => {
  * @returns How many bytes were written from `out[at]` on, or `URL_DECODE_ERR_ESCAPE`, `URL_DECODE_ERR_NUL` or `URL_DECODE_ERR_SPACE`.
  */
 export const percentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 =>
+  urlDecodeChecked(urlDecodeRun(src, off, len, out, at, flags, false), "percentDecode")
+
+/**
+ * `percentDecode` that answers `URL_DECODE_ERR_WINDOW`, writing nothing,
+ * where `percentDecode` panics: a window outside `src` or an `at` outside
+ * `out`. A caller a strict module reaches uses this one.
+ *
+ * @param src The array holding the encoded text.
+ * @param off Where the encoded text starts in `src`.
+ * @param len The encoded text's length in bytes.
+ * @param out The array the decoded bytes are written into.
+ * @param at The index in `out` the first decoded byte goes to.
+ * @param flags `URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
+ * @returns How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` code, `URL_DECODE_ERR_WINDOW` included.
+ */
+export const tryPercentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 =>
   urlDecodeRun(src, off, len, out, at, flags, false)
 
 /**
@@ -268,7 +298,7 @@ export const percentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32,
  * @returns The index in `src` decoding stops at, or -1 when all of it decodes.
  */
 export const percentDecodeErrorAt = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 =>
-  urlDecodeRun(src, off, len, out, at, flags, true)
+  urlDecodeChecked(urlDecodeRun(src, off, len, out, at, flags, true), "percentDecodeErrorAt")
 
 /**
  * `percentDecode` for one path segment: `+` is literal whatever `flags` say,
@@ -290,7 +320,11 @@ export const percentDecodePathSegment = (
   out: u8[],
   at: i32,
   flags: i32
-): i32 => urlDecodeRun(src, off, len, out, at, (flags | URL_DECODE_FORM) ^ URL_DECODE_FORM, false)
+): i32 =>
+  urlDecodeChecked(
+    urlDecodeRun(src, off, len, out, at, (flags | URL_DECODE_FORM) ^ URL_DECODE_FORM, false),
+    "percentDecodePathSegment"
+  )
 
 /**
  * The segments of a path, split on the raw `/`. A leading `/` starts the
@@ -417,17 +451,7 @@ export class UrlQuery {
    * @param len How many bytes the query takes.
    */
   reset(bytes: u8[], off: i32, len: i32): void {
-    const end: i32 = urlCheckWindow(bytes, off, len, "UrlQuery")
-    this.bytes = bytes
-    this.pos = off
-    this.end = end
-    this.count = 0
-    this.failed = 0
-    this.keyStart = off
-    this.keyLength = 0
-    this.valueStart = off
-    this.valueLength = 0
-    this.hasValue = false
+    urlQueryOver(this, bytes, off, urlCheckWindow(bytes, off, len, "UrlQuery"))
   }
 
   /**
@@ -490,7 +514,9 @@ export class UrlQuery {
 /**
  * Whether `bytes[off, off + len)`, decoded strictly in form mode, is `name`'s
  * bytes. Nothing is written: a malformed escape or `%00` in the key matches
- * no name.
+ * no name. `UrlQuery.next` sets the window inside `bytes`, but its fields are
+ * public: a window a caller moved past `bytes` reads as the part inside it,
+ * and one that starts outside reads as the empty key, which matches only "".
  */
 const urlKeyEquals = (bytes: u8[], off: i32, len: i32, name: string): boolean => {
   const n: i32 = toI32(name.length)
@@ -660,15 +686,24 @@ const urlBytesText = (bytes: u8[], a: i32, b: i32, lower: boolean): string => {
 
 /** `percentDecode` of `src[off, off + len)` as a new string, or null on an error or when the result is not UTF-8. */
 const urlDecodeString = (src: u8[], off: i32, len: i32, flags: i32): string | null => {
-  // `len` bytes of room, pushed one at a time for the same reason as in
-  // `urlBytesOf`; decoding never makes the text longer.
-  const out: u8[] = []
-  let k: i32 = 0
-  while (k < len) {
-    out.push(0)
-    k += 1
+  // `len` bytes of room; decoding never makes the text longer. A length that
+  // fits a `u16`, every real target, is one allocation whose length needs no
+  // check; a longer one is pushed a byte at a time for the same reason as in
+  // `urlBytesOf`.
+  let out: u8[] = []
+  if (len >= 0 && len <= 65535) {
+    out = new Array<u8>(toU16(len))
+  } else {
+    let k: i32 = 0
+    while (k < len) {
+      out.push(0)
+      k += 1
+    }
   }
-  const n: i32 = percentDecode(src, off, len, out, 0, flags)
+  // Its callers pass a window built from `src.length`, so
+  // `URL_DECODE_ERR_WINDOW` cannot come back; if it did, it is a refusal
+  // like any other negative answer.
+  const n: i32 = tryPercentDecode(src, off, len, out, 0, flags)
   if (n < 0 || !urlIsUtf8(out, 0, n)) {
     return null
   }
@@ -696,6 +731,20 @@ export const urlDecode = (s: string, flags: i32): string | null => {
   return urlDecodeString(bytes, 0, toI32(bytes.length), flags)
 }
 
+/** `UrlQuery.reset` on `bytes[off, end)`, for a caller that built the window from `bytes.length` and so has nothing to check. */
+const urlQueryOver = (query: UrlQuery, bytes: u8[], off: i32, end: i32): void => {
+  query.bytes = bytes
+  query.pos = off
+  query.end = end
+  query.count = 0
+  query.failed = 0
+  query.keyStart = off
+  query.keyLength = 0
+  query.valueStart = off
+  query.valueLength = 0
+  query.hasValue = false
+}
+
 /**
  * The first value for `name` in the query of the request target `target`,
  * form-decoded strictly: `""` for a key written without `=`, as
@@ -715,15 +764,15 @@ export const urlQueryGet = (target: string, name: string): string | null => {
     return null
   }
   const len: i32 = toI32(bytes.length)
-  const q: i32 = urlQueryStart(bytes, 0, len)
-  // `urlQueryStart` answers -1 or an index below `len`; the upper bound is
+  const q: i32 = urlQueryScan(bytes, 0, len)
+  // `urlQueryScan` answers -1 or an index below `len`; the upper bound is
   // spelled out for the proof of the window below.
   if (q < 0 || q >= len) {
     return null
   }
   const query: UrlQuery = new UrlQuery(new UrlQueryLimits())
-  // `q < len`, so the rest of the target after the `?` has a length that cannot wrap.
-  query.reset(bytes, q + 1, toI32(toU32(len) - toU32(q) - 1))
+  // `q < len = bytes.length`, so `[q + 1, len)` lies inside `bytes`.
+  urlQueryOver(query, bytes, q + 1, len)
   if (urlQueryFind(query, name) !== URL_QUERY_PAIR) {
     return null
   }

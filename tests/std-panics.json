@@ -1755,8 +1755,8 @@
     },
     {
       "module": "std/net/url.ts",
-      "function": "urlDecodeRun",
-      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content"
+      "function": "urlDecodeChecked",
+      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content. tryPercentDecode answers URL_DECODE_ERR_WINDOW instead"
     },
     {
       "module": "std/net/websocket.ts",

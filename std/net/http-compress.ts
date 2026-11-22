@@ -97,6 +97,8 @@ export const HTTP_CODING_DEFLATE: i32 = 2
 
 /** Nothing offered is acceptable, identity included (§12.5.3: 406, or identity anyway). */
 export const HTTP_CODING_NONE: i32 = -1
+/** `httpTryAcceptEncoding` and `httpTryContentEncoding`: the window lies outside its buffer. */
+export const HTTP_CODING_BAD_WINDOW: i32 = -2
 
 /** `httpAcceptEncoding`'s `offered` bits: the program can send gzip, deflate. */
 export const HTTP_OFFER_GZIP: i32 = 1
@@ -126,6 +128,15 @@ export const HTTP_COMPRESS_TOO_LARGE: i32 = 3
 export const HTTP_COMPRESS_TOO_LITTLE_SAVED: i32 = 4
 /** Under `segmentMode`, compressing would not have saved a TCP segment. */
 export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
+/**
+ * The encoder's gzip member could not be written into `output` or reframed as
+ * zlib, so the body went as it is. `output` holds `compressBound(maxLength)`
+ * bytes and every member an encoder writes carries its 18 bytes of header and
+ * trailer, so no body `compress` or `compressAnyway` accepts reaches it.
+ */
+export const HTTP_COMPRESS_FAILED: i32 = 6
+/** `tryCompress` and `tryCompressAnyway`: the window lies outside the body, so nothing was compressed. */
+export const HTTP_COMPRESS_BAD_WINDOW: i32 = 7
 
 /**
  * `HttpCompressor.encoder`: by the body's length (the fixed-Huffman encoder up
@@ -155,6 +166,9 @@ export const HTTP1_GZIP_FIELD_BYTES: i32 = 24
 /** How many bytes shorter a zlib stream is than the gzip member around the same DEFLATE stream: a 10-byte header and 8-byte trailer against 2 and 4. */
 const HTTP_ZLIB_SHORTER: i32 = 12
 
+/** `httpGzipToZlib`: the member was too short to reframe or passed its buffer. */
+const HTTP_ZLIB_FAILED: i32 = -1
+
 /**
  * The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
  * A segment size of zero or less panics, since no count would mean anything.
@@ -168,14 +182,22 @@ export const httpSegments = (bytes: i32, mss: i32): i32 => {
   if (mss <= 0) {
     panic("httpSegments: a segment size of zero or less")
   }
+  return httpSegmentsOf(bytes, toU32(mss))
+}
+
+/**
+ * `httpSegments` without its panic, for a `size` its caller has shown is 1 or
+ * more: `httpSegments` by its panic, `fewerSegments` by `segmentSize`, which
+ * answers a size above 0 or `HTTP_DEFAULT_MSS`. A `size` of 0 counts 0.
+ */
+const httpSegmentsOf = (bytes: i32, size: u32): i32 => {
   if (bytes <= 0) {
     return 0
   }
-  // `mss` is 1 or more, so the quotient is at most `bytes - 1` and the sum
+  // `size` is 1 or more, so the quotient is at most `bytes - 1` and the sum
   // at most `bytes`: unsigned arithmetic gives the same count with no check.
-  // The panic above leaves `size` 1 or more, so the test always holds; it is
-  // what shows the division has a divisor.
-  const size: u32 = toU32(mss)
+  // Both callers pass 1 or more, so the test always holds; it is what shows
+  // the division has a divisor.
   if (size > 0) {
     return toI32((toU32(bytes) - 1) / size + 1)
   }
@@ -302,8 +324,29 @@ const httpOws = (c: i32): boolean => c === 32 || c === 9
  *   when nothing offered is acceptable and identity is refused too
  */
 export const httpAcceptEncoding = (buf: u8[], start: i32, end: i32, offered: i32): i32 => {
-  if (start < 0 || start > end || end > toI32(buf.length)) {
+  const coding: i32 = httpTryAcceptEncoding(buf, start, end, offered)
+  if (coding === HTTP_CODING_BAD_WINDOW) {
     panic("httpAcceptEncoding: the window lies outside its buffer")
+  }
+  return coding
+}
+
+/**
+ * `httpAcceptEncoding` that answers `HTTP_CODING_BAD_WINDOW` where
+ * `httpAcceptEncoding` panics: a window outside `buf`. A caller a strict
+ * module reaches uses this one.
+ *
+ * @param buf the buffer holding the field value, such as the request head
+ * @param start the index in `buf` of the value's first octet
+ * @param end the index just past the value's last octet
+ * @param offered which codings the program can produce, `HTTP_OFFER_*` bits
+ *   or 0 for none
+ * @returns the `HTTP_CODING_*` to send the body in, `HTTP_CODING_NONE` when
+ *   nothing offered is acceptable, or `HTTP_CODING_BAD_WINDOW`
+ */
+export const httpTryAcceptEncoding = (buf: u8[], start: i32, end: i32, offered: i32): i32 => {
+  if (start < 0 || start > end || end > toI32(buf.length)) {
+    return HTTP_CODING_BAD_WINDOW
   }
   let qGzip: i32 = -1
   let qDeflate: i32 = -1
@@ -434,8 +477,9 @@ const httpCompressBytes = (text: string): u8[] => {
  * `FLEVEL` of `level` (RFC 1950 §2.2), the DEFLATE stream moved down 8 bytes,
  * and the Adler-32 of `src[off .. off + len)`, the data compressed.
  *
- * @returns the zlib stream's length, `n - HTTP_ZLIB_SHORTER`; -1, which no
- *   caller sees, when `out[0 .. n)` is too short to be a gzip member
+ * @returns the zlib stream's length, `n - HTTP_ZLIB_SHORTER`; or
+ *   `HTTP_ZLIB_FAILED` when `out[0 .. n)` is too short to be a gzip member or
+ *   passes `out`, which its callers turn into `HTTP_COMPRESS_FAILED`
  */
 const httpGzipToZlib = (out: u8[], n: i32, level: i32, src: u8[], off: i32, len: i32): i32 => {
   let flevel: u32 = 3
@@ -453,14 +497,14 @@ const httpGzipToZlib = (out: u8[], n: i32, level: i32, src: u8[], off: i32, len:
   const flg: u32 = top + ((toU32(31) - ((cmf * 256 + top) % 31)) % 31)
   // Both callers pass what an encoder just wrote at the start of `out`: at
   // least 18 bytes of gzip header and trailer, inside `out`. So the tests
-  // always hold; they are what prove the writes below in bounds, and a miss
-  // would answer -1, which sends the body as it is.
+  // hold; they are what prove the writes below in bounds, and a miss answers
+  // `HTTP_ZLIB_FAILED`, which sends the body as it is.
   if (n < 18 || n > toI32(out.length) || toI32(out.length) < 2) {
-    return -1
+    return HTTP_ZLIB_FAILED
   }
   const end: i32 = n - HTTP_ZLIB_SHORTER - 4
   if (end < 0 || end + 3 >= toI32(out.length)) {
-    return -1
+    return HTTP_ZLIB_FAILED
   }
   out[0] = toU8(cmf)
   out[1] = toU8(flg)
@@ -609,8 +653,30 @@ export class HttpCompressor {
    *   to send the body uncompressed; `decision` says which reason applied
    */
   compress(coding: i32, body: u8[], off: i32, len: i32): i32 {
-    if (off < 0 || len < 0 || off > toI32(body.length) - len) {
+    const n: i32 = this.tryCompress(coding, body, off, len)
+    if (this.decision === HTTP_COMPRESS_BAD_WINDOW) {
       panic("HttpCompressor.compress: the window lies outside its body")
+    }
+    return n
+  }
+
+  /**
+   * `compress` that answers -1 with `decision` set to
+   * `HTTP_COMPRESS_BAD_WINDOW` where `compress` panics: a window outside
+   * `body`. A caller a strict module reaches uses this one.
+   *
+   * @param coding the coding negotiated for this request, from
+   *   `httpAcceptEncoding`
+   * @param body the buffer holding the response body
+   * @param off the index in `body` where the body starts
+   * @param len the body's length in bytes
+   * @returns how many bytes of `output` hold the gzip or deflate body, or -1
+   *   to send the body uncompressed; `decision` says which reason applied
+   */
+  tryCompress(coding: i32, body: u8[], off: i32, len: i32): i32 {
+    if (off < 0 || len < 0 || off > toI32(body.length) - len) {
+      this.decision = HTTP_COMPRESS_BAD_WINDOW
+      return -1
     }
     if (len < this.minLength) {
       this.decision = HTTP_COMPRESS_TOO_SMALL
@@ -647,6 +713,10 @@ export class HttpCompressor {
         : this.gzip.compress(body, off, len, this.output, toI32(0))
       if (deflate && n >= 0) {
         n = httpGzipToZlib(this.output, n, fixed ? toI32(1) : this.level, body, off, len)
+        if (n === HTTP_ZLIB_FAILED) {
+          this.decision = HTTP_COMPRESS_FAILED
+          return -1
+        }
       }
     }
     if (n < 0 || n > keep) {
@@ -679,8 +749,30 @@ export class HttpCompressor {
    *   to send the body uncompressed
    */
   compressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32 {
-    if (off < 0 || len < 0 || off > toI32(body.length) - len) {
+    const n: i32 = this.tryCompressAnyway(coding, body, off, len)
+    if (this.decision === HTTP_COMPRESS_BAD_WINDOW) {
       panic("HttpCompressor.compressAnyway: the window lies outside its body")
+    }
+    return n
+  }
+
+  /**
+   * `compressAnyway` that answers -1 with `decision` set to
+   * `HTTP_COMPRESS_BAD_WINDOW` where `compressAnyway` panics: a window outside
+   * `body`. A caller a strict module reaches uses this one.
+   *
+   * @param coding the coding negotiated for this request, from
+   *   `httpAcceptEncoding`
+   * @param body the buffer holding the response body
+   * @param off the index in `body` where the body starts
+   * @param len the body's length in bytes
+   * @returns how many bytes of `output` hold the gzip or deflate body, or -1
+   *   to send the body uncompressed
+   */
+  tryCompressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32 {
+    if (off < 0 || len < 0 || off > toI32(body.length) - len) {
+      this.decision = HTTP_COMPRESS_BAD_WINDOW
+      return -1
     }
     if (len > this.maxLength) {
       this.decision = HTTP_COMPRESS_TOO_LARGE
@@ -705,13 +797,14 @@ export class HttpCompressor {
       n = this.gzip.compress(body, off, len, this.output, toI32(0))
       level = this.level
     }
-    if (deflate) {
+    if (deflate && n >= 0) {
       n = httpGzipToZlib(this.output, n, level, body, off, len)
     }
     if (n < 0) {
       // `output` holds `compressBound(maxLength)` bytes, so an encoder always
-      // fits and this never happens; were it to, the body goes out as it is.
-      this.decision = HTTP_COMPRESS_TOO_LARGE
+      // fits, and its member is long enough to reframe; were either to fail,
+      // the body goes out as it is.
+      this.decision = HTTP_COMPRESS_FAILED
       return -1
     }
     this.sent(deflate)
@@ -759,8 +852,9 @@ export class HttpCompressor {
    *   compressed response is worth sending
    */
   fewerSegments(identityBytes: i32, encodedBytes: i32, mss: i32): boolean {
-    const size: i32 = this.segmentSize(mss)
-    if (httpSegments(encodedBytes, size) < httpSegments(identityBytes, size)) {
+    // `segmentSize` answers 1 or more, so neither count can be refused.
+    const size: u32 = toU32(this.segmentSize(mss))
+    if (httpSegmentsOf(encodedBytes, size) < httpSegmentsOf(identityBytes, size)) {
       return true
     }
     this.decision = HTTP_COMPRESS_NO_FEWER_SEGMENTS
@@ -949,8 +1043,25 @@ export const httpCompressorDefault = (): HttpCompressor => new HttpCompressor(DE
  * @returns the one coding named, `HTTP_CODING_IDENTITY` for none, or `HTTP_CODING_NONE`
  */
 export const httpContentEncoding = (buf: u8[], start: i32, end: i32): i32 => {
-  if (start < 0 || start > end || end > toI32(buf.length)) {
+  const coding: i32 = httpTryContentEncoding(buf, start, end)
+  if (coding === HTTP_CODING_BAD_WINDOW) {
     panic("httpContentEncoding: the window lies outside its buffer")
+  }
+  return coding
+}
+
+/**
+ * `httpContentEncoding` that answers `HTTP_CODING_BAD_WINDOW` where
+ * `httpContentEncoding` panics: a window outside `buf`. A caller a strict
+ * module reaches uses this one.
+ * @param buf the bytes that hold the field value
+ * @param start where the value starts in `buf`
+ * @param end where the value ends in `buf`, one past its last byte
+ * @returns the one coding named, `HTTP_CODING_IDENTITY` for none, `HTTP_CODING_NONE`, or `HTTP_CODING_BAD_WINDOW`
+ */
+export const httpTryContentEncoding = (buf: u8[], start: i32, end: i32): i32 => {
+  if (start < 0 || start > end || end > toI32(buf.length)) {
+    return HTTP_CODING_BAD_WINDOW
   }
   let coding: i32 = HTTP_CODING_IDENTITY
   let p: i32 = start

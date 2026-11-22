@@ -1,0 +1,45 @@
+PASS  tryFeed: a window past the data answers false
+PASS  tryFeed: a negative offset answers false
+PASS  tryFeed: a negative length answers false
+PASS  and takes nothing
+PASS  tryFeed: the whole data answers true
+PASS  and is buffered
+PASS  tryFeed: past 2^30 buffered still answers true
+PASS  and next() refuses
+PASS  with a 413
+PASS  tryFeed: an end past the buffer still answers true
+PASS  and next() refuses
+PASS  with a 413
+PASS  a well-formed head is a head
+PASS  a request line ended in a bare LF is refused
+PASS  with a 400
+PASS  a field line holding a control byte is refused
+PASS  with a 400
+PASS  a request line past its limit is refused before its CRLF arrives
+PASS  with a 414
+PASS  a line cut short waits for more
+PASS  http1TryWriteChunk: a window past the data
+PASS  http1TryWriteChunk: a negative length
+PASS  http1TryWriteChunk: a good window writes `5\r\nhello\r\n`
+PASS  tryPercentDecode: a window past the source
+PASS  tryPercentDecode: an output index past the output
+PASS  tryPercentDecode: `%C3%A9` decodes to two bytes
+PASS  the first is 0xC3
+PASS  the second is 0xA9
+PASS  urlDecode: `%C3%A9` is `é`, two UTF-8 bytes natively
+PASS  urlQueryGet: `q=caf%C3%A9` is `café`
+PASS  urlDecode: a lone `%C3` is not UTF-8, so null
+PASS  httpTryAcceptEncoding: an end past the buffer
+PASS  httpTryAcceptEncoding: a start after its end
+PASS  httpTryAcceptEncoding: `gzip` is gzip
+PASS  httpTryContentEncoding: an end past the buffer
+PASS  httpTryContentEncoding: `gzip` is gzip
+PASS  tryCompress: a window past the body
+PASS  says so
+PASS  tryCompressAnyway: a negative offset
+PASS  says so
+PASS  tryCompress: the whole body compresses
+PASS  and is sent
+PASS  tryCompressAnyway: so does a short one
+PASS  and is sent
+net_http1_wire_refusals: 44 passed, 0 failed, 0 skipped
