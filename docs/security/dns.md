@@ -405,17 +405,35 @@ needs a clock within
 wrapping deadline would change what `fail`, `tick` and `nextDeadlineNanos`
 report.
 
-Two explicit panics are new, each on an argument only the caller can get
-wrong: `DnsClient`'s constructor refuses a resolver whose `maxLookups` is
-outside 1 to 64, a value only a write to that field after construction
-gives and from which the client sizes its per-query arrays, and `dnsHostsFind`
-refuses a `DnsHosts` whose counts do not fit its own arrays.
+Explicit panics go from 14 to 21 in `dns-config.ts` and from 3 to 4 in
+`dns.ts`; `dns-message.ts` and `dns-resolver.ts` keep theirs. Ten are new
+and three are gone, each new one a guard on an argument only the caller can
+get wrong, which no byte of a reply or a file reaches:
+
+- `dnsParseIpv4: out has no room for four bytes from at`, and
+  `dnsParseIpv6: out is shorter than 16 bytes` at its two writes: the address
+  parsers' output window, which every caller in these modules sizes first.
+- `dnsParseAddress: the window is outside the array`: the input window,
+  checked where `dnsLineEnd` and `dnsWordEnd` checked it before.
+- `dnsHostsFind: hosts is not a table dnsParseHosts filled`, at four reads,
+  and `dnsHostsFind: out has no room for max addresses`, at two writes: a
+  `DnsHosts` whose counts do not fit its own arrays, which only a write to
+  its fields gives, and an `out` shorter than the caller said.
+- `DnsClient: … lookups is outside 1 to 64`: a resolver whose `maxLookups`
+  was written after construction, from which the client sizes its per-query
+  arrays.
+
+The three gone are `dnsLineEnd: the window is outside the array` and
+`dnsWordEnd: the window is outside the array`, with the helpers folded into
+their callers, and `dnsFallbackServers`', below.
 
 One panic is gone. `dnsParseResolvConf` with no nameserver line writes
 127.0.0.1 and ::1 into `config.servers`, and panicked
 (`dnsFallbackServers: servers has no room for two addresses`) when the
 caller had replaced that array with one too short for two addresses. It now
-gives `config` a full table of `DNS_MAX_SERVERS` addresses first. Before:
+gives such a `config` a full table of `DNS_MAX_SERVERS` addresses before it
+reads a line, so a nameserver line, which writes into the same array, keeps
+its address too. Before:
 `tests/link/net_dns_fallback_short` exited 1 with that message; after, it
 prints both loopback servers on port 53. No byte of a file reached it, so it
 is not a finding.
@@ -437,7 +455,7 @@ query`, `DnsResolver.result` and `cancel` for a lookup not in progress or an
 `DnsClient: … lookups is outside 1 to 64`,
 `DnsClient.ready: the token … is not the client's`, `resolveHost: out or
 ttls has no room for DNS_RESOLVE_MAX_ADDRESSES`, the address parsers'
-`dnsParseIpv4: out has no room for four bytes at at`, `dnsParseIpv6: out is
+`dnsParseIpv4: out has no room for four bytes from at`, `dnsParseIpv6: out is
 shorter than 16 bytes` and `dnsParseAddress: parsed is shorter than 16 bytes`,
 and `dnsHostsFind: hosts is not a table dnsParseHosts filled` — are each a guard on the caller's arguments, reached by no byte of a
 reply or a file.

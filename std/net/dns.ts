@@ -397,11 +397,13 @@ export class DnsClient {
       // `meta` is made two long and the core has just written it; a shorter
       // one, never seen, would leave only the close done.
       const meta: i32[] = this.meta
-      const kind: i32 = meta.length > 0 ? meta[0] : DNS_CLOSE
-      if (kind === DNS_SEND_TCP) {
-        dnsClientOpenTcp(this, q, nowNanos)
-      } else if (kind !== DNS_CLOSE) {
-        dnsClientSendUdp(this, q, nowNanos)
+      if (meta.length > 0) {
+        const kind: i32 = meta[0]
+        if (kind === DNS_SEND_TCP) {
+          dnsClientOpenTcp(this, q, nowNanos)
+        } else if (kind !== DNS_CLOSE) {
+          dnsClientSendUdp(this, q, nowNanos)
+        }
       }
       q = this.nextOutgoing()
     }

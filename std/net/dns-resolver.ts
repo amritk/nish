@@ -386,12 +386,13 @@ export class DnsResolver {
     }
     const lookupState: i32[] = this.lookupState
     let l: i32 = 0
-    while (l < toI32(lookupState.length) && lookupState[l] !== DNS_L_FREE) {
+    while (l < this.maxLookups && l < toI32(lookupState.length) && lookupState[l] !== DNS_L_FREE) {
       l += 1
     }
     // There are `maxLookups` slots, at most 64, so `l > 63` never holds; it
-    // bounds `l * 2` for the panic prover.
-    if (l >= toI32(lookupState.length) || l > 63) {
+    // bounds `l * 2` for the panic prover. `result`, `cancel` and `settle`
+    // take a slot below both bounds, so `start` hands out no other.
+    if (l >= this.maxLookups || l >= toI32(lookupState.length) || l > 63) {
       return DNS_RESOLVE_BUSY
     }
     const a: i32 = l * 2

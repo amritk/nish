@@ -248,7 +248,7 @@ const dnsParseIpv4 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
     panic("dnsParseIpv4: the window is outside the array")
   }
   if (at < 0 || at > toI32(out.length) - 4) {
-    panic("dnsParseIpv4: out has no room for four bytes at at")
+    panic("dnsParseIpv4: out has no room for four bytes from at")
   }
   let i: i32 = from
   let part: i32 = 0
@@ -666,9 +666,9 @@ const dnsResolvLine = (b: u8[], from: i32, to: i32, config: DnsConfig): void => 
 /**
  * Reads the resolv.conf `b[off, off + len)` into `config`, which starts over
  * from the defaults, and gives it 127.0.0.1 and ::1 on port 53 when no
- * nameserver line held an address. It allocates nothing, unless that
- * fallback finds `config.servers` replaced with an array too short for two
- * addresses, when it gives `config` a new full table. Nothing in the bytes
+ * nameserver line held an address. It allocates nothing, unless it finds
+ * `config.servers` replaced with an array shorter than `DNS_MAX_SERVERS`
+ * addresses, when it first gives `config` a new full table. Nothing in the bytes
  * makes it panic or fail: what it cannot use is ignored or counted.
  *
  * @param b The file's bytes, read by the caller.
@@ -682,6 +682,12 @@ export const dnsParseResolvConf = (b: u8[], off: i32, len: i32, config: DnsConfi
   if (off < 0 || to < off || to > toI32(b.length)) {
     dnsConfigCheckWindow(toI32(b.length), off, to, "dnsParseResolvConf")
     return
+  }
+  if (toI32(config.servers.length) < 54) {
+    // Only a caller that replaced `config.servers` with a shorter array gets
+    // here. Both a nameserver line and the fallback write into it, so it gets
+    // a full table of `DNS_MAX_SERVERS` addresses, 54 bytes.
+    config.servers = new Array<u8>(54)
   }
   config.serverCount = 0
   config.droppedServers = 0
@@ -707,12 +713,6 @@ export const dnsParseResolvConf = (b: u8[], off: i32, len: i32, config: DnsConfi
     }
   }
   if (config.serverCount === 0) {
-    if (toI32(config.servers.length) < 36) {
-      // Only a caller that replaced `config.servers` with a shorter array
-      // gets here. The fallback needs two addresses, so it gets a full table
-      // of `DNS_MAX_SERVERS` addresses, 54 bytes.
-      config.servers = new Array<u8>(54)
-    }
     dnsFallbackServers(config.servers)
     config.serverCount = 2
   }
