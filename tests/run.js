@@ -26429,7 +26429,7 @@ if (dealtHere("cliChecks")) {
       "zlib-each":
         "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
       "request-slot":
-        "std/net/http-server.ts:228:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 208 → 208 bytes",
+        "std/net/http-server.ts:238:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 208 → 208 bytes",
     }
     for (const [base, want] of Object.entries(holderWant)) {
       const file = `tests/layout/compact-bench/${base}.ts`
