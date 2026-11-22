@@ -71,7 +71,7 @@ function qcConnected(conn: QuicConnection, bidiLocal: i64): QcClient -> @qcConne
   callee +2:69 quicEncodeTransportParameters -> @nish.quicEncodeTransportParameters
   callee +2:99 qcParams -> @qcParams
 function qcFrameTypes(payload: u8[]): string -> @qcFrameTypes [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: n64 nish.QuicFrame.constructor nish.quicParseFrame nish_alloc_struct nish_array_grow nish_str_from_i32
   pointer payload: size=0 writesThrough=false captured=false passedTo=nish.quicParseFrame#1
   stackSites=2 stackLocals=2
@@ -82,13 +82,13 @@ function qcFrameTypes(payload: u8[]): string -> @qcFrameTypes [exported]
   callee +4:9 quicParseFrame -> @nish.quicParseFrame
   callee +4:71 n64 -> @n64
 function QcFound.constructor(this: QcFound): void -> @QcFound.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.QuicFrame.constructor nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new QuicFrame -> @nish.QuicFrame.constructor
 function qcFind(payloads: u8[][], type: i32): QcFound -> @qcFind [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: QcFound.constructor n64 nish.quicParseFrame nish_alloc_struct
   pointer payloads: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
