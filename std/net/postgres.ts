@@ -2513,23 +2513,35 @@ export class PgConnection {
 
   private putByte(v: i32): void {
     const end: i32 = this.outEnd
-    this.reserve(toI64(end) + toI64(1))
     const b: u8[] = this.out
-    if (end < 0 || end >= toI32(b.length)) {
+    if (end >= 0 && end < toI32(b.length)) {
+      b[end] = toU8(v)
+      this.outEnd = end + 1
       return
     }
-    b[end] = toU8(v)
+    this.reserve(toI64(end) + toI64(1))
+    const grown: u8[] = this.out
+    if (end < 0 || end >= toI32(grown.length)) {
+      return
+    }
+    grown[end] = toU8(v)
     this.outEnd = end + 1
   }
 
   private putI32(v: i32): void {
     const end: i32 = this.outEnd
-    this.reserve(toI64(end) + toI64(4))
     const b: u8[] = this.out
-    if (end < 0 || end > toI32(b.length) - 4) {
+    if (end >= 0 && end <= toI32(b.length) - 4) {
+      setI32BE(b, end, v)
+      this.outEnd = end + 4
       return
     }
-    setI32BE(b, end, v)
+    this.reserve(toI64(end) + toI64(4))
+    const grown: u8[] = this.out
+    if (end < 0 || end > toI32(grown.length) - 4) {
+      return
+    }
+    setI32BE(grown, end, v)
     this.outEnd = end + 4
   }
 
@@ -2967,9 +2979,12 @@ export class PgConnection {
         break
       }
       size += toI64(n) + toI64(3)
-      for (let i: i32 = 0; i < n && size >= 0 && size <= 1073741823; i++) {
+      for (let i: i32 = 0; i < n; i++) {
         const c: i32 = toI32(item.charCodeAt(i))
         if (c === 34 || c === 92) {
+          if (size < 0 || size > 1073741823) {
+            break
+          }
           size += 1
         }
       }
@@ -4245,22 +4260,26 @@ export class PgPool {
     while (s.state === PG_SLOT_STARTING || s.state === PG_SLOT_READY) {
       this.ticket = s.oldest()
       const event: i32 = conn.next()
-      const lead: i32 = s.leading()
       if (event === PG_READY) {
         s.state = PG_SLOT_READY
-      } else if (event === PG_DESCRIBED && lead > 0) {
-        s.setLeading(lead - 1)
-        const described: i32 = s.described
-        // Only a queued prepare is described, so `described` stays below `queued`; the test
-        // states that for the prover.
-        if (described < s.queued) {
-          s.described = described + 1
+      } else if (event === PG_DESCRIBED || event === PG_ERROR) {
+        // Only an event about a prepare leading the oldest group is the pool's own.
+        const lead: i32 = s.leading()
+        if (lead > 0 && event === PG_DESCRIBED) {
+          s.setLeading(lead - 1)
+          const described: i32 = s.described
+          // Only a queued prepare is described, so `described` stays below `queued`; the test
+          // states that for the prover.
+          if (described < s.queued) {
+            s.described = described + 1
+          }
+          continue
         }
-        continue
-      } else if (event === PG_ERROR && lead > 0) {
-        // The rest of the group's prepares were skipped: the next request prepares them again.
-        s.setLeading(0)
-        s.queued = s.described
+        if (lead > 0) {
+          // The rest of the group's prepares were skipped: the next request prepares them again.
+          s.setLeading(toI32(0))
+          s.queued = s.described
+        }
       } else if (event === PG_GROUP_DONE) {
         s.pop()
       } else if (event === PG_FAILED) {
@@ -4268,7 +4287,7 @@ export class PgPool {
           // A starting slot was given no request, so its ring is empty and takes this one.
           const ticket: i32 = this.dequeue()
           if (ticket >= 0) {
-            s.push(ticket, 0)
+            s.push(ticket, toI32(0))
           }
         }
         if (this.building === slot) {
