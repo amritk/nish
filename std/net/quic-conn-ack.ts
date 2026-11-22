@@ -42,6 +42,14 @@ import { quicPushAck, quicPushAckEcn, quicPutAck, quicPutAckEcn } from "nish/net
 export const QUIC_ACK_MAX_RANGES: i32 = 32
 
 /**
+ * One more than the ECN count `n`, or `n` once it is the largest a varint
+ * carries, since an ACK_ECN frame could not write a larger one.
+ */
+const quicAckCountUp = (n: i64): i64 =>
+  // Below `QUIC_MAX_VARINT`, so the unsigned sum cannot wrap.
+  n < QUIC_MAX_VARINT ? toI64(toU64(n) + 1) : n
+
+/**
  * The packet numbers received in one space. `ranges` holds `count` pairs
  * `[smallest, largest]`, highest first and never touching; `largest` is the
  * largest packet number received, or -1 before the first.
@@ -68,7 +76,8 @@ export class QuicAckRanges {
    * `QUIC_ACK_MAX_RANGES` ranges.
    */
   constructor() {
-    this.ranges = new Array<i64>(QUIC_ACK_MAX_RANGES * 2)
+    // 64 slots, which a u16 length holds.
+    this.ranges = new Array<i64>(toU16(QUIC_ACK_MAX_RANGES * 2))
   }
 
   /**
@@ -78,8 +87,13 @@ export class QuicAckRanges {
    * @returns The range's smallest packet number, or -1 for an index outside the storage.
    */
   low(k: i32): i64 {
+    // Below half the storage, `k * 2` cannot wrap.
+    const half: i32 = toI32(this.ranges.length) >>> 1
+    if (k < 0 || k >= half) {
+      return -1
+    }
     const at: i32 = k * 2
-    if (at < 0 || at >= toI32(this.ranges.length)) {
+    if (at >= toI32(this.ranges.length)) {
       return -1
     }
     return this.ranges[at]
@@ -92,8 +106,13 @@ export class QuicAckRanges {
    * @returns The range's largest packet number, or -1 for an index outside the storage.
    */
   high(k: i32): i64 {
+    // Below half the storage, `k * 2 + 1` cannot wrap.
+    const half: i32 = toI32(this.ranges.length) >>> 1
+    if (k < 0 || k >= half) {
+      return -1
+    }
     const at: i32 = k * 2 + 1
-    if (at < 0 || at >= toI32(this.ranges.length)) {
+    if (at >= toI32(this.ranges.length)) {
       return -1
     }
     return this.ranges[at]
@@ -108,9 +127,14 @@ export class QuicAckRanges {
    * @param high The range's largest packet number, at least `low`.
    */
   set(k: i32, low: i64, high: i64): void {
+    // Below half the storage, `k * 2 + 1` cannot wrap.
+    const half: i32 = toI32(this.ranges.length) >>> 1
+    if (k < 0 || k >= half) {
+      return
+    }
     const at: i32 = k * 2
     const next: i32 = at + 1
-    if (at < 0 || at >= toI32(this.ranges.length) || next < 0 || next >= toI32(this.ranges.length)) {
+    if (at >= toI32(this.ranges.length) || next >= toI32(this.ranges.length)) {
       return
     }
     this.ranges[at] = low
@@ -164,7 +188,8 @@ export class QuicAckRanges {
     while (k < this.count && this.low(k) > pn) {
       k += 1
     }
-    const joinsAbove: boolean = k > 0 && this.low(k - 1) === pn + 1
+    // `pn` is at most 2^62 - 1 here, so one past it cannot wrap.
+    const joinsAbove: boolean = k > 0 && this.low(k - 1) === toI64(toU64(pn) + 1)
     const joinsBelow: boolean = k < this.count && this.high(k) === pn - 1
     if (joinsAbove && joinsBelow) {
       // `pn` closes the hole between two ranges: merge them into the upper one.
@@ -194,11 +219,11 @@ export class QuicAckRanges {
   countEcn(codepoint: i32): void {
     const bits: i32 = codepoint & 3
     if (bits === 2) {
-      this.ect0 = this.ect0 + 1
+      this.ect0 = quicAckCountUp(this.ect0)
     } else if (bits === 1) {
-      this.ect1 = this.ect1 + 1
+      this.ect1 = quicAckCountUp(this.ect1)
     } else if (bits === 3) {
-      this.ce = this.ce + 1
+      this.ce = quicAckCountUp(this.ce)
     }
   }
 
@@ -211,12 +236,16 @@ export class QuicAckRanges {
     return this.ect0 > 0 || this.ect1 > 0 || this.ce > 0
   }
 
-  /** Removes range `k`, moving the lower ones up. */
+  /** Removes range `k`, moving the lower ones up; `k` is a held range, below `count`. */
   private remove(k: i32): void {
-    for (let j: i32 = k; j + 1 < this.count; j += 1) {
-      this.set(j, this.low(j + 1), this.high(j + 1))
+    const count: i32 = this.count
+    if (count <= 0 || k < 0 || k >= count) {
+      return
     }
-    this.count = this.count - 1
+    for (let j: i32 = k + 1; j < count; j += 1) {
+      this.set(j - 1, this.low(j), this.high(j))
+    }
+    this.count = count - 1
   }
 
   /**
@@ -225,19 +254,22 @@ export class QuicAckRanges {
    * if `pn` itself would be that lowest range, it is the one dropped.
    */
   private insert(k: i32, pn: i64): void {
-    if (this.count === QUIC_ACK_MAX_RANGES) {
-      if (k === this.count) {
+    let count: i32 = this.count
+    if (count === QUIC_ACK_MAX_RANGES) {
+      if (k === count) {
         this.floor = pn
         return
       }
-      this.floor = this.high(this.count - 1)
-      this.count = this.count - 1
+      this.floor = this.high(QUIC_ACK_MAX_RANGES - 1)
+      count = QUIC_ACK_MAX_RANGES - 1
     }
-    for (let j: i32 = this.count; j > k; j -= 1) {
+    // `k` is 0 or more, so `j > 0` adds nothing but keeps `j - 1` from wrapping.
+    for (let j: i32 = count; j > 0 && j > k; j -= 1) {
       this.set(j, this.low(j - 1), this.high(j - 1))
     }
     this.set(k, pn, pn)
-    this.count = this.count + 1
+    // `count` is below `QUIC_ACK_MAX_RANGES` here, so one more cannot wrap.
+    this.count = toI32(toU32(count) + 1)
   }
 
   /**
