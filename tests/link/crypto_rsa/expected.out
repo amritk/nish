@@ -70,6 +70,8 @@ PASS  PSS with a padding byte of 01 is refused
 PASS  PSS with 02 before the salt is refused
 PASS  PSS verifies under a 2049-bit key
 PASS  a 2049-bit key's signature of 2^2048 plus a block is refused
+PASS  a 2049-bit key's PSS signature that starts with a zero byte verifies
+PASS  that signature without its zero byte, as long as the block, is refused
 PASS  PSS SHA-512 verifies under a 1024-bit key
 PASS  a salt too long for a 1024-bit key and SHA-512 is refused
-rsa: 74 passed, 0 failed, 0 skipped
+rsa: 76 passed, 0 failed, 0 skipped

@@ -7,3 +7,10 @@ modulus tag 0x03: null
 exponent tag 0x04: null
 four-byte length form: null
 last byte cut: null
+SEQUENCE of the modulus alone: null
+exponent tag with no length: null
+exponent length 0x81 with no octet after it: null
+exponent length 0x82 with one octet after it: null
+empty exponent: null
+exponent of a lone zero byte: null
+exponent 65537 after the same modulus: key

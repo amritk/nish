@@ -9,10 +9,10 @@ tests/link/crypto_rsa_der_refusals with build/nish in the debug profile
 with --allow-panics, as tests/run.js builds a case; and
 runs both. A mutation is caught when either run exits nonzero: a failing
 check, or a debug-profile panic. The file is restored in a `finally`, so
-`git diff std/crypto/rsa.ts` is empty afterwards. The rules in UNREACHABLE are
-defences another rule makes unreachable (the record,
-docs/security/crypto-rsa.md, says which rule for each); every other rule must
-be caught. Exits 1 when one is not, or when a pattern no longer matches.
+`git diff std/crypto/rsa.ts` is empty afterwards. The rules in UNCAUGHT are
+ones no test can catch alone, each with the rule or caller that answers for
+it, which the run prints; every other rule must be caught, and each of those
+must be missed. Exits 1 when one is not, or when a pattern no longer matches.
 """
 import os, subprocess, sys
 
@@ -60,7 +60,7 @@ MUTATIONS = [
     ("empty n or e", "if (nLength === 0 || eLength === 0) {", "if (false) {"),
     ("min bits", *drop(KEY, "bits < RSA_MIN_BITS || ")),
     ("max bits", *drop(KEY, "bits > RSA_MAX_BITS || ")),
-    ("odd n", *drop(KEY, " || (nLast & 1) === 0")),
+    ("odd n", KEY, KEY.replace("(nLast & 1) === 0", "nLast < 0")),
     ("e len", *drop(KEY, " || eLength > 4")),
     ("odd e", "if ((eLast & 1) === 0 || (eLength === 1 && eLast < 3)) {", "if (eLength === 1 && eLast < 3) {"),
     ("e min", "if ((eLast & 1) === 0 || (eLength === 1 && eLast < 3)) {", "if ((eLast & 1) === 0) {"),
@@ -90,30 +90,37 @@ MUTATIONS = [
     ("pss room", *drop(PSS_B, " || emLen < hashSize + saltLen + 2")),
     ("pss em len", "if (emLength !== emLen) {", "if (false) {"),
     ("pss top", "if (i === 0 && (toI32(em[i]) & ~topMask) !== 0) {", "if (false) {"),
-    ("pss bc", "if (trailer !== 0xbc) {", "if (false) {"),
+    ("pss bc", "if (trailer !== 0xbc) {", "if (trailer < 0) {"),
     ("pss zeros", "if (v !== 0) {", "if (false) {"),
     ("pss sep", "if (v !== 0x01) {", "if (false) {"),
-    ("pss separated", "if (!separated) {", "if (false) {"),
+    ("pss separated", "if (!separated) {", "if (!separated && saltLen < 0) {"),
     ("pss hash", "return timingSafeEqual(rsaDigest(hash, prime), h)", "return true"),
 ]
-UNREACHABLE = {
-    "fits",
-    "bit length cap",
-    "empty n or e",
-    "pow n size",
-    "pow s len",
-    "pow e bits",
-    "open size",
-    "open short",
-    "pkcs hash0",
-    "pkcs hash max",
-    "pkcs k max",
-    "pss hash0",
-    "pss hash max",
-    "pss bits",
-    "pss em size",
-    "pss em len",
-    "pss separated",
+# Each rule no test catches, and the rule that answers for it.
+UNCAUGHT = {
+    "element end": "every caller passes end = der.length, and an end below 2 leaves at > end - 2 true for every at >= 0",
+    "int range": "start is a span's start, at least at + 2 >= 2",
+    "empty int": "an empty modulus reads e's tag 0x02 as its contents' first byte and comes back empty, refused by `empty n or e`; an empty exponent ends the buffer, so start >= total refuses it",
+    "int in der": "a span ends at most at end = der.length (`fits`), and a start at der.length is a start at end",
+    "fits": "a span past der.length is refused after it returns: the SEQUENCE's by `seq end`, the modulus's by the exponent's `element at`, the exponent's by `e end`",
+    "bit length cap": "every array it is given is a DER INTEGER's contents, at most 65535 bytes under a two-octet length",
+    "empty n or e": "`empty int` refuses an INTEGER with no contents and `lone zero` one of a zero byte alone, so a read INTEGER has a byte",
+    "pow n size": "a parsed modulus is 1024 to 8192 bits, 128 to 1024 bytes (`min bits`, `max bits`)",
+    "pow s len": "rsaOpen passes only a signature exactly as long as n (`sig len`)",
+    "pow e bits": "a parsed exponent is odd and at least 3 (`odd e`, `e min`)",
+    "open size": "PKCS#1 v1.5 passes k, the modulus's length, and PSS emLen = (bits + 6) >> 3, which is 128 to k (`pss em size`)",
+    "open short": "rsaModPow answers exactly n.length bytes, and size is at most n.length",
+    "pkcs hash0": "an unknown id has hashSize 0 but rsaDigest still answers a 32-byte SHA-256 digest, so `expected` is k + 32 bytes and `pkcs compare` refuses it (the hash id 0 and 4 tests)",
+    "pkcs hash max": "rsaHashSize answers at most 64",
+    "pkcs k max": "a parsed modulus is at most 1024 bytes (`max bits`)",
+    "pss hash0": "an unknown id has hashSize 0, so h is empty, and the 32-byte SHA-256 digest rsaDigest answers never equals it (`pss hash`; the PSS hash id 0 test)",
+    "pss hash max": "rsaHashSize answers at most 64",
+    "pss salt neg": "a negative salt puts the zeros through the whole data block, so no 0x01 is read and `!separated` refuses it",
+    "pss bits": "a parsed modulus is 1024 to 8192 bits (`min bits`, `max bits`)",
+    "pss em size": "emLen is (bits + 6) / 8 for 1024 to 8192 bits",
+    "pss room": "a salt too long for the block makes the zeros' count negative, so no 0x01 is read and `!separated` refuses it",
+    "pss em len": "rsaOpen answers exactly emLen bytes (`open short`, `top zeros`)",
+    "pss separated": "with a salt of 0 or more and room for it, the 0x01's index is inside the data block, so the loop always reaches it",
 }
 
 only = sys.argv[1:]
@@ -153,10 +160,13 @@ try:
         caught_count += caught
         ran += 1
         print(f"{name}: {'caught' if caught else 'missed'} {' '.join(notes)}", flush=True)
-        if caught == (name in UNREACHABLE):
+        if caught == (name in UNCAUGHT):
             bad.append(name)
 finally:
     open(P, "w").write(orig)
 print(f"{caught_count} of {ran} rules caught")
-print(f"{len(bad)} unexpected: {', '.join(bad)}" if bad else "every reachable rule caught, every unreachable one missed")
+for name, _, _ in MUTATIONS:
+    if name in UNCAUGHT and (not only or name in only):
+        print(f"  uncaught {name}: {UNCAUGHT[name]}")
+print(f"{len(bad)} unexpected: {', '.join(bad)}" if bad else "every rule caught except those listed, each missed")
 sys.exit(1 if bad else 0)
