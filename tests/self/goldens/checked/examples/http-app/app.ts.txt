@@ -26,6 +26,7 @@ const NOT_FOUND: i32 = 404
 const METHOD_NOT_ALLOWED: i32 = 405
 const INSUFFICIENT_STORAGE: i32 = 507
 const ZERO: i32 = 0
+const NO_ID: i32 = -1
 struct Config (class) size=32 align=8 exported
   field port: i32 index=0 offset=0 initialized
   field maxNotes: i32 index=1 offset=4 initialized
@@ -132,42 +133,42 @@ function App.dispatch(this: App, req: HttpRequest): i32 -> @App.dispatch [export
   local +24:15 text: string | null (const)
   callee +24:37 jsonField -> @nish.jsonField
   callee +26:11 logRefusal -> @logRefusal
-  callee +26:22 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
-  local +29:15 id: i32 (const)
-  callee +29:25 Notes.add -> @Notes.add
-  callee +31:11 logRefusal -> @logRefusal
-  callee +31:22 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
-  callee +39:9 writeNote -> @writeNote
-  callee +39:19 HttpHandler.json -> @nish.HttpHandler.json
-  callee +40:9 logRefusal -> @logRefusal
-  callee +40:20 HttpHandler.trySendJson -> @nish.HttpHandler.trySendJson
-  local +44:15 at: i32 (const)
-  callee +44:25 Notes.find -> @Notes.find
-  callee +44:41 HttpRequest.tryParamDecimal -> @nish.HttpRequest.tryParamDecimal
-  callee +46:11 logRefusal -> @logRefusal
-  callee +46:22 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
-  callee +49:9 writeNote -> @writeNote
-  callee +49:19 HttpHandler.json -> @nish.HttpHandler.json
-  callee +50:9 logRefusal -> @logRefusal
-  callee +50:20 HttpHandler.trySendJson -> @nish.HttpHandler.trySendJson
-  callee +54:14 Notes.remove -> @Notes.remove
-  callee +54:32 HttpRequest.tryParamDecimal -> @nish.HttpRequest.tryParamDecimal
+  callee +27:13 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
+  local +36:15 id: i32 (const)
+  callee +36:25 Notes.add -> @Notes.add
+  callee +38:11 logRefusal -> @logRefusal
+  callee +39:13 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
+  callee +48:9 writeNote -> @writeNote
+  callee +48:19 HttpHandler.json -> @nish.HttpHandler.json
+  callee +49:9 logRefusal -> @logRefusal
+  callee +49:20 HttpHandler.trySendJson -> @nish.HttpHandler.trySendJson
+  local +53:15 at: i32 (const)
+  callee +53:25 Notes.find -> @Notes.find
+  callee +53:41 HttpRequest.tryParamDecimal -> @nish.HttpRequest.tryParamDecimal
   callee +55:11 logRefusal -> @logRefusal
   callee +55:22 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
-  callee +58:9 logRefusal -> @logRefusal
-  callee +58:20 HttpHandler.tryEmpty -> @nish.HttpHandler.tryEmpty
-  local +61:15 files: StaticFiles | null (const)
-  local +63:15 start: Result<i32, string> (const)
-  callee +63:44 HttpRequest.tryParamStart -> @nish.HttpRequest.tryParamStart
-  local +64:15 end: Result<i32, string> (const)
-  callee +64:42 HttpRequest.tryParamEnd -> @nish.HttpRequest.tryParamEnd
-  local +67:17 served: Result<i32, string> (const)
-  callee +67:47 StaticFiles.tryServeHandler -> @nish.StaticFiles.tryServeHandler
-  callee +76:9 logRefusal -> @logRefusal
-  callee +76:20 HttpHandler.tryRefuse -> @nish.HttpHandler.tryRefuse
-  local +81:15 status: i32 (const)
-  callee +82:9 logRefusal -> @logRefusal
-  callee +82:20 HttpHandler.tryRefuse -> @nish.HttpHandler.tryRefuse
+  callee +58:9 writeNote -> @writeNote
+  callee +58:19 HttpHandler.json -> @nish.HttpHandler.json
+  callee +59:9 logRefusal -> @logRefusal
+  callee +59:20 HttpHandler.trySendJson -> @nish.HttpHandler.trySendJson
+  callee +63:14 Notes.remove -> @Notes.remove
+  callee +63:32 HttpRequest.tryParamDecimal -> @nish.HttpRequest.tryParamDecimal
+  callee +64:11 logRefusal -> @logRefusal
+  callee +64:22 HttpHandler.tryProblem -> @nish.HttpHandler.tryProblem
+  callee +67:9 logRefusal -> @logRefusal
+  callee +67:20 HttpHandler.tryEmpty -> @nish.HttpHandler.tryEmpty
+  local +70:15 files: StaticFiles | null (const)
+  local +72:15 start: Result<i32, string> (const)
+  callee +72:44 HttpRequest.tryParamStart -> @nish.HttpRequest.tryParamStart
+  local +73:15 end: Result<i32, string> (const)
+  callee +73:42 HttpRequest.tryParamEnd -> @nish.HttpRequest.tryParamEnd
+  local +76:17 served: Result<i32, string> (const)
+  callee +76:47 StaticFiles.tryServeHandler -> @nish.StaticFiles.tryServeHandler
+  callee +85:9 logRefusal -> @logRefusal
+  callee +85:20 HttpHandler.tryRefuse -> @nish.HttpHandler.tryRefuse
+  local +90:15 status: i32 (const)
+  callee +91:9 logRefusal -> @logRefusal
+  callee +91:20 HttpHandler.tryRefuse -> @nish.HttpHandler.tryRefuse
 function serveTurn(app: App, timeoutMs: i32): void -> @serveTurn [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpHandler.wait

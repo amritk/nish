@@ -306,6 +306,9 @@ class Request
 | `path(): string` | The path: the target up to its `?`, still percent-encoded. |
 | `query(name: string): string` | The first query parameter named `name`, form-decoded (`+` as a space, `%XX` as its byte). |
 | `text(): string` | The body as text. |
+| `tryParam(k: i32): Result<string, string>` | Route parameter `k`, percent-decoded, as `param` reads it, or an error naming the parameter the route does not have. |
+| `tryParamMalformed(k: i32): Result<boolean, string>` | Whether route parameter `k` holds a malformed percent escape, as `paramMalformed` answers it, or an error naming the parameter the route does not have. |
+| `tryParamNumber(k: i32): Result<i32, string>` | Route parameter `k` read as a decimal number, as `paramNumber` reads it, or an error naming the parameter the route does not have. |
 
 ### Response
 
@@ -327,6 +330,7 @@ class Response
 | `bytes(type: string, buf: u8[], off: i32, len: i32): Response` | Sets a body of bytes with a content type. |
 | `json(s: string): Response` | Sets a JSON body the program wrote. |
 | `text(s: string): Response` | Sets a plain-text body. |
+| `tryBytes(type: string, buf: u8[], off: i32, len: i32): Result<Response, string>` | Sets a body of bytes with a content type, as `bytes` does, or an error when the window lies outside `buf`; nothing is set on an error. |
 
 ### ServeLimits
 

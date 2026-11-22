@@ -167,7 +167,11 @@ const staticPut = (out: u8[], i: i32, v: i32): void => {
  */
 const staticBytes = (n: i32): u8[] => {
   if (n <= 65535) {
-    return new Array<u8>(toU16(n < 0 ? 0 : n))
+    let size: i32 = 0
+    if (n > 0) {
+      size = n
+    }
+    return new Array<u8>(toU16(size))
   }
   const out: u8[] = new Array<u8>(65535)
   for (let i: i32 = 65535; i < n; i++) {
@@ -232,7 +236,8 @@ export const staticContentType = (name: string): string => {
     while (
       k < length &&
       k < 65536 &&
-      staticChar(STATIC_TYPES, staticAdd(at, k)) === staticLower(staticChar(name, staticAdd(dot, staticAdd(1, k))))
+      staticChar(STATIC_TYPES, staticAdd(at, k)) ===
+        staticLower(staticChar(name, staticAdd(dot, staticAdd(1, k))))
     ) {
       k++
     }
@@ -296,7 +301,11 @@ const staticDigits = (out: u8[], at: i32, v: i64, radix: i64): i32 => {
 const staticTwo = (b: u8[], at: i32): i32 => {
   const hi: i32 = staticByte(b, at)
   const lo: i32 = staticByte(b, staticAdd(at, 1))
-  return hi < 48 || hi > 57 || lo < 48 || lo > 57 ? -1 : 10 * (hi - 48) + (lo - 48)
+  if (hi < 48 || hi > 57 || lo < 48 || lo > 57) {
+    return -1
+  }
+  const ten: i32 = 10
+  return ten * (hi - 48) + (lo - 48)
 }
 
 /** The month names, three letters each from January. */
@@ -399,7 +408,10 @@ const staticDate = (b: u8[], start: i32, end: i32): i64 => {
   const y: i32 = year
   const dayOfYear: i32 = (153 * mp + 2) / 5 + day - 1
   const leaps: i32 = staticAdd(staticSub(y / 4, y / 100), y / 400)
-  const days: i32 = staticSub(staticAdd(staticAdd(toI32(toI64(toU64(y) * toU64(365))), leaps), dayOfYear), 719468)
+  const days: i32 = staticSub(
+    staticAdd(staticAdd(toI32(toI64(toU64(y) * toU64(365))), leaps), dayOfYear),
+    719468
+  )
   // Worked in `u64`, whose wrapping has the bits of the signed result: `days`
   // is within 2^22 of 0, so the seconds never wrap.
   return toI64(toU64(days) * toU64(86400) + toU64(3600 * hour + 60 * minute + second))
@@ -715,7 +727,13 @@ export class StaticFiles {
     const names: u8[][] = []
     const values: u8[][] = []
     this.staticFields(status, names, values)
-    const started: Result<i32, string> = h.tryStart(r, status, names, values, toI32(this.staticBodyLength(status)))
+    const started: Result<i32, string> = h.tryStart(
+      r,
+      status,
+      names,
+      values,
+      toI32(this.staticBodyLength(status))
+    )
     if (started.isErr()) {
       this.staticClose()
       return Err(started.error)
@@ -1081,7 +1099,12 @@ export class StaticFiles {
       if (b === 42) {
         return true
       }
-      if (b === 87 && staticByte(head, staticAdd(k, 1)) === 47 && staticByte(head, staticAdd(k, 2)) === 34 && staticAdd(k, 2) < e) {
+      if (
+        b === 87 &&
+        staticByte(head, staticAdd(k, 1)) === 47 &&
+        staticByte(head, staticAdd(k, 2)) === 34 &&
+        staticAdd(k, 2) < e
+      ) {
         k = staticAdd(k, 2)
       } else if (b === 34) {
         let close: i32 = k + 1
@@ -1275,7 +1298,6 @@ export class StaticFiles {
     mtimes[at] = this.mtime
     this.slot = at
   }
-
 
   /**
    * How many body bytes from `pos` are ready to write: the rest of the range

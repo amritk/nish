@@ -27,6 +27,8 @@ const METHOD_NOT_ALLOWED: i32 = 405
 const INSUFFICIENT_STORAGE: i32 = 507
 
 const ZERO: i32 = 0
+/** The id no note has, for a parameter that is not a decimal. */
+const NO_ID: i32 = -1
 
 /** What the command line set. */
 export class Config {
@@ -177,17 +179,26 @@ export class App {
       case CREATE: {
         const text: string | null = jsonField(String.fromBytes(req.body, ZERO, req.bodyLength), "text")
         if (text === null) {
-          logRefusal(h.tryProblem(req, BAD_REQUEST, "Bad Request", 'the body is a JSON object with a string field "text"'))
+          logRefusal(
+            h.tryProblem(
+              req,
+              BAD_REQUEST,
+              "Bad Request",
+              'the body is a JSON object with a string field "text"'
+            )
+          )
           return BAD_REQUEST
         }
         const id: i32 = this.notes.add(text)
         if (id < 0) {
-          logRefusal(h.tryProblem(
-            req,
-            INSUFFICIENT_STORAGE,
-            "Insufficient Storage",
-            `the store holds ${this.notes.capacity} notes`
-          ))
+          logRefusal(
+            h.tryProblem(
+              req,
+              INSUFFICIENT_STORAGE,
+              "Insufficient Storage",
+              `the store holds ${this.notes.capacity} notes`
+            )
+          )
           return INSUFFICIENT_STORAGE
         }
         writeNote(h.json(), id, text)
@@ -195,7 +206,7 @@ export class App {
         return CREATED
       }
       case SHOW: {
-        const at: i32 = this.notes.find(req.tryParamDecimal(ZERO).unwrapOr(-1))
+        const at: i32 = this.notes.find(req.tryParamDecimal(ZERO).unwrapOr(NO_ID))
         if (at < 0 || at >= toI32(this.notes.ids.length) || at >= toI32(this.notes.texts.length)) {
           logRefusal(h.tryProblem(req, NOT_FOUND, "Not Found", "there is no note with that id"))
           return NOT_FOUND
@@ -205,7 +216,7 @@ export class App {
         return OK
       }
       case REMOVE:
-        if (!this.notes.remove(req.tryParamDecimal(ZERO).unwrapOr(-1))) {
+        if (!this.notes.remove(req.tryParamDecimal(ZERO).unwrapOr(NO_ID))) {
           logRefusal(h.tryProblem(req, NOT_FOUND, "Not Found", "there is no note with that id"))
           return NOT_FOUND
         }

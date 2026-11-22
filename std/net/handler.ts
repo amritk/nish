@@ -617,11 +617,21 @@ export class HttpRequest {
     let at: i32 = pathEnd + 1
     while (at < end) {
       let pairEnd: i32 = at
-      while (pairEnd >= 0 && pairEnd < end && pairEnd < toI32(this.head.length) && toI32(this.head[pairEnd]) !== 38) {
+      while (
+        pairEnd >= 0 &&
+        pairEnd < end &&
+        pairEnd < toI32(this.head.length) &&
+        toI32(this.head[pairEnd]) !== 38
+      ) {
         pairEnd += 1
       }
       let keyEnd: i32 = at
-      while (keyEnd >= 0 && keyEnd < pairEnd && keyEnd < toI32(this.head.length) && toI32(this.head[keyEnd]) !== 61) {
+      while (
+        keyEnd >= 0 &&
+        keyEnd < pairEnd &&
+        keyEnd < toI32(this.head.length) &&
+        toI32(this.head[keyEnd]) !== 61
+      ) {
         keyEnd += 1
       }
       if (handlerFormIs(this.head, at, keyEnd, name)) {
@@ -879,7 +889,9 @@ export class HttpHandler {
    * @returns true when it was readable in the last turn; false for an id outside the range
    */
   fired(id: i32): boolean {
-    return id >= 0 && id < HANDLER_MAX_WATCHED && id < toI32(this.watchedFired.length) && this.watchedFired[id]
+    return (
+      id >= 0 && id < HANDLER_MAX_WATCHED && id < toI32(this.watchedFired.length) && this.watchedFired[id]
+    )
   }
 
   /**
@@ -902,7 +914,10 @@ export class HttpHandler {
     let timeout: i32 = timeoutMs
     if (this.acceptRestUntil > 0 && !this.draining) {
       // Wake for the listener's return, whatever the program asked.
-      const rest: i32 = handlerAdd(toI32(handlerSince(monotonicNanos(), this.acceptRestUntil) / toI64(1000000)), 1)
+      const rest: i32 = handlerAdd(
+        toI32(handlerSince(monotonicNanos(), this.acceptRestUntil) / toI64(1000000)),
+        1
+      )
       if (timeout < 0 || rest < timeout) {
         timeout = rest
       }
@@ -1247,7 +1262,11 @@ export class HttpHandler {
     )
     if (route === ROUTER_METHOD_NOT_ALLOWED && r.methodIs("HEAD")) {
       const get: i32 = this.router.methodIndex("GET")
-      if (get >= 0 && get < toI32(this.router.methodStart.length) && get < toI32(this.router.methodEnd.length)) {
+      if (
+        get >= 0 &&
+        get < toI32(this.router.methodStart.length) &&
+        get < toI32(this.router.methodEnd.length)
+      ) {
         const viaGet: i32 = this.router.match(
           this.router.methodBytes,
           this.router.methodStart[get],
@@ -1483,7 +1502,12 @@ export class HttpHandler {
     const slotGen: i32[] = this.slotGen
     const current: i32[] = this.current
     // Every slot the carrier hands has a place in all three.
-    if (slot < 0 || slot >= toI32(open.length) || slot >= toI32(slotGen.length) || slot >= toI32(current.length)) {
+    if (
+      slot < 0 ||
+      slot >= toI32(open.length) ||
+      slot >= toI32(slotGen.length) ||
+      slot >= toI32(current.length)
+    ) {
       return
     }
     open[slot] = false
@@ -1545,7 +1569,12 @@ export class HttpHandler {
         r.state = HANDLER_HELD
         let sent: i32 = HANDLER_REFUSED
         if (r.refusal === 413) {
-          sent = this.problemCore(r, toI32(413), "Content Too Large", "the body decodes to more than this server takes")
+          sent = this.problemCore(
+            r,
+            toI32(413),
+            "Content Too Large",
+            "the body decodes to more than this server takes"
+          )
         } else {
           sent = this.problemCore(
             r,
@@ -1893,7 +1922,9 @@ export class HttpHandler {
     if (handlerSub(toI32(r.pending.length), r.pendingEnd) < len) {
       if (r.pendingStart > 0 || toI32(r.pending.length) < want) {
         const target: u8[] =
-          toI32(r.pending.length) < want ? handlerBytes(handlerGrown(toI32(r.pending.length), want)) : r.pending
+          toI32(r.pending.length) < want
+            ? handlerBytes(handlerGrown(toI32(r.pending.length), want))
+            : r.pending
         copyBytes(target, HANDLER_ZERO, r.pending, r.pendingStart, live)
         r.pending = target
         r.pendingStart = 0
@@ -1943,7 +1974,9 @@ export class HttpHandler {
     const short: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
     if (conn.responseFraming >= 0 && short > 0 && !conn.responseEmpty) {
       this.abandon(r)
-      return this.refused(`HttpHandler.end: the body is ${short} byte(s) short of the length the response declared`)
+      return this.refused(
+        `HttpHandler.end: the body is ${short} byte(s) short of the length the response declared`
+      )
     }
     this.finish(r, conn)
     this.drive(slot)
@@ -1977,7 +2010,14 @@ export class HttpHandler {
    * @param len how many body bytes to send
    * @returns `Ok` with what `send` answers, or `Err` saying which contract the call broke
    */
-  trySend(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): Result<i32, string> {
+  trySend(
+    r: HttpRequest,
+    status: i32,
+    contentType: u8[],
+    body: u8[],
+    off: i32,
+    len: i32
+  ): Result<i32, string> {
     return this.checked(this.sendCore(r, status, contentType, body, off, len))
   }
 
@@ -2101,7 +2141,15 @@ export class HttpHandler {
   }
 
   private emptyCore(r: HttpRequest, status: i32): i32 {
-    return this.sendFieldsCore(r, status, this.noFields, this.noFields, this.scratch, HANDLER_ZERO, HANDLER_ZERO)
+    return this.sendFieldsCore(
+      r,
+      status,
+      this.noFields,
+      this.noFields,
+      this.scratch,
+      HANDLER_ZERO,
+      HANDLER_ZERO
+    )
   }
 
   /**
