@@ -20774,9 +20774,18 @@ const pendingNotes = () => {
  * rendered `text` counts: an error message that happens to quote the words —
  * the generator lists the unconventional subjects it skipped — is not the
  * release notes carrying them.
+ *
+ * The words count as written or as `scripts/changelog-gen.mjs`'s `renderEntry`
+ * writes a title: it raises the first letter unless the title starts with a
+ * backtick. A declaration copies its words from the squash subject, which a
+ * conventional commit keeps lower case, so without this the words of a
+ * subject's opening are never in the notes that subject became.
  */
-const isNamed = (words, changelogText, pending) =>
-  changelogText.includes(words) || (pending?.text?.includes(words) ?? false)
+const isNamed = (words, changelogText, pending) => {
+  const rendered = words.startsWith("`") ? words : words.charAt(0).toUpperCase() + words.slice(1)
+  const has = (text) => text.includes(words) || text.includes(rendered)
+  return has(changelogText) || (pending?.text !== undefined && has(pending.text))
+}
 
 /**
  * `isNamed` over inputs no repository produces, on every run, for the reason
@@ -20801,6 +20810,13 @@ const selfCheckNotes = () => {
     [words, "## [Unreleased]\n", { error: `skipped 1 commit: abc1234 ${words}` }, false],
     // Not asked for at all.
     [words, "## [Unreleased]\n", null, false],
+    // Copied from a subject's opening, lower case: the generator raised its
+    // first letter in both the file and the pending section.
+    ["prove bounds through toI32(length)", released, null, true],
+    ["prove bounds through toI32(length)", "## [Unreleased]\n", pending, true],
+    // Only the first letter is raised, and a backtick title keeps its case.
+    ["prove Bounds through toI32(length)", released, null, false],
+    ["`toI32` bounds", "- checker: `ToI32` bounds\n", null, false],
   ]
   for (const [w, changelogText, notes, want] of cases) {
     const got = isNamed(w, changelogText, notes)
