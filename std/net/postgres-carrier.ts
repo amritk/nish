@@ -566,10 +566,7 @@ export class PgCarrier {
    *   waiting, the batcher's queue is full or the carrier is closed.
    */
   runInt(req: HttpRequest | null, batcher: i32, key: i64, tag: i32): i32 {
-    const batch: PgCarrierBatch | null = this.batcher(batcher)
-    if (batch === null) {
-      panic("nish/net/postgres-carrier: PgCarrier batcher id out of range")
-    }
+    const batch: PgCarrierBatch = this.attached(batcher)
     const held: PgCarrierQuery | null = this.take(req, tag)
     if (held === null) {
       return PG_CARRIER_FULL
@@ -600,10 +597,7 @@ export class PgCarrier {
    *   key too long for one execution.
    */
   runText(req: HttpRequest | null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32): i32 {
-    const batch: PgCarrierBatch | null = this.batcher(batcher)
-    if (batch === null) {
-      panic("nish/net/postgres-carrier: PgCarrier batcher id out of range")
-    }
+    const batch: PgCarrierBatch = this.attached(batcher)
     const held: PgCarrierQuery | null = this.take(req, tag)
     if (held === null) {
       return PG_CARRIER_FULL
@@ -1496,6 +1490,16 @@ export class PgCarrier {
   private batcher(id: i32): PgCarrierBatch | null {
     const batchers: PgCarrierBatch[] = this.batchers
     return id >= 0 && id < toI32(batchers.length) ? batchers[id] : null
+  }
+
+  // The batcher a `runInt` or `runText` caller names; panics on an id `attach`
+  // never gave, the one contract those two keep. The frame paths use `batcher`.
+  private attached(id: i32): PgCarrierBatch {
+    const batch: PgCarrierBatch | null = this.batcher(id)
+    if (batch === null) {
+      panic("nish/net/postgres-carrier: PgCarrier batcher id out of range")
+    }
+    return batch
   }
 
   // A free query for `req` and `tag`, or null when none is free or the carrier is closed.

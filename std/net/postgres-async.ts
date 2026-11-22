@@ -735,14 +735,10 @@ export class PgAsyncResult {
    * @returns The number.
    */
   int(row: i32, column: i32, fallback: i32): i32 {
-    const at: i32 = this.cell(row, column)
-    if (at < 0 || at >= toI32(this.nulls.length) || at >= toI32(this.values.length)) {
-      panic("nish/net/postgres-async: a cell out of range")
-    }
-    if (this.nulls[at]) {
+    if (this.isNull(row, column)) {
       return fallback
     }
-    return pgAsyncDecimal(this.values[at], fallback)
+    return pgAsyncDecimal(this.text(row, column), fallback)
   }
 
   /**
