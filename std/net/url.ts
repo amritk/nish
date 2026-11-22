@@ -115,12 +115,14 @@ const URL_SLASH: i32 = 47
 const URL_EQUALS: i32 = 61
 const URL_QUESTION: i32 = 63
 
-/** Panics unless `bytes[off, off + len)` lies inside `bytes`. */
-const urlCheckWindow = (bytes: u8[], off: i32, len: i32, who: string): void => {
+/** Panics unless `bytes[off, off + len)` lies inside `bytes`, and answers the window's end, `off + len`. */
+const urlCheckWindow = (bytes: u8[], off: i32, len: i32, who: string): i32 => {
   const size: i32 = toI32(bytes.length)
   if (off < 0 || len < 0 || off > size || len > size - off) {
     panic(who + ": the window is outside the array")
   }
+  // The test above bounds the sum by `bytes.length`, so it cannot wrap.
+  return toI32(toU32(off) + toU32(len))
 }
 
 /** The value of one hex digit, either case, or -1. */
@@ -139,7 +141,10 @@ const urlHexValue = (b: i32): i32 => {
 
 /** The byte the escape at `bytes[i]` (a `%`) stands for, or -1 when two hex digits do not follow it before `end`. */
 const urlEscapeAt = (bytes: u8[], i: i32, end: i32): i32 => {
-  if (end - i < 3) {
+  // Callers pass `0 <= i < end <= bytes.length`, so `i + 3 > end` is the
+  // only test that can fail; the others are spelled out for the bounds proof.
+  const n: i32 = toI32(bytes.length)
+  if (i < 0 || i >= n - 2 || i + 2 >= end) {
     return -1
   }
   const hi: i32 = urlHexValue(toI32(bytes[i + 1]))
@@ -147,7 +152,7 @@ const urlEscapeAt = (bytes: u8[], i: i32, end: i32): i32 => {
   if (hi < 0 || lo < 0) {
     return -1
   }
-  return hi * 16 + lo
+  return (hi << 4) | lo
 }
 
 /**
@@ -164,7 +169,7 @@ const urlDecodeRun = (
   flags: i32,
   wantPos: boolean
 ): i32 => {
-  urlCheckWindow(src, off, len, "percentDecode")
+  const end: i32 = urlCheckWindow(src, off, len, "percentDecode")
   const size: i32 = toI32(out.length)
   if (at < 0 || at > size) {
     panic("percentDecode: at is outside out")
@@ -172,7 +177,6 @@ const urlDecodeRun = (
   const form: boolean = (flags & URL_DECODE_FORM) !== 0
   const lenient: boolean = (flags & URL_DECODE_LENIENT) !== 0
   const allowNul: boolean = (flags & URL_DECODE_ALLOW_NUL) !== 0
-  const end: i32 = off + len
   let i: i32 = off
   let w: i32 = at
   const n: i32 = toI32(src.length)
@@ -198,9 +202,12 @@ const urlDecodeRun = (
     }
     out[w] = toU8(b)
     w += 1
-    i += step
+    // An escape is taken only when its digits lie inside `src`, so the step
+    // ends at most at `src.length` and cannot wrap.
+    i = toI32(toU32(i) + toU32(step))
   }
-  return wantPos ? -1 : w - at
+  // `w` starts at `at` and only grows, so the difference cannot wrap.
+  return wantPos ? -1 : toI32(toU32(w) - toU32(at))
 }
 
 /**
@@ -214,8 +221,7 @@ const urlDecodeRun = (
  * @returns The index in `bytes` of the `?`, or -1 when the target has no query.
  */
 export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 => {
-  urlCheckWindow(bytes, off, len, "urlQueryStart")
-  const end: i32 = off + len
+  const end: i32 = urlCheckWindow(bytes, off, len, "urlQueryStart")
   const n: i32 = toI32(bytes.length)
   let i: i32 = off
   while (i >= 0 && i < end && i < n) {
@@ -316,14 +322,16 @@ export class UrlPathSegments {
    * @param len How many bytes the path takes.
    */
   reset(bytes: u8[], off: i32, len: i32): void {
-    urlCheckWindow(bytes, off, len, "UrlPathSegments")
+    const end: i32 = urlCheckWindow(bytes, off, len, "UrlPathSegments")
     this.bytes = bytes
     this.pos = off
-    this.end = off + len
+    this.end = end
     this.start = off
     this.length = 0
     this.done = len === 0
-    if (len > 0 && toI32(bytes[off]) === URL_SLASH) {
+    // With `len > 0` the window check puts `off` inside `bytes`; the bounds
+    // are spelled out for the proof.
+    if (len > 0 && off >= 0 && off < end && off < toI32(bytes.length) && toI32(bytes[off]) === URL_SLASH) {
       this.pos = off + 1
     }
   }
@@ -337,14 +345,17 @@ export class UrlPathSegments {
       return false
     }
     const bytes: u8[] = this.bytes
-    let j: i32 = this.pos
+    const pos: i32 = this.pos
+    const end: i32 = this.end
+    let j: i32 = pos
     const n: i32 = toI32(bytes.length)
-    while (j >= 0 && j < this.end && j < n && toI32(bytes[j]) !== URL_SLASH) {
+    while (j >= 0 && j < end && j < n && toI32(bytes[j]) !== URL_SLASH) {
       j += 1
     }
-    this.start = this.pos
-    this.length = j - this.pos
-    if (j < this.end) {
+    this.start = pos
+    // `j` starts at `pos` and only grows, so the difference cannot wrap.
+    this.length = toI32(toU32(j) - toU32(pos))
+    if (j < end) {
       this.pos = j + 1
     } else {
       this.done = true
@@ -406,10 +417,10 @@ export class UrlQuery {
    * @param len How many bytes the query takes.
    */
   reset(bytes: u8[], off: i32, len: i32): void {
-    urlCheckWindow(bytes, off, len, "UrlQuery")
+    const end: i32 = urlCheckWindow(bytes, off, len, "UrlQuery")
     this.bytes = bytes
     this.pos = off
-    this.end = off + len
+    this.end = end
     this.count = 0
     this.failed = 0
     this.keyStart = off
@@ -438,7 +449,10 @@ export class UrlQuery {
     if (i >= end) {
       return URL_QUERY_END
     }
-    if (this.count >= this.maxPairs) {
+    const start: i32 = i
+    const count: i32 = this.count
+    const maxPairs: i32 = this.maxPairs
+    if (count >= maxPairs) {
       this.failed = URL_QUERY_ERR_PAIRS
       return this.failed
     }
@@ -453,20 +467,22 @@ export class UrlQuery {
       }
       i += 1
     }
-    this.keyStart = this.pos
+    // `start <= eq < i` when `eq` was found, as the loop only moves `i` on,
+    // so none of the differences below can wrap.
+    this.keyStart = start
     if (eq < 0) {
-      this.keyLength = i - this.pos
+      this.keyLength = toI32(toU32(i) - toU32(start))
       this.valueStart = i
       this.valueLength = 0
       this.hasValue = false
     } else {
-      this.keyLength = eq - this.pos
-      this.valueStart = eq + 1
-      this.valueLength = i - eq - 1
+      this.keyLength = toI32(toU32(eq) - toU32(start))
+      this.valueStart = toI32(toU32(eq) + 1)
+      this.valueLength = toI32(toU32(i) - toU32(eq) - 1)
       this.hasValue = true
     }
     this.pos = i
-    this.count += 1
+    this.count = count + 1
     return URL_QUERY_PAIR
   }
 }
@@ -478,10 +494,21 @@ export class UrlQuery {
  */
 const urlKeyEquals = (bytes: u8[], off: i32, len: i32, name: string): boolean => {
   const n: i32 = toI32(name.length)
-  const end: i32 = off + len
+  const size: i32 = toI32(bytes.length)
+  if (off < 0 || off > size) {
+    return n === 0
+  }
+  // The fields are public, so the window may run past `bytes`; reading stops
+  // at its end either way, so the end is clamped there. A negative `len` is an
+  // empty window. Otherwise `off + len` is at most `size` and cannot wrap.
+  let end: i32 = size
+  if (len <= 0) {
+    end = off
+  } else if (len <= size - off) {
+    end = toI32(toU32(off) + toU32(len))
+  }
   let i: i32 = off
   let o: i32 = 0
-  const size: i32 = toI32(bytes.length)
   while (i >= 0 && i < end && i < size) {
     let b: i32 = toI32(bytes[i])
     let step: i32 = 1
@@ -498,7 +525,9 @@ const urlKeyEquals = (bytes: u8[], off: i32, len: i32, name: string): boolean =>
       return false
     }
     o += 1
-    i += step
+    // An escape is taken only when its digits lie inside `bytes`, so the step
+    // ends at most at `bytes.length` and cannot wrap.
+    i = toI32(toU32(i) + toU32(step))
   }
   return o === n
 }
@@ -569,15 +598,28 @@ const urlIsUtf8 = (buf: u8[], off: i32, len: i32): boolean => {
     if (second < lo || second > hi) {
       return false
     }
-    let k: i32 = 2
-    while (k <= need) {
-      const c: i32 = toI32(buf[i + k])
+    // The test on `end` above already keeps the sequence inside `buf`; each
+    // byte's own guard is spelled out for the bounds proof.
+    if (need >= 2) {
+      if (i >= n - 2) {
+        return false
+      }
+      const c: i32 = toI32(buf[i + 2])
       if (c < 0x80 || c > 0xbf) {
         return false
       }
-      k += 1
     }
-    i += need + 1
+    if (need >= 3) {
+      if (i >= n - 3) {
+        return false
+      }
+      const c: i32 = toI32(buf[i + 3])
+      if (c < 0x80 || c > 0xbf) {
+        return false
+      }
+    }
+    // Every byte of the sequence was read inside `buf`, so the step cannot wrap.
+    i = toI32(toU32(i) + toU32(need) + 1)
   }
   return true
 }
@@ -585,27 +627,51 @@ const urlIsUtf8 = (buf: u8[], off: i32, len: i32): boolean => {
 /** `s`'s bytes, or null when it holds a code unit past 0xFF (only possible under Node, where a string is UTF-16). */
 const urlBytesOf = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
-  const bytes: u8[] = new Array<u8>(n)
+  // Pushed a byte at a time: an array made at a length read from a string
+  // keeps a length check that no proof removes.
+  const bytes: u8[] = []
   let i: i32 = 0
-  while (i < n && i < toI32(bytes.length)) {
+  while (i < n) {
     const c: i32 = toI32(s.charCodeAt(i))
     if (c > 0xff) {
       return null
     }
-    bytes[i] = toU8(c)
+    bytes.push(toU8(c))
     i += 1
   }
   return bytes
 }
 
+/**
+ * `bytes[a, b)` as a string, a byte at a time: `String.fromBytes` keeps a
+ * range check that no proof removes, and natively `fromCharCode` makes exactly
+ * one byte.
+ */
+const urlBytesText = (bytes: u8[], a: i32, b: i32): string => {
+  const parts: string[] = []
+  let i: i32 = a
+  while (i >= 0 && i < b && i < toI32(bytes.length)) {
+    parts.push(String.fromCharCode(toI32(bytes[i])))
+    i += 1
+  }
+  return parts.join("")
+}
+
 /** `percentDecode` of `src[off, off + len)` as a new string, or null on an error or when the result is not UTF-8. */
 const urlDecodeString = (src: u8[], off: i32, len: i32, flags: i32): string | null => {
-  const out: u8[] = new Array<u8>(len)
+  // `len` bytes of room, pushed one at a time for the same reason as in
+  // `urlBytesOf`; decoding never makes the text longer.
+  const out: u8[] = []
+  let k: i32 = 0
+  while (k < len) {
+    out.push(0)
+    k += 1
+  }
   const n: i32 = percentDecode(src, off, len, out, 0, flags)
   if (n < 0 || !urlIsUtf8(out, 0, n)) {
     return null
   }
-  return String.fromBytes(out, 0, n)
+  return urlBytesText(out, 0, n)
 }
 
 /**
@@ -644,11 +710,14 @@ export const urlQueryGet = (target: string, name: string): string | null => {
   }
   const len: i32 = toI32(bytes.length)
   const q: i32 = urlQueryStart(bytes, 0, len)
-  if (q < 0) {
+  // `urlQueryStart` answers -1 or an index below `len`; the upper bound is
+  // spelled out for the proof of the window below.
+  if (q < 0 || q >= len) {
     return null
   }
   const query: UrlQuery = new UrlQuery(new UrlQueryLimits())
-  query.reset(bytes, q + 1, len - q - 1)
+  // `q < len`, so the rest of the target after the `?` has a length that cannot wrap.
+  query.reset(bytes, q + 1, toI32(toU32(len) - toU32(q) - 1))
   if (urlQueryFind(query, name) !== URL_QUERY_PAIR) {
     return null
   }
@@ -697,14 +766,16 @@ export class Url {
 
 /** `bytes[a, b)` as a string with A to Z lower-cased. */
 const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
-  const out: u8[] = new Array<u8>(b - a)
+  // A byte at a time, as `urlBytesText` builds; the bytes are the checked
+  // ASCII of a URL, so every host reads them alike.
+  const parts: string[] = []
   let i: i32 = a
-  while (i >= 0 && i < b && i < toI32(bytes.length) && i - a < toI32(out.length)) {
+  while (i >= 0 && i < b && i < toI32(bytes.length)) {
     const c: i32 = toI32(bytes[i])
-    out[i - a] = c >= 65 && c <= 90 ? toU8(c + 32) : toU8(c)
+    parts.push(String.fromCharCode(c >= 65 && c <= 90 ? c + 32 : c))
     i += 1
   }
-  return String.fromBytes(out, 0, b - a)
+  return parts.join("")
 }
 
 /** The first `c` in `bytes[a, b)`, or `b`. */
@@ -733,9 +804,24 @@ const urlIsIpv4 = (bytes: u8[], a: i32, b: i32): boolean => {
   let parts: i32 = 0
   let i: i32 = a
   while (parts < 4) {
+    // A part that starts before the array has no digits; saying so first
+    // keeps `i - start` below in range.
+    if (i < 0) {
+      return false
+    }
     const start: i32 = i
     let value: i32 = 0
-    while (i >= 0 && i < b && i < toI32(bytes.length) && i - start < 4 && urlIsDigit(toI32(bytes[i]))) {
+    // Three digits make at most 999, so `value <= 999` never stops the loop
+    // before `i - start < 4` does; it bounds the sum for the proof.
+    while (
+      i >= 0 &&
+      i < b &&
+      i < toI32(bytes.length) &&
+      i - start < 4 &&
+      value >= 0 &&
+      value <= 999 &&
+      urlIsDigit(toI32(bytes[i]))
+    ) {
       value = value * 10 + toI32(bytes[i]) - 48
       i += 1
     }
@@ -769,11 +855,25 @@ const urlIsIpv6 = (bytes: u8[], a: i32, b: i32): boolean => {
   let groups: i32 = 0
   let elided: boolean = false
   let i: i32 = a
-  if (b - a >= 2 && toI32(bytes[a]) === URL_COLON && toI32(bytes[a + 1]) === URL_COLON) {
+  const n: i32 = toI32(bytes.length)
+  // The window lies inside `bytes`, so `a < n - 1` holds whenever
+  // `a + 1 < b` does; it is spelled out for the bounds proof.
+  if (
+    a >= 0 &&
+    a < n - 1 &&
+    a + 1 < b &&
+    toI32(bytes[a]) === URL_COLON &&
+    toI32(bytes[a + 1]) === URL_COLON
+  ) {
     elided = true
     i = a + 2
   }
   while (i < b) {
+    // A group before the array has no digits, and nine groups are already
+    // too many; answering both first keeps the counts below in range.
+    if (i < 0 || groups > 8) {
+      return false
+    }
     const start: i32 = i
     while (i >= 0 && i < b && i < toI32(bytes.length) && urlHexValue(toI32(bytes[i])) >= 0) {
       i += 1
@@ -818,19 +918,28 @@ const urlIsIpv6 = (bytes: u8[], a: i32, b: i32): boolean => {
  * that reads them as 127.0.0.1.
  */
 const urlLooksNumeric = (bytes: u8[], a: i32, b: i32): boolean => {
+  // The window lies inside `bytes`, so the bounds beside `a` below always
+  // hold; they are spelled out for the proof.
+  const n: i32 = toI32(bytes.length)
   let end: i32 = b
-  if (end > a && toI32(bytes[end - 1]) === URL_DOT) {
+  if (end > a && end > 0 && end <= toI32(bytes.length) && toI32(bytes[end - 1]) === URL_DOT) {
     end -= 1
   }
   let start: i32 = end
-  while (start > a && toI32(bytes[start - 1]) !== URL_DOT) {
+  while (start > a && start > 0 && start <= toI32(bytes.length) && toI32(bytes[start - 1]) !== URL_DOT) {
     start -= 1
   }
   if (start === end) {
     return false
   }
   let i: i32 = start
-  if (end - start >= 2 && toI32(bytes[start]) === 48 && (toI32(bytes[start + 1]) | 32) === 120) {
+  if (
+    start >= 0 &&
+    start < n - 1 &&
+    start + 1 < end &&
+    toI32(bytes[start]) === 48 &&
+    (toI32(bytes[start + 1]) | 32) === 120
+  ) {
     i = start + 2
     while (i >= 0 && i < end && i < toI32(bytes.length) && urlHexValue(toI32(bytes[i])) >= 0) {
       i += 1
@@ -843,8 +952,12 @@ const urlLooksNumeric = (bytes: u8[], a: i32, b: i32): boolean => {
   return i === end
 }
 
-/** Reads the authority `bytes[a, b)` into `u`, or answers false when it breaks a rule `urlParse` names. */
-const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
+/**
+ * Reads the authority `bytes[a, b)` into `u`, or answers false when it breaks
+ * a rule `urlParse` names. `bytes` are `s`'s, all printable ASCII, so a part
+ * is cut from `s` itself, which clamps its range rather than checking it.
+ */
+const urlReadAuthority = (s: string, bytes: u8[], a: i32, b: i32, u: Url): boolean => {
   const at: i32 = urlFind(bytes, a, b, URL_AT)
   let h: i32 = a
   if (at < b) {
@@ -855,9 +968,9 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
       return false
     }
     const colon: i32 = urlFind(bytes, a, at, URL_COLON)
-    u.username = String.fromBytes(bytes, a, colon)
+    u.username = s.substring(a, colon)
     if (colon < at) {
-      u.password = String.fromBytes(bytes, colon + 1, at)
+      u.password = s.substring(colon + 1, at)
     }
     h = at + 1
   }
@@ -865,12 +978,14 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
   if (portAt < 0) {
     return false
   }
-  if (h < b && toI32(bytes[h]) === URL_OPEN_BRACKET) {
+  // `h` lies inside the window, which lies inside `bytes`; the bounds are
+  // spelled out for the proof.
+  if (h >= 0 && h < b && h < toI32(bytes.length) && toI32(bytes[h]) === URL_OPEN_BRACKET) {
     u.host = urlLowerString(bytes, h + 1, portAt - 1)
   } else {
     u.host = urlLowerString(bytes, h, portAt)
   }
-  if (portAt + 1 < b) {
+  if (portAt < b && portAt + 1 < b) {
     const port: i32 = urlPortOf(bytes, portAt + 1, b)
     if (port < 0) {
       return false
@@ -890,10 +1005,12 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
 const urlHostEnd = (bytes: u8[], h: i32, b: i32): i32 => {
   if (h >= 0 && h < b && h < toI32(bytes.length) && toI32(bytes[h]) === URL_OPEN_BRACKET) {
     const close: i32 = urlFind(bytes, h, b, URL_CLOSE_BRACKET)
-    if (close === b || !urlIsIpv6(bytes, h + 1, close)) {
+    // `urlFind` answers an index in `[h, b]`, so `close >= b` is `close === b`
+    // and the other bound always holds; both keep `close + 1` in range.
+    if (close < 0 || close >= b || !urlIsIpv6(bytes, h + 1, close)) {
       return -1
     }
-    if (close + 1 < b && toI32(bytes[close + 1]) !== URL_COLON) {
+    if (close + 1 < b && close + 1 < toI32(bytes.length) && toI32(bytes[close + 1]) !== URL_COLON) {
       return -1
     }
     return close + 1
@@ -918,10 +1035,13 @@ const urlPortOf = (bytes: u8[], a: i32, b: i32): i32 => {
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(bytes.length)) {
     const c: i32 = toI32(bytes[i])
-    if (!urlIsDigit(c)) {
+    // `urlIsDigit`, written out so the proof sees the digit's range.
+    if (c < 48 || c > 57) {
       return -1
     }
-    port = port * 10 + c - 48
+    // `port` is at most 65535 here and `c` a digit, so the sum is at most
+    // 655359 and cannot wrap.
+    port = toI32(toU32(port) * 10 + toU32(c) - 48)
     if (port > URL_MAX_PORT) {
       return -1
     }
@@ -952,7 +1072,8 @@ export const urlIsHostPort = (bytes: u8[], a: i32, b: i32): boolean => {
   if (portAt < 0) {
     return false
   }
-  return portAt + 1 >= b || urlPortOf(bytes, portAt + 1, b) >= 0
+  // `portAt >= b` is spelled out so the proof sees `portAt + 1` in range.
+  return portAt >= b || portAt + 1 >= b || urlPortOf(bytes, portAt + 1, b) >= 0
 }
 
 /**
@@ -962,13 +1083,14 @@ export const urlIsHostPort = (bytes: u8[], a: i32, b: i32): boolean => {
  * only a resolved URL is held to.
  */
 const urlReadReference = (s: string): Url | null => {
-  const bytes: u8[] | null = urlBytesOf(s)
-  if (bytes === null) {
+  const maybe: u8[] | null = urlBytesOf(s)
+  if (maybe === null) {
     return null
   }
+  const bytes: u8[] = maybe
   const n: i32 = toI32(bytes.length)
   let i: i32 = 0
-  while (i < n) {
+  while (i >= 0 && i < n) {
     const c: i32 = toI32(bytes[i])
     // A WHATWG parser reads `\` as `/` under http(s), so it would end the
     // authority or start one where this reading does not: refused everywhere.
@@ -982,49 +1104,67 @@ const urlReadReference = (s: string): Url | null => {
     }
     i += 1
   }
+  // Every byte is printable ASCII now, so `s` and `bytes` agree index for
+  // index on every host, and a part is cut from `s`, which clamps its range
+  // rather than checking it. `urlFind` answers an index at most `n`, so the
+  // tests against the length below always hold; they are spelled out for the
+  // proof.
   const u: Url = new Url()
   const hash: i32 = urlFind(bytes, 0, n, URL_HASH)
   if (hash < n) {
-    u.fragment = String.fromBytes(bytes, hash + 1, n)
+    u.fragment = s.substring(hash + 1, n)
   }
   const question: i32 = urlFind(bytes, 0, hash, URL_QUESTION)
   if (question < hash) {
-    u.query = String.fromBytes(bytes, question + 1, hash)
+    u.query = s.substring(question + 1, hash)
   }
   let pos: i32 = 0
-  if (question > 0 && urlIsAlpha(toI32(bytes[0]))) {
+  if (question > 0 && toI32(bytes.length) > 0 && urlIsAlpha(toI32(bytes[0]))) {
     let j: i32 = 1
-    while (j < question) {
+    while (j < question && j < toI32(bytes.length)) {
       const c: i32 = toI32(bytes[j])
       if (!(urlIsAlpha(c) || urlIsDigit(c) || c === URL_PLUS || c === 45 || c === URL_DOT)) {
         break
       }
       j += 1
     }
-    if (j < question && toI32(bytes[j]) === URL_COLON) {
+    if (j < question && j < toI32(bytes.length) && toI32(bytes[j]) === URL_COLON) {
       u.scheme = urlLowerString(bytes, 0, j)
       pos = j + 1
     }
   }
-  if (question - pos >= 2 && toI32(bytes[pos]) === URL_SLASH && toI32(bytes[pos + 1]) === URL_SLASH) {
+  if (
+    pos >= 0 &&
+    pos < toI32(bytes.length) - 1 &&
+    pos + 1 < question &&
+    toI32(bytes[pos]) === URL_SLASH &&
+    toI32(bytes[pos + 1]) === URL_SLASH
+  ) {
     const end: i32 = urlFind(bytes, pos + 2, question, URL_SLASH)
     u.hasAuthority = true
-    if (!urlReadAuthority(bytes, pos + 2, end, u)) {
+    if (!urlReadAuthority(s, bytes, pos + 2, end, u)) {
       return null
     }
     pos = end
   }
-  u.path = String.fromBytes(bytes, pos, question)
+  u.path = s.substring(pos, question)
   return u
 }
 
 /** The width of a `.` (1) or `%2e` (3) at `s[i]`, or 0. */
 const urlDotAt = (s: string, i: i32, end: i32): i32 => {
-  if (i < end && toI32(s.charCodeAt(i)) === URL_DOT) {
+  // Callers pass `0 <= i` and `end <= s.length`, so only `i >= end` can
+  // answer here; the other bounds are spelled out for the proof.
+  const n: i32 = toI32(s.length)
+  if (i < 0 || i >= end || i >= n) {
+    return 0
+  }
+  if (toI32(s.charCodeAt(i)) === URL_DOT) {
     return 1
   }
   if (
-    end - i >= 3 &&
+    i < n - 2 &&
+    i + 2 < end &&
     toI32(s.charCodeAt(i)) === URL_PERCENT &&
     toI32(s.charCodeAt(i + 1)) === 50 &&
     (toI32(s.charCodeAt(i + 2)) | 32) === 101
@@ -1040,23 +1180,17 @@ const urlDotSegment = (s: string, a: i32, b: i32): i32 => {
   if (first === 0) {
     return 0
   }
-  if (a + first === b) {
+  // `urlDotAt` answers a width only for characters inside `s`, so each sum
+  // is at most `s.length` and cannot wrap.
+  const next: i32 = toI32(toU32(a) + toU32(first))
+  if (next === b) {
     return 1
   }
-  const second: i32 = urlDotAt(s, a + first, b)
-  if (second > 0 && a + first + second === b) {
+  const second: i32 = urlDotAt(s, next, b)
+  if (second > 0 && toI32(toU32(next) + toU32(second)) === b) {
     return 2
   }
   return 0
-}
-
-/** The first `/` in `s[i, n)`, or `n`. */
-const urlSlashFrom = (s: string, i: i32, n: i32): i32 => {
-  let j: i32 = i
-  while (j < n && toI32(s.charCodeAt(j)) !== URL_SLASH) {
-    j += 1
-  }
-  return j
 }
 
 /**
@@ -1070,19 +1204,32 @@ const urlRemoveDotSegments = (s: string): string => {
   const out: string[] = []
   let i: i32 = 0
   while (i >= 0 && i < n) {
+    // Each segment's end is found by a scan written out here, not in a
+    // helper, so the proof sees it inside `s` where the segment is cut.
     if (toI32(s.charCodeAt(i)) !== URL_SLASH) {
-      const j: i32 = urlSlashFrom(s, i, n)
+      let j: i32 = i
+      while (j >= 0 && j < n && toI32(s.charCodeAt(j)) !== URL_SLASH) {
+        j += 1
+      }
       if (urlDotSegment(s, i, j) > 0) {
         i = j < n ? j + 1 : n
       } else {
-        out.push(s.slice(i, j))
+        // The scan starts at `i` and stops at `n` at most, so this test always
+        // holds; it is spelled out so the cut keeps no clamp.
+        if (i >= 0 && i <= j && j <= toI32(s.length)) {
+          out.push(s.substring(i, j))
+        }
         i = j
       }
     } else {
-      const j: i32 = urlSlashFrom(s, i + 1, n)
+      let j: i32 = i + 1
+      while (j >= 0 && j < n && toI32(s.charCodeAt(j)) !== URL_SLASH) {
+        j += 1
+      }
       const dots: i32 = urlDotSegment(s, i + 1, j)
-      if (dots === 0) {
-        out.push(s.slice(i, j))
+      // Always true, as above; spelled out so the cut keeps no clamp.
+      if (dots === 0 && i >= 0 && i <= j && j <= toI32(s.length)) {
+        out.push(s.substring(i, j))
       } else if (dots === 2 && out.length > 0) {
         out.pop()
       }
@@ -1139,7 +1286,7 @@ const urlMerge = (base: Url, path: string): string => {
   while (k > 0 && toI32(base.path.charCodeAt(k - 1)) !== URL_SLASH) {
     k -= 1
   }
-  return base.path.slice(0, k) + path
+  return base.path.substring(0, k) + path
 }
 
 /**
@@ -1173,8 +1320,10 @@ export const urlResolve = (base: Url, ref: string): Url | null => {
         }
         return urlFinish(r)
       }
-      if (toI32(r.path.charCodeAt(0)) !== URL_SLASH) {
-        r.path = urlMerge(base, r.path)
+      // The path is not empty here; its length is tested for the proof.
+      const path: string = r.path
+      if (toI32(path.length) > 0 && toI32(path.charCodeAt(0)) !== URL_SLASH) {
+        r.path = urlMerge(base, path)
       }
     }
   }
