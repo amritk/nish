@@ -405,7 +405,8 @@ either proven or now returns a result. Where an index or a length comes from
 the wire (a varint, a frame length, a QPACK prefix or string length, a table
 reference), a value that does not fit is refused with the code the protocol
 already gives it: H3_FRAME_ERROR, H3_SETTINGS_ERROR,
-QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR, each sent as the
+QPACK_DECOMPRESSION_FAILED, QPACK_ENCODER_STREAM_ERROR or
+QPACK_DECODER_STREAM_ERROR, each sent as the
 connection's CONNECTION_CLOSE. `link/net_http3_malformed` feeds nine such
 inputs to the frame reader and the QPACK decoder and exits 0
 (`link/net_http3_malformed: exits with 0 and stdout matches expected.out`).
@@ -419,6 +420,11 @@ These changes alter what a caller sees:
 - `Http3Connection.share` used to panic when it was given pools whose buffers
   were the wrong size for this connection. It now leaves them and keeps its
   own pools. `Http3Server` always passes pools of the right size.
+- The `Http3Connection` constructor now panics when the QUIC connection
+  allows more than 1,024 bidirectional streams or its stream table holds
+  more than 3,072 slots, the bound its per-slot tables are sized to.
+  `quicConnConfigFits` caps each stream kind at `QUIC_CONN_MAX_STREAMS`
+  (1,024), so no connection built by `std/net/quic.ts` reaches it.
 - The idle and head deadlines in `Http3Connection.clock` are now summed in
   `f64` (`http3Deadline`). That sum is exact for any clock below 2^53 ms and
   saturates at `i64`'s maximum, where the `i64` sum would have overflowed.
