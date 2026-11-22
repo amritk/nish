@@ -196,14 +196,14 @@ export const httpFieldValueValid = (value: u8[]): boolean => {
     }
   }
   // `n` is the length, so only an empty value, which has no edges to hold
-  // whitespace, fails the test; it is what proves the two indexes.
+  // whitespace, takes this branch; the test is what proves the two indexes.
   const lastAt: i32 = n - 1
-  if (lastAt >= 0 && lastAt < toI32(value.length) && toI32(value.length) > 0) {
-    const first: i32 = toI32(value[0])
-    const last: i32 = toI32(value[lastAt])
-    return first !== 32 && first !== 9 && last !== 32 && last !== 9
+  if (lastAt < 0 || lastAt >= toI32(value.length) || toI32(value.length) < 1) {
+    return true
   }
-  return true
+  const first: i32 = toI32(value[0])
+  const last: i32 = toI32(value[lastAt])
+  return first !== 32 && first !== 9 && last !== 32 && last !== 9
 }
 
 /**

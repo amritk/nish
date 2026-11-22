@@ -455,23 +455,24 @@ const httpGzipToZlib = (out: u8[], n: i32, level: i32, src: u8[], off: i32, len:
   // least 18 bytes of gzip header and trailer, inside `out`. So the tests
   // always hold; they are what prove the writes below in bounds, and a miss
   // would answer -1, which sends the body as it is.
-  if (n >= 18 && n <= toI32(out.length) && toI32(out.length) > 1) {
-    const end: i32 = n - HTTP_ZLIB_SHORTER - 4
-    if (end >= 0 && end + 3 < toI32(out.length)) {
-      out[0] = toU8(cmf)
-      out[1] = toU8(flg)
-      for (let i: i32 = 2; i < end && i >= 0 && i + 8 < toI32(out.length); i += 1) {
-        out[i] = out[i + 8]
-      }
-      const a: u32 = adler32(src, off, len)
-      out[end] = toU8(a >>> 24)
-      out[end + 1] = toU8((a >>> 16) & 255)
-      out[end + 2] = toU8((a >>> 8) & 255)
-      out[end + 3] = toU8(a & 255)
-      return end + 4
-    }
+  if (n < 18 || n > toI32(out.length) || toI32(out.length) < 2) {
+    return -1
   }
-  return -1
+  const end: i32 = n - HTTP_ZLIB_SHORTER - 4
+  if (end < 0 || end + 3 >= toI32(out.length)) {
+    return -1
+  }
+  out[0] = toU8(cmf)
+  out[1] = toU8(flg)
+  for (let i: i32 = 2; i < end && i >= 0 && i + 8 < toI32(out.length); i += 1) {
+    out[i] = out[i + 8]
+  }
+  const a: u32 = adler32(src, off, len)
+  out[end] = toU8(a >>> 24)
+  out[end + 1] = toU8((a >>> 16) & 255)
+  out[end + 2] = toU8((a >>> 8) & 255)
+  out[end + 3] = toU8(a & 255)
+  return end + 4
 }
 
 /**

@@ -643,15 +643,16 @@ const urlBytesOf = (s: string): u8[] | null => {
 }
 
 /**
- * `bytes[a, b)` as a string, a byte at a time: `String.fromBytes` keeps a
- * range check that no proof removes, and natively `fromCharCode` makes exactly
- * one byte.
+ * `bytes[a, b)` as a string, a byte at a time, with A to Z lower-cased when
+ * `lower` is set: `String.fromBytes` keeps a range check that no proof
+ * removes, and natively `fromCharCode` makes exactly one byte.
  */
-const urlBytesText = (bytes: u8[], a: i32, b: i32): string => {
+const urlBytesText = (bytes: u8[], a: i32, b: i32, lower: boolean): string => {
   const parts: string[] = []
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(bytes.length)) {
-    parts.push(String.fromCharCode(toI32(bytes[i])))
+    const c: i32 = toI32(bytes[i])
+    parts.push(String.fromCharCode(lower && c >= 65 && c <= 90 ? c + 32 : c))
     i += 1
   }
   return parts.join("")
@@ -671,7 +672,7 @@ const urlDecodeString = (src: u8[], off: i32, len: i32, flags: i32): string | nu
   if (n < 0 || !urlIsUtf8(out, 0, n)) {
     return null
   }
-  return urlBytesText(out, 0, n)
+  return urlBytesText(out, 0, n, false)
 }
 
 /**
@@ -767,20 +768,6 @@ export class Url {
   port: i32 = -1
   /** True when the URL has a `//` authority; `mailto:a@b` has none and `file:///x` has an empty one. */
   hasAuthority: boolean = false
-}
-
-/** `bytes[a, b)` as a string with A to Z lower-cased. */
-const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
-  // A byte at a time, as `urlBytesText` builds; the bytes are the checked
-  // ASCII of a URL, so every host reads them alike.
-  const parts: string[] = []
-  let i: i32 = a
-  while (i >= 0 && i < b && i < toI32(bytes.length)) {
-    const c: i32 = toI32(bytes[i])
-    parts.push(String.fromCharCode(c >= 65 && c <= 90 ? c + 32 : c))
-    i += 1
-  }
-  return parts.join("")
 }
 
 /** The first `c` in `bytes[a, b)`, or `b`. */
@@ -986,9 +973,9 @@ const urlReadAuthority = (s: string, bytes: u8[], a: i32, b: i32, u: Url): boole
   // `h` lies inside the window, which lies inside `bytes`; the bounds are
   // spelled out for the proof.
   if (h >= 0 && h < b && h < toI32(bytes.length) && toI32(bytes[h]) === URL_OPEN_BRACKET) {
-    u.host = urlLowerString(bytes, h + 1, portAt - 1)
+    u.host = urlBytesText(bytes, h + 1, portAt - 1, true)
   } else {
-    u.host = urlLowerString(bytes, h, portAt)
+    u.host = urlBytesText(bytes, h, portAt, true)
   }
   if (portAt < b && portAt + 1 < b) {
     const port: i32 = urlPortOf(bytes, portAt + 1, b)
@@ -1134,7 +1121,7 @@ const urlReadReference = (s: string): Url | null => {
       j += 1
     }
     if (j < question && j < toI32(bytes.length) && toI32(bytes[j]) === URL_COLON) {
-      u.scheme = urlLowerString(bytes, 0, j)
+      u.scheme = urlBytesText(bytes, 0, j, true)
       pos = j + 1
     }
   }
