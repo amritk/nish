@@ -11,7 +11,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare void @nish.AtomicI32Array.constructor(%struct.AtomicI32Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture, i32 noundef) #1
+declare void @nish.AtomicI32Array.constructor(%struct.AtomicI32Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture, i32 noundef) #0
 declare noundef i32 @nish.AtomicI32Array.load(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef) #0
 declare void @nish.AtomicI32Array.store(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
@@ -20,7 +20,7 @@ declare noundef i32 @nish.AtomicI32Array.min(%struct.AtomicI32Array* noundef non
 declare noundef i32 @nish.AtomicI32Array.max(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.AtomicI32Array.exchange(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.AtomicI32Array.compareExchange(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare void @nish.AtomicI64Array.constructor(%struct.AtomicI64Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture, i32 noundef) #1
+declare void @nish.AtomicI64Array.constructor(%struct.AtomicI64Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture, i32 noundef) #0
 declare noundef i64 @nish.AtomicI64Array.load(%struct.AtomicI64Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef) #0
 declare void @nish.AtomicI64Array.store(%struct.AtomicI64Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i64 noundef) #0
 declare noundef i64 @nish.AtomicI64Array.add(%struct.AtomicI64Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i64 noundef) #0
@@ -32,14 +32,14 @@ declare noundef i64 @nish.AtomicI64Array.compareExchange(%struct.AtomicI64Array*
 declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.parallelFrom$i32$fn.16.nish_main$arrow0(i32 noundef) #0
 declare void @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.AtomicI32Array* noundef) #0
 declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.parallelMap$i32$i32$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.AtomicI64Array* noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare void @nish_free_arena() #1
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
@@ -320,8 +320,8 @@ entry:
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }

@@ -1,6 +1,6 @@
-// An atomic array of a negative length is an array of none: the constructor
-// allocates no buffer and does not stop the program, and every index of it
-// would.
+// An atomic array of a negative length is refused as `new Array` of one is:
+// the constructor stops the program before any buffer is allocated, and no
+// line after it prints.
 import { AtomicI32Array } from "nish/threads";
 
 export const main = (): i32 => {
@@ -8,6 +8,6 @@ export const main = (): i32 => {
   console.log(`length ${ok.length}`);
   const n: i32 = ok.length - 3;
   const bins = new AtomicI32Array(n);
-  console.log(`empty ${bins.length}`);
+  console.log(`not reached ${bins.length}`);
   return 0;
 };

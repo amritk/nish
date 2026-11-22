@@ -783,6 +783,14 @@ export class AtomicI64 {
 }
 
 /**
+ * The panic of an atomic array made with a negative length: the message
+ * `new Array` of one prints, so the two refuse it alike.
+ */
+const negativeAtomicLength = (): void => {
+  panic("array length out of range")
+}
+
+/**
  * `length` `i32` counters in one contiguous buffer, each of which a scope's
  * tasks and a parallel body may update together (docs/LANGUAGE.md,
  * "Atomic arrays"). It is `AtomicI32` with the element's index first: each
@@ -809,24 +817,19 @@ export class AtomicI32Array {
   /**
    * An array of `length` elements, each `0`.
    *
-   * @param length how many elements; a negative one makes an array of none,
-   *   whose `length` is `0` and every index of which stops the program.
+   * @param length how many elements; a negative one stops the program, as
+   *   `new Array` of one does.
    */
   constructor(length: i32) {
-    // Up to 65,535 elements the length is a `u16`, which the compiler knows is
-    // not negative, and the buffer is the one `new Array` the emitter places
-    // on cache lines of its own; a longer array grows to its length instead.
-    if (length >= 0 && length <= 65535) {
-      this.values = new Array<i32>(toU16(length))
+    this.length = length
+    if (length >= 0) {
+      this.values = new Array<i32>(length)
     } else {
+      negativeAtomicLength()
+      // Never reached: `negativeAtomicLength` stops the program.
       this.values = []
-      const zero: i32 = 0
-      for (let k: i32 = 0; k < length; k += 1) {
-        this.values.push(zero)
-      }
     }
     this.values.fill(0)
-    this.length = toI32(this.values.length)
   }
 
   /**
@@ -970,23 +973,19 @@ export class AtomicI64Array {
   /**
    * An array of `length` elements, each `0`.
    *
-   * @param length how many elements; a negative one makes an array of none,
-   *   whose `length` is `0` and every index of which stops the program.
+   * @param length how many elements; a negative one stops the program, as
+   *   `new Array` of one does.
    */
   constructor(length: i32) {
-    // Up to 65,535 elements the length is a `u16`, which the compiler knows is
-    // not negative, and the buffer is the one `new Array` the emitter places
-    // on cache lines of its own; a longer array grows to its length instead.
-    if (length >= 0 && length <= 65535) {
-      this.values = new Array<i64>(toU16(length))
+    this.length = length
+    if (length >= 0) {
+      this.values = new Array<i64>(length)
     } else {
+      negativeAtomicLength()
+      // Never reached: `negativeAtomicLength` stops the program.
       this.values = []
-      for (let k: i32 = 0; k < length; k += 1) {
-        this.values.push(toI64(0))
-      }
     }
     this.values.fill(0)
-    this.length = toI32(this.values.length)
   }
 
   /**

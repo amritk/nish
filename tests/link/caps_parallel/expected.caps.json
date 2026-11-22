@@ -109,7 +109,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:860:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:863:3", "proven": false }
               ]
             },
             {
@@ -118,7 +118,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:935:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:938:3", "proven": false }
               ]
             },
             {
@@ -127,10 +127,10 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/threads.ts:820:21", "allowed": true },
-                { "kind": "oom", "at": "std/threads.ts:822:21", "allowed": true },
-                { "kind": "overflow", "at": "std/threads.ts:824:40", "proven": true },
-                { "kind": "oom", "at": "std/threads.ts:825:9", "allowed": true }
+                { "kind": "array-length", "at": "std/threads.ts:826:21", "proven": false },
+                { "kind": "oom", "at": "std/threads.ts:826:21", "allowed": true },
+                { "kind": "call", "at": "std/threads.ts:828:7", "callee": "negativeAtomicLength", "via": "panic" },
+                { "kind": "oom", "at": "std/threads.ts:830:21", "allowed": true }
               ]
             },
             {
@@ -139,7 +139,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:919:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:922:3", "proven": false }
               ]
             },
             {
@@ -148,7 +148,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:838:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:841:3", "proven": false }
               ]
             },
             {
@@ -157,7 +157,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:904:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:907:3", "proven": false }
               ]
             },
             {
@@ -166,7 +166,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:888:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:891:3", "proven": false }
               ]
             },
             {
@@ -175,7 +175,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:848:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:851:3", "proven": false }
               ]
             },
             {
@@ -184,7 +184,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:874:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:877:3", "proven": false }
               ]
             },
             {
@@ -256,7 +256,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1020:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1019:3", "proven": false }
               ]
             },
             {
@@ -265,7 +265,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1095:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1094:3", "proven": false }
               ]
             },
             {
@@ -274,10 +274,10 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/threads.ts:981:21", "allowed": true },
-                { "kind": "oom", "at": "std/threads.ts:983:21", "allowed": true },
-                { "kind": "overflow", "at": "std/threads.ts:984:40", "proven": true },
-                { "kind": "oom", "at": "std/threads.ts:985:9", "allowed": true }
+                { "kind": "array-length", "at": "std/threads.ts:982:21", "proven": false },
+                { "kind": "oom", "at": "std/threads.ts:982:21", "allowed": true },
+                { "kind": "call", "at": "std/threads.ts:984:7", "callee": "negativeAtomicLength", "via": "panic" },
+                { "kind": "oom", "at": "std/threads.ts:986:21", "allowed": true }
               ]
             },
             {
@@ -286,7 +286,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1079:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1078:3", "proven": false }
               ]
             },
             {
@@ -295,7 +295,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:998:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:997:3", "proven": false }
               ]
             },
             {
@@ -304,7 +304,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1064:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1063:3", "proven": false }
               ]
             },
             {
@@ -313,7 +313,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1048:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1047:3", "proven": false }
               ]
             },
             {
@@ -322,7 +322,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1008:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1007:3", "proven": false }
               ]
             },
             {
@@ -331,7 +331,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/threads.ts:1034:3", "proven": false }
+                { "kind": "index", "at": "std/threads.ts:1033:3", "proven": false }
               ]
             },
             {
