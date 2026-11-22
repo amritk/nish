@@ -450,8 +450,8 @@ const tlsTicketSealExposed = (key: u8[], input: u8[]): u8[] => {
  *
  * @param key The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
  * @param info The key's record: its id heads the ticket and its count goes up by one on a seal.
- * @param state What the ticket carries; its `issuedAt` is overwritten with `now`, unless the key
- *   cannot seal at `now`, the state does not fit a ticket or `out` is too short.
+ * @param state What the ticket carries; its `issuedAt` is overwritten with `now` only when the
+ *   ticket is sealed, so a refusal leaves the state untouched.
  * @param now The issue time, in `monotonicNanos()`.
  * @param out Where the ticket is written, from index 0; at least `tlsTicketSize(state)` bytes.
  * @returns How many bytes of `out` hold the ticket, or 0 when nothing was sealed.
@@ -484,7 +484,6 @@ export const tlsTicketSeal = (
     return 0
   }
   using _scope = arena()
-  state.issuedAt = now
   const head: i32 = TLS_TICKET_KEY_ID_SIZE + TLS_TICKET_NONCE_SIZE
   const input: u8[] = new Array<u8>(toU16(head + plainLength))
   const nonce: u8[] = new Array<u8>(TLS_TICKET_NONCE_SIZE)
@@ -517,6 +516,7 @@ export const tlsTicketSeal = (
   ) {
     // Under its cap, so the count never reaches the `i64` top `tlsTicketAdd` would hold it at.
     info.sealed = tlsTicketAdd(info.sealed, 1)
+    state.issuedAt = now
     written = size
   }
   secureZero(input)

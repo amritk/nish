@@ -1147,7 +1147,9 @@ const tlsWindowUint = (data: u8[], at: i32, width: i32): i64 => {
  * @param at Where the window starts in `data`, in bytes.
  * @param length How many bytes to copy; a negative one copies none.
  * @returns A fresh array of the window's bytes; it stops where `data` ends, so it is
- *   shorter than `length` when the window runs past the buffer.
+ *   shorter than `length` when the window runs past the buffer. Callers in
+ *   `std/net/tls` pass a window a parsed view validated, or check the copy's length
+ *   (`tlsHeldWindow` in `schedule.ts`).
  */
 export const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
   const out: u8[] = []
@@ -1162,7 +1164,10 @@ export const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
   return out
 }
 
-/** The 16-bit values of `data[at .. at + length)`, in a fresh list. */
+/**
+ * The 16-bit values of `data[at .. at + length)`, in a fresh list. Every caller
+ * validates the window first; the walk's own stop is a backstop.
+ */
 const tlsCopyU16Window = (data: u8[], at: i32, length: i32): i32[] => {
   const out: i32[] = []
   const end: i64 = toI64(at) + toI64(length)
@@ -1181,7 +1186,8 @@ const tlsCopyU16Window = (data: u8[], at: i32, length: i32): i32[] => {
  * @param data The buffer the window points into.
  * @param at Where the window starts in `data`, in bytes.
  * @param length How many bytes the window holds; any part outside `data` is left out.
- * @returns A fresh string, one character for each byte read.
+ * @returns A fresh string, one character for each byte read. Every caller in
+ *   `std/net/tls` validates the window first, so no byte is left out there.
  */
 export const tlsWindowString = (data: u8[], at: i32, length: i32): string => {
   const parts: string[] = []
@@ -1455,8 +1461,9 @@ const tlsPutHelloHead = (
 ): i32 => {
   let p: i32 = tlsPutU16(out, at, TLS_LEGACY_VERSION)
   p = retry ? tlsHexInto(TLS_HELLO_RETRY_RANDOM, out, p) : tlsPutBytes(out, p, random)
-  p = tlsPutU8(out, p, sessionIdLength)
-  p = tlsPutWindow(out, p, sessionId, sessionIdOff, sessionIdLength)
+  const id: i32 = tlsAdvance(p, 1)
+  p = tlsPutWindow(out, id, sessionId, sessionIdOff, sessionIdLength)
+  p = tlsPutLength(out, id, p, 1)
   p = tlsPutU16(out, p, suite)
   return tlsPutU8(out, p, 0)
 }
@@ -1525,9 +1532,10 @@ const tlsPutServerHello = (
  * @param suite The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_128_GCM_SHA256`.
  * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the session id past 255 bytes, or the key share
+ *   or the extensions past 65,535.
  */
 export const tlsWriteServerHello = (
   out: u8[],
@@ -1558,9 +1566,10 @@ export const tlsWriteServerHello = (
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the session id past 255 bytes, or the key share
+ *   or the extensions past 65,535.
  */
 export const tlsWriteServerHelloPsk = (
   out: u8[],
@@ -1598,9 +1607,9 @@ export const tlsWriteServerHelloPsk = (
  * @param sessionIdLength How many bytes the session id is, 0 to 32.
  * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
  * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the session id past 255 bytes.
  */
 export const tlsWriteHelloRetryRequest = (
   out: u8[],
@@ -1648,9 +1657,10 @@ export const tlsWriteHelloRetryRequest = (
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
  * @param recordSizeLimit The largest record plaintext the server takes, content type included, written as a `uint16`; 0 to send none.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the ALPN protocol past 255 bytes, or
+ *   `quicTransportParameters` or the extensions past 65,535.
  */
 export const tlsWriteEncryptedExtensions = (
   out: u8[],
@@ -1697,9 +1707,10 @@ export const tlsWriteEncryptedExtensions = (
  * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
  * @param at Where the message, handshake header first, starts in `out`.
  * @param chain The DER certificates, leaf first, each written as it is.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): a certificate or the whole list past 2^24 - 1
+ *   bytes.
  */
 export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
   const list: i32 = tlsAdvance(tlsPutU8(out, tlsAdvance(at, 4), 0), 3)
@@ -1722,9 +1733,9 @@ export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
  * @param at Where the message, handshake header first, starts in `out`.
  * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
  * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the signature past 65,535 bytes.
  */
 export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signature: u8[]): i32 => {
   const body: i32 = tlsAdvance(tlsPutU16(out, tlsAdvance(at, 4), scheme), 2)
@@ -1741,9 +1752,9 @@ export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signa
  * @param verifyData The buffer that holds the `verify_data`, the HMAC the key schedule computed.
  * @param off Where the `verify_data` starts in `verifyData`.
  * @param len How many bytes it is: the suite's hash length, 32 or 48.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, the window is outside `verifyData`, `len` is past 2^24 - 1 (the handshake header's
+ *   length field), or the end would pass 2^30 - 1.
  */
 export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32, len: i32): i32 => {
   const p: i32 = tlsPutWindow(out, tlsAdvance(at, 4), verifyData, off, len)
@@ -1767,11 +1778,12 @@ export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32,
  * @param nonceLength How many bytes the nonce is, 0 to 255.
  * @param ticket The buffer that holds the ticket the client will send back.
  * @param ticketOff Where the ticket starts in `ticket`.
- * @param ticketLength How many bytes the ticket is: §4.6.1 allows 1 to 65535, not checked here.
+ * @param ticketLength How many bytes the ticket is: §4.6.1 allows 1 to 65535; past 65535 answers -1, and 0 is not checked.
  * @param extra Whole extensions, type and length included, written unchecked; empty for none.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the nonce past 255 bytes, or the ticket or the
+ *   extensions past 65,535.
  */
 export const tlsWriteNewSessionTicket = (
   out: u8[],
@@ -1787,10 +1799,12 @@ export const tlsWriteNewSessionTicket = (
   extra: u8[]
 ): i32 => {
   let p: i32 = tlsPutU32(out, tlsPutU32(out, tlsAdvance(at, 4), lifetime), ageAdd)
-  p = tlsPutU8(out, p, nonceLength)
-  p = tlsPutWindow(out, p, nonce, nonceOff, nonceLength)
-  p = tlsPutU16(out, p, ticketLength)
-  p = tlsPutWindow(out, p, ticket, ticketOff, ticketLength)
+  const nonceAt: i32 = tlsAdvance(p, 1)
+  p = tlsPutWindow(out, nonceAt, nonce, nonceOff, nonceLength)
+  p = tlsPutLength(out, nonceAt, p, 1)
+  const ticketAt: i32 = tlsAdvance(p, 2)
+  p = tlsPutWindow(out, ticketAt, ticket, ticketOff, ticketLength)
+  p = tlsPutLength(out, ticketAt, p, 2)
   const extensions: i32 = tlsAdvance(p, 2)
   p = tlsPutBytes(out, extensions, extra)
   p = tlsPutLength(out, extensions, p, 2)
@@ -1809,8 +1823,7 @@ export const tlsWriteNewSessionTicket = (
  * @param off Where the hash starts in `transcriptHash`.
  * @param len How many bytes the hash is: the suite's hash length.
  * @returns Where the content ends in `out`: `at` plus 98 plus `len`, written or not; -1
- *   when `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ *   when `at` is negative, the window is outside `transcriptHash`, or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificateVerifyContent = (
   out: u8[],
@@ -1854,9 +1867,9 @@ const tlsBytesString = (name: u8[]): string => tlsWindowString(name, TLS_CODEC_F
  * @param suite The cipher suite the server chose.
  * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the session id past 255 bytes, or
+ *   the key share or the extensions past 65,535.
  */
 export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, serverShare: u8[]): u8[] => {
   const none: u8[] = []
@@ -1897,9 +1910,9 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the session id past 255 bytes, or
+ *   the key share or the extensions past 65,535.
  */
 export const tlsEncodeServerHelloPsk = (
   random: u8[],
@@ -1944,9 +1957,8 @@ export const tlsEncodeServerHelloPsk = (
  * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
  * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
  * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the session id past 255 bytes.
  */
 export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i32): u8[] => {
   const none: u8[] = []
@@ -1967,9 +1979,9 @@ export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
  * @param recordSizeLimit The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the ALPN protocol past 255 bytes,
+ *   or `quicTransportParameters` or the extensions past 65,535.
  */
 export const tlsEncodeEncryptedExtensions = (
   extra: u8[],
@@ -2007,9 +2019,9 @@ export const tlsEncodeEncryptedExtensions = (
  * A server's Certificate (§4.4.2) in a fresh array (`tlsWriteCertificate`).
  *
  * @param chain The DER certificates, leaf first, each written as it is.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): a certificate or the whole list
+ *   past 2^24 - 1 bytes.
  */
 export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
   const none: u8[] = []
@@ -2023,9 +2035,8 @@ export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
  *
  * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
  * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the signature past 65,535 bytes.
  */
 export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] => {
   const none: u8[] = []
@@ -2038,9 +2049,8 @@ export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] =
  * A Finished (§4.4.4) carrying `verifyData`, in a fresh array (`tlsWriteFinished`).
  *
  * @param verifyData The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for `verifyData` past 2^24 - 1
+ *   bytes.
  */
 export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
   const none: u8[] = []
@@ -2056,11 +2066,11 @@ export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
  * @param lifetime How long the ticket may be used, in seconds; RFC 8446 §4.6.1 caps it at seven days.
  * @param ageAdd The `ticket_age_add` that obfuscates the ticket age, which §4.6.1 wants fresh and random.
  * @param nonce The whole `ticket_nonce`, 0 to 255 bytes.
- * @param ticket The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes, not checked here.
+ * @param ticket The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes; past 65535 answers empty, and 0 is not checked.
  * @param extra Whole extensions, type and length included, written unchecked; empty for none.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the nonce past 255 bytes, or the
+ *   ticket or the extensions past 65,535.
  */
 export const tlsEncodeNewSessionTicket = (
   lifetime: u32,
@@ -2168,9 +2178,11 @@ export const tlsClientOffersScheme = (scheme: i32): boolean =>
  * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
  * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
  * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
- * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
- *   `at` is negative, a window is outside its buffer, a vector is longer than
- *   its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+ *   negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+ *   than its length field holds (`tlsPutLength`): the session id or an ALPN protocol past 255
+ *   bytes, or the server name, a list (suites, groups, schemes, ALPN, key shares), the key share,
+ *   the cookie or the extensions past 65,535.
  */
 export const tlsWriteClientHello = (
   out: u8[],
@@ -2187,8 +2199,9 @@ export const tlsWriteClientHello = (
 ): i32 => {
   let p: i32 = tlsPutU16(out, tlsAdvance(at, 4), TLS_LEGACY_VERSION)
   p = tlsPutBytes(out, p, random)
-  p = tlsPutU8(out, p, toI32(sessionId.length))
-  p = tlsPutBytes(out, p, sessionId)
+  const id: i32 = tlsAdvance(p, 1)
+  p = tlsPutBytes(out, id, sessionId)
+  p = tlsPutLength(out, id, p, 1)
   const suiteList: i32 = tlsAdvance(p, 2)
   p = suiteList
   for (const suite of suites) {
@@ -2270,9 +2283,10 @@ export const tlsWriteClientHello = (
  * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
  * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
  * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
- * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
- *   with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
- *   past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+ *   a vector longer than its length field holds (`tlsPutLength`): the session id or an ALPN
+ *   protocol past 255 bytes, or the server name, a list (suites, groups, schemes, ALPN, key
+ *   shares), the key share, the cookie or the extensions past 65,535.
  */
 export const tlsEncodeClientHello = (
   random: u8[],

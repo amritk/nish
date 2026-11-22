@@ -731,6 +731,7 @@ export class TlsRecordClient {
           return idle
         }
       }
+      // Only the 4-byte header is kept; the body's bytes are counted, not stored.
       if (have < toI32(message.length)) {
         message[have] = byte
       }

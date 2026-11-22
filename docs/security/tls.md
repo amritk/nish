@@ -1403,7 +1403,15 @@ interop server does not.
   not 16 bytes fail the same way, before the key is exposed
   (`tlsTicketNamesKey`). On the seal side a key record whose id is not
   16 bytes seals nothing: `tlsTicketSeal` answers 0, so the server issues
-  no ticket rather than one no key could open.
+  no ticket rather than one no key could open. Every refusal of
+  `tlsTicketSeal` leaves the state's `issuedAt` as it was; only a sealed
+  ticket stamps it with `now`.
+- **A vector too long for its length field is refused.** `tlsWriteNewSessionTicket`
+  answers -1, and `tlsEncodeNewSessionTicket` empty, for a nonce past 255 bytes
+  or a ticket past 65,535, where they once wrote the length's low bits over
+  the whole vector; the ServerHello and ClientHello writers do the same for a
+  session id past 255 (`tlsPutLength`). Pinned by the two refusal checks in
+  `tests/link/net_tls_psk_wire` (a 256-byte nonce, a 65,536-byte ticket).
 - **Nonces, enforced.** Each ticket is sealed under a fresh 12-byte random
   nonce. Under one key, n tickets collide with probability about n² / 2^97.
   The issue window bounds time, not the number of connections, so the count
