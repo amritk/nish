@@ -528,7 +528,8 @@ How many bytes to copy; a negative one copies none.
 
 <scalar-field name="returns" type="u8[]">
 
-A fresh array of `length` bytes; nothing from outside `data` is copied into it.
+A fresh array of the window's bytes; it stops where `data` ends, so it is
+  shorter than `length` when the window runs past the buffer.
 
 </scalar-field>
 
@@ -548,7 +549,7 @@ The DER certificates, leaf first, each written as it is.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -577,7 +578,7 @@ The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -655,7 +656,7 @@ A HelloRetryRequest's `cookie` to echo; empty to send none.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -706,7 +707,7 @@ The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -726,7 +727,7 @@ The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -763,7 +764,7 @@ The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -813,7 +814,7 @@ Whole extensions, type and length included, written unchecked; empty for none.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -859,7 +860,7 @@ The server's key share, its `key_exchange`: 32 bytes of x25519, or a
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -912,7 +913,7 @@ The index, from 0, of the client's PSK identity the server accepts; only its low
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included.
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
 
 </scalar-field>
 
@@ -946,7 +947,8 @@ Where the first byte goes in `out`.
 
 <scalar-field name="returns" type="i32">
 
-`at` plus the number of bytes `text` spells, written or not.
+`at` plus the number of bytes `text` spells, written or not; -1 when `at` is
+  negative or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1436,7 +1438,8 @@ The DER certificates, leaf first, each written as it is.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1480,7 +1483,8 @@ The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1533,7 +1537,8 @@ How many bytes the hash is: the suite's hash length.
 
 <scalar-field name="returns" type="i32">
 
-Where the content ends in `out`: `at` plus 98 plus `len`, written or not.
+Where the content ends in `out`: `at` plus 98 plus `len`, written or not; -1
+  when `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1632,7 +1637,8 @@ A HelloRetryRequest's `cookie` to echo; empty to send none.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1703,7 +1709,8 @@ The largest record plaintext the server takes, content type included, written as
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1753,7 +1760,8 @@ How many bytes it is: the suite's hash length, 32 or 48.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1820,7 +1828,8 @@ The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1917,7 +1926,8 @@ Whole extensions, type and length included, written unchecked; empty for none.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1994,7 +2004,8 @@ The server's key share, its `key_exchange`: 32 bytes of x25519, or a
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -2078,7 +2089,8 @@ The index, from 0, of the client's PSK identity the server accepts; only its low
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when
+  `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
