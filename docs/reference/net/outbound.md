@@ -112,7 +112,8 @@ special-purpose address registries, not ported from another implementation.
 ### outboundAddressAllowed
 
 Whether `policy` lets a connection go to the sixteen address bytes at
-`addr[off]`: a prefix it `permit`s, or else a public address.
+`addr[off]`: a prefix it `permit`s, or else a public address. False when
+sixteen bytes do not fit there.
 
 ```ts
 const outboundAddressAllowed: (
@@ -149,7 +150,7 @@ True when a connection may go there. An IPv4 address carried by NAT64 or 6to4 is
 ### outboundAddressPublic
 
 Whether the sixteen address bytes at `addr[off]` are public, as the module
-comment defines it. Panics when sixteen bytes do not fit there.
+comment defines it. False when sixteen bytes do not fit there.
 
 ```ts
 const outboundAddressPublic: (
@@ -198,7 +199,7 @@ Where the address's sixteen bytes start in `addr`.
 
 <scalar-field name="returns" type="string">
 
-Dotted decimal for an IPv4 address in its `::ffff:` form, otherwise all eight lower-case hex groups with no `::` shortening.
+Dotted decimal for an IPv4 address in its `::ffff:` form, otherwise all eight lower-case hex groups with no `::` shortening; empty when sixteen bytes do not fit there.
 
 </scalar-field>
 
@@ -230,7 +231,7 @@ The records, each sixteen address bytes and a two-byte port, reordered in place.
 
 <scalar-field name="count" type="i32" required>
 
-How many records `addresses` holds from its start; one that does not fit panics.
+How many records `addresses` holds from its start; one past its end, or a negative count, keeps none of them.
 
 </scalar-field>
 
