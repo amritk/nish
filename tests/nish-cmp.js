@@ -10262,6 +10262,19 @@ const DECLARED = [
       "examples/wordcount.ts": ["exit"],
     }
   ),
+  ...stdPanicFree(
+    "the program reaches std/net's DNS modules, which now parse and build messages and read resolv.conf under guards the prover reads in place of panicking indexes, so their code and the inlined callers change; bytes.ll differs because the program is new to the corpus and the 0.44.0 seed's std/bytes.ts is older than main's, which this PR does not touch",
+    {
+      "bench/std-net-dns-message.ts": ["bytes.ll", "dns-message.ll", "std-net-dns-message.ll"],
+      "tests/link/net_dns_fallback_short/main.ts": ["bytes.ll", "dns-config.ll", "dns-message.ll", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "the QUIC packet bench is new to the corpus and reads through nish/bytes; bytes.ll differs because the 0.44.0 seed's std/bytes.ts is older than main's, which this PR does not touch",
+    {
+      "bench/std-net-quic-packet.ts": ["bytes.ll"],
+    }
+  ),
   ...scramModule(),
   ...protobufModule(),
   ...protoClasses(),
