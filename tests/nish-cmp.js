@@ -18413,7 +18413,7 @@ const DECLARED = [
   {
     program: "bench/std-cli-args.ts",
     file: "cli-args.ll",
-    changelog: "std/ panic ratchet",
+    changelog: "panic ratchet",
     why: "a new instruction bench driving std/cli-args.ts: the reference compiles it against the seed's std/cli-args.ts, whose functions, hash key and `Cli` constructor differ from this tree's",
   },
   ...[
@@ -18426,7 +18426,7 @@ const DECLARED = [
   ].map((file) => ({
     program: "bench/std-json-typed.ts",
     file,
-    changelog: "std/ panic ratchet",
+    changelog: "panic ratchet",
     why: "a new instruction bench driving std/json-typed.ts: the reference compiles it against the seed's std/bytes.ts, std/json*.ts and std/json-typed.ts, which differ from this tree's, so every module it reaches and its own header and IR differ",
   })),
   {
