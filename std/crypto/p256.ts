@@ -4432,7 +4432,7 @@ const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): voi
   ) {
     for (let t: i32 = 0; t < 16; t++) {
       // at <= src.length - 64 and 4 * t < 64: the sum is inside `src`, an i32.
-      w[t] = p256LoadWord(src, toI32(toI64(at) + toI64(4 * t)))
+      w[t] = p256LoadWord(src, toI32(toI64(at) + toI64(t) * 4))
     }
     for (let t: i32 = 16; t < 64; t++) {
       const w2: u32 = w[t - 2]
@@ -4547,7 +4547,7 @@ const p256ShaInto = (
   for (let i: i32 = 0; i < 8 && i < toI32(h.length); i++) {
     const word: u32 = h[i]
     for (let b: i32 = 0; b < 4; b++) {
-      const j: i32 = toI32(toI64(at) + toI64(4 * i + b))
+      const j: i32 = toI32(toI64(at) + toI64(i) * 4 + toI64(b))
       if (j >= 0 && j < outLength) {
         const top: i32 = 24
         out[j] = toU8(word >>> toU32(top - 8 * b))
