@@ -560,7 +560,7 @@ One statement, `$1`, `$2`, ... naming the parameters; a NUL in
 <scalar-field name="params" type="PgAsyncParams" required>
 
 The parameters, as many as the statement names; a NUL in
-  a text one, or a Bind past 2^30 bytes, fails the query the same way.
+  a text one, a Bind past 2^30 bytes, or unequal `values` and `nulls` fails it the same way.
 
 </scalar-field>
 
@@ -904,8 +904,8 @@ query cut off by it fails with `PG_ERR_CLOSED` and this as its
 `PG_ASYNC_UNSENT: i32`
 
 `pgAsyncSend`'s answer for a statement it did not send because a parameter
-holds a NUL, or its Bind would pass 2^30 bytes; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
-connection is reused.
+holds a NUL, its Bind would pass 2^30 bytes, or its `values` and `nulls`
+differ in length; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the connection is reused.
 
 </scalar-card>
 

@@ -214,8 +214,8 @@ export const PG_ASYNC_MAX_STATEMENTS: i32 = 64
 export const PG_ASYNC_MAX_DEPTH: i32 = 16
 /**
  * `pgAsyncSend`'s answer for a statement it did not send because a parameter
- * holds a NUL, or its Bind would pass 2^30 bytes; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
- * connection is reused.
+ * holds a NUL, its Bind would pass 2^30 bytes, or its `values` and `nulls`
+ * differ in length; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the connection is reused.
  */
 export const PG_ASYNC_UNSENT: i32 = -1
 /**
@@ -2415,7 +2415,7 @@ export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable:
  * @param sql One statement, `$1`, `$2`, ... naming the parameters; a NUL in
  *   it fails the query with `PG_ERR_ENCODING` without sending anything.
  * @param params The parameters, as many as the statement names; a NUL in
- *   a text one, or a Bind past 2^30 bytes, fails the query the same way.
+ *   a text one, a Bind past 2^30 bytes, or unequal `values` and `nulls` fails it the same way.
  * @returns The answer; its `reusable` goes to `pgAsyncRelease`.
  */
 export const pgAsyncQuery = async (

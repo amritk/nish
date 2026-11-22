@@ -40097,6 +40097,7 @@ const KIND_OTHER: i32 = 0
 const KIND_ECHO: i32 = 1
 const KIND_USERS: i32 = 2
 const TURNS: i32 = 10000
+const ROUND_TURNS: i32 = 4
 struct BackendConn (class) size=56 align=8
   field input: u8[] index=0 offset=0
   field output: u8[] index=1 offset=8
@@ -40130,7 +40131,7 @@ struct Backend (class) size=40 align=8
   method serve -> @Backend.serve
   method process -> @Backend.process
   method execute -> @Backend.execute
-struct App (class) size=64 align=8
+struct App (class) size=72 align=8
   field h: HttpHandler index=0 offset=0
   field carrier: PgCarrier index=1 offset=8
   field pool: PgPool index=2 offset=16
@@ -40142,6 +40143,7 @@ struct App (class) size=64 align=8
   field failed: i32 index=8 offset=48 initialized
   field full: i32 index=9 offset=52 initialized
   field value: i64 index=10 offset=56 initialized
+  field late: i32 index=11 offset=64 initialized
   constructor -> @App.constructor
   method ended -> @App.ended
   method turn -> @App.turn
@@ -40385,7 +40387,7 @@ function App.constructor(this: App): void -> @App.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.Router.add
   calls: Backend.constructor ascii nish.HandlerLimits.constructor nish.HttpHandler.constructor nish.PgBatcher.constructor nish.PgCarrier.attach nish.PgCarrier.constructor nish.PgPool.constructor nish.PgPool.register nish.Router.add nish.Router.constructor nish.pgTarget nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_alloc_struct nish_tcp_listen
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=5 stackLocals=3
   local +0:11 router: Router (const)
   callee +0:20 new Router -> @nish.Router.constructor
@@ -40411,13 +40413,13 @@ function App.constructor(this: App): void -> @App.constructor [constructor]
 function App.ended(this: App): i32 -> @App.ended [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function App.turn(this: App): void -> @App.turn [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: Backend.serve mix nish.HttpHandler.wait nish.PgCarrier.connection nish.PgCarrier.next nish.PgCarrier.send nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.colLength nish.PgConnection.colStart nish.PgConnection.inputBuffer nish.PgConnection.paramInt nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -9:5 Backend.serve -> @Backend.serve
   callee -8:5 HttpHandler.wait -> @nish.HttpHandler.wait
@@ -40448,7 +40450,7 @@ function App.round(this: App, r: i32): boolean -> @App.round [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: App.ended App.turn nish.PgCarrier.run nish.PgCarrier.runInt nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=App.ended#0 App.ended#0 App.turn#0 App.ended#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=App.ended#0 App.ended#0 App.turn#0 App.ended#0
   stackSites=0 stackLocals=0
   local -3:11 want: i32 (const)
   callee -3:23 App.ended -> @App.ended
@@ -40457,10 +40459,10 @@ function App.round(this: App, r: i32): boolean -> @App.round [method]
   local +4:14 k: i32 (let)
   local +6:13 key: i64 (const)
   callee +7:11 PgCarrier.runInt -> @nish.PgCarrier.runInt
-  local +12:14 t: i32 (let)
-  callee +12:39 App.ended -> @App.ended
-  callee +13:7 App.turn -> @App.turn
-  callee +15:12 App.ended -> @App.ended
+  local +12:9 t: i32 (let)
+  callee +13:45 App.ended -> @App.ended
+  callee +14:7 App.turn -> @App.turn
+  callee +20:12 App.ended -> @App.ended
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via App.constructor

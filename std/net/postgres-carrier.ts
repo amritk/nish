@@ -1108,7 +1108,7 @@ export class PgCarrier {
     const id: i32 = exec.batcher
     const batch: PgCarrierBatch | null = this.batcher(id)
     if (batch === null) {
-      // An execution no batcher holds is no longer held either.
+      // Not reached: no batcher is ever detached, so this releases nothing.
       return PG_CARRIER_NONE
     }
     const b: PgBatcher = batch.batcher

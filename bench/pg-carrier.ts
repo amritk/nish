@@ -3,9 +3,9 @@
 // process over loopback, all on one thread, as
 // tests/link/std_postgres_carrier drives one. Each of `n` rounds queues
 // eight plain queries and eight int8 keys on an attached PgBatcher (queries
-// of the program's own, with no request), then turns until every one has
-// had its final event: the stand-in serves, the handler waits without
-// blocking, and the carrier's events are read. A plain query's
+// of the program's own, with no request), then runs ROUND_TURNS turns, by
+// which every one has had its final event: the stand-in serves, the handler
+// waits without blocking, and the carrier's events are read. A plain query's
 // PG_CARRIER_BUILD binds one int8 parameter, which the stand-in answers as
 // a one-column row; the eight keys go out in one execution, answered with a
 // two-column row for each key below 1000. It reaches the carrier's dispatch,
@@ -13,7 +13,7 @@
 // beneath them, whose panic sites the std/ ratchet counts in
 // std/net/postgres-carrier.ts and std/net/postgres.ts, so a fix to one of
 // them shows here as a count that holds or falls. It prints the fold of
-// every row read and the count of each final event.
+// every row read, the count of each final event and of late rounds.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
 import { PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgPool, pgTarget } from "nish/net/postgres"
@@ -47,6 +47,13 @@ const KIND_ECHO: i32 = 1
 const KIND_USERS: i32 = 2
 /** The most turns one round may take before the bench gives up on it. */
 const TURNS: i32 = 10000
+/**
+ * The turns every round runs. A round on loopback ends in 2, and the first,
+ * which connects, in 4. A round that ends sooner runs idle turns up to this,
+ * so the count does not depend on when the kernel hands over a reply; one
+ * that needs more is late, and a late round fails the run.
+ */
+const ROUND_TURNS: i32 = 4
 
 /** One byte into FNV-1a 32. */
 const mix = (h: u32, b: i32): u32 => (h ^ toU32(b & 255)) * 16777619
@@ -380,6 +387,8 @@ class App {
   full: i32 = 0
   /** The next plain query's parameter. */
   value: i64 = 0
+  /** Rounds that needed more than ROUND_TURNS turns. */
+  late: i32 = 0
 
   constructor() {
     const router = new Router(new RouterLimits())
@@ -451,7 +460,7 @@ class App {
     }
   }
 
-  /** One round: the plain queries and the keys, then turns until each has ended. */
+  /** One round: the plain queries and the keys, then ROUND_TURNS turns, or more until each has ended. */
   round(r: i32): boolean {
     const want: i32 = this.ended() + PLAIN + KEYS
     for (let k: i32 = 0; k < PLAIN; k++) {
@@ -468,8 +477,13 @@ class App {
         return false
       }
     }
-    for (let t: i32 = 0; t < TURNS && this.ended() < want; t++) {
+    let t: i32 = 0
+    while (t < TURNS && (t < ROUND_TURNS || this.ended() < want)) {
       this.turn()
+      t++
+    }
+    if (t > ROUND_TURNS) {
+      this.late += 1
     }
     return this.ended() === want
   }
@@ -485,9 +499,9 @@ export const main = (): i32 => {
     }
   }
   console.log(
-    `${toI64(app.fold)} rounds=${good}/${n} done=${app.done} missing=${app.missing} failed=${app.failed} full=${app.full}`
+    `${toI64(app.fold)} rounds=${good}/${n} done=${app.done} missing=${app.missing} failed=${app.failed} full=${app.full} late=${app.late}`
   )
   app.carrier.close()
   app.pool.dispose()
-  return good === n && app.failed === 0 ? 0 : 1
+  return good === n && app.failed === 0 && app.late === 0 ? 0 : 1
 }
