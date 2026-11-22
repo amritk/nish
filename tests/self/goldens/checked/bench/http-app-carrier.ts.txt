@@ -17720,6 +17720,7 @@ import hmacSha256 from "nish/crypto/hmac" -> function @nish.hmacSha256
 import hmacSha256Secret from "nish/crypto/hmac" -> function @nish.hmacSha256Secret
 import hmacSha384 from "nish/crypto/hmac" -> function @nish.hmacSha384
 import hmacSha384Secret from "nish/crypto/hmac" -> function @nish.hmacSha384Secret
+import tlsCopyWindow from "nish/net/tls/codec" -> function @nish.tlsCopyWindow
 import tlsHexInto from "nish/net/tls/codec" -> function @nish.tlsHexInto
 import timingSafeEqualAt from "nish/crypto/ct" -> function @nish.timingSafeEqualAt
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
@@ -18180,13 +18181,13 @@ function tlsHeldCopy(held: u8[], from: u8[]): void -> @nish.tlsHeldCopy
   stackSites=0 stackLocals=0
   local -1:12 k: i32 (let)
 function tlsHeldWindow(caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] -> @nish.tlsHeldWindow
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: hashOff
-  calls: nish_array_grow nish_panic nish_str_concat nish_str_from_i32
-  pointer transcriptHash: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: hashLength hashOff
+  calls: nish.tlsCopyWindow nish_panic nish_str_concat nish_str_from_i32
+  pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.tlsCopyWindow#0
   stackSites=0 stackLocals=0
   local +0:9 window: u8[] (const)
-  local +2:9 j: i32 (let)
+  callee +0:24 tlsCopyWindow -> @nish.tlsCopyWindow
 function tlsHeldCheck(caller: string, hashLength: i32, held: Secret<u8[]>): void -> @nish.tlsHeldCheck
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.expose$arr.u8$i32$fn.18.nish.tlsHeldLength nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
@@ -22519,7 +22520,7 @@ function TlsClient.checkHello(this: TlsClient, view: TlsServerFlightView): i32 -
   stackSites=0 stackLocals=0
   callee +0:31 tlsServerHelloDowngrade -> @nish.tlsServerHelloDowngrade
   callee +12:8 timingSafeEqualAt -> @nish.timingSafeEqualAt
-function TlsClient.hashMessage(this: TlsClient, length: i32): void -> @nish.TlsClient.hashMessage [exported method]
+function TlsClient.hashMessage(this: TlsClient, length: i32): boolean -> @nish.TlsClient.hashMessage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTranscript.update
   calls: nish.TlsTranscript.update
@@ -22533,14 +22534,14 @@ function TlsClient.handleServerHello(this: TlsClient, length: i32): i32 -> @nish
   calls: nish.TlsClient.checkHello nish.TlsClient.exchangeKeys nish.TlsClient.handleRetry nish.TlsClient.hashMessage nish.TlsClient.secrets nish.TlsClient.startTranscript nish.TlsTranscript.hashInto nish.tlsDeriveSecretHeld nish.tlsReadServerHello
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsClient.checkHello#0 nish.TlsClient.handleRetry#0 nish.TlsClient.startTranscript#0 nish.TlsClient.hashMessage#0 nish.TlsClient.exchangeKeys#0 nish.TlsClient.secrets#0
   stackSites=0 stackLocals=0
-  local -36:11 view: TlsServerFlightView (const)
-  callee -35:5 tlsReadServerHello -> @nish.tlsReadServerHello
-  local -30:11 checked: i32 (const)
-  callee -30:26 TlsClient.checkHello -> @nish.TlsClient.checkHello
-  callee -25:14 TlsClient.handleRetry -> @nish.TlsClient.handleRetry
-  local -17:11 shareSize: i32 (const)
-  callee -12:7 TlsClient.startTranscript -> @nish.TlsClient.startTranscript
-  callee -10:5 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
+  local -38:11 view: TlsServerFlightView (const)
+  callee -37:5 tlsReadServerHello -> @nish.tlsReadServerHello
+  local -32:11 checked: i32 (const)
+  callee -32:26 TlsClient.checkHello -> @nish.TlsClient.checkHello
+  callee -27:14 TlsClient.handleRetry -> @nish.TlsClient.handleRetry
+  local -19:11 shareSize: i32 (const)
+  callee -14:7 TlsClient.startTranscript -> @nish.TlsClient.startTranscript
+  callee -12:10 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
   local -9:11 alert: i32 (const)
   callee -9:24 TlsClient.exchangeKeys -> @nish.TlsClient.exchangeKeys
   local -5:11 pool: TlsSecretPool (const)
@@ -22569,10 +22570,10 @@ function TlsClient.handleRetry(this: TlsClient, length: i32): i32 -> @nish.TlsCl
   local -10:11 view: TlsServerFlightView (const)
   callee +1:5 TlsClient.startTranscript -> @nish.TlsClient.startTranscript
   callee +2:5 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
-  callee +3:5 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
-  callee +5:21 tlsCopyWindow -> @nish.tlsCopyWindow
-  callee +10:5 TlsClient.wipeUnpicked -> @nish.TlsClient.wipeUnpicked
-  callee +13:9 TlsClient.writeHello -> @nish.TlsClient.writeHello
+  callee +3:10 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
+  callee +7:21 tlsCopyWindow -> @nish.tlsCopyWindow
+  callee +12:5 TlsClient.wipeUnpicked -> @nish.TlsClient.wipeUnpicked
+  callee +15:9 TlsClient.writeHello -> @nish.TlsClient.writeHello
 function TlsClient.wipeKeys(this: TlsClient): void -> @nish.TlsClient.wipeKeys [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$i32$i32$fn.16.nish.tlsZeroHeld
@@ -22623,7 +22624,7 @@ function TlsClient.handleEncryptedExtensions(this: TlsClient, length: i32): i32 
   callee -21:5 tlsReadEncryptedExtensions -> @nish.tlsReadEncryptedExtensions
   local -10:13 chosen: string (const)
   callee -10:30 tlsWindowString -> @nish.tlsWindowString
-  callee +2:5 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
+  callee +2:10 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
 function TlsClient.handleCertificate(this: TlsClient, length: i32): i32 -> @nish.TlsClient.handleCertificate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -22634,9 +22635,9 @@ function TlsClient.handleCertificate(this: TlsClient, length: i32): i32 -> @nish
   local -11:11 view: TlsServerFlightView (const)
   callee -10:5 tlsReadCertificate -> @nish.tlsReadCertificate
   callee +0:25 tlsCopyCertificates -> @nish.tlsCopyCertificates
-  callee +1:5 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
-  callee +2:20 tlsCertificateVerifyContent -> @nish.tlsCertificateVerifyContent
-  callee +2:48 TlsTranscript.hash -> @nish.TlsTranscript.hash
+  callee +1:10 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
+  callee +4:20 tlsCertificateVerifyContent -> @nish.tlsCertificateVerifyContent
+  callee +4:48 TlsTranscript.hash -> @nish.TlsTranscript.hash
 function TlsClient.handleCertificateVerify(this: TlsClient, length: i32): i32 -> @nish.TlsClient.handleCertificateVerify [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -22648,7 +22649,7 @@ function TlsClient.handleCertificateVerify(this: TlsClient, length: i32): i32 ->
   callee -7:5 tlsReadCertificateVerify -> @nish.tlsReadCertificateVerify
   callee -3:10 tlsClientOffersScheme -> @nish.tlsClientOffersScheme
   callee +1:22 tlsCopyWindow -> @nish.tlsCopyWindow
-  callee +2:5 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
+  callee +2:10 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
 function TlsClient.handleFinished(this: TlsClient, length: i32): i32 -> @nish.TlsClient.handleFinished [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -22664,19 +22665,19 @@ function TlsClient.handleFinished(this: TlsClient, length: i32): i32 -> @nish.Tl
   callee -2:28 tlsFinishedVerifyDataHeld -> @nish.tlsFinishedVerifyDataHeld
   local -1:11 matches: boolean (const)
   callee -1:30 timingSafeEqualAt -> @nish.timingSafeEqualAt
-  callee +4:5 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
-  callee +5:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee +8:5 tlsMasterSecretHeld -> @nish.tlsMasterSecretHeld
-  callee +9:5 tlsDeriveSecretHeld -> @nish.tlsDeriveSecretHeld
-  callee +17:5 tlsDeriveSecretHeld -> @nish.tlsDeriveSecretHeld
-  callee +25:5 tlsDeriveSecretHeld -> @nish.tlsDeriveSecretHeld
-  callee +26:5 TlsSecretPool.zero -> @nish.TlsSecretPool.zero
-  local +27:11 verifyData: u8[] (const)
-  callee +27:30 tlsFinishedVerifyDataHeld -> @nish.tlsFinishedVerifyDataHeld
-  local +28:11 at: i32 (const)
-  local +29:11 end: i32 (const)
-  callee +29:22 tlsWriteFinished -> @nish.tlsWriteFinished
-  callee +31:10 TlsClient.sent -> @nish.TlsClient.sent
+  callee +4:10 TlsClient.hashMessage -> @nish.TlsClient.hashMessage
+  callee +7:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee +10:5 tlsMasterSecretHeld -> @nish.tlsMasterSecretHeld
+  callee +11:5 tlsDeriveSecretHeld -> @nish.tlsDeriveSecretHeld
+  callee +19:5 tlsDeriveSecretHeld -> @nish.tlsDeriveSecretHeld
+  callee +27:5 tlsDeriveSecretHeld -> @nish.tlsDeriveSecretHeld
+  callee +28:5 TlsSecretPool.zero -> @nish.TlsSecretPool.zero
+  local +29:11 verifyData: u8[] (const)
+  callee +29:30 tlsFinishedVerifyDataHeld -> @nish.tlsFinishedVerifyDataHeld
+  local +30:11 at: i32 (const)
+  local +31:11 end: i32 (const)
+  callee +31:22 tlsWriteFinished -> @nish.tlsWriteFinished
+  callee +33:10 TlsClient.sent -> @nish.TlsClient.sent
 function TlsClient.handleTicket(this: TlsClient, length: i32): i32 -> @nish.TlsClient.handleTicket [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsReadNewSessionTicket

@@ -843,13 +843,17 @@ export class TlsClient {
     return 0
   }
 
-  /** Hashes the message `input[0 .. 4 + length)` into the transcript. */
-  private hashMessage(length: i32): void {
-    // `drain` refuses a length past 65,536, so this never skips a message.
+  /**
+   * Hashes the message `input[0 .. 4 + length)` into the transcript; false,
+   * hashing nothing, for a length `drain` refuses (past 65,536), so a caller
+   * fails the handshake rather than go on with a transcript short a message.
+   */
+  private hashMessage(length: i32): boolean {
     if (length < 0 || length > 65536) {
-      return
+      return false
     }
     this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
+    return true
   }
 
   /** A ServerHello or HelloRetryRequest, `input[0 .. 4 + length)`. */
@@ -880,7 +884,9 @@ export class TlsClient {
     if (!this.retried) {
       this.startTranscript(view.suite)
     }
-    this.hashMessage(length)
+    if (!this.hashMessage(length)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     const alert: i32 = this.exchangeKeys()
     if (alert !== 0) {
       return alert
@@ -929,7 +935,9 @@ export class TlsClient {
     this.retried = true
     this.startTranscript(view.suite)
     this.transcript.restartWithMessageHash()
-    this.hashMessage(length)
+    if (!this.hashMessage(length)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     if (view.hasCookie) {
       this.cookie = tlsCopyWindow(view.data, view.cookieAt, view.cookieLength)
     }
@@ -1015,7 +1023,9 @@ export class TlsClient {
       }
       this.alpnChosen = chosen
     }
-    this.hashMessage(length)
+    if (!this.hashMessage(length)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     this.state = TLS_CLIENT_STATE_WAIT_CERTIFICATE
     return 0
   }
@@ -1034,7 +1044,9 @@ export class TlsClient {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
     this.certificates = tlsCopyCertificates(view)
-    this.hashMessage(length)
+    if (!this.hashMessage(length)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     this.content = tlsCertificateVerifyContent(this.transcript.hash())
     this.state = TLS_CLIENT_STATE_WAIT_CERTIFICATE_VERIFY
     return 0
@@ -1052,7 +1064,9 @@ export class TlsClient {
     }
     this.scheme = view.scheme
     this.signature = tlsCopyWindow(view.data, view.signatureAt, view.signatureLength)
-    this.hashMessage(length)
+    if (!this.hashMessage(length)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     this.state = TLS_CLIENT_STATE_WAIT_AUTH
     return 0
   }
@@ -1076,7 +1090,9 @@ export class TlsClient {
     if (!matches) {
       return TLS_ALERT_DECRYPT_ERROR
     }
-    this.hashMessage(length)
+    if (!this.hashMessage(length)) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     this.transcript.hashInto(this.hashes, TLS_CLIENT_FROM)
     // The master secret is derived over the handshake secret, which has no
     // other use left.

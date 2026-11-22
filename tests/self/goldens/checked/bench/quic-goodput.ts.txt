@@ -18263,6 +18263,7 @@ import hmacSha256 from "nish/crypto/hmac" -> function @nish.hmacSha256
 import hmacSha256Secret from "nish/crypto/hmac" -> function @nish.hmacSha256Secret
 import hmacSha384 from "nish/crypto/hmac" -> function @nish.hmacSha384
 import hmacSha384Secret from "nish/crypto/hmac" -> function @nish.hmacSha384Secret
+import tlsCopyWindow from "nish/net/tls/codec" -> function @nish.tlsCopyWindow
 import tlsHexInto from "nish/net/tls/codec" -> function @nish.tlsHexInto
 import timingSafeEqualAt from "nish/crypto/ct" -> function @nish.timingSafeEqualAt
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
@@ -18723,13 +18724,13 @@ function tlsHeldCopy(held: u8[], from: u8[]): void -> @nish.tlsHeldCopy
   stackSites=0 stackLocals=0
   local -1:12 k: i32 (let)
 function tlsHeldWindow(caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] -> @nish.tlsHeldWindow
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: hashOff
-  calls: nish_array_grow nish_panic nish_str_concat nish_str_from_i32
-  pointer transcriptHash: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: hashLength hashOff
+  calls: nish.tlsCopyWindow nish_panic nish_str_concat nish_str_from_i32
+  pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.tlsCopyWindow#0
   stackSites=0 stackLocals=0
   local +0:9 window: u8[] (const)
-  local +2:9 j: i32 (let)
+  callee +0:24 tlsCopyWindow -> @nish.tlsCopyWindow
 function tlsHeldCheck(caller: string, hashLength: i32, held: Secret<u8[]>): void -> @nish.tlsHeldCheck
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.expose$arr.u8$i32$fn.18.nish.tlsHeldLength nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32

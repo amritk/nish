@@ -75,7 +75,7 @@ import {
   hmacSha384,
   hmacSha384Secret,
 } from "nish/crypto/hmac"
-import { tlsHexInto } from "nish/net/tls/codec"
+import { tlsCopyWindow, tlsHexInto } from "nish/net/tls/codec"
 import { timingSafeEqualAt } from "nish/crypto/ct"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
@@ -867,14 +867,7 @@ const tlsHeldCopy = (held: u8[], from: u8[]): void => {
  * a shorter context would derive another secret without a word.
  */
 const tlsHeldWindow = (caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
-  const window: u8[] = []
-  for (
-    let j: i32 = hashOff;
-    j >= 0 && j < toI32(transcriptHash.length) && toI32(window.length) < hashLength;
-    j++
-  ) {
-    window.push(transcriptHash[j])
-  }
+  const window: u8[] = tlsCopyWindow(transcriptHash, hashOff, hashLength)
   if (toI32(window.length) !== hashLength) {
     panic(`${caller}: a transcript hash at ${hashOff} outside its ${transcriptHash.length} bytes`)
   }
