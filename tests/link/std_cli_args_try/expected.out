@@ -1,0 +1,80 @@
+tryGroup bad handle: cli-args: group(x): 99 is not a command handle
+tryGroup bad name: cli-args: group(-x): '-x' is not a command name
+tryGroup under a command: cli-args: group(x): api users list is a command, not a group
+tryGroup taken: cli-args: group(users): api already has a command 'users'
+tryGroup: ok
+tryArgument on the root: ok
+tryGroup under arguments: cli-args: group(x): cat takes arguments, so it cannot hold commands
+tryRequired on the root: ok
+tryCommand under a required flag: cli-args: command(x): cat has a required flag, so it cannot hold commands
+tryCommand negative id: cli-args: command(x): the id -1 is negative, which a group answers
+tryCommand id taken: cli-args: command(x): api users list already has the id 1
+tryCommand bad handle: cli-args: command(x): -3 is not a command handle
+tryCommand taken: cli-args: command(list): api users already has a command 'list'
+tryCommand: ok
+tryAlias bad handle: cli-args: alias(x): 99 is not a command handle
+tryAlias root: cli-args: alias(x): the root has no alias
+tryAlias bad name: cli-args: alias(a b): 'a b' is not a command name
+tryAlias taken: cli-args: alias(get): api users already has a command 'get'
+tryAlias: ok
+tryAlias taken by an alias: cli-args: alias(ls): api users already has a command 'ls'
+tryGlobalFlag bad spec: cli-args: globalFlag("-xy, --x"): bad flag spec '-xy, --x': a short flag is one letter, then ', --name'
+tryGlobalFlag short not a letter: cli-args: globalFlag("-=, --x"): bad flag spec '-=, --x': the short flag is not a letter
+tryGlobalFlag no dashes: cli-args: globalFlag("x"): bad flag spec 'x': a flag is written '--name'
+tryGlobalFlag bad name: cli-args: globalFlag("--"): bad flag spec '--': the name is empty or has a space, '=' or leading dash
+tryGlobalFlag bad value: cli-args: globalFlag("--x <y"): bad flag spec '--x <y': a value is written <value> or [value]
+tryGlobalFlag help: cli-args: globalFlag("--help"): -h, --help, -v and --version are taken
+tryGlobalFlag taken: cli-args: globalFlag("--color"): the global flags already has a flag of that name
+tryGlobalFlag taken by a local: cli-args: globalFlag("--limit <n>"): api users list already has a flag of that name
+tryGlobalFlag: ok
+tryFlag bad handle: cli-args: flag("--x"): 99 is not a command handle
+tryFlag taken here: cli-args: flag("--limit <n>"): api users list already has a flag of that name
+tryFlag taken by a global: cli-args: flag("--color"): a global flag of that name is already declared
+tryFlag: ok
+tryDefaultValue bad handle: cli-args: defaultValue(x): 99 is not a flag handle
+tryDefaultValue boolean: cli-args: defaultValue(x): --all takes no value
+tryDefaultValue required: cli-args: defaultValue(x): --name is required, so a default would never be read
+tryDefaultValue: ok
+tryRequired bad handle: cli-args: required: -1 is not a flag handle
+tryRequired on a group: cli-args: required: api users holds commands, so --page can never be checked
+tryRequired defaulted: cli-args: required: --limit has a default, so it can never be missing
+tryRequired: ok
+tryRepeatable bad handle: cli-args: repeatable: 99 is not a flag handle
+tryRepeatable boolean: cli-args: repeatable: --color takes no value
+tryRepeatable: ok
+tryNegatable bad handle: cli-args: negatable: 99 is not a flag handle
+tryNegatable value flag: cli-args: negatable(--limit): only a boolean flag declared '--name' can be negated
+tryNegatable negation: cli-args: negatable(--trace): only a boolean flag declared '--name' can be negated
+tryNegatable: ok
+tryNegatable twice: cli-args: negatable(--color): --no-color is already declared
+tryNegatable taken: cli-args: negatable(--dry): --no-dry is already declared
+tryArgument bad handle: cli-args: argument("<x>"): 99 is not a command handle
+tryArgument group: cli-args: argument("<x>"): api users holds commands, so it takes no arguments
+tryArgument bad spec: cli-args: argument("x"): bad argument spec: an argument is written <name> or [name]
+tryArgument bad name: cli-args: argument("<a b>"): bad argument spec: the name is empty or has a space, '=' or leading dash
+tryArgument optional: ok
+tryArgument required after optional: cli-args: argument("<more>"): a required argument may not follow an optional one
+tryArgument variadic: ok
+tryArgument after variadic: cli-args: argument("[last]"): no argument may follow a variadic one
+tryEpilog bad handle: cli-args: epilog: 99 is not a command handle
+tryEpilog: ok
+status ok: true
+user: 42
+scopes: read,write
+tags: a,b from argv: true
+tag: b
+base: https://x default: true
+raw: true color: false
+limit: (none) unset: true
+limit values: 0
+'kyes': api users: unknown command 'kyes' (did you mean 'keys'?)
+'ksey': api users: unknown command 'ksey' (did you mean 'keys'?)
+'': api users: unknown command '' (did you mean 'ab'?)
+'-': api users: unknown command '-' (did you mean 'ab'?)
+'--': api users: missing command (one of: administrators, keys, ab)
+'administratosr': api users: unknown command 'administratosr' (did you mean 'administrators'?)
+'x': api users: unknown command 'x' (did you mean 'ab'?)
+'zzzzzz': api users: unknown command 'zzzzzz'
+'--lmit': api keys: unknown flag --lmit (did you mean --limit?)
+'---': api keys: unknown flag ---
+'--': parsed

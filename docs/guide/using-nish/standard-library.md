@@ -2134,7 +2134,13 @@ by a name a typo could miss. Each command gets an id you choose, which a
 A mistake in the declarations — a flag declared twice in one scope, a bad spec,
 a required argument after an optional one, a command id used twice or negative,
 a required flag on a command that holds commands or with a default, a flag a
-`--no-` negation would shadow — panics at the call that made it, naming it. A
+`--no-` negation would shadow — panics at the call that made it, naming it.
+Each declaring method has a `try` twin (`tryGroup`, `tryCommand`, `tryFlag`,
+`tryArgument`, ...) that answers the same mistake as an `Err` instead, and
+`tryFlag` and `tryArgument` give a `CliFlag` or `CliArgument` that the
+result's `readFlag`, `readValue`, `readPositional` and their siblings read
+without a check that can panic, so a tool built without `--allow-panics`
+declares its tree through them. A
 module constant can only be a number, a boolean or a string, so build the tree
 in `main` or in a class's constructor.
 

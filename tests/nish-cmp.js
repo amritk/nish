@@ -18492,7 +18492,6 @@ const DECLARED = [
     "std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages` in an i32 and clamps its help padding instead of checking it for overflow, so every module and header naming `HelpMenu` moves (WP80 S1)",
     {
       "bench/std-cli-args.ts": ["cli.ll", "std-cli-args.h", "std-cli-args.ll"],
-      "examples/api-cli/main.ts": ["cli.ll", "main.h"],
       "tests/link/std_cli/main.ts": ["cli.ll", "main.h", "main.ll"],
       ...Object.fromEntries(
         [
@@ -18532,6 +18531,55 @@ const DECLARED = [
       "bench/std-router.ts": ["router.ll", "std-router.h", "std-router.ll"],
     }
   ),
+  // WP80 S1: the atomic arrays build their values with a counted push loop
+  // instead of `new Array(length)`, so every program reaching them moves.
+  ...s1PanicFree(
+    "std/threads.ts's `AtomicI32Array` and `AtomicI64Array` constructors push a typed zero `length` times instead of building `new Array(length)`, so threads.ll loses its array-length panic and gains the push loop, and a module declaring either constructor numbers its attribute groups differently",
+    {
+      "bench/par-histogram-atomic.ts": ["par-histogram-atomic.ll", "threads.ll"],
+      "bench/std-threads.ts": ["threads.ll"],
+      "docs/cookbook/thread-atomic-array.ts": ["thread-atomic-array.ll", "threads.ll"],
+      "examples/histogram-atomic.ts": ["threads.ll"],
+      "tests/link/module_private_spawn/main.ts": ["threads.ll"],
+      ...Object.fromEntries(
+        [
+          "atomic_array_negative_index",
+          "atomic_array_negative_length",
+          "atomic_array_out_of_range",
+          "par_atomic_array",
+          "thread_atomic_array",
+        ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll", "threads.ll"]])
+      ),
+    }
+  ),
+  ...s1PanicFree(
+    "a test new with this change: it reads `ParsedFlags` after a flag the table declares late, and std/cli-flags.ts now keeps one `FlagValue` record per flag where the seed's copy kept parallel arrays, so cli-flags.ll, cli.ll, the program's module and its header differ",
+    Object.fromEntries(
+      ["std_cli_flags_bad_late_flag", "std_cli_flags_bad_late_has"].map((name) => [
+        `tests/link/${name}/main.ts`,
+        ["cli-flags.ll", "cli.ll", "main.h", "main.ll"],
+      ])
+    )
+  ),
+  ...s1PanicFree(
+    "a test new with this change: it decodes long arrays through std/json-typed.ts, whose array readers this change proves, against the seed's copies of std/bytes.ts and std/json*.ts, which differ from this tree's",
+    {
+      "tests/link/std_json_typed_long/main.ts": [
+        "bytes.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+      ],
+    }
+  ),
+  ...["examples/api-cli/main.ts", "tests/link/std_cli_args_try/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: S1_PANIC_FREE,
+    why: "the program declares its tree through std/cli-args.ts's new `try` twins and reads values through `CliFlag` and `CliArgument`, which the seed's copy does not export, so the reference refuses it",
+  })),
 ]
 
 /**

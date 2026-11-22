@@ -8,8 +8,8 @@ unsafe import 73:10 wrappingAdd from "nish:unsafe"
 unsafe import 73:23 wrappingSub from "nish:unsafe"
 unsafe call 579:18 wrappingAdd (node 1394)
 unsafe call 591:18 wrappingSub (node 1424)
-unsafe call 851:22 wrappingAdd (node 1896)
-unsafe call 865:22 wrappingSub (node 1934)
+unsafe call 862:22 wrappingAdd (node 1951)
+unsafe call 876:22 wrappingSub (node 1989)
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 const MIN_STACK: i32 = 131072
@@ -180,11 +180,12 @@ function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64)
   stackSites=0 stackLocals=0
   local +0:11 old: i64 (const)
 function AtomicI32Array.constructor(this: AtomicI32Array, length: i32): void -> @nish.AtomicI32Array.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  escaping: length
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_array_grow
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local +0:13 zero: i32 (const)
+  local +1:16 k: i32 (let)
 function AtomicI32Array.load(this: AtomicI32Array, i: i32): i32 -> @nish.AtomicI32Array.load [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -232,11 +233,11 @@ function AtomicI32Array.compareExchange(this: AtomicI32Array, i: i32, expected: 
   stackSites=0 stackLocals=0
   local +0:11 old: i32 (const)
 function AtomicI64Array.constructor(this: AtomicI64Array, length: i32): void -> @nish.AtomicI64Array.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  escaping: length
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_array_grow
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local +0:16 k: i32 (let)
 function AtomicI64Array.load(this: AtomicI64Array, i: i32): i64 -> @nish.AtomicI64Array.load [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
