@@ -1259,7 +1259,10 @@ export class Http1Connection {
       // Only a WebSocket reads the decoder and the configured message cap,
       // so a request's check stays on the connection's front fields.
       const ws: WsDecoder | null = this.ws
-      room = http1ServerSub(this.inputLimit(), ws !== null ? http1ServerSub(ws.end, ws.start) : this.parser.buffered())
+      room = http1ServerSub(
+        this.inputLimit(),
+        ws !== null ? http1ServerSub(ws.end, ws.start) : this.parser.buffered()
+      )
     } else {
       room = http1ServerSub(this.bufferLimit, this.parser.buffered())
     }
@@ -1784,7 +1787,10 @@ export class Http1Connection {
       if (this.sameHead(status, names, values, framing, code)) {
         // `bodyRoom` stops short of the output's end, so the copy fits; a
         // copy that did not would write the head out afresh below.
-        if (this.headLength <= this.bodyRoom() && tryCopyBytes(this.output, this.outputEnd, this.headBytes, H1_ZERO, this.headLength)) {
+        if (
+          this.headLength <= this.bodyRoom() &&
+          tryCopyBytes(this.output, this.outputEnd, this.headBytes, H1_ZERO, this.headLength)
+        ) {
           this.outputEnd = http1ServerAdd(this.outputEnd, this.headLength)
           this.headMisses = 0
           // A count past 2^31 - 2 heads stays there: no server lives that long.
@@ -1947,7 +1953,9 @@ export class Http1Connection {
     if (toI32(this.headBytes.length) < n) {
       // `n` is at most `H1_HEAD_KEEP`, so the rounded length is a `u16`.
       // A power of two: rounding up is adding one short of it and masking.
-      this.headBytes = new Array<u8>(toU16((toU32(n) + toU32(H1_HEAD_ROUND) - toU32(1)) & (toU32(0) - toU32(H1_HEAD_ROUND))))
+      this.headBytes = new Array<u8>(
+        toU16((toU32(n) + toU32(H1_HEAD_ROUND) - toU32(1)) & (toU32(0) - toU32(H1_HEAD_ROUND)))
+      )
     }
     // `fields` is at most `H1_HEAD_FIELDS`, so twice it is a `u16`.
     const kinds: u16 = toU16(toU32(fields) * toU32(2))
@@ -2413,7 +2421,10 @@ export class Http1Connection {
     if (this.state !== H1_S_WEBSOCKET) {
       return H1_CLOSED
     }
-    if (opcode === WS_OP_CLOSE || toI64(len) > toI64(this.config.outputSize) - toI64(H1_CONTROL_RESERVE) - toI64(14)) {
+    if (
+      opcode === WS_OP_CLOSE ||
+      toI64(len) > toI64(this.config.outputSize) - toI64(H1_CONTROL_RESERVE) - toI64(14)
+    ) {
       return H1_INVALID
     }
     if (websocketFrameSize(len, false) > this.bodyRoom()) {
@@ -2897,7 +2908,12 @@ export class Http1Server {
     const at: i32[] = this.at
     const rested: i64[] = this.rested
     const restedMss: i32[] = this.restedMss
-    if (slot < 0 || slot >= toI32(at.length) || slot >= toI32(rested.length) || slot >= toI32(restedMss.length)) {
+    if (
+      slot < 0 ||
+      slot >= toI32(at.length) ||
+      slot >= toI32(rested.length) ||
+      slot >= toI32(restedMss.length)
+    ) {
       return
     }
     const k: i32 = at[slot]
@@ -3174,7 +3190,12 @@ export class Http1Server {
     const fd: i32 = conn.fd
     const pending: i32 = http1ServerSub(conn.outputEnd, conn.outputStart)
     while (conn.wantsWrite()) {
-      const n: i32 = netWrite(fd, conn.output, conn.outputStart, http1ServerSub(conn.outputEnd, conn.outputStart))
+      const n: i32 = netWrite(
+        fd,
+        conn.output,
+        conn.outputStart,
+        http1ServerSub(conn.outputEnd, conn.outputStart)
+      )
       if (n <= 0) {
         if (n !== H1_AGAIN) {
           conn.abort()
@@ -3618,7 +3639,12 @@ export class Http1TlsServer {
   private send(slot: i32, conn: Http1Connection): void {
     const pending: i32 = http1ServerSub(conn.outputEnd, conn.outputStart)
     while (conn.wantsWrite()) {
-      const n: i32 = this.tls.write(slot, conn.output, conn.outputStart, http1ServerSub(conn.outputEnd, conn.outputStart))
+      const n: i32 = this.tls.write(
+        slot,
+        conn.output,
+        conn.outputStart,
+        http1ServerSub(conn.outputEnd, conn.outputStart)
+      )
       if (n <= 0) {
         break
       }
