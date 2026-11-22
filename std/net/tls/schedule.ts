@@ -860,16 +860,19 @@ const tlsHeldCopy = (held: u8[], from: u8[]): void => {
   }
 }
 
-/** `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the context a held form hands HKDF. */
-const tlsHeldWindow = (hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
+/**
+ * `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the
+ * context a held form hands HKDF. Panics naming `caller` when the window is
+ * not inside `transcriptHash`, as `tlsHeldCheck` does for a wrong hash length:
+ * a shorter context would derive another secret without a word.
+ */
+const tlsHeldWindow = (caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
   const window: u8[] = []
-  if (hashOff < 0) {
-    return window
-  }
-  // A window that runs past `transcriptHash` stops at its end: a shorter context derives another secret,
-  // so the handshake fails at Finished rather than reading out of bounds.
-  for (let j: i32 = hashOff; j < toI32(transcriptHash.length) && j - hashOff < hashLength; j++) {
+  for (let j: i32 = hashOff; j >= 0 && j < toI32(transcriptHash.length) && j - hashOff < hashLength; j++) {
     window.push(transcriptHash[j])
+  }
+  if (toI32(window.length) !== hashLength) {
+    panic(`${caller}: a transcript hash at ${hashOff} outside its ${transcriptHash.length} bytes`)
   }
   return window
 }
@@ -902,8 +905,8 @@ const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, 
  * `tlsDeriveSecret` into a held `Secret`: Derive-Secret (RFC 8446 §7.1) of
  * `prk` with `label` and the transcript hash `transcriptHash[hashOff ..
  * hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
- * may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
- * HashLen bytes.
+ * may be `prk`. Panics unless `hashLength` is 32 or 48, both hold HashLen
+ * bytes and the transcript hash's window is inside `transcriptHash`.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param prk The held stage of the schedule to derive from. It is only overwritten when it is also `dst`.
@@ -922,7 +925,7 @@ export const tlsDeriveSecretHeld = (
 ): void => {
   tlsHeldCheck("tlsDeriveSecretHeld", hashLength, prk)
   tlsHeldCheck("tlsDeriveSecretHeld", hashLength, dst)
-  const context: u8[] = tlsHeldWindow(hashLength, transcriptHash, hashOff)
+  const context: u8[] = tlsHeldWindow("tlsDeriveSecretHeld", hashLength, transcriptHash, hashOff)
   if (hashLength === SHA384_SIZE) {
     hkdfExpandLabelSha384Held(dst, prk, label, context)
   } else {
@@ -996,7 +999,8 @@ export const tlsMasterSecretHeld = (
  * `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
  * §4.4.4). The finished key is held and wiped before it returns;
  * `verify_data` goes on the wire, so it is plain. Panics unless `hashLength`
- * is 32 or 48 and `baseKey` holds HashLen bytes.
+ * is 32 or 48, `baseKey` holds HashLen bytes and the transcript hash's window
+ * is inside `transcriptHash`.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param baseKey The sender's held handshake traffic secret. It stays the caller's: this does not wipe it.
@@ -1011,6 +1015,8 @@ export const tlsFinishedVerifyDataHeld = (
   hashOff: i32
 ): u8[] => {
   tlsHeldCheck("tlsFinishedVerifyDataHeld", hashLength, baseKey)
+  // Refused before the finished key exists, so a panic leaves no key unwiped.
+  const transcript: u8[] = tlsHeldWindow("tlsFinishedVerifyDataHeld", hashLength, transcriptHash, hashOff)
   const none: u8[] = []
   const finishedKey: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   if (hashLength === SHA384_SIZE) {
@@ -1018,7 +1024,6 @@ export const tlsFinishedVerifyDataHeld = (
   } else {
     hkdfExpandLabelSha256Held(finishedKey, baseKey, "finished", none)
   }
-  const transcript: u8[] = tlsHeldWindow(hashLength, transcriptHash, hashOff)
   const verifyData: u8[] =
     hashLength === SHA384_SIZE
       ? hmacSha384Secret(finishedKey, transcript)
