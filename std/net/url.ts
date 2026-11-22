@@ -157,10 +157,15 @@ const urlEscapeAt = (bytes: u8[], i: i32, end: i32): i32 => {
   return (hi << 4) | lo
 }
 
-/** Panics on `URL_DECODE_ERR_WINDOW`, as the decoders that are not `tryPercentDecode` do, and answers `result` otherwise. */
+/** `urlDecodeRun`'s answer for an `at` outside `out`, kept apart from a bad window so each panic names its argument. */
+const URL_DECODE_AT_OUTSIDE: i32 = -5
+
+/** Panics on a bad window or `at`, as the decoders that are not `tryPercentDecode` do, and answers `result` otherwise. */
 const urlDecodeChecked = (result: i32, who: string): i32 => {
-  if (result === URL_DECODE_ERR_WINDOW) {
-    panic(who + ": the window is outside the array")
+  if (result === URL_DECODE_ERR_WINDOW || result === URL_DECODE_AT_OUTSIDE) {
+    panic(
+      who + (result === URL_DECODE_AT_OUTSIDE ? ": at is outside out" : ": the window is outside the array")
+    )
   }
   return result
 }
@@ -181,10 +186,13 @@ const urlDecodeRun = (
 ): i32 => {
   const n: i32 = toI32(src.length)
   const size: i32 = toI32(out.length)
-  if (off < 0 || len < 0 || off > n || len > n - off || at < 0 || at > size) {
+  if (off < 0 || len < 0 || off > n || len > n - off) {
     return URL_DECODE_ERR_WINDOW
   }
-  // The test above bounds the sum by `src.length`, so it cannot wrap.
+  if (at < 0 || at > size) {
+    return URL_DECODE_AT_OUTSIDE
+  }
+  // The window test bounds the sum by `src.length`, so it cannot wrap.
   const end: i32 = toI32(toU32(off) + toU32(len))
   const form: boolean = (flags & URL_DECODE_FORM) !== 0
   const lenient: boolean = (flags & URL_DECODE_LENIENT) !== 0
@@ -280,8 +288,10 @@ export const percentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32,
  * @param flags `URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
  * @returns How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` code, `URL_DECODE_ERR_WINDOW` included.
  */
-export const tryPercentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 =>
-  urlDecodeRun(src, off, len, out, at, flags, false)
+export const tryPercentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 => {
+  const result: i32 = urlDecodeRun(src, off, len, out, at, flags, false)
+  return result === URL_DECODE_AT_OUTSIDE ? URL_DECODE_ERR_WINDOW : result
+}
 
 /**
  * The offset in `src` of the byte `percentDecode` with the same arguments

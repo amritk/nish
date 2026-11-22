@@ -4086,6 +4086,7 @@ const URL_PLUS: i32 = 43
 const URL_SLASH: i32 = 47
 const URL_EQUALS: i32 = 61
 const URL_QUESTION: i32 = 63
+const URL_DECODE_AT_OUTSIDE: i32 = -5
 const URL_HASH: i32 = 35
 const URL_DOT: i32 = 46
 const URL_COLON: i32 = 58
@@ -4164,8 +4165,8 @@ function urlDecodeRun(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: 
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlEscapeAt#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -32:9 n: i32 (const)
-  local -31:9 size: i32 (const)
+  local -35:9 n: i32 (const)
+  local -34:9 size: i32 (const)
   local -26:9 end: i32 (const)
   local -25:9 form: boolean (const)
   local -24:9 lenient: boolean (const)
@@ -4209,7 +4210,8 @@ function tryPercentDecode(src: u8[], off: i32, len: i32, out: u8[], at: i32, fla
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlDecodeRun#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.urlDecodeRun#3
   stackSites=0 stackLocals=0
-  callee +0:3 urlDecodeRun -> @nish.urlDecodeRun
+  local +0:9 result: i32 (const)
+  callee +0:23 urlDecodeRun -> @nish.urlDecodeRun
 function percentDecodeErrorAt(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 -> @nish.percentDecodeErrorAt [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.urlDecodeRun
