@@ -41,7 +41,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 3 / 6 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
-| Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
+| Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 3 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 8 | 0 / 0 / 0 / 0 ⁷ |

@@ -925,6 +925,12 @@ const ends = (app: App): void => {
   check(app, "lookup: a name with no address is UPSTREAM_E_LOOKUP", nowhere.error === UPSTREAM_E_LOOKUP && failed(app, nowhere, 913, "/") === UPSTREAM_E_LOOKUP)
 }
 
+/** A slot made by hand with no room for a head: once a panic of `new Array`, now an empty head. */
+const noRoom = (app: App): void => {
+  const slot = new UpstreamResponse(0, -1, new HttpRequest(-1))
+  check(app, "slot: a negative head room gives an empty head, not a panic", slot.head.length === 0 && slot.length === 0)
+}
+
 export const main = (): i32 => {
   const app = new App()
   slowUpstream(app)
@@ -936,5 +942,6 @@ export const main = (): i32 => {
   caps(app)
   lateReply(app)
   ends(app)
+  noRoom(app)
   return app.failures === 0 ? 0 : 1
 };

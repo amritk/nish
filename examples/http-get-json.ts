@@ -1,8 +1,10 @@
-// Opt-out (`--allow-panics`): calls into `std/json`, `std/net/fetch` and
-// `std/net/tls/record-client` reach their panic sites, and the
-// `String.fromBytes` slice of the body keeps a range check the checker cannot
-// yet discharge. Follow-up: make those modules panic-free and teach the prover
-// that slice's bound, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): `FetchSyncClient.fetch` and `close` reach an
+// overflow site in `std/net/tls/record-client`, the request write reaches the
+// range check of the `netWrite` builtin and `HttpBodyReader.readAll` that of
+// `netRead`, both in `std/net/fetch`, which the checker cannot yet discharge.
+// Follow-up: make the record layer panic-free and teach the prover the
+// `netRead` and `netWrite` bounds, then build this file
+// without `--allow-panics`.
 //
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when
@@ -24,6 +26,18 @@ import { getenv } from "nish:process"
 
 /** The most of a body this reads; a larger one is refused rather than held. */
 const MAX_BODY: i32 = 4194304
+
+/**
+ * The string of `bytes`, a byte at a time: `String.fromBytes` keeps a range
+ * check that no proof removes, and `fromCharCode` makes exactly one byte.
+ */
+const bytesText = (bytes: u8[]): string => {
+  const parts: string[] = []
+  for (const b of bytes) {
+    parts.push(String.fromCharCode(b))
+  }
+  return parts.join("")
+}
 
 export const main = (): i32 => {
   const args = process.argv
@@ -58,7 +72,7 @@ export const main = (): i32 => {
     return 1
   }
   client.close()
-  const text: string = String.fromBytes(body, 0, toI32(body.length))
+  const text: string = bytesText(body)
   if (res.status < 200 || res.status > 299) {
     console.error(`${res.status} ${res.reason} from ${res.url}`)
     console.error(text)
