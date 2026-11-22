@@ -41407,11 +41407,8 @@ function http2FramePut32(out: u8[], at: i32, value: i64): boolean -> @nish.http2
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function http2FrameLength(total: i64): i32 -> @nish.http2FrameLength
-  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: total
-  calls: nish.http2FrameLength
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  callee +0:47 http2FrameLength -> @nish.http2FrameLength
 function http2FrameAdd(a: i32, b: i32): i32 -> @nish.http2FrameAdd
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
