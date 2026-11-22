@@ -602,13 +602,12 @@ const aesStore32 = (out: u8[], at: i32, w: u32): void => {
  * that `rounds` is 10 or 14 to match, and that `rk` holds the
  * `8 * (rounds + 1)` words this writes; the compiler may replace that call
  * with a runtime kernel, which writes its own layout into the same words.
+ * `rounds` is an `i32` because the kernel takes one; the schedule is
+ * AES-128's for 10 and AES-256's for 14, the two values it can be.
  */
 const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
-  // The caller's contract, tested so the sizes below are literals the
+  // The sizes are chosen from the two schedules, so each is a literal the
   // bounds prover can see: Nk words of key, 4 * (rounds + 1) words in all.
-  if (rounds !== 10 && rounds !== 14) {
-    return
-  }
   const aes128: boolean = rounds === 10
   const nk: integer<4, 8> = aes128 ? 4 : 8
   const total: integer<44, 60> = aes128 ? 44 : 60
@@ -1030,15 +1029,15 @@ const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
   ghashBlocksInto(y, h[0], h[1], key.roundKeys, data, length)
 }
 
-/** The last GHASH block: the AAD's and the ciphertext's lengths in bits, 64 bits each. */
-const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): void => {
-  const h: u64[] = key.h
-  if (toI32(h.length) < 2) {
-    return
-  }
+/**
+ * The last GHASH block: the AAD's and the ciphertext's lengths in bits, 64
+ * bits each. `hHi` and `hLo` are H's words, read by the entry point that
+ * checked the key's shape.
+ */
+const ghashLengths = (y: u64[], hHi: u64, hLo: u64, aadLength: i32, textLength: i32): void => {
   y[0] = y[0] ^ (toU64(aadLength) << toU64(3))
   y[1] = y[1] ^ (toU64(textLength) << toU64(3))
-  ghashMultiply(y, h[0], h[1])
+  ghashMultiply(y, hHi, hLo)
 }
 
 /**
@@ -1047,7 +1046,7 @@ const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): v
  * block and followed by its length in bits. That GHASH, with the IV, says
  * something of H, so the GHASH state is wiped here and the caller wipes J0.
  */
-const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
+const aesGcmJ0 = (key: AesKey, hHi: u64, hLo: u64, iv: u8[]): u8[] => {
   const length: i32 = toI32(iv.length)
   const j0: u8[] = new Array<u8>(16)
   if (length === 12) {
@@ -1058,7 +1057,7 @@ const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
   }
   const y: u64[] = new Array<u64>(2)
   ghashUpdate(y, key, iv, length)
-  ghashLengths(y, key, 0, length)
+  ghashLengths(y, hHi, hLo, 0, length)
   aesStore64(j0, 0, y[0])
   aesStore64(j0, 8, y[1])
   // GHASH of the IV under H: with the IV, it says something of H.
@@ -1156,13 +1155,22 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
  * E(K, J0) ⊕ S, GCM's tag (SP 800-38D §7.1 step 6), into `y` (zero, two
  * words) as two big-endian words: S is the GHASH of the AAD and the
  * ciphertext `text[0 .. textLength)`. E(K, J0)'s block is wiped once it is
- * folded in.
+ * folded in. `hHi` and `hLo` are H's words, as `key.h` holds them.
  */
-const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void => {
+const aesGcmTag = (
+  y: u64[],
+  key: AesKey,
+  hHi: u64,
+  hLo: u64,
+  j0: u8[],
+  aad: u8[],
+  text: u8[],
+  textLength: i32
+): void => {
   const aadLength: i32 = toI32(aad.length)
   ghashUpdate(y, key, aad, aadLength)
   ghashUpdate(y, key, text, textLength)
-  ghashLengths(y, key, aadLength, textLength)
+  ghashLengths(y, hHi, hLo, aadLength, textLength)
   const mask: u8[] = new Array<u8>(AES_BLOCK)
   aesEncryptOne(key, j0, mask)
   // The second word first: its checked read proves the first.
@@ -1205,14 +1213,24 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   const length: i32 = toI32(plaintext.length)
   // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
   // is still an array length.
-  if (length > 0x7fffffef || !aesKeyUsable(key) || toI32(iv.length) === 0 || !aesGcmLengthFits(length)) {
+  const h: u64[] = key.h
+  if (
+    length > 0x7fffffef ||
+    toI32(h.length) !== 2 ||
+    !aesKeyUsable(key) ||
+    toI32(iv.length) === 0 ||
+    !aesGcmLengthFits(length)
+  ) {
     return null
   }
-  const j0: u8[] = aesGcmJ0(key, iv)
+  // H's words, read where the length test above proves both.
+  const hLo: u64 = h[1]
+  const hHi: u64 = h[0]
+  const j0: u8[] = aesGcmJ0(key, hHi, hLo, iv)
   const out: u8[] = new Array<u8>(length + AES_GCM_TAG_SIZE)
   aesGcmCtr(key, j0, plaintext, out, length)
   const tag: u64[] = new Array<u64>(2)
-  aesGcmTag(tag, key, j0, aad, out, length)
+  aesGcmTag(tag, key, hHi, hLo, j0, aad, out, length)
   // The second word first: its checked read proves the first.
   const tagLo: u64 = tag[1]
   aesStore64(out, length, tag[0])
@@ -1247,16 +1265,18 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   // has it (for one from `aesKey` the chance is 2^-128), and such a key opens
   // nothing. H is secret, so this is folded into the mask below, not branched
   // on; it is read here, where the length test above still proves both words.
-  const hashKeySet: u64 = ~ctEq(h[0] | h[1], toU64(0))
+  const hLo: u64 = h[1]
+  const hHi: u64 = h[0]
+  const hashKeySet: u64 = ~ctEq(hHi | hLo, toU64(0))
   // `total` is an array length and at least a tag, so neither this nor the
   // tag's second word at `length + 8` can leave the range of an `i32`.
   const length: i32 = total - AES_GCM_TAG_SIZE
   if (!aesGcmLengthFits(length)) {
     return null
   }
-  const j0: u8[] = aesGcmJ0(key, iv)
+  const j0: u8[] = aesGcmJ0(key, hHi, hLo, iv)
   const tag: u64[] = new Array<u64>(2)
-  aesGcmTag(tag, key, j0, aad, sealed, length)
+  aesGcmTag(tag, key, hHi, hLo, j0, aad, sealed, length)
   // The second word first: its checked read proves the first.
   const tagLo: u64 = tag[1]
   const same: u64 = aesGcmTagMask(
