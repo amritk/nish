@@ -10267,6 +10267,14 @@ const DECLARED = [
       "examples/prefork-jobs.ts": ["exit"],
     }
   ),
+  // WP80 S2: the checked-prefork test calls tryPreforkWith, which this branch
+  // adds, so a seed without it refuses the program.
+  ...stdPanicFree(
+    "std/net/prefork gains tryPreforkWith, which answers a config it refuses as an Err, so only the candidate compiles its test",
+    {
+      "tests/link/net_prefork_checked/main.ts": ["exit"],
+    }
+  ),
   // WP80 S2: BufferPool.take tests its free list before it reads and pops
   // it, and lent() subtracts in 64 bits, so the pool and every module that
   // inlines take (quic-stream, the buffer-pool tests themselves) move.
