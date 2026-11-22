@@ -10299,7 +10299,9 @@ const DECLARED = [
   ),
   // WP80 S2: BufferPool.take tests its free list before it reads and pops
   // it, and lent() subtracts in 64 bits, so the pool and every module that
-  // inlines take (quic-stream, the buffer-pool tests themselves) move.
+  // inlines take (quic-stream, the buffer-pool tests themselves) move. A
+  // record.ll listed here moves by one line: its `declare` of
+  // BufferPool.lent takes another attribute group now lent cannot panic.
   ...stdPanicFree(
     "BufferPool.take reads and pops its free list under a guard the prover reads and lent subtracts in 64 bits, so the pool and the code that inlines it change",
     {
@@ -10307,6 +10309,7 @@ const DECLARED = [
       "bench/http1-request/main.ts": ["buffer-pool.ll"],
       "bench/http1-server.ts": ["buffer-pool.ll"],
       "bench/quic-goodput.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "bench/std-http1.ts": ["buffer-pool.ll", "record.ll"],
       "bench/std-net-tls-record.ts": ["buffer-pool.ll", "record.ll"],
       "bench/techempower/main.ts": ["buffer-pool.ll"],
       "examples/file-server.ts": ["buffer-pool.ll"],
