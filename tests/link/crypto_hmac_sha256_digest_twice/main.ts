@@ -1,8 +1,9 @@
-// A second `HmacSha256.digest` would pad an already padded inner hash and answer
-// a tag of nothing the caller sent. It panics in the inner `Sha256` instead
-// ("Sha256: digest called twice", on stderr): exit 1, and stdout stops at the line
-// printed after the first digest. The link harness compares stdout and the
-// exit code only, so the message is named here rather than pinned.
+// A second `HmacSha256.digest` would feed the outer hash a second inner digest
+// and answer a tag of nothing the caller sent. It panics in the outer `Sha256`
+// instead, which the first digest finished ("Sha256: update after digest", on
+// stderr): exit 1, and stdout stops at the line printed after the first
+// digest. The link harness compares stdout and the exit code only, so the
+// message is named here rather than pinned.
 import { HmacSha256 } from "nish/crypto/hmac";
 
 export const main = (): i32 => {

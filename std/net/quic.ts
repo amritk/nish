@@ -760,9 +760,12 @@ class QuicConnReassembly {
    */
   delivered: i64 = 0
 
-  constructor(capacity: i32) {
+  /**
+   * @param capacity The ring's size in bytes, a `u16` so its arrays' lengths cannot be negative.
+   */
+  constructor(capacity: u16) {
     this.ring = new Array<u8>(capacity)
-    this.have = new Array<u8>((capacity + 7) >> 3)
+    this.have = new Array<u8>(toU16((toI32(capacity) + 7) >> 3))
   }
 
   /**
@@ -780,8 +783,8 @@ class QuicConnReassembly {
    * @internal Read in quic.ts outside the class.
    */
   slot(offset: i64): i32 {
-    const capacity: i32 = toI32(this.ring.length)
-    return capacity > 0 ? toI32(offset % toI64(capacity)) : 0
+    const capacity: i64 = toI64(this.ring.length)
+    return capacity > 0 ? toI32(offset % capacity) : 0
   }
 
   /** Whether the byte in ring slot `s` arrived and is not yet handed out. */
@@ -801,20 +804,40 @@ class QuicConnReassembly {
    * @internal Read in quic.ts outside the class.
    */
   insert(offset: i64, data: u8[], from: i32, length: i32): boolean {
-    const capacity: i32 = toI32(this.ring.length)
-    if (offset + toI64(length) > this.delivered + toI64(capacity)) {
+    const ring: u8[] = this.ring
+    const capacity: i32 = toI32(ring.length)
+    const delivered: i64 = this.delivered
+    // A CRYPTO frame's offset is a varint and `delivered` counts bytes that arrived, so neither is
+    // negative and `offset - delivered` is exact; a negative length or range start is no frame's.
+    if (offset < 0 || delivered < 0 || length < 0 || from < 0) {
       return false
     }
-    for (let k: i32 = 0; k < length; k += 1) {
-      const position: i64 = offset + toI64(k)
-      const at: i32 = from + k
-      if (position >= this.delivered && at >= 0 && at < toI32(data.length)) {
-        const s: i32 = this.slot(position)
-        if (s >= 0 && s < capacity) {
-          this.ring[s] = data[at]
-          this.mark(s, true)
-        }
+    // offset + length > delivered + capacity, rearranged so no sum can overflow.
+    const ahead: i64 = offset - delivered
+    if (ahead > toI64(capacity) - toI64(length)) {
+      return false
+    }
+    // The bytes before `delivered` were handed out already: start at the first one that was not.
+    let k: i32 = 0
+    let s: i32 = this.slot(offset)
+    if (ahead < 0) {
+      const behind: i64 = delivered - offset
+      if (behind >= toI64(length)) {
+        return true
       }
+      k = toI32(behind)
+      s = this.slot(delivered)
+    }
+    const dataLength: i32 = toI32(data.length)
+    while (k < length && s >= 0 && s < capacity) {
+      const wide: i64 = toI64(from) + toI64(k)
+      const at: i32 = wide < toI64(dataLength) ? toI32(wide) : -1
+      if (at >= 0 && at < toI32(data.length)) {
+        ring[s] = data[at]
+        this.mark(s, true)
+      }
+      k += 1
+      s = s + 1 < capacity ? s + 1 : 0
     }
     return true
   }
@@ -826,11 +849,15 @@ class QuicConnReassembly {
   run(): i32 {
     const capacity: i32 = toI32(this.ring.length)
     const start: i32 = this.slot(this.delivered)
-    let n: i32 = 0
-    while (start + n < capacity && this.arrived(start + n)) {
-      n += 1
+    if (start < 0) {
+      // Never taken: `delivered` is not negative, so neither is its slot.
+      return 0
     }
-    return n
+    let s: i32 = start
+    while (s < capacity && this.arrived(s)) {
+      s += 1
+    }
+    return s - start
   }
 
   /**
@@ -838,11 +865,19 @@ class QuicConnReassembly {
    * @internal Read in quic.ts outside the class.
    */
   consume(n: i32): void {
+    const capacity: i32 = toI32(this.ring.length)
     const start: i32 = this.slot(this.delivered)
-    for (let k: i32 = 0; k < n; k += 1) {
-      this.mark(start + k, false)
+    if (start < 0 || n < 0) {
+      // Never taken: `delivered` is not negative, and `n` is a count `run` gave.
+      return
     }
-    this.delivered = this.delivered + toI64(n)
+    // `run` counts no further than the ring's end, so `s` reaches `start + n` before `capacity`.
+    for (let s: i32 = start; s < capacity && s - start < n; s += 1) {
+      this.mark(s, false)
+    }
+    // Exact: `delivered` only moves past bytes that arrived, below 2^62 + the ring, and `n` is at
+    // most the ring's size, so the sum is far below 2^63 and the u64 add cannot wrap.
+    this.delivered = toI64(toU64(this.delivered) + toU64(n))
   }
 }
 
@@ -931,6 +966,8 @@ class QuicConnSpace {
    * second of each, which a key update derives the next generation into.
    */
   keySlots: QuicKeysSlot[]
+  /** `keySlots[0]`, held apart so `keySlot` can answer it without an index into the array. */
+  private firstKeySlot: QuicKeysSlot
   /**
    * `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index.
    * @internal Read in quic.ts outside the class.
@@ -962,28 +999,36 @@ class QuicConnSpace {
     this.level = level
     this.received = new QuicAckRanges()
     this.cryptoOut = []
-    this.keySlots = []
+    this.firstKeySlot = new QuicKeysSlot()
+    this.keySlots = [this.firstKeySlot]
     const slots: i32 = level === TLS_LEVEL_APPLICATION ? 4 : 2
-    for (let k: i32 = 0; k < slots; k += 1) {
+    for (let k: i32 = 1; k < slots; k += 1) {
       this.keySlots.push(new QuicKeysSlot())
     }
-    const capacity: i32 =
-      level === TLS_LEVEL_APPLICATION ? QUIC_RECOVERY_APPLICATION_CAPACITY : QUIC_RECOVERY_HANDSHAKE_CAPACITY
-    const rows: i32 = capacity + 1
+    const application: boolean = level === TLS_LEVEL_APPLICATION
+    // The row counts are constants folded into `u16`s, so no length below can be negative.
+    const rows: u16 = application
+      ? toU16(QUIC_RECOVERY_APPLICATION_CAPACITY + 1)
+      : toU16(QUIC_RECOVERY_HANDSHAKE_CAPACITY + 1)
     // Only 1-RTT packets carry STREAM and control frames (RFC 9000 §12.4).
-    const chunkRows: i32 = level === TLS_LEVEL_APPLICATION ? rows : 0
-    this.staging = capacity
+    const streamSlots: u16 = application
+      ? toU16((QUIC_RECOVERY_APPLICATION_CAPACITY + 1) * QUIC_CONN_PACKET_STREAMS)
+      : toU16(0)
+    const controlSlots: u16 = application
+      ? toU16((QUIC_RECOVERY_APPLICATION_CAPACITY + 1) * QUIC_CONN_PACKET_CONTROL)
+      : toU16(0)
+    this.staging = application ? QUIC_RECOVERY_APPLICATION_CAPACITY : QUIC_RECOVERY_HANDSHAKE_CAPACITY
     this.sentCryptoOffset = new Array<i64>(rows)
     this.sentCryptoLength = new Array<i32>(rows)
     this.sentFlags = new Array<u8>(rows)
     this.sentStreamCount = new Array<i32>(rows)
-    this.sentStreamId = new Array<i64>(chunkRows * QUIC_CONN_PACKET_STREAMS)
-    this.sentStreamOffset = new Array<i64>(chunkRows * QUIC_CONN_PACKET_STREAMS)
-    this.sentStreamLength = new Array<i32>(chunkRows * QUIC_CONN_PACKET_STREAMS)
-    this.sentStreamFin = new Array<u8>(chunkRows * QUIC_CONN_PACKET_STREAMS)
+    this.sentStreamId = new Array<i64>(streamSlots)
+    this.sentStreamOffset = new Array<i64>(streamSlots)
+    this.sentStreamLength = new Array<i32>(streamSlots)
+    this.sentStreamFin = new Array<u8>(streamSlots)
     this.sentControlCount = new Array<i32>(rows)
-    this.sentControlKind = new Array<u8>(chunkRows * QUIC_CONN_PACKET_CONTROL)
-    this.sentControlValue = new Array<i64>(chunkRows * QUIC_CONN_PACKET_CONTROL)
+    this.sentControlKind = new Array<u8>(controlSlots)
+    this.sentControlValue = new Array<i64>(controlSlots)
   }
 
   /**
@@ -1018,10 +1063,12 @@ class QuicConnSpace {
       const at: i32 = this.cryptoOutLength
       if (at >= 0 && at < toI32(this.cryptoOut.length)) {
         this.cryptoOut[at] = bytes[k]
+        this.cryptoOutLength = at + 1
       } else {
+        // `cryptoOutLength` never passes the array's length, so here it equals it and the push is byte `at`.
         this.cryptoOut.push(bytes[k])
+        this.cryptoOutLength = toI32(this.cryptoOut.length)
       }
-      this.cryptoOutLength = at + 1
     }
   }
 
@@ -1034,8 +1081,11 @@ class QuicConnSpace {
    * @returns The slot itself, borrowed from the space and reused across keys; slot 0 for a `k` out of range.
    */
   keySlot(k: i32): QuicKeysSlot {
-    const at: i32 = k >= 0 && k < toI32(this.keySlots.length) ? k : 0
-    return this.keySlots[at]
+    const slots: QuicKeysSlot[] = this.keySlots
+    if (k >= 0 && k < toI32(slots.length)) {
+      return slots[k]
+    }
+    return this.firstKeySlot
   }
 
   /**
@@ -1127,7 +1177,7 @@ class QuicConnSpace {
 
   /** Sets STREAM chunk `j` of row `row`. */
   private setChunk(row: i32, j: i32, id: i64, offset: i64, length: i32, fin: boolean): void {
-    const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+    const at: i32 = quicConnCell(row, j, QUIC_CONN_PACKET_STREAMS, toI32(this.sentStreamId.length))
     if (
       at >= 0 &&
       at < toI32(this.sentStreamId.length) &&
@@ -1144,7 +1194,7 @@ class QuicConnSpace {
 
   /** Sets control frame `j` of row `row`. */
   private setControl(row: i32, j: i32, kind: i32, value: i64): void {
-    const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
+    const at: i32 = quicConnCell(row, j, QUIC_CONN_PACKET_CONTROL, toI32(this.sentControlKind.length))
     if (at >= 0 && at < toI32(this.sentControlKind.length) && at < toI32(this.sentControlValue.length)) {
       this.sentControlKind[at] = toU8(kind)
       this.sentControlValue[at] = value
@@ -1166,6 +1216,10 @@ class QuicConnSpace {
    */
   stageChunk(id: i64, offset: i64, length: i32, fin: boolean): void {
     const streams: i32 = this.streamCount(this.staging)
+    if (streams < 0 || streams >= QUIC_CONN_PACKET_STREAMS) {
+      // Never taken: the caller keeps under `QUIC_CONN_PACKET_STREAMS`, and a count is never negative.
+      return
+    }
     this.setChunk(this.staging, streams, id, offset, length, fin)
     this.setCounts(this.staging, streams + 1, this.controlCount(this.staging))
     this.stagedEliciting = true
@@ -1177,6 +1231,10 @@ class QuicConnSpace {
    */
   stageControl(kind: i32, value: i64): void {
     const control: i32 = this.controlCount(this.staging)
+    if (control < 0 || control >= QUIC_CONN_PACKET_CONTROL) {
+      // Never taken: the caller keeps under `QUIC_CONN_PACKET_CONTROL`, and a count is never negative.
+      return
+    }
     this.setControl(this.staging, control, kind, value)
     this.setCounts(this.staging, this.streamCount(this.staging), control + 1)
     this.stagedEliciting = true
@@ -1194,7 +1252,7 @@ class QuicConnSpace {
     const control: i32 = this.controlCount(from)
     this.setCounts(row, streams, control)
     for (let j: i32 = 0; j < streams; j += 1) {
-      const at: i32 = from * QUIC_CONN_PACKET_STREAMS + j
+      const at: i32 = quicConnCell(from, j, QUIC_CONN_PACKET_STREAMS, toI32(this.sentStreamId.length))
       if (
         at >= 0 &&
         at < toI32(this.sentStreamId.length) &&
@@ -1213,7 +1271,7 @@ class QuicConnSpace {
       }
     }
     for (let j: i32 = 0; j < control; j += 1) {
-      const at: i32 = from * QUIC_CONN_PACKET_CONTROL + j
+      const at: i32 = quicConnCell(from, j, QUIC_CONN_PACKET_CONTROL, toI32(this.sentControlKind.length))
       if (at >= 0 && at < toI32(this.sentControlKind.length) && at < toI32(this.sentControlValue.length)) {
         this.setControl(row, j, toI32(this.sentControlKind[at]), this.sentControlValue[at])
       }
@@ -1228,7 +1286,12 @@ class QuicConnSpace {
     if (length <= 0 || this.discarded) {
       return
     }
-    const end: i64 = offset + toI64(length)
+    if (offset < 0) {
+      // Never taken: a CRYPTO offset is a varint.
+      return
+    }
+    // Exact: `offset` is a varint, below 2^62, and `length` an `i32`, so the u64 sum cannot wrap.
+    const end: i64 = toI64(toU64(offset) + toU64(length))
     if (this.cryptoResendLow < 0) {
       this.cryptoResendLow = offset
       this.cryptoResendHigh = end
@@ -1247,17 +1310,37 @@ class QuicConnSpace {
    * @internal Read in quic.ts outside the class.
    */
   cryptoUnsent(): i32 {
-    return this.cryptoOutLength - this.cryptoOutHead
+    const length: i32 = this.cryptoOutLength
+    const head: i32 = this.cryptoOutHead
+    if (length < 0 || head < 0) {
+      // Never taken: both count bytes from the stream's start.
+      return 0
+    }
+    return toI32(toI64(length) - toI64(head))
   }
 }
 
+/**
+ * Index of entry `j` of row `row` in a table of `per` entries a row and `length` entries in all,
+ * or -1 when the entry is not in the table.
+ */
+const quicConnCell = (row: i32, j: i32, per: i32, length: i32): i32 => {
+  if (row < 0 || j < 0 || j >= per || length <= 0) {
+    return -1
+  }
+  const at: i64 = toI64(row) * toI64(per) + toI64(j)
+  return at < toI64(length) ? toI32(at) : -1
+}
+
 /** The bytes `bytes[from .. from + length)`, copied into an array of exactly that size. */
-const quicConnSlice = (bytes: u8[], from: i32, length: i32): u8[] => {
+const quicConnSlice = (bytes: u8[], from: i32, length: u16): u8[] => {
   const out: u8[] = new Array<u8>(length)
   const n: i32 = toI32(out.length)
   for (let k: i32 = 0; k < n; k += 1) {
-    if (from + k >= 0 && from + k < toI32(bytes.length)) {
-      out[k] = bytes[from + k]
+    const wide: i64 = toI64(from) + toI64(k)
+    const at: i32 = wide >= 0 && wide < toI64(bytes.length) ? toI32(wide) : -1
+    if (at >= 0 && at < toI32(bytes.length)) {
+      out[k] = bytes[at]
     }
   }
   return out
@@ -1321,7 +1404,7 @@ const quicConnWipePacketKey = (keys: QuicKeys | null): void => {
  */
 export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
   const mac: u8[] = hmacSha256(key, cid)
-  const token: u8[] = quicConnSlice(mac, 0, QUIC_RESET_TOKEN_SIZE)
+  const token: u8[] = quicConnSlice(mac, 0, toU16(QUIC_RESET_TOKEN_SIZE))
   secureZero(mac)
   return token
 }
@@ -1354,32 +1437,105 @@ export const quicConnResetTokenInto = (
   mac.begin(key, QUIC_CONN_FROM, toI32(key.length))
   mac.update(cid, at, length)
   mac.finishInto(tag, QUIC_CONN_FROM)
-  for (
-    let k: i32 = 0;
-    k < QUIC_RESET_TOKEN_SIZE && k < toI32(tag.length) && outAt + k < toI32(out.length);
-    k += 1
-  ) {
-    out[outAt + k] = tag[k]
+  for (let k: i32 = 0; k < QUIC_RESET_TOKEN_SIZE && k < toI32(tag.length); k += 1) {
+    const i: i32 = quicConnAt(outAt, k, toI32(out.length))
+    if (i < 0 || i >= toI32(out.length)) {
+      break
+    }
+    out[i] = tag[k]
   }
   secureZero(tag)
   mac.wipe()
 }
+
+/** `base + k` when it indexes an array of `length` elements, else -1; the sum is taken in `i64`, so it cannot overflow. */
+const quicConnAt = (base: i32, k: i32, length: i32): i32 => {
+  const at: i64 = toI64(base) + toI64(k)
+  return at >= 0 && at < toI64(length) ? toI32(at) : -1
+}
+
+/**
+ * A new array of `count` zero bytes: none for a count of 0 or less. A count
+ * that fits a `u16` is sized at once; a larger one is pushed byte by byte,
+ * so no `i32` length is computed for `new Array`.
+ */
+const quicConnBytes = (count: i64): u8[] => {
+  if (count <= 0) {
+    return []
+  }
+  if (count <= 65535) {
+    return new Array<u8>(toU16(count))
+  }
+  const out: u8[] = []
+  while (toI64(out.length) < count) {
+    out.push(toU8(0))
+  }
+  return out
+}
+
+/**
+ * `a + b`, stopping at the largest or smallest `i64` instead of wrapping. Its
+ * callers add a span to a time in milliseconds or a datagram's size to a byte
+ * count, which are never near either end, so the sum is exact on every path a
+ * connection takes. The add is done in `u64`, where it wraps to the same bits
+ * as an exact two's-complement sum, and a wrap shows as a sign the operands
+ * did not have.
+ */
+const quicConnSum = (a: i64, b: i64): i64 => {
+  const sum: i64 = toI64(toU64(a) + toU64(b))
+  if (a >= 0 && b >= 0 && sum < 0) {
+    return toI64((toU64(1) << toU64(63)) - toU64(1))
+  }
+  if (a < 0 && b < 0 && sum >= 0) {
+    return toI64(toU64(1) << toU64(63))
+  }
+  return sum
+}
+
+/**
+ * Where entry `index` of a ring of `entries` entries, each
+ * `QUIC_PATH_DATA_SIZE` bytes, starts: `(index % entries) *
+ * QUIC_PATH_DATA_SIZE`. A negative index or an empty ring, which no caller
+ * passes, answers -1.
+ */
+const quicConnRingAt = (index: i64, entries: i32): i32 => {
+  if (index < 0) {
+    return -1
+  }
+  const n: i64 = toI64(entries)
+  if (n <= 0) {
+    return -1
+  }
+  return toI32(toI64(toI32(index % n)) * toI64(QUIC_PATH_DATA_SIZE))
+}
+
+/**
+ * `received * 3 - sent`, what the anti-amplification limit (RFC 9000 §8.1)
+ * leaves a path. Byte counts are never near the ends of `i64`, so the
+ * arithmetic, done in `u64` where it wraps to the bits of the exact result,
+ * is exact.
+ */
+const quicConnThrice = (received: i64, sent: i64): i64 => toI64(toU64(received) * toU64(3) - toU64(sent))
 
 /** Puts `from[at .. at + length)` in `to`, emptied first, in the room `to` already has. */
 const quicConnRefill = (to: u8[], from: u8[], at: i32, length: i32): void => {
   while (to.length > 0) {
     to.pop()
   }
-  for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(from.length); k += 1) {
-    to.push(from[at + k])
+  for (let k: i32 = 0; k < length; k += 1) {
+    const i: i32 = quicConnAt(at, k, toI32(from.length))
+    if (i < 0 || i >= toI32(from.length)) {
+      break
+    }
+    to.push(from[i])
   }
 }
 
 /** Copies `length` bytes from `from[fromAt]` to `to[toAt]`, as far as both arrays reach. */
 const quicConnCopyAt = (to: u8[], toAt: i32, from: u8[], fromAt: i32, length: i32): void => {
   for (let k: i32 = 0; k < length; k += 1) {
-    const i: i32 = toAt + k
-    const j: i32 = fromAt + k
+    const i: i32 = quicConnAt(toAt, k, toI32(to.length))
+    const j: i32 = quicConnAt(fromAt, k, toI32(from.length))
     if (i >= 0 && i < toI32(to.length) && j >= 0 && j < toI32(from.length)) {
       to[i] = from[j]
     }
@@ -1434,27 +1590,42 @@ const quicWorkerMark = (config: QuicServerConfig, cid: u8[]): void => {
 }
 
 /** Whether the configuration's limits are ones this module can honour. */
-const quicConnConfigFits = (config: QuicServerConfig): boolean =>
-  config.maxStreamData >= 1 &&
-  config.maxStreamData <= QUIC_CONN_MAX_STREAM_DATA &&
-  config.maxStreamsBidi >= 0 &&
-  config.maxStreamsBidi <= QUIC_CONN_MAX_STREAMS &&
-  config.maxStreamsUni >= 0 &&
-  config.maxStreamsUni <= QUIC_CONN_MAX_STREAMS &&
-  config.localStreams >= 0 &&
-  config.localStreams <= QUIC_CONN_MAX_STREAMS &&
-  (config.maxStreamsBidi + config.maxStreamsUni + config.localStreams) * config.maxStreamData * 2 <=
-    QUIC_CONN_MAX_STREAM_BUFFERS &&
-  config.maxDatagramFrameSize >= 0 &&
-  config.maxDatagramFrameSize <= QUIC_CONN_MAX_DATAGRAM_FRAME &&
-  config.maxData >= 0 &&
-  config.maxData <= QUIC_MAX_VARINT &&
-  config.maxIdleTimeout >= 0 &&
-  config.maxIdleTimeout <= QUIC_MAX_VARINT &&
-  config.activeConnectionIdLimit >= 2 &&
-  config.activeConnectionIdLimit <= 8 &&
-  (config.congestion === QUIC_RECOVERY_NEWRENO || config.congestion === QUIC_RECOVERY_CUBIC) &&
-  toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE
+const quicConnConfigFits = (config: QuicServerConfig): boolean => {
+  const data: i64 = config.maxStreamData
+  const bidi: i64 = config.maxStreamsBidi
+  const uni: i64 = config.maxStreamsUni
+  const local: i64 = config.localStreams
+  if (
+    data < 1 ||
+    data > QUIC_CONN_MAX_STREAM_DATA ||
+    bidi < 0 ||
+    bidi > QUIC_CONN_MAX_STREAMS ||
+    uni < 0 ||
+    uni > QUIC_CONN_MAX_STREAMS ||
+    local < 0 ||
+    local > QUIC_CONN_MAX_STREAMS
+  ) {
+    return false
+  }
+  // At most 3 * 1024 streams of 2^20 bytes each, twice over: below 2^33, so nothing here overflows.
+  // Taken in `u64` as the prover does not carry the bounds above into the product.
+  const buffers: u64 = (toU64(bidi) + toU64(uni) + toU64(local)) * toU64(data) * 2
+  if (buffers > toU64(QUIC_CONN_MAX_STREAM_BUFFERS)) {
+    return false
+  }
+  return (
+    config.maxDatagramFrameSize >= 0 &&
+    config.maxDatagramFrameSize <= QUIC_CONN_MAX_DATAGRAM_FRAME &&
+    config.maxData >= 0 &&
+    config.maxData <= QUIC_MAX_VARINT &&
+    config.maxIdleTimeout >= 0 &&
+    config.maxIdleTimeout <= QUIC_MAX_VARINT &&
+    config.activeConnectionIdLimit >= 2 &&
+    config.activeConnectionIdLimit <= 8 &&
+    (config.congestion === QUIC_RECOVERY_NEWRENO || config.congestion === QUIC_RECOVERY_CUBIC) &&
+    toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE
+  )
+}
 
 /**
  * One server connection, which is also a reusable slot. Make one, hand it
@@ -1860,14 +2031,14 @@ export class QuicConnection {
       datagrams,
       fits ? toI32(config.maxDatagramFrameSize) : QUIC_CONN_FROM
     )
-    this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)
-    this.pathData = new Array<u8>(QUIC_PATH_DATA_SIZE * 4)
+    this.cryptoIn = new QuicConnReassembly(toU16(QUIC_CONN_CRYPTO_WINDOW))
+    this.pathData = new Array<u8>(toU16(QUIC_PATH_DATA_SIZE * 4))
     this.pathCurrent = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
     this.pathValidated = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
     this.pathArrival = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
     this.probeAddress = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
     this.probeData = new Array<u8>(QUIC_PATH_DATA_SIZE)
-    this.challengeData = new Array<u8>(QUIC_PATH_DATA_SIZE * QUIC_CONN_CHALLENGES)
+    this.challengeData = new Array<u8>(toU16(QUIC_PATH_DATA_SIZE * QUIC_CONN_CHALLENGES))
     this.frame = new QuicFrame()
     this.header = new QuicHeader()
     this.packet = new QuicPacket()
@@ -2008,8 +2179,9 @@ export class QuicConnection {
 
   /** Counts a dropped packet; the count stops at the largest `i32` rather than overflow. */
   private drop(): void {
-    if (this.dropped < 2147483647) {
-      this.dropped += 1
+    const n: i32 = this.dropped
+    if (n < 2147483647) {
+      this.dropped = n + 1
     }
   }
 
@@ -2097,7 +2269,8 @@ export class QuicConnection {
    * keep them.
    */
   private startClosingPeriod(): void {
-    this.closingUntil = this.now + this.recovery.probeTimeout() * 3
+    const probe: i64 = this.recovery.probeTimeout()
+    this.closingUntil = quicConnSum(this.now, quicConnSum(quicConnSum(probe, probe), probe))
   }
 
   /** The space of packets of `type`, or `null` for a 0-RTT or Retry packet. */
@@ -2218,7 +2391,9 @@ export class QuicConnection {
       this.drop()
       return 0
     }
-    const end: i32 = off + len
+    // The check above leaves `off + len` at most the array's length, so the
+    // sum taken in `i64` is exact.
+    const end: i32 = toI32(toI64(off) + toI64(len))
     let at: i32 = off
     let counted: boolean = false
     while (at < end) {
@@ -2237,7 +2412,7 @@ export class QuicConnection {
     // A datagram counts toward the amplification limit once one of its packets
     // proves it is this connection's (RFC 9000 §8.1).
     if (counted) {
-      this.bytesReceived = this.bytesReceived + toI64(len)
+      this.bytesReceived = quicConnSum(this.bytesReceived, toI64(len))
     }
     if (!this.closed()) {
       this.afterPath(counted, len)
@@ -2454,7 +2629,8 @@ export class QuicConnection {
     // connection's private pools, so the handshake, not the first 1-RTT
     // packet, pays for them.
     if (type === QUIC_PACKET_SHORT || type === QUIC_PACKET_ZERO_RTT) {
-      this.streams.prime(header.end - header.pnOffset)
+      // The parser leaves both in the datagram, the end past the packet number.
+      this.streams.prime(toI32(toI64(header.end) - toI64(header.pnOffset)))
     } else {
       this.streams.ownPools()
     }
@@ -2525,7 +2701,7 @@ export class QuicConnection {
       // reads nothing more. A first Initial that fails is not counted: the
       // connection is not started, and the next one starts afresh.
       if (!first) {
-        this.authFailures = this.authFailures + 1
+        this.authFailures = quicConnSum(this.authFailures, 1)
         if (this.authFailures > this.integrityLimit) {
           this.fail(QUIC_ERROR_AEAD_LIMIT_REACHED, QUIC_CONN_NONE)
         }
@@ -2618,7 +2794,13 @@ export class QuicConnection {
    */
   private applyPhase(pn: i64): void {
     if (this.writePhase === this.readPhase) {
-      this.keyUpdates = this.keyUpdates + 1
+      // `notePhase` refused the packet at the limit, so this is never taken.
+      const updates: i32 = this.keyUpdates
+      if (updates >= QUIC_CONN_MAX_KEY_UPDATES) {
+        this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
+        return
+      }
+      this.keyUpdates = updates + 1
       if (!this.updateWriteKeys()) {
         this.fail(QUIC_ERROR_INTERNAL, QUIC_CONN_NONE)
         return
@@ -2628,7 +2810,7 @@ export class QuicConnection {
     this.application.readKeys = this.otherReadKeys
     this.otherReadKeys = previous
     this.otherIsNext = false
-    this.appReadSlot = 1 - this.appReadSlot
+    this.appReadSlot = this.appReadSlot === 0 ? 1 : 0
     // The next read secret becomes the current one, over the secret it
     // replaces, and is zeroed where it was. Both widths move: the one the
     // suite does not use holds zeros.
@@ -2639,7 +2821,7 @@ export class QuicConnection {
     this.readPhase = !this.readPhase
     this.readPhaseLowest = pn
     this.readPhaseHighest = pn
-    this.keyRetainUntil = this.now + this.recovery.probeTimeout()
+    this.keyRetainUntil = quicConnSum(this.now, this.recovery.probeTimeout())
   }
 
   /**
@@ -2653,7 +2835,9 @@ export class QuicConnection {
     if (keys === null) {
       return false
     }
-    const slot: QuicKeysSlot = this.application.keySlot(QUIC_CONN_APP_WRITE_SLOTS + 1 - this.appWriteSlot)
+    const slot: QuicKeysSlot = this.application.keySlot(
+      this.appWriteSlot === 0 ? QUIC_CONN_APP_WRITE_SLOTS + 1 : QUIC_CONN_APP_WRITE_SLOTS
+    )
     const next: QuicKeys | null =
       keys.aead === QUIC_AEAD_AES_256_GCM
         ? this.nextKeys(slot, keys, this.writeSecret384, this.writeSecret384)
@@ -2663,7 +2847,7 @@ export class QuicConnection {
     }
     quicConnWipePacketKey(keys)
     this.application.writeKeys = next
-    this.appWriteSlot = 1 - this.appWriteSlot
+    this.appWriteSlot = this.appWriteSlot === 0 ? 1 : 0
     this.writePhase = !this.writePhase
     this.writePhaseFirst = this.application.nextPn
     this.sealedUnderKey = 0
@@ -2707,15 +2891,20 @@ export class QuicConnection {
     {
       using _scope = arena()
       const plain: u8[] = expose(current, tlsHeldClone)
-      const out: u8[] = new Array<u8>(plain.length)
-      made =
-        quicKeyUpdateSecretInto(this.kdf, keys.aead, plain, out) &&
-        quicKeysUpdateInto(this.kdf, slot, keys, out) !== null
-      if (made) {
-        exposeWith(next, out, tlsHeldCopyIn)
+      // A traffic secret is its hash's length, 32 or 48 bytes, so the size
+      // check never fails; one that did would make no keys.
+      const size: i32 = toI32(plain.length)
+      if (size > 0 && size <= 255) {
+        const out: u8[] = new Array<u8>(toU8(size))
+        made =
+          quicKeyUpdateSecretInto(this.kdf, keys.aead, plain, out) &&
+          quicKeysUpdateInto(this.kdf, slot, keys, out) !== null
+        if (made) {
+          exposeWith(next, out, tlsHeldCopyIn)
+        }
+        secureZero(out)
       }
       secureZero(plain)
-      secureZero(out)
     }
     return made ? slot.keys : null
   }
@@ -2736,7 +2925,8 @@ export class QuicConnection {
     if (keys === null) {
       return
     }
-    const slot: QuicKeysSlot = this.application.keySlot(1 - this.appReadSlot)
+    const otherSlot: i32 = this.appReadSlot === 0 ? 1 : 0
+    const slot: QuicKeysSlot = this.application.keySlot(otherSlot)
     this.otherReadKeys =
       keys.aead === QUIC_AEAD_AES_256_GCM
         ? this.nextKeys(slot, keys, this.readSecret384, this.nextReadSecret384)
@@ -3002,8 +3192,13 @@ export class QuicConnection {
     const ranges: i64[] = frame.ackRanges
     for (let k: i32 = 0; k < toI32(this.skipped.length); k += 1) {
       const pn: i64 = this.skipped[k]
-      for (let r: i32 = 0; pn >= 0 && r < frame.ackRangeCount && r * 2 + 1 < toI32(ranges.length); r += 1) {
-        if (pn >= ranges[r * 2] && pn <= ranges[r * 2 + 1]) {
+      for (let r: i32 = 0; pn >= 0 && r < frame.ackRangeCount; r += 1) {
+        const lo: i32 = quicConnCell(r, 0, 2, toI32(ranges.length))
+        const hi: i32 = quicConnCell(r, 1, 2, toI32(ranges.length))
+        if (lo < 0 || hi < 0 || lo >= toI32(ranges.length) || hi >= toI32(ranges.length)) {
+          break
+        }
+        if (pn >= ranges[lo] && pn <= ranges[hi]) {
           return true
         }
       }
@@ -3132,7 +3327,7 @@ export class QuicConnection {
       this.application.probes === 0 &&
       sent !== null &&
       !sent.full() &&
-      this.recovery.bytesInFlight() + toI64(size) <= this.recovery.congestionWindow
+      quicConnSum(this.recovery.bytesInFlight(), toI64(size)) <= this.recovery.congestionWindow
     )
   }
 
@@ -3144,12 +3339,22 @@ export class QuicConnection {
   private buildPmtuProbe(out: u8[], at: i32, size: i32): i32 {
     const space: QuicConnSpace = this.application
     const overhead: i32 = this.overhead(space)
-    if (overhead === 0 || overhead + 1 > size) {
+    if (overhead === 0 || overhead >= size) {
+      return 0
+    }
+    // `pmtuDue` checked the probe fits the room after `at`, so this is never
+    // taken; were it, the probe would go unsealed.
+    const start: i64 = toI64(at) + toI64(overhead) - toI64(QUIC_AEAD_TAG_SIZE)
+    const end: i64 = toI64(at) + toI64(size) - toI64(QUIC_AEAD_TAG_SIZE)
+    if (start < 0 || end < start || end > toI64(out.length)) {
+      return 0
+    }
+    if (end < 0) {
       return 0
     }
     space.clearStaged()
-    const payloadStart: i32 = at + overhead - QUIC_AEAD_TAG_SIZE
-    const payloadEnd: i32 = at + size - QUIC_AEAD_TAG_SIZE
+    const payloadStart: i32 = toI32(start)
+    const payloadEnd: i32 = toI32(end)
     const ping: i32 = quicPutTypeOnly(out, payloadStart, payloadEnd, QUIC_FRAME_PING)
     if (ping < 0) {
       return 0
@@ -3157,21 +3362,22 @@ export class QuicConnection {
     space.stagedEliciting = true
     const pn: i64 = space.nextPn
     this.pmtuSealing = true
-    const n: i32 = this.sealAt(space, out, at, quicPutPadding(out, ping, payloadEnd - ping))
+    const n: i32 = this.sealAt(space, out, at, quicPutPadding(out, ping, toI32(end - toI64(ping))))
     this.pmtuSealing = false
     if (n <= 0) {
       return 0
     }
     this.pmtuProbeSize = n
     this.pmtuProbePn = pn
-    if (this.pmtuProbes < 2147483647) {
-      this.pmtuProbes = this.pmtuProbes + 1
+    const pmtuProbes: i32 = this.pmtuProbes
+    if (pmtuProbes < 2147483647) {
+      this.pmtuProbes = pmtuProbes + 1
     }
     if (!this.elicitingSent) {
       this.idleSince = this.now
       this.elicitingSent = true
     }
-    this.bytesSent = this.bytesSent + toI64(n)
+    this.bytesSent = quicConnSum(this.bytesSent, toI64(n))
     this.notePathSent(n)
     return n
   }
@@ -3203,15 +3409,18 @@ export class QuicConnection {
 
   /** The probe numbered `pn` was lost: after three of one size, the search goes on below it. */
   private pmtuProbeLost(pn: i64): void {
-    if (this.pmtuProbesLost < 2147483647) {
-      this.pmtuProbesLost = this.pmtuProbesLost + 1
-    }
-    if (this.pmtuProbeSize === 0 || pn !== this.pmtuProbePn) {
-      return
+    const pmtuProbesLost: i32 = this.pmtuProbesLost
+    if (pmtuProbesLost < 2147483647) {
+      this.pmtuProbesLost = pmtuProbesLost + 1
     }
     const size: i32 = this.pmtuProbeSize
+    if (size <= 0 || pn !== this.pmtuProbePn) {
+      return
+    }
     this.pmtuProbeSize = 0
-    this.pmtuTries = this.pmtuTries + 1
+    // `pmtuStep` sets the count back to 0 when it reaches 3.
+    const tries: i32 = this.pmtuTries
+    this.pmtuTries = tries < 3 ? tries + 1 : 3
     if (this.pmtuTries >= 3) {
       this.pmtuHigh = size - 1
       this.pmtuStep()
@@ -3224,19 +3433,26 @@ export class QuicConnection {
    * (RFC 8899 §4.3), and `pathMtu` falls back to 1200.
    */
   private pmtuLargeLost(): void {
-    this.pmtuSuspect = this.pmtuSuspect + 1
-    if (this.pmtuSuspect < 3 || this.pathMtu <= QUIC_CONN_DATAGRAM_SIZE) {
-      return
+    const suspect: i32 = this.pmtuSuspect
+    if (suspect < 2147483647) {
+      this.pmtuSuspect = suspect + 1
     }
     const failed: i32 = this.pathMtu
+    if (this.pmtuSuspect < 3) {
+      return
+    }
+    if (failed <= QUIC_CONN_DATAGRAM_SIZE) {
+      return
+    }
     this.pathMtu = QUIC_CONN_DATAGRAM_SIZE
     this.recovery.setDatagramSize(toI64(QUIC_CONN_DATAGRAM_SIZE))
     this.pmtuSuspect = 0
     this.pmtuProbeSize = 0
     this.pmtuLow = QUIC_CONN_DATAGRAM_SIZE
-    this.pmtuHigh = failed - 1
-    if (this.pmtuBlackHoles < 2147483647) {
-      this.pmtuBlackHoles = this.pmtuBlackHoles + 1
+    this.pmtuHigh = toI32(toI64(failed) - 1)
+    const pmtuBlackHoles: i32 = this.pmtuBlackHoles
+    if (pmtuBlackHoles < 2147483647) {
+      this.pmtuBlackHoles = pmtuBlackHoles + 1
     }
     this.pmtuStep()
   }
@@ -3244,7 +3460,15 @@ export class QuicConnection {
   /** The next size to try, halfway between the bounds, or 0 when they are within 16 bytes. */
   private pmtuStep(): void {
     this.pmtuTries = 0
-    this.pmtuNext = this.pmtuHigh - this.pmtuLow < 16 ? 0 : (this.pmtuLow + this.pmtuHigh + 1) / 2
+    const low: i32 = this.pmtuLow
+    const high: i32 = this.pmtuHigh
+    // Both bounds are sizes, at least 1200 bytes, so the guard is never
+    // taken; were it, the search would stop.
+    if (low < 0 || high < 0) {
+      this.pmtuNext = 0
+      return
+    }
+    this.pmtuNext = toI64(high) - toI64(low) < 16 ? 0 : toI32((toI64(low) + toI64(high) + 1) / 2)
   }
 
   /**
@@ -3261,7 +3485,7 @@ export class QuicConnection {
     }
     const streams: i32 = space.streamCount(row)
     for (let j: i32 = 0; j < streams; j += 1) {
-      const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+      const at: i32 = quicConnCell(row, j, QUIC_CONN_PACKET_STREAMS, toI32(space.sentStreamId.length))
       if (
         at >= 0 &&
         at < toI32(space.sentStreamId.length) &&
@@ -3279,7 +3503,7 @@ export class QuicConnection {
     }
     const control: i32 = space.controlCount(row)
     for (let j: i32 = 0; j < control; j += 1) {
-      const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
+      const at: i32 = quicConnCell(row, j, QUIC_CONN_PACKET_CONTROL, toI32(space.sentControlKind.length))
       if (at >= 0 && at < toI32(space.sentControlKind.length) && at < toI32(space.sentControlValue.length)) {
         this.requeueControl(toI32(space.sentControlKind[at]), space.sentControlValue[at])
       }
@@ -3345,11 +3569,11 @@ export class QuicConnection {
    * datagram (`takeDatagramInto`).
    */
   private resendEarly(level: i32): void {
-    if (
-      this.earlyResends >= QUIC_CONN_EARLY_RESENDS ||
-      this.initial.probes > 0 ||
-      this.handshake.probes > 0
-    ) {
+    const resends: i32 = this.earlyResends
+    if (resends >= QUIC_CONN_EARLY_RESENDS) {
+      return
+    }
+    if (this.initial.probes > 0 || this.handshake.probes > 0) {
       return
     }
     const asked: QuicSentPackets | null = this.recovery.space(level)
@@ -3357,7 +3581,7 @@ export class QuicConnection {
       return
     }
     let queued: boolean = false
-    for (let at: i32 = level; at <= TLS_LEVEL_HANDSHAKE; at += 1) {
+    for (let at: i32 = level; at < TLS_LEVEL_HANDSHAKE + 1; at += 1) {
       const space: QuicConnSpace = this.spaceAt(at)
       const sent: QuicSentPackets | null = this.recovery.space(at)
       if (sent === null || space.discarded || sent.inFlight === 0) {
@@ -3374,7 +3598,7 @@ export class QuicConnection {
       }
     }
     if (queued) {
-      this.earlyResends += 1
+      this.earlyResends = resends + 1
     }
   }
 
@@ -3389,7 +3613,7 @@ export class QuicConnection {
   private receiveCrypto(space: QuicConnSpace, frame: QuicFrame, payload: u8[]): void {
     const reassembly: QuicConnReassembly = this.cryptoIn
     if (space.level < reassembly.level) {
-      if (frame.offset + toI64(frame.dataLength) > space.cryptoInDelivered) {
+      if (quicConnSum(frame.offset, toI64(frame.dataLength)) > space.cryptoInDelivered) {
         this.fail(QUIC_ERROR_CRYPTO + QUIC_CONN_ALERT_UNEXPECTED, toI64(QUIC_FRAME_CRYPTO))
       }
       return
@@ -3444,7 +3668,7 @@ export class QuicConnection {
    * `readDatagram`, or is dropped when the ring is full.
    */
   private receiveDatagram(frame: QuicFrame, payload: u8[], frameStart: i32): void {
-    const size: i64 = toI64(frame.end - frameStart)
+    const size: i64 = toI64(frame.end) - toI64(frameStart)
     if (this.config.maxDatagramFrameSize === 0 || size > this.config.maxDatagramFrameSize) {
       // `fin` is how the frame says it was 0x31, the type with a Length.
       this.fail(
@@ -3471,14 +3695,21 @@ export class QuicConnection {
       this.pathHead = 0
       this.pathCount = 0
     }
-    const base: i32 = ((this.pathHead + this.pathCount) % 4) * QUIC_PATH_DATA_SIZE
-    for (let k: i32 = 0; k < QUIC_PATH_DATA_SIZE; k += 1) {
-      const at: i32 = from + k
-      if (base + k >= 0 && base + k < toI32(this.pathData.length) && at >= 0 && at < toI32(data.length)) {
-        this.pathData[base + k] = data[at]
+    const count: i32 = this.pathCount
+    // The ring holds 0 to 3 entries here, so this is never taken.
+    if (count < 0 || count >= 4) {
+      return
+    }
+    const base: i32 = quicConnRingAt(toI64(this.pathHead) + toI64(count), 4)
+    const ring: u8[] = this.pathData
+    for (let k: i32 = 0; base >= 0 && k < QUIC_PATH_DATA_SIZE; k += 1) {
+      const to: i32 = quicConnAt(base, k, toI32(ring.length))
+      const at: i32 = quicConnAt(from, k, toI32(data.length))
+      if (to >= 0 && to < toI32(ring.length) && at >= 0 && at < toI32(data.length)) {
+        ring[to] = data[at]
       }
     }
-    this.pathCount = this.pathCount + 1
+    this.pathCount = count + 1
   }
 
   /**
@@ -3512,16 +3743,18 @@ export class QuicConnection {
     }
     let matched: boolean = false
     for (let m: i32 = 0; m < this.challengeCount; m += 1) {
-      const slot: i32 = toI32((this.challengesDrawn - 1 - toI64(m)) % toI64(QUIC_CONN_CHALLENGES))
+      // At most `challengesDrawn` challenges are kept, so the index, taken
+      // in `u64` where it is exact, is never negative.
+      const base: i32 = quicConnRingAt(
+        toI64(toU64(this.challengesDrawn) - toU64(1) - toU64(m)),
+        QUIC_CONN_CHALLENGES
+      )
+      if (base < 0) {
+        continue
+      }
       // Not secret once sent, but compared without branching on the bytes all the same.
       matched =
-        timingSafeEqualAt(
-          payload,
-          frame.dataStart,
-          this.challengeData,
-          slot * QUIC_PATH_DATA_SIZE,
-          QUIC_PATH_DATA_SIZE
-        ) || matched
+        timingSafeEqualAt(payload, frame.dataStart, this.challengeData, base, QUIC_PATH_DATA_SIZE) || matched
     }
     if (matched) {
       this.pathConfirmed()
@@ -3586,7 +3819,7 @@ export class QuicConnection {
         // suite's width and wiped in `TlsServer`, leaving one copy of each.
         const pool: TlsSecretPool = tls.secrets()
         const writeSlot: QuicKeysSlot = this.application.keySlot(
-          QUIC_CONN_APP_WRITE_SLOTS + this.appWriteSlot
+          this.appWriteSlot === 0 ? QUIC_CONN_APP_WRITE_SLOTS : QUIC_CONN_APP_WRITE_SLOTS + 1
         )
         const readSlot: QuicKeysSlot = this.application.keySlot(this.appReadSlot)
         if (aead === QUIC_AEAD_AES_256_GCM) {
@@ -3812,7 +4045,8 @@ export class QuicConnection {
     if (timeout === 0) {
       return -1
     }
-    let floor: i64 = this.recovery.probeTimeout() * 3
+    const probe: i64 = this.recovery.probeTimeout()
+    let floor: i64 = quicConnSum(quicConnSum(probe, probe), probe)
     if (floor < QUIC_CONN_IDLE_FLOOR) {
       floor = QUIC_CONN_IDLE_FLOOR
     }
@@ -3826,7 +4060,8 @@ export class QuicConnection {
    */
   idleDeadline(): i64 {
     const timeout: i64 = this.idleTimeout()
-    return timeout >= 0 && this.idleSince >= 0 ? this.idleSince + timeout : -1
+    const since: i64 = this.idleSince
+    return timeout >= 0 && since >= 0 ? quicConnSum(since, timeout) : -1
   }
 
   /**
@@ -3882,7 +4117,8 @@ export class QuicConnection {
    */
   amplificationBlocked(): boolean {
     return (
-      (!this.addressValidated && this.bytesReceived * 3 - this.bytesSent < toI64(QUIC_CONN_DATAGRAM_SIZE)) ||
+      (!this.addressValidated &&
+        quicConnThrice(this.bytesReceived, this.bytesSent) < toI64(QUIC_CONN_DATAGRAM_SIZE)) ||
       this.pathBudget() < QUIC_CONN_PATH_MIN
     )
   }
@@ -3893,7 +4129,7 @@ export class QuicConnection {
    * (RFC 9000 §9.3.1, §8.1). Unlimited, as `QUIC_MAX_VARINT`, on a validated path.
    */
   private pathBudget(): i64 {
-    return this.pathValidating ? this.pathReceived * 3 - this.pathSent : QUIC_MAX_VARINT
+    return this.pathValidating ? quicConnThrice(this.pathReceived, this.pathSent) : QUIC_MAX_VARINT
   }
 
   /**
@@ -4030,7 +4266,7 @@ export class QuicConnection {
       if (!this.migrateOwed) {
         if (this.probeStaged) {
           quicConnCopyAt(this.probeAddress, 0, this.pathArrival, 0, QUIC_CONN_ADDRESS_SIZE)
-          this.probeBudget = toI64(len) * 3
+          this.probeBudget = quicConnThrice(toI64(len), 0)
           this.probeOwed = true
         }
         return
@@ -4041,7 +4277,7 @@ export class QuicConnection {
       }
     }
     if (this.pathValidating) {
-      this.pathReceived = this.pathReceived + toI64(len)
+      this.pathReceived = quicConnSum(this.pathReceived, toI64(len))
     }
   }
 
@@ -4066,8 +4302,12 @@ export class QuicConnection {
     }
     this.endValidation()
     this.pathValidating = true
-    const span: i64 = this.recovery.probeTimeout() * 3
-    this.challengeUntil = this.now + (span > QUIC_CONN_VALIDATION_FLOOR ? span : QUIC_CONN_VALIDATION_FLOOR)
+    const probe: i64 = this.recovery.probeTimeout()
+    const span: i64 = quicConnSum(quicConnSum(probe, probe), probe)
+    this.challengeUntil = quicConnSum(
+      this.now,
+      span > QUIC_CONN_VALIDATION_FLOOR ? span : QUIC_CONN_VALIDATION_FLOOR
+    )
     this.drawChallenge()
     return swapped
   }
@@ -4091,12 +4331,22 @@ export class QuicConnection {
       this.pathCount = 0
       return false
     }
-    const base: i32 = ((this.pathHead + this.pathCount - 1) % 4) * QUIC_PATH_DATA_SIZE
+    const base: i32 = quicConnRingAt(toI64(this.pathHead) + toI64(this.pathCount) - 1, 4)
+    // The ring holds an entry here, so its base is never negative.
+    if (base < 0) {
+      this.pathCount = 0
+      return false
+    }
     const swapped: boolean = this.probeStaged
+    const probe: u8[] = this.probeData
+    const ring: u8[] = this.pathData
     for (let k: i32 = 0; k < QUIC_PATH_DATA_SIZE; k += 1) {
-      const kept: u8 = this.probeData[k]
-      this.probeData[k] = this.pathData[base + k]
-      this.pathData[base + k] = kept
+      const to: i32 = quicConnAt(base, k, toI32(ring.length))
+      if (k < toI32(probe.length) && to >= 0 && to < toI32(ring.length)) {
+        const kept: u8 = probe[k]
+        probe[k] = ring[to]
+        ring[to] = kept
+      }
     }
     this.pathHead = base / QUIC_PATH_DATA_SIZE
     this.pathCount = swapped ? 1 : 0
@@ -4104,7 +4354,7 @@ export class QuicConnection {
     if (!this.pathValidating) {
       this.probeBudget = toI64(QUIC_CONN_DATAGRAM_SIZE)
     } else {
-      const left: i64 = this.pathReceived * 3 - this.pathSent
+      const left: i64 = quicConnThrice(this.pathReceived, this.pathSent)
       this.probeBudget = left > 0 ? left : 0
     }
     this.probeOwed = true
@@ -4118,16 +4368,20 @@ export class QuicConnection {
    * probe timeout later.
    */
   private drawChallenge(): void {
-    this.deriveConnectionId(QUIC_CONN_CHALLENGE_SEQUENCE + this.challengesDrawn)
-    const slot: i32 = toI32(this.challengesDrawn % toI64(QUIC_CONN_CHALLENGES))
-    quicConnCopyAt(this.challengeData, slot * QUIC_PATH_DATA_SIZE, this.cidScratch, 0, QUIC_PATH_DATA_SIZE)
+    const drawn: i64 = this.challengesDrawn
+    this.deriveConnectionId(quicConnSum(QUIC_CONN_CHALLENGE_SEQUENCE, drawn))
+    const base: i32 = quicConnRingAt(drawn, QUIC_CONN_CHALLENGES)
+    if (base >= 0) {
+      quicConnCopyAt(this.challengeData, base, this.cidScratch, 0, QUIC_PATH_DATA_SIZE)
+    }
     secureZero(this.cidScratch)
-    this.challengesDrawn = this.challengesDrawn + 1
-    if (this.challengeCount < QUIC_CONN_CHALLENGES) {
-      this.challengeCount = this.challengeCount + 1
+    this.challengesDrawn = quicConnSum(drawn, 1)
+    const count: i32 = this.challengeCount
+    if (count < QUIC_CONN_CHALLENGES) {
+      this.challengeCount = count + 1
     }
     this.challengeOwed = true
-    this.challengeResendAt = this.now + this.recovery.probeTimeout()
+    this.challengeResendAt = quicConnSum(this.now, this.recovery.probeTimeout())
   }
 
   /**
@@ -4162,7 +4416,7 @@ export class QuicConnection {
   /** Adds `n` bytes sent to the path being validated's count. */
   private notePathSent(n: i32): void {
     if (this.pathValidating) {
-      this.pathSent = this.pathSent + toI64(n)
+      this.pathSent = quicConnSum(this.pathSent, toI64(n))
     }
   }
 
@@ -4236,7 +4490,9 @@ export class QuicConnection {
       using _scope = arena()
       n = this.buildProbe(out, at, size)
     }
-    this.probeBudget = this.probeBudget - toI64(n)
+    // Both are byte counts far from the ends of `i64`, so the `u64`
+    // difference is exact.
+    this.probeBudget = toI64(toU64(this.probeBudget) - toU64(n))
     return n
   }
 
@@ -4244,12 +4500,21 @@ export class QuicConnection {
   private buildProbe(out: u8[], at: i32, size: i32): i32 {
     const space: QuicConnSpace = this.application
     const overhead: i32 = this.overhead(space)
-    if (overhead === 0 || size < overhead + 1 + QUIC_PATH_DATA_SIZE) {
+    if (overhead === 0 || toI64(size) < toI64(overhead) + toI64(1 + QUIC_PATH_DATA_SIZE)) {
+      return 0
+    }
+    const start: i64 = toI64(at) + toI64(overhead) - toI64(QUIC_AEAD_TAG_SIZE)
+    const end: i64 = toI64(at) + toI64(size) - toI64(QUIC_AEAD_TAG_SIZE)
+    // Both lie inside `out`, which the caller sized, so these are never taken.
+    if (start < 0 || end > toI64(out.length)) {
+      return 0
+    }
+    if (end < start) {
       return 0
     }
     space.clearStaged()
-    const payloadStart: i32 = at + overhead - QUIC_AEAD_TAG_SIZE
-    const payloadEnd: i32 = at + size - QUIC_AEAD_TAG_SIZE
+    const payloadStart: i32 = toI32(start)
+    const payloadEnd: i32 = toI32(end)
     const next: i32 = quicPutPathData(
       out,
       payloadStart,
@@ -4261,7 +4526,7 @@ export class QuicConnection {
     if (next < 0) {
       return 0
     }
-    return this.sealAt(space, out, at, quicPutPadding(out, next, payloadEnd - next))
+    return this.sealAt(space, out, at, quicPutPadding(out, next, toI32(toI64(payloadEnd) - toI64(next))))
   }
 
   /**
@@ -4303,7 +4568,10 @@ export class QuicConnection {
       return -1
     }
     const half: i64 = this.recovery.smoothedRtt / 2
-    return sent.lastAckEliciting + (half > QUIC_RECOVERY_GRANULARITY ? half : QUIC_RECOVERY_GRANULARITY)
+    return quicConnSum(
+      sent.lastAckEliciting,
+      half > QUIC_RECOVERY_GRANULARITY ? half : QUIC_RECOVERY_GRANULARITY
+    )
   }
 
   /** The early probe of `earlyProbeAt`, if it is due. */
@@ -4368,14 +4636,15 @@ export class QuicConnection {
    * cannot tell where the next will.
    */
   private scheduleSkip(from: i64): void {
-    this.deriveConnectionId(QUIC_CONN_SKIP_SEQUENCE + this.skipsDrawn)
-    this.skipsDrawn = this.skipsDrawn + 1
+    const drawn: i64 = this.skipsDrawn
+    this.deriveConnectionId(quicConnSum(QUIC_CONN_SKIP_SEQUENCE, drawn))
+    this.skipsDrawn = quicConnSum(drawn, 1)
     let draw: i64 = 0
     for (let k: i32 = 0; k < 4 && k < toI32(this.cidScratch.length); k += 1) {
       draw = (draw << 8) | toI64(this.cidScratch[k])
     }
     secureZero(this.cidScratch)
-    this.nextSkip = from + QUIC_CONN_SKIP_MIN + (draw % QUIC_CONN_SKIP_SPREAD)
+    this.nextSkip = quicConnSum(from, quicConnSum(QUIC_CONN_SKIP_MIN, draw % QUIC_CONN_SKIP_SPREAD))
   }
 
   // ---- Streams ------------------------------------------------------------------
@@ -4496,7 +4765,7 @@ export class QuicConnection {
     while (id >= 0) {
       const stream: QuicStream | null = this.streams.find(id)
       const available: i64 = stream !== null ? stream.readable() : 0
-      const data: u8[] = new Array<u8>(toI32(available))
+      const data: u8[] = quicConnBytes(available)
       const n: i32 = this.streams.read(id, data, QUIC_CONN_FROM, toI32(available))
       // Every byte up to the FIN read: one more read sees the end, which lets the side finish.
       const end: boolean =
@@ -4539,8 +4808,8 @@ export class QuicConnection {
     }
     const length: i64 = toI64(toI32(data.length))
     if (
-      stream.sendEnd + length > stream.sendLimit ||
-      this.streams.writtenTotal + length > this.streams.sendMaxData ||
+      quicConnSum(stream.sendEnd, length) > stream.sendLimit ||
+      quicConnSum(this.streams.writtenTotal, length) > this.streams.sendMaxData ||
       length > stream.room()
     ) {
       return QUIC_STREAM_ERR_FLOW
@@ -4564,9 +4833,14 @@ export class QuicConnection {
   maxDatagramPayload(): i32 {
     const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
     const cid: i32 = entry !== null ? entry.length : QUIC_CONN_FROM
-    let limit: i64 = toI64(this.datagramSize() - 1 - cid - 4 - QUIC_AEAD_TAG_SIZE)
+    let limit: i64 = toI64(this.datagramSize()) - toI64(cid) - toI64(QUIC_AEAD_TAG_SIZE + 1 + 4)
     if (this.peerMaxDatagramFrame < limit) {
       limit = this.peerMaxDatagramFrame
+    }
+    // A negative limit leaves no payload either way: below, every payload it
+    // gives is negative, and so is answered as none.
+    if (limit < 0) {
+      limit = 0
     }
     // The frame is its type, a Length of 1, 2 or 4 bytes, and the payload.
     let payload: i64 = limit - 2
@@ -4647,7 +4921,8 @@ export class QuicConnection {
   takeDatagram(now: i64): u8[] | null {
     const out: u8[] = new Array<u8>(QUIC_CONN_DATAGRAM_SIZE)
     const n: i32 = this.takeDatagramInto(out, QUIC_CONN_FROM, now)
-    return n > 0 ? quicConnSlice(out, 0, n) : null
+    // `n` is a datagram's length, at most `out`'s `QUIC_CONN_DATAGRAM_SIZE` bytes, so it fits a `u16`.
+    return n > 0 && n <= QUIC_CONN_DATAGRAM_SIZE ? quicConnSlice(out, 0, toU16(n)) : null
   }
 
   /**
@@ -4689,7 +4964,9 @@ export class QuicConnection {
    * @returns The datagram's length in bytes, at most what `out` holds from `at` and `datagramSize()`, or 0.
    */
   takeDatagramInto(out: u8[], at: i32, now: i64): i32 {
-    return this.takeDatagramWithin(out, at, toI32(out.length) - at, now)
+    // A negative `at` is refused there whatever the room.
+    const room: i32 = at < 0 ? 0 : toI32(out.length) - at
+    return this.takeDatagramWithin(out, at, room, now)
   }
 
   /**
@@ -4717,7 +4994,7 @@ export class QuicConnection {
       this.state === QUIC_STATE_TIMED_OUT ||
       at < 0 ||
       room < QUIC_CONN_DATAGRAM_SIZE ||
-      at > toI32(out.length) - room
+      toI64(at) > toI64(out.length) - toI64(room)
     ) {
       return 0
     }
@@ -4760,19 +5037,26 @@ export class QuicConnection {
    */
   private beforeDatagram(): void {
     const limit: i64 = this.confidentialityLimit
-    if (this.sealedUnderKey >= limit - limit / 4) {
+    // The limit is a positive count far from the ends of `i64`, so the
+    // `u64` difference is exact.
+    if (this.sealedUnderKey >= toI64(toU64(limit) - toU64(limit / 4))) {
       this.updateKeys()
     }
     const pn: i64 = this.application.nextPn
     if (pn !== this.nextSkip) {
       return
     }
-    if (this.skipHead >= 0 && this.skipHead < toI32(this.skipped.length)) {
-      this.skipped[this.skipHead] = pn
+    const head: i32 = this.skipHead
+    const ring: i64[] = this.skipped
+    if (head >= 0 && head < toI32(ring.length)) {
+      ring[head] = pn
     }
-    this.skipHead = (this.skipHead + 1) % QUIC_CONN_SKIP_RING
-    this.application.nextPn = pn + 1
-    this.scheduleSkip(pn + 1)
+    // The head stays in 0 .. QUIC_CONN_SKIP_RING - 1, so this is
+    // `(head + 1) % QUIC_CONN_SKIP_RING`.
+    this.skipHead = head >= 0 && head < QUIC_CONN_SKIP_RING - 1 ? head + 1 : 0
+    const next: i64 = quicConnSum(pn, 1)
+    this.application.nextPn = next
+    this.scheduleSkip(next)
   }
 
   /**
@@ -4800,7 +5084,7 @@ export class QuicConnection {
       space.builtStart = -1
       const overhead: i32 = this.overhead(space)
       const sent: QuicSentPackets | null = this.recovery.space(level)
-      if (sent === null || overhead === 0 || remaining <= overhead + 8) {
+      if (sent === null || overhead === 0 || toI64(remaining) <= toI64(overhead) + 8) {
         continue
       }
       if (space.probes > 0 && sent.full()) {
@@ -4812,13 +5096,14 @@ export class QuicConnection {
         }
       }
       const elicit: boolean = space.probes > 0 || (open && !sent.full())
-      const headerLength: i32 = overhead - QUIC_AEAD_TAG_SIZE
-      const payloadStart: i32 = position + headerLength
+      // Every position here lies inside `out`, so each sum, taken in `i64`,
+      // fits an `i32`.
+      const payloadStart: i32 = toI32(toI64(position) + toI64(overhead) - toI64(QUIC_AEAD_TAG_SIZE))
       let payloadEnd: i32 = this.buildPayloadInto(
         space,
         out,
         payloadStart,
-        payloadStart + remaining - overhead,
+        toI32(toI64(payloadStart) + toI64(remaining) - toI64(overhead)),
         elicit,
         !sent.full()
       )
@@ -4828,8 +5113,11 @@ export class QuicConnection {
       // RFC 9001 §5.4.2: the packet number and payload give header
       // protection at least four bytes to sample from.
       const pnLength: i32 = quicPacketNumberLength(space.nextPn, space.largestAcked)
-      if (pnLength + payloadEnd - payloadStart < 4) {
-        payloadEnd = quicPutPadding(out, payloadEnd, 4 - pnLength - (payloadEnd - payloadStart))
+      const written: i64 = toI64(pnLength) + toI64(payloadEnd) - toI64(payloadStart)
+      // The packet number is 1 to 4 bytes and the payload never shorter
+      // than nothing, so `written` is never negative.
+      if (written >= 0 && written < 4) {
+        payloadEnd = quicPutPadding(out, payloadEnd, toI32(4 - written))
       }
       eliciting = eliciting || space.stagedEliciting
       // RFC 9000 §14.1: a datagram with an ack-eliciting Initial is padded.
@@ -4839,8 +5127,8 @@ export class QuicConnection {
       space.builtStart = position
       space.builtEnd = payloadEnd
       last = level
-      remaining = remaining - (payloadEnd + QUIC_AEAD_TAG_SIZE - position)
-      position = payloadEnd + QUIC_AEAD_TAG_SIZE
+      remaining = toI32(toI64(remaining) + toI64(position) - toI64(payloadEnd) - toI64(QUIC_AEAD_TAG_SIZE))
+      position = toI32(toI64(payloadEnd) + toI64(QUIC_AEAD_TAG_SIZE))
     }
     if (last < 0) {
       return 0
@@ -4860,18 +5148,19 @@ export class QuicConnection {
     // make cause, leaves the datagram unsendable: none of it goes.
     let total: i32 = 0
     let sealed: boolean = true
-    for (let level: i32 = 0; level <= last; level += 1) {
+    for (let level: i32 = 0; level < 3 && level <= last; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
       if (space.builtStart >= 0) {
         const n: i32 = this.sealAt(space, out, space.builtStart, space.builtEnd)
         sealed = sealed && n > 0
-        total = total + n
+        // A datagram's packets together fit `out`, so this fits an `i32`.
+        total = toI32(toI64(total) + toI64(n))
       }
     }
     if (!sealed) {
       return 0
     }
-    this.bytesSent = this.bytesSent + toI64(total)
+    this.bytesSent = quicConnSum(this.bytesSent, toI64(total))
     this.notePathSent(total)
     return total
   }
@@ -4892,12 +5181,15 @@ export class QuicConnection {
     if (space.level === TLS_LEVEL_APPLICATION) {
       const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
       const cid: i32 = entry !== null ? entry.length : QUIC_CONN_FROM
-      return 1 + cid + pnLength + QUIC_AEAD_TAG_SIZE
+      // An ID is at most 20 bytes and a packet number 4, so this fits an `i32`.
+      return toI32(toI64(cid) + toI64(pnLength) + toI64(1 + QUIC_AEAD_TAG_SIZE))
     }
     // First byte, version, both IDs with their lengths, the Length (two
     // bytes, always) and, for an Initial, the empty token's length.
     const token: i32 = space.level === TLS_LEVEL_INITIAL ? 1 : 0
-    return 7 + this.peerScidLength + QUIC_CONN_CID_LENGTH + token + 2 + pnLength + QUIC_AEAD_TAG_SIZE
+    // Each part is a few bytes, so the sum fits an `i32`.
+    const fixed: i64 = toI64(7 + QUIC_CONN_CID_LENGTH + 2 + QUIC_AEAD_TAG_SIZE)
+    return toI32(fixed + toI64(this.peerScidLength) + toI64(token) + toI64(pnLength))
   }
 
   /**
@@ -4952,10 +5244,16 @@ export class QuicConnection {
    * is kept whole, so a byte's index in `cryptoOut` is its offset.
    */
   private buildCrypto(space: QuicConnSpace, out: u8[], at: i32, end: i32): i32 {
-    if (space.cryptoResendLow >= 0) {
-      const low: i64 = space.cryptoResendLow
-      const want: i32 = toI32(space.cryptoResendHigh - low)
-      const left: i32 = end - at - quicCryptoOverhead(low, want)
+    const low: i64 = space.cryptoResendLow
+    if (low >= 0) {
+      const high: i64 = space.cryptoResendHigh
+      // A resend range is never empty while it is kept, so this is never taken.
+      if (high < low) {
+        return at
+      }
+      // `high` is at least `low`, so the `u64` difference is exact.
+      const want: i32 = toI32(toI64(toU64(high) - toU64(low)))
+      const left: i32 = toI32(toI64(end) - toI64(at) - toI64(quicCryptoOverhead(low, want)))
       const n: i32 = left < want ? left : want
       if (n <= 0) {
         return at
@@ -4965,7 +5263,7 @@ export class QuicConnection {
         return at
       }
       space.stageCrypto(low, n)
-      space.cryptoResendLow = low + toI64(n)
+      space.cryptoResendLow = quicConnSum(low, toI64(n))
       if (space.cryptoResendLow >= space.cryptoResendHigh) {
         space.cryptoResendLow = -1
         space.cryptoResendHigh = -1
@@ -4976,7 +5274,7 @@ export class QuicConnection {
     if (unsent <= 0) {
       return at
     }
-    const left: i32 = end - at - quicCryptoOverhead(space.cryptoOutOffset, unsent)
+    const left: i32 = toI32(toI64(end) - toI64(at) - toI64(quicCryptoOverhead(space.cryptoOutOffset, unsent)))
     const n: i32 = left < unsent ? left : unsent
     if (n <= 0) {
       return at
@@ -4994,8 +5292,9 @@ export class QuicConnection {
       return at
     }
     space.stageCrypto(space.cryptoOutOffset, n)
-    space.cryptoOutHead = space.cryptoOutHead + n
-    space.cryptoOutOffset = space.cryptoOutOffset + toI64(n)
+    // The head moves within `cryptoOut`, so the sum fits an `i32`.
+    space.cryptoOutHead = toI32(toI64(space.cryptoOutHead) + toI64(n))
+    space.cryptoOutOffset = quicConnSum(space.cryptoOutOffset, toI64(n))
     return next
   }
 
@@ -5009,37 +5308,34 @@ export class QuicConnection {
    */
   private buildPathFrames(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
     let at: i32 = start
-    while (this.pathCount > 0 && end - at >= 9) {
-      const next: i32 = quicPutPathData(
-        out,
-        at,
-        end,
-        QUIC_FRAME_PATH_RESPONSE,
-        this.pathData,
-        (this.pathHead % 4) * QUIC_PATH_DATA_SIZE
-      )
+    while (this.pathCount > 0 && toI64(end) - toI64(at) >= 9) {
+      const head: i32 = this.pathHead
+      const base: i32 = quicConnRingAt(toI64(head), 4)
+      // The head stays in 0 .. 3, so this is never taken.
+      if (base < 0) {
+        break
+      }
+      const next: i32 = quicPutPathData(out, at, end, QUIC_FRAME_PATH_RESPONSE, this.pathData, base)
       if (next < 0) {
         break
       }
       at = next
-      this.pathHead = (this.pathHead + 1) % 4
-      this.pathCount = this.pathCount - 1
+      // `(head + 1) % 4`, the head being in 0 .. 3.
+      this.pathHead = head < 3 ? head + 1 : 0
+      const count: i32 = this.pathCount
+      this.pathCount = count > 0 ? count - 1 : 0
       // Ack-eliciting, but never sent again (RFC 9000 §13.3).
       space.stagedEliciting = true
       this.pathFrameStaged = true
     }
     // The PATH_CHALLENGE on a path being validated; one lost is not sent
     // again, but `runPathClock` draws fresh data a probe timeout later.
-    if (this.challengeOwed && this.challengesDrawn > 0 && end - at >= 9) {
-      const slot: i32 = toI32((this.challengesDrawn - 1) % toI64(QUIC_CONN_CHALLENGES))
-      const next: i32 = quicPutPathData(
-        out,
-        at,
-        end,
-        QUIC_FRAME_PATH_CHALLENGE,
-        this.challengeData,
-        slot * QUIC_PATH_DATA_SIZE
-      )
+    const drawn: i64 = this.challengesDrawn
+    if (this.challengeOwed && drawn > 0 && toI64(end) - toI64(at) >= 9) {
+      const base: i32 = quicConnRingAt(drawn - 1, QUIC_CONN_CHALLENGES)
+      // `drawn` is positive, so `base` is never negative.
+      const next: i32 =
+        base >= 0 ? quicPutPathData(out, at, end, QUIC_FRAME_PATH_CHALLENGE, this.challengeData, base) : -1
       if (next >= 0) {
         at = next
         this.challengeOwed = false
@@ -5067,7 +5363,7 @@ export class QuicConnection {
     // 8-byte ID at most 42.
     while (
       this.cids.retireCount > 0 &&
-      end - at >= 9 &&
+      toI64(end) - toI64(at) >= 9 &&
       space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
     ) {
       const sequence: i64 = this.cids.takeRetire()
@@ -5075,7 +5371,11 @@ export class QuicConnection {
       space.stageControl(QUIC_CONN_CONTROL_RETIRE, sequence)
     }
     let entry: QuicCidEntry | null = this.cids.nextUnannounced()
-    while (entry !== null && end - at >= 42 && space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
+    while (
+      entry !== null &&
+      toI64(end) - toI64(at) >= 42 &&
+      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
+    ) {
       const next: i32 = quicPutNewConnectionId(
         out,
         at,
@@ -5168,8 +5468,10 @@ export class QuicConnection {
     const keys: QuicKeys | null = space.writeKeys
     const pn: i64 = space.nextPn
     const pnLength: i32 = quicPacketNumberLength(pn, space.largestAcked)
-    const headerLength: i32 = this.overhead(space) - QUIC_AEAD_TAG_SIZE
-    const payloadLength: i32 = payloadEnd - start - headerLength
+    // Positions inside `out` and a header of a few bytes: each sum, taken
+    // in `i64`, fits an `i32`.
+    const headerLength: i32 = toI32(toI64(this.overhead(space)) - toI64(QUIC_AEAD_TAG_SIZE))
+    const payloadLength: i32 = toI32(toI64(payloadEnd) - toI64(start) - toI64(headerLength))
     const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
     const headerEnd: i32 =
       space.level === TLS_LEVEL_APPLICATION
@@ -5196,25 +5498,26 @@ export class QuicConnection {
             pnLength,
             payloadLength
           )
-    if (keys === null || headerEnd !== start + headerLength) {
+    if (keys === null || toI64(headerEnd) !== toI64(start) + toI64(headerLength)) {
       return 0
     }
     const end: i32 = quicSealInPlace(keys, out, start, headerLength, payloadLength, pn)
     if (end < 0) {
       return 0
     }
-    space.nextPn = pn + 1
+    space.nextPn = quicConnSum(pn, 1)
     if (space.level === TLS_LEVEL_APPLICATION) {
-      this.sealedUnderKey = this.sealedUnderKey + 1
+      this.sealedUnderKey = quicConnSum(this.sealedUnderKey, 1)
     }
-    const slot: i32 = this.recordSent(space, pn, end - start)
+    const size: i32 = toI32(toI64(end) - toI64(start))
+    const slot: i32 = this.recordSent(space, pn, size)
     if (this.pmtuSealing) {
       this.recovery.onProbeSent(space.level, slot)
     }
     if (this.datagramEcn !== 0) {
       this.recovery.onEctSent(space.level, slot)
     }
-    return end - start
+    return size
   }
 
   /**
@@ -5233,8 +5536,9 @@ export class QuicConnection {
     const slot: i32 = this.recovery.onPacketSent(space.level, pn, size, this.now)
     if (slot >= 0) {
       space.commitStaged(slot)
-      if (space.probes > 0) {
-        space.probes -= 1
+      const probes: i32 = space.probes
+      if (probes > 0) {
+        space.probes = probes - 1
         // §6.2.4: a second probe carries unacknowledged data too. When the
         // first took everything queued, the oldest — what it just carried —
         // goes again.
@@ -5253,7 +5557,7 @@ export class QuicConnection {
   private untrack(space: QuicConnSpace, row: i32): void {
     const streams: i32 = space.streamCount(row)
     for (let j: i32 = 0; j < streams; j += 1) {
-      const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+      const at: i32 = quicConnCell(row, j, QUIC_CONN_PACKET_STREAMS, toI32(space.sentStreamId.length))
       if (
         at >= 0 &&
         at < toI32(space.sentStreamId.length) &&
@@ -5271,7 +5575,7 @@ export class QuicConnection {
     }
     const control: i32 = space.controlCount(row)
     for (let j: i32 = 0; j < control; j += 1) {
-      const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
+      const at: i32 = quicConnCell(row, j, QUIC_CONN_PACKET_CONTROL, toI32(space.sentControlKind.length))
       if (at >= 0 && at < toI32(space.sentControlKind.length) && at < toI32(space.sentControlValue.length)) {
         this.streams.controlAcked(toI32(space.sentControlKind[at]), space.sentControlValue[at])
       }
@@ -5294,7 +5598,10 @@ export class QuicConnection {
     this.closeSent = true
     this.startClosingPeriod()
     let position: i32 = at
-    const limit: i32 = at + QUIC_CONN_DATAGRAM_SIZE
+    // `takeDatagramWithin` checked `out` holds a whole datagram from `at`,
+    // so every position here lies inside it and each sum, taken in `i64`,
+    // fits an `i32`.
+    const limit: i32 = toI32(toI64(at) + toI64(QUIC_CONN_DATAGRAM_SIZE))
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
       const overhead: i32 = this.overhead(space)
@@ -5302,8 +5609,8 @@ export class QuicConnection {
         continue
       }
       space.clearStaged()
-      const payloadStart: i32 = position + overhead - QUIC_AEAD_TAG_SIZE
-      const room: i32 = limit - QUIC_AEAD_TAG_SIZE
+      const payloadStart: i32 = toI32(toI64(position) + toI64(overhead) - toI64(QUIC_AEAD_TAG_SIZE))
+      const room: i32 = toI32(toI64(limit) - toI64(QUIC_AEAD_TAG_SIZE))
       let payloadEnd: i32 =
         level === TLS_LEVEL_APPLICATION || !this.errorIsApplication
           ? quicPutConnectionClose(
@@ -5328,14 +5635,18 @@ export class QuicConnection {
         continue
       }
       const pnLength: i32 = quicPacketNumberLength(space.nextPn, space.largestAcked)
-      if (pnLength + payloadEnd - payloadStart < 4) {
-        payloadEnd = quicPutPadding(out, payloadEnd, 4 - pnLength - (payloadEnd - payloadStart))
+      const written: i64 = toI64(pnLength) + toI64(payloadEnd) - toI64(payloadStart)
+      // The packet number is 1 to 4 bytes and the payload never shorter
+      // than nothing, so `written` is never negative.
+      if (written >= 0 && written < 4) {
+        payloadEnd = quicPutPadding(out, payloadEnd, toI32(4 - written))
       }
-      position = position + this.sealAt(space, out, position, payloadEnd)
+      position = toI32(toI64(position) + toI64(this.sealAt(space, out, position, payloadEnd)))
     }
-    this.bytesSent = this.bytesSent + toI64(position - at)
-    this.notePathSent(position - at)
-    return position - at
+    const sent: i32 = toI32(toI64(position) - toI64(at))
+    this.bytesSent = quicConnSum(this.bytesSent, toI64(sent))
+    this.notePathSent(sent)
+    return sent
   }
 
   /**

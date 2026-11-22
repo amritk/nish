@@ -159,29 +159,32 @@ const isDecimal = (text: string): boolean => {
   // 0 before anything, 1 in the digits, 2 in the fraction, 3 just after
   // the `e`, 4 in the exponent.
   let state: i32 = 0
-  let mantissa: i32 = 0
-  let exponent: i32 = 0
+  // Whether a digit came before the exponent, and one after the `e`: only
+  // their presence matters, so no count that could grow.
+  let mantissa = false
+  let exponent = false
   for (let i: i32 = 0; i < toI32(text.length); i++) {
     const c = toI32(text.charCodeAt(i))
     if (c >= 48 && c <= 57) {
       if (state >= 3) {
-        exponent = exponent + 1
+        exponent = true
         state = 4
       } else {
-        mantissa = mantissa + 1
+        mantissa = true
         state = state === 0 ? toI32(1) : state
       }
     } else if ((c === 43 || c === 45) && (state === 0 || state === 3)) {
-      state = state + 1
+      // A sign leads the number (0 to 1) or the exponent (3 to 4).
+      state = state === 0 ? toI32(1) : toI32(4)
     } else if (c === 46 && state <= 1) {
       state = 2
-    } else if ((c === 101 || c === 69) && (state === 1 || state === 2) && mantissa > 0) {
+    } else if ((c === 101 || c === 69) && (state === 1 || state === 2) && mantissa) {
       state = 3
     } else {
       return false
     }
   }
-  return mantissa > 0 && (state < 3 || exponent > 0)
+  return mantissa && (state < 3 || exponent)
 }
 
 /** Whether `name` can follow `--` and be matched: not empty, no leading `-`, and no `=`, space or control byte. */
@@ -226,14 +229,14 @@ export class FlagTable {
     this.commands = []
   }
 
-  /** @internal Called by `ParsedFlags`. The index of the flag `name` (without `--`), or `-1`. */
-  indexOf(name: string): i32 {
-    for (let i: i32 = 0; i < toI32(this.flags.length); i++) {
-      if (this.flags[i].name === name) {
-        return i
+  /** The flag `name` (without `--`) as declared, or `null` when the table declares none. */
+  private find(name: string): FlagSpec | null {
+    for (const f of this.flags) {
+      if (f.name === name) {
+        return f
       }
     }
-    return -1
+    return null
   }
 
   /** A flag of `kind`, after the checks every declaring method shares. */
@@ -243,13 +246,14 @@ export class FlagTable {
         `nish/cli-flags: a flag name is not empty and has no leading '-', '=' or whitespace, got "${name}"`
       )
     }
-    if (this.indexOf(name) >= 0) {
+    if (this.find(name) !== null) {
       panic(`nish/cli-flags: --${name} is declared twice`)
     }
     // `--no-x` cannot be both a flag of its own and the clearing of a boolean `--x`.
-    const clears = kind === FLAG_BOOLEAN ? this.indexOf(`no-${name}`) : toI32(-1)
-    const cleared = name.startsWith("no-") ? this.indexOf(name.substring(3)) : toI32(-1)
-    if (clears >= 0 || (cleared >= 0 && this.flags[cleared].kind === FLAG_BOOLEAN)) {
+    const clears = kind === FLAG_BOOLEAN && this.find(`no-${name}`) !== null
+    const base: FlagSpec | null = name.startsWith("no-") ? this.find(name.substring(3)) : null
+    const cleared = base !== null && base.kind === FLAG_BOOLEAN
+    if (clears || cleared) {
       panic(
         `nish/cli-flags: --${kind === FLAG_BOOLEAN ? `no-${name}` : name} would both be a flag and clear a boolean`
       )
@@ -346,18 +350,17 @@ export class FlagTable {
   }
 
   /**
-   * The index of the command `words` spell the longest declared path of, or
-   * `-1`. A path spelled by a prefix of `words` counts; the words after it
-   * are the positionals.
+   * The command `words` spell the longest declared path of, or `null`. A
+   * path spelled by a prefix of `words` counts; the words after it are the
+   * positionals.
    */
-  private matchCommand(words: string[]): i32 {
-    let best: i32 = -1
+  private matchCommand(words: string[]): CommandSpec | null {
+    let best: CommandSpec | null = null
     let bestLength: i32 = 0
-    for (let i: i32 = 0; i < toI32(this.commands.length); i++) {
-      const path = this.commands[i].words
-      const length = toI32(path.length)
-      if (length <= toI32(words.length) && length > bestLength && agrees(path, words, length)) {
-        best = i
+    for (const c of this.commands) {
+      const length = toI32(c.words.length)
+      if (length <= toI32(words.length) && length > bestLength && agrees(c.words, words, length)) {
+        best = c
         bestLength = length
       }
     }
@@ -419,16 +422,16 @@ export class FlagTable {
     // A value flag written without `=` waits here for the next argument,
     // which is its value whatever it looks like, so that `--jobs -1` and
     // `--grep --x` mean what they say.
-    let pending: i32 = -1
+    let pending: FlagValue | null = null
     let pendingFlag = ""
     let pendingArg = ""
     for (let i: i32 = 0; i < toI32(args.length) && got.ok; i++) {
       const arg = args[i]
       if (i < first) {
         // Before `first`, so not read at all.
-      } else if (pending >= 0) {
+      } else if (pending !== null) {
         got.take(pending, pendingFlag, arg, pendingArg)
-        pending = -1
+        pending = null
       } else if (ended) {
         trailing.push(arg)
       } else if (arg === "--") {
@@ -438,56 +441,58 @@ export class FlagTable {
       } else if (!arg.startsWith("--")) {
         got.fail(FLAG_ERR_UNKNOWN, `unknown flag ${arg}`, arg)
       } else {
-        const eq = toI32(arg.indexOf("="))
-        const flag = eq < 0 ? arg : arg.slice(0, eq)
-        let at = this.indexOf(flag.substring(2))
-        let negated = false
-        if (at < 0 && flag.startsWith("--no-")) {
-          const cleared = this.indexOf(flag.substring(5))
-          if (cleared >= 0 && this.flags[cleared].kind === FLAG_BOOLEAN) {
-            at = cleared
-            negated = true
+        // `--name=value` splits at its first `=`; the `--` holds none.
+        let flag = arg
+        let value = ""
+        let joined = false
+        for (let k: i32 = 2; k < toI32(arg.length); k++) {
+          if (arg.charCodeAt(k) === 61) {
+            flag = arg.substring(0, k)
+            value = arg.substring(k + 1)
+            joined = true
+            break
           }
         }
-        if (at < 0) {
+        const found = got.lookup(flag)
+        if (found === null) {
           got.fail(FLAG_ERR_UNKNOWN, `unknown flag ${flag}`, arg)
-        } else {
-          const spec = this.flags[at]
-          if (spec.kind === FLAG_BOOLEAN) {
-            if (eq >= 0) {
-              got.fail(FLAG_ERR_BOOLEAN_VALUE, `${flag} takes no value`, arg)
-            } else if (got.counts[at] > 0) {
-              got.fail(FLAG_ERR_REPEATED, `--${spec.name} is given twice`, arg)
-            } else {
-              got.bools[at] = !negated
-              got.counts[at] = 1
-            }
-          } else if (eq >= 0) {
-            got.take(at, flag, arg.substring(eq + 1), arg)
+        } else if (found.spec.kind === FLAG_BOOLEAN) {
+          if (joined) {
+            got.fail(FLAG_ERR_BOOLEAN_VALUE, `${flag} takes no value`, arg)
+          } else if (found.given) {
+            got.fail(FLAG_ERR_REPEATED, `--${found.spec.name} is given twice`, arg)
           } else {
-            pending = at
-            pendingFlag = flag
-            pendingArg = arg
+            // `lookup` matched the base name of a `--no-x` exactly when the
+            // name it found is not the one written.
+            found.bool = found.spec.name === flag.substring(2)
+            found.given = true
           }
+        } else if (joined) {
+          got.take(found, flag, value, arg)
+        } else {
+          pending = found
+          pendingFlag = flag
+          pendingArg = arg
         }
       }
     }
-    if (pending >= 0 && got.ok) {
-      const meta = this.flags[pending].meta
+    if (pending !== null && got.ok) {
+      const meta = pending.spec.meta
       const wanted = meta.length > 0 ? meta : "a value"
       got.fail(FLAG_ERR_MISSING_VALUE, `${pendingFlag} needs ${wanted}`, pendingArg)
     }
+    let skip: i32 = 0
     if (this.commands.length > 0) {
-      const at = this.matchCommand(words)
-      if (at >= 0) {
-        got.commandAt = at
-        got.command = this.commands[at].path
+      const chosen = this.matchCommand(words)
+      if (chosen !== null) {
+        got.chosen = chosen
+        got.command = chosen.path
+        skip = toI32(chosen.words.length)
       } else if (words.length > 0 && got.ok) {
         const shown = this.unknownCommand(words)
         got.fail(FLAG_ERR_UNKNOWN_COMMAND, `unknown command "${shown}"`, shown)
       }
     }
-    const skip: i32 = got.commandAt >= 0 ? toI32(this.commands[got.commandAt].words.length) : 0
     for (let w: i32 = 0; w < toI32(words.length); w++) {
       if (w >= skip) {
         got.positionals.push(words[w])
@@ -496,6 +501,7 @@ export class FlagTable {
     for (const t of trailing) {
       got.positionals.push(t)
     }
+    got.publish()
     return got
   }
 
@@ -525,6 +531,34 @@ export class FlagTable {
 }
 
 /**
+ * One flag's answer, beside the declaration it answers for, so that one
+ * lookup by name reaches the kind and every value without an index.
+ */
+class FlagValue {
+  /** The declaration, shared with the table. */
+  spec: FlagSpec
+  /** A string or number flag's value as written, `""` when not given. */
+  text: string
+  /** A number flag's value, `0` when not given. */
+  number: f64
+  /** A repeatable flag's values in the order given; empty when not given. */
+  list: string[]
+  /** Whether the command line gave the flag; for a boolean, in either spelling. */
+  given: boolean
+  /** A boolean flag's value, `false` when not given. */
+  bool: boolean
+
+  constructor(spec: FlagSpec) {
+    this.spec = spec
+    this.text = ""
+    this.number = toF64(0)
+    this.list = []
+    this.given = false
+    this.bool = false
+  }
+}
+
+/**
  * What `parse` answered: a usage error, or every flag's value. Values sit in
  * arrays parallel to the table's `flags`: `counts` says how often each was
  * given, `texts` and `numbers` hold a string or number flag's value,
@@ -549,8 +583,8 @@ export class ParsedFlags {
   argument: string
   /** The path of the command the leading words chose, or `""` for none. */
   command: string
-  /** @internal Used by `FlagTable`. */
-  commandAt: i32
+  /** @internal Used by `FlagTable`. The command the leading words chose, or `null`. */
+  chosen: CommandSpec | null
   /**
    * The words that are not flags, values or the command's path, in order,
    * then every argument after `--`. On a usage error, only those among the
@@ -567,6 +601,12 @@ export class ParsedFlags {
   bools: boolean[]
   /** Each repeatable flag's values in the order given; empty when not given. */
   lists: string[][]
+  /**
+   * One answer per flag the table declared when the parse began, in its
+   * order: what the readers look up, and what `publish` copies into the
+   * arrays above.
+   */
+  private values: FlagValue[]
 
   /**
    * An answer with no error and every flag unset, which `FlagTable.parseFrom`
@@ -582,21 +622,57 @@ export class ParsedFlags {
     this.message = ""
     this.argument = ""
     this.command = ""
-    this.commandAt = -1
+    this.chosen = null
     this.positionals = []
     this.counts = []
     this.texts = []
     this.numbers = []
     this.bools = []
     this.lists = []
-    for (let i: i32 = 0; i < toI32(table.flags.length); i++) {
-      this.counts.push(toI32(0))
-      this.texts.push("")
-      this.numbers.push(toF64(0))
-      this.bools.push(false)
-      const none: string[] = []
-      this.lists.push(none)
+    this.values = []
+    for (const f of table.flags) {
+      this.values.push(new FlagValue(f))
     }
+    this.publish()
+  }
+
+  /**
+   * @internal Called by `FlagTable`. Rewrites `counts`, `texts`, `numbers`,
+   * `bools` and `lists` from the answers, one element per flag in the
+   * table's order; a repeatable flag's count is how many values it holds.
+   */
+  publish(): void {
+    this.counts = []
+    this.texts = []
+    this.numbers = []
+    this.bools = []
+    this.lists = []
+    for (const v of this.values) {
+      const once: i32 = v.given ? 1 : 0
+      this.counts.push(v.spec.kind === FLAG_REPEATABLE ? toI32(v.list.length) : once)
+      this.texts.push(v.text)
+      this.numbers.push(v.number)
+      this.bools.push(v.bool)
+      this.lists.push(v.list)
+    }
+  }
+
+  /**
+   * @internal Called by `FlagTable`. The answer for `flag` as written
+   * (`--name`, without any `=value`): the flag of that name, or for
+   * `--no-x` the boolean `x`, or `null` for neither. One pass: the table
+   * never holds both a `no-x` and a boolean `x`, so at most one answer
+   * matches.
+   */
+  lookup(flag: string): FlagValue | null {
+    const name = flag.substring(2)
+    const base = flag.startsWith("--no-") ? flag.substring(5) : ""
+    for (const v of this.values) {
+      if (v.spec.name === name || (base.length > 0 && v.spec.kind === FLAG_BOOLEAN && v.spec.name === base)) {
+        return v
+      }
+    }
+    return null
   }
 
   /** @internal Called by `FlagTable`. Records the first usage error; a parse stops at it. */
@@ -607,15 +683,15 @@ export class ParsedFlags {
     this.argument = argument
   }
 
-  /** @internal Called by `FlagTable`. Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. */
-  take(at: i32, flag: string, value: string, arg: string): void {
-    const kind = this.table.flags[at].kind
+  /** @internal Called by `FlagTable`. Stores `value` for the flag `into`, spelled `flag` in `arg`, or fails as its kind requires. */
+  take(into: FlagValue, flag: string, value: string, arg: string): void {
+    const kind = into.spec.kind
     if (kind === FLAG_REPEATABLE) {
-      this.lists[at].push(value)
-      this.counts[at] = this.counts[at] + 1
+      into.list.push(value)
+      into.given = true
       return
     }
-    if (this.counts[at] > 0) {
+    if (into.given) {
       this.fail(FLAG_ERR_REPEATED, `${flag} is given twice`, arg)
       return
     }
@@ -628,19 +704,23 @@ export class ParsedFlags {
         this.fail(FLAG_ERR_NOT_A_NUMBER, `${flag} needs a number, not "${value}"`, value)
         return
       }
-      this.numbers[at] = n
+      into.number = n
     }
-    this.texts[at] = value
-    this.counts[at] = 1
+    into.text = value
+    into.given = true
   }
 
-  /** The index of the flag `name` of `kind`; a name the table does not declare so is a bug, and panics. */
-  private slot(name: string, kind: i32): i32 {
-    const at = this.table.indexOf(name)
-    if (at < 0 || this.table.flags[at].kind !== kind) {
-      panic(`nish/cli-flags: ${this.table.program} declares no such flag --${name} of that kind`)
+  /**
+   * The answer for the flag `name` of `kind`; a name the table does not
+   * declare so, or declared after this parse, is a bug, and panics.
+   */
+  private slot(name: string, kind: i32): FlagValue {
+    for (const v of this.values) {
+      if (v.spec.name === name && v.spec.kind === kind) {
+        return v
+      }
     }
-    return at
+    panic(`nish/cli-flags: ${this.table.program} declares no such flag --${name} of that kind`)
   }
 
   /**
@@ -651,7 +731,7 @@ export class ParsedFlags {
    * @returns the value as it appeared on the command line
    */
   str(name: string): string {
-    return this.texts[this.slot(name, FLAG_STRING)]
+    return this.slot(name, FLAG_STRING).text
   }
 
   /**
@@ -662,7 +742,7 @@ export class ParsedFlags {
    * @returns the finite value the command line gave
    */
   num(name: string): f64 {
-    return this.numbers[this.slot(name, FLAG_NUMBER)]
+    return this.slot(name, FLAG_NUMBER).number
   }
 
   /**
@@ -674,7 +754,7 @@ export class ParsedFlags {
    * @returns whether the flag is set
    */
   bool(name: string): boolean {
-    return this.bools[this.slot(name, FLAG_BOOLEAN)]
+    return this.slot(name, FLAG_BOOLEAN).bool
   }
 
   /**
@@ -688,7 +768,7 @@ export class ParsedFlags {
    */
   all(name: string): string[] {
     const out: string[] = []
-    for (const v of this.lists[this.slot(name, FLAG_REPEATABLE)]) {
+    for (const v of this.slot(name, FLAG_REPEATABLE).list) {
       out.push(v)
     }
     return out
@@ -703,11 +783,13 @@ export class ParsedFlags {
    * @returns `true` when the command line gave it at least once
    */
   has(name: string): boolean {
-    const at = this.table.indexOf(name)
-    if (at < 0) {
-      panic(`nish/cli-flags: ${this.table.program} declares no flag --${name}`)
+    // A flag declared after this parse has no answer in it.
+    for (const v of this.values) {
+      if (v.spec.name === name) {
+        return v.given
+      }
     }
-    return this.counts[at] > 0
+    panic(`nish/cli-flags: ${this.table.program} declares no flag --${name}`)
   }
 
   /**
@@ -717,8 +799,8 @@ export class ParsedFlags {
    */
   private usageLine(): string {
     const table = this.table
-    if (this.commandAt >= 0) {
-      const c = table.commands[this.commandAt]
+    const c = this.chosen
+    if (c !== null) {
       const shape = c.shape.length > 0 ? ` ${c.shape}` : ""
       return `usage: ${table.program} ${c.path}${shape} [flags]`
     }

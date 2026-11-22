@@ -33,7 +33,12 @@ import {
   HTTP1_NEED_MORE,
   HTTP1_UPGRADE,
 } from "nish/net/http1-codec"
-import { HTTP1_E_INFORMATIONAL_LIMIT, HTTP1_E_NONE, HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client-codec"
+import {
+  HTTP1_E_MEMORY_LIMIT,
+  HTTP1_E_NONE,
+  HTTP1_INFORMATIONAL,
+  Http1ResponseParser,
+} from "nish/net/http1-client-codec"
 
 /** The parser the first byte asks for. */
 const makeParser = (config: i32): Http1ResponseParser => {
@@ -124,7 +129,7 @@ const drain = (p: Http1ResponseParser, head: boolean, connect: boolean, unfed: i
     } else if (e === HTTP1_CLOSED) {
       return true
     } else if (e === HTTP1_ERROR) {
-      if (p.error === HTTP1_E_NONE || p.error > HTTP1_E_INFORMATIONAL_LIMIT) {
+      if (p.error === HTTP1_E_NONE || p.error > HTTP1_E_MEMORY_LIMIT) {
         panic("http1-client fuzz: a refusal without an error code")
       }
       mix(t, p.error)

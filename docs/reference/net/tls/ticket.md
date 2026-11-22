@@ -249,8 +249,8 @@ True when the program should rotate now; the key still opens tickets for a while
 
 Opens `ticket` under `key`, the key `info` describes, into `out`, and
 answers whether it opened at `now`. False — with nothing of the key read —
-when the ticket names another key id or the key is past 14 hours of awake
-time; false when the tag does not verify, the plaintext is malformed, or the
+when the ticket names another key id, is longer than 65,535 bytes, or the key
+is past 14 hours of awake time; false when the tag does not verify, the plaintext is malformed, or the
 ticket is outside its bounds (`tlsTicketParse`). On true, `out` holds the
 state and the ticket's nonce in `id`, its strike-register id. On false after
 the AEAD ran, the state's PSK array is wiped. The plaintext is wiped once,
@@ -339,8 +339,8 @@ The key's record: its id heads the ticket and its count goes up by one on a seal
 
 <scalar-field name="state" type="TlsTicketState" required>
 
-What the ticket carries; its `issuedAt` is overwritten with `now`, unless the key
-  cannot seal at `now`, the state does not fit a ticket or `out` is too short.
+What the ticket carries; its `issuedAt` is overwritten with `now` only when the
+  ticket is sealed, so a refusal leaves the state untouched.
 
 </scalar-field>
 
@@ -448,7 +448,7 @@ class TlsTicketStrikes
 
 | Member | |
 | --- | --- |
-| `new TlsTicketStrikes(capacity: i32)` | Makes the whole table now, so that no `take` ever allocates; it panics on a capacity below 1. |
+| `new TlsTicketStrikes(capacity: i32)` | Makes the whole table now, so that no `take` ever allocates; it panics on a capacity below 1, or above 178,956,969, past which the ids' table would not fit an `i32` length. |
 | `filled: i32` | How many ids are held or were held and expired: slots ever used. |
 | `longest: i32` | The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain. `net/tls.ts` reads it to stop a probe. |
 | `refusedFull: i64` | How many `take`s were refused because no entry was free. |

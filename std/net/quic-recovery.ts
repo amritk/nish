@@ -224,6 +224,59 @@ const QUIC_RECOVERY_CUBIC_SCALE: i64 = 5000000000
 /** The larger of two times or durations. */
 const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
 
+/** 2^63 − 1, the largest `i64`, which a sum or product past it is held at. */
+const quicRecoveryTop = (): i64 => toI64((toU64(1) << toU64(63)) - toU64(1))
+
+/**
+ * `a + b`, held at 2^63 − 1 when the true sum is past it and at −2^63 when
+ * it is below. Recovery's times, durations and byte counts are far inside
+ * an `i64`, so a held sum is one no clock or window reaches: a deadline that
+ * never comes, a window nothing fills. Taken in `u64`, whose `+` wraps, and
+ * read back as the `i64` with the same bits, which is the true sum whenever
+ * that fits.
+ */
+const quicRecoverySum = (a: i64, b: i64): i64 => {
+  const sum: i64 = toI64(toU64(a) + toU64(b))
+  if (a >= 0 && b >= 0 && sum < 0) {
+    return quicRecoveryTop()
+  }
+  if (a < 0 && b < 0 && sum >= 0) {
+    return toI64(toU64(1) << toU64(63))
+  }
+  return sum
+}
+
+/** `a − b`, held at 2^63 − 1 / −2^63 where the true difference passes either. */
+const quicRecoveryLess = (a: i64, b: i64): i64 => {
+  const diff: i64 = toI64(toU64(a) - toU64(b))
+  if (a >= 0 && b < 0 && diff < 0) {
+    return quicRecoveryTop()
+  }
+  if (a < 0 && b >= 0 && diff >= 0) {
+    return toI64(toU64(1) << toU64(63))
+  }
+  return diff
+}
+
+/** `n + 1` for a counter, held at 2^31 − 1, which no connection's events reach. */
+const quicRecoveryStep = (n: i32): i32 => (n >= 2147483647 ? n : n + 1)
+
+/**
+ * `a × b` for two non-negative times, durations or byte counts, held at
+ * 2^63 − 1 when the true product is past it, as `quicRecoverySum` holds a
+ * sum. Below that it is taken in `u64` and is exact. A negative operand
+ * counts as 0: every caller passes values it has kept at 0 or above.
+ */
+const quicRecoveryProduct = (a: i64, b: i64): i64 => {
+  if (a <= 0 || b <= 0) {
+    return 0
+  }
+  if (b > quicRecoveryTop() / a) {
+    return quicRecoveryTop()
+  }
+  return toI64(toU64(a) * toU64(b))
+}
+
 /** `x` clamped to −`QUIC_RECOVERY_CUBIC_SPAN` .. `QUIC_RECOVERY_CUBIC_SPAN`. */
 const quicRecoveryCubicClamp = (x: i64): i64 => {
   if (x > QUIC_RECOVERY_CUBIC_SPAN) {
@@ -241,24 +294,27 @@ const quicRecoveryCubicClamp = (x: i64): i64 => {
  * @returns Its root, 0 to 40000.
  */
 export const quicRecoveryCbrt = (x: i64): i64 => {
-  let lo: i64 = 0
-  let hi: i64 = QUIC_RECOVERY_CUBIC_SPAN
-  if (x <= lo) {
-    return lo
+  if (x <= 0) {
+    return 0
   }
-  if (x >= hi * hi * hi) {
-    return hi
+  // Unsigned, and exact: every value below is at most the span, 40000, and every cube at most
+  // 40000³ = 6.4 × 10¹³, far inside 64 bits.
+  const cube: u64 = toU64(x)
+  let lo: u64 = 0
+  let hi: u64 = toU64(QUIC_RECOVERY_CUBIC_SPAN)
+  if (cube >= hi * hi * hi) {
+    return QUIC_RECOVERY_CUBIC_SPAN
   }
   // lo³ <= x < hi³ holds at every step.
   while (hi - lo > 1) {
-    const mid: i64 = (lo + hi) / 2
-    if (mid * mid * mid <= x) {
+    const mid: u64 = (lo + hi) / 2
+    if (mid * mid * mid <= cube) {
       lo = mid
     } else {
       hi = mid
     }
   }
-  return lo
+  return toI64(lo)
 }
 
 /**
@@ -297,7 +353,7 @@ export class QuicSentPackets {
   lastAckEliciting: i64 = -1
   /** The bytes of this space's packets in flight. */
   bytesInFlight: i64 = 0
-  private capacity: i32 = 0
+  private capacity: u8 = 0
   private head: i32 = 0
   /**
    * How many packets the ring keeps, in flight and settled; a test reads it to see what a flight
@@ -324,9 +380,10 @@ export class QuicSentPackets {
    *
    * @param capacity How many sent packets the ring records at once, fixed for its life: in flight and
    *   settled alike, until `compact` drops the settled ones. `QUIC_RECOVERY_HANDSHAKE_CAPACITY` or
-   *   `QUIC_RECOVERY_APPLICATION_CAPACITY`.
+   *   `QUIC_RECOVERY_APPLICATION_CAPACITY`. A `u8`, so no ring is larger than 255 slots and an
+   *   index sum of two slots stays far inside `i32`.
    */
-  constructor(capacity: i32) {
+  constructor(capacity: u8) {
     this.capacity = capacity
     this.pn = new Array<i64>(capacity)
     this.timeSent = new Array<i64>(capacity)
@@ -342,7 +399,14 @@ export class QuicSentPackets {
    * @internal Read by quic.ts, and in quic-recovery.ts outside the class.
    */
   slot(k: i32): i32 {
-    return (this.head + k) % this.capacity
+    const capacity: i32 = toI32(this.capacity)
+    const head: i32 = this.head
+    // Never taken for a `k` below `count`: `head` stays below the capacity, and `count` never passes it.
+    if (k < 0 || k >= capacity || head < 0 || head >= capacity) {
+      return -1
+    }
+    const s: i32 = head + k
+    return s >= capacity ? s - capacity : s
   }
 
   /**
@@ -497,7 +561,7 @@ export class QuicSentPackets {
    */
   full(): boolean {
     this.compact()
-    return this.count >= this.capacity
+    return this.count >= toI32(this.capacity)
   }
 
   /**
@@ -505,11 +569,17 @@ export class QuicSentPackets {
    * @internal Read by quic.ts, and in quic-recovery.ts outside the class.
    */
   compact(): void {
-    while (this.count > 0 && this.stateAt(this.head) !== QUIC_RECOVERY_SENT) {
-      this.setState(this.head, QUIC_RECOVERY_FREE)
-      this.head = (this.head + 1) % this.capacity
-      this.count = this.count - 1
+    const capacity: i32 = toI32(this.capacity)
+    let count: i32 = this.count
+    let head: i32 = this.head
+    while (count > 0 && head >= 0 && head < capacity && this.stateAt(head) !== QUIC_RECOVERY_SENT) {
+      this.setState(head, QUIC_RECOVERY_FREE)
+      const next: i32 = head + 1
+      head = next >= capacity ? 0 : next
+      count = count - 1
     }
+    this.head = head
+    this.count = count
     if (this.count === 0) {
       this.head = 0
     }
@@ -529,9 +599,18 @@ export class QuicSentPackets {
    * @internal Read in quic-recovery.ts outside the class.
    */
   settle(s: i32, state: i32): void {
+    const size: i64 = toI64(this.sizeAt(s))
     this.setState(s, state)
-    this.inFlight = this.inFlight - 1
-    this.bytesInFlight = this.bytesInFlight - toI64(this.sizeAt(s))
+    // Both guards hold for a packet in flight, the only kind a caller settles: it is counted in
+    // `inFlight` and its size in `bytesInFlight`.
+    const inFlight: i32 = this.inFlight
+    if (inFlight > 0) {
+      this.inFlight = inFlight - 1
+    }
+    const bytes: i64 = this.bytesInFlight
+    if (bytes >= 0 && size >= 0) {
+      this.bytesInFlight = bytes - size
+    }
   }
 
   /**
@@ -540,9 +619,11 @@ export class QuicSentPackets {
    */
   markLost(s: i32): void {
     this.settle(s, QUIC_RECOVERY_LOST_NOW)
-    if (this.lostCount < toI32(this.lost.length)) {
-      this.lost[this.lostCount] = s
-      this.lostCount = this.lostCount + 1
+    const lost: i32[] = this.lost
+    const n: i32 = this.lostCount
+    if (n >= 0 && n < toI32(lost.length)) {
+      lost[n] = s
+      this.lostCount = n + 1
     }
   }
 
@@ -580,15 +661,19 @@ export class QuicSentPackets {
 
 /** Whether `pn` falls in one of the first `count` `[smallest, largest]` pairs of `ranges`. */
 const quicRecoveryInRanges = (ranges: i64[], count: i32, pn: i64): boolean => {
-  for (let k: i32 = 0; k < count; k += 1) {
-    const low: i32 = k * 2
+  const n: i32 = toI32(ranges.length)
+  let left: i32 = count
+  let low: i32 = 0
+  while (left > 0 && low >= 0 && low < n) {
     const high: i32 = low + 1
-    if (low < 0 || low >= toI32(ranges.length) || high < 0 || high >= toI32(ranges.length)) {
+    if (high >= n) {
       return false
     }
     if (pn >= ranges[low] && pn <= ranges[high]) {
       return true
     }
+    low = high + 1
+    left = left - 1
   }
   return false
 }
@@ -707,9 +792,9 @@ export class QuicRecovery {
    */
   constructor() {
     this.spaces = [
-      new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),
-      new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),
-      new QuicSentPackets(QUIC_RECOVERY_APPLICATION_CAPACITY),
+      new QuicSentPackets(toU8(QUIC_RECOVERY_HANDSHAKE_CAPACITY)),
+      new QuicSentPackets(toU8(QUIC_RECOVERY_HANDSHAKE_CAPACITY)),
+      new QuicSentPackets(toU8(QUIC_RECOVERY_APPLICATION_CAPACITY)),
     ]
     this.reset()
   }
@@ -773,8 +858,8 @@ export class QuicRecovery {
    * @returns The initial window in bytes: 12000 at 1200 bytes.
    */
   initialWindow(): i64 {
-    const ten: i64 = 10 * this.datagramSize
-    const floor: i64 = quicRecoveryMax(14720, 2 * this.datagramSize)
+    const ten: i64 = quicRecoveryProduct(10, this.datagramSize)
+    const floor: i64 = quicRecoveryMax(14720, quicRecoveryProduct(2, this.datagramSize))
     return ten < floor ? ten : floor
   }
 
@@ -784,7 +869,7 @@ export class QuicRecovery {
    * @returns The minimum window in bytes: 2400 at 1200 bytes.
    */
   minimumWindow(): i64 {
-    return 2 * this.datagramSize
+    return quicRecoveryProduct(2, this.datagramSize)
   }
 
   /**
@@ -853,7 +938,7 @@ export class QuicRecovery {
   bytesInFlight(): i64 {
     let total: i64 = 0
     for (const sp of this.spaces) {
-      total = total + sp.bytesInFlight
+      total = quicRecoverySum(total, sp.bytesInFlight)
     }
     return total
   }
@@ -865,7 +950,7 @@ export class QuicRecovery {
    * @returns True when the bytes in flight plus `datagramSize` bytes fit the congestion window.
    */
   canSend(): boolean {
-    return this.bytesInFlight() + this.datagramSize <= this.congestionWindow
+    return quicRecoverySum(this.bytesInFlight(), this.datagramSize) <= this.congestionWindow
   }
 
   /**
@@ -886,26 +971,38 @@ export class QuicRecovery {
     if (sp === null || size <= 0 || pn <= sp.lastPn || pn > QUIC_MAX_VARINT || sp.full()) {
       return -1
     }
-    const s: i32 = sp.slot(sp.count)
+    const count: i32 = sp.count
+    const inFlight: i32 = sp.inFlight
+    const s: i32 = sp.slot(count)
+    const pns: i64[] = sp.pn
+    const times: i64[] = sp.timeSent
+    const fines: i64[] = sp.fineSent
+    const sizes: i32[] = sp.size
+    // Never taken: `full()` answered false, so the ring has a free slot, and
+    // every array is the ring's capacity long, which neither count reaches.
     if (
       s < 0 ||
-      s >= toI32(sp.pn.length) ||
-      s >= toI32(sp.timeSent.length) ||
-      s >= toI32(sp.fineSent.length) ||
-      s >= toI32(sp.size.length)
+      s >= toI32(pns.length) ||
+      s >= toI32(times.length) ||
+      s >= toI32(fines.length) ||
+      s >= toI32(sizes.length) ||
+      count < 0 ||
+      count >= toI32(pns.length) ||
+      inFlight < 0 ||
+      inFlight >= toI32(pns.length)
     ) {
       return -1
     }
-    sp.pn[s] = pn
-    sp.timeSent[s] = now
-    sp.fineSent[s] = this.fineNow(now)
-    sp.size[s] = size
+    pns[s] = pn
+    times[s] = now
+    fines[s] = this.fineNow(now)
+    sizes[s] = size
     sp.setMarked(s, false)
     sp.setProbe(s, false)
     sp.setState(s, QUIC_RECOVERY_SENT)
-    sp.count = sp.count + 1
-    sp.inFlight = sp.inFlight + 1
-    sp.bytesInFlight = sp.bytesInFlight + toI64(size)
+    sp.count = count + 1
+    sp.inFlight = inFlight + 1
+    sp.bytesInFlight = quicRecoverySum(sp.bytesInFlight, toI64(size))
     sp.lastPn = pn
     sp.lastAckEliciting = now
     return s
@@ -955,15 +1052,15 @@ export class QuicRecovery {
     if (sp === null) {
       return
     }
-    sp.ectSent = sp.ectSent + 1
+    sp.ectSent = quicRecoverySum(sp.ectSent, 1)
     const recorded: boolean = sp.inFlightAt(slot) && !sp.markedAt(slot)
     if (recorded) {
       sp.setMarked(slot, true)
     }
     if (this.ecnState === QUIC_RECOVERY_ECN_TESTING || this.ecnState === QUIC_RECOVERY_ECN_UNKNOWN) {
-      this.ecnTestSent = this.ecnTestSent + 1
+      this.ecnTestSent = quicRecoveryStep(this.ecnTestSent)
       if (recorded) {
-        this.ecnTestRecorded = this.ecnTestRecorded + 1
+        this.ecnTestRecorded = quicRecoveryStep(this.ecnTestRecorded)
       }
       if (this.ecnTestSent >= QUIC_RECOVERY_ECN_TESTING_PACKETS) {
         this.ecnState = QUIC_RECOVERY_ECN_UNKNOWN
@@ -1038,7 +1135,7 @@ export class QuicRecovery {
     }
     // The bytes in flight before this ACK decide whether the window was in
     // use, and so whether it may grow (§7.8).
-    const inUse: boolean = this.bytesInFlight() * 2 >= this.congestionWindow
+    const inUse: boolean = quicRecoveryProduct(this.bytesInFlight(), 2) >= this.congestionWindow
     let sampleAt: i32 = -1
     // The send time of the first recorded packet past the largest acknowledged, or `now`: no earlier than the largest's own.
     let later: i64 = now
@@ -1051,9 +1148,11 @@ export class QuicRecovery {
       }
       if (sp.stateAt(s) === QUIC_RECOVERY_SENT && quicRecoveryInRanges(ranges, count, sp.pnAt(s))) {
         sp.settle(s, QUIC_RECOVERY_ACKED)
-        if (sp.ackedCount < toI32(sp.acked.length)) {
-          sp.acked[sp.ackedCount] = s
-          sp.ackedCount = sp.ackedCount + 1
+        const acked: i32[] = sp.acked
+        const n: i32 = sp.ackedCount
+        if (n >= 0 && n < toI32(acked.length)) {
+          acked[n] = s
+          sp.ackedCount = n + 1
         }
         if (sp.pnAt(s) === largest) {
           sampleAt = s
@@ -1070,7 +1169,7 @@ export class QuicRecovery {
       return 0
     }
     if (sampleAt >= 0) {
-      this.latestRtt = quicRecoveryMax(now - sp.timeAt(sampleAt), 0)
+      this.latestRtt = quicRecoveryMax(quicRecoveryLess(now, sp.timeAt(sampleAt)), 0)
       // §5.3: the Initial space's ACKs are not delayed by the peer, so their delay is ignored.
       const none: i64 = 0
       const delay: i64 = space === QUIC_RECOVERY_INITIAL ? none : quicRecoveryMax(ackDelay, none)
@@ -1115,7 +1214,7 @@ export class QuicRecovery {
     let marked: i64 = 0
     for (let k: i32 = 0; k < sp.ackedCount; k += 1) {
       if (sp.markedAt(sp.ackedSlot(k))) {
-        marked = marked + 1
+        marked = quicRecoverySum(marked, 1)
       }
     }
     if (ect0 < 0 || ect1 < 0 || ce < 0) {
@@ -1136,9 +1235,9 @@ export class QuicRecovery {
       ect1 < sp.ect1 ||
       ce < sp.ce ||
       ect0 > sent ||
-      ect1 > sent - ect0 ||
-      ce > sent - ect0 - ect1 ||
-      ect0 - sp.ect0 + (ce - sp.ce) < marked
+      ect1 > quicRecoveryLess(sent, ect0) ||
+      ce > quicRecoveryLess(quicRecoveryLess(sent, ect0), ect1) ||
+      quicRecoverySum(quicRecoveryLess(ect0, sp.ect0), quicRecoveryLess(ce, sp.ce)) < marked
     ) {
       this.ecnState = QUIC_RECOVERY_ECN_FAILED
       return
@@ -1152,9 +1251,10 @@ export class QuicRecovery {
     sp.ce = ce
     if (rose) {
       const events: i32 = this.congestionEvents
-      this.congestionEvent(sp.ackedCount > 0 ? sp.timeAt(sp.ackedSlot(sp.ackedCount - 1)) : later, now)
+      const n: i32 = sp.ackedCount
+      this.congestionEvent(n > 0 ? sp.timeAt(sp.ackedSlot(n - 1)) : later, now)
       if (this.congestionEvents > events) {
-        this.ecnCongestionEvents = this.ecnCongestionEvents + 1
+        this.ecnCongestionEvents = quicRecoveryStep(this.ecnCongestionEvents)
       }
     }
   }
@@ -1175,12 +1275,14 @@ export class QuicRecovery {
     const delay: i64 = this.boundAckDelay(ackDelay)
     // The delay is taken off only where that leaves the sample at or above min_rtt.
     let adjusted: i64 = latest
-    if (latest >= this.minRtt + delay) {
-      adjusted = latest - delay
+    if (quicRecoveryLess(latest, this.minRtt) >= delay) {
+      adjusted = quicRecoveryLess(latest, delay)
     }
-    const gap: i64 = this.smoothedRtt > adjusted ? this.smoothedRtt - adjusted : adjusted - this.smoothedRtt
-    this.rttVar = (3 * this.rttVar + gap) / 4
-    this.smoothedRtt = (7 * this.smoothedRtt + adjusted) / 8
+    const smoothed: i64 = this.smoothedRtt
+    const gap: i64 =
+      smoothed > adjusted ? quicRecoveryLess(smoothed, adjusted) : quicRecoveryLess(adjusted, smoothed)
+    this.rttVar = quicRecoverySum(quicRecoveryProduct(3, this.rttVar), gap) / 4
+    this.smoothedRtt = quicRecoverySum(quicRecoveryProduct(7, smoothed), adjusted) / 8
   }
 
   /** The peer's ACK delay in milliseconds as §5.3 counts it: at most max_ack_delay once the handshake is confirmed. */
@@ -1196,8 +1298,10 @@ export class QuicRecovery {
    * @returns The same instant in microseconds.
    */
   fineNow(now: i64): i64 {
-    const coarse: i64 = now * QUIC_RECOVERY_MICROS
-    return this.micros >= coarse && this.micros < coarse + QUIC_RECOVERY_MICROS ? this.micros : coarse
+    const coarse: i64 = quicRecoveryProduct(now, QUIC_RECOVERY_MICROS)
+    return this.micros >= coarse && this.micros < quicRecoverySum(coarse, QUIC_RECOVERY_MICROS)
+      ? this.micros
+      : coarse
   }
 
   /**
@@ -1211,8 +1315,9 @@ export class QuicRecovery {
    */
   private fineSample(now: i64, sent: i64): i64 {
     const at: i64 = this.fineNow(now)
-    const floor: i64 = at === this.micros ? 1 : QUIC_RECOVERY_GRANULARITY * QUIC_RECOVERY_MICROS
-    return quicRecoveryMax(at - sent, floor)
+    const floor: i64 =
+      at === this.micros ? 1 : quicRecoveryProduct(QUIC_RECOVERY_GRANULARITY, QUIC_RECOVERY_MICROS)
+    return quicRecoveryMax(quicRecoveryLess(at, sent), floor)
   }
 
   /**
@@ -1227,12 +1332,12 @@ export class QuicRecovery {
       this.pacerRtt = sample
       return
     }
-    const delay: i64 = this.boundAckDelay(ackDelay) * QUIC_RECOVERY_MICROS
+    const delay: i64 = quicRecoveryProduct(this.boundAckDelay(ackDelay), QUIC_RECOVERY_MICROS)
     let adjusted: i64 = sample
-    if (sample >= this.minRtt * QUIC_RECOVERY_MICROS + delay) {
-      adjusted = sample - delay
+    if (quicRecoveryLess(sample, quicRecoveryProduct(this.minRtt, QUIC_RECOVERY_MICROS)) >= delay) {
+      adjusted = quicRecoveryLess(sample, delay)
     }
-    this.pacerRtt = (7 * this.pacerRtt + adjusted) / 8
+    this.pacerRtt = quicRecoverySum(quicRecoveryProduct(7, this.pacerRtt), adjusted) / 8
   }
 
   /**
@@ -1241,7 +1346,7 @@ export class QuicRecovery {
    * @returns How long after a packet was sent it is lost by the time threshold, in milliseconds, at least 1.
    */
   lossDelay(): i64 {
-    const delay: i64 = (9 * quicRecoveryMax(this.latestRtt, this.smoothedRtt)) / 8
+    const delay: i64 = quicRecoveryProduct(9, quicRecoveryMax(this.latestRtt, this.smoothedRtt)) / 8
     return quicRecoveryMax(delay, QUIC_RECOVERY_GRANULARITY)
   }
 
@@ -1254,7 +1359,7 @@ export class QuicRecovery {
   private detectLoss(sp: QuicSentPackets, now: i64): void {
     sp.lossTime = -1
     const delay: i64 = this.lossDelay()
-    const lostSendTime: i64 = now - delay
+    const lostSendTime: i64 = quicRecoveryLess(now, delay)
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
       const pn: i64 = sp.pnAt(s)
@@ -1264,10 +1369,13 @@ export class QuicRecovery {
       if (sp.stateAt(s) !== QUIC_RECOVERY_SENT) {
         continue
       }
-      if (sp.timeAt(s) <= lostSendTime || sp.largestAcked >= pn + QUIC_RECOVERY_PACKET_THRESHOLD) {
+      if (
+        sp.timeAt(s) <= lostSendTime ||
+        quicRecoveryLess(sp.largestAcked, pn) >= QUIC_RECOVERY_PACKET_THRESHOLD
+      ) {
         sp.markLost(s)
       } else {
-        const at: i64 = sp.timeAt(s) + delay
+        const at: i64 = quicRecoverySum(sp.timeAt(s), delay)
         if (sp.lossTime < 0 || at < sp.lossTime) {
           sp.lossTime = at
         }
@@ -1290,7 +1398,7 @@ export class QuicRecovery {
         newest = quicRecoveryMax(newest, sp.timeAt(sp.lostSlot(k)))
       }
       if (sp.markedAt(sp.lostSlot(k)) && this.ecnState !== QUIC_RECOVERY_ECN_CAPABLE) {
-        this.ecnTestLost = this.ecnTestLost + 1
+        this.ecnTestLost = quicRecoveryStep(this.ecnTestLost)
       }
     }
     // RFC 9000 A.4: every packet marked while testing that could be lost was.
@@ -1311,7 +1419,7 @@ export class QuicRecovery {
       // CUBIC starts over from slow start (RFC 9438 §4.8): its next stage is a new epoch.
       this.cubicEpoch = -1
       this.cubicIdle = -1
-      this.persistentCongestions = this.persistentCongestions + 1
+      this.persistentCongestions = quicRecoveryStep(this.persistentCongestions)
     }
     for (let k: i32 = 0; k < sp.lostCount; k += 1) {
       sp.setState(sp.lostSlot(k), QUIC_RECOVERY_LOST)
@@ -1329,7 +1437,10 @@ export class QuicRecovery {
     if (this.firstSampleTime < 0) {
       return false
     }
-    const span: i64 = (this.ptoBase() + this.maxAckDelay) * QUIC_RECOVERY_PERSISTENT_THRESHOLD
+    const span: i64 = quicRecoveryProduct(
+      quicRecoverySum(this.ptoBase(), this.maxAckDelay),
+      QUIC_RECOVERY_PERSISTENT_THRESHOLD
+    )
     let first: i64 = -1
     let fresh: boolean = false
     for (let k: i32 = 0; k < sp.count; k += 1) {
@@ -1357,7 +1468,7 @@ export class QuicRecovery {
         first = sp.timeAt(s)
       }
       fresh = fresh || state === QUIC_RECOVERY_LOST_NOW
-      if (fresh && sp.timeAt(s) - first > span) {
+      if (fresh && quicRecoveryLess(sp.timeAt(s), first) > span) {
         return true
       }
     }
@@ -1382,16 +1493,16 @@ export class QuicRecovery {
     this.recoveryStart = now
     const cwnd: i64 = this.congestionWindow
     if (this.controller === QUIC_RECOVERY_CUBIC) {
-      this.cubicMax = cwnd < this.cubicMax ? (cwnd * 17) / 20 : cwnd
+      this.cubicMax = cwnd < this.cubicMax ? quicRecoveryProduct(cwnd, 17) / 20 : cwnd
       this.cubicPrior = cwnd
       this.cubicEpoch = -1
       this.cubicIdle = -1
-      this.ssthresh = (cwnd * 7) / 10
+      this.ssthresh = quicRecoveryProduct(cwnd, 7) / 10
     } else {
       this.ssthresh = cwnd / 2
     }
     this.congestionWindow = quicRecoveryMax(this.ssthresh, this.minimumWindow())
-    this.congestionEvents = this.congestionEvents + 1
+    this.congestionEvents = quicRecoveryStep(this.congestionEvents)
   }
 
   /**
@@ -1405,12 +1516,14 @@ export class QuicRecovery {
       return
     }
     const size: i64 = toI64(sp.sizeAt(s))
-    if (this.congestionWindow < this.ssthresh) {
-      this.congestionWindow = this.congestionWindow + size
+    const cwnd: i64 = this.congestionWindow
+    // A window of nothing has no fraction to grow by, so it grows as in slow start.
+    if (cwnd < this.ssthresh || cwnd <= 0) {
+      this.congestionWindow = quicRecoverySum(cwnd, size)
     } else if (this.controller === QUIC_RECOVERY_CUBIC) {
       this.cubicAcked(size, now)
     } else {
-      this.congestionWindow = this.congestionWindow + (this.datagramSize * size) / this.congestionWindow
+      this.congestionWindow = quicRecoverySum(cwnd, quicRecoveryProduct(this.datagramSize, size) / cwnd)
     }
   }
 
@@ -1429,6 +1542,10 @@ export class QuicRecovery {
    */
   private cubicAcked(size: i64, now: i64): void {
     const cwnd: i64 = this.congestionWindow
+    // Never taken: `packetAcked` grows a window of nothing as slow start does.
+    if (cwnd <= 0) {
+      return
+    }
     if (this.cubicEpoch < 0) {
       this.cubicEpoch = now
       this.cubicIdle = -1
@@ -1436,29 +1553,39 @@ export class QuicRecovery {
       this.cubicEstCarry = 0
       this.cubicCarry = 0
       if (this.cubicMax > cwnd) {
-        this.cubicK = this.cubicSpan(this.cubicMax - cwnd)
+        this.cubicK = this.cubicSpan(quicRecoveryLess(this.cubicMax, cwnd))
       } else {
         this.cubicK = 0
         this.cubicMax = cwnd
       }
     }
     const alpha: i64 = this.cubicEst >= this.cubicPrior ? 17 : 9
-    const num: i64 = alpha * size * this.datagramSize + this.cubicEstCarry
-    const den: i64 = 17 * cwnd
-    this.cubicEst = this.cubicEst + num / den
+    const num: i64 = quicRecoverySum(
+      quicRecoveryProduct(quicRecoveryProduct(alpha, size), this.datagramSize),
+      this.cubicEstCarry
+    )
+    const den: i64 = quicRecoveryProduct(17, cwnd)
+    // Never taken: 17 × a window past 0 is past 0, or held at 2^63 − 1.
+    if (den <= 0) {
+      return
+    }
+    this.cubicEst = quicRecoverySum(this.cubicEst, num / den)
     this.cubicEstCarry = num % den
-    const t: i64 = now - this.cubicEpoch
+    const t: i64 = quicRecoveryLess(now, this.cubicEpoch)
     if (this.cubicWindow(t) < this.cubicEst) {
       this.congestionWindow = quicRecoveryMax(cwnd, this.cubicEst)
       return
     }
-    const ceiling: i64 = cwnd + cwnd / 2
-    const curve: i64 = this.cubicWindow(t + this.smoothedRtt)
+    const ceiling: i64 = quicRecoverySum(cwnd, cwnd / 2)
+    const curve: i64 = this.cubicWindow(quicRecoverySum(t, this.smoothedRtt))
     const target: i64 = quicRecoveryMax(cwnd, curve > ceiling ? ceiling : curve)
     // The window only grows within a stage, so the carry, below the window
     // it was a fraction of, stays below the one it is added against.
-    const step: i64 = (target - cwnd) * size + this.cubicCarry
-    this.congestionWindow = cwnd + step / cwnd
+    const step: i64 = quicRecoverySum(
+      quicRecoveryProduct(quicRecoveryLess(target, cwnd), size),
+      this.cubicCarry
+    )
+    this.congestionWindow = quicRecoverySum(cwnd, step / cwnd)
     this.cubicCarry = step % cwnd
   }
 
@@ -1469,8 +1596,13 @@ export class QuicRecovery {
    * division truncates toward zero.
    */
   private cubicWindow(t: i64): i64 {
-    const d: i64 = quicRecoveryCubicClamp(t - this.cubicK)
-    return this.cubicMax + (2 * this.datagramSize * (d * d * d)) / QUIC_RECOVERY_CUBIC_SCALE
+    const d: i64 = quicRecoveryCubicClamp(quicRecoveryLess(t, this.cubicK))
+    // |t − K| is at most 40000, so its cube, 6.4 × 10¹³ at most, fits; the sign goes back on after the division.
+    const size: u64 = d < 0 ? toU64(0) - toU64(d) : toU64(d)
+    const cube: i64 = toI64(size * size * size)
+    const move: i64 =
+      quicRecoveryProduct(cube, quicRecoveryProduct(2, this.datagramSize)) / QUIC_RECOVERY_CUBIC_SCALE
+    return d < 0 ? quicRecoveryLess(this.cubicMax, move) : quicRecoverySum(this.cubicMax, move)
   }
 
   /**
@@ -1479,13 +1611,15 @@ export class QuicRecovery {
    * milliseconds, rounded down; a fall too deep for the cube to fit is 40 s.
    */
   private cubicSpan(drop: i64): i64 {
-    const two: i64 = 2 * this.datagramSize
+    const two: i64 = quicRecoveryProduct(2, this.datagramSize)
     const span: i64 = QUIC_RECOVERY_CUBIC_SPAN
-    // drop >= span³ × 2 × size / (5 × 10⁹), which is 25600 × size, has K at the span or past it.
-    if (drop >= 25600 * this.datagramSize) {
+    // drop >= span³ × 2 × size / (5 × 10⁹), which is 25600 × size, has K at the span or past it, as has a
+    // datagram size of nothing. The product below is held at 2^63 − 1 only for a size past 72000, where
+    // what it is divided to is past span³ too.
+    if (drop >= quicRecoveryProduct(25600, this.datagramSize) || two <= 0) {
       return span
     }
-    return quicRecoveryCbrt((drop * QUIC_RECOVERY_CUBIC_SCALE) / two)
+    return quicRecoveryCbrt(quicRecoveryProduct(drop, QUIC_RECOVERY_CUBIC_SCALE) / two)
   }
 
   /**
@@ -1505,7 +1639,7 @@ export class QuicRecovery {
       return
     }
     if (this.cubicIdle >= 0) {
-      this.cubicEpoch = this.cubicEpoch + (now - this.cubicIdle)
+      this.cubicEpoch = quicRecoverySum(this.cubicEpoch, quicRecoveryLess(now, this.cubicIdle))
       this.cubicIdle = -1
     }
   }
@@ -1520,12 +1654,15 @@ export class QuicRecovery {
    */
   probeTimeout(): i64 {
     const base: i64 = this.ptoBase()
-    return this.handshakeConfirmed ? base + this.maxAckDelay : base
+    return this.handshakeConfirmed ? quicRecoverySum(base, this.maxAckDelay) : base
   }
 
   /** smoothed_rtt + max(4 × rttvar, kGranularity): every probe timeout's period before max_ack_delay and the backoff. */
   private ptoBase(): i64 {
-    return this.smoothedRtt + quicRecoveryMax(4 * this.rttVar, QUIC_RECOVERY_GRANULARITY)
+    return quicRecoverySum(
+      this.smoothedRtt,
+      quicRecoveryMax(quicRecoveryProduct(4, this.rttVar), QUIC_RECOVERY_GRANULARITY)
+    )
   }
 
   /**
@@ -1553,9 +1690,9 @@ export class QuicRecovery {
     const backoff: i64 = toI64(1) << toI64(this.ptoCount)
     let duration: i64 = this.ptoBase()
     if (space === QUIC_RECOVERY_APPLICATION) {
-      duration = duration + this.maxAckDelay
+      duration = quicRecoverySum(duration, this.maxAckDelay)
     }
-    return sp.lastAckEliciting + duration * backoff
+    return quicRecoverySum(sp.lastAckEliciting, quicRecoveryProduct(duration, backoff))
   }
 
   /** The space whose probe timeout fires first, or -1 when no space may have one. */
@@ -1600,9 +1737,9 @@ export class QuicRecovery {
    * @returns The time `onTimeout` is next due, in the caller's milliseconds, or -1 when no timer is set.
    */
   deadline(amplificationBlocked: boolean): i64 {
-    const loss: i32 = this.lossSpace()
-    if (loss >= 0) {
-      return this.spaces[loss].lossTime
+    const loss: QuicSentPackets | null = this.space(this.lossSpace())
+    if (loss !== null) {
+      return loss.lossTime
     }
     if (amplificationBlocked) {
       return -1
@@ -1634,16 +1771,17 @@ export class QuicRecovery {
       return QUIC_RECOVERY_TIMEOUT_NONE
     }
     const loss: i32 = this.lossSpace()
-    if (loss >= 0) {
-      const sp: QuicSentPackets = this.spaces[loss]
+    const sp: QuicSentPackets | null = this.space(loss)
+    if (sp !== null) {
       this.detectLoss(sp, now)
       this.packetsLost(sp, now)
       this.timeoutSpace = loss
       return QUIC_RECOVERY_TIMEOUT_LOSS
     }
     this.timeoutSpace = this.ptoSpace()
-    if (this.ptoCount < QUIC_RECOVERY_MAX_BACKOFF) {
-      this.ptoCount = this.ptoCount + 1
+    const count: i32 = this.ptoCount
+    if (count < QUIC_RECOVERY_MAX_BACKOFF) {
+      this.ptoCount = count + 1
     }
     return QUIC_RECOVERY_TIMEOUT_PTO
   }
@@ -1708,13 +1846,17 @@ export class QuicRecovery {
       return
     }
     // A minute is far past what fills the budget, and keeps the product in range.
-    let elapsed: i64 = at - this.pacerTime
+    let elapsed: i64 = quicRecoveryLess(at, this.pacerTime)
     if (elapsed > 60000000) {
       elapsed = 60000000
     }
-    const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
-    const earned: i64 = (elapsed * this.pacerWindow() * 5) / (rtt * 4)
-    this.pacerBudget = this.pacerBudget + earned
+    const per: i64 = quicRecoveryProduct(quicRecoveryMax(this.pacerRtt, 1), 4)
+    // Never taken: 4 × an RTT of at least 1 is past 0, or held at 2^63 − 1.
+    if (per <= 0) {
+      return
+    }
+    const earned: i64 = quicRecoveryProduct(quicRecoveryProduct(elapsed, this.pacerWindow()), 5) / per
+    this.pacerBudget = quicRecoverySum(this.pacerBudget, earned)
     if (this.pacerBudget > this.initialWindow()) {
       this.pacerBudget = this.initialWindow()
     }
@@ -1733,14 +1875,18 @@ export class QuicRecovery {
    */
   pacerDelay(now: i64, size: i32): i64 {
     this.pacerRefill(now)
-    const need: i64 = toI64(size) - this.pacerBudget
+    const need: i64 = quicRecoveryLess(toI64(size), this.pacerBudget)
     if (need <= 0) {
       return 0
     }
-    const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
-    const rate: i64 = quicRecoveryMax(this.pacerWindow() * 5, 1)
-    const wait: i64 = (need * rtt * 4 + rate - 1) / rate
-    return quicRecoveryMax((wait + QUIC_RECOVERY_MICROS - 1) / QUIC_RECOVERY_MICROS, 1)
+    const rate: i64 = quicRecoveryMax(quicRecoveryProduct(this.pacerWindow(), 5), 1)
+    // Never taken: the rate is at least 1.
+    if (rate <= 0) {
+      return 1
+    }
+    const time: i64 = quicRecoveryProduct(quicRecoveryProduct(need, quicRecoveryMax(this.pacerRtt, 1)), 4)
+    const wait: i64 = quicRecoverySum(time, rate - 1) / rate
+    return quicRecoveryMax(quicRecoverySum(wait, QUIC_RECOVERY_MICROS - 1) / QUIC_RECOVERY_MICROS, 1)
   }
 
   /**
@@ -1755,8 +1901,13 @@ export class QuicRecovery {
    * @returns The bytes the pacer earns in a millisecond, held to `least` and `most`.
    */
   pacerQuantum(least: i32, most: i32): i32 {
-    const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
-    const milli: i64 = (this.pacerWindow() * 5 * QUIC_RECOVERY_MICROS) / (rtt * 4)
+    const per: i64 = quicRecoveryProduct(quicRecoveryMax(this.pacerRtt, 1), 4)
+    // Never taken: 4 × an RTT of at least 1 is past 0, or held at 2^63 − 1.
+    if (per <= 0) {
+      return least
+    }
+    const milli: i64 =
+      quicRecoveryProduct(quicRecoveryProduct(this.pacerWindow(), 5), QUIC_RECOVERY_MICROS) / per
     if (milli < toI64(least)) {
       return least
     }
@@ -1771,6 +1922,6 @@ export class QuicRecovery {
    */
   onPaced(now: i64, size: i32): void {
     this.pacerRefill(now)
-    this.pacerBudget = this.pacerBudget - toI64(size)
+    this.pacerBudget = quicRecoveryLess(this.pacerBudget, toI64(size))
   }
 }

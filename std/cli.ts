@@ -895,10 +895,18 @@ const spaces = (count: i32): string => {
 }
 
 /**
- * The spaces that take plain text `width` columns wide to `column`, or two
- * when that would leave fewer, so a long flag still keeps apart from its text.
+ * The spaces that take plain text `fixed + first + second` columns wide to
+ * `column`, or two when that would leave fewer, so a long flag still keeps
+ * apart from its text. The width comes in parts, each an `i32`, and is summed
+ * as an `i64`, where three `i32`s and a constant cannot overflow; the spaces
+ * counted are then at most `column`, so they fit an `i32` again.
  */
-const padTo = (width: i32, column: i32): string => spaces(width + 2 <= column ? column - width : 2)
+const padTo = (fixed: i32, first: i32, second: i32, column: i32): string =>
+  spaces(
+    toI64(fixed) + toI64(first) + toI64(second) + toI64(2) <= toI64(column)
+      ? toI32(toI64(column) - toI64(fixed) - toI64(first) - toI64(second))
+      : 2
+  )
 
 /**
  * A help menu, built a line at a time and answered whole by `text`. Rows are
@@ -913,7 +921,7 @@ export class HelpMenu {
   private column: i32
   private usageColumn: i32
   private lines: string[]
-  private usages: i32
+  private hasUsage: boolean
 
   /**
    * An empty menu; nothing is written until `text` is asked for.
@@ -935,7 +943,7 @@ export class HelpMenu {
     this.column = column
     this.usageColumn = usageColumn
     this.lines = []
-    this.usages = 0
+    this.hasUsage = false
   }
 
   /**
@@ -986,11 +994,12 @@ export class HelpMenu {
    */
   usage(shape: string, description: string): void {
     const style = this.style
-    const lead = this.usages === 0 ? `${style.heading("usage:")} ` : spaces(7)
-    const width: i32 = 8 + toI32(this.program.length) + toI32(shape.length)
-    const text = description.length > 0 ? `${padTo(width, this.usageColumn)}${style.dim(description)}` : ""
+    const lead = this.hasUsage ? spaces(7) : `${style.heading("usage:")} `
+    // `usage: ` or its indent is seven columns, and a space follows the name.
+    const pad = padTo(8, toI32(this.program.length), toI32(shape.length), this.usageColumn)
+    const text = description.length > 0 ? `${pad}${style.dim(description)}` : ""
     this.lines.push(`${lead}${style.name(this.program)} ${style.flag(shape)}${text}`)
-    this.usages = this.usages + 1
+    this.hasUsage = true
   }
 
   /**
@@ -1015,11 +1024,10 @@ export class HelpMenu {
    */
   row(flag: string, meta: string, description: string): void {
     const style = this.style
-    const width: i32 = 2 + toI32(flag.length) + (meta.length > 0 ? 1 + toI32(meta.length) : 0)
+    // The indent is two columns, and a placeholder is one more for its space.
+    const pad = padTo(meta.length > 0 ? 3 : 2, toI32(flag.length), toI32(meta.length), this.column)
     const placeholder = meta.length > 0 ? ` ${style.meta(meta)}` : ""
-    this.lines.push(
-      `  ${style.flag(flag)}${placeholder}${padTo(width, this.column)}${style.dim(description)}`
-    )
+    this.lines.push(`  ${style.flag(flag)}${placeholder}${pad}${style.dim(description)}`)
   }
 
   /**

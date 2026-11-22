@@ -298,7 +298,7 @@ class QuicSentPackets
 
 | Member | |
 | --- | --- |
-| `new QuicSentPackets(capacity: i32)` | An empty ring; `QuicRecovery` makes one for each space. |
+| `new QuicSentPackets(capacity: u8)` | An empty ring; `QuicRecovery` makes one for each space. |
 | `acked: i32[]` | The slots the last `onAck` acknowledged, `ackedCount` of them, oldest first. |
 | `bytesInFlight: i64` | The bytes of this space's packets in flight. |
 | `ce: i64` | The ECN-CE count of the last ACK_ECN frame validated in this space; a rise is a congestion event. |
