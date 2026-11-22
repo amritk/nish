@@ -1,16 +1,15 @@
 // Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
-// neither `std/sync/ring` nor `preforkSupervise`'s config contract stops it
-// (`tryPreforkWith` answers a bad config as `Err`), but three calls still
-// reach sites in other modules. `getI32LE` and its kin in `std/bytes` reach
-// their index checks and the overflow of `off + i` (bytes.ts:113, 139, 273, 304),
-// whose fix moves the `tests/link/std_bytes` golden and so waits on WP80's
-// follow-up. Two are gaps in the `src/` panic prover, which no package owns
-// yet (#1846, prover-gaps, lists four others): `createRegion`, `openRegion`
-// and `unlinkRegion` reach the `ffi-nul` check of the region's name, proven
-// only for a literal (`foreignStringIsNulFree`); and `tryPreforkWith` reaches
-// `netRead(fd, buf, 0, buf.length)` in its channel drain, whose range the
-// prover does not read from the buffer's own length (as at
-// http1-server.ts's drain). Then build this file without `--allow-panics`.
+// nothing in `std/bytes`, `std/sync/ring` or `preforkSupervise`'s config
+// contract stops it: the byte accessors are the checked `tryGetI32LE` kin,
+// and `tryPreforkWith` answers a bad config as `Err`. What is left are two
+// gaps in the `src/` panic prover, which no package owns yet (#1846,
+// prover-gaps). `createRegion`, `openRegion` and `unlinkRegion` reach the
+// `ffi-nul` check of the region's name, which is proven only for a literal
+// (`foreignStringIsNulFree`), even though `std/sync/shm` now refuses a name
+// with a NUL before the call. And `tryPreforkWith` reaches
+// `netRead(fd, buf, 0, size)` in its channel drain, whose range check the
+// prover records unproven for every net builtin (`noteBuiltinSite`). Once
+// #1846 closes both, build this file without `--allow-panics`.
 // smoke: args --allow-panics
 //
 // Work handed across cores without a socket: `nish/net/prefork` starts five
@@ -30,7 +29,7 @@
 // Linux there is no doorbell and the waits poll. `NISH_WORKERS` overrides the
 // five: with fewer, the owner and the clients each give up after a second
 // with nothing to do, and with more, the extra workers exit at once.
-import { getI32LE, getI64LE, setI32LE, setI64LE } from "nish/bytes"
+import { tryGetI32LE, tryGetI64LE, trySetI32LE, trySetI64LE } from "nish/bytes"
 import {
   PREFORK_WORKER_FLAG,
   PREFORK_WORKERS_EXITED,
@@ -125,8 +124,17 @@ const owner = (region: SharedRegion): i32 => {
   // Every answer below 0 ends the loop: an empty ring, a record too long for
   // `job`, or a ring a peer scribbled on.
   while (done < CLIENTS && takeRecord(jobs.value, job) >= 0) {
-    const client: i32 = getI32LE(job, 0)
-    const counter: i32 = getI32LE(job, 8)
+    // `job` holds JOB_BYTES, so none of these reads is out of range; the
+    // checked forms answer one that were as a record to skip.
+    const clientAt = tryGetI32LE(job, 0)
+    const counterAt = tryGetI32LE(job, 8)
+    const tagAt = tryGetI32LE(job, 4)
+    const addAt = tryGetI32LE(job, 12)
+    if (clientAt.isErr() || counterAt.isErr() || tagAt.isErr() || addAt.isErr()) {
+      continue
+    }
+    const client: i32 = clientAt.value
+    const counter: i32 = counterAt.value
     if (counter < 0) {
       done = done + 1
       continue
@@ -138,9 +146,10 @@ const owner = (region: SharedRegion): i32 => {
     if (slot >= toI32(answers.length)) {
       continue
     }
-    counters[counter] = counters[counter] + toU64(getI32LE(job, 12))
-    setI32LE(answer, 0, getI32LE(job, 4))
-    setI64LE(answer, 4, toI64(counters[counter]))
+    counters[counter] = counters[counter] + toU64(addAt.value)
+    if (!trySetI32LE(answer, 0, tagAt.value) || !trySetI64LE(answer, 4, toI64(counters[counter]))) {
+      continue
+    }
     // The client never has more in flight than its ring holds.
     answers[slot].offer(answer, toI32(0), ANSWER_BYTES)
     answered = answered + 1
@@ -172,16 +181,18 @@ const client = (region: SharedRegion, me: i32): i32 => {
   }
   const job: u8[] = new Array<u8>(toU16(JOB_BYTES))
   const answer: u8[] = new Array<u8>(toU16(ANSWER_BYTES))
-  setI32LE(job, 0, me)
+  // `job` and `answer` hold JOB_BYTES and ANSWER_BYTES, so no checked access
+  // below fails; one that did would count as a job that went wrong.
+  trySetI32LE(job, 0, me)
   let sent: u32 = 1
   let got: u32 = 0
   let wrong: u32 = 0
   let since: u64 = toU64(monotonicNanos())
   while (got < toU32(JOBS)) {
     while (sent <= toU32(JOBS) && sent - 1 - got < toU32(WINDOW)) {
-      setI32LE(job, 4, toI32(sent))
-      setI32LE(job, 8, toI32(sent) % COUNTERS)
-      setI32LE(job, 12, toI32(sent))
+      trySetI32LE(job, 4, toI32(sent))
+      trySetI32LE(job, 8, toI32(sent) % COUNTERS)
+      trySetI32LE(job, 12, toI32(sent))
       if (jobs.value.offer(job, toI32(0), JOB_BYTES) !== 0) {
         break
       }
@@ -201,11 +212,13 @@ const client = (region: SharedRegion, me: i32): i32 => {
     since = toU64(monotonicNanos())
     got = got + 1
     // Answers come back in order, and a counter only grows.
-    if (getI32LE(answer, 0) !== toI32(got) || getI64LE(answer, 4) < toI64(got)) {
+    const tag = tryGetI32LE(answer, 0)
+    const value = tryGetI64LE(answer, 4)
+    if (tag.isErr() || value.isErr() || tag.value !== toI32(got) || value.value < toI64(got)) {
       wrong = wrong + 1
     }
   }
-  setI32LE(job, 8, -1)
+  trySetI32LE(job, 8, -1)
   for (let k: i32 = 0; k < 1000000 && jobs.value.offer(job, toI32(0), JOB_BYTES) !== 0; k++) {
     // full: the owner is behind, so spin a while
   }

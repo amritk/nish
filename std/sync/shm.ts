@@ -172,6 +172,32 @@ const shmDone = (rc: i32): Result<void, ShmError> => {
 }
 
 /**
+ * Whether `name` keeps `createRegion`'s rules: 1 to 30 of
+ * `A-Z a-z 0-9 . _ -`, not starting with `.`. The runtime checks them too;
+ * checking here answers a NUL byte as `SHM_INVALID` before C would read it.
+ */
+const shmNameOk = (name: string): boolean => {
+  const n: i32 = toI32(name.length)
+  if (n < 1 || n > 30) {
+    return false
+  }
+  for (let i: i32 = 0; i < n; i++) {
+    const c: i32 = name.charCodeAt(i)
+    const ok =
+      (c >= 65 && c <= 90) ||
+      (c >= 97 && c <= 122) ||
+      (c >= 48 && c <= 57) ||
+      c === 46 ||
+      c === 95 ||
+      c === 45
+    if (!ok || (i === 0 && c === 46)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
  * Creates the region `name`, `bytes` long and zeroed, mode 0600, and maps it.
  * `SHM_EXISTS` when the name is taken: unlink a stale one first.
  * @param name the region's name, 1 to 30 of `A-Z a-z 0-9 . _ -`, not
@@ -185,6 +211,9 @@ const shmDone = (rc: i32): Result<void, ShmError> => {
  *   system gave
  */
 export const createRegion = (name: string, bytes: i32): Result<SharedRegion, ShmError> => {
+  if (!shmNameOk(name)) {
+    return Err(new ShmError(SHM_INVALID))
+  }
   const h: i32 = nishshm_create(name, bytes)
   if (h < 0) {
     return Err(new ShmError(shmErrno(h)))
@@ -206,6 +235,9 @@ export const createRegion = (name: string, bytes: i32): Result<SharedRegion, Shm
  *   system gave
  */
 export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
+  if (!shmNameOk(name)) {
+    return Err(new ShmError(SHM_INVALID))
+  }
   const h: i32 = nishshm_open(name)
   if (h < 0) {
     return Err(new ShmError(shmErrno(h)))
@@ -221,7 +253,12 @@ export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
  * @returns `Ok()` once the name is gone, or the `ShmError`: `SHM_NOT_FOUND`,
  *   `SHM_INVALID`, code 95 on wasi, or the errno the system gave
  */
-export const unlinkRegion = (name: string): Result<void, ShmError> => shmDone(nishshm_unlink(name))
+export const unlinkRegion = (name: string): Result<void, ShmError> => {
+  if (!shmNameOk(name)) {
+    return Err(new ShmError(SHM_INVALID))
+  }
+  return shmDone(nishshm_unlink(name))
+}
 
 /**
  * A fence of `order`, for the accesses around it: C11's

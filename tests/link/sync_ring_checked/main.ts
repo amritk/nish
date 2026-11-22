@@ -6,7 +6,9 @@
 //      wrote, and leaves the slot where it was, so a second `take` answers
 //      the same and a repaired length gives the record back; `takeWait`
 //      answers RING_CORRUPT as `take` does, and RING_EMPTY when the wait
-//      runs out with nothing offered;
+//      runs out with nothing offered; `offer` answers RING_CORRUPT for an
+//      enqueue position written back in the header and RING_FULL for one
+//      written far ahead, and `attachMpscRing` refuses a scribbled shape;
 //   3. `tryInitMpscRing` answers Err for a shape no ring has and for a base
 //      off a 64-byte boundary or past the region's end, and writes nothing;
 //   4. `attachSpscRing` and `attachMpscRing` answer Err for a misaligned base
@@ -36,6 +38,9 @@ const SPSC_AT: i32 = 1024 // 64 bytes of data: 320 bytes
 // A ring's header is 256 bytes and its slots follow; each slot is the
 // sequence number (i64), the length (i32) and padding, then the record.
 const SLOT0_LEN_AT: i32 = MPSC_AT + 256 + 8
+// The header's enqueue position (an i64) and slot count.
+const TAIL_AT: i32 = MPSC_AT + 64
+const SLOTS_AT: i32 = MPSC_AT + 8
 
 const offers = (t: Suite, region: SharedRegion): void => {
   const made = tryInitMpscRing(region, MPSC_AT, 4, 16, false)
@@ -83,6 +88,18 @@ const corrupt = (t: Suite, region: SharedRegion): void => {
   t.eqI32("with the length repaired, take gives the record back", ring.take(dst, 0), 8)
   t.eqI32("as it was offered", toI32(dst[7]), 7)
   t.eqI32("a ring with no doorbell answers takeWait with SHM_UNSUPPORTED", ring.takeWait(dst, 0, 10), SHM_UNSUPPORTED)
+  // The header, which every producer reads: a position written back is
+  // RING_CORRUPT, not a spin, and one written far ahead reads as full.
+  t.eqI32("a second record is offered", ring.offer(src, 0, 8), 0)
+  region.storeI64(TAIL_AT, toI64(0), RELAXED)
+  t.eqI32("offer answers RING_CORRUPT for an enqueue position written back", ring.offer(src, 0, 8), RING_CORRUPT)
+  region.storeI64(TAIL_AT, toI64(1000000), RELAXED)
+  t.eqI32("and RING_FULL for one written far ahead", ring.offer(src, 0, 8), RING_FULL)
+  region.storeI64(TAIL_AT, toI64(2), RELAXED)
+  t.eqI32("with the position repaired, take gives the second record back", ring.take(dst, 0), 8)
+  region.storeI32(SLOTS_AT, 3, RELAXED)
+  t.ok("attachMpscRing refuses a header whose slot count was scribbled", attachMpscRing(region, MPSC_AT).isErr())
+  region.storeI32(SLOTS_AT, 4, RELAXED)
   const belled = tryInitMpscRing(region, MPSC_AT, 4, 16, true)
   if (belled.isErr()) {
     t.fail("tryInitMpscRing makes a ring with a doorbell", belled.error)

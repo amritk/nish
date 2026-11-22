@@ -786,8 +786,9 @@ export class MpscRing {
 
   /**
    * Queues `src[off, off + len)` as one record: false when every slot is
-   * taken now. A record longer than a slot panics; `offer` answers it as
-   * `RING_TOO_LONG` instead. The producer claims a slot with a `RELAXED`
+   * taken now. A record longer than a slot panics, and so does an enqueue
+   * position a peer wrote back; `offer` answers them as `RING_TOO_LONG` and
+   * `RING_CORRUPT` instead. The producer claims a slot with a `RELAXED`
    * compare-exchange on the enqueue position, after an `ACQUIRE` load of the
    * slot's sequence number; it copies the record in and publishes it with one
    * store of that number, `RELEASE`, or `SEQ_CST` followed by the doorbell
@@ -804,6 +805,9 @@ export class MpscRing {
     if (rc === RING_TOO_LONG) {
       panic(`nish/sync/ring: a record of ${len} bytes does not fit a slot of ${this.slotBytes}`)
     }
+    if (rc === RING_CORRUPT) {
+      panic("nish/sync/ring: the enqueue position went backwards: the ring is corrupt")
+    }
     return rc === 0
   }
 
@@ -816,8 +820,10 @@ export class MpscRing {
    * @param len the record's length in bytes, from 0 to `slotBytes`; a range
    *   outside `src` panics, in `SharedRegion.write`
    * @returns 0 when the record is queued, `RING_FULL` when the slot it would
-   *   take has not been freed by the consumer yet, or `RING_TOO_LONG` for a
-   *   length outside `[0, slotBytes]`; nothing is written unless it is 0
+   *   take has not been freed by the consumer yet, `RING_TOO_LONG` for a
+   *   length outside `[0, slotBytes]`, or `RING_CORRUPT` when the enqueue
+   *   position in the header went backwards, which no producer does; nothing
+   *   is written unless it is 0
    */
   offer(src: readonly u8[], off: i32, len: i32): i32 {
     if (len < 0 || len > this.slotBytes) {
@@ -836,7 +842,14 @@ export class MpscRing {
       } else if (seq < pos) {
         return RING_FULL
       } else {
-        pos = this.region.loadI64(tailAt, RELAXED)
+        // A slot one lap on means some producer moved the position past
+        // `pos`, and producers only move it forward: one that reads `pos`
+        // again was written back by something that is no producer.
+        const again: i64 = this.region.loadI64(tailAt, RELAXED)
+        if (again === pos) {
+          return RING_CORRUPT
+        }
+        pos = again
       }
     }
     const slot: i32 = this.slotAt(pos)

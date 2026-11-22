@@ -317,6 +317,81 @@ function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count:
   local +9:7 d: i32 (let)
   local +10:7 s: i32 (let)
   local +11:7 k: i32 (let)
+function tryGetU32LE(b: u8[], off: i32): Result<u32, string> -> @nish.tryGetU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: off
+  calls: nish.bytesRangeError nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRangeError#2
+  stackSites=0 stackLocals=0
+  local +0:11 b3: u32 (const)
+  local +1:11 b2: u32 (const)
+  local +2:11 b1: u32 (const)
+  local +3:11 b0: u32 (const)
+  callee +6:14 bytesRangeError -> @nish.bytesRangeError
+function tryGetU64LE(b: u8[], off: i32): Result<u64, string> -> @nish.tryGetU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  escaping: off
+  calls: nish.bytesRangeError nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRangeError#2
+  stackSites=0 stackLocals=0
+  local +0:11 b7: u64 (const)
+  local +1:11 b6: u64 (const)
+  local +2:11 b5: u64 (const)
+  local +3:11 b4: u64 (const)
+  local +4:11 b3: u64 (const)
+  local +5:11 b2: u64 (const)
+  local +6:11 b1: u64 (const)
+  local +7:11 b0: u64 (const)
+  callee +15:14 bytesRangeError -> @nish.bytesRangeError
+function tryGetI32LE(b: u8[], off: i32): Result<i32, string> -> @nish.tryGetI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: off
+  calls: nish.tryGetU32LE nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.tryGetU32LE#0
+  stackSites=0 stackLocals=0
+  local +0:9 v: Result<u32, string> (const)
+  callee +0:34 tryGetU32LE -> @nish.tryGetU32LE
+function tryGetI64LE(b: u8[], off: i32): Result<i64, string> -> @nish.tryGetI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  escaping: off
+  calls: nish.tryGetU64LE nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.tryGetU64LE#0
+  stackSites=0 stackLocals=0
+  local +0:9 v: Result<u64, string> (const)
+  callee +0:34 tryGetU64LE -> @nish.tryGetU64LE
+function trySetU32LE(b: u8[], off: i32, v: u32): boolean -> @nish.trySetU32LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: off
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function trySetU64LE(b: u8[], off: i32, v: u64): boolean -> @nish.trySetU64LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: off
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function trySetI32LE(b: u8[], off: i32, v: i32): boolean -> @nish.trySetI32LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.trySetU32LE
+  escaping: off
+  calls: nish.trySetU32LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.trySetU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:68 trySetU32LE -> @nish.trySetU32LE
+function trySetI64LE(b: u8[], off: i32, v: i64): boolean -> @nish.trySetI64LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.trySetU64LE
+  escaping: off
+  calls: nish.trySetU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.trySetU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:68 trySetU64LE -> @nish.trySetU64LE
+function bytesRangeError(off: i32, width: i32, b: u8[]): string -> @nish.bytesRangeError
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32 nish_str_from_i64
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 module std/net/prefork.ts [package nish]
 import NET_UNIX_SEQPACKET from "nish:net" -> builtin NET_UNIX_SEQPACKET
 import NET_UNIX_STREAM from "nish:net" -> builtin NET_UNIX_STREAM
@@ -1419,18 +1494,19 @@ function MpscRing.offer(this: MpscRing, src: readonly u8[], off: i32, len: i32):
   local +5:15 seen: i64 (const)
   callee +5:27 SharedRegion.compareExchangeI64 -> @nish.SharedRegion.compareExchangeI64
   callee +5:71 ringPos -> @nish.ringPos
-  callee +13:15 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
-  local +16:11 slot: i32 (const)
-  callee +16:23 MpscRing.slotAt -> @nish.MpscRing.slotAt
-  callee +17:5 SharedRegion.storeI32 -> @nish.SharedRegion.storeI32
-  callee +17:26 ringAdd -> @nish.ringAdd
-  callee +18:5 SharedRegion.write -> @nish.SharedRegion.write
-  callee +18:23 ringAdd -> @nish.ringAdd
-  callee +20:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
-  callee +20:34 ringPos -> @nish.ringPos
-  callee +21:7 ringRing -> @nish.ringRing
-  callee +23:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
-  callee +23:34 ringPos -> @nish.ringPos
+  local +16:15 again: i64 (const)
+  callee +16:28 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
+  local +23:11 slot: i32 (const)
+  callee +23:23 MpscRing.slotAt -> @nish.MpscRing.slotAt
+  callee +24:5 SharedRegion.storeI32 -> @nish.SharedRegion.storeI32
+  callee +24:26 ringAdd -> @nish.ringAdd
+  callee +25:5 SharedRegion.write -> @nish.SharedRegion.write
+  callee +25:23 ringAdd -> @nish.ringAdd
+  callee +27:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  callee +27:34 ringPos -> @nish.ringPos
+  callee +28:7 ringRing -> @nish.ringRing
+  callee +30:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  callee +30:34 ringPos -> @nish.ringPos
 function MpscRing.ready(this: MpscRing, order: i32): boolean -> @nish.MpscRing.ready [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.SharedRegion.loadI64
@@ -1780,36 +1856,49 @@ function shmDone(rc: i32): Result<void, ShmError> -> @nish.shmDone
   stackSites=0 stackLocals=0
   callee +0:16 new ShmError -> @nish.ShmError.constructor
   callee +0:29 shmErrno -> @nish.shmErrno
+function shmNameOk(name: string): boolean -> @nish.shmNameOk
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +4:12 i: i32 (let)
+  local +5:11 c: i32 (const)
+  local +6:11 ok: boolean (const)
 function createRegion(name: string, bytes: i32): Result<SharedRegion, ShmError> -> @nish.createRegion [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
-  sharedWrite: via nishshm_create
+  sharedWrite: via nish.ShmError.constructor
   escaping: bytes name
-  calls: nish.SharedRegion.constructor nish.ShmError.constructor nish.shmErrno nish_alloc_struct nish_panic nish_str_index_of nishshm_create
+  calls: nish.SharedRegion.constructor nish.ShmError.constructor nish.shmErrno nish.shmNameOk nish_alloc_struct nish_panic nish_str_index_of nishshm_create
   stackSites=0 stackLocals=0
-  local +0:9 h: i32 (const)
-  callee +0:18 nishshm_create -> @nishshm_create
-  callee +2:16 new ShmError -> @nish.ShmError.constructor
-  callee +2:29 shmErrno -> @nish.shmErrno
-  callee +4:13 new SharedRegion -> @nish.SharedRegion.constructor
+  callee +0:8 shmNameOk -> @nish.shmNameOk
+  callee +1:16 new ShmError -> @nish.ShmError.constructor
+  local +3:9 h: i32 (const)
+  callee +3:18 nishshm_create -> @nishshm_create
+  callee +5:16 new ShmError -> @nish.ShmError.constructor
+  callee +5:29 shmErrno -> @nish.shmErrno
+  callee +7:13 new SharedRegion -> @nish.SharedRegion.constructor
 function openRegion(name: string): Result<SharedRegion, ShmError> -> @nish.openRegion [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
-  sharedWrite: via nishshm_open
+  sharedWrite: via nish.ShmError.constructor
   escaping: name
-  calls: nish.SharedRegion.constructor nish.ShmError.constructor nish.shmErrno nish_alloc_struct nish_panic nish_str_index_of nishshm_open
+  calls: nish.SharedRegion.constructor nish.ShmError.constructor nish.shmErrno nish.shmNameOk nish_alloc_struct nish_panic nish_str_index_of nishshm_open
   stackSites=0 stackLocals=0
-  local +0:9 h: i32 (const)
-  callee +0:18 nishshm_open -> @nishshm_open
-  callee +2:16 new ShmError -> @nish.ShmError.constructor
-  callee +2:29 shmErrno -> @nish.shmErrno
-  callee +4:13 new SharedRegion -> @nish.SharedRegion.constructor
+  callee +0:8 shmNameOk -> @nish.shmNameOk
+  callee +1:16 new ShmError -> @nish.ShmError.constructor
+  local +3:9 h: i32 (const)
+  callee +3:18 nishshm_open -> @nishshm_open
+  callee +5:16 new ShmError -> @nish.ShmError.constructor
+  callee +5:29 shmErrno -> @nish.shmErrno
+  callee +7:13 new SharedRegion -> @nish.SharedRegion.constructor
 function unlinkRegion(name: string): Result<void, ShmError> -> @nish.unlinkRegion [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: via nish.shmDone
+  sharedWrite: via nish.ShmError.constructor
   escaping: name
-  calls: nish.shmDone nish_panic nish_str_index_of nishshm_unlink
+  calls: nish.ShmError.constructor nish.shmDone nish.shmNameOk nish_alloc_struct nish_panic nish_str_index_of nishshm_unlink
   stackSites=0 stackLocals=0
-  callee +0:71 shmDone -> @nish.shmDone
-  callee +0:79 nishshm_unlink -> @nishshm_unlink
+  callee +0:8 shmNameOk -> @nish.shmNameOk
+  callee +1:16 new ShmError -> @nish.ShmError.constructor
+  callee +3:10 shmDone -> @nish.shmDone
+  callee +3:18 nishshm_unlink -> @nishshm_unlink
 function fence(order: i32): void -> @nish.fence [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nishshm_fence
@@ -1968,10 +2057,10 @@ function SharedRegion.close(this: SharedRegion): Result<void, ShmError> -> @nish
   stackSites=0 stackLocals=0
   callee +0:12 shmDone -> @nish.shmDone
   callee +0:20 nishshm_close -> @nishshm_close
-import getI32LE from "nish/bytes" -> function @nish.getI32LE
-import getI64LE from "nish/bytes" -> function @nish.getI64LE
-import setI32LE from "nish/bytes" -> function @nish.setI32LE
-import setI64LE from "nish/bytes" -> function @nish.setI64LE
+import tryGetI32LE from "nish/bytes" -> function @nish.tryGetI32LE
+import tryGetI64LE from "nish/bytes" -> function @nish.tryGetI64LE
+import trySetI32LE from "nish/bytes" -> function @nish.trySetI32LE
+import trySetI64LE from "nish/bytes" -> function @nish.trySetI64LE
 import PREFORK_WORKER_FLAG from "nish/net/prefork" -> const PREFORK_WORKER_FLAG
 import PREFORK_WORKERS_EXITED from "nish/net/prefork" -> const PREFORK_WORKERS_EXITED
 import PreforkConfig from "nish/net/prefork" -> struct PreforkConfig
@@ -2027,9 +2116,9 @@ function takeRecord(ring: MpscRing, buf: u8[]): i32 -> @takeRecord
   callee +0:18 MpscRing.takeWait -> @nish.MpscRing.takeWait
   callee +1:34 MpscRing.take -> @nish.MpscRing.take
 function owner(region: SharedRegion): i32 -> @owner
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.attachMpscRing
-  calls: answersAt nish.MpscRing.offer nish.SharedRegion.storeI64 nish.attachMpscRing nish.getI32LE nish.setI32LE nish.setI64LE nish_arena_mark nish_arena_release nish_array_grow nish_str_concat nish_write takeRecord
+  calls: answersAt nish.MpscRing.offer nish.SharedRegion.storeI64 nish.attachMpscRing nish.tryGetI32LE nish.trySetI32LE nish.trySetI64LE nish_arena_mark nish_arena_release nish_array_grow nish_str_concat nish_write takeRecord
   pointer region: size=4 writesThrough=true captured=true passedTo=nish.attachMpscRing#0 nish.attachMpscRing#0 nish.SharedRegion.storeI64#0 nish.SharedRegion.storeI64#0
   stackSites=1 stackLocals=1
   local +0:9 jobs: Result<MpscRing, string> (const)
@@ -2045,25 +2134,29 @@ function owner(region: SharedRegion): i32 -> @owner
   local +18:7 done: i32 (let)
   local +19:7 answered: u64 (let)
   callee +22:28 takeRecord -> @takeRecord
-  local +23:11 client: i32 (const)
-  callee +23:25 getI32LE -> @nish.getI32LE
-  local +24:11 counter: i32 (const)
-  callee +24:26 getI32LE -> @nish.getI32LE
-  local +32:11 slot: i32 (const)
-  callee +36:51 getI32LE -> @nish.getI32LE
-  callee +37:5 setI32LE -> @nish.setI32LE
-  callee +37:25 getI32LE -> @nish.getI32LE
-  callee +38:5 setI64LE -> @nish.setI64LE
-  callee +40:5 MpscRing.offer -> @nish.MpscRing.offer
-  local +43:7 total: u64 (let)
-  local +44:14 v: u64 (const)
-  callee +47:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
-  callee +48:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  local +25:11 clientAt: Result<i32, string> (const)
+  callee +25:22 tryGetI32LE -> @nish.tryGetI32LE
+  local +26:11 counterAt: Result<i32, string> (const)
+  callee +26:23 tryGetI32LE -> @nish.tryGetI32LE
+  local +27:11 tagAt: Result<i32, string> (const)
+  callee +27:19 tryGetI32LE -> @nish.tryGetI32LE
+  local +28:11 addAt: Result<i32, string> (const)
+  callee +28:19 tryGetI32LE -> @nish.tryGetI32LE
+  local +32:11 client: i32 (const)
+  local +33:11 counter: i32 (const)
+  local +41:11 slot: i32 (const)
+  callee +46:10 trySetI32LE -> @nish.trySetI32LE
+  callee +46:50 trySetI64LE -> @nish.trySetI64LE
+  callee +50:5 MpscRing.offer -> @nish.MpscRing.offer
+  local +53:7 total: u64 (let)
+  local +54:14 v: u64 (const)
+  callee +57:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  callee +58:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
 function client(region: SharedRegion, me: i32): i32 -> @client
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.attachMpscRing
   escaping: me
-  calls: answersAt nish.MpscRing.offer nish.SharedRegion.addI32 nish.attachMpscRing nish.getI32LE nish.getI64LE nish.setI32LE nish_arena_mark nish_arena_release nish_monotonic_nanos nish_str_concat nish_write takeRecord
+  calls: answersAt nish.MpscRing.offer nish.SharedRegion.addI32 nish.attachMpscRing nish.tryGetI32LE nish.tryGetI64LE nish.trySetI32LE nish_arena_mark nish_arena_release nish_monotonic_nanos nish_str_concat nish_write takeRecord
   pointer region: size=4 writesThrough=true captured=true passedTo=nish.attachMpscRing#0 nish.attachMpscRing#0 nish.SharedRegion.addI32#0
   stackSites=0 stackLocals=0
   local +0:9 jobs: Result<MpscRing, string> (const)
@@ -2073,23 +2166,25 @@ function client(region: SharedRegion, me: i32): i32 -> @client
   callee +5:42 answersAt -> @answersAt
   local +10:9 job: u8[] (const)
   local +11:9 answer: u8[] (const)
-  callee +12:3 setI32LE -> @nish.setI32LE
-  local +13:7 sent: u32 (let)
-  local +14:7 got: u32 (let)
-  local +15:7 wrong: u32 (let)
-  local +16:7 since: u64 (let)
-  callee +19:7 setI32LE -> @nish.setI32LE
-  callee +20:7 setI32LE -> @nish.setI32LE
-  callee +21:7 setI32LE -> @nish.setI32LE
-  callee +22:11 MpscRing.offer -> @nish.MpscRing.offer
-  local +34:11 took: i32 (const)
-  callee +34:23 takeRecord -> @takeRecord
-  callee +41:9 getI32LE -> @nish.getI32LE
-  callee +41:47 getI64LE -> @nish.getI64LE
-  callee +45:3 setI32LE -> @nish.setI32LE
-  local +46:12 k: i32 (let)
-  callee +46:39 MpscRing.offer -> @nish.MpscRing.offer
-  callee +49:3 SharedRegion.addI32 -> @nish.SharedRegion.addI32
+  callee +14:3 trySetI32LE -> @nish.trySetI32LE
+  local +15:7 sent: u32 (let)
+  local +16:7 got: u32 (let)
+  local +17:7 wrong: u32 (let)
+  local +18:7 since: u64 (let)
+  callee +21:7 trySetI32LE -> @nish.trySetI32LE
+  callee +22:7 trySetI32LE -> @nish.trySetI32LE
+  callee +23:7 trySetI32LE -> @nish.trySetI32LE
+  callee +24:11 MpscRing.offer -> @nish.MpscRing.offer
+  local +36:11 took: i32 (const)
+  callee +36:23 takeRecord -> @takeRecord
+  local +43:11 tag: Result<i32, string> (const)
+  callee +43:17 tryGetI32LE -> @nish.tryGetI32LE
+  local +44:11 value: Result<i64, string> (const)
+  callee +44:19 tryGetI64LE -> @nish.tryGetI64LE
+  callee +49:3 trySetI32LE -> @nish.trySetI32LE
+  local +50:12 k: i32 (let)
+  callee +50:39 MpscRing.offer -> @nish.MpscRing.offer
+  callee +53:3 SharedRegion.addI32 -> @nish.SharedRegion.addI32
 function supervise(name: string): i32 -> @supervise
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.unlinkRegion
