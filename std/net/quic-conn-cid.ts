@@ -49,7 +49,7 @@ import {
   QUIC_ERROR_PROTOCOL_VIOLATION,
   QUIC_RESET_TOKEN_SIZE,
 } from "nish/net/quic-frame"
-import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
+import { QUIC_MAX_CID_LENGTH, QUIC_MAX_VARINT } from "nish/net/quic-packet"
 
 /** A typed zero: a bare literal is an `f64` under `--number-mode f64`. */
 const QUIC_CID_ZERO: i32 = 0
@@ -95,7 +95,10 @@ export class QuicCidEntry {
  */
 export const quicCidCopy = (to: u8[], from: u8[], at: i32, length: i32): void => {
   for (let k: i32 = 0; k < toI32(to.length); k += 1) {
-    to[k] = k < length && at + k >= 0 && at + k < toI32(from.length) ? from[at + k] : toU8(0)
+    // Widened, so a sum past 2^31 - 1 lands outside `from` and reads as a missing byte.
+    const j: i64 = toI64(at) + toI64(k)
+    const i: i32 = j >= 0 && j < 2147483648 ? toI32(j) : -1
+    to[k] = k < length && i >= 0 && i < toI32(from.length) ? from[i] : toU8(0)
   }
 }
 
@@ -137,6 +140,19 @@ const quicCidClear = (entry: QuicCidEntry): void => {
   entry.length = 0
   secureZero(entry.cid)
   secureZero(entry.resetToken)
+}
+
+/** `count` zeroed sequence numbers, none when `count` is below 1; `count` is below 2^32. */
+const quicCidSequences = (count: i64): i64[] => {
+  if (count >= 0 && count <= 65535) {
+    return new Array<i64>(toU16(count))
+  }
+  const out: i64[] = []
+  // `count` is twice an i32 at most, below 2^32, so the unsigned counter reaches it before it wraps.
+  for (let k: u32 = 0; toI64(k) < count; k += 1) {
+    out.push(0)
+  }
+  return out
 }
 
 /** `count` empty slots. */
@@ -184,7 +200,8 @@ export class QuicCidTable {
     const peerSlots: i32 = limit < 1 ? 1 : toI32(limit)
     this.local = quicCidSlots(localCapacity)
     this.peer = quicCidSlots(peerSlots)
-    this.retirePending = new Array<i64>(peerSlots * 2)
+    // Widened, so twice a large `limit` cannot wrap.
+    this.retirePending = quicCidSequences(toI64(peerSlots) * 2)
     this.limit = limit
   }
 
@@ -206,21 +223,23 @@ export class QuicCidTable {
   /**
    * Issues `cid`, up to its first 20 bytes, as the next local ID, with its
    * 16-byte reset token (or none, empty, for sequence 0), and answers its
-   * sequence number; -1 when every local slot is taken.
+   * sequence number; -1 when every local slot is taken or sequence
+   * numbers reach 2^62 - 1, the largest a varint carries.
    *
    * @param cid The ID's bytes, copied into the slot; past 20 bytes (`QUIC_MAX_CID_LENGTH`) the rest is
    *   dropped.
    * @param resetToken The 16-byte stateless reset token, copied; any other length, empty included, means
    *   none.
-   * @returns The ID's sequence number, counting up from 0, or -1 when every local slot is taken.
+   * @returns The ID's sequence number, counting up from 0, or -1 when every local slot is taken or the
+   *   sequence numbers are used up.
    */
   addLocal(cid: u8[], resetToken: u8[]): i64 {
     const k: i32 = quicCidFree(this.local)
-    if (k < 0) {
+    const sequence: i64 = this.nextLocal
+    if (k < 0 || k >= toI32(this.local.length) || sequence < 0 || sequence >= QUIC_MAX_VARINT) {
       return -1
     }
     const entry: QuicCidEntry = this.local[k]
-    const sequence: i64 = this.nextLocal
     const length: i32 = toI32(cid.length) > QUIC_MAX_CID_LENGTH ? QUIC_MAX_CID_LENGTH : toI32(cid.length)
     quicCidCopy(entry.cid, cid, 0, length)
     entry.length = length
@@ -230,7 +249,8 @@ export class QuicCidTable {
     entry.used = true
     // Sequence 0 travels in the long header's SCID, never in a frame.
     entry.announced = sequence === 0
-    this.nextLocal = sequence + 1
+    // Below `QUIC_MAX_VARINT`, so one more cannot wrap.
+    this.nextLocal = toI64(toU64(sequence) + 1)
     return sequence
   }
 
@@ -240,13 +260,14 @@ export class QuicCidTable {
    * @returns The count of issued, not yet retired local IDs, from 0 to `localCapacity`.
    */
   activeLocal(): i32 {
-    let n: i32 = 0
+    // At most one per slot, so the unsigned count cannot wrap.
+    let n: u32 = 0
     for (const entry of this.local) {
       if (entry.used) {
         n += 1
       }
     }
-    return n
+    return toI32(n)
   }
 
   /**
@@ -314,13 +335,14 @@ export class QuicCidTable {
    * @returns The count of the peer's IDs not yet retired, from 0 to `limit`.
    */
   activePeer(): i32 {
-    let n: i32 = 0
+    // At most one per slot, so the unsigned count cannot wrap.
+    let n: u32 = 0
     for (const entry of this.peer) {
       if (entry.used) {
         n += 1
       }
     }
-    return n
+    return toI32(n)
   }
 
   /**
@@ -399,8 +421,10 @@ export class QuicCidTable {
     // Count what the frame would leave before changing anything, so a frame
     // refused for a limit leaves the table as it was.
     const priorTo: i64 = retirePriorTo > this.peerRetirePriorTo ? retirePriorTo : this.peerRetirePriorTo
-    let active: i64 = sequence < priorTo ? 0 : 1
-    let pending: i64 = toI64(this.retireCount) + (sequence < priorTo ? 1 : 0)
+    // Each count is at most one per peer slot and queued retirement plus this frame's ID, far below
+    // 2^32, so the unsigned sums cannot wrap.
+    let active: u32 = sequence < priorTo ? 0 : 1
+    let pending: u32 = toU32(this.retireCount) + (sequence < priorTo ? 1 : 0)
     for (const old of this.peer) {
       if (!old.used) {
         continue
@@ -412,9 +436,10 @@ export class QuicCidTable {
       }
     }
     if (
-      active > this.limit ||
-      pending > this.limit * 2 ||
-      pending > toI64(toI32(this.retirePending.length))
+      toI64(active) > this.limit ||
+      // `pending > limit * 2` for whole numbers, without doubling `limit`.
+      toI64((pending + 1) >>> 1) > this.limit ||
+      toI64(pending) > toI64(toI32(this.retirePending.length))
     ) {
       return QUIC_ERROR_CONNECTION_ID_LIMIT
     }
@@ -472,7 +497,8 @@ export class QuicCidTable {
   currentPeer(): u8[] {
     const entry: QuicCidEntry | null = this.currentPeerEntry()
     const length: i32 = entry !== null ? entry.length : 0
-    const out: u8[] = new Array<u8>(length)
+    // An entry's length is 0 to 20 (`QUIC_MAX_CID_LENGTH`), so it fits a u16.
+    const out: u8[] = new Array<u8>(toU16(length))
     if (entry !== null) {
       quicCidCopy(out, entry.cid, 0, length)
     }
@@ -487,20 +513,33 @@ export class QuicCidTable {
    */
   queueRetire(sequence: i64): void {
     const size: i32 = toI32(this.retirePending.length)
-    for (let k: i32 = 0; k < this.retireCount; k += 1) {
-      const at: i32 = (this.retireHead + k) % size
+    const count: i32 = this.retireCount
+    for (let k: i32 = 0; k < count; k += 1) {
+      const at: i32 = this.retireSlot(k)
       if (at >= 0 && at < size && this.retirePending[at] === sequence) {
         return
       }
     }
-    if (this.retireCount >= size || size === 0) {
+    if (count < 0 || count >= size) {
       return
     }
-    const at: i32 = (this.retireHead + this.retireCount) % size
+    const at: i32 = this.retireSlot(count)
     if (at >= 0 && at < size) {
       this.retirePending[at] = sequence
-      this.retireCount = this.retireCount + 1
+      this.retireCount = count + 1
     }
+  }
+
+  /**
+   * The ring slot `k` places after `retireHead`, or 0 for an empty ring. Unsigned, because the head and
+   * `k` are each below 2^31, so the sum cannot wrap.
+   */
+  private retireSlot(k: i32): i32 {
+    const size: u32 = toU32(this.retirePending.length)
+    if (size === 0) {
+      return 0
+    }
+    return toI32((toU32(this.retireHead) + toU32(k)) % size)
   }
 
   /**
@@ -510,13 +549,14 @@ export class QuicCidTable {
    */
   takeRetire(): i64 {
     const size: i32 = toI32(this.retirePending.length)
-    if (this.retireCount === 0 || size === 0) {
+    const count: i32 = this.retireCount
+    if (count <= 0 || size === 0) {
       return -1
     }
     const at: i32 = this.retireHead
     const first: i64 = at >= 0 && at < size ? this.retirePending[at] : -1
-    this.retireHead = (at + 1) % size
-    this.retireCount = this.retireCount - 1
+    this.retireHead = this.retireSlot(1)
+    this.retireCount = count - 1
     return first
   }
 
