@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 5245,
+  "total": 4683,
   "explicit": {
-    "kept": 340,
-    "toFix": 90
+    "kept": 354,
+    "toFix": 70
   },
   "modules": {
     "std/base64.ts": {
@@ -226,13 +226,9 @@
       "panic": 9
     },
     "std/net/http-server.ts": {
-      "array-length": 22,
-      "divide": 8,
-      "index": 193,
+      "array-length": 3,
       "io-exit": 2,
-      "overflow": 175,
-      "panic": 48,
-      "pop": 2,
+      "panic": 43,
       "slice": 1
     },
     "std/net/http1-client-codec.ts": {
@@ -242,11 +238,7 @@
       "panic": 3
     },
     "std/net/http1-server.ts": {
-      "array-length": 6,
-      "index": 51,
-      "overflow": 101,
-      "panic": 3,
-      "pop": 1,
+      "panic": 2,
       "slice": 4
     },
     "std/net/http2-cleartext.ts": {
@@ -1132,6 +1124,21 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServer.consume",
       "reason": "the request must be the program's and n within its bodyLength; a caller sequencing contract and a window the caller owns"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.constructor",
+      "reason": "pollCreate fails only when the process has no descriptor or memory left, and a constructor has no Result to answer it with"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.start",
+      "reason": "the request must be taken and unanswered, the status 200 to 599, the body length HTTP1_CHUNKED or more, and names beside values that are tokens and field text a carrier accepts; a caller sequencing and field contract like end and field"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.trailers",
+      "reason": "trailers follow a started HTTP/2 response declared HTTP1_CHUNKED whose body is fully written, with names and values the carrier accepts; a caller sequencing and field contract like end"
     },
     {
       "module": "std/net/http1-client-codec.ts",

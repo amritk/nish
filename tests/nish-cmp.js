@@ -556,6 +556,8 @@ const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
   )
+/** WP80 S4's release-note words, lower-case so they match the capitalised CHANGELOG.md line. */
+const HTTP1_SERVER_PANIC_FREE = "the HTTP/1 server panic-free"
 const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
 const betweenRequests = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -19942,6 +19944,50 @@ const DECLARED = [
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
   },
+  // WP80 S4: three probes new with the panic-free HTTP/1 server.
+  {
+    program: "tests/link/std_http1_config_checked/main.ts",
+    file: "exit",
+    changelog: HTTP1_SERVER_PANIC_FREE,
+    why: "a probe new with this change: it calls `http1ConfigChecked`, which the 0.44.0 seed's std/net/http1-server.ts lacks, so the seed refuses it (WP80 S4)",
+  },
+  // `std_http1_output_bytes` imports only the pool, so its main.ll agrees.
+  ...[
+    ...["bytes.ll", "http-compress.ll", "main.h", "main.ll", "zlib.ll"].map((file) => [
+      "std_http1_encoded_window",
+      file,
+    ]),
+    ...["bytes.ll", "http-compress.ll", "main.h", "zlib.ll"].map((file) => ["std_http1_output_bytes", file]),
+  ].map(([name, file]) => ({
+    program: `tests/link/${name}/main.ts`,
+    file,
+    changelog: HTTP1_SERVER_PANIC_FREE,
+    why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it), so those modules and the header and IR after them differ (WP80 S4)",
+  })),
+  // The same two probes reach std/net's buffer pool and the TLS modules
+  // through std/net/http1-server.ts, and main has changed those since the
+  // 0.44.0 seed.
+  ...["std_http1_encoded_window", "std_http1_output_bytes"].flatMap((name) =>
+    ["buffer-pool.ll", "client.ll", "ct.ll", "hkdf.ll", "hmac.ll", "record.ll", "tls.ll"].map((file) => ({
+      program: `tests/link/${name}/main.ts`,
+      file,
+      changelog: HTTP1_SERVER_PANIC_FREE,
+      why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/net/buffer-pool.ts, std/crypto and std/net/tls modules, which differ from this tree's, so those modules' IR differs (WP80 S4)",
+    }))
+  ),
+  // Reported only under `--no-sidecars`.
+  {
+    program: "bench/http1-conn/main.ts",
+    file: "main.ll",
+    changelog: HTTP1_SERVER_PANIC_FREE,
+    why: "`Http1Connection` moves its offsets and counts to i64 and its checks to refusals, so the struct, the inlined connection calls and the panic blocks they drop change (WP80 S4)",
+  },
+  ...["bytes.ll", "http-compress.ll", "zlib.ll"].map((file) => ({
+    program: "bench/http1-conn/main.ts",
+    file,
+    changelog: HTTP1_SERVER_PANIC_FREE,
+    why: "the reference compiles the bench against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it); the bench reaches them through this change's std/net/http1-server.ts (WP80 S4)",
+  })),
   // WP82 S3: the HTTP/1 client codec refuses more than 2^30 buffered bytes
   // with the new `HTTP1_E_MEMORY_LIMIT` code where it used to panic, and
   // `Http1ResponseParser.buffered` no longer reaches a panic site.
