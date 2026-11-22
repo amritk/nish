@@ -10126,6 +10126,22 @@ const wirePanicFreeDeclared = () => [
     changelog: WIRE_PANIC_FREE,
     why: "urlDecode, which pgTargetUrl calls, builds its bytes with `push` in place of a computed-length array, so the fuzz loop calling pgTargetUrl no longer hoists the `pieces` header and its values renumber",
   },
+  ...[
+    "tests/link/std_url/main.ts",
+    "tests/link/std_url_pairs/main.ts",
+    "tests/link/std_url_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: WIRE_PANIC_FREE,
+    why: "urlQueryGet starts its query through the new internal UrlQuery.over, so its declaration joins the module's and the attribute groups and values after it renumber",
+  })),
+  {
+    program: "tests/link/net_http1_wire_refusals/main.ts",
+    file: "exit",
+    changelog: WIRE_PANIC_FREE,
+    why: "the program calls tryFeed, http1TryWriteChunk, tryPercentDecode, tryCompress and their failure codes, which the seed's std does not have, so only the candidate compiles it",
+  },
 ]
 
 const DECLARED = [

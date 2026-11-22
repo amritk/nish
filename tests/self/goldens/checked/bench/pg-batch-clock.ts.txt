@@ -2548,7 +2548,8 @@ function pgTarget(host: string, port: i32): PgTarget -> @nish.pgTarget [exported
   local +19:11 limit: i32 (const)
   callee +21:14 pgTargetFailed -> @nish.pgTargetFailed
 function pgDecoded(text: string, start: i32, end: i32): string | null -> @nish.pgDecoded
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.urlDecode
   calls: nish.urlDecode nish_str_new
   stackSites=0 stackLocals=0
   callee +0:3 urlDecode -> @nish.urlDecode
@@ -2561,7 +2562,8 @@ function pgPortValue(text: string): i32 -> @nish.pgPortValue
   local +5:12 i: i32 (let)
   local +6:11 c: i32 (const)
 function pgTargetUrl(url: string): PgTarget -> @nish.pgTargetUrl [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  sharedWrite: via nish.pgDecoded
   escaping: url
   calls: nish.pgDecoded nish.pgPortValue nish.pgTarget nish.pgTargetFailed nish_panic_index nish_panic_overflow nish_str_at nish_str_eq
   stackSites=0 stackLocals=0
@@ -5090,6 +5092,7 @@ const URL_DECODE_ALLOW_NUL: i32 = 4 [exported]
 const URL_DECODE_ERR_ESCAPE: i32 = -1 [exported]
 const URL_DECODE_ERR_NUL: i32 = -2 [exported]
 const URL_DECODE_ERR_SPACE: i32 = -3 [exported]
+const URL_DECODE_ERR_WINDOW: i32 = -4 [exported]
 const URL_QUERY_PAIR: i32 = 1 [exported]
 const URL_QUERY_END: i32 = 0 [exported]
 const URL_QUERY_ERR_PAIRS: i32 = -4 [exported]
@@ -5135,6 +5138,7 @@ struct UrlQuery (class) size=48 align=8 exported
   field hasValue: boolean index=10 offset=44 initialized
   constructor -> @nish.UrlQuery.constructor
   method reset -> @nish.UrlQuery.reset
+  method over -> @nish.UrlQuery.over
   method next -> @nish.UrlQuery.next
 struct Url (class) size=64 align=8 exported
   field scheme: string index=0 offset=0 initialized
@@ -5165,39 +5169,58 @@ function urlEscapeAt(bytes: u8[], i: i32, end: i32): i32 -> @nish.urlEscapeAt
   callee +4:19 urlHexValue -> @nish.urlHexValue
   local +5:9 lo: i32 (const)
   callee +5:19 urlHexValue -> @nish.urlHexValue
+function urlDecodeChecked(result: i32, who: string): i32 -> @nish.urlDecodeChecked
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: result
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
+  stackSites=0 stackLocals=0
 function urlDecodeRun(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32, wantPos: boolean): i32 -> @nish.urlDecodeRun
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: at len off
-  calls: nish.urlCheckWindow nish.urlEscapeAt nish_panic
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlCheckWindow#0 nish.urlEscapeAt#0
+  escaping: at off
+  calls: nish.urlEscapeAt
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlEscapeAt#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -31:9 end: i32 (const)
-  callee -31:20 urlCheckWindow -> @nish.urlCheckWindow
-  local -30:9 size: i32 (const)
-  local -26:9 form: boolean (const)
-  local -25:9 lenient: boolean (const)
-  local -24:9 allowNul: boolean (const)
-  local -23:7 i: i32 (let)
-  local -22:7 w: i32 (let)
-  local -21:9 n: i32 (const)
+  local -32:9 n: i32 (const)
+  local -31:9 size: i32 (const)
+  local -26:9 end: i32 (const)
+  local -25:9 form: boolean (const)
+  local -24:9 lenient: boolean (const)
+  local -23:9 allowNul: boolean (const)
+  local -22:7 i: i32 (let)
+  local -21:7 w: i32 (let)
   local -19:9 b: i32 (let)
   local -18:9 step: i32 (let)
   local -16:13 e: i32 (const)
   callee -16:22 urlEscapeAt -> @nish.urlEscapeAt
-function urlQueryStart(bytes: u8[], off: i32, len: i32): i32 -> @nish.urlQueryStart [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: len off
-  calls: nish.urlCheckWindow
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlCheckWindow#0
+function urlQueryScan(bytes: u8[], off: i32, end: i32): i32 -> @nish.urlQueryScan
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 end: i32 (const)
-  callee +0:20 urlCheckWindow -> @nish.urlCheckWindow
-  local +1:9 n: i32 (const)
-  local +2:7 i: i32 (let)
+  local +0:9 n: i32 (const)
+  local +1:7 i: i32 (let)
+function urlQueryStart(bytes: u8[], off: i32, len: i32): i32 -> @nish.urlQueryStart [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: len off
+  calls: nish.urlCheckWindow nish.urlQueryScan
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlQueryScan#0 nish.urlCheckWindow#0
+  stackSites=0 stackLocals=0
+  callee +0:3 urlQueryScan -> @nish.urlQueryScan
+  callee +0:28 urlCheckWindow -> @nish.urlCheckWindow
 function percentDecode(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 -> @nish.percentDecode [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.urlDecodeRun
+  escaping: at flags len off
+  calls: nish.urlDecodeChecked nish.urlDecodeRun
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlDecodeRun#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.urlDecodeRun#3
+  stackSites=0 stackLocals=0
+  callee +0:3 urlDecodeChecked -> @nish.urlDecodeChecked
+  callee +0:20 urlDecodeRun -> @nish.urlDecodeRun
+function tryPercentDecode(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 -> @nish.tryPercentDecode [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.urlDecodeRun
   escaping: at flags len off
   calls: nish.urlDecodeRun
@@ -5209,20 +5232,22 @@ function percentDecodeErrorAt(src: u8[], off: i32, len: i32, out: u8[], at: i32,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.urlDecodeRun
   escaping: at flags len off
-  calls: nish.urlDecodeRun
+  calls: nish.urlDecodeChecked nish.urlDecodeRun
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlDecodeRun#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.urlDecodeRun#3
   stackSites=0 stackLocals=0
-  callee +0:3 urlDecodeRun -> @nish.urlDecodeRun
+  callee +0:3 urlDecodeChecked -> @nish.urlDecodeChecked
+  callee +0:20 urlDecodeRun -> @nish.urlDecodeRun
 function percentDecodePathSegment(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 -> @nish.percentDecodePathSegment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.urlDecodeRun
   escaping: at len off
-  calls: nish.urlDecodeRun
+  calls: nish.urlDecodeChecked nish.urlDecodeRun
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlDecodeRun#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.urlDecodeRun#3
   stackSites=0 stackLocals=0
-  callee +0:11 urlDecodeRun -> @nish.urlDecodeRun
+  callee +0:3 urlDecodeChecked -> @nish.urlDecodeChecked
+  callee +1:5 urlDecodeRun -> @nish.urlDecodeRun
 function UrlPathSegments.constructor(this: UrlPathSegments): void -> @nish.UrlPathSegments.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=32 writesThrough=true captured=false
@@ -5254,14 +5279,21 @@ function UrlQuery.constructor(this: UrlQuery, limits: UrlQueryLimits): void -> @
   stackSites=0 stackLocals=0
 function UrlQuery.reset(this: UrlQuery, bytes: u8[], off: i32, len: i32): void -> @nish.UrlQuery.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: bytes len off
-  calls: nish.urlCheckWindow
-  pointer this: size=48 writesThrough=true captured=false
-  pointer bytes: size=0 writesThrough=true captured=true passedTo=nish.urlCheckWindow#0
+  sharedWrite: via nish.UrlQuery.over
+  escaping: len off
+  calls: nish.UrlQuery.over nish.urlCheckWindow
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.UrlQuery.over#0
+  pointer bytes: size=0 writesThrough=true captured=true passedTo=nish.UrlQuery.over#1 nish.urlCheckWindow#0
   stackSites=0 stackLocals=0
-  local -1:11 end: i32 (const)
-  callee -1:22 urlCheckWindow -> @nish.urlCheckWindow
+  callee +0:5 UrlQuery.over -> @nish.UrlQuery.over
+  callee +0:27 urlCheckWindow -> @nish.urlCheckWindow
+function UrlQuery.over(this: UrlQuery, bytes: u8[], off: i32, end: i32): void -> @nish.UrlQuery.over [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: bytes end off
+  pointer this: size=48 writesThrough=true captured=false
+  pointer bytes: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
 function UrlQuery.next(this: UrlQuery): i32 -> @nish.UrlQuery.next [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -5334,19 +5366,21 @@ function urlBytesText(bytes: u8[], a: i32, b: i32, lower: boolean): string -> @n
   local +1:7 i: i32 (let)
   local +3:11 c: i32 (const)
 function urlDecodeString(src: u8[], off: i32, len: i32, flags: i32): string | null -> @nish.urlDecodeString
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: flags len off
-  calls: nish.percentDecode nish.urlBytesText nish.urlIsUtf8 nish_array_grow
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.percentDecode#0
-  stackSites=1 stackLocals=1
-  local +0:9 out: u8[] (const)
-  local +1:7 k: i32 (let)
-  local +6:9 n: i32 (const)
-  callee +6:18 percentDecode -> @nish.percentDecode
-  callee +7:17 urlIsUtf8 -> @nish.urlIsUtf8
-  callee +10:10 urlBytesText -> @nish.urlBytesText
+  calls: nish.tryPercentDecode nish.urlBytesText nish.urlIsUtf8 nish_array_grow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.tryPercentDecode#0
+  stackSites=0 stackLocals=0
+  local -6:7 out: u8[] (let)
+  local -2:9 k: i32 (let)
+  local +7:9 n: i32 (const)
+  callee +7:18 tryPercentDecode -> @nish.tryPercentDecode
+  callee +8:17 urlIsUtf8 -> @nish.urlIsUtf8
+  callee +11:10 urlBytesText -> @nish.urlBytesText
 function urlDecode(s: string, flags: i32): string | null -> @nish.urlDecode [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.urlDecodeString
   escaping: flags s
   calls: nish.urlBytesOf nish.urlDecodeString
   stackSites=0 stackLocals=0
@@ -5354,19 +5388,19 @@ function urlDecode(s: string, flags: i32): string | null -> @nish.urlDecode [exp
   callee +0:30 urlBytesOf -> @nish.urlBytesOf
   callee +4:10 urlDecodeString -> @nish.urlDecodeString
 function urlQueryGet(target: string, name: string): string | null -> @nish.urlQueryGet [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.UrlQuery.reset
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.UrlQuery.over
   escaping: name target
-  calls: nish.UrlQuery.constructor nish.UrlQuery.reset nish.urlBytesOf nish.urlDecodeString nish.urlQueryFind nish.urlQueryStart
+  calls: nish.UrlQuery.constructor nish.UrlQuery.over nish.urlBytesOf nish.urlDecodeString nish.urlQueryFind nish.urlQueryScan
   stackSites=2 stackLocals=1
   local +0:9 bytes: u8[] | null (const)
   callee +0:30 urlBytesOf -> @nish.urlBytesOf
   local +4:9 len: i32 (const)
   local +5:9 q: i32 (const)
-  callee +5:18 urlQueryStart -> @nish.urlQueryStart
+  callee +5:18 urlQueryScan -> @nish.urlQueryScan
   local +11:9 query: UrlQuery (const)
   callee +11:27 new UrlQuery -> @nish.UrlQuery.constructor
-  callee +13:3 UrlQuery.reset -> @nish.UrlQuery.reset
+  callee +13:3 UrlQuery.over -> @nish.UrlQuery.over
   callee +14:7 urlQueryFind -> @nish.urlQueryFind
   callee +20:10 urlDecodeString -> @nish.urlDecodeString
 function urlFind(bytes: u8[], a: i32, b: i32, c: i32): i32 -> @nish.urlFind
