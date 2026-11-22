@@ -329,7 +329,11 @@ export class Http2Pools {
    * @param ceiling how many buffers of each kind may be lent at once
    */
   constructor(name: string, config: Http2Config, ceiling: i32) {
-    this.input = new BufferPool(`${name}.input`, config.maxFrameSize + H2_FRAME_HEADER_SIZE, ceiling)
+    // A frame size the connection accepts is at most 2^24 - 1, so the header fits beside it; any other is
+    // passed on unchanged, and the connection built on that config refuses it.
+    const frame: i32 = config.maxFrameSize
+    const inputSize: i32 = frame >= 0 && frame <= 16777215 ? frame + H2_FRAME_HEADER_SIZE : frame
+    this.input = new BufferPool(`${name}.input`, inputSize, ceiling)
     this.output = new BufferPool(`${name}.output`, config.outputSize, ceiling)
     this.block = new BufferPool(`${name}.block`, config.maxHeaderBlock, ceiling)
   }
@@ -340,7 +344,8 @@ export class Http2Pools {
    * @returns the buffers lent and not given back yet, of all three pools together
    */
   lent(): i32 {
-    return this.input.lent() + this.output.lent() + this.block.lent()
+    // Each count is a live buffer of one pool, far below 2^31 together; the sum is taken in i64.
+    return toI32(toI64(this.input.lent()) + toI64(this.output.lent()) + toI64(this.block.lent()))
   }
 
   /**
@@ -349,7 +354,8 @@ export class Http2Pools {
    * @returns the buffers the three pools have allocated, together; at most three times the ceiling
    */
   made(): i32 {
-    return this.input.made + this.output.made + this.block.made
+    // Each count is at most its pool's ceiling, far below 2^31 together; the sum is taken in i64.
+    return toI32(toI64(this.input.made) + toI64(this.output.made) + toI64(this.block.made))
   }
 }
 
@@ -389,32 +395,66 @@ export class Http2Stream {
 
 /** Whether `buf[off ..]` holds the preface. */
 const http2IsPreface = (buf: u8[], off: i32): boolean => {
-  for (let k: i32 = 0; k < H2_PREFACE_SIZE && off + k < toI32(buf.length); k++) {
-    if (toI32(buf[off + k]) !== toI32(H2_PREFACE.charCodeAt(k))) {
+  const preface: string = H2_PREFACE
+  const length: i32 = toI32(buf.length)
+  // `at` walks `buf` beside `k`; it stays in `[0, length)` when read, so `at + 1` cannot wrap.
+  let at: i32 = off
+  for (let k: i32 = 0; k < toI32(preface.length); k++) {
+    if (at < 0) {
       return false
     }
+    if (at >= length) {
+      return true
+    }
+    if (toI32(buf[at]) !== toI32(preface.charCodeAt(k))) {
+      return false
+    }
+    at = at + 1
   }
   return true
 }
 
 /** Moves `buf[start, end)` to the front of `buf` and answers where it now ends. */
 const http2Compact = (buf: u8[], start: i32, end: i32): i32 => {
+  // The connection keeps `0 <= start <= end`; a span outside that is left where it is.
+  if (start < 0 || end < 0 || end < start) {
+    return end
+  }
   const keep: i32 = end - start
-  if (start > 0) {
-    for (let k: i32 = 0; k < keep && k < toI32(buf.length) && start + k < toI32(buf.length); k++) {
-      buf[k] = buf[start + k]
+  const length: i32 = toI32(buf.length)
+  // `from` is read only inside `[0, length)`, so `from + 1` cannot wrap.
+  let from: i32 = start
+  for (let k: i32 = 0; start > 0 && k < keep && k < length; k++) {
+    if (from < 0 || from >= length) {
+      return keep
     }
+    buf[k] = buf[from]
+    from = from + 1
   }
   return keep
 }
 
 /** Writes `id` at `at` in the ring `ring` and answers where the next one goes. */
 const http2Remember = (ring: i32[], at: i32, id: i32): i32 => {
-  const slot: i32 = at % toI32(ring.length)
-  if (slot >= 0 && slot < toI32(ring.length)) {
-    ring[slot] = id
+  const size: i32 = toI32(ring.length)
+  if (size <= 0) {
+    return 0
   }
+  const slot: i32 = at % size
+  if (slot < 0 || slot >= size) {
+    return 0
+  }
+  ring[slot] = id
   return slot + 1
+}
+
+/** A ring of `count` zeroed identifiers, none when `count` is not positive. */
+const http2Ring = (count: i32): i32[] => {
+  const ring: i32[] = []
+  for (let k: i32 = 0; k < count; k++) {
+    ring.push(0)
+  }
+  return ring
 }
 
 /** Panics unless `[off, off + len)` lies inside `buf`. */
@@ -423,6 +463,29 @@ const http2CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => 
     panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
   }
 }
+
+/**
+ * How long before `now` the instant `since` was, both `monotonicNanos` readings. The difference is taken
+ * modulo 2^64: two readings of one monotonic clock are under 2^63 apart, so it is the exact one.
+ */
+const http2Since = (now: i64, since: i64): i64 => toI64(toU64(now) - toU64(since))
+
+/**
+ * The `monotonicNanos` instant `ms` milliseconds after `since`. The product is under 2^52 for an `i32`
+ * `ms`; the sum is taken modulo 2^64, and a reading plus it stays far below 2^63.
+ */
+const http2After = (since: i64, ms: i32): i64 => toI64(toU64(since) + toU64(toI64(ms) * toI64(1000000)))
+
+/**
+ * `a + b` for flow-control figures: a window, the bytes owed to one, or the change a SETTINGS makes to
+ * every window. Each stays within 2^33 either side of 0, since a window that passes 2^31 - 1 fails its
+ * stream or the connection and no frame moves one by more than 2^31 - 1, so the sum taken modulo 2^64
+ * is the exact one.
+ */
+const http2Plus = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+
+/** `a - b` for flow-control figures, exact for the reason `http2Plus` gives. */
+const http2Minus = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
 
 /** Whether one of `names` is `date` in any ASCII case (RFC 9110 §5.1). */
 const http2NamesHoldDate = (names: u8[][]): boolean => {
@@ -627,8 +690,11 @@ export class Http2Connection {
     for (let k: i32 = 0; k < config.maxStreams; k++) {
       this.streams.push(new Http2Stream())
     }
-    this.resets = new Array<i32>(config.maxStreams + H2_RECENT_RESETS)
-    this.closed = new Array<i32>(config.maxStreams + H2_RECENT_RESETS)
+    // http2CheckCap held maxStreams to [1, 65536] above, so the first arm is the one taken and cannot wrap.
+    const streams: i32 = config.maxStreams
+    const remembered: i32 = streams >= 0 && streams <= 65536 ? streams + H2_RECENT_RESETS : H2_RECENT_RESETS
+    this.resets = http2Ring(remembered)
+    this.closed = http2Ring(remembered)
     this.statusName = httpFieldBytes(":status")
     this.statusValue = [48, 48, 48]
     this.date = []
@@ -729,7 +795,8 @@ export class Http2Connection {
   /** Whether the server's SETTINGS have waited longer than `settingsTimeout` at `now` (`monotonicNanos`). */
   private settingsLate(now: i64): boolean {
     return (
-      !this.settingsAcked && now - this.settingsSince > toI64(this.config.settingsTimeout) * toI64(1000000)
+      !this.settingsAcked &&
+      http2Since(now, this.settingsSince) > toI64(this.config.settingsTimeout) * toI64(1000000)
     )
   }
 
@@ -742,7 +809,9 @@ export class Http2Connection {
    * @returns true when the carrier should end the connection, after `timeOut` has written its GOAWAY
    */
   expired(now: i64): boolean {
-    return this.settingsLate(now) || now - this.lastActive > toI64(this.config.idleTimeout) * toI64(1000000)
+    return (
+      this.settingsLate(now) || http2Since(now, this.lastActive) > toI64(this.config.idleTimeout) * toI64(1000000)
+    )
   }
 
   /**
@@ -754,9 +823,9 @@ export class Http2Connection {
    * @returns the earliest `monotonicNanos` instant at which `expired` could answer true
    */
   expiresNoSooner(now: i64): i64 {
-    let soonest: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)
+    let soonest: i64 = http2After(this.lastActive, this.config.idleTimeout)
     if (!this.settingsAcked) {
-      const settings: i64 = this.settingsSince + toI64(this.config.settingsTimeout) * toI64(1000000)
+      const settings: i64 = http2After(this.settingsSince, this.config.settingsTimeout)
       soonest = settings < soonest ? settings : soonest
     }
     return soonest > now ? soonest : now
@@ -808,9 +877,9 @@ export class Http2Connection {
     if (this.prefaceOwed) {
       this.prefaceOwed = false
       this.wrote(http2WriteSettings(this.output, this.outputEnd, this.settingIds, this.settingValues))
-      const raise: i32 = this.config.connectionWindowSize - H2_DEFAULT_WINDOW
-      if (raise > 0) {
-        this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, H2_ZERO, raise))
+      const size: i32 = this.config.connectionWindowSize
+      if (size >= 0 && size > H2_DEFAULT_WINDOW) {
+        this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, H2_ZERO, size - H2_DEFAULT_WINDOW))
       }
     }
   }
@@ -899,7 +968,9 @@ export class Http2Connection {
    * @internal Unused: nothing calls it, and tsc's noUnusedLocals refuses a private member nothing reads.
    */
   inputRoom(): i32 {
-    return this.config.maxFrameSize + H2_FRAME_HEADER_SIZE - (this.inputEnd - this.inputStart)
+    // Each term is an i32, so the i64 sum cannot wrap; it is the documented range once taken back to i32.
+    const frame: i64 = toI64(this.config.maxFrameSize) + toI64(H2_FRAME_HEADER_SIZE)
+    return toI32(http2Minus(frame, toI64(this.inputEnd) - toI64(this.inputStart)))
   }
 
   /**
@@ -922,12 +993,26 @@ export class Http2Connection {
     }
     const room: i32 = this.inputTail()
     const n: i32 = len < room ? len : room
+    const input: u8[] = this.input
+    const size: i32 = toI32(input.length)
+    const length: i32 = toI32(buf.length)
+    // `inputTail` left `room` bytes free from `inputEnd`, and `http2CheckWindow` held `[off, off + len)`
+    // inside `buf`, so the copy stops at `n` and `to` and `from` stay inside their buffers when read.
+    let to: i32 = this.inputEnd
+    let from: i32 = off
+    let taken: i32 = 0
     for (let k: i32 = 0; k < n; k++) {
-      this.input[this.inputEnd + k] = buf[off + k]
+      if (to < 0 || to >= size || from < 0 || from >= length) {
+        break
+      }
+      input[to] = buf[from]
+      to = to + 1
+      from = from + 1
+      taken = k + 1
     }
-    this.inputEnd = this.inputEnd + n
-    this.inputUsed = this.inputEnd > this.inputUsed ? this.inputEnd : this.inputUsed
-    return n
+    this.inputEnd = to
+    this.inputUsed = to > this.inputUsed ? to : this.inputUsed
+    return taken
   }
 
   /**
@@ -938,24 +1023,31 @@ export class Http2Connection {
    */
   inputTail(): i32 {
     this.holdInput()
-    this.inputEnd = http2Compact(this.input, this.inputStart, this.inputEnd)
+    const end: i32 = http2Compact(this.input, this.inputStart, this.inputEnd)
+    this.inputEnd = end
     this.inputStart = 0
-    return toI32(this.input.length) - this.inputEnd
+    const size: i32 = toI32(this.input.length)
+    return end >= 0 && end <= size ? size - end : 0
   }
 
   /**
-   * Takes `n` bytes a carrier read into `input` at `inputEnd`, after `inputTail` gave it the room.
+   * Takes `n` bytes a carrier read into `input` at `inputEnd`, after `inputTail` gave it the room; `n`
+   * below 0 or past that room panics, since the carrier's read could not have written them.
    * @internal Read by `http2-tls.ts`'s server loop; not for callers.
    */
   received(n: i32): void {
-    const room: i32 = toI32(this.input.length) - this.inputEnd
+    const end: i32 = this.inputEnd
+    const size: i32 = toI32(this.input.length)
+    const room: i32 = end >= 0 && end <= size ? size - end : 0
     if (n < 0 || n > room) {
       panic(`Http2Connection.received: ${n} bytes into ${room} of room`)
     }
+    // Both terms are i32s, so the i64 sum is exact; it is at most `size`, so it fits back in an i32.
+    const after: i32 = toI32(toI64(end) + toI64(n))
     // A carrier's read wrote them whatever the state, so they are zeroed when the input goes back.
-    this.inputUsed = this.inputEnd + n > this.inputUsed ? this.inputEnd + n : this.inputUsed
+    this.inputUsed = after > this.inputUsed ? after : this.inputUsed
     if (this.state !== H2_STATE_FAILED) {
-      this.inputEnd = this.inputEnd + n
+      this.inputEnd = after
     }
   }
 
@@ -965,8 +1057,11 @@ export class Http2Connection {
    * @param n how many bytes of `output[outputStart .. outputEnd)` were sent; more than that counts as all
    */
   consume(n: i32): void {
-    const pending: i32 = this.outputEnd - this.outputStart
-    this.outputStart = this.outputStart + (n < pending ? n : pending)
+    const start: i32 = this.outputStart
+    const end: i32 = this.outputEnd
+    // The connection keeps `0 <= outputStart <= outputEnd`, and the i64 sum below cannot wrap.
+    const pending: i32 = start >= 0 && end >= 0 ? end - start : 0
+    this.outputStart = toI32(toI64(start) + toI64(n < pending ? n : pending))
     if (this.outputStart === this.outputEnd) {
       this.giveOutput()
     }
@@ -1012,15 +1107,17 @@ export class Http2Connection {
   /** The room left at the end of the output, once what was sent is moved out of the way. */
   private room(): i32 {
     this.holdOutput()
-    this.outputEnd = http2Compact(this.output, this.outputStart, this.outputEnd)
+    const end: i32 = http2Compact(this.output, this.outputStart, this.outputEnd)
+    this.outputEnd = end
     this.outputStart = 0
-    return toI32(this.output.length) - this.outputEnd
+    const size: i32 = toI32(this.output.length)
+    return end >= 0 && end <= size ? size - end : 0
   }
 
   /** The room DATA and HEADERS may use: all but the control reserve. */
   private bodyRoom(): i32 {
-    const r: i32 = this.room() - H2_CONTROL_RESERVE
-    return r > 0 ? r : 0
+    const r: i32 = this.room()
+    return r >= 0 && r > H2_CONTROL_RESERVE ? r - H2_CONTROL_RESERVE : 0
   }
 
   /** Appends a frame a writer put at the end of the output, when it fit (`end >= 0`), and answers whether it did. */
@@ -1053,8 +1150,8 @@ export class Http2Connection {
     return null
   }
 
-  /** Opens stream `id` in a free slot; the caller has checked there is one. */
-  private open(id: i32): Http2Stream {
+  /** Opens stream `id` in a free slot and answers it; null, opening nothing, when no slot is free. */
+  private open(id: i32): Http2Stream | null {
     for (const s of this.streams) {
       if (s.id === 0) {
         s.id = id
@@ -1069,11 +1166,12 @@ export class Http2Connection {
         s.blocked = false
         s.held = false
         s.owed = 0
-        this.active = this.active + 1
+        // At most `maxStreams` slots are in use, so the i64 count fits back in an i32.
+        this.active = toI32(toI64(this.active) + toI64(1))
         return s
       }
     }
-    panic("Http2Connection.open: no free slot")
+    return null
   }
 
   /** Frees the slot of a stream that is closed. */
@@ -1081,7 +1179,7 @@ export class Http2Connection {
     if (s.id !== 0) {
       this.closedAt = http2Remember(this.closed, this.closedAt, s.id)
       s.id = 0
-      this.active = this.active - 1
+      this.active = toI32(toI64(this.active) - toI64(1))
     }
   }
 
@@ -1097,7 +1195,7 @@ export class Http2Connection {
   private localEnd(s: Http2Stream): void {
     s.localEnded = true
     if (this.resetCredit < this.config.resetBudget) {
-      this.resetCredit = this.resetCredit + 1
+      this.resetCredit = toI32(toI64(this.resetCredit) + toI64(1))
     }
     if (s.remoteEnded) {
       this.release(s)
@@ -1142,7 +1240,9 @@ export class Http2Connection {
    * once the budget is spent the connection error ENHANCE_YOUR_CALM (§10.5).
    */
   private chargeReset(): i32 {
-    this.resetCredit = this.resetCredit - 1
+    // The credit is at most `resetBudget` and falls by one per reset before the connection fails, so the
+    // i64 count fits back in an i32.
+    this.resetCredit = toI32(toI64(this.resetCredit) - toI64(1))
     return this.resetCredit < 0 ? this.fail(H2_ENHANCE_YOUR_CALM) : H2_NEED_MORE
   }
 
@@ -1206,12 +1306,12 @@ export class Http2Connection {
    * window is owed.
    */
   private credit(s: Http2Stream | null, n: i32): void {
-    this.recvUnacked = this.recvUnacked + toI64(n)
+    this.recvUnacked = http2Plus(this.recvUnacked, toI64(n))
     const half: i64 = toI64(this.config.connectionWindowSize / 2)
     if (this.recvUnacked > toI64(0) && this.recvUnacked >= half) {
       const inc: i32 = toI32(this.recvUnacked)
       this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, H2_ZERO, inc))
-      this.recvWindow = this.recvWindow + this.recvUnacked
+      this.recvWindow = http2Plus(this.recvWindow, this.recvUnacked)
       this.recvUnacked = 0
     }
     if (s !== null) {
@@ -1228,13 +1328,14 @@ export class Http2Connection {
     if (s.remoteEnded) {
       return true
     }
-    s.recvUnacked = s.recvUnacked + n
+    // Below half a window owed plus one frame's bytes: the i64 sum fits back in an i32.
+    s.recvUnacked = toI32(toI64(s.recvUnacked) + toI64(n))
     if (s.recvUnacked > 0 && s.recvUnacked >= this.config.initialWindowSize / 2) {
       if (!this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, s.id, s.recvUnacked))) {
         this.owing = true
         return false
       }
-      s.recvWindow = s.recvWindow + toI64(s.recvUnacked)
+      s.recvWindow = http2Plus(s.recvWindow, toI64(s.recvUnacked))
       s.recvUnacked = 0
     }
     return true
@@ -1287,7 +1388,10 @@ export class Http2Connection {
       if (this.owing) {
         this.settleOwed()
       }
-      const available: i32 = this.inputEnd - this.inputStart
+      const start: i32 = this.inputStart
+      const end: i32 = this.inputEnd
+      // The connection keeps `0 <= inputStart <= inputEnd`.
+      const available: i32 = start >= 0 && end >= 0 ? end - start : 0
       if (this.state === H2_STATE_PREFACE) {
         if (available < H2_PREFACE_SIZE) {
           return H2_NEED_MORE
@@ -1295,7 +1399,8 @@ export class Http2Connection {
         if (!http2IsPreface(this.input, this.inputStart)) {
           return this.fail(H2_PROTOCOL_ERROR)
         }
-        this.inputStart = this.inputStart + H2_PREFACE_SIZE
+        // The preface lies inside `[inputStart, inputEnd)`, so the i64 sum fits back in an i32.
+        this.inputStart = toI32(toI64(start) + toI64(H2_PREFACE_SIZE))
         this.state = H2_STATE_SETTINGS
         continue
       }
@@ -1306,11 +1411,13 @@ export class Http2Connection {
       if (f.length > this.config.maxFrameSize) {
         return this.fail(H2_FRAME_SIZE_ERROR)
       }
-      if (available < H2_FRAME_HEADER_SIZE + f.length) {
+      const frameSize: i64 = toI64(H2_FRAME_HEADER_SIZE) + toI64(f.length)
+      if (toI64(available) < frameSize) {
         return H2_NEED_MORE
       }
       const error: i32 = http2ParseFrame(f, this.input, this.inputStart, this.config.maxFrameSize)
-      this.inputStart = this.inputStart + H2_FRAME_HEADER_SIZE + f.length
+      // The frame lies inside `[inputStart, inputEnd)`, so the i64 sum fits back in an i32.
+      this.inputStart = toI32(toI64(start) + toI64(toI32(frameSize)))
       if (error !== H2_NO_ERROR) {
         return this.fail(error)
       }
@@ -1391,13 +1498,14 @@ export class Http2Connection {
     if (toI64(size) > this.recvWindow) {
       return this.fail(H2_FLOW_CONTROL_ERROR)
     }
-    this.recvWindow = this.recvWindow - toI64(size)
+    this.recvWindow = http2Minus(this.recvWindow, toI64(size))
     if (s === null) {
       this.credit(null, size)
       return this.discarded(id) ? H2_NEED_MORE : this.refuseStream(id, H2_STREAM_CLOSED)
     }
     const end: boolean = f.has(H2_FLAG_END_STREAM)
-    const received: i64 = s.received + toI64(f.contentLength)
+    // A count of body bytes: 2^63 of them cannot arrive, so the sum modulo 2^64 is the exact one.
+    const received: i64 = toI64(toU64(s.received) + toU64(toI64(f.contentLength)))
     const declared: boolean = s.contentLength >= toI64(0)
     let error: i32 = H2_NO_ERROR
     if (s.remoteEnded) {
@@ -1411,14 +1519,16 @@ export class Http2Connection {
       this.credit(null, size)
       return this.streamError(s, error)
     }
-    s.recvWindow = s.recvWindow - toI64(size)
+    s.recvWindow = http2Minus(s.recvWindow, toI64(size))
     s.received = received
     if (s.held && !end) {
       // The connection takes the whole frame back on arrival, as for every
       // stream; the stream only its padding, its body waiting for `consumeBody`.
       this.credit(null, size)
-      this.creditStream(s, size - f.contentLength)
-      s.owed = s.owed + f.contentLength
+      // The body lies inside the frame, so both i64 figures fit back in an i32: the padding, and what the
+      // stream owes, which its window bounds.
+      this.creditStream(s, toI32(toI64(size) - toI64(f.contentLength)))
+      s.owed = toI32(toI64(s.owed) + toI64(f.contentLength))
     } else {
       this.credit(end ? null : s, size)
     }
@@ -1438,18 +1548,31 @@ export class Http2Connection {
   /** Appends a fragment of a header block; a block past `maxHeaderBlock` or `H2_MAX_FRAGMENTS` ends the connection. */
   private gather(f: Http2Frame): boolean {
     this.holdBlock()
-    this.blockFragments = this.blockFragments + 1
-    if (
-      this.blockFragments > H2_MAX_FRAGMENTS ||
-      f.contentLength > toI32(this.block.length) - this.blockLength
-    ) {
+    // Past H2_MAX_FRAGMENTS the connection fails just below, so the i64 count fits back in an i32.
+    this.blockFragments = toI32(toI64(this.blockFragments) + toI64(1))
+    const block: u8[] = this.block
+    const input: u8[] = this.input
+    const size: i32 = toI32(block.length)
+    const length: i32 = toI32(input.length)
+    const start: i32 = this.blockLength
+    const n: i32 = f.contentLength
+    if (this.blockFragments > H2_MAX_FRAGMENTS || start < 0 || start > size || n > size - start) {
       return false
     }
-    for (let k: i32 = 0; k < f.contentLength; k++) {
-      this.block[this.blockLength + k] = this.input[f.contentStart + k]
+    // The fragment fits after `blockLength` by the test above, and the frame's content lies inside the
+    // input, so `to` and `from` stay inside their buffers when read and `+ 1` cannot wrap.
+    let to: i32 = start
+    let from: i32 = f.contentStart
+    for (let k: i32 = 0; k < n; k++) {
+      if (to < 0 || to >= size || from < 0 || from >= length) {
+        break
+      }
+      block[to] = input[from]
+      to = to + 1
+      from = from + 1
     }
-    this.blockLength = this.blockLength + f.contentLength
-    this.blockUsed = this.blockLength > this.blockUsed ? this.blockLength : this.blockUsed
+    this.blockLength = to
+    this.blockUsed = to > this.blockUsed ? to : this.blockUsed
     return true
   }
 
@@ -1527,7 +1650,10 @@ export class Http2Connection {
     if (shape !== HTTP_FIELDS_OK || (this.blockEndStream && this.fields.contentLength > toI64(0))) {
       return this.refuseStream(id, H2_PROTOCOL_ERROR)
     }
-    const opened: Http2Stream = this.open(id)
+    const opened: Http2Stream | null = this.open(id)
+    if (opened === null) {
+      return this.refuseStream(id, H2_REFUSED_STREAM)
+    }
     opened.contentLength = this.fields.contentLength
     this.stream = id
     this.endStream = this.blockEndStream
@@ -1596,11 +1722,13 @@ export class Http2Connection {
     while (toI32(this.encoded.length) > 0) {
       this.encoded.pop()
     }
-    if (status > 0) {
-      this.statusValue[0] = toU8(status / 100 + H2_DIGIT_ZERO)
-      this.statusValue[1] = toU8(((status / 10) % 10) + H2_DIGIT_ZERO)
-      this.statusValue[2] = toU8((status % 10) + H2_DIGIT_ZERO)
-      this.encoder.encodeField(this.encoded, this.statusName, this.statusValue, HPACK_INDEX_WITHOUT, false)
+    // `statusValue` is made with three digits and never resized.
+    const digits: u8[] = this.statusValue
+    if (status > 0 && toI32(digits.length) >= 3) {
+      digits[0] = toU8(status / 100 + H2_DIGIT_ZERO)
+      digits[1] = toU8(((status / 10) % 10) + H2_DIGIT_ZERO)
+      digits[2] = toU8((status % 10) + H2_DIGIT_ZERO)
+      this.encoder.encodeField(this.encoded, this.statusName, digits, HPACK_INDEX_WITHOUT, false)
     }
     if (withDate && status >= 200 && toI32(this.date.length) > 0) {
       const huffman: boolean =
@@ -1653,11 +1781,11 @@ export class Http2Connection {
       if (!this.settingsAcked) {
         this.settingsAcked = true
         this.decoder.setSettingsLimit(this.config.headerTableSize)
-        const delta: i64 = toI64(this.config.initialWindowSize) - this.localInitialWindow
+        const delta: i64 = http2Minus(toI64(this.config.initialWindowSize), this.localInitialWindow)
         this.localInitialWindow = toI64(this.config.initialWindowSize)
         for (const s of this.streams) {
           if (s.id !== 0) {
-            s.recvWindow = s.recvWindow + delta
+            s.recvWindow = http2Plus(s.recvWindow, delta)
           }
         }
       }
@@ -1702,11 +1830,11 @@ export class Http2Connection {
       return this.fail(H2_FLOW_CONTROL_ERROR)
     }
     if (window !== this.peerInitialWindow) {
-      const delta: i64 = window - this.peerInitialWindow
+      const delta: i64 = http2Minus(window, this.peerInitialWindow)
       this.peerInitialWindow = window
       for (const s of this.streams) {
         if (s.id !== 0) {
-          s.sendWindow = s.sendWindow + delta
+          s.sendWindow = http2Plus(s.sendWindow, delta)
           if (delta > toI64(0) && s.blocked) {
             s.blocked = false
             opened = true
@@ -1730,9 +1858,9 @@ export class Http2Connection {
     if (initial <= this.peerInitialWindow) {
       return false
     }
-    const delta: i64 = initial - this.peerInitialWindow
+    const delta: i64 = http2Minus(initial, this.peerInitialWindow)
     for (const s of this.streams) {
-      if (s.id !== 0 && s.sendWindow + delta > toI64(H2_MAX_WINDOW)) {
+      if (s.id !== 0 && http2Plus(s.sendWindow, delta) > toI64(H2_MAX_WINDOW)) {
         return true
       }
     }
@@ -1743,7 +1871,7 @@ export class Http2Connection {
   private handleWindowUpdate(f: Http2Frame): i32 {
     const inc: i64 = toI64(f.increment)
     if (f.streamId === 0) {
-      this.sendWindow = this.sendWindow + inc
+      this.sendWindow = http2Plus(this.sendWindow, inc)
       if (this.sendWindow > toI64(H2_MAX_WINDOW)) {
         return this.fail(H2_FLOW_CONTROL_ERROR)
       }
@@ -1761,7 +1889,7 @@ export class Http2Connection {
     if (f.streamError !== 0) {
       return this.streamError(s, f.streamError)
     }
-    s.sendWindow = s.sendWindow + inc
+    s.sendWindow = http2Plus(s.sendWindow, inc)
     if (s.sendWindow > toI64(H2_MAX_WINDOW)) {
       return this.streamError(s, H2_FLOW_CONTROL_ERROR)
     }
@@ -1800,20 +1928,27 @@ export class Http2Connection {
     }
     // A literal costs its strings and at most eleven bytes of prefixes; two
     // table size updates and `:status` are inside the forty-eight on top.
-    let bound: i64 = toI64(48)
+    // The bound is unsigned: it counts bytes the program holds, far below 2^64, so it cannot wrap.
+    let bound: u64 = toU64(48)
     for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length); k++) {
-      bound = bound + toI64(names[k].length) + toI64(values[k].length) + toI64(11)
+      bound = bound + toU64(toI64(names[k].length)) + toU64(toI64(values[k].length)) + toU64(11)
     }
     // The server's `date` goes on a final response unless the program sent
     // its own, so a response never carries two.
     const withDate: boolean = status >= 200 && toI32(this.date.length) > 0 && !http2NamesHoldDate(names)
     if (withDate) {
-      bound = bound + toI64(this.dateName.length) + toI64(this.date.length) + toI64(11)
+      bound = bound + toU64(toI64(this.dateName.length)) + toU64(toI64(this.date.length)) + toU64(11)
     }
-    const frames: i64 = bound / toI64(this.peerMaxFrameSize) + toI64(1)
-    const need: i64 = bound + frames * toI64(H2_FRAME_HEADER_SIZE)
-    if (need > toI64(this.bodyRoom())) {
-      return toI64(this.output.length) < need + toI64(H2_CONTROL_RESERVE) ? H2_INVALID : H2_AGAIN
+    // SETTINGS_MAX_FRAME_SIZE is at least 16,384 from the default and every value the peer may send.
+    const most: i32 = this.peerMaxFrameSize
+    const divisor: u64 = toU64(toI64(most))
+    if (most <= 0 || divisor === toU64(0)) {
+      return H2_INVALID
+    }
+    const frames: u64 = bound / divisor + toU64(1)
+    const need: u64 = bound + frames * toU64(H2_FRAME_HEADER_SIZE)
+    if (need > toU64(toI64(this.bodyRoom()))) {
+      return toU64(toI64(this.output.length)) < need + toU64(H2_CONTROL_RESERVE) ? H2_INVALID : H2_AGAIN
     }
     this.encodeStatus(status, withDate)
     for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length); k++) {
@@ -1832,9 +1967,11 @@ export class Http2Connection {
     let at: i32 = 0
     let first: boolean = true
     while (first || at < total) {
-      const left: i32 = total - at
-      const chunk: i32 = left < this.peerMaxFrameSize ? left : this.peerMaxFrameSize
-      const last: boolean = at + chunk >= total
+      // `at` starts at 0 and moves by `chunk`, never past `total`.
+      const left: i32 = at >= 0 && total >= 0 ? total - at : 0
+      const chunk: i32 = left < most ? left : most
+      const end: i32 = toI32(toI64(at) + toI64(chunk))
+      const last: boolean = end >= total
       const flags: i32 =
         (last ? H2_FLAG_END_HEADERS : H2_ZERO) | (first && endStream ? H2_FLAG_END_STREAM : H2_ZERO)
       this.wrote(
@@ -1842,7 +1979,7 @@ export class Http2Connection {
           ? http2WriteHeaders(this.output, this.outputEnd, s.id, this.encoded, at, chunk, flags, H2_NO_PAD)
           : http2WriteContinuation(this.output, this.outputEnd, s.id, this.encoded, at, chunk, flags)
       )
-      at = at + chunk
+      at = end
       first = false
     }
     if (endStream) {
@@ -1939,8 +2076,9 @@ export class Http2Connection {
     }
     let sent: i32 = 0
     while (sent < len) {
-      const room: i32 = this.bodyRoom() - H2_FRAME_HEADER_SIZE
-      let chunk: i64 = Math.min(toI64(len - sent), toI64(this.peerMaxFrameSize))
+      const body: i32 = this.bodyRoom()
+      const room: i32 = body >= 0 && body > H2_FRAME_HEADER_SIZE ? body - H2_FRAME_HEADER_SIZE : 0
+      let chunk: i64 = Math.min(toI64(len) - toI64(sent), toI64(this.peerMaxFrameSize))
       chunk = Math.min(chunk, Math.min(s.sendWindow, this.sendWindow))
       chunk = Math.min(chunk, toI64(room))
       if (chunk <= toI64(0)) {
@@ -1953,22 +2091,24 @@ export class Http2Connection {
         break
       }
       const n: i32 = toI32(chunk)
-      const last: boolean = endStream && sent + n === len
+      // `chunk` is at most `len - sent`, so each i64 sum below is inside `buf`'s window and fits an i32.
+      const after: i32 = toI32(toI64(sent) + toI64(n))
+      const last: boolean = endStream && after === len
       this.wrote(
         http2WriteData(
           this.output,
           this.outputEnd,
           id,
           buf,
-          off + sent,
+          toI32(toI64(off) + toI64(sent)),
           n,
           last ? H2_FLAG_END_STREAM : 0,
           H2_NO_PAD
         )
       )
-      s.sendWindow = s.sendWindow - chunk
-      this.sendWindow = this.sendWindow - chunk
-      sent = sent + n
+      s.sendWindow = http2Minus(s.sendWindow, chunk)
+      this.sendWindow = http2Minus(this.sendWindow, chunk)
+      sent = after
     }
     if (len === 0 && endStream) {
       if (this.bodyRoom() < H2_FRAME_HEADER_SIZE) {
@@ -2029,8 +2169,9 @@ export class Http2Connection {
     if (this.state === H2_STATE_FAILED || s === null || !s.held || n <= 0) {
       return 0
     }
-    const k: i32 = n < s.owed ? n : s.owed
-    s.owed = s.owed - k
+    const owed: i32 = s.owed
+    const k: i32 = n < owed ? n : owed
+    s.owed = toI32(toI64(owed) - toI64(k))
     this.room()
     return this.creditStream(s, k) ? 0 : H2_AGAIN
   }
