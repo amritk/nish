@@ -41,7 +41,7 @@
     "std-cli-args": { "n": 20000, "instructions": 95000000 },
     "std-http1": { "n": 8000, "instructions": 141346355, "commit": "451120d9", "valgrind": "valgrind-3.26.0" },
     "std-router": { "n": 150000, "instructions": 155580314, "commit": "451120d9", "valgrind": "valgrind-3.26.0" },
-    "std-ring": { "n": 8000, "instructions": 137385172, "commit": "451120d9", "valgrind": "valgrind-3.26.0" },
+    "std-ring": { "n": 8000, "instructions": 129526568, "commit": "2c49f59a", "valgrind": "valgrind-3.26.0" },
     "std-net-quic-packet": { "n": 50000, "instructions": 132844631 },
     "std-net-tls-record": { "n": 1000, "instructions": 159165518 },
     "std-net-dns-message": { "n": 5000, "instructions": 96298847 },
