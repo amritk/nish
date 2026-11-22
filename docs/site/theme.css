@@ -448,6 +448,29 @@ table.t-editor__table tbody tr:hover {
   border-radius: 12px;
 }
 
+/* A heading is text, not a row: Scalar lays it out as a flex row to put the
+   copy-link button beside it, which makes each run of text and each inline
+   `code` a flex item, and on a narrow column those shrink side by side,
+   breaking `parallelMapInto` mid-name and stacking "and" a letter a line. As
+   a block the heading wraps between words. The button sits after the last
+   word but out of the flow, so it takes no width and never wraps onto a line
+   of its own; the heading's right padding is the room it hangs into, so a
+   full line does not push it past a phone's edge. */
+.t-editor__heading {
+  display: block;
+  padding-right: 27px;
+}
+.t-editor__heading .notify-container {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  height: 1lh;
+  margin-left: 3px;
+}
+.t-editor__heading .t-editor__inline-code {
+  overflow-wrap: break-word;
+}
+
 /* A heading's copy-link button: Scalar shows its icon by switching it from
    display: none to flex on hover, so the button grows by the icon's width
    and a centred heading shifts sideways under the pointer. The icon keeps its
@@ -1066,20 +1089,8 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   font-size: clamp(26px, 3.6vw, 36px);
   letter-spacing: -0.02em;
   text-align: center;
-  justify-content: center;
-}
-/* The copy-link button keeps its box at rest (see "A heading's copy-link
-   button"), which would pull the centred text left by half of it. A spacer
-   as wide as the button balances it on the other side. */
-.page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"]::before {
-  content: "";
-  flex: none;
-  width: 24px;
-}
-.page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"] .notify-container {
-  flex: none;
-  box-sizing: border-box;
-  width: 24px;
+  /* The same room on the left as the copy-link button's on the right. */
+  padding-left: 27px;
 }
 /* The paragraph under the hero is its lead. */
 .page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
