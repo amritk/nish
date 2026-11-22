@@ -2510,15 +2510,18 @@ const pgAsyncLost = (result: PgAsyncResult, failure: i32, socketError: i32): PgA
 
 /**
  * Parse (when `parse`), Bind, Execute and Sync for the statement `sql` and
- * `params`, or null for a NUL in a parameter, more than 65535 of them, or
- * SQL or a Bind past 2^30 bytes, more than one message holds. `name` -1 is the unnamed
+ * `params`, or null for a NUL in a parameter, more than 65535 of them, a
+ * value without its null mark or one past them, or SQL or a Bind past 2^30
+ * bytes, more than one message holds. `name` -1 is the unnamed
  * statement; 0 or more names it `n<name>`, which the connection keeps.
  */
 const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncParams): u8[] | null => {
   const values: string[] = params.values
   const nulls: boolean[] = params.nulls
   const count: i32 = toI32(values.length)
-  if (count > 65535) {
+  // A parameter without its null mark (an array pushed to directly, past the
+  // methods) would send a Bind whose count is not what follows it.
+  if (count > 65535 || count !== toI32(nulls.length)) {
     return null
   }
   // A message's length is an i32 on the wire; each kept under 2^30 leaves the sums below room.

@@ -19,7 +19,7 @@
 // loads in zlib, http1-server, tls/codec and std/net/websocket.ts:432;
 // `aesLoad32` (std/crypto/aes.ts), which is `sha1LoadWord` with its shift
 // counts written as `toU32(24)`; the inline `i32` loads that sign-extend the
-// top byte (std/net/postgres.ts:1749 and :1983, std/net/postgres-async.ts:2925,
+// top byte (std/net/postgres.ts:1749 and :1983, std/net/postgres-async.ts:2928,
 // std/net/websocket.ts:566); and std/net/tls.ts:2403, an `i64` load narrowed
 // by `toU32`.
 import { monotonicNanos } from "nish:process"
