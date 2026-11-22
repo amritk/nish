@@ -398,9 +398,10 @@ the record that found it. The notes below the table name each such finding.
     and found to hold.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
-21. PKI-R6 and PKI-R7 (Low) are accepted, with the reason in their record, and
+21. PKI-R6 to PKI-R8 (Low) are accepted, with the reason in their record, and
     are not counted: the size cap and file-type check that a descriptor-based
-    builtin would tighten, and the macOS Keychain the loader does not read.
+    builtin would tighten, the macOS Keychain the loader does not read, and
+    the overflow check the uncapped `skipped` count keeps.
     PKI-R1 to PKI-R5 are properties checked and found to hold.
 22. DNS-1 to DNS-4 (Low) are accepted, with the reason in their record, and
     are not counted: DNS-1 to DNS-3 are the trust a stub resolver places in

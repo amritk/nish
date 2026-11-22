@@ -2,7 +2,7 @@
 
 The record of two modules of #987, toward #480. `nish/crypto/pki-roots`:
 where a program's root certificates come from, what the loader does with a
-file it cannot use, and what it bounds (PKI-R1 to PKI-R7). `nish/crypto/pki`:
+file it cannot use, and what it bounds (PKI-R1 to PKI-R8). `nish/crypto/pki`:
 whether the chain a TLS server sent leads to one of those roots and names the
 host dialled, and what one call may cost ([Path validation](#path-validation-nishcryptopki),
 PKI-1 to PKI-33). Both are written with the code rather than after an audit,
@@ -32,7 +32,9 @@ Accepted and not counted:
 
 - the size cap is checked after the read, and there is a window between the
   file-type check and the open (PKI-R6);
-- the macOS Keychain gap (PKI-R7).
+- the macOS Keychain gap (PKI-R7);
+- the `skipped` count, which is not capped and keeps the module's one
+  panic site (PKI-R8).
 
 ## Scope
 
@@ -318,6 +320,23 @@ Reading the Keychain needs Security.framework, which the runtime does not
 link. Closing this gap is a separate stage. Until then, a macOS program that
 must honour the machine's trust settings sets `SSL_CERT_FILE` to an export it
 keeps current. The gap is also in the module's user-guide row.
+
+### PKI-R8 (Low): the `skipped` count keeps an overflow check
+
+`std/crypto/pki-roots.ts` keeps one panic site under the no-panic check, the
+overflow check of the `+ 1` in `pkiRootsSkip`, which every skipped block, file
+and directory entry goes through. Every other index, sum and copy in the module
+is proven in range or guarded since #2150 (WP83 S4), and `tests/std-panics.json`
+counts this one alone (`overflow: 1`).
+
+The count is not capped on purpose. Past `PKI_ROOTS_MAX_FILES` a trust
+directory's entries are each counted as skipped without a read, so the count
+is bounded by the entries the listings hold, not by a constant below 2^31. A
+cap would report a smaller number of skips than happened, which is a made-up
+value. Reaching the check needs 2^31 − 1 skipped entries across the trust
+paths, and so someone who can write them; by the threat model that someone
+already decides what is trusted. The check panics rather than wrapping, so the
+count is never wrong.
 
 ## Path validation (`nish/crypto/pki`)
 
@@ -637,6 +656,25 @@ the path.
 
 Tests: `an empty chain`, `a leaf that is no certificate` and
 `an intermediate that is no certificate`.
+
+A malformed certificate is refused without a panic, whether it is the leaf or
+the intermediate: `tests/link/crypto_pki_malformed` cuts OpenSSL's leaf and
+intermediate at every length short of their own, sets their outer and
+tbsCertificate lengths past the buffer, writes a five-octet and an indefinite
+length, and puts a SET, an OCTET STRING, a zero tag and a high-tag-number tag
+where a SEQUENCE belongs. Each is `null` from `x509ParseCertificate` and
+`PKI_ERR_MALFORMED` from `pkiVerifyServer` in either position, and the process
+reaching its summary shows none of them panicked. Its checks are
+`the leaf cut at each of 509 lengths`,
+`the intermediate cut at each of 458 lengths` and the eighteen
+`the leaf: …` and `the intermediate: …` lines.
+
+`std/crypto/pki.ts` keeps no panic site under the no-panic check since #2150
+(WP83 S4): every index is proven in range by a check beside it, every count
+and budget is summed in 64 bits and refused past its bound before it is
+stored, and the hex of a key's hash is built without `String.fromBytes`.
+`tests/std-panics.json` lists the module with no sites, so a new one fails the
+`std-panics` section.
 
 #### PKI-3: the path is built from what was sent, in any order
 

@@ -233,6 +233,25 @@ to write but which is a different certificate (and hash), not a second spelling
 of the same one; and a negative or zero serial, which §4.1.2.2 asks verifiers to
 handle gracefully. Both were documented already.
 
+## Panic sites
+
+Since #2150 (WP83 S4) the DER reader, the extension readers, the mint and the
+signature checks keep one panic site between them under the no-panic check,
+and `nish/crypto/x509-random` two. Every other index is proven in range by a
+check beside it, and every length and offset sum is taken in 64 bits, or as an
+unsigned sum the prover bounds, and refused past the buffer before it is used.
+`tests/std-panics.json` counts the three that stay:
+
+| Site | Kind | Why it stays |
+| --- | --- | --- |
+| `std/crypto/x509.ts`, `x509DerText` | `slice` | `String.fromBytes` keeps its own range check, which no proof removes yet. The range is an element `x509DerRead` gave, and it is checked against the buffer just before the call, which answers `""` outside it, so the check is never reached. |
+| `std/crypto/x509-random.ts`, `x509DrawP256Key` | `io-exit` | `crypto.getRandomValues` exits the process when the operating system cannot give randomness. A key drawn from anything else would be a made-up value, so failing closed is the contract. |
+| `std/crypto/x509-random.ts`, `x509DrawSerial` | `io-exit` | The same call, for the serial. |
+
+`tests/link/crypto_x509_malformed` reaches its summary on every edited input
+(the row above), and `tests/link/crypto_pki_malformed` does the same through
+path validation (`crypto-pki.md`, PKI-2).
+
 ## Doc corrections for the security-policy stage
 
 `std/README.md`'s `crypto/x509.ts` row should say, in the words of the module
