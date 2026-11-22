@@ -11,7 +11,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-static%20subset-3178c6?style=flat-square&logo=typescript&logoColor=white)
 ![LLVM](https://img.shields.io/badge/LLVM-18-4b5563?style=flat-square&logo=llvm&logoColor=white)
 ![WebAssembly](https://img.shields.io/badge/wasm-wasm32%20%C2%B7%20wasi-654ff0?style=flat-square&logo=webassembly&logoColor=white)
-![vibe coded](https://img.shields.io/badge/vibe-coded-a855f7?style=flat-square)
+![built with Claude](https://img.shields.io/badge/built%20with-Claude-D97757?style=flat-square&logo=claude&logoColor=white)
 
 **[nishlang.com](https://nishlang.com/)** · [Get started](https://nishlang.com/getting-started/installation) · [Language reference](https://nishlang.com/reference/language) · [Changelog](https://nishlang.com/reference/changelog)
 

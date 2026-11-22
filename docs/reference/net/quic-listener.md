@@ -533,8 +533,8 @@ class QuicListener
 | `pool: u8[]` | Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. |
 | `poolHead: i32` | Where the unused bytes of `pool` start: `QUIC_LISTENER_POOL` when it is spent. |
 | `readSlot: QuicKeysSlot` | The INVALID_TOKEN close's keys for reading the client's Initial. |
-| `resetsLimited: i32` | Stateless resets the rate limit held back, which a log or test reads to see the limit working. |
-| `resetsSent: i32` | Stateless resets sent, and ones the rate limit held back. |
+| `resetsLimited: i32` | Stateless resets the rate limit held back, held at 2147483647, which a log or test reads to see the limit working. |
+| `resetsSent: i32` | Stateless resets sent, held at 2147483647. |
 | `seed: u8[]` | The 32 bytes of entropy every unpredictable byte is made from; `release` wipes it. |
 | `spare: QuicListenerAnswer` | What `handle` answers into before it copies the answer out. |
 | `tag: u8[]` | A full HMAC-SHA256 tag, wiped once its 16 bytes are used. |

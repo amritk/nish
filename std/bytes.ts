@@ -704,3 +704,172 @@ const copyBytesWalk = (dst: u8[], at: i32, src: readonly u8[], from: i32, count:
     k -= 1
   }
 }
+
+/**
+ * `getU32LE` that answers an offset whose four bytes do not all lie in `b`
+ * as `Err`, where `getU32LE` panics `index`: the form a strict module reads a
+ * record it did not size itself with.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 3]`.
+ * @returns The number read, or `Err` naming the offset and the array's length
+ *   when a byte of the four lies outside `b`.
+ */
+export const tryGetU32LE = (b: u8[], off: i32): Result<u32, string> => {
+  if (off >= 0 && off < 2147483644 && off + 4 <= toI32(b.length)) {
+    // The last byte is read first: once it is in range the checker proves
+    // the three below it, where a first read of `b[off]` leaves them unproven.
+    const b3: u32 = toU32(b[off + 3])
+    const b2: u32 = toU32(b[off + 2])
+    const b1: u32 = toU32(b[off + 1])
+    const b0: u32 = toU32(b[off])
+    return Ok((b0 | (b1 << 8) | (b2 << 16)) + b3 * toU32(0x1000000))
+  }
+  return Err(bytesRangeError(off, 4, b))
+}
+
+/**
+ * `getU64LE` that answers an offset whose eight bytes do not all lie in `b`
+ * as `Err`, where `getU64LE` panics.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`.
+ * @returns The number read, or `Err` naming the offset and the array's length
+ *   when a byte of the eight lies outside `b`.
+ */
+export const tryGetU64LE = (b: u8[], off: i32): Result<u64, string> => {
+  if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
+    // The last byte first, as in `tryGetU32LE`.
+    const b7: u64 = toU64(b[off + 7])
+    const b6: u64 = toU64(b[off + 6])
+    const b5: u64 = toU64(b[off + 5])
+    const b4: u64 = toU64(b[off + 4])
+    const b3: u64 = toU64(b[off + 3])
+    const b2: u64 = toU64(b[off + 2])
+    const b1: u64 = toU64(b[off + 1])
+    const b0: u64 = toU64(b[off])
+    return Ok(
+      b0 |
+        (b1 << toU64(8)) |
+        ((b2 << toU64(16)) | (b3 << toU64(24))) |
+        ((b4 << toU64(32)) | (b5 << toU64(40)) | ((b6 << toU64(48)) | (b7 << toU64(56))))
+    )
+  }
+  return Err(bytesRangeError(off, 8, b))
+}
+
+/**
+ * `getI32LE` that answers an offset whose four bytes do not all lie in `b`
+ * as `Err`, where `getI32LE` panics.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 3]`.
+ * @returns The number read, from -2^31 to 2^31 - 1, or `Err` naming the
+ *   offset and the array's length when a byte of the four lies outside `b`.
+ */
+export const tryGetI32LE = (b: u8[], off: i32): Result<i32, string> => {
+  const v: Result<u32, string> = tryGetU32LE(b, off)
+  if (v.isErr()) {
+    return Err(v.error)
+  }
+  return Ok(toI32(v.value))
+}
+
+/**
+ * `getI64LE` that answers an offset whose eight bytes do not all lie in `b`
+ * as `Err`, where `getI64LE` panics.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`.
+ * @returns The number read, from -2^63 to 2^63 - 1, or `Err` naming the
+ *   offset and the array's length when a byte of the eight lies outside `b`.
+ */
+export const tryGetI64LE = (b: u8[], off: i32): Result<i64, string> => {
+  const v: Result<u64, string> = tryGetU64LE(b, off)
+  if (v.isErr()) {
+    return Err(v.error)
+  }
+  return Ok(toI64(v.value))
+}
+
+/**
+ * `setU32LE` that answers `false`, and writes nothing, where `setU32LE`
+ * panics: for an offset whose four bytes do not all lie in `b`.
+ *
+ * @param b The bytes written into; only the four at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 3]`.
+ * @param v The number to store.
+ * @returns `true` once the bytes are written, or `false` when a byte of the
+ *   four lies outside `b` and nothing was written.
+ */
+export const trySetU32LE = (b: u8[], off: i32, v: u32): boolean => {
+  if (off >= 0 && off < 2147483644 && off + 4 <= toI32(b.length)) {
+    b[off] = toU8(v & 255)
+    b[off + 1] = toU8((v >> 8) & 255)
+    b[off + 2] = toU8((v >> 16) & 255)
+    b[off + 3] = toU8((v >> 24) & 255)
+    return true
+  }
+  return false
+}
+
+/**
+ * `setU64LE` that answers `false`, and writes nothing, where `setU64LE`
+ * panics: for an offset whose eight bytes do not all lie in `b`.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`.
+ * @param v The number to store.
+ * @returns `true` once the bytes are written, or `false` when a byte of the
+ *   eight lies outside `b` and nothing was written.
+ */
+export const trySetU64LE = (b: u8[], off: i32, v: u64): boolean => {
+  if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
+    b[off] = toU8(v & toU64(255))
+    b[off + 1] = toU8((v >> toU64(8)) & toU64(255))
+    b[off + 2] = toU8((v >> toU64(16)) & toU64(255))
+    b[off + 3] = toU8((v >> toU64(24)) & toU64(255))
+    b[off + 4] = toU8((v >> toU64(32)) & toU64(255))
+    b[off + 5] = toU8((v >> toU64(40)) & toU64(255))
+    b[off + 6] = toU8((v >> toU64(48)) & toU64(255))
+    b[off + 7] = toU8((v >> toU64(56)) & toU64(255))
+    return true
+  }
+  return false
+}
+
+/**
+ * `setI32LE` that answers `false`, and writes nothing, where `setI32LE`
+ * panics.
+ *
+ * @param b The bytes written into; only the four at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 3]`.
+ * @param v The number to store, as its two's-complement bits.
+ * @returns `true` once the bytes are written, or `false` when a byte of the
+ *   four lies outside `b` and nothing was written.
+ */
+export const trySetI32LE = (b: u8[], off: i32, v: i32): boolean => trySetU32LE(b, off, toU32(v))
+
+/**
+ * `setI64LE` that answers `false`, and writes nothing, where `setI64LE`
+ * panics.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`.
+ * @param v The number to store, as its two's-complement bits.
+ * @returns `true` once the bytes are written, or `false` when a byte of the
+ *   eight lies outside `b` and nothing was written.
+ */
+export const trySetI64LE = (b: u8[], off: i32, v: i64): boolean => trySetU64LE(b, off, toU64(v))
+
+/** The `Err` text of a checked read whose `width` bytes at `off` do not all lie in `b`. */
+const bytesRangeError = (off: i32, width: i32, b: u8[]): string =>
+  `bytes ${off} to ${toI64(off) + toI64(width) - toI64(1)} lie outside an array of ${b.length}`

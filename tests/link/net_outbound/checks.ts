@@ -352,6 +352,26 @@ const pureChecks = (t: Tally): void => {
     outboundFilter(new OutboundPolicy(), none, 1) === 0 && outboundAddressText(none, 0) === "0:0:0:0:0:0:0:1",
     "and keeps none of an answer with no public address, which is left in place to be named"
   );
+  const one: u8[] = addr("93.184.215.14");
+  t.check(
+    outboundFilter(new OutboundPolicy(), one, 3) === 1 && outboundFilter(new OutboundPolicy(), one, -1) === 0,
+    "outboundFilter keeps only the records that fit, and none for a negative count"
+  );
+  t.check(
+    !outboundAddressPublic(one, 3) && !outboundAddressPublic(one, -1) &&
+      !outboundAddressAllowed(new OutboundPolicy(), one, 3) && outboundAddressText(one, 3) === "",
+    "an address whose sixteen bytes do not fit at the offset is neither public nor allowed, and has no text"
+  );
+  const wide: OutboundPolicy = new OutboundPolicy();
+  t.check(
+    !wide.permit("10.0.0.0/33") && !wide.permit("::/129") && !wide.permit("10.0.0.0/1000") &&
+      !wide.permit("1111111111111111111111111111111111111111111111111111111111111111.1/8") && !wide.permit("/8"),
+    "permit refuses a prefix longer than its address, more than three digits, an oversized address and an empty one"
+  );
+  t.check(
+    wide.permit("192.168.0.0/23") && allowed(wide, "192.168.1.1") && !allowed(wide, "192.168.2.1"),
+    "a prefix that ends inside a byte covers exactly its bits"
+  );
 };
 
 // --- fetches ---------------------------------------------------------------------

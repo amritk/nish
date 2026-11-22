@@ -22,7 +22,8 @@ PASS  a field added to one request is not on the next
 PASS  GET /late is answered 503 by its after-step
 PASS  so the after-step below it does not run
 PASS  and the 503 carries ID's field, not the body's answer
+PASS  the server's date pins for the warm rounds
 PASS  a warm connection answers twelve hundred stepped and plain requests
 PASS  and the arena stays flat
 PASS  and the pool makes no request past its warm size
-handler steps: 27 passed, 0 failed, 0 skipped
+handler steps: 28 passed, 0 failed, 0 skipped

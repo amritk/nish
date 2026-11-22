@@ -221,4 +221,6 @@ PASS  a NewSessionTicket with no ticket: keeps its alert
 PASS  a wiped client
 PASS  a wiped client: failed
 PASS  a wiped client: keeps its alert
-tls client refusals: 223 passed, 0 failed, 0 skipped
+PASS  a secret pool of a negative hash length: no client Finished
+PASS  a secret pool of a negative hash length: no CertificateVerify input
+tls client refusals: 225 passed, 0 failed, 0 skipped

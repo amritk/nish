@@ -10451,14 +10451,14 @@ declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* no
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef zeroext i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #1
 declare noundef i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #2
-declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i32 noundef) #1
-declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i32 noundef) #2
+declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.key(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #1
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.text(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #1
 declare void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef zeroext i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #1
 declare void @nish.JsonDecoder.unknownTag(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
-declare noundef zeroext i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef zeroext i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare void @nish.JsonDecoder.tagValue(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #1
 declare void @nish.JsonDecoder.duplicateField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare void @nish.JsonDecoder.missingField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
@@ -11046,14 +11046,14 @@ declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* no
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare noundef i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #2
-declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
+declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i32 noundef) #2
+declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.key(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #0
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.text(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #0
 declare void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonDecoder.unknownTag(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare void @nish.JsonDecoder.tagValue(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonDecoder.duplicateField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare void @nish.JsonDecoder.missingField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
@@ -11537,14 +11537,14 @@ declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* no
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare noundef i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #2
-declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
+declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i32 noundef) #2
+declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.key(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #0
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.text(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #0
 declare void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonDecoder.unknownTag(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare void @nish.JsonDecoder.tagValue(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonDecoder.duplicateField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare void @nish.JsonDecoder.missingField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
