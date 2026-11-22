@@ -430,7 +430,8 @@ The ECN-CE count: packets received in this space marked CE.
 
 <scalar-field name="returns" type="i32">
 
-The frame's size in bytes, or 0 when `quicPutAckEcn` would refuse these arguments.
+The frame's size in bytes, or 0 when `quicPutAckEcn` would refuse these arguments or the
+  frame would pass 2^31 − 1 bytes.
 
 </scalar-field>
 
@@ -468,7 +469,8 @@ The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
 
 <scalar-field name="returns" type="i32">
 
-The frame's size in bytes, or 0 when `quicPutAck` would refuse these arguments.
+The frame's size in bytes, or 0 when `quicPutAck` would refuse these arguments or the
+  frame would pass 2^31 − 33 bytes.
 
 </scalar-field>
 
@@ -512,13 +514,14 @@ const quicDatagramSize: (length: i32) => i32
 
 <scalar-field name="length" type="i32" required>
 
-The payload's size in bytes.
+The payload's size in bytes, 0 or more. A negative one is not refused: it
+  answers `1 + length`, which is not a frame's size.
 
 </scalar-field>
 
 <scalar-field name="returns" type="i32">
 
-The whole frame's size in bytes.
+The whole frame's size in bytes, held at 2^31 − 1, a size no buffer has room for.
 
 </scalar-field>
 
@@ -915,7 +918,8 @@ The whole array is the token the client is to present later; copied, not kept.
 
 <scalar-field name="returns" type="boolean">
 
-True when the frame was appended; false, appending nothing, for an empty token.
+True when the frame was appended; false, appending nothing, for an empty token or
+  one too large to append to `out`.
 
 </scalar-field>
 

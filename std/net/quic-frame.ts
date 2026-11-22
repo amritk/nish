@@ -177,6 +177,9 @@ export const QUIC_ERROR_CRYPTO: i64 = 0x0100
  */
 export const QUIC_FRAME_MAX_ACK_RANGES: i32 = 32
 
+/** The `ackRanges` slots: a smallest and a largest per range. */
+const QUIC_FRAME_ACK_SLOTS: i32 = QUIC_FRAME_MAX_ACK_RANGES * 2
+
 /** A stream count's ceiling, 2^60 (RFC 9000 §4.6, §19.11). Spelled as a product: an `i64` literal past 2^53 is refused. */
 const QUIC_FRAME_MAX_STREAMS: i64 = 1073741824 * 1073741824
 
@@ -275,7 +278,7 @@ export class QuicFrame {
    */
   constructor() {
     // Sized once, so reading an ACK stores nothing new into the frame.
-    this.ackRanges = new Array<i64>(QUIC_FRAME_MAX_ACK_RANGES * 2)
+    this.ackRanges = new Array<i64>(QUIC_FRAME_ACK_SLOTS)
   }
 }
 
@@ -311,7 +314,8 @@ const quicFrameVarint = (r: QuicFrameReader, d: u8[]): i64 => {
     r.failed = true
     return 0
   }
-  r.at = r.at + quicVarintLength(d, r.at)
+  // The varint was read inside the window, so its end fits.
+  r.at = toI32(toI64(r.at) + toI64(quicVarintLength(d, r.at)))
   return value
 }
 
@@ -321,21 +325,24 @@ const quicFrameVarint = (r: QuicFrameReader, d: u8[]): i64 => {
  */
 const quicFrameSkip = (r: QuicFrameReader, length: i64): i32 => {
   const at: i32 = r.at
-  if (r.failed || length < 0 || length > toI64(r.end - at)) {
+  if (r.failed || length < 0 || length > toI64(r.end) - toI64(at)) {
     r.failed = true
     return at
   }
-  r.at = at + toI32(length)
+  // `length` is at most `end - at`, so it and the new position fit.
+  r.at = toI32(toI64(at) + toI64(toI32(length)))
   return at
 }
 
 /** Stores the `index`-th ACK range pair; the caller keeps `index` under `QUIC_FRAME_MAX_ACK_RANGES`. */
 const quicFrameStoreRange = (frame: QuicFrame, index: i32, smallest: i64, largest: i64): void => {
-  const at: i32 = index * 2
+  // `index` is under `QUIC_FRAME_MAX_ACK_RANGES`, so both slots fit an i32.
+  const at: i32 = toI32(toI64(index) * 2)
+  const next: i32 = toI32(toI64(at) + 1)
   const ranges: i64[] = frame.ackRanges
-  if (at >= 0 && at + 1 < toI32(ranges.length)) {
+  if (at >= 0 && at < toI32(ranges.length) && next >= 0 && next < toI32(ranges.length)) {
     ranges[at] = smallest
-    ranges[at + 1] = largest
+    ranges[next] = largest
   }
 }
 
@@ -377,7 +384,9 @@ const quicFrameReadAck = (r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
   if (r.failed) {
     return QUIC_ERROR_FRAME_ENCODING
   }
-  let smallest: i64 = frame.largest - first
+  // Varints are below 2^62, so the difference is exact in wrapping u64 and a
+  // negative answer means the range reached below zero.
+  let smallest: i64 = toI64(toU64(frame.largest) - toU64(first))
   if (smallest < 0) {
     return QUIC_ERROR_FRAME_ENCODING
   }
@@ -385,26 +394,33 @@ const quicFrameReadAck = (r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
   let stored: i32 = 1
   // Each further range takes at least two bytes, so the loop is bounded by the
   // payload whatever count the peer claims: a short read ends it.
-  for (let k: i64 = 0; k < count; k += 1) {
+  for (let k: u64 = 0; k < toU64(count); k += 1) {
     const gap: i64 = quicFrameVarint(r, d)
     const length: i64 = quicFrameVarint(r, d)
     if (r.failed) {
       return QUIC_ERROR_FRAME_ENCODING
     }
     // The next range's largest is two below this one's smallest, less the gap.
-    const top: i64 = smallest - gap - 2
-    const bottom: i64 = top - length
-    if (top < 0 || bottom < 0) {
+    // `smallest` is 0 or more and the varints below 2^62, so wrapping u64
+    // is exact and a negative answer is a range below zero.
+    const top: i64 = toI64(toU64(smallest) - toU64(gap) - 2)
+    if (top < 0) {
+      return QUIC_ERROR_FRAME_ENCODING
+    }
+    const bottom: i64 = toI64(toU64(top) - toU64(length))
+    if (bottom < 0) {
       return QUIC_ERROR_FRAME_ENCODING
     }
     if (stored < QUIC_FRAME_MAX_ACK_RANGES) {
       quicFrameStoreRange(frame, stored, bottom, top)
-      stored = stored + 1
+      // Under `QUIC_FRAME_MAX_ACK_RANGES`, so the count fits.
+      stored = toI32(toI64(stored) + 1)
     }
     smallest = bottom
   }
   frame.ackRangeCount = stored
-  frame.ackRangeTotal = count + 1
+  // `count` is a varint, below 2^62.
+  frame.ackRangeTotal = toI64(toU64(count) + 1)
   if (ecn) {
     frame.ect0 = quicFrameVarint(r, d)
     frame.ect1 = quicFrameVarint(r, d)
@@ -423,8 +439,10 @@ const quicFrameReadData = (r: QuicFrameReader, frame: QuicFrame, length: i64): i
   if (r.failed) {
     return QUIC_ERROR_FRAME_ENCODING
   }
-  frame.dataLength = toI32(length)
-  return frame.offset > QUIC_MAX_VARINT - length ? QUIC_ERROR_FRAME_ENCODING : QUIC_ERROR_NO_ERROR
+  // The skip held `length` inside the window.
+  const dataLength: i32 = toI32(length)
+  frame.dataLength = dataLength
+  return frame.offset > QUIC_MAX_VARINT - toI64(dataLength) ? QUIC_ERROR_FRAME_ENCODING : QUIC_ERROR_NO_ERROR
 }
 
 /** STREAM (§19.8): the type's three low bits say whether Offset and Length are present and whether FIN is set. */
@@ -434,7 +452,7 @@ const quicFrameReadStream = (r: QuicFrameReader, d: u8[], frame: QuicFrame, bits
     frame.offset = quicFrameVarint(r, d)
   }
   // Without a Length the data runs to the end of the packet.
-  const length: i64 = (bits & 0x02) !== 0 ? quicFrameVarint(r, d) : toI64(r.end - r.at)
+  const length: i64 = (bits & 0x02) !== 0 ? quicFrameVarint(r, d) : toI64(r.end) - toI64(r.at)
   frame.fin = (bits & 0x01) !== 0
   if (r.failed) {
     return QUIC_ERROR_FRAME_ENCODING
@@ -444,7 +462,7 @@ const quicFrameReadStream = (r: QuicFrameReader, d: u8[], frame: QuicFrame, bits
 
 /** DATAGRAM (RFC 9221 §4): with a Length, that many bytes; without, the rest of the packet. */
 const quicFrameReadDatagram = (r: QuicFrameReader, d: u8[], frame: QuicFrame, hasLength: boolean): i64 => {
-  const length: i64 = hasLength ? quicFrameVarint(r, d) : toI64(r.end - r.at)
+  const length: i64 = hasLength ? quicFrameVarint(r, d) : toI64(r.end) - toI64(r.at)
   frame.fin = hasLength
   frame.dataStart = quicFrameSkip(r, length)
   if (r.failed) {
@@ -490,9 +508,11 @@ const quicFrameReadBody = (r: QuicFrameReader, d: u8[], frame: QuicFrame, type: 
     case QUIC_FRAME_PADDING: {
       // Padding is a run of zero bytes; read it as one frame, so a packet of
       // a thousand padding bytes is one call rather than a thousand.
-      while (r.at < r.end && r.at >= 0 && r.at < toI32(d.length) && toI32(d[r.at]) === 0) {
-        r.at = r.at + 1
+      let at: i32 = r.at
+      while (at >= 0 && at < r.end && at < toI32(d.length) && toI32(d[at]) === 0) {
+        at += 1
       }
+      r.at = at
       return QUIC_ERROR_NO_ERROR
     }
     case QUIC_FRAME_PING:
@@ -693,26 +713,46 @@ export const quicFrameAckEliciting = (type: i32): boolean =>
 const quicFrameWindowFits = (bytes: u8[], from: i32, length: i32): boolean =>
   from >= 0 && length >= 0 && from <= toI32(bytes.length) - length
 
-/** Whether `size` bytes from `at` fit before `end` and inside `buf`. */
-const quicFrameRoom = (buf: u8[], at: i32, end: i32, size: i32): boolean =>
-  size > 0 && at >= 0 && end <= toI32(buf.length) && at <= end - size
+/** Whether a frame of `header` bytes and `length` more from `at` fits before `end` and inside `buf`. */
+const quicFrameRoom = (buf: u8[], at: i32, end: i32, header: i32, length: i32): boolean =>
+  header > 0 &&
+  length >= 0 &&
+  at >= 0 &&
+  end <= toI32(buf.length) &&
+  toI64(header) + toI64(length) <= toI64(end) - toI64(at)
 
-/** Writes one byte and answers the offset past it; the caller has checked the room. */
+/** `at + count` for a cursor inside a frame `quicFrameRoom` fitted before `end`, so the sum fits. */
+const quicFrameAdvance = (at: i32, count: i32): i32 => toI32(toI64(at) + toI64(count))
+
+/**
+ * Writes one byte and answers the offset past it. Every caller has checked the
+ * room with `quicFrameRoom` or made it with `quicFrameGrow`, so the bounds
+ * guard never skips the byte.
+ */
 const quicFramePutByte = (buf: u8[], at: i32, value: i32): i32 => {
   if (at >= 0 && at < toI32(buf.length)) {
     buf[at] = toU8(value)
   }
-  return at + 1
+  return quicFrameAdvance(at, 1)
 }
 
 /** Writes a varint in the fewest bytes; the caller has checked the room and the value. */
 const quicFramePutVarint = (buf: u8[], at: i32, value: i64): i32 =>
   quicVarintPut(buf, at, value, quicVarintSize(value))
 
-/** Grows `out` by `size` bytes and answers where they start, for a `push` writer to `put` into. */
-const quicFrameGrow = (out: u8[], size: i32): i32 => {
+/**
+ * Grows `out` by `header` plus `length` bytes and answers where they start, for a `push` writer to
+ * `put` into; -1, growing nothing, for a size below one or past what an array holds, which every
+ * `put` writer refuses.
+ */
+const quicFrameGrow = (out: u8[], header: i32, length: i32): i32 => {
   const at: i32 = toI32(out.length)
-  quicPacketGrow(out, size)
+  const size: i64 = toI64(header) + toI64(length)
+  if (header < 1 || length < 0 || size > toI64(2147483647) - toI64(at)) {
+    return -1
+  }
+  // Checked against the room the array has left just above.
+  quicPacketGrow(out, toI32(size))
   return at
 }
 
@@ -741,12 +781,14 @@ export const quicPushPadding = (out: u8[], count: i32): void => {
  *   `at` itself when nothing could be written.
  */
 export const quicPutPadding = (buf: u8[], at: i32, count: i32): i32 => {
+  let cursor: i32 = at
   let k: i32 = 0
-  while (k < count && at + k >= 0 && at + k < toI32(buf.length)) {
-    buf[at + k] = toU8(0)
+  while (k < count && cursor >= 0 && cursor < toI32(buf.length)) {
+    buf[cursor] = toU8(0)
+    cursor += 1
     k += 1
   }
-  return at + k
+  return cursor
 }
 
 /**
@@ -759,7 +801,10 @@ export const quicPutPadding = (buf: u8[], at: i32, count: i32): i32 => {
  * @returns `at + 1`, or -1 with nothing written.
  */
 export const quicPutTypeOnly = (buf: u8[], at: i32, end: i32, type: i32): i32 => {
-  if ((type !== QUIC_FRAME_PING && type !== QUIC_FRAME_HANDSHAKE_DONE) || !quicFrameRoom(buf, at, end, 1)) {
+  if (
+    (type !== QUIC_FRAME_PING && type !== QUIC_FRAME_HANDSHAKE_DONE) ||
+    !quicFrameRoom(buf, at, end, 1, 0)
+  ) {
     return -1
   }
   return quicFramePutByte(buf, at, type)
@@ -776,8 +821,8 @@ export const quicPushTypeOnly = (out: u8[], type: i32): boolean => {
   if (type !== QUIC_FRAME_PING && type !== QUIC_FRAME_HANDSHAKE_DONE) {
     return false
   }
-  const at: i32 = quicFrameGrow(out, 1)
-  return quicPutTypeOnly(out, at, at + 1, type) >= 0
+  const at: i32 = quicFrameGrow(out, 1, 0)
+  return quicPutTypeOnly(out, at, toI32(out.length), type) >= 0
 }
 
 /**
@@ -788,17 +833,23 @@ export const quicPushTypeOnly = (out: u8[], type: i32): boolean => {
  * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
  * @param rangeCount How many pairs to read from the front of `ranges`; the rest of the array is ignored.
  * @param ackDelay The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
- * @returns The frame's size in bytes, or 0 when `quicPutAck` would refuse these arguments.
+ * @returns The frame's size in bytes, or 0 when `quicPutAck` would refuse these arguments or the
+ *   frame would pass 2^31 − 33 bytes.
  */
 export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 => {
-  if (rangeCount < 1 || rangeCount * 2 > toI32(ranges.length) || quicVarintSize(ackDelay) === 0) {
+  if (
+    rangeCount < 1 ||
+    toI64(rangeCount) * 2 > toI64(toI32(ranges.length)) ||
+    quicVarintSize(ackDelay) === 0
+  ) {
     return 0
   }
   let size: i32 = 1
   let previousSmallest: i64 = 0
   for (let k: i32 = 0; k < rangeCount; k += 1) {
-    const at: i32 = k * 2
-    const next: i32 = at + 1
+    // `k` is under `rangeCount`, which is at most half the array, so both slots fit.
+    const at: i32 = toI32(toI64(k) * 2)
+    const next: i32 = toI32(toI64(at) + 1)
     if (at < 0 || at >= toI32(ranges.length) || next < 0 || next >= toI32(ranges.length)) {
       return 0
     }
@@ -807,17 +858,29 @@ export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 
     if (smallest < 0 || largest < smallest || largest > QUIC_MAX_VARINT) {
       return 0
     }
+    // A range adds at most 32 bytes, so refusing past 2^31 − 33 keeps the size
+    // an i32; no buffer holds a frame that large.
+    if (size > 2147483615) {
+      return 0
+    }
+    // `smallest` is 0 or more and at most `largest`, so the difference is exact.
+    const span: i64 = toI64(toU64(largest) - toU64(smallest))
     if (k === 0) {
-      size = size + quicVarintSize(largest) + quicVarintSize(ackDelay) + quicVarintSize(toI64(rangeCount - 1))
+      size =
+        size +
+        quicVarintSize(largest) +
+        quicVarintSize(ackDelay) +
+        quicVarintSize(toI64(rangeCount - 1)) +
+        quicVarintSize(span)
     } else {
-      // Gap: the packets missing between this range and the one above, less one (§19.3.1).
-      const gap: i64 = previousSmallest - largest - 2
+      // Gap: the packets missing between this range and the one above, less one (§19.3.1). Both
+      // are 0 to 2^62 − 1, so wrapping u64 is exact and a negative gap is ranges out of order.
+      const gap: i64 = toI64(toU64(previousSmallest) - toU64(largest) - 2)
       if (gap < 0) {
         return 0
       }
-      size = size + quicVarintSize(gap)
+      size = size + quicVarintSize(gap) + quicVarintSize(span)
     }
-    size = size + quicVarintSize(largest - smallest)
     previousSmallest = smallest
   }
   return size
@@ -848,24 +911,28 @@ export const quicPutAck = (
   ackDelay: i64
 ): i32 => {
   const size: i32 = quicAckSize(ranges, rangeCount, ackDelay)
-  if (!quicFrameRoom(buf, at, end, size)) {
+  if (!quicFrameRoom(buf, at, end, size, 0)) {
     return -1
   }
   let cursor: i32 = quicFramePutByte(buf, at, QUIC_FRAME_ACK)
   let previousSmallest: i64 = 0
   for (let k: i32 = 0; k < rangeCount; k += 1) {
-    const pair: i32 = k * 2
-    if (pair >= 0 && pair < toI32(ranges.length) && pair + 1 < toI32(ranges.length)) {
+    // `quicAckSize` held `rangeCount` to half the array and checked every
+    // pair, so the slots fit, the guard below never skips a pair, and the
+    // differences are exact in wrapping u64.
+    const pair: i32 = toI32(toI64(k) * 2)
+    const next: i32 = toI32(toI64(pair) + 1)
+    if (pair >= 0 && pair < toI32(ranges.length) && next >= 0 && next < toI32(ranges.length)) {
       const smallest: i64 = ranges[pair]
-      const largest: i64 = ranges[pair + 1]
+      const largest: i64 = ranges[next]
       if (k === 0) {
         cursor = quicFramePutVarint(buf, cursor, largest)
         cursor = quicFramePutVarint(buf, cursor, ackDelay)
-        cursor = quicFramePutVarint(buf, cursor, toI64(rangeCount - 1))
+        cursor = quicFramePutVarint(buf, cursor, toI64(rangeCount) - 1)
       } else {
-        cursor = quicFramePutVarint(buf, cursor, previousSmallest - largest - 2)
+        cursor = quicFramePutVarint(buf, cursor, toI64(toU64(previousSmallest) - toU64(largest) - 2))
       }
-      cursor = quicFramePutVarint(buf, cursor, largest - smallest)
+      cursor = quicFramePutVarint(buf, cursor, toI64(toU64(largest) - toU64(smallest)))
       previousSmallest = smallest
     }
   }
@@ -886,8 +953,8 @@ export const quicPushAck = (out: u8[], ranges: i64[], rangeCount: i32, ackDelay:
   if (size === 0) {
     return false
   }
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutAck(out, at, at + size, ranges, rangeCount, ackDelay) >= 0
+  const at: i32 = quicFrameGrow(out, size, 0)
+  return quicPutAck(out, at, toI32(out.length), ranges, rangeCount, ackDelay) >= 0
 }
 
 /**
@@ -901,7 +968,8 @@ export const quicPushAck = (out: u8[], ranges: i64[], rangeCount: i32, ackDelay:
  * @param ect0 The ECT(0) count: packets received in this space marked ECT(0).
  * @param ect1 The ECT(1) count: packets received in this space marked ECT(1).
  * @param ce The ECN-CE count: packets received in this space marked CE.
- * @returns The frame's size in bytes, or 0 when `quicPutAckEcn` would refuse these arguments.
+ * @returns The frame's size in bytes, or 0 when `quicPutAckEcn` would refuse these arguments or the
+ *   frame would pass 2^31 − 1 bytes.
  */
 export const quicAckEcnSize = (
   ranges: i64[],
@@ -918,7 +986,8 @@ export const quicAckEcnSize = (
   if (base === 0 || a === 0 || b === 0 || c === 0) {
     return 0
   }
-  return base + a + b + c
+  const size: i64 = toI64(base) + toI64(a) + toI64(b) + toI64(c)
+  return size > 2147483647 ? 0 : toI32(size)
 }
 
 /**
@@ -950,7 +1019,7 @@ export const quicPutAckEcn = (
   ce: i64
 ): i32 => {
   const size: i32 = quicAckEcnSize(ranges, rangeCount, ackDelay, ect0, ect1, ce)
-  if (!quicFrameRoom(buf, at, end, size)) {
+  if (!quicFrameRoom(buf, at, end, size, 0)) {
     return -1
   }
   let cursor: i32 = quicPutAck(buf, at, end, ranges, rangeCount, ackDelay)
@@ -988,8 +1057,8 @@ export const quicPushAckEcn = (
   if (size === 0) {
     return false
   }
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutAckEcn(out, at, at + size, ranges, rangeCount, ackDelay, ect0, ect1, ce) >= 0
+  const at: i32 = quicFrameGrow(out, size, 0)
+  return quicPutAckEcn(out, at, toI32(out.length), ranges, rangeCount, ackDelay, ect0, ect1, ce) >= 0
 }
 
 /**
@@ -1031,7 +1100,7 @@ export const quicPutCrypto = (
     !quicFrameWindowFits(data, from, length) ||
     offset < 0 ||
     offset > QUIC_MAX_VARINT - toI64(length) ||
-    !quicFrameRoom(buf, at, end, quicCryptoOverhead(offset, length) + length)
+    !quicFrameRoom(buf, at, end, quicCryptoOverhead(offset, length), length)
   ) {
     return -1
   }
@@ -1039,7 +1108,7 @@ export const quicPutCrypto = (
   cursor = quicFramePutVarint(buf, cursor, offset)
   cursor = quicFramePutVarint(buf, cursor, toI64(length))
   quicPacketCopy(buf, cursor, data, from, length)
-  return cursor + length
+  return quicFrameAdvance(cursor, length)
 }
 
 /**
@@ -1056,9 +1125,8 @@ export const quicPushCrypto = (out: u8[], offset: i64, data: u8[], from: i32, le
   if (!quicFrameWindowFits(data, from, length) || offset < 0 || offset > QUIC_MAX_VARINT - toI64(length)) {
     return false
   }
-  const size: i32 = quicCryptoOverhead(offset, length) + length
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutCrypto(out, at, at + size, offset, data, from, length) >= 0
+  const at: i32 = quicFrameGrow(out, quicCryptoOverhead(offset, length), length)
+  return quicPutCrypto(out, at, toI32(out.length), offset, data, from, length) >= 0
 }
 
 /**
@@ -1072,7 +1140,9 @@ export const quicPushCrypto = (out: u8[], offset: i64, data: u8[], from: i32, le
  * @returns The header's size in bytes, not counting the data.
  */
 export const quicStreamOverhead = (streamId: i64, offset: i64, length: i32): i32 =>
-  1 + quicVarintSize(streamId) + (offset === 0 ? 0 : quicVarintSize(offset)) + quicVarintSize(toI64(length))
+  offset === 0
+    ? 1 + quicVarintSize(streamId) + quicVarintSize(toI64(length))
+    : 1 + quicVarintSize(streamId) + quicVarintSize(offset) + quicVarintSize(toI64(length))
 
 /**
  * Writes a STREAM frame (§19.8) carrying `length` bytes of `data` on
@@ -1115,7 +1185,7 @@ export const quicPutStream = (
     quicVarintSize(streamId) === 0 ||
     offset < 0 ||
     offset > QUIC_MAX_VARINT - toI64(length) ||
-    !quicFrameRoom(buf, at, end, quicStreamOverhead(streamId, offset, length) + length)
+    !quicFrameRoom(buf, at, end, quicStreamOverhead(streamId, offset, length), length)
   ) {
     return -1
   }
@@ -1127,11 +1197,15 @@ export const quicPutStream = (
     cursor = quicFramePutVarint(buf, cursor, offset)
   }
   cursor = quicFramePutVarint(buf, cursor, toI64(length))
-  // Two runs: up to the end of the array, then from its start.
-  const first: i32 = length < size - from ? length : size - from
-  quicPacketCopy(buf, cursor, data, from, first)
-  quicPacketCopy(buf, cursor + first, data, 0, length - first)
-  return cursor + length
+  // Two runs: up to the end of the array, then from its start. With no data
+  // `from` may lie past the array, and there is nothing to copy.
+  if (length > 0) {
+    // `from` is inside the array here, so `first` is 1 to `length`.
+    const first: i32 = length < size - from ? length : size - from
+    quicPacketCopy(buf, cursor, data, from, first)
+    quicPacketCopy(buf, quicFrameAdvance(cursor, first), data, 0, toI32(toI64(length) - toI64(first)))
+  }
+  return quicFrameAdvance(cursor, length)
 }
 
 /**
@@ -1166,10 +1240,9 @@ export const quicPushStream = (
   ) {
     return false
   }
-  const size: i32 = quicStreamOverhead(streamId, offset, length) + length
-  const at: i32 = quicFrameGrow(out, size)
+  const at: i32 = quicFrameGrow(out, quicStreamOverhead(streamId, offset, length), length)
   // A window inside the array is a ring that does not wrap.
-  return quicPutStream(out, at, at + size, streamId, offset, data, from, length, fin) >= 0
+  return quicPutStream(out, at, toI32(out.length), streamId, offset, data, from, length, fin) >= 0
 }
 
 /** Whether `type` is one of the frames `quicPutValue` writes, and `value` one it may carry. */
@@ -1202,7 +1275,7 @@ const quicFrameValueFits = (type: i32, value: i64): boolean => {
  * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutValue = (buf: u8[], at: i32, end: i32, type: i32, value: i64): i32 => {
-  if (!quicFrameValueFits(type, value) || !quicFrameRoom(buf, at, end, 1 + quicVarintSize(value))) {
+  if (!quicFrameValueFits(type, value) || !quicFrameRoom(buf, at, end, 1 + quicVarintSize(value), 0)) {
     return -1
   }
   return quicFramePutVarint(buf, quicFramePutByte(buf, at, type), value)
@@ -1221,8 +1294,8 @@ export const quicPushValue = (out: u8[], type: i32, value: i64): boolean => {
     return false
   }
   const size: i32 = 1 + quicVarintSize(value)
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutValue(out, at, at + size, type, value) >= 0
+  const at: i32 = quicFrameGrow(out, size, 0)
+  return quicPutValue(out, at, toI32(out.length), type, value) >= 0
 }
 
 /**
@@ -1250,7 +1323,7 @@ export const quicPutStreamValue = (
     (type !== QUIC_FRAME_MAX_STREAM_DATA && type !== QUIC_FRAME_STREAM_DATA_BLOCKED) ||
     quicVarintSize(streamId) === 0 ||
     quicVarintSize(value) === 0 ||
-    !quicFrameRoom(buf, at, end, 1 + quicVarintSize(streamId) + quicVarintSize(value))
+    !quicFrameRoom(buf, at, end, 1 + quicVarintSize(streamId) + quicVarintSize(value), 0)
   ) {
     return -1
   }
@@ -1276,8 +1349,8 @@ export const quicPushStreamValue = (out: u8[], type: i32, streamId: i64, value: 
     return false
   }
   const size: i32 = 1 + quicVarintSize(streamId) + quicVarintSize(value)
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutStreamValue(out, at, at + size, type, streamId, value) >= 0
+  const at: i32 = quicFrameGrow(out, size, 0)
+  return quicPutStreamValue(out, at, toI32(out.length), type, streamId, value) >= 0
 }
 
 /** The size of a NEW_CONNECTION_ID frame, or 0 for arguments `quicPutNewConnectionId` refuses. */
@@ -1292,7 +1365,12 @@ const quicFrameNewCidSize = (sequence: i64, retirePriorTo: i64, cidLength: i32, 
   ) {
     return 0
   }
-  return 1 + quicVarintSize(sequence) + quicVarintSize(retirePriorTo) + 1 + cidLength + QUIC_RESET_TOKEN_SIZE
+  // `cidLength` is 1 to 20 here, so the sum fits.
+  return toI32(
+    toI64(2 + quicVarintSize(sequence) + quicVarintSize(retirePriorTo)) +
+      toI64(cidLength) +
+      toI64(QUIC_RESET_TOKEN_SIZE)
+  )
 }
 
 /**
@@ -1322,7 +1400,7 @@ export const quicPutNewConnectionId = (
   resetToken: u8[]
 ): i32 => {
   const size: i32 = quicFrameNewCidSize(sequence, retirePriorTo, cidLength, toI32(resetToken.length))
-  if (size === 0 || cidLength > toI32(connectionId.length) || !quicFrameRoom(buf, at, end, size)) {
+  if (size === 0 || cidLength > toI32(connectionId.length) || !quicFrameRoom(buf, at, end, size, 0)) {
     return -1
   }
   let cursor: i32 = quicFramePutByte(buf, at, QUIC_FRAME_NEW_CONNECTION_ID)
@@ -1330,8 +1408,9 @@ export const quicPutNewConnectionId = (
   cursor = quicFramePutVarint(buf, cursor, retirePriorTo)
   cursor = quicFramePutByte(buf, cursor, cidLength)
   quicPacketCopy(buf, cursor, connectionId, 0, cidLength)
-  quicPacketCopy(buf, cursor + cidLength, resetToken, 0, QUIC_RESET_TOKEN_SIZE)
-  return cursor + cidLength + QUIC_RESET_TOKEN_SIZE
+  const tokenAt: i32 = quicFrameAdvance(cursor, cidLength)
+  quicPacketCopy(buf, tokenAt, resetToken, 0, QUIC_RESET_TOKEN_SIZE)
+  return quicFrameAdvance(tokenAt, QUIC_RESET_TOKEN_SIZE)
 }
 
 /**
@@ -1358,12 +1437,12 @@ export const quicPushNewConnectionId = (
   if (size === 0) {
     return false
   }
-  const at: i32 = quicFrameGrow(out, size)
+  const at: i32 = quicFrameGrow(out, size, 0)
   return (
     quicPutNewConnectionId(
       out,
       at,
-      at + size,
+      toI32(out.length),
       sequence,
       retirePriorTo,
       connectionId,
@@ -1390,13 +1469,13 @@ export const quicPutPathData = (buf: u8[], at: i32, end: i32, type: i32, data: u
   if (
     (type !== QUIC_FRAME_PATH_CHALLENGE && type !== QUIC_FRAME_PATH_RESPONSE) ||
     !quicFrameWindowFits(data, from, QUIC_PATH_DATA_SIZE) ||
-    !quicFrameRoom(buf, at, end, 1 + QUIC_PATH_DATA_SIZE)
+    !quicFrameRoom(buf, at, end, 1 + QUIC_PATH_DATA_SIZE, 0)
   ) {
     return -1
   }
   const cursor: i32 = quicFramePutByte(buf, at, type)
   quicPacketCopy(buf, cursor, data, from, QUIC_PATH_DATA_SIZE)
-  return cursor + QUIC_PATH_DATA_SIZE
+  return quicFrameAdvance(cursor, QUIC_PATH_DATA_SIZE)
 }
 
 /**
@@ -1415,8 +1494,20 @@ export const quicPushPathData = (out: u8[], type: i32, data: u8[], from: i32): b
   ) {
     return false
   }
-  const at: i32 = quicFrameGrow(out, 1 + QUIC_PATH_DATA_SIZE)
-  return quicPutPathData(out, at, at + 1 + QUIC_PATH_DATA_SIZE, type, data, from) >= 0
+  const at: i32 = quicFrameGrow(out, 1 + QUIC_PATH_DATA_SIZE, 0)
+  return quicPutPathData(out, at, toI32(out.length), type, data, from) >= 0
+}
+
+/** The size of a RESET_STREAM or, with `finalSize` at -1, STOP_SENDING frame, or 0 for a value no varint holds. */
+const quicFrameStreamErrorSize = (streamId: i64, errorCode: i64, finalSize: i64): i32 => {
+  if (finalSize === -1) {
+    return quicFrameVarints3(streamId, errorCode, 0)
+      ? 1 + quicVarintSize(streamId) + quicVarintSize(errorCode)
+      : 0
+  }
+  return quicFrameVarints3(streamId, errorCode, finalSize)
+    ? 1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + quicVarintSize(finalSize)
+    : 0
 }
 
 /**
@@ -1441,12 +1532,8 @@ export const quicPutStreamError = (
   finalSize: i64
 ): i32 => {
   const reset: boolean = finalSize !== -1
-  if (!quicFrameVarints3(streamId, errorCode, reset ? finalSize : 0)) {
-    return -1
-  }
-  const size: i32 =
-    1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + (reset ? quicVarintSize(finalSize) : 0)
-  if (!quicFrameRoom(buf, at, end, size)) {
+  const size: i32 = quicFrameStreamErrorSize(streamId, errorCode, finalSize)
+  if (!quicFrameRoom(buf, at, end, size, 0)) {
     return -1
   }
   let cursor: i32 = quicFramePutByte(buf, at, reset ? QUIC_FRAME_RESET_STREAM : QUIC_FRAME_STOP_SENDING)
@@ -1468,28 +1555,30 @@ export const quicPutStreamError = (
  * @returns True when the frame was appended.
  */
 export const quicPushStreamError = (out: u8[], streamId: i64, errorCode: i64, finalSize: i64): boolean => {
-  const reset: boolean = finalSize !== -1
-  if (!quicFrameVarints3(streamId, errorCode, reset ? finalSize : 0)) {
+  const size: i32 = quicFrameStreamErrorSize(streamId, errorCode, finalSize)
+  if (size === 0) {
     return false
   }
-  const size: i32 =
-    1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + (reset ? quicVarintSize(finalSize) : 0)
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutStreamError(out, at, at + size, streamId, errorCode, finalSize) >= 0
+  const at: i32 = quicFrameGrow(out, size, 0)
+  return quicPutStreamError(out, at, toI32(out.length), streamId, errorCode, finalSize) >= 0
 }
 
-/** The size of a CONNECTION_CLOSE frame, or 0 for a value no varint holds. */
-const quicFrameCloseSize = (application: boolean, errorCode: i64, frameType: i64, reasonLength: i32): i32 => {
+/**
+ * The size of a CONNECTION_CLOSE frame before its `reasonLength`-byte reason, or 0 for a value no
+ * varint holds.
+ */
+const quicFrameCloseHeader = (
+  application: boolean,
+  errorCode: i64,
+  frameType: i64,
+  reasonLength: i32
+): i32 => {
   if (!quicFrameVarints3(errorCode, application ? 0 : frameType, toI64(reasonLength))) {
     return 0
   }
-  return (
-    1 +
-    quicVarintSize(errorCode) +
-    (application ? 0 : quicVarintSize(frameType)) +
-    quicVarintSize(toI64(reasonLength)) +
-    reasonLength
-  )
+  return application
+    ? 1 + quicVarintSize(errorCode) + quicVarintSize(toI64(reasonLength))
+    : 1 + quicVarintSize(errorCode) + quicVarintSize(frameType) + quicVarintSize(toI64(reasonLength))
 }
 
 /**
@@ -1518,8 +1607,8 @@ export const quicPutConnectionClose = (
   reason: u8[]
 ): i32 => {
   const reasonLength: i32 = toI32(reason.length)
-  const size: i32 = quicFrameCloseSize(application, errorCode, frameType, reasonLength)
-  if (!quicFrameRoom(buf, at, end, size)) {
+  const header: i32 = quicFrameCloseHeader(application, errorCode, frameType, reasonLength)
+  if (!quicFrameRoom(buf, at, end, header, reasonLength)) {
     return -1
   }
   let cursor: i32 = quicFramePutByte(
@@ -1533,7 +1622,7 @@ export const quicPutConnectionClose = (
   }
   cursor = quicFramePutVarint(buf, cursor, toI64(reasonLength))
   quicPacketCopy(buf, cursor, reason, 0, reasonLength)
-  return cursor + reasonLength
+  return quicFrameAdvance(cursor, reasonLength)
 }
 
 /**
@@ -1554,12 +1643,13 @@ export const quicPushConnectionClose = (
   frameType: i64,
   reason: u8[]
 ): boolean => {
-  const size: i32 = quicFrameCloseSize(application, errorCode, frameType, toI32(reason.length))
-  if (size === 0) {
+  const reasonLength: i32 = toI32(reason.length)
+  const header: i32 = quicFrameCloseHeader(application, errorCode, frameType, reasonLength)
+  if (header === 0) {
     return false
   }
-  const at: i32 = quicFrameGrow(out, size)
-  return quicPutConnectionClose(out, at, at + size, application, errorCode, frameType, reason) >= 0
+  const at: i32 = quicFrameGrow(out, header, reasonLength)
+  return quicPutConnectionClose(out, at, toI32(out.length), application, errorCode, frameType, reason) >= 0
 }
 
 /**
@@ -1568,15 +1658,19 @@ export const quicPushConnectionClose = (
  *
  * @param out The bytes to append the frame to.
  * @param token The whole array is the token the client is to present later; copied, not kept.
- * @returns True when the frame was appended; false, appending nothing, for an empty token.
+ * @returns True when the frame was appended; false, appending nothing, for an empty token or
+ *   one too large to append to `out`.
  */
 export const quicPushNewToken = (out: u8[], token: u8[]): boolean => {
   const length: i32 = toI32(token.length)
   if (length === 0) {
     return false
   }
-  const size: i32 = 1 + quicVarintSize(toI64(length)) + length
-  let cursor: i32 = quicFramePutByte(out, quicFrameGrow(out, size), QUIC_FRAME_NEW_TOKEN)
+  const at: i32 = quicFrameGrow(out, 1 + quicVarintSize(toI64(length)), length)
+  if (at < 0) {
+    return false
+  }
+  let cursor: i32 = quicFramePutByte(out, at, QUIC_FRAME_NEW_TOKEN)
   cursor = quicFramePutVarint(out, cursor, toI64(length))
   quicPacketCopy(out, cursor, token, 0, length)
   return true
@@ -1587,10 +1681,14 @@ export const quicPushNewToken = (out: u8[], token: u8[]): boolean => {
  * `length` bytes: the type, the Length and the payload. This is the size RFC
  * 9221 §3 holds to `max_datagram_frame_size`.
  *
- * @param length The payload's size in bytes.
- * @returns The whole frame's size in bytes.
+ * @param length The payload's size in bytes, 0 or more. A negative one is not refused: it
+ *   answers `1 + length`, which is not a frame's size.
+ * @returns The whole frame's size in bytes, held at 2^31 − 1, a size no buffer has room for.
  */
-export const quicDatagramSize = (length: i32): i32 => 1 + quicVarintSize(toI64(length)) + length
+export const quicDatagramSize = (length: i32): i32 => {
+  const size: i64 = toI64(1 + quicVarintSize(toI64(length))) + toI64(length)
+  return size > toI64(2147483647) ? 2147483647 : toI32(size)
+}
 
 /**
  * Writes a DATAGRAM frame with a Length (type 0x31, RFC 9221 §4) carrying
@@ -1605,7 +1703,10 @@ export const quicDatagramSize = (length: i32): i32 => 1 + quicVarintSize(toI64(l
  * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutDatagram = (buf: u8[], at: i32, end: i32, data: u8[], from: i32, length: i32): i32 => {
-  if (!quicFrameWindowFits(data, from, length) || !quicFrameRoom(buf, at, end, quicDatagramSize(length))) {
+  if (
+    !quicFrameWindowFits(data, from, length) ||
+    !quicFrameRoom(buf, at, end, 1 + quicVarintSize(toI64(length)), length)
+  ) {
     return -1
   }
   const cursor: i32 = quicFramePutVarint(
@@ -1614,5 +1715,5 @@ export const quicPutDatagram = (buf: u8[], at: i32, end: i32, data: u8[], from: 
     toI64(length)
   )
   quicPacketCopy(buf, cursor, data, from, length)
-  return cursor + length
+  return quicFrameAdvance(cursor, length)
 }
