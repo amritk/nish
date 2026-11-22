@@ -73,6 +73,12 @@ Sites as of 071ed014 (571): net/postgres-carrier 153, net/postgres-async 418. Ki
 
 Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `pgAsyncAnswer`, `PgCarrier.batcher`.
 
+**Owns:** `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts`, `bench/instructions.json`, `bench/README.md`, `bench/pg-*.ts`, `bench/pg-*/**`, `bench/postgres/**`, `bench/techempower/**`, `bench/wp68-*.ts`, `docs/BENCHMARKS.md`, `tests/std-panics.json`, `tests/nish-cmp.js`, `tests/run.js`, `tests/postgres/**`, `tests/link/std_postgres*/**`, `tests/link/net_serve_pg/**`, `tests/link/net_http_server_carriers/**`, `tests/link/tfb_*/**`, `docs/security/postgres.md`, `docs/security/README.md`, `docs/guide/using-nish/postgres.md`, `docs/guide/using-nish/async-server.md`, `docs/guide/using-nish/standard-library.md`, `docs/wp48-layout-survey.txt`, `docs/wp68-shared-libraries.md`. Generated (regenerate, never hand-edit): `tests/self/goldens/checked/**`, `docs/reference/**`, `scalar.config.json`, `tests/differential/goldens/**`, `docs/IR_COOKBOOK.md`, `tests/wordings/*.err`, `tests/link/*/expected.caps.json`, `docs/reference/diagnostics/**`.
+
+**Depends on:** nothing. A fix here that needs a change in `std/net/postgres.ts` (a new helper or a Result-returning signature) asks the lead for an Owns amendment rather than taking S2's file.
+
+**Model:** the lead's (design and security judgement on which failures are real).
+
 ### S2 — postgres
 
 The blocking client's sites are removed or proved.
@@ -80,3 +86,21 @@ The blocking client's sites are removed or proved.
 Sites as of 071ed014 (556): net/postgres 556. Kinds: overflow 314, index 139, panic 46, array-length 28, divide 16, slice 13.
 
 Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `pgFind`, `pgPutDecimal`.
+
+**Owns:** `std/net/postgres.ts`, `bench/instructions.json`, `bench/README.md`, `bench/pg-*.ts`, `bench/pg-*/**`, `bench/postgres/**`, `bench/techempower/**`, `bench/wp68-*.ts`, `docs/BENCHMARKS.md`, `tests/std-panics.json`, `tests/nish-cmp.js`, `tests/run.js`, `tests/postgres/**`, `tests/link/std_postgres*/**`, `tests/link/net_serve_pg/**`, `tests/link/net_http_server_carriers/**`, `tests/link/tfb_*/**`, `docs/security/postgres.md`, `docs/security/README.md`, `docs/guide/using-nish/postgres.md`, `docs/guide/using-nish/async-server.md`, `docs/guide/using-nish/standard-library.md`, `docs/wp48-layout-survey.txt`, `docs/wp68-shared-libraries.md`. Generated (regenerate, never hand-edit): `tests/self/goldens/checked/**`, `docs/reference/**`, `scalar.config.json`, `tests/differential/goldens/**`, `docs/IR_COOKBOOK.md`, `tests/wordings/*.err`, `tests/link/*/expected.caps.json`, `docs/reference/diagnostics/**`.
+
+**Depends on:** `s1-carrier-async`, for development and merge. `std/net/postgres-async.ts` imports this file, this stage lowers the benches S1 adds, and both stages edit `tests/std-panics.json`, `bench/instructions.json`, `tests/nish-cmp.js` and `docs/security/postgres.md`; it starts from `main` after S1 merges.
+
+**Model:** the lead's.
+
+## Acceptance criteria
+
+1. `tests/std-panics.json` on `main` records for `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts` and `std/net/postgres.ts` counts below the 071ed014 figures (153, 418, 556), each site left being on the kept list with its reason or recorded with why it stays, and `node tests/run.js std-panics` passes.
+2. `pgAsyncAnswer`, `PgCarrier.batcher`, `pgFind` and `pgPutDecimal` hold no explicit `panic(...)`, and none of them is on the kept list.
+3. A short or malformed server message (a truncated length, a field count past the frame, a DataRow cut short) fed to each client returns an error the caller sees through a Result, not a panic; a test in the suite shows it for each client.
+4. `bench/instructions.json` holds programs for PostgreSQL message encode, decode, a DataRow parse and a Bind/Execute build, added before any site changed; no count in it rose across the package, and every count it holds came from CI's runner table.
+5. No `nish:unsafe` and no made-up-value guard was added to the three modules (`git diff` of the package's merges).
+6. `docs/security/postgres.md` and its row in `docs/security/README.md` name the moved findings at their new files and lines, and `node scripts/security-scope.mjs` passes.
+7. The postgres benches, `bench/techempower` programs and `tests/postgres` programs still build; no opt-out the package made unneeded remains (`node tests/run.js performance` passes).
+8. CI is green on `main` after the last merge, with every nish-cmp move declared (`node tests/nish-cmp.js` passes).
+
