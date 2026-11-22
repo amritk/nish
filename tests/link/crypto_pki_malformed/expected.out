@@ -1,0 +1,22 @@
+PASS  the unedited chain is accepted
+PASS  the leaf cut at each of 509 lengths
+PASS  the intermediate cut at each of 458 lengths
+PASS  the leaf: its length one past its buffer
+PASS  the leaf: its length 65535
+PASS  the leaf: tbsCertificate's length past the certificate
+PASS  the leaf: a five-octet length
+PASS  the leaf: an indefinite length
+PASS  the leaf: a SET for its SEQUENCE
+PASS  the leaf: an OCTET STRING for tbsCertificate
+PASS  the leaf: a zero tag
+PASS  the leaf: a high-tag-number tag
+PASS  the intermediate: its length one past its buffer
+PASS  the intermediate: its length 65535
+PASS  the intermediate: tbsCertificate's length past the certificate
+PASS  the intermediate: a five-octet length
+PASS  the intermediate: an indefinite length
+PASS  the intermediate: a SET for its SEQUENCE
+PASS  the intermediate: an OCTET STRING for tbsCertificate
+PASS  the intermediate: a zero tag
+PASS  the intermediate: a high-tag-number tag
+pki malformed: 21 passed, 0 failed, 0 skipped
