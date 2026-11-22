@@ -1343,20 +1343,21 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       const v: i32 = this.i32()
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs
@@ -1379,20 +1380,21 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       const v: u32 = this.u32()
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs
@@ -1415,20 +1417,21 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       const v: i64 = this.i64()
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs
@@ -1451,20 +1454,21 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       const v: u64 = this.u64()
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs
@@ -1487,20 +1491,21 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       const v: f64 = this.f64()
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs
@@ -1523,20 +1528,21 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       const v: boolean = this.boolean()
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs
@@ -1560,25 +1566,26 @@ export class JsonDecoder {
       return xs
     }
     let n: i32 = 0
+    let grown = false
     while (this.nextElement()) {
       let cur: string = ""
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
         cur = xs[n]
       }
       // Read into a local first: the call ends what the guard proved about `n`.
       const v: string = this.string(cur)
-      if (n < toI32(xs.length)) {
+      if (!grown && n < toI32(xs.length)) {
+        // `n` is below an `i32` length, so the `+ 1` fits.
         xs[n] = v
-      } else {
-        xs.push(v)
-      }
-      // Slot `n` now holds `v`, so `n` is below the length and this always
-      // counts it; the test is what proves the `+ 1` fits.
-      if (n < toI32(xs.length)) {
         n += 1
+      } else {
+        // Every slot `xs` had is written: the rest of the input is pushed.
+        xs.push(v)
+        grown = true
       }
     }
-    while (toI32(xs.length) > n && xs.length > 0) {
+    // An input shorter than `xs` leaves slots of the old value past `n`.
+    while (!grown && toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
     }
     return xs

@@ -1520,10 +1520,10 @@ const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overlo
 
 const PACKAGE_LINK = "A package links a C library or its own C sources"
 
-/** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 /** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
 const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
 const s1PanicFree = byFinding(S1_PANIC_FREE)
+/** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
 /**
@@ -18485,7 +18485,8 @@ const DECLARED = [
     file: "main.h",
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
-  }, // WP80 S1: std/cli, std/cli-flags and std/cli-args reach no index,
+  },
+  // WP80 S1: std/cli, std/cli-flags and std/cli-args reach no index,
   // slice or overflow panic, so every program linking nish/cli moves.
   ...s1PanicFree(
     "std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages` in an i32 and clamps its help padding instead of checking it for overflow, so every module and header naming `HelpMenu` moves (WP80 S1)",

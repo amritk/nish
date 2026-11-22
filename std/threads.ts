@@ -809,13 +809,23 @@ export class AtomicI32Array {
   /**
    * An array of `length` elements, each `0`.
    *
-   * @param length how many elements; a negative one stops the program, as
-   *   `new Array` of one does.
+   * @param length how many elements; a negative one makes an array of none,
+   *   whose `length` is `0` and every index of which stops the program.
    */
   constructor(length: i32) {
-    this.length = length
-    this.values = new Array<i32>(length)
+    // Up to 65,535 elements the length is a `u16`, which the compiler knows is
+    // not negative, and the buffer is the one `new Array` the emitter places
+    // on cache lines of its own; a longer array grows to its length instead.
+    if (length >= 0 && length <= 65535) {
+      this.values = new Array<i32>(toU16(length))
+    } else {
+      this.values = []
+      for (let k: i32 = 0; k < length; k += 1) {
+        this.values.push(0)
+      }
+    }
     this.values.fill(0)
+    this.length = toI32(this.values.length)
   }
 
   /**
@@ -959,13 +969,23 @@ export class AtomicI64Array {
   /**
    * An array of `length` elements, each `0`.
    *
-   * @param length how many elements; a negative one stops the program, as
-   *   `new Array` of one does.
+   * @param length how many elements; a negative one makes an array of none,
+   *   whose `length` is `0` and every index of which stops the program.
    */
   constructor(length: i32) {
-    this.length = length
-    this.values = new Array<i64>(length)
+    // Up to 65,535 elements the length is a `u16`, which the compiler knows is
+    // not negative, and the buffer is the one `new Array` the emitter places
+    // on cache lines of its own; a longer array grows to its length instead.
+    if (length >= 0 && length <= 65535) {
+      this.values = new Array<i64>(toU16(length))
+    } else {
+      this.values = []
+      for (let k: i32 = 0; k < length; k += 1) {
+        this.values.push(toI64(0))
+      }
+    }
     this.values.fill(0)
+    this.length = toI32(this.values.length)
   }
 
   /**

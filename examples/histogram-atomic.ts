@@ -1,12 +1,13 @@
 // Opt-out (`--allow-panics`), for a `src/` gap, not a site of this file's: the
 // compiler writes `AtomicI32Array`'s element methods itself and records one
 // `index` site at each method's declaration (src/attributes.ts, "An atomic's
-// method"), so `add` (std/threads.ts:849:3), `load` (827:3) and every `spawn`
-// of a task that calls `add` reach a site no caller's guard removes; the
-// constructor's `new Array<i32>(length)` keeps an `array-length` site
-// (817:19) a caller's constant length does not prove either. Follow-up, in
-// `src/`: prove an element method's index at its call as `a[i]`'s is proved,
-// and a constant length at the constructor, then drop this opt-out.
+// method"), so `add` (std/threads.ts:859:3), `load` (837:3) and every `spawn`
+// of a task that calls `add` reach a site no caller's guard removes: `load`
+// below already runs under `b < bins.length`, and wrapping each `add` in
+// `if (b >= 0 && b < s.bins.length)` leaves the same five errors, each naming
+// 859:3 or 837:3. No work package owns the gap yet; the fix, in `src/`, is to
+// prove an element method's index at its call as `a[i]`'s is proved, then
+// drop this opt-out.
 // smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
