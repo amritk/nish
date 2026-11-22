@@ -42399,9 +42399,9 @@ function Http3Connection.awaitsHead(this: Http3Connection): boolean -> @nish.Htt
   local +0:11 skip: i32 (const)
   local +1:11 flagsOf: i32[] (const)
   local +2:11 phases: i32[] (const)
-  local +3:14 k: i32 (let)
-  local +4:13 flags: i32 (const)
-  callee +9:9 http3IsRequest -> @nish.http3IsRequest
+  local +4:11 k: i32 (let)
+  local +8:13 flags: i32 (const)
+  callee +13:9 http3IsRequest -> @nish.http3IsRequest
 function Http3Connection.writeNew(this: Http3Connection, id: i64, buf: u8[], n: i32): boolean -> @nish.Http3Connection.writeNew [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.streamWrite
@@ -42542,10 +42542,10 @@ function Http3Connection.stepAgain(this: Http3Connection, k: i32, id: i64): void
   escaping: id k
   pointer this: size=536 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -21:11 again: i64[] (const)
-  local -20:11 size: i32 (const)
-  local -19:11 head: i32 (const)
-  local -18:11 count: i32 (const)
+  local -29:11 again: i64[] (const)
+  local -28:11 size: i32 (const)
+  local -27:11 head: i32 (const)
+  local -26:11 count: i32 (const)
   local -5:11 end: i32 (const)
   local -4:11 at: i32 (const)
 function Http3Connection.step(this: Http3Connection, id: i64): i32 -> @nish.Http3Connection.step [exported method]
@@ -42555,9 +42555,9 @@ function Http3Connection.step(this: Http3Connection, id: i64): i32 -> @nish.Http
   calls: nish.Http3Connection.open nish.Http3Connection.ownStream nish.Http3Connection.requestStep nish.Http3Connection.uniStep nish.Http3Connection.wtStep nish.QuicStreams.slotOf
   pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.wtStep#0 nish.Http3Connection.ownStream#0 nish.Http3Connection.open#0 nish.Http3Connection.uniStep#0 nish.Http3Connection.requestStep#0
   stackSites=0 stackLocals=0
-  local -5:11 k: i32 (const)
-  callee -5:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local -4:11 phases: i32[] (const)
+  local -10:11 k: i32 (const)
+  callee -10:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local -9:11 phases: i32[] (const)
   callee +2:14 Http3Connection.wtStep -> @nish.Http3Connection.wtStep
   local +4:11 kind: i64 (const)
   callee +6:14 Http3Connection.ownStream -> @nish.Http3Connection.ownStream
@@ -42712,13 +42712,13 @@ function Http3Connection.controlFrame(this: Http3Connection, type: i64): i32 -> 
   local +3:15 id: i64 (const)
   local +4:15 w: i32 (const)
   callee +4:24 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  callee +7:11 Http3Connection.stepAgain -> @nish.Http3Connection.stepAgain
-  local +16:11 value: i64 (const)
-  callee +16:24 h3ReadIdPayload -> @nish.h3ReadIdPayload
-  callee +18:14 Http3Connection.fail -> @nish.Http3Connection.fail
-  callee +23:16 Http3Connection.fail -> @nish.Http3Connection.fail
-  callee +32:16 Http3Connection.fail -> @nish.Http3Connection.fail
-  callee +39:37 Http3Connection.fail -> @nish.Http3Connection.fail
+  callee +12:11 Http3Connection.stepAgain -> @nish.Http3Connection.stepAgain
+  local +21:11 value: i64 (const)
+  callee +21:24 h3ReadIdPayload -> @nish.h3ReadIdPayload
+  callee +23:14 Http3Connection.fail -> @nish.Http3Connection.fail
+  callee +28:16 Http3Connection.fail -> @nish.Http3Connection.fail
+  callee +37:16 Http3Connection.fail -> @nish.Http3Connection.fail
+  callee +44:37 Http3Connection.fail -> @nish.Http3Connection.fail
 function Http3Connection.discard(this: Http3Connection, k: i32, id: i64): i32 -> @nish.Http3Connection.discard [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -42759,7 +42759,7 @@ function Http3Connection.wtStep(this: Http3Connection, k: i32, id: i64): i32 -> 
   calls: nish.Http3Connection.discard nish.Http3Connection.held nish.Http3Connection.mark nish.Http3Connection.readData nish.Http3Connection.resetEvent nish.Http3Connection.writable nish.QuicConnection.streamRead nish.h3ReadVarint
   pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.held#0 nish.Http3Connection.readData#0 nish.Http3Connection.mark#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.writable#0 nish.Http3Connection.discard#0 nish.Http3Connection.writable#0
   stackSites=0 stackLocals=0
-  local -8:11 slots: QuicStream[] (const)
+  local -14:11 slots: QuicStream[] (const)
   local -3:11 stream: QuicStream (const)
   callee -1:7 Http3Connection.mark -> @nish.Http3Connection.mark
   local +4:11 phase: i32 (const)
@@ -42978,7 +42978,7 @@ function Http3Connection.fieldSection(this: Http3Connection, k: i32, id: i64, le
   callee -5:16 Http3Connection.streamError -> @nish.Http3Connection.streamError
   callee +4:9 HttpFields.readRequest -> @nish.HttpFields.readRequest
   callee +5:14 Http3Connection.streamError -> @nish.Http3Connection.streamError
-  local +15:11 heads: i32 (const)
+  local +19:11 heads: i32 (const)
 function Http3Connection.copyFields(this: Http3Connection): void -> @nish.Http3Connection.copyFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -43020,7 +43020,7 @@ function Http3Connection.ended(this: Http3Connection, k: i32, id: i64, n: i32, r
   calls: nish.Http3Connection.abandon nish.Http3Connection.chargeReset nish.Http3Connection.dropped nish.Http3Connection.mark nish.Http3Connection.resetEvent nish.h3Count
   pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.dropped#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.dropped#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0
   stackSites=0 stackLocals=0
-  local -5:11 phases: i32[] (const)
+  local -10:11 phases: i32[] (const)
   local -1:11 phase: i32 (const)
   local +1:11 delivered: boolean (const)
   local +2:11 owed: i64 (const)
@@ -43312,9 +43312,9 @@ function Http3Connection.writeDataWhole(this: Http3Connection, id: i64, buf: u8[
   callee +31:7 Http3Connection.arm -> @nish.Http3Connection.arm
   local +34:11 hp: i32 (const)
   callee +34:21 h3PutFrameHeader -> @nish.h3PutFrameHeader
-  callee +35:5 QuicConnection.streamWrite -> @nish.QuicConnection.streamWrite
-  callee +36:5 QuicConnection.streamWrite -> @nish.QuicConnection.streamWrite
-  callee +38:7 Http3Connection.answered -> @nish.Http3Connection.answered
+  callee +41:5 QuicConnection.streamWrite -> @nish.QuicConnection.streamWrite
+  callee +42:5 QuicConnection.streamWrite -> @nish.QuicConnection.streamWrite
+  callee +44:7 Http3Connection.answered -> @nish.Http3Connection.answered
 function Http3Connection.reset(this: Http3Connection, id: i64, code: i64): i32 -> @nish.Http3Connection.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -43761,7 +43761,7 @@ function QpackEncoder.receiveDecoderStream(this: QpackEncoder, buf: u8[], off: i
   local +8:15 spare: i64 (const)
   callee +10:18 QpackEncoder.refuse -> @nish.QpackEncoder.refuse
   local +13:15 grown: i64 (const)
-  local +14:15 left: i64 (const)
+  local +14:15 room: i64 (const)
   callee +16:18 QpackEncoder.refuse -> @nish.QpackEncoder.refuse
   callee +20:11 QpackEncoder.cancelled -> @nish.QpackEncoder.cancelled
 function QpackEncoder.cancelled(this: QpackEncoder, streamId: i64): void -> @nish.QpackEncoder.cancelled [exported method]
@@ -51241,8 +51241,8 @@ function Http3CidIndex.insert(this: Http3CidIndex, e: i32, buf: u8[], at: i32, l
   pointer this: size=32 writesThrough=false captured=false passedTo=nish.Http3CidIndex.find#0 nish.Http3CidIndex.bucket#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http3CidIndex.find#1 nish.Http3CidIndex.bucket#1
   stackSites=0 stackLocals=0
-  local -17:11 keys: u8[] (const)
-  local -16:11 lengths: i32[] (const)
+  local -23:11 keys: u8[] (const)
+  local -22:11 lengths: i32[] (const)
   callee -11:9 Http3CidIndex.find -> @nish.Http3CidIndex.find
   local -7:9 p: i32 (let)
   local -6:9 i: i32 (let)
@@ -51295,10 +51295,10 @@ function Http3Wheel.unfile(this: Http3Wheel, slot: i32): void -> @nish.Http3Whee
   calls: nish.Http3Wheel.flag
   pointer this: size=56 writesThrough=false captured=false passedTo=nish.Http3Wheel.flag#0
   stackSites=0 stackLocals=0
-  local -19:11 head: i32[] (const)
-  local -18:11 nextOf: i32[] (const)
-  local -17:11 prevOf: i32[] (const)
-  local -16:11 bucketOf: i32[] (const)
+  local -24:11 head: i32[] (const)
+  local -23:11 nextOf: i32[] (const)
+  local -22:11 prevOf: i32[] (const)
+  local -21:11 bucketOf: i32[] (const)
   local -11:11 b: i32 (const)
   local -7:11 prev: i32 (const)
   local -6:11 next: i32 (const)
@@ -51460,12 +51460,12 @@ function Http3Server.touch(this: Http3Server, slot: i32): void -> @nish.Http3Ser
   calls: nish.Http3Server.dirty nish.Http3Server.holds
   pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.dirty#0
   stackSites=0 stackLocals=0
-  local -15:11 queued: i32[] (const)
-  local -14:11 ring: i32[] (const)
-  callee -12:10 Http3Server.holds -> @nish.Http3Server.holds
-  local -9:11 head: i32 (const)
-  local -8:11 count: i32 (const)
-  local -7:11 length: i32 (const)
+  local -22:11 queued: i32[] (const)
+  local -21:11 ring: i32[] (const)
+  callee -19:10 Http3Server.holds -> @nish.Http3Server.holds
+  local -16:11 head: i32 (const)
+  local -15:11 count: i32 (const)
+  local -14:11 length: i32 (const)
   local -3:13 sum: i32 (const)
   local -2:13 at: i32 (const)
   callee +5:5 Http3Server.dirty -> @nish.Http3Server.dirty
@@ -51688,9 +51688,9 @@ function Http3Server.flushSlot(this: Http3Server, slot: i32, now: i64): void -> 
   calls: nish.Http3Connection.clock nish.Http3Connection.isDone nish.Http3Server.refile nish.Http3Server.release nish.Http3Server.send nish.Http3Wheel.file nish.QuicConnection.close nish.QuicConnection.closed nish.QuicConnection.deadline nish.QuicConnection.sendAddress nish.QuicConnection.takeDatagramInto nish.QuicConnection.takeProbeInto nish.quicListenerFlightTime nish.quicListenerTakeFlight
   pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.release#0 nish.Http3Server.refile#0
   stackSites=0 stackLocals=0
-  local -10:11 quics: QuicConnection[] (const)
-  local -9:11 conns: Http3Connection[] (const)
-  local -8:11 addresses: u8[][] (const)
+  local -15:11 quics: QuicConnection[] (const)
+  local -14:11 conns: Http3Connection[] (const)
+  local -13:11 addresses: u8[][] (const)
   local -3:11 quic: QuicConnection (const)
   local -2:11 conn: Http3Connection (const)
   local -1:11 to: u8[] (const)
