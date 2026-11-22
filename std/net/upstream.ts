@@ -110,7 +110,7 @@ import { monotonicNanos } from "nish:process"
 
 /** The call was read to its end: `ok`. */
 export const UPSTREAM_E_NONE: i32 = 0
-// 1 to 17 are the codec's own `HTTP1_E_` refusals, passed through as they are.
+// 1 to 18 are the codec's own `HTTP1_E_` refusals, passed through as they are.
 /** The origin is not an `http:` URL with a host and nothing past its authority but `/`. */
 export const UPSTREAM_E_ORIGIN: i32 = 32
 /** The origin's host could not be looked up at start-up. */

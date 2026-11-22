@@ -40,6 +40,7 @@ import {
   HTTP1_E_HEADER_LIMIT,
   HTTP1_E_INFORMATIONAL_LIMIT,
   HTTP1_E_LENGTH,
+  HTTP1_E_MEMORY_LIMIT,
   HTTP1_E_NONE,
   HTTP1_E_STATUS_LINE,
   HTTP1_E_STATUS_LINE_LIMIT,
@@ -1160,6 +1161,19 @@ export const http1ClientChecks = (): i32 => {
   );
   const twoFinals: string = `${continues}HTTP/1.1 204 No Content\r\n\r\n${continues}HTTP/1.1 204 No Content\r\n\r\n`;
   t.eqStr("the interim count starts again for each request", outcomeOf(smallParser(), twoFinals, plain()), "ends 2, error 0");
+  // One feed of 2^30 + 1 bytes is refused before any of it is copied: the
+  // parser holds at most 2^30 bytes fed and not read.
+  const floodBytes: i32 = 1073741825;
+  const flood: u8[] = new Array<u8>(floodBytes);
+  const flooded: Http1ResponseParser = smallParser();
+  flooded.feed(flood, zero, toI32(flood.length));
+  const floodedNext: boolean = flooded.next() === HTTP1_ERROR;
+  t.eqStr(
+    "refused: more than 2^30 bytes fed and not read",
+    `${floodedNext}, error ${flooded.error}, ${flooded.buffered()} buffered`,
+    `true, error ${HTTP1_E_MEMORY_LIMIT}, 0 buffered`
+  );
+  t.eqI32("HTTP1_E_MEMORY_LIMIT is 18, after every older code", HTTP1_E_MEMORY_LIMIT, toI32(18));
 
   // --- The writer ------------------------------------------------------------
   const none: i64 = toI64(HTTP1_NO_BODY);

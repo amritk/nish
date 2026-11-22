@@ -77,7 +77,7 @@
  *
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import {
   HTTP1_BODY,
   HTTP1_CLOSED,
@@ -145,29 +145,39 @@ export const HTTP1_E_TRAILER_LIMIT: i32 = 15
 export const HTTP1_E_CHUNK_LINE_LIMIT: i32 = 16
 /** `error`: more than `HTTP1_MAX_INFORMATIONAL` interim responses. */
 export const HTTP1_E_INFORMATIONAL_LIMIT: i32 = 17
+/**
+ * `error`: the parser would hold more than 2^30 bytes, the most one of its
+ * arrays holds: input fed and not yet read, or a response head's kept reason
+ * phrase and fields.
+ */
+export const HTTP1_E_MEMORY_LIMIT: i32 = 18
 
 // --- The writer -------------------------------------------------------------
 
 /** How many decimal digits `n`, which is not negative, takes. */
 const http1ClientDigits = (n: i64): i32 => {
-  let digits: i32 = 1
+  // Counted unsigned: an i64 has at most 19 digits, so the count cannot wrap.
+  let digits: u32 = 1
   let v: i64 = n
   while (v >= toI64(10)) {
     v = v / toI64(10)
-    digits += 1
+    digits = digits + toU32(1)
   }
-  return digits
+  return toI32(digits)
 }
 
 /** Writes the decimal digits of `n`, which is not negative, at `out[at ..)`, which holds them, and answers where they end. */
 const http1ClientPutDecimal = (out: u8[], at: i32, n: i64): i32 => {
-  const digits: i32 = http1ClientDigits(n)
+  // Unsigned sums: the caller counted room for the digits at `at`, so `end`
+  // is at most `out.length`, and `end - 1` is at least `at - 1`.
+  const end: i32 = toI32(toU32(at) + toU32(http1ClientDigits(n)))
   let v: i64 = n
-  for (let k: i32 = at + digits - 1; k >= at && k >= 0 && k < toI32(out.length); k -= 1) {
-    out[k] = toU8(toI32(v % toI64(10)) + 48)
+  for (let k: i32 = toI32(toU32(end) - toU32(1)); k >= at && k >= 0 && k < toI32(out.length); k -= 1) {
+    // `v % 10` is a digit, 0 to 9, so adding '0' cannot wrap.
+    out[k] = toU8(toU32(toI32(v % toI64(10))) + toU32(48))
     v = v / toI64(10)
   }
-  return at + digits
+  return end
 }
 
 /** Whether `c` may follow the first letter of a URI scheme (RFC 3986 §3.1). */
@@ -207,7 +217,7 @@ const http1ClientTargetOk = (method: string, target: string): boolean => {
         colon = k
       }
     }
-    if (colon < 1 || n - colon - 1 < 1 || n - colon - 1 > 5) {
+    if (colon < 1 || colon >= n || n - colon - 1 < 1 || n - colon - 1 > 5) {
       return false
     }
     for (let k: i32 = colon + 1; k < n; k += 1) {
@@ -217,6 +227,11 @@ const http1ClientTargetOk = (method: string, target: string): boolean => {
       }
     }
     return true
+  }
+  // `n` is at least 1, but the calls above leave the prover nothing to know
+  // `target`'s length by, so it is asked again.
+  if (toI32(target.length) < 1) {
+    return false
   }
   const first: i32 = toI32(target.charCodeAt(0))
   if (first === 42) {
@@ -274,17 +289,23 @@ const http1ClientTrimEnd = (value: string, a: i32, b: i32): i32 => {
 const http1ClientListHas = (value: string, word: string): boolean => {
   const n: i32 = toI32(value.length)
   let start: i32 = 0
-  for (let k: i32 = 0; k <= n; k += 1) {
-    if (k === n || http1ClientIsComma(value, k)) {
-      const a: i32 = http1ClientTrimStart(value, start, k)
-      const b: i32 = http1ClientTrimEnd(value, a, k)
-      if (http1SameWord(value, a, b, word)) {
+  // Each comma ends an element, and the end of the value ends the last one,
+  // which is tested after the walk so that no index steps past `n`.
+  for (let k: i32 = 0; k < n; k += 1) {
+    if (http1ClientIsComma(value, k)) {
+      if (http1ClientListElementIs(value, start, k, word)) {
         return true
       }
       start = k + 1
     }
   }
-  return false
+  return http1ClientListElementIs(value, start, n, word)
+}
+
+/** Whether the list element `value[a .. b)`, trimmed of OWS, is `word` in any case. */
+const http1ClientListElementIs = (value: string, a: i32, b: i32, word: string): boolean => {
+  const from: i32 = http1ClientTrimStart(value, a, b)
+  return http1SameWord(value, from, http1ClientTrimEnd(value, from, b), word)
 }
 
 /**
@@ -316,8 +337,10 @@ const http1ClientRequestNeed = (
   }
   // method SP target SP "HTTP/1.1" CRLF, the fields, the framing field and
   // the empty line.
-  let need: i64 = toI64(method.length) + toI64(target.length) + toI64(14)
-  let hosts: i32 = 0
+  // Unsigned 64-bit sums: every term is a length below 2^31, and there are
+  // fewer than 2^31 of them, so the total stays below 2^63.
+  let need: u64 = toU64(method.length) + toU64(target.length) + toU64(14)
+  let hosts: u32 = 0
   for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
     const name: string = names[i]
     const value: string = values[i]
@@ -341,23 +364,23 @@ const http1ClientRequestNeed = (
       return toI64(-1)
     }
     if (http1SameWord(name, 0, nameLength, "host")) {
-      hosts += 1
+      hosts = hosts + toU32(1)
     }
-    need = need + toI64(nameLength) + toI64(value.length) + toI64(4)
+    need = need + toU64(nameLength) + toU64(value.length) + toU64(4)
   }
-  if (hosts !== 1) {
+  if (hosts !== toU32(1)) {
     return toI64(-1)
   }
   if (bodyLength >= toI64(0)) {
-    need = need + toI64(18 + http1ClientDigits(bodyLength))
+    need = need + toU64(18) + toU64(http1ClientDigits(bodyLength))
   } else if (bodyLength === toI64(-1)) {
-    need = need + toI64(28)
+    need = need + toU64(28)
   }
   if (upgrading) {
     // "Upgrade: " value CRLF "Connection: Upgrade" CRLF
-    need = need + toI64(upgrade.length) + toI64(32)
+    need = need + toU64(upgrade.length) + toU64(32)
   }
-  return need
+  return toI64(need)
 }
 
 /** Writes field `i` at `out[at ..)`, which holds it, and answers where it ends. */
@@ -523,8 +546,20 @@ const http1ClientHeadArray = (
   if (need < toI64(0) || need > toI64(1073741824)) {
     return null
   }
-  const out: u8[] = new Array<u8>(toI32(need))
+  const out: u8[] = http1ClientZeros(toI32(need))
   http1ClientPutHead(out, 0, method, target, names, values, bodyLength, upgrade)
+  return out
+}
+
+/**
+ * `n` zero bytes, appended one at a time: the prover reads only a constant
+ * length of `new Array` as in range, and these lengths are computed.
+ */
+const http1ClientZeros = (n: i32): u8[] => {
+  const out: u8[] = []
+  for (let k: i32 = 0; k < n; k += 1) {
+    out.push(toU8(0))
+  }
   return out
 }
 
@@ -766,7 +801,9 @@ export class Http1ResponseParser {
   /**
    * Appends `data[off .. off + len)` to the input. A window outside `data`
    * panics. After `finish()`, or once the parser has closed or refused, the
-   * input is dropped; in a tunnel it is kept for `tunnelBytes()`.
+   * input is dropped; in a tunnel it is kept for `tunnelBytes()`. Input that
+   * would leave more than 2^30 bytes fed and not read is refused with
+   * `HTTP1_E_MEMORY_LIMIT`.
    * @param data The bytes read from the connection.
    * @param off Where the new bytes start in `data`.
    * @param len How many bytes to append.
@@ -779,10 +816,12 @@ export class Http1ResponseParser {
     if (this.closed || this.state === HTTP1_CLIENT_S_CLOSED || this.state === HTTP1_CLIENT_S_ERROR) {
       return
     }
-    http1ClientReserve(this, len)
-    const at: i32 = this.end
-    copyBytes(this.buf, at, data, off, len)
-    this.end = at + len
+    if (!http1ClientReserve(this, len) || !tryCopyBytes(this.buf, this.end, data, off, len)) {
+      http1ClientFail(this, HTTP1_E_MEMORY_LIMIT, "more than 2^30 bytes fed and not read")
+      return
+    }
+    // Unsigned: the copy above fit `len` bytes after `end` inside `buf`.
+    this.end = toI32(toU32(this.end) + toU32(len))
   }
 
   /**
@@ -830,10 +869,16 @@ export class Http1ResponseParser {
    * @returns The field's value, OWS trimmed, or `null` when the response has no such field.
    */
   header(name: string): string | null {
-    for (let i: i32 = 0; i < this.spanCount; i += 1) {
-      if (http1ClientHeadSameWord(this.head, this.spans[i * 4], this.spans[i * 4 + 1], name)) {
-        return http1Text(this.head, this.spans[i * 4 + 2], this.spans[i * 4 + 3], false)
+    const spans: i32[] = this.spans
+    // `j` is `i * 4`, stepped beside `i` and asked against `spans` each pass.
+    let j: i32 = 0
+    for (let i: i32 = 0; i < this.spanCount && j >= 0 && j <= toI32(spans.length) - 4; i += 1) {
+      const valueStart: i32 = spans[j + 2]
+      const valueEnd: i32 = spans[j + 3]
+      if (http1ClientHeadSameWord(this.head, spans[j], spans[j + 1], name)) {
+        return http1Text(this.head, valueStart, valueEnd, false)
       }
+      j += 4
     }
     return null
   }
@@ -852,10 +897,11 @@ export class Http1ResponseParser {
    * @returns The name, or "" past the last field.
    */
   fieldName(i: i32): string {
-    if (i < 0 || i >= this.spanCount) {
+    const j: i32 = http1ClientSpanAt(this, i)
+    if (j < 0 || j > toI32(this.spans.length) - 4) {
       return ""
     }
-    return http1Text(this.head, this.spans[i * 4], this.spans[i * 4 + 1], false)
+    return http1Text(this.head, this.spans[j], this.spans[j + 1], false)
   }
 
   /**
@@ -864,10 +910,11 @@ export class Http1ResponseParser {
    * @returns The value, or "" past the last field.
    */
   fieldValue(i: i32): string {
-    if (i < 0 || i >= this.spanCount) {
+    const j: i32 = http1ClientSpanAt(this, i)
+    if (j < 0 || j > toI32(this.spans.length) - 4) {
       return ""
     }
-    return http1Text(this.head, this.spans[i * 4 + 2], this.spans[i * 4 + 3], false)
+    return http1Text(this.head, this.spans[j + 2], this.spans[j + 3], false)
   }
 
   /**
@@ -886,7 +933,8 @@ export class Http1ResponseParser {
    * @returns The count of unread input bytes.
    */
   buffered(): i32 {
-    return this.end - this.start
+    // Unsigned: the parser keeps `start <= end`, so the difference cannot wrap.
+    return toI32(toU32(this.end) - toU32(this.start))
   }
 
   /**
@@ -894,44 +942,74 @@ export class Http1ResponseParser {
    * @returns The bytes, or an empty array outside a tunnel.
    */
   tunnelBytes(): u8[] {
-    let n: i32 = this.end - this.start
-    if (n < 0 || this.state !== HTTP1_CLIENT_S_TUNNEL) {
-      n = 0
+    const from: i32 = this.start
+    const to: i32 = this.end
+    // The parser keeps `0 <= start <= end <= buf.length`, so this is every unread byte.
+    if (this.state !== HTTP1_CLIENT_S_TUNNEL || from < 0 || to <= from || to > toI32(this.buf.length)) {
+      return []
     }
-    const out: u8[] = new Array<u8>(n)
-    if (n > 0) {
-      copyBytes(out, 0, this.buf, this.start, n)
+    const buf: u8[] = this.buf
+    const out: u8[] = []
+    for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
+      out.push(buf[k])
     }
     return out
   }
 }
 
-/** Makes room for `len` more bytes at `p.end`, moving the live bytes down first. */
-const http1ClientReserve = (p: Http1ResponseParser, len: i32): void => {
+/**
+ * Makes room for `len` more bytes at `p.end`, moving the live bytes down
+ * first. Answers false when that would take an array past 2^30 bytes.
+ */
+const http1ClientReserve = (p: Http1ResponseParser, len: i32): boolean => {
   const old: u8[] = p.buf
   const capacity: i32 = toI32(old.length)
-  if (len <= capacity - p.end) {
-    return
+  const from: i32 = p.start
+  const end: i32 = p.end
+  // The parser keeps `0 <= start <= end <= buf.length`; asked here so the
+  // differences below are known not to wrap.
+  if (len < 0 || from < 0 || end < from || end > capacity) {
+    return false
   }
-  const live: i32 = p.end - p.start
-  let size: i32 = capacity < HTTP1_FIRST_INPUT ? HTTP1_FIRST_INPUT : capacity
-  while (size - live < len) {
-    if (size > 1073741823) {
-      panic("Http1ResponseParser: more than 2^30 bytes buffered")
+  // Unsigned, as are the sizes below: `from <= end <= capacity` was just
+  // asked, and `size` starts at `capacity` or more, so no difference wraps.
+  if (toU32(len) <= toU32(capacity) - toU32(end)) {
+    return true
+  }
+  const live: u32 = toU32(end) - toU32(from)
+  let size: u32 = toU32(capacity < HTTP1_FIRST_INPUT ? HTTP1_FIRST_INPUT : capacity)
+  while (size - live < toU32(len)) {
+    if (size > toU32(1073741823)) {
+      return false
     }
-    size = size * 2
+    size = size * toU32(2)
   }
   // A fresh array when it has to grow, and the same one otherwise: either way
   // the live bytes move to the front, and every index into them moves too.
-  const buf: u8[] = size === capacity ? old : new Array<u8>(size)
-  const from: i32 = p.start
-  if (live > 0) {
-    copyBytes(buf, 0, old, from, live)
+  const buf: u8[] = size === toU32(capacity) ? old : http1ClientZeros(toI32(size))
+  if (live > toU32(0) && !tryCopyBytes(buf, 0, old, from, toI32(live))) {
+    return false
   }
   p.buf = buf
-  p.scan -= from
+  // Unsigned: `scan` and `start` move down together, and `scan` is past `start`
+  // whenever it is read.
+  p.scan = toI32(toU32(p.scan) - toU32(from))
   p.start = 0
-  p.end = live
+  p.end = toI32(live)
+  return true
+}
+
+/**
+ * Where field `i`'s four offsets start in `p.spans`, or -1 when `i` is not
+ * below `fields()`. Each field takes 4 slots, and `spans` holds
+ * `spanCount * 4` of them.
+ */
+const http1ClientSpanAt = (p: Http1ResponseParser, i: i32): i32 => {
+  // `i` below 2^29 keeps `i * 4` inside an `i32`; `spans` cannot hold more.
+  if (i < 0 || i >= p.spanCount || i > 536870911) {
+    return -1
+  }
+  return i * 4
 }
 
 /**
@@ -981,13 +1059,19 @@ const http1ClientStartHead = (p: Http1ResponseParser): void => {
 const http1ClientTakeLine = (p: Http1ResponseParser, limit: i32, overCode: i32, overText: string): i32 => {
   const buf: u8[] = p.buf
   const end: i32 = p.end
-  let i: i32 = p.scan > p.start ? p.scan : p.start
+  const start: i32 = p.start
+  // In 64 bits, where a difference of two `i32`s cannot wrap.
+  const most: i64 = toI64(limit) + toI64(1)
+  let i: i32 = p.scan > start ? p.scan : start
   while (i >= 0 && i < end && i < toI32(buf.length)) {
     if (buf[i] === 10) {
-      if (i - p.start > limit + 1) {
+      // `i` is at least `start`, so `i < 1` is `i === start` at 0. Read
+      // before the call below, which drops what is known of `buf`.
+      const bare: boolean = i < 1 || i === start || buf[i - 1] !== 13
+      if (toI64(i) - toI64(start) > most) {
         return http1ClientFail(p, overCode, overText)
       }
-      if (i === p.start || buf[i - 1] !== 13) {
+      if (bare) {
         return http1ClientFail(p, HTTP1_E_BARE_LF, "a line ended in a bare LF")
       }
       p.lineStart = p.start
@@ -999,15 +1083,14 @@ const http1ClientTakeLine = (p: Http1ResponseParser, limit: i32, overCode: i32, 
     i += 1
   }
   p.scan = end
-  if (end - p.start > limit + 1) {
+  if (toI64(end) - toI64(start) > most) {
     return http1ClientFail(p, overCode, overText)
   }
   return HTTP1_NEED_MORE
 }
 
-/** Whether `buf[i]` is an ASCII digit. */
-const http1ClientDigitAt = (buf: u8[], i: i32): boolean =>
-  i >= 0 && i < toI32(buf.length) && buf[i] >= 48 && buf[i] <= 57
+/** Whether byte `c` is an ASCII digit. */
+const http1ClientIsDigit = (c: i32): boolean => c >= 48 && c <= 57
 
 /**
  * Reads the status line in `lineStart .. lineEnd` (RFC 9112 §4):
@@ -1018,45 +1101,68 @@ const http1ClientStatusLine = (p: Http1ResponseParser): i32 => {
   const buf: u8[] = p.buf
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < toI32(buf.length) ? p.lineEnd : toI32(buf.length)
+  // In 64 bits, where a difference of two `i32`s cannot wrap.
+  const width: i64 = toI64(b) - toI64(a)
+  // `b` is at most `buf.length`, so a line of 12 bytes or more has
+  // `a <= buf.length - 12`; asked so the reads below are known in range.
+  if (width < toI64(12) || a < 0 || a > toI32(buf.length) - 12) {
+    return http1ClientFail(p, HTTP1_E_STATUS_LINE, "a malformed status line")
+  }
+  // Every byte is read before any call, which would drop what is known of `buf`.
+  const major: i32 = toI32(buf[a + 5])
+  const minor: i32 = toI32(buf[a + 7])
+  const hundreds: i32 = toI32(buf[a + 9])
+  const tens: i32 = toI32(buf[a + 10])
+  const ones: i32 = toI32(buf[a + 11])
+  // Past 12 bytes, the space before the reason; `a <= buf.length - 13` then
+  // holds as well, and is asked so the read is known in range.
+  let reasonFrom: i32 = b
+  if (width > toI64(12)) {
+    if (a > toI32(buf.length) - 13 || buf[a + 12] !== 32) {
+      return http1ClientFail(p, HTTP1_E_STATUS_LINE, "a malformed status line")
+    }
+    reasonFrom = a + 13
+  }
   if (
-    b - a < 12 ||
-    a < 0 ||
     buf[a] !== 72 ||
     buf[a + 1] !== 84 ||
     buf[a + 2] !== 84 ||
     buf[a + 3] !== 80 ||
     buf[a + 4] !== 47 ||
-    !http1ClientDigitAt(buf, a + 5) ||
     buf[a + 6] !== 46 ||
-    !http1ClientDigitAt(buf, a + 7) ||
     buf[a + 8] !== 32 ||
-    !http1ClientDigitAt(buf, a + 9) ||
-    !http1ClientDigitAt(buf, a + 10) ||
-    !http1ClientDigitAt(buf, a + 11) ||
-    (b - a > 12 && buf[a + 12] !== 32)
+    !http1ClientIsDigit(major) ||
+    !http1ClientIsDigit(minor) ||
+    !http1ClientIsDigit(hundreds) ||
+    !http1ClientIsDigit(tens) ||
+    !http1ClientIsDigit(ones)
   ) {
     return http1ClientFail(p, HTTP1_E_STATUS_LINE, "a malformed status line")
   }
-  if (buf[a + 5] !== 49) {
+  if (major !== 49) {
     return http1ClientFail(p, HTTP1_E_VERSION, "an HTTP major version other than 1")
   }
-  const status: i32 =
-    (toI32(buf[a + 9]) - 48) * 100 + (toI32(buf[a + 10]) - 48) * 10 + (toI32(buf[a + 11]) - 48)
+  // Each is an ASCII digit, so its low four bits are its value.
+  const status: i32 = (hundreds & 15) * 100 + (tens & 15) * 10 + (ones & 15)
   if (status < 100 || status > 599) {
     return http1ClientFail(p, HTTP1_E_STATUS_LINE, "a status code outside 100 to 599")
   }
-  for (let k: i32 = a + 13; k < b && k < toI32(buf.length); k += 1) {
+  for (let k: i32 = reasonFrom; k >= 0 && k < b && k < toI32(buf.length); k += 1) {
     if (!http1IsValueByte(toI32(buf[k]))) {
       return http1ClientFail(p, HTTP1_E_STATUS_LINE, "a control character in the reason phrase")
     }
   }
-  p.minor = buf[a + 7] === 48 ? 0 : 1
+  p.minor = minor === 48 ? 0 : 1
   p.status = status
-  if (b - a > 13) {
-    p.reasonStart = http1ClientKeep(p, buf, a + 13, b, false)
+  if (reasonFrom < b) {
+    const reason: i32 = http1ClientKeep(p, buf, reasonFrom, b, false)
+    if (reason < 0) {
+      return http1ClientFail(p, HTTP1_E_MEMORY_LIMIT, "more than 2^30 bytes of head kept")
+    }
+    p.reasonStart = reason
     p.reasonEnd = p.headUsed
     if (p.keepStrings) {
-      p.reason = http1Text(buf, a + 13, b, false)
+      p.reason = http1Text(buf, reasonFrom, b, false)
     }
   }
   p.state = HTTP1_CLIENT_S_FIELDS
@@ -1072,14 +1178,15 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
   const buf: u8[] = p.buf
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < toI32(buf.length) ? p.lineEnd : toI32(buf.length)
-  if (a >= 0 && a < b && http1IsOws(toI32(buf[a]))) {
+  if (a >= 0 && a < b && a < toI32(buf.length) && http1IsOws(toI32(buf[a]))) {
     return http1ClientFail(p, HTTP1_E_FIELD, "a field line that starts with whitespace (obs-fold)")
   }
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
     i += 1
   }
-  if (i === a || i >= b || buf[i] !== 58) {
+  // `b` is at most `buf.length`; the bounds are asked so the read is known in range.
+  if (i === a || i >= b || i < 0 || i >= toI32(buf.length) || buf[i] !== 58) {
     return http1ClientFail(p, HTTP1_E_FIELD, "a malformed field name")
   }
   const nameEnd: i32 = i
@@ -1088,7 +1195,8 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
       return http1ClientFail(p, HTTP1_E_FIELD, "a control character in a field value")
     }
   }
-  p.fieldCount += 1
+  // Counting stops at the limit (at most 2^31 - 1), so the sum does not wrap.
+  p.fieldCount = toI32(toU32(p.fieldCount) + toU32(1))
   if (p.fieldCount > p.maxHeaders) {
     return http1ClientFail(p, HTTP1_E_COUNT_LIMIT, "more fields than the limit")
   }
@@ -1106,14 +1214,18 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
     }
     while (
       valueEnd > valueStart &&
-      valueEnd - 1 < toI32(buf.length) &&
+      valueEnd >= 1 &&
+      valueEnd <= toI32(buf.length) &&
       http1IsOws(toI32(buf[valueEnd - 1]))
     ) {
       valueEnd -= 1
     }
     const name: i32 = http1ClientKeep(p, buf, a, nameEnd, true)
-    const value: i32 = http1ClientKeep(p, buf, valueStart, valueEnd, false)
-    http1ClientSpan(p, name, value, value + (valueEnd - valueStart))
+    const value: i32 = name < 0 ? -1 : http1ClientKeep(p, buf, valueStart, valueEnd, false)
+    if (value < 0) {
+      return http1ClientFail(p, HTTP1_E_MEMORY_LIMIT, "more than 2^30 bytes of head kept")
+    }
+    http1ClientSpan(p, name, value, p.headUsed)
     if (p.keepStrings) {
       p.names.push(http1Text(buf, a, nameEnd, true))
       p.values.push(http1Text(buf, valueStart, valueEnd, false))
@@ -1135,8 +1247,11 @@ const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 =
   const n: i32 = to < toI32(head.length) ? to : toI32(head.length)
   let found: i64 = seen
   let start: i32 = from
-  for (let k: i32 = from; k <= n; k += 1) {
-    if (k === n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
+  // The list's end ends its last element, as a comma does; the walk stops
+  // there, before any step past `n`.
+  let k: i32 = from
+  while (k <= n) {
+    if (k >= n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
       const a: i32 = http1ClientHeadTrimStart(head, start, k)
       const b: i32 = http1ClientHeadTrimEnd(head, a, k)
       if (a === b) {
@@ -1149,7 +1264,8 @@ const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 =
           return toI64(-1)
         }
         if (v <= (HTTP1_CLIENT_MAX_BODY - toI64(c - 48)) / toI64(10)) {
-          v = v * toI64(10) + toI64(c - 48)
+          // Unsigned: `v` starts at 0 and the test keeps it at most 2^53.
+          v = toI64(toU64(v) * toU64(10) + toU64(c - 48))
         } else {
           v = HTTP1_CLIENT_MAX_BODY + toI64(1)
         }
@@ -1158,8 +1274,15 @@ const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 =
         return toI64(-2)
       }
       found = v
+      if (k >= n) {
+        break
+      }
       start = k + 1
     }
+    if (k >= n) {
+      break
+    }
+    k += 1
   }
   return found
 }
@@ -1167,111 +1290,160 @@ const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 =
 /**
  * The fields of `name` together as one comma-separated list (RFC 9110 §5.3),
  * tallied for `word`: answers the element count times 4, plus 2 when `word`
- * appears more than once and 1 when it is the last element.
+ * appears more than once and 1 when it is the last element. Both counts stop
+ * at 2, since the callers only ask whether each is more than 1.
  */
 const http1ClientTally = (p: Http1ResponseParser, name: string, word: string): i32 => {
   let elements: i32 = 0
   let matches: i32 = 0
   let last: boolean = false
   const head: u8[] = p.head
-  for (let i: i32 = 0; i < p.spanCount; i += 1) {
-    if (http1ClientHeadIs(head, p.spans[i * 4], p.spans[i * 4 + 1], name)) {
-      const from: i32 = p.spans[i * 4 + 2]
-      const n: i32 = p.spans[i * 4 + 3] < toI32(head.length) ? p.spans[i * 4 + 3] : toI32(head.length)
+  const spans: i32[] = p.spans
+  // `j` is `i * 4`, stepped beside `i` and asked against `spans` each pass.
+  let j: i32 = 0
+  for (let i: i32 = 0; i < p.spanCount && j >= 0 && j <= toI32(spans.length) - 4; i += 1) {
+    const from: i32 = spans[j + 2]
+    const to: i32 = spans[j + 3]
+    if (http1ClientHeadIs(head, spans[j], spans[j + 1], name)) {
+      const n: i32 = to < toI32(head.length) ? to : toI32(head.length)
       let start: i32 = from
-      for (let k: i32 = from; k <= n; k += 1) {
-        if (k === n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
+      // The list's end ends its last element, as a comma does; the walk
+      // stops there, before any step past `n`.
+      let k: i32 = from
+      while (k <= n) {
+        if (k >= n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
           const a: i32 = http1ClientHeadTrimStart(head, start, k)
           const b: i32 = http1ClientHeadTrimEnd(head, a, k)
           if (b > a) {
-            elements += 1
+            if (elements < 2) {
+              elements += 1
+            }
             last = http1ClientHeadSameWord(head, a, b, word)
-            if (last) {
+            if (last && matches < 2) {
               matches += 1
             }
           }
+          if (k >= n) {
+            break
+          }
           start = k + 1
         }
+        if (k >= n) {
+          break
+        }
+        k += 1
       }
     }
+    j += 4
   }
-  return elements * 4 + (matches > 1 ? 2 : 0) + (last ? 1 : 0)
+  // `elements` stops at 2, so the mask keeps it as it is.
+  const repeated: i32 = matches > 1 ? 2 : 0
+  const ends: i32 = last ? 1 : 0
+  return ((elements & 3) << 2) | repeated | ends
 }
 
 /** Whether a `Connection` field of the response lists `word`. */
 const http1ClientConnectionHas = (p: Http1ResponseParser, word: string): boolean => {
-  for (let i: i32 = 0; i < p.spanCount; i += 1) {
+  const spans: i32[] = p.spans
+  // `j` is `i * 4`, stepped beside `i` and asked against `spans` each pass.
+  let j: i32 = 0
+  for (let i: i32 = 0; i < p.spanCount && j >= 0 && j <= toI32(spans.length) - 4; i += 1) {
+    const from: i32 = spans[j + 2]
+    const to: i32 = spans[j + 3]
     if (
-      http1ClientHeadIs(p.head, p.spans[i * 4], p.spans[i * 4 + 1], "connection") &&
-      http1ClientHeadListHas(p.head, p.spans[i * 4 + 2], p.spans[i * 4 + 3], word)
+      http1ClientHeadIs(p.head, spans[j], spans[j + 1], "connection") &&
+      http1ClientHeadListHas(p.head, from, to, word)
     ) {
       return true
     }
+    j += 4
   }
   return false
 }
 
 /**
  * Copies `buf[a .. b)` to the end of `p.head`, lowercased when `lower`, and
- * answers where the copy starts. `head` grows by doubling and is kept, so a
- * parser reused for many responses stops growing at the largest head.
+ * answers where the copy starts, or -1 when `head` would pass 2^30 bytes.
+ * `head` grows by doubling and is kept, so a parser reused for many
+ * responses stops growing at the largest head.
  */
 const http1ClientKeep = (p: Http1ResponseParser, buf: u8[], a: i32, b: i32, lower: boolean): i32 => {
-  const n: i32 = b - a
   const at: i32 = p.headUsed
-  if (n > toI32(p.head.length) - at) {
-    let size: i32 = toI32(p.head.length) < 256 ? 256 : toI32(p.head.length)
-    while (size - at < n) {
-      if (size > 1073741823) {
-        panic("Http1ResponseParser: more than 2^30 bytes of head")
+  const used: i32 = toI32(p.head.length)
+  // The callers pass a window inside `buf`, and `headUsed` stays inside
+  // `head`; asked here so the differences below are known not to wrap.
+  if (a < 0 || b < a || b > toI32(buf.length) || at < 0 || at > used) {
+    return -1
+  }
+  // Unsigned, as are the sizes below: `a <= b` and `at <= used` were just
+  // asked, and `size` starts at `used` or more, so no difference wraps.
+  const n: i32 = toI32(toU32(b) - toU32(a))
+  if (toU32(n) > toU32(used) - toU32(at)) {
+    let size: u32 = used < 256 ? toU32(256) : toU32(used)
+    while (size - toU32(at) < toU32(n)) {
+      if (size > toU32(1073741823)) {
+        return -1
       }
-      size = size * 2
+      size = size * toU32(2)
     }
-    const grown: u8[] = new Array<u8>(size)
-    copyBytes(grown, 0, p.head, 0, at)
+    const grown: u8[] = http1ClientZeros(toI32(size))
+    if (!tryCopyBytes(grown, 0, p.head, 0, at)) {
+      return -1
+    }
     p.head = grown
   }
-  copyBytes(p.head, at, buf, a, n)
+  if (!tryCopyBytes(p.head, at, buf, a, n)) {
+    return -1
+  }
+  // Unsigned: the copy above fit `n` bytes after `at` inside `head`.
+  const stop: i32 = toI32(toU32(at) + toU32(n))
   if (lower) {
     const head: u8[] = p.head
-    for (let k: i32 = at; k >= 0 && k < at + n && k < toI32(head.length); k += 1) {
+    for (let k: i32 = at; k >= 0 && k < stop && k < toI32(head.length); k += 1) {
       const c: i32 = toI32(head[k])
       if (c >= 65 && c <= 90) {
         head[k] = toU8(c + 32)
       }
     }
   }
-  p.headUsed = at + n
+  p.headUsed = stop
   return at
 }
 
 /** Records the field whose name starts at `name` and whose value is `head[value .. valueEnd)`. */
 const http1ClientSpan = (p: Http1ResponseParser, name: i32, value: i32, valueEnd: i32): void => {
-  const at: i32 = p.spanCount * 4
-  if (at + 4 > toI32(p.spans.length)) {
-    p.spans.push(name)
-    p.spans.push(value)
-    p.spans.push(value)
-    p.spans.push(valueEnd)
+  const spans: i32[] = p.spans
+  // Unsigned: `spans` holds 4 entries a field, so `spanCount * 4` fits an
+  // `i32` length and neither the product nor the count wraps.
+  const at: i32 = toI32(toU32(p.spanCount) * toU32(4))
+  if (at >= 0 && at <= toI32(spans.length) - 4) {
+    spans[at] = name
+    spans[at + 1] = value
+    spans[at + 2] = value
+    spans[at + 3] = valueEnd
   } else {
-    p.spans[at] = name
-    p.spans[at + 1] = value
-    p.spans[at + 2] = value
-    p.spans[at + 3] = valueEnd
+    spans.push(name)
+    spans.push(value)
+    spans.push(value)
+    spans.push(valueEnd)
   }
-  p.spanCount += 1
+  p.spanCount = toI32(toU32(p.spanCount) + toU32(1))
 }
 
 /** Whether `head[a .. b)` is `word`, byte for byte. */
 const http1ClientHeadIs = (head: u8[], a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  if (b - a !== n || a < 0 || b > toI32(head.length)) {
+  // In 64 bits, where a difference of two `i32`s cannot wrap.
+  if (toI64(b) - toI64(a) !== toI64(n) || a < 0 || b > toI32(head.length)) {
     return false
   }
-  for (let k: i32 = 0; k < n; k += 1) {
-    if (toI32(head[a + k]) !== toI32(word.charCodeAt(k))) {
+  // `i` is `a + k`, stepped beside `k` and asked against `head` each pass.
+  let i: i32 = a
+  for (let k: i32 = 0; k < n && i >= 0 && i < toI32(head.length); k += 1) {
+    if (toI32(head[i]) !== toI32(word.charCodeAt(k))) {
       return false
     }
+    i += 1
   }
   return true
 }
@@ -1279,11 +1451,15 @@ const http1ClientHeadIs = (head: u8[], a: i32, b: i32, word: string): boolean =>
 /** Whether `head[a .. b)` is `word` in any case, ASCII letters folded. */
 const http1ClientHeadSameWord = (head: u8[], a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  if (b - a !== n || a < 0 || b > toI32(head.length)) {
+  // In 64 bits, where a difference of two `i32`s cannot wrap.
+  if (toI64(b) - toI64(a) !== toI64(n) || a < 0 || b > toI32(head.length)) {
     return false
   }
-  for (let k: i32 = 0; k < n; k += 1) {
-    let x: i32 = toI32(head[a + k])
+  // `i` is `a + k`, stepped beside `k` and asked against `head` each pass.
+  let i: i32 = a
+  for (let k: i32 = 0; k < n && i >= 0 && i < toI32(head.length); k += 1) {
+    let x: i32 = toI32(head[i])
+    i += 1
     let y: i32 = toI32(word.charCodeAt(k))
     if (x >= 65 && x <= 90) {
       x += 32
@@ -1320,15 +1496,25 @@ const http1ClientHeadTrimEnd = (head: u8[], a: i32, b: i32): i32 => {
 const http1ClientHeadListHas = (head: u8[], from: i32, to: i32, word: string): boolean => {
   const n: i32 = to < toI32(head.length) ? to : toI32(head.length)
   let start: i32 = from
-  for (let k: i32 = from; k <= n; k += 1) {
-    if (k === n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
+  // The list's end ends its last element, as a comma does; the walk stops
+  // there, before any step past `n`.
+  let k: i32 = from
+  while (k <= n) {
+    if (k >= n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
       const a: i32 = http1ClientHeadTrimStart(head, start, k)
       const b: i32 = http1ClientHeadTrimEnd(head, a, k)
       if (http1ClientHeadSameWord(head, a, b, word)) {
         return true
       }
+      if (k >= n) {
+        break
+      }
       start = k + 1
     }
+    if (k >= n) {
+      break
+    }
+    k += 1
   }
   return false
 }
@@ -1350,11 +1536,12 @@ const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
     return HTTP1_HEAD
   }
   if (status < 200) {
-    if (p.informational >= HTTP1_MAX_INFORMATIONAL) {
+    const interim: i32 = p.informational
+    if (interim >= HTTP1_MAX_INFORMATIONAL) {
       return http1ClientFail(p, HTTP1_E_INFORMATIONAL_LIMIT, "more interim responses than the limit")
     }
     // The 1xx's status and fields stay readable until the next status line.
-    p.informational += 1
+    p.informational = interim + 1
     p.state = HTTP1_CLIENT_S_STATUS_LINE
     return HTTP1_INFORMATIONAL
   }
@@ -1366,13 +1553,19 @@ const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
   }
   let codings: boolean = false
   let length: i64 = toI64(-1)
-  for (let i: i32 = 0; i < p.spanCount; i += 1) {
-    const a: i32 = p.spans[i * 4]
-    const b: i32 = p.spans[i * 4 + 1]
+  const spans: i32[] = p.spans
+  // `j` is `i * 4`, stepped beside `i` and asked against `spans` each pass.
+  let j: i32 = 0
+  for (let i: i32 = 0; i < p.spanCount && j >= 0 && j <= toI32(spans.length) - 4; i += 1) {
+    const a: i32 = spans[j]
+    const b: i32 = spans[j + 1]
+    const from: i32 = spans[j + 2]
+    const to: i32 = spans[j + 3]
+    j += 4
     if (http1ClientHeadIs(p.head, a, b, "transfer-encoding")) {
       codings = true
     } else if (http1ClientHeadIs(p.head, a, b, "content-length")) {
-      length = http1ClientLengthList(p.head, p.spans[i * 4 + 2], p.spans[i * 4 + 3], length)
+      length = http1ClientLengthList(p.head, from, to, length)
       if (length === toI64(-2)) {
         return http1ClientFail(
           p,
@@ -1437,7 +1630,7 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
   const buf: u8[] = p.buf
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < toI32(buf.length) ? p.lineEnd : toI32(buf.length)
-  const room: i64 = p.maxBody - p.bodyTotal
+  const room: i64 = http1ClientRoom(p)
   let size: i64 = toI64(0)
   let over: boolean = false
   let i: i32 = a
@@ -1447,10 +1640,12 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
       break
     }
     if (!over) {
-      if (toI64(digit) > room || size > (room - toI64(digit)) / toI64(16)) {
+      // Unsigned: the first test leaves `digit` at most `room`.
+      if (toI64(digit) > room || size > toI64(toU64(room) - toU64(toI64(digit))) / toI64(16)) {
         over = true
       } else {
-        size = size * toI64(16) + toI64(digit)
+        // Unsigned: `size` starts at 0 and the test keeps it at most `room`.
+        size = toI64(toU64(size) * toU64(16) + toU64(digit))
       }
     }
     i += 1
@@ -1467,7 +1662,7 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
   if (i >= b && i > digitsEnd) {
     return http1ClientFail(p, HTTP1_E_CHUNK, "a malformed chunk size")
   }
-  if (i >= 0 && i < b) {
+  if (i >= 0 && i < b && i < toI32(buf.length)) {
     if (buf[i] !== 59) {
       return http1ClientFail(p, HTTP1_E_CHUNK, "a malformed chunk size")
     }
@@ -1494,31 +1689,43 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
  * `after` once the last of them is handed out.
  */
 const http1ClientBodyWindow = (p: Http1ResponseParser, after: i32): i32 => {
-  const ready: i32 = p.end - p.start
-  if (ready <= 0) {
+  const start: i32 = p.start
+  const end: i32 = p.end
+  // Both are offsets into `buf`, so neither is below 0; asked so the
+  // difference is known not to wrap.
+  if (start < 0 || end < 0 || end <= start) {
     return HTTP1_NEED_MORE
   }
-  const take: i32 = toI64(ready) < p.left ? ready : toI32(p.left)
+  const ready: i32 = end - start
+  const left: i64 = p.left
+  const take: i32 = toI64(ready) < left ? ready : toI32(left)
   p.body = p.buf
-  p.bodyOff = p.start
+  p.bodyOff = start
   p.bodyLen = take
-  p.start += take
+  // Unsigned: `take` is at most `ready`, `left`, and the room under
+  // `maxBody` (at most 2^53), so none of these wraps.
+  p.start = toI32(toU32(start) + toU32(take))
   p.scan = p.start
-  p.left = p.left - toI64(take)
-  p.bodyTotal = p.bodyTotal + toI64(take)
+  p.left = toI64(toU64(left) - toU64(toI64(take)))
+  p.bodyTotal = toI64(toU64(p.bodyTotal) + toU64(toI64(take)))
   if (p.left === toI64(0)) {
     p.state = after
   }
   return HTTP1_BODY
 }
 
+/**
+ * The body bytes `maxBody` still allows: `maxBody - bodyTotal`. Unsigned:
+ * both stay in 0 to 2^53, the constructor's clamp, so it does not wrap.
+ */
+const http1ClientRoom = (p: Http1ResponseParser): i64 => toI64(toU64(p.maxBody) - toU64(p.bodyTotal))
+
 /** A body read until the server closes: every byte fed, up to `maxBody`. */
 const http1ClientCloseBody = (p: Http1ResponseParser): i32 => {
-  const ready: i32 = p.end - p.start
-  if (ready <= 0) {
+  if (p.end <= p.start) {
     return HTTP1_NEED_MORE
   }
-  const room: i64 = p.maxBody - p.bodyTotal
+  const room: i64 = http1ClientRoom(p)
   if (room <= toI64(0)) {
     return http1ClientFail(p, HTTP1_E_BODY_LIMIT, "a body read until close over the limit")
   }
@@ -1553,14 +1760,18 @@ const http1ClientNext = (p: Http1ResponseParser): i32 => {
         const limit: i32 = trailer ? p.maxTrailerBytes : p.maxHeaderBytes
         const code: i32 = trailer ? HTTP1_E_TRAILER_LIMIT : HTTP1_E_HEADER_LIMIT
         const text: string = trailer ? "a trailer section over the limit" : "a header section over the limit"
-        const got: i32 = http1ClientTakeLine(p, limit - p.sectionBytes, code, text)
+        const section: i32 = p.sectionBytes
+        // In 64 bits, where sums and differences of `i32`s cannot wrap; the
+        // section is at most its limit, so what is left fits an `i32`.
+        const got: i32 = http1ClientTakeLine(p, toI32(toI64(limit) - toI64(section)), code, text)
         if (got !== HTTP1_CLIENT_LINE) {
           return got
         }
-        p.sectionBytes += p.lineEnd - p.lineStart + 2
-        if (p.sectionBytes > limit) {
+        const used: i64 = toI64(section) + (toI64(p.lineEnd) - toI64(p.lineStart)) + toI64(2)
+        if (used > toI64(limit)) {
           return http1ClientFail(p, code, text)
         }
+        p.sectionBytes = toI32(used)
         if (p.lineEnd === p.lineStart) {
           if (trailer) {
             p.state = HTTP1_CLIENT_S_MESSAGE_END
