@@ -133,7 +133,6 @@ import {
   QUIC_CONN_ENTROPY_SIZE,
   QUIC_CONN_LOCAL_CIDS,
   QUIC_CONN_MAX_STREAM_DATA,
-  QUIC_CONN_MAX_STREAMS,
   QuicConnection,
   QuicServerConfig,
 } from "nish/net/quic"
@@ -175,8 +174,20 @@ const H3_SERVER_UNSUPPORTED: i32 = -95
 /** The largest datagram read: a GRO receive of up to 64 KB. */
 const H3_SERVER_RECEIVE_SIZE: i32 = 65536
 
+/** The bytes of the largest flight `flush` writes at once: `QUIC_LISTENER_FLIGHT_MAX` datagrams. */
+const H3_SERVER_FLIGHT_BYTES: i32 = QUIC_LISTENER_FLIGHT_MAX * QUIC_CONN_DATAGRAM_SIZE
+
 /** Index entries per slot: its local connection IDs, then the client's original DCID. */
 const H3_SERVER_KEYS: i32 = QUIC_CONN_LOCAL_CIDS + 1
+
+/** The ID bytes an index keeps per slot: its entries, `QUIC_MAX_CID_LENGTH` bytes each. */
+const H3_SERVER_SLOT_KEY_BYTES: i32 = H3_SERVER_KEYS * QUIC_MAX_CID_LENGTH
+
+/** The most slots an index files: past it, one slot's ID bytes would end beyond an `i32` offset. */
+const H3_SERVER_SLOT_LIMIT: i32 = 21474836
+
+/** The index's largest table, in places: 2^30, more than twice `H3_SERVER_SLOT_LIMIT`'s entries. */
+const H3_SERVER_TABLE_LIMIT: i32 = 1073741824
 
 /** Typed constants, since a bare literal is an `f64` under `--number-mode f64`. */
 const H3_SERVER_ZERO: i32 = 0
@@ -190,8 +201,66 @@ const H3_SERVER_MASK: i64 = 0x7fffffffffff
 const H3_SERVER_FREE: i32 = 0
 const H3_SERVER_BUSY: i32 = 1
 
-/** The bucket of `time` on the wheel. */
-const http3ServerBucket = (time: i64): i32 => toI32(time % toI64(H3_SERVER_WHEEL))
+/**
+ * The bucket of `time` on the wheel: 2048 is `H3_SERVER_WHEEL`, written out
+ * so the divisor is a literal. Negative for a negative time not a multiple of it.
+ */
+const http3ServerBucket = (time: i64): i32 => toI32(time % toI64(2048))
+
+/** The words of the wheel's bitmap: `H3_SERVER_WHEEL / 64`. */
+const H3_SERVER_WHEEL_WORDS: i32 = 32
+
+/**
+ * `count` copies of `value`, built by `push`, so a negative `count` gives an
+ * empty array and no length is unchecked.
+ */
+const http3ServerFilled = (count: i32, value: i32): i32[] => {
+  const out: i32[] = []
+  let i: i32 = 0
+  while (i < count) {
+    out.push(value)
+    i = i + 1
+  }
+  return out
+}
+
+/** `count` zero times, built as `http3ServerFilled` builds. */
+const http3ServerZeroTimes = (count: i32): i64[] => {
+  const out: i64[] = []
+  let i: i32 = 0
+  while (i < count) {
+    out.push(toI64(0))
+    i = i + 1
+  }
+  return out
+}
+
+/**
+ * Milliseconds from `now` to `from + offset`, 0 when that is at or before
+ * `now`; a wait past the `i32` range keeps its low 32 bits, as `toI32` gives.
+ * The sum is never formed, since it can pass the `i64` range.
+ * @param from A millisecond; a negative one only with an `offset` of 0.
+ * @param offset Milliseconds after `from`, 0 to 2047; one outside gives -1.
+ * @param now The current millisecond.
+ * @returns The wait, or -1 for an `offset` out of range.
+ */
+const http3ServerWait = (from: i64, offset: i32, now: i64): i32 => {
+  if (offset < 0 || offset > 2047) {
+    // Never taken: `next` passes an offset below `H3_SERVER_WHEEL`.
+    return -1
+  }
+  let due: boolean = false
+  if (from < 0) {
+    due = from + toI64(offset) <= now
+  } else if (now >= 0) {
+    due = from - now <= toI64(0 - offset)
+  }
+  if (due) {
+    return H3_SERVER_ZERO
+  }
+  // The low 32 bits of `from + offset - now`, from the low 32 bits of each.
+  return toI32(toI64(toI32(from)) - toI64(toI32(now)) + toI64(offset))
+}
 
 /**
  * The connection IDs of every slot, by hash: an open-addressed table keyed
@@ -211,18 +280,37 @@ export class Http3CidIndex {
 
   /**
    * An empty index for `slots` slots.
-   * @param slots How many slots it files IDs for, each `QUIC_CONN_LOCAL_CIDS + 1` entries.
+   * @param slots How many slots it files IDs for, each `QUIC_CONN_LOCAL_CIDS + 1` entries; 0 or fewer
+   *   files none.
    * @param salt The hash's key: its first eight bytes are copied (zeros past a shorter one); not kept.
    */
   constructor(slots: i32, salt: u8[]) {
-    const entries: i32 = slots * H3_SERVER_KEYS
-    let size: i32 = 8
-    while (size < entries * 2) {
-      size = size * 2
+    // Each table is built by push, one after another, so it grows at the
+    // top of the arena; seeded with one slot's worth, its capacity is exact
+    // at a power-of-two slot count.
+    const lengths: i32[] = slots > 0 ? new Array<i32>(H3_SERVER_KEYS) : []
+    for (let s: i32 = 1; s < slots && s < H3_SERVER_SLOT_LIMIT; s++) {
+      for (let j: i32 = 0; j < H3_SERVER_KEYS; j++) {
+        lengths.push(0)
+      }
     }
-    this.table = new Array<i32>(size)
-    this.keys = new Array<u8>(entries * QUIC_MAX_CID_LENGTH)
-    this.lengths = new Array<i32>(entries)
+    const keys: u8[] = slots > 0 ? new Array<u8>(H3_SERVER_SLOT_KEY_BYTES) : []
+    for (let s: i32 = 1; s < slots && s < H3_SERVER_SLOT_LIMIT; s++) {
+      for (let k: i32 = 0; k < H3_SERVER_SLOT_KEY_BYTES; k++) {
+        keys.push(0)
+      }
+    }
+    const entries: i32 = toI32(lengths.length)
+    const table: i32[] = new Array<i32>(8)
+    while (toI32(table.length) < H3_SERVER_TABLE_LIMIT && toI32(table.length) / 2 < entries) {
+      const size: i32 = toI32(table.length)
+      for (let h: i32 = 0; h < size; h++) {
+        table.push(0)
+      }
+    }
+    this.table = table
+    this.keys = keys
+    this.lengths = lengths
     this.salt = new Array<u8>(8)
     for (let k: i32 = 0; k < 8 && k < toI32(salt.length); k++) {
       this.salt[k] = salt[k]
@@ -231,11 +319,19 @@ export class Http3CidIndex {
 
   /** The bucket the ID `buf[at .. at + length)` starts its probe at. */
   private bucket(buf: u8[], at: i32, length: i32): i32 {
+    const salt: u8[] = this.salt
     let h: i64 = toI64(length)
-    for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(buf.length); k++) {
+    // `i` is `at + k`, the byte read.
+    let i: i32 = at
+    for (let k: i32 = 0; k < length && i >= 0 && i < toI32(buf.length); k++) {
       const j: i32 = k & 7
-      const mixed: i64 = toI64(toI32(buf[at + k]) ^ toI32(this.salt[j]))
+      if (j >= toI32(salt.length)) {
+        // Never taken: the constructor gives `salt` eight bytes.
+        break
+      }
+      const mixed: i64 = toI64(toI32(buf[i]) ^ toI32(salt[j]))
       h = (((h << 7) & H3_SERVER_MASK_LOW) ^ (h >> 29) ^ mixed) & H3_SERVER_MASK
+      i++
     }
     h = h ^ (h >> 17) ^ (h >> 31)
     return toI32(h & toI64(toI32(this.table.length) - 1))
@@ -243,14 +339,21 @@ export class Http3CidIndex {
 
   /** Whether entry `e` holds the ID `buf[at .. at + length)`. */
   private holds(e: i32, buf: u8[], at: i32, length: i32): boolean {
-    if (e < 0 || e >= toI32(this.lengths.length) || this.lengths[e] !== length) {
+    const keys: u8[] = this.keys
+    const lengths: i32[] = this.lengths
+    // 107374182 is `I32_MAX / QUIC_MAX_CID_LENGTH`, past `H3_SERVER_SLOT_LIMIT`'s entries.
+    if (e < 0 || e >= 107374182 || e >= toI32(lengths.length) || lengths[e] !== length) {
       return false
     }
-    const base: i32 = e * QUIC_MAX_CID_LENGTH
+    // `p` and `i` are `e * QUIC_MAX_CID_LENGTH + k` and `at + k`, the bytes compared.
+    let p: i32 = e * QUIC_MAX_CID_LENGTH
+    let i: i32 = at
     for (let k: i32 = 0; k < length; k++) {
-      if (at + k < 0 || at + k >= toI32(buf.length) || this.keys[base + k] !== buf[at + k]) {
+      if (i < 0 || i >= toI32(buf.length) || p < 0 || p >= toI32(keys.length) || keys[p] !== buf[i]) {
         return false
       }
+      p++
+      i++
     }
     return true
   }
@@ -266,10 +369,11 @@ export class Http3CidIndex {
     const size: i32 = toI32(this.table.length)
     let h: i32 = this.bucket(buf, at, length)
     for (let probe: i32 = 0; probe < size && h >= 0 && h < size; probe++) {
-      const e: i32 = this.table[h] - 1
-      if (e < 0) {
+      const filed: i32 = this.table[h]
+      if (filed <= 0) {
         return -1
       }
+      const e: i32 = filed - 1
       if (this.holds(e, buf, at, length)) {
         return e / H3_SERVER_KEYS
       }
@@ -288,17 +392,28 @@ export class Http3CidIndex {
    * @param length The ID's length in bytes, 1 to `QUIC_MAX_CID_LENGTH`; any other files nothing.
    */
   insert(e: i32, buf: u8[], at: i32, length: i32): void {
-    if (length <= 0 || length > QUIC_MAX_CID_LENGTH || e < 0 || e >= toI32(this.lengths.length)) {
+    const keys: u8[] = this.keys
+    const lengths: i32[] = this.lengths
+    // 107374182 is `I32_MAX / QUIC_MAX_CID_LENGTH`, past `H3_SERVER_SLOT_LIMIT`'s entries.
+    if (length <= 0 || length > QUIC_MAX_CID_LENGTH || e < 0 || e >= toI32(lengths.length) || e >= 107374182) {
       return
     }
     if (this.find(buf, at, length) >= 0) {
       return
     }
-    const base: i32 = e * QUIC_MAX_CID_LENGTH
-    for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(buf.length); k++) {
-      this.keys[base + k] = buf[at + k]
+    // `p` and `i` are `e * QUIC_MAX_CID_LENGTH + k` and `at + k`, the bytes copied.
+    let p: i32 = e * QUIC_MAX_CID_LENGTH
+    let i: i32 = at
+    for (let k: i32 = 0; k < length && i >= 0 && i < toI32(buf.length); k++) {
+      if (p < 0 || p >= toI32(keys.length)) {
+        // Never taken: each entry has `QUIC_MAX_CID_LENGTH` bytes of `keys`.
+        return
+      }
+      keys[p] = buf[i]
+      p++
+      i++
     }
-    this.lengths[e] = length
+    lengths[e] = length
     const size: i32 = toI32(this.table.length)
     let h: i32 = this.bucket(buf, at, length)
     for (let probe: i32 = 0; probe < size && h >= 0 && h < size; probe++) {
@@ -315,13 +430,14 @@ export class Http3CidIndex {
    * @param e The entry, numbered as `insert` numbers it; one out of range or not filed is ignored.
    */
   remove(e: i32): void {
-    if (e < 0 || e >= toI32(this.lengths.length) || this.lengths[e] === 0) {
+    const lengths: i32[] = this.lengths
+    // 107374182 is `I32_MAX / QUIC_MAX_CID_LENGTH`, past `H3_SERVER_SLOT_LIMIT`'s entries.
+    if (e < 0 || e >= toI32(lengths.length) || e >= 107374182 || lengths[e] === 0) {
       return
     }
     const size: i32 = toI32(this.table.length)
     const mask: i32 = size - 1
-    const base: i32 = e * QUIC_MAX_CID_LENGTH
-    let h: i32 = this.bucket(this.keys, base, this.lengths[e])
+    let h: i32 = this.bucket(this.keys, e * QUIC_MAX_CID_LENGTH, lengths[e])
     let hole: i32 = -1
     for (let probe: i32 = 0; probe < size && h >= 0 && h < size; probe++) {
       if (this.table[h] === 0) {
@@ -333,17 +449,27 @@ export class Http3CidIndex {
       }
       h = (h + 1) & mask
     }
-    this.lengths[e] = 0
-    if (hole < 0) {
+    lengths[e] = 0
+    // `hole` is -1 or a place the probe found, below `size`.
+    if (hole < 0 || hole >= size) {
       return
     }
     let next: i32 = (hole + 1) & mask
     for (let probe: i32 = 0; probe < size && next >= 0 && next < size && hole >= 0 && hole < size; probe++) {
-      const other: i32 = this.table[next] - 1
-      if (other < 0) {
+      const filed: i32 = this.table[next]
+      if (filed <= 0) {
         break
       }
-      const home: i32 = this.bucket(this.keys, other * QUIC_MAX_CID_LENGTH, this.lengths[other])
+      const other: i32 = filed - 1
+      if (other >= toI32(lengths.length) || other >= 107374182) {
+        // Never taken: only `insert` files an entry, and only one it numbers.
+        break
+      }
+      const home: i32 = this.bucket(this.keys, other * QUIC_MAX_CID_LENGTH, lengths[other])
+      if (home < 0 || home >= size) {
+        // Never taken: `bucket` answers a place of the table.
+        break
+      }
       // The entry may move into the hole when its home is not between the hole and it.
       if (((hole - home) & mask) < ((next - home) & mask)) {
         this.table[hole] = this.table[next]
@@ -377,16 +503,15 @@ export class Http3Wheel {
 
   /**
    * An empty wheel whose cursor is not started.
-   * @param slots How many slots it files, 0 to `slots - 1`.
+   * @param slots How many slots it files, 0 to `slots - 1`; 0 or fewer files none.
    */
   constructor(slots: i32) {
     this.head = new Array<i32>(H3_SERVER_WHEEL)
-    this.nextOf = new Array<i32>(slots)
-    this.prevOf = new Array<i32>(slots)
-    this.bucketOf = new Array<i32>(slots)
-    this.bucketOf.fill(-1)
-    this.dueAt = new Array<i64>(slots)
-    this.bits = new Array<i64>(H3_SERVER_WHEEL / 64)
+    this.nextOf = http3ServerFilled(slots, H3_SERVER_ZERO)
+    this.prevOf = http3ServerFilled(slots, H3_SERVER_ZERO)
+    this.bucketOf = http3ServerFilled(slots, -1)
+    this.dueAt = http3ServerZeroTimes(slots)
+    this.bits = new Array<i64>(H3_SERVER_WHEEL_WORDS)
   }
 
   /** Marks bucket `b` filled or not. */
@@ -404,27 +529,36 @@ export class Http3Wheel {
    * @param slot The slot; one out of range or not filed is ignored.
    */
   unfile(slot: i32): void {
-    if (slot < 0 || slot >= toI32(this.bucketOf.length)) {
+    const head = this.head
+    const nextOf = this.nextOf
+    const prevOf = this.prevOf
+    const bucketOf = this.bucketOf
+    if (slot < 0 || slot >= toI32(bucketOf.length) || slot >= toI32(nextOf.length) || slot >= toI32(prevOf.length)) {
+      // Past the first two, never taken: the constructor gives each per-slot array `slots` entries.
       return
     }
-    const b: i32 = this.bucketOf[slot]
-    if (b < 0 || b >= H3_SERVER_WHEEL) {
+    const b: i32 = bucketOf[slot]
+    if (b < 0 || b >= toI32(head.length)) {
       return
     }
-    const prev: i32 = this.prevOf[slot]
-    const next: i32 = this.nextOf[slot]
-    if (prev >= 0 && prev < toI32(this.nextOf.length)) {
-      this.nextOf[prev] = next
+    const prev: i32 = prevOf[slot]
+    const next: i32 = nextOf[slot]
+    if (next >= toI32(prevOf.length)) {
+      // Never taken: `file` links a slot only to a slot or -1.
+      return
+    }
+    if (prev >= 0 && prev < toI32(nextOf.length)) {
+      nextOf[prev] = next
     } else {
-      this.head[b] = next + 1
+      head[b] = next + 1
     }
-    if (next >= 0 && next < toI32(this.prevOf.length)) {
-      this.prevOf[next] = prev
+    if (next >= 0) {
+      prevOf[next] = prev
     }
-    if (this.head[b] === 0) {
+    if (head[b] === 0) {
       this.flag(b, false)
     }
-    this.bucketOf[slot] = -1
+    bucketOf[slot] = -1
   }
 
   /**
@@ -437,30 +571,52 @@ export class Http3Wheel {
    */
   file(slot: i32, due: i64, now: i64): void {
     this.unfile(slot)
-    if (due < 0 || slot < 0 || slot >= toI32(this.bucketOf.length)) {
+    const head = this.head
+    const nextOf = this.nextOf
+    const prevOf = this.prevOf
+    const bucketOf = this.bucketOf
+    const dueAt = this.dueAt
+    if (
+      due < 0 ||
+      slot < 0 ||
+      slot >= toI32(bucketOf.length) ||
+      slot >= toI32(nextOf.length) ||
+      slot >= toI32(prevOf.length) ||
+      slot >= toI32(dueAt.length)
+    ) {
+      // Past the first three, never taken: the constructor gives each per-slot array `slots` entries.
       return
     }
     if (this.cursor < 0) {
       this.cursor = now
     }
-    let at: i64 = due < this.cursor ? this.cursor : due
-    const horizon: i64 = this.cursor + toI64(H3_SERVER_WHEEL - 1)
-    if (at > horizon) {
-      at = horizon
+    const cursor: i64 = this.cursor
+    let b: i32 = -1
+    if (cursor < 0) {
+      // A cursor before the clock's zero: its horizon is below 2047, so the sum cannot overflow.
+      const horizon: i64 = cursor + toI64(2047)
+      b = http3ServerBucket(due > horizon ? horizon : due)
+    } else if (due - cursor > 2047) {
+      // Past the horizon, `cursor + 2047`, whose bucket is the one before the
+      // cursor's; found from that bucket, since the sum can overflow.
+      const at: i32 = http3ServerBucket(cursor)
+      b = at > 0 ? at - 1 : 2047
+    } else {
+      b = http3ServerBucket(due < cursor ? cursor : due)
     }
-    const b: i32 = http3ServerBucket(at)
-    if (b < 0 || b >= H3_SERVER_WHEEL) {
+    if (b < 0 || b >= toI32(head.length)) {
       return
     }
-    const first: i32 = this.head[b] - 1
-    this.nextOf[slot] = first
-    this.prevOf[slot] = -1
-    if (first >= 0 && first < toI32(this.prevOf.length)) {
-      this.prevOf[first] = slot
+    const filed: i32 = head[b]
+    const first: i32 = filed > 0 ? filed - 1 : -1
+    nextOf[slot] = first
+    prevOf[slot] = -1
+    if (first >= 0 && first < toI32(prevOf.length)) {
+      prevOf[first] = slot
     }
-    this.head[b] = slot + 1
-    this.bucketOf[slot] = b
-    this.dueAt[slot] = due
+    head[b] = slot + 1
+    bucketOf[slot] = b
+    dueAt[slot] = due
     this.flag(b, true)
   }
 
@@ -471,11 +627,17 @@ export class Http3Wheel {
    * @returns The slot taken, or -1 when the bucket is empty.
    */
   take(time: i64): i32 {
+    const head = this.head
     const b: i32 = http3ServerBucket(time)
-    const slot: i32 = b >= 0 && b < H3_SERVER_WHEEL ? this.head[b] - 1 : -1
-    if (slot >= 0) {
-      this.unfile(slot)
+    if (b < 0 || b >= toI32(head.length)) {
+      return -1
     }
+    const filed: i32 = head[b]
+    if (filed <= 0) {
+      return -1
+    }
+    const slot: i32 = filed - 1
+    this.unfile(slot)
     return slot
   }
 
@@ -486,25 +648,36 @@ export class Http3Wheel {
    *   when every bucket is empty.
    */
   next(now: i64): i32 {
+    const head = this.head
+    const bits = this.bits
     // From the cursor: a bucket before it has run, and one at `now` after a
     // tick is the horizon's, a full turn of the wheel away.
     const from: i64 = this.cursor < 0 ? now : this.cursor
-    const end: i64 = from + toI64(H3_SERVER_WHEEL)
-    let time: i64 = from
-    while (time < end) {
-      const b: i32 = http3ServerBucket(time)
-      const word: i32 = b >> 6
-      if (word < 0 || word >= toI32(this.bits.length)) {
+    const start: i32 = http3ServerBucket(from)
+    if (start < 0 || start > 2047) {
+      // Below 0 only for a time before the clock's zero, which has no bucket; never above 2047.
+      return -1
+    }
+    // The milliseconds past `from` searched, to `H3_SERVER_WHEEL`.
+    let offset: i32 = 0
+    while (offset < 2048) {
+      if (from < 0 && offset > 0) {
+        // Past a negative `from`, every time up to the clock's zero has no bucket.
         return -1
       }
-      if (this.bits[word] === 0) {
+      const b: i32 = (start + offset) & 2047
+      const word: i32 = b >> 6
+      if (word >= toI32(bits.length) || b >= toI32(head.length)) {
+        // Never taken: the constructor gives `head` a place per bucket and `bits` a bit.
+        return -1
+      }
+      if (bits[word] === 0) {
         // An empty word: on to the next one.
-        const word64: i32 = 64
-        time = time + toI64(word64 - (b & 63))
-      } else if (this.head[b] !== 0) {
-        return time <= now ? H3_SERVER_ZERO : toI32(time - now)
+        offset = offset + (64 - (b & 63))
+      } else if (head[b] !== 0) {
+        return http3ServerWait(from, offset, now)
       } else {
-        time = time + 1
+        offset = offset + 1
       }
     }
     return -1
@@ -680,32 +853,34 @@ export class Http3Server {
     const bidi: i64 = quicConfig.maxStreamsBidi
     const uni: i64 = quicConfig.maxStreamsUni
     const local: i64 = quicConfig.localStreams
+    // `QUIC_CONN_MAX_STREAMS`, written out so each count's bound is known to the sum below.
+    const most: i64 = 1024
     if (
       streamData >= 1 &&
       streamData <= QUIC_CONN_MAX_STREAM_DATA &&
       bidi >= 0 &&
-      bidi <= QUIC_CONN_MAX_STREAMS &&
+      bidi <= most &&
       uni >= 0 &&
-      uni <= QUIC_CONN_MAX_STREAMS &&
+      uni <= most &&
       local >= 0 &&
-      local <= QUIC_CONN_MAX_STREAMS &&
-      bidi + uni + local > 0
+      local <= most &&
+      (bidi > 0 || uni > 0 || local > 0)
     ) {
       this.streamPools = new QuicStreamPools(toI32(streamData), toI32(bidi + uni + local), size)
     }
     this.rx = new Array<u8>(H3_SERVER_RECEIVE_SIZE)
-    this.tx = new Array<u8>(QUIC_LISTENER_FLIGHT_MAX * QUIC_CONN_DATAGRAM_SIZE)
+    this.tx = new Array<u8>(H3_SERVER_FLIGHT_BYTES)
     this.from = new Array<u8>(H3_SERVER_ADDRESS)
     this.meta = [H3_SERVER_ZERO, H3_SERVER_ZERO]
     this.flight = new QuicFlight()
     this.signer = new TlsP256Signer()
-    this.signatures = new Array<i64>(size)
-    this.state = new Array<i32>(size)
-    this.readyRing = new Array<i32>(size)
-    this.dirtyStack = new Array<i32>(size)
+    this.signatures = http3ServerZeroTimes(size)
+    this.state = http3ServerFilled(size, H3_SERVER_ZERO)
+    this.readyRing = http3ServerFilled(size, H3_SERVER_ZERO)
+    this.dirtyStack = http3ServerFilled(size, H3_SERVER_ZERO)
     // Released slots only: one never used is taken at `used`.
-    this.free = new Array<i32>(size)
-    this.queued = new Array<i32>(size)
+    this.free = http3ServerFilled(size, H3_SERVER_ZERO)
+    this.queued = http3ServerFilled(size, H3_SERVER_ZERO)
   }
 
   /**
@@ -760,7 +935,13 @@ export class Http3Server {
    * @returns 0 to `size()`.
    */
   busy(): i32 {
-    return this.used - this.freeCount
+    const used: i32 = this.used
+    const freed: i32 = this.freeCount
+    // Never taken: both count up from 0.
+    if (used < 0 || freed < 0) {
+      return H3_SERVER_ZERO
+    }
+    return used - freed
   }
 
   /**
@@ -782,7 +963,15 @@ export class Http3Server {
    */
   connection(slot: i32): Http3Connection {
     this.date.current()
-    return this.conns[this.slotAt(slot)]
+    const at: i32 = slot >= 0 && slot < this.slots ? slot : H3_SERVER_ZERO
+    const conns: Http3Connection[] = this.conns
+    // `build` grows `conns` and `quics` together, so this builds as `slotAt` does.
+    for (;;) {
+      if (at >= 0 && at < toI32(conns.length)) {
+        return conns[at]
+      }
+      this.build()
+    }
   }
 
   /**
@@ -791,7 +980,14 @@ export class Http3Server {
    * @returns The slot's QUIC connection, kept by the pool and reset for each connection the slot holds.
    */
   quic(slot: i32): QuicConnection {
-    return this.quics[this.slotAt(slot)]
+    const at: i32 = slot >= 0 && slot < this.slots ? slot : H3_SERVER_ZERO
+    const quics: QuicConnection[] = this.quics
+    for (;;) {
+      if (at >= 0 && at < toI32(quics.length)) {
+        return quics[at]
+      }
+      this.build()
+    }
   }
 
   /**
@@ -801,24 +997,41 @@ export class Http3Server {
    * @param slot The slot; one that holds no connection is ignored.
    */
   touch(slot: i32): void {
-    if (!this.holds(slot)) {
+    const queued: i32[] = this.queued
+    const ring: i32[] = this.readyRing
+    // Past `holds`, never taken: `queued` is `size` long, as `state` is.
+    if (!this.holds(slot) || slot < 0 || slot >= toI32(queued.length)) {
       return
     }
-    if ((this.queued[slot] & 1) === 0 && this.readyCount < toI32(this.readyRing.length)) {
-      const at: i32 = (this.readyHead + this.readyCount) % toI32(this.readyRing.length)
-      this.readyRing[at] = slot
-      this.readyCount = this.readyCount + 1
-      this.queued[slot] = this.queued[slot] | 1
+    const head: i32 = this.readyHead
+    const count: i32 = this.readyCount
+    const length: i32 = toI32(ring.length)
+    // Never false past its first two terms: `ready` keeps `head` in the ring, which is at most 65536 long.
+    if ((queued[slot] & 1) === 0 && count < length && head >= 0 && head <= 65535 && count >= 0 && count <= 65535) {
+      // `(head + count) % length`, both below `length`.
+      const sum: i32 = head + count
+      const at: i32 = sum >= length ? sum - length : sum
+      if (at >= 0 && at < length) {
+        ring[at] = slot
+        this.readyCount = count + 1
+        queued[slot] = queued[slot] | 1
+      }
     }
     this.dirty(slot)
   }
 
   /** Puts `slot` on the dirty stack, for `flush`. */
   private dirty(slot: i32): void {
-    if ((this.queued[slot] & 2) === 0 && this.dirtyCount < toI32(this.dirtyStack.length)) {
-      this.dirtyStack[this.dirtyCount] = slot
-      this.dirtyCount = this.dirtyCount + 1
-      this.queued[slot] = this.queued[slot] | 2
+    const queued: i32[] = this.queued
+    const stack: i32[] = this.dirtyStack
+    const count: i32 = this.dirtyCount
+    // Never false past its second term: every caller passes a slot `holds`, and the count starts at 0.
+    if (slot >= 0 && slot < toI32(queued.length) && count >= 0) {
+      if ((queued[slot] & 2) === 0 && count < toI32(stack.length)) {
+        stack[count] = slot
+        this.dirtyCount = count + 1
+        queued[slot] = queued[slot] | 2
+      }
     }
   }
 
@@ -829,16 +1042,31 @@ export class Http3Server {
    */
   ready(): i32 {
     this.date.current()
-    while (this.readyCount > 0) {
-      const slot: i32 = this.readyRing[this.readyHead]
-      this.readyHead = (this.readyHead + 1) % toI32(this.readyRing.length)
-      this.readyCount = this.readyCount - 1
-      this.queued[slot] = this.queued[slot] & ~1
+    const ring: i32[] = this.readyRing
+    const queued: i32[] = this.queued
+    for (;;) {
+      const count: i32 = this.readyCount
+      if (count <= 0) {
+        return -1
+      }
+      const head: i32 = this.readyHead
+      const length: i32 = toI32(ring.length)
+      // Never taken: `touch` and this loop keep `head` in the ring.
+      if (head < 0 || head >= length) {
+        return -1
+      }
+      const slot: i32 = ring[head]
+      // `(head + 1) % length`.
+      this.readyHead = head + 1 < length ? head + 1 : H3_SERVER_ZERO
+      this.readyCount = count - 1
+      // Never false: `touch` puts only a slot it holds on the ring.
+      if (slot >= 0 && slot < toI32(queued.length)) {
+        queued[slot] = queued[slot] & ~1
+      }
       if (this.holds(slot)) {
         return slot
       }
     }
-    return -1
   }
 
   /**
@@ -863,18 +1091,26 @@ export class Http3Server {
         this.from,
         this.meta
       )
-      if (n < 0) {
+      const meta: i32[] = this.meta
+      // Past the first term, never taken: `udpRecvFrom` reads at most the
+      // `H3_SERVER_RECEIVE_SIZE` it is given, and `meta` is the constructor's two words.
+      if (n < 0 || n > 65536 || toI32(meta.length) < 2) {
         return count
       }
-      const segment: i32 = this.meta[0] > 0 ? this.meta[0] : n
+      const segment: i32 = meta[0] > 0 ? meta[0] : n
       // One receive is one ECN codepoint for every GRO segment of it.
-      this.arrivalEcn = this.meta[1] & 3
+      this.arrivalEcn = meta[1] & 3
       let at: i32 = 0
-      while (at < n && segment > 0) {
-        const length: i32 = n - at < segment ? n - at : segment
+      while (at >= 0 && at < n && segment > 0) {
+        const left: i32 = n - at
+        const length: i32 = left < segment ? left : segment
         this.datagram(this.rx, at, length, this.from, now, key)
-        count = count + 1
-        at = at + length
+        count = h3Count(count)
+        if (length < left) {
+          at = at + length
+        } else {
+          at = n
+        }
       }
     }
     return count
@@ -893,20 +1129,27 @@ export class Http3Server {
    * @param key The certificate's private key, as `receive` takes it.
    */
   datagram(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
-    if (len < 1 || at < 0 || at + len > toI32(buf.length)) {
+    const end: i64 = toI64(at) + toI64(len)
+    // The fourth term never decides: a window of at least a byte inside `buf` starts in it.
+    if (len < 1 || at < 0 || end > toI64(buf.length) || at >= toI32(buf.length)) {
       return
     }
     // RFC 8999: a long header carries the DCID's length; a short one is ours, of our length.
     let dcidAt: i32 = at + 1
     let dcidLength: i32 = QUIC_CONN_CID_LENGTH
     if ((toI32(buf[at]) & 0x80) !== 0) {
-      if (len < 6) {
+      if (len < 6 || at >= toI32(buf.length) - 5) {
         return
       }
-      dcidLength = toI32(buf[at + 5])
-      dcidAt = at + 6
+      const lengthAt: i32 = at + 5
+      // Never taken, nor the second term above: a window of six bytes or more holds its sixth.
+      if (lengthAt >= toI32(buf.length)) {
+        return
+      }
+      dcidLength = toI32(buf[lengthAt])
+      dcidAt = lengthAt + 1
     }
-    if (dcidLength > QUIC_MAX_CID_LENGTH || dcidAt + dcidLength > at + len) {
+    if (dcidLength > QUIC_MAX_CID_LENGTH || toI64(dcidAt) + toI64(dcidLength) > end) {
       return
     }
     const slot: i32 = this.index.find(buf, dcidAt, dcidLength)
@@ -938,28 +1181,54 @@ export class Http3Server {
     // first accepts take slots 0, 1, 2 ... and a pool that never fills never
     // builds its last slots.
     let slot: i32 = 0
-    if (this.freeCount > 0) {
-      this.freeCount = this.freeCount - 1
-      slot = this.free[this.freeCount]
-    } else if (this.used < this.slots) {
-      slot = this.slotAt(this.used)
-      this.used = this.used + 1
+    const free: i32[] = this.free
+    const freed: i32 = this.freeCount
+    const used: i32 = this.used
+    if (freed > 0) {
+      // Never taken: `release` pushes at most one entry per slot onto `free`, `size` long.
+      if (freed > toI32(free.length)) {
+        return
+      }
+      this.freeCount = freed - 1
+      slot = free[freed - 1]
+    } else if (used < this.slots) {
+      slot = this.slotAt(used)
+      this.used = used + 1
     } else {
       return
     }
+    const quics: QuicConnection[] = this.quics
+    const conns: Http3Connection[] = this.conns
+    const addresses: u8[][] = this.addresses
+    const state: i32[] = this.state
+    const signatures: i64[] = this.signatures
     crypto.getRandomValues(this.entropy)
-    const quic: QuicConnection = this.quics[slot]
+    // Never taken: a released slot was built, `slotAt` builds the one it answers, and
+    // `state` and `signatures` are `size` long.
+    if (
+      slot < 0 ||
+      slot >= toI32(quics.length) ||
+      slot >= toI32(conns.length) ||
+      slot >= toI32(addresses.length) ||
+      slot >= toI32(state.length) ||
+      slot >= toI32(signatures.length)
+    ) {
+      return
+    }
+    const quic: QuicConnection = quics[slot]
+    const conn: Http3Connection = conns[slot]
+    const to: u8[] = addresses[slot]
+    // Marked busy before its connections restart, which read neither array.
+    state[slot] = H3_SERVER_BUSY
+    signatures[slot] = H3_SERVER_NONE
     quic.reset(this.entropy)
-    this.conns[slot].restart()
+    conn.restart()
     if (answer.retried) {
       quic.acceptRetry(answer.originalDcid, answer.retryScid)
     }
-    const to: u8[] = this.addresses[slot]
     for (let k: i32 = 0; k < toI32(to.length) && k < toI32(address.length); k++) {
       to[k] = address[k]
     }
-    this.state[slot] = H3_SERVER_BUSY
-    this.signatures[slot] = H3_SERVER_NONE
     this.accepted = h3Count(this.accepted)
     this.serve(slot, buf, at, len, address, now, key)
   }
@@ -976,6 +1245,10 @@ export class Http3Server {
    * not start a connection, are also held to `takeAnswer`'s budget.
    */
   private worthListening(buf: u8[], at: i32, len: i32, now: i64): boolean {
+    // Never taken: `datagram` passes a window of at least a byte inside `buf`.
+    if (at < 0 || at >= toI32(buf.length)) {
+      return false
+    }
     const first: i32 = toI32(buf[at])
     if ((first & 0x80) === 0) {
       return len > QUIC_LISTENER_MIN_RESET && this.takeAnswer(now)
@@ -983,14 +1256,26 @@ export class Http3Server {
     if (len < QUIC_CONN_DATAGRAM_SIZE) {
       return false
     }
+    // Never taken, nor the test in the loop: the window, `QUIC_CONN_DATAGRAM_SIZE` bytes or more,
+    // holds its first six.
+    if (at >= toI32(buf.length) - 5) {
+      return false
+    }
+    const lengthAt: i32 = at + 5
+    if (lengthAt >= toI32(buf.length)) {
+      return false
+    }
     let version: i32 = 0
     for (let k: i32 = 1; k <= 4; k++) {
-      version = (version << 8) | toI32(buf[at + k])
+      const byteAt: i32 = at + k
+      if (byteAt < toI32(buf.length)) {
+        version = (version << 8) | toI32(buf[byteAt])
+      }
     }
     if (version !== 1) {
       return version !== 0 && this.takeAnswer(now)
     }
-    if ((first & 0x30) !== 0 || toI32(buf[at + 5]) < 8) {
+    if ((first & 0x30) !== 0 || toI32(buf[lengthAt]) < 8) {
       return false
     }
     if (this.full()) {
@@ -1008,21 +1293,42 @@ export class Http3Server {
    * garbage costs no answer and no MAC past the budget (H3-3); counted in `limited`.
    */
   private takeAnswer(now: i64): boolean {
-    if (this.answerRefilled < 0 || now < this.answerRefilled) {
-      this.answerRefilled = now
-      this.answerBudget = H3_SERVER_ANSWER_BURST
+    let refilled: i64 = this.answerRefilled
+    let budget: i32 = this.answerBudget
+    if (refilled < 0 || now < refilled) {
+      refilled = now
+      budget = H3_SERVER_ANSWER_BURST
+    } else if (now >= 0) {
+      // Always taken: `now` is at least `refilled`, which is not negative here.
+      const elapsed: i64 = now - refilled
+      // 100 is `H3_SERVER_ANSWER_INTERVAL`, written out so the divisor is a literal.
+      const earned: i64 = elapsed / toI64(100)
+      // The second term never decides: an interval earned is 100 elapsed.
+      if (earned > 0 && elapsed > 0) {
+        // The budget is 0 to `H3_SERVER_ANSWER_BURST`, 16, so 16 intervals or more always fill it.
+        const gain: i32 = earned < 16 ? toI32(earned) : 16
+        if (gain < 16 && gain >= 0 && budget >= 0 && budget < 16) {
+          const sum: i32 = budget + gain
+          budget = sum < H3_SERVER_ANSWER_BURST ? sum : H3_SERVER_ANSWER_BURST
+        } else {
+          budget = H3_SERVER_ANSWER_BURST
+        }
+        // `refilled + earned * H3_SERVER_ANSWER_INTERVAL`: the part of an interval left over counts
+        // toward the next answer.
+        const rest: i32 = toI32(elapsed % 100)
+        // Always taken: `elapsed` is positive, so its remainder is 0 to 99.
+        if (rest >= 0 && rest < 100) {
+          refilled = now - toI64(rest)
+        }
+      }
     }
-    const earned: i64 = (now - this.answerRefilled) / H3_SERVER_ANSWER_INTERVAL
-    if (earned > 0) {
-      const room: i64 = toI64(H3_SERVER_ANSWER_BURST - this.answerBudget)
-      this.answerBudget = this.answerBudget + toI32(earned < room ? earned : room)
-      this.answerRefilled = this.answerRefilled + earned * H3_SERVER_ANSWER_INTERVAL
-    }
-    if (this.answerBudget <= 0) {
+    this.answerRefilled = refilled
+    if (budget <= 0) {
+      this.answerBudget = budget
       this.limited = h3Count(this.limited)
       return false
     }
-    this.answerBudget = this.answerBudget - 1
+    this.answerBudget = budget - 1
     return true
   }
 
@@ -1044,7 +1350,7 @@ export class Http3Server {
    * handshake asks, and refiles its IDs and timer. The connection decides
    * from the address whether the client moved (RFC 9000 §9.3); an address
    * that is not 18 bytes long leaves it where it is.
-   * @param slot A slot that holds a connection, as `datagram` finds it; the slot is not checked.
+   * @param slot A slot that holds a connection, as `datagram` finds it; one outside the pool is ignored.
    * @param buf The bytes holding the datagram, read in place.
    * @param at Where the datagram starts in `buf`.
    * @param len Its length in bytes.
@@ -1053,7 +1359,11 @@ export class Http3Server {
    * @param key The certificate's private key, as `receive` takes it.
    */
   serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
-    const quic: QuicConnection = this.quics[slot]
+    const quics: QuicConnection[] = this.quics
+    if (slot < 0 || slot >= toI32(quics.length)) {
+      return
+    }
+    const quic: QuicConnection = quics[slot]
     quic.recovery.micros = this.micros
     quic.arrivalEcn = this.arrivalEcn
     quic.receiveWindowFrom(buf, at, len, address, now)
@@ -1070,31 +1380,41 @@ export class Http3Server {
 
   /** Files `slot`'s connection IDs in the index again when they changed. */
   private refile(slot: i32): void {
-    const quic: QuicConnection = this.quics[slot]
+    const quics: QuicConnection[] = this.quics
+    if (slot < 0 || slot >= toI32(quics.length)) {
+      // Never taken: every caller passes a slot of the pool.
+      return
+    }
+    const quic: QuicConnection = quics[slot]
     const signature: i64 =
       (quic.cids.nextLocal << 16) |
       (toI64(quic.cids.activeLocal()) << 8) |
       (toI64(quic.originalDcidLength) << 1) |
       (quic.handshakeComplete ? toI64(1) : toI64(0))
-    if (signature === this.signatures[slot]) {
+    const signatures: i64[] = this.signatures
+    // `slot` is under 65536, the most slots the constructor takes, so its first entry below fits.
+    if (slot >= toI32(signatures.length) || slot > 65535) {
+      // Never taken: `signatures` has an entry per slot.
       return
     }
-    this.signatures[slot] = signature
+    if (signature === signatures[slot]) {
+      return
+    }
+    signatures[slot] = signature
     this.unindex(slot)
-    const first: i32 = slot * H3_SERVER_KEYS
-    for (let j: i32 = 0; j < QUIC_CONN_LOCAL_CIDS && j < toI32(quic.cids.local.length); j++) {
-      const entry = quic.cids.local[j]
+    // 5 is `H3_SERVER_KEYS` and 4 `QUIC_CONN_LOCAL_CIDS`, written out so the entries' bound is known.
+    const keys: i32 = 5
+    const cids: i32 = 4
+    const first: i32 = slot * keys
+    const local = quic.cids.local
+    for (let j: i32 = 0; j < cids && j < toI32(local.length); j++) {
+      const entry = local[j]
       if (entry.used) {
         this.index.insert(first + j, entry.cid, H3_SERVER_ZERO, entry.length)
       }
     }
     if (!quic.handshakeComplete && quic.originalDcidLength > 0) {
-      this.index.insert(
-        first + QUIC_CONN_LOCAL_CIDS,
-        quic.originalDcid,
-        H3_SERVER_ZERO,
-        quic.originalDcidLength
-      )
+      this.index.insert(first + cids, quic.originalDcid, H3_SERVER_ZERO, quic.originalDcidLength)
     }
   }
 
@@ -1119,9 +1439,14 @@ export class Http3Server {
       mark = H3_SERVER_ZERO
     }
     const step: i32 = segment > 0 ? segment : len
+    if (at < 0 || len < 0) {
+      // Never taken: `udpSendTo` above took `buf[at .. at + len)`.
+      return false
+    }
     let p: i32 = at
-    while (p < at + len) {
-      const n: i32 = at + len - p < step ? at + len - p : step
+    let left: i32 = len
+    while (left > 0) {
+      const n: i32 = left < step ? left : step
       let one: i32 = udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark)
       if (one === H3_SERVER_UNSUPPORTED && mark !== 0) {
         // No ECN here: this datagram and the rest go unmarked and no slot
@@ -1135,7 +1460,13 @@ export class Http3Server {
         this.sendErrors = h3Count(this.sendErrors)
         return false
       }
-      p = p + n
+      if (n < 0 || n > left) {
+        // Never taken: `n` is the smaller of `left` and a positive `step`.
+        return false
+      }
+      left = left - n
+      // `p + n`, at most `at + len`, which `udpSendTo` took, so it fits an i32.
+      p = toI32(toI64(p) + toI64(n))
     }
     return true
   }
@@ -1156,10 +1487,21 @@ export class Http3Server {
    * @param now The current millisecond on the caller's monotonic clock.
    */
   flush(now: i64): void {
-    while (this.dirtyCount > 0) {
-      this.dirtyCount = this.dirtyCount - 1
-      const slot: i32 = this.dirtyStack[this.dirtyCount]
-      this.queued[slot] = this.queued[slot] & ~2
+    const stack: i32[] = this.dirtyStack
+    const queued: i32[] = this.queued
+    for (;;) {
+      const count: i32 = this.dirtyCount
+      // Past the first term, never taken: `dirty` pushes only below the stack's length.
+      if (count <= 0 || count > toI32(stack.length)) {
+        return
+      }
+      const top: i32 = count - 1
+      this.dirtyCount = top
+      const slot: i32 = stack[top]
+      // Always taken: the stack holds slots of the pool.
+      if (slot >= 0 && slot < toI32(queued.length)) {
+        queued[slot] = queued[slot] & ~2
+      }
       if (this.holds(slot)) {
         this.flushSlot(slot, now)
       }
@@ -1168,9 +1510,17 @@ export class Http3Server {
 
   /** `flush` of one slot. */
   private flushSlot(slot: i32, now: i64): void {
-    const quic: QuicConnection = this.quics[slot]
+    const quics: QuicConnection[] = this.quics
+    const conns: Http3Connection[] = this.conns
+    const addresses: u8[][] = this.addresses
+    if (slot < 0 || slot >= toI32(quics.length) || slot >= toI32(conns.length) || slot >= toI32(addresses.length)) {
+      // Never taken: `flush` passes a slot that holds a connection, which `build` made in all three.
+      return
+    }
+    const quic: QuicConnection = quics[slot]
+    const conn: Http3Connection = conns[slot]
+    const to: u8[] = addresses[slot]
     quic.recovery.micros = this.micros
-    const conn: Http3Connection = this.conns[slot]
     if (conn.isDone() && !quic.closed()) {
       quic.close(H3_NO_ERROR)
     }
@@ -1184,7 +1534,6 @@ export class Http3Server {
     if (probe > 0) {
       this.send(this.tx, H3_SERVER_ZERO, probe, quic.probeAddress, H3_SERVER_ZERO, H3_SERVER_ZERO)
     }
-    const to: u8[] = this.addresses[slot]
     if (quic.pathKnown) {
       const current: u8[] = quic.sendAddress()
       for (let k: i32 = 0; k < toI32(to.length) && k < toI32(current.length); k++) {
@@ -1241,8 +1590,14 @@ export class Http3Server {
 
   /** Takes every one of `slot`'s connection IDs out of the index. */
   private unindex(slot: i32): void {
-    const first: i32 = slot * H3_SERVER_KEYS
-    for (let j: i32 = 0; j < H3_SERVER_KEYS; j++) {
+    // Never taken: a slot is 0 to 65535, under the most slots the constructor takes.
+    if (slot < 0 || slot > 65535) {
+      return
+    }
+    // 5 is `H3_SERVER_KEYS`, written out so the entries' bound is known.
+    const keys: i32 = 5
+    const first: i32 = slot * keys
+    for (let j: i32 = 0; j < keys; j++) {
       this.index.remove(first + j)
     }
   }
@@ -1251,11 +1606,21 @@ export class Http3Server {
   private release(slot: i32): void {
     this.unindex(slot)
     this.wheel.unfile(slot)
-    this.conns[slot].release()
-    this.state[slot] = H3_SERVER_FREE
-    if (this.freeCount < toI32(this.free.length)) {
-      this.free[this.freeCount] = slot
-      this.freeCount = this.freeCount + 1
+    const conns: Http3Connection[] = this.conns
+    const state: i32[] = this.state
+    if (slot < 0 || slot >= toI32(conns.length) || slot >= toI32(state.length)) {
+      // Never taken: every caller passes a slot that holds a connection.
+      return
+    }
+    // Marked free before the connection lets go of its buffers, which read
+    // nothing of the server's.
+    state[slot] = H3_SERVER_FREE
+    conns[slot].release()
+    const free: i32[] = this.free
+    const count: i32 = this.freeCount
+    if (count >= 0 && count < toI32(free.length)) {
+      free[count] = slot
+      this.freeCount = count + 1
     }
   }
 
@@ -1277,11 +1642,13 @@ export class Http3Server {
    */
   stop(): void {
     this.stopped = true
+    const conns: Http3Connection[] = this.conns
     for (let slot: i32 = 0; slot < toI32(this.quics.length); slot++) {
       if (this.holds(slot)) {
         this.release(slot)
-      } else {
-        this.conns[slot].release()
+      } else if (slot < toI32(conns.length)) {
+        // Always taken: `build` grows `conns` and `quics` together.
+        conns[slot].release()
       }
     }
     this.listener.release()
@@ -1297,35 +1664,90 @@ export class Http3Server {
    * @param now The current millisecond on the caller's monotonic clock.
    */
   tick(now: i64): void {
+    // `now + 1`, where the cursor ends once `now` has run. Below zero it fits;
+    // from zero it is put back together from the millisecond's high and low
+    // parts, whose ranges show the sum fits.
+    let after: i64 = 0
+    if (now < 0) {
+      after = now + 1
+    } else {
+      const high: i64 = now / 1048576
+      const low: i64 = now % 1048576
+      if (high >= 1073741824) {
+        // Never taken: a millisecond of `monotonicNanos() / 1000000` is under
+        // 2^44, so `high` is under 2^24.
+        return
+      }
+      after = high * 1048576 + low + 1
+    }
     const wheel: Http3Wheel = this.wheel
-    if (wheel.cursor < 0) {
-      wheel.cursor = now
+    let cursor: i64 = wheel.cursor
+    if (cursor < 0) {
+      cursor = now
     }
     // Late by more than a turn: every bucket is run once, from a turn ago, so a
-    // slot filed again lands after `now` and not behind the cursor.
-    if (now - wheel.cursor >= toI64(H3_SERVER_WHEEL)) {
-      wheel.cursor = now - toI64(H3_SERVER_WHEEL - 1)
+    // slot filed again lands after `now` and not behind the cursor. 2048 is
+    // `H3_SERVER_WHEEL`, compared on each side of zero so no difference overflows.
+    if (now >= 0) {
+      if (now - 2048 >= cursor) {
+        cursor = now - 2047
+      }
+    } else if (cursor < 0) {
+      const behind: i64 = now - cursor
+      if (behind >= 2048) {
+        // `now - 2047`.
+        cursor = cursor + (behind - 2047)
+      }
     }
-    let steps: i32 = 0
-    while (wheel.cursor <= now && steps < H3_SERVER_WHEEL) {
-      let slot: i32 = wheel.take(wheel.cursor)
+    wheel.cursor = cursor
+    for (let steps: i32 = 0; steps < H3_SERVER_WHEEL; steps++) {
+      const at: i64 = wheel.cursor
+      if (at > now) {
+        break
+      }
+      let slot: i32 = wheel.take(at)
       while (slot >= 0) {
         if (this.holds(slot)) {
-          if (wheel.dueAt[slot] > now) {
+          const dueAt: i64[] = wheel.dueAt
+          const quics: QuicConnection[] = this.quics
+          if (slot >= toI32(dueAt.length) || slot >= toI32(quics.length)) {
+            // Never taken: `holds` is true only of a slot of the pool.
+          } else if (dueAt[slot] > now) {
             // Filed at the horizon: not due yet, so filed again.
-            wheel.file(slot, wheel.dueAt[slot], now)
+            wheel.file(slot, dueAt[slot], now)
           } else {
-            this.quics[slot].handleTimer(now)
+            quics[slot].handleTimer(now)
             this.dirty(slot)
           }
         }
         slot = wheel.take(wheel.cursor)
       }
-      wheel.cursor = wheel.cursor + 1
-      steps++
+      // On to the next millisecond, `next + 1`, written so that no sum can
+      // overflow. At `now` the cursor ends at `after`, and the loop with it.
+      const next: i64 = wheel.cursor
+      if (next === now) {
+        wheel.cursor = after
+        break
+      }
+      if (next < 0 && next < now) {
+        wheel.cursor = next + 1
+      } else if (next >= 0 && now >= 0) {
+        // Both from zero, so the distance left fits.
+        const ahead: i64 = now - next
+        if (ahead >= 1) {
+          wheel.cursor = now - (ahead - 1)
+        } else {
+          // Never taken: the bucket just run was at `now` or before.
+          break
+        }
+      } else {
+        // Never taken: the bucket just run was at `now` or before, and running
+        // it moves the cursor only from before zero to `now`.
+        break
+      }
     }
     if (wheel.cursor <= now) {
-      wheel.cursor = now + 1
+      wheel.cursor = after
     }
   }
 
