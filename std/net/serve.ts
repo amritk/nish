@@ -670,7 +670,7 @@ const serveAnyBusy = (st: ServeState): boolean => {
   return false
 }
 
-/** Sends slot `k`'s answer, as its task wrote it. */
+/** Sends slot `k`'s answer, as its task wrote it; one it cannot send is counted in `stats.failed`. */
 const serveAnswer = (c: ServeConns, st: ServeState, k: i32, stats: ServeStats): void => {
   // Every per-slot array grows together in `serveFreeSlot`, so `k`, a slot
   // that array made, is inside each; the reads take them as locals to see it.
@@ -693,6 +693,10 @@ const serveAnswer = (c: ServeConns, st: ServeState, k: i32, stats: ServeStats): 
     k >= toI32(bodies.length) ||
     k >= toI32(types.length)
   ) {
+    // `k` is no slot `serveFreeSlot` made, so it names no connection to
+    // answer: the answer is lost, and counted failed like one that cannot
+    // be framed below.
+    serveCountFailed(stats)
     return
   }
   const s: i32 = slots[k]
@@ -1489,25 +1493,21 @@ class ServeConns {
     return s < 0 || s >= toI32(ex.length) || !ex[s].conn.unlendParsed()
   }
 
-  /** Slot `s`'s record; only while it holds one, from `begin` to `release`. */
-  req(s: i32): HttpRequest {
-    const ex: ServeExchange[] = this.ex
-    if (s < 0 || s >= toI32(ex.length)) {
-      return this.none
-    }
-    return ex[s].rec
-  }
-
   /** Points a record for slot `s` at the head the parser read, and routes it. */
   begin(s: i32, conn: Http1Connection): void {
     if (this.draining) {
       // A head read during the drain is the connection's last.
       conn.closeAfter = true
     }
+    // `s` is a slot the server made, inside both per-slot arrays; a slot
+    // outside them holds no connection, so there is nothing to route.
     const ex: ServeExchange[] = this.ex
-    if (s < 0 || s >= toI32(ex.length)) {
+    const gens: i32[] = this.slotGen
+    if (s < 0 || s >= toI32(ex.length) || s >= toI32(gens.length)) {
       return
     }
+    // Read before `acquire`, a call after which the prover no longer knows `gens`'s length.
+    const gen: i32 = gens[s]
     const e: ServeExchange = ex[s]
     if (!e.holds) {
       e.rec = this.acquire()
@@ -1525,8 +1525,7 @@ class ServeConns {
     r.targetEnd = p.targetEnd
     r.bodyLength = 0
     r.slot = s
-    const gens: i32[] = this.slotGen
-    r.gen = s < toI32(gens.length) ? gens[s] : 0
+    r.gen = gen
     r.since = this.turnAt
     e.state = SERVE_READING
     e.pendingStart = 0
@@ -1635,7 +1634,11 @@ class ServeConns {
     return false
   }
 
-  /** The next queued exchange's slot, now held; call after `ready`. */
+  /**
+   * The next queued exchange's slot, now held; call after `ready`.
+   *
+   * @returns the slot, or -1 when nothing is queued or the queue's next entry is no slot the server made; the caller stops taking then
+   */
   take(): i32 {
     const queue: i32[] = this.queue
     const start: i32 = this.queueStart
@@ -1647,9 +1650,10 @@ class ServeConns {
     this.queueStart = toI32(toI64(start) + toI64(1)) & (toI32(queue.length) - 1)
     this.queueCount = count - 1
     const ex: ServeExchange[] = this.ex
-    if (s >= 0 && s < toI32(ex.length)) {
-      ex[s].state = SERVE_HELD
+    if (s < 0 || s >= toI32(ex.length)) {
+      return -1
     }
+    ex[s].state = SERVE_HELD
     return s
   }
 
@@ -1945,7 +1949,11 @@ export const serveOn = async (
       st.finishedCount = 0
       while (c.ready()) {
         const s: i32 = c.take()
-        const k: i32 = serveFreeSlot(st, limits, c.req(s))
+        if (s < 0) {
+          break
+        }
+        // `lendOut` sets the slot's record for each request, the first too.
+        const k: i32 = serveFreeSlot(st, limits, c.none)
         moved = true
         if (k < 0) {
           c.release(s)

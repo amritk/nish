@@ -46,6 +46,10 @@ export class StaticRig {
   last: i32 = 0
   /** How many requests either server's program refused as not found. */
   missing: i32 = 0
+  /** Whether the handler's program answers through `tryServeHandler`. */
+  tryMode: boolean = false
+  /** In `tryMode`, the `Err` a second `tryServeHandler` of an answered request gave, or `""`. */
+  again: string = ""
 
   constructor(limits: StaticLimits) {
     const serverLimits = new HttpServerLimits()
@@ -105,7 +109,17 @@ export class StaticRig {
       this.handler.refuse(r)
       return
     }
-    this.last = this.files.serveHandler(this.handler, r, r.paramStart(0), r.paramEnd(0))
+    if (this.tryMode) {
+      const served: Result<i32, string> = this.files.tryServeHandler(this.handler, r, r.paramStart(0), r.paramEnd(0))
+      this.last = served.isOk() ? served.value : -1
+      if (this.last !== STATIC_NOT_FOUND) {
+        // Answered (or not): a second answer is a broken contract, an `Err`.
+        const twice: Result<i32, string> = this.files.tryServeHandler(this.handler, r, r.paramStart(0), r.paramEnd(0))
+        this.again = twice.isErr() ? twice.error : ""
+      }
+    } else {
+      this.last = this.files.serveHandler(this.handler, r, r.paramStart(0), r.paramEnd(0))
+    }
     if (this.last === STATIC_NOT_FOUND) {
       this.missing += 1
       this.handler.refuse(r)

@@ -4,9 +4,9 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 8520,
+  "total": 8517,
   "explicit": {
-    "kept": 338,
+    "kept": 335,
     "toFix": 124
   },
   "modules": {
@@ -242,7 +242,7 @@
       "panic": 9
     },
     "std/net/handler.ts": {
-      "panic": 13
+      "panic": 9
     },
     "std/net/hpack.ts": {
       "array-length": 1,
@@ -425,6 +425,7 @@
       "slice": 8
     },
     "std/net/static.ts": {
+      "panic": 1,
       "slice": 4
     },
     "std/net/tls-tcp.ts": {
@@ -1116,33 +1117,13 @@
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpRequest.param",
+      "function": "HttpRequest.paramBound",
       "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpRequest.paramDecimal",
-      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
-    },
-    {
-      "module": "std/net/handler.ts",
-      "function": "HttpRequest.paramEnd",
-      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
-    },
-    {
-      "module": "std/net/handler.ts",
-      "function": "HttpRequest.paramIs",
-      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
-    },
-    {
-      "module": "std/net/handler.ts",
-      "function": "HttpRequest.paramStart",
-      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
-    },
-    {
-      "module": "std/net/handler.ts",
-      "function": "handlerFormDecode",
-      "reason": "the query value span must lie inside the head; queryIndex sets it there, so only a caller that wrote queryValueStart or queryValueEnd reaches it"
+      "function": "HttpRequest.valueBound",
+      "reason": "a field index header() did not answer; the caller holds the index header() gave, so only a program bug passes another; tryValueStart and tryValueEnd answer Err instead"
     },
     {
       "module": "std/net/hpack.ts",
@@ -1713,6 +1694,11 @@
       "module": "std/net/serve.ts",
       "function": "serveFields",
       "reason": "ServeLimits.server is a program-written config string that must hold no control bytes"
+    },
+    {
+      "module": "std/net/static.ts",
+      "function": "StaticFiles.serveHandler",
+      "reason": "a request whose field spans disagree with its own header() answers, the handler's invariant; it was HttpRequest.valueStart's panic before; tryServeHandler answers Err instead"
     },
     {
       "module": "std/net/tls/schedule.ts",

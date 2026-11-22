@@ -424,72 +424,53 @@ export class HttpRequest {
   }
 
   /**
-   * Where parameter `k` starts in `head`. Panics on a parameter the route does not have.
+   * Where parameter `k` starts in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the byte offset in `head` of the parameter's first raw byte
    */
   paramStart(k: i32): i32 {
-    const at: i32 = this.paramSlot(k)
-    if (at < 0 || at > 131070 || at + 1 >= toI32(this.params.length)) {
-      panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
-    }
-    return this.params[at]
+    return this.paramBound(k, 0)
   }
 
   /**
-   * Where parameter `k` ends in `head`.
+   * Where parameter `k` ends in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the byte offset in `head` just past the parameter's last raw byte
    */
   paramEnd(k: i32): i32 {
-    const at: i32 = this.paramSlot(k)
-    if (at < 0 || at > 131070 || at + 1 >= toI32(this.params.length)) {
-      panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
-    }
-    return this.params[at + 1]
+    return this.paramBound(k, 1)
   }
 
   /**
-   * Whether parameter `k`, raw, is exactly `text`.
+   * Whether parameter `k`, raw, is exactly `text`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @param text the value to compare with, as it would appear still percent-encoded
    * @returns true when the raw parameter bytes are exactly `text`
    */
   paramIs(k: i32, text: string): boolean {
-    const at: i32 = this.paramSlot(k)
-    if (at < 0 || at > 131070 || at + 1 >= toI32(this.params.length)) {
-      panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
-    }
-    return handlerSpanIs(this.head, this.params[at], this.params[at + 1], text)
+    return handlerSpanIs(this.head, this.paramBound(k, 0), this.paramBound(k, 1), text)
   }
 
   /**
    * Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its
    * length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM`
-   * when `out` is too short. Nothing is written on a code.
+   * when `out` is too short. Nothing is written on a code. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @param out where the decoded bytes go, from index 0; the caller's buffer
    * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
-    const at: i32 = this.paramSlot(k)
-    if (at < 0 || at > 131070 || at + 1 >= toI32(this.params.length)) {
-      panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
-    }
-    return routerDecode(this.head, this.params[at], this.params[at + 1], out)
+    return routerDecode(this.head, this.paramBound(k, 0), this.paramBound(k, 1), out)
   }
 
   /**
-   * Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1.
+   * Parameter `k` read as a decimal number that is not negative and fits an
+   * `i32`, or -1. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
    */
   paramDecimal(k: i32): i32 {
-    const at: i32 = this.paramSlot(k)
-    if (at < 0 || at > 131070 || at + 1 >= toI32(this.params.length)) {
-      panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
-    }
-    return handlerDecimal(this.head, this.params[at], this.params[at + 1])
+    return handlerDecimal(this.head, this.paramBound(k, 0), this.paramBound(k, 1))
   }
 
   /**
@@ -498,16 +479,7 @@ export class HttpRequest {
    * @returns `Ok` with the byte offset in `head` of the parameter's first raw byte, or `Err` when the route has no parameter `k`
    */
   tryParamStart(k: i32): Result<i32, string> {
-    const fault: string = this.paramFault(k)
-    // A literal bound first, so `2 * k + 1` is seen not to overflow.
-    if (fault.length > 0 || k < 0 || k > 65535) {
-      return Err(fault)
-    }
-    const at: i32 = 2 * k
-    if (at + 1 >= toI32(this.params.length)) {
-      return Err(fault)
-    }
-    return Ok(this.params[at])
+    return this.tryParamBound(k, 0)
   }
 
   /**
@@ -516,16 +488,7 @@ export class HttpRequest {
    * @returns `Ok` with the byte offset in `head` just past the parameter's last raw byte, or `Err` when the route has no parameter `k`
    */
   tryParamEnd(k: i32): Result<i32, string> {
-    const fault: string = this.paramFault(k)
-    // A literal bound first, so `2 * k + 1` is seen not to overflow.
-    if (fault.length > 0 || k < 0 || k > 65535) {
-      return Err(fault)
-    }
-    const at: i32 = 2 * k
-    if (at + 1 >= toI32(this.params.length)) {
-      return Err(fault)
-    }
-    return Ok(this.params[at + 1])
+    return this.tryParamBound(k, 1)
   }
 
   /**
@@ -535,36 +498,69 @@ export class HttpRequest {
    * @returns `Ok` with the number, or -1 when the parameter is empty, holds a non-digit or overflows; `Err` when the route has no parameter `k`
    */
   tryParamDecimal(k: i32): Result<i32, string> {
-    const fault: string = this.paramFault(k)
-    // A literal bound first, so `2 * k + 1` is seen not to overflow.
-    if (fault.length > 0 || k < 0 || k > 65535) {
-      return Err(fault)
+    const start = this.tryParamBound(k, 0)
+    if (start.isErr()) {
+      return Err(start.error)
+    }
+    const end = this.tryParamBound(k, 1)
+    if (end.isErr()) {
+      return Err(end.error)
+    }
+    return Ok(handlerDecimal(this.head, start.value, end.value))
+  }
+
+  /**
+   * Parameter `k`'s start (`side` 0) or end (`side` 1) in `head`: the one
+   * place the parameter contract panics.
+   */
+  private paramBound(k: i32, side: i32): i32 {
+    const bound: i32 = this.paramAt(k, side)
+    if (bound < 0) {
+      // A parameter the route does not have: the program's own mistake.
+      panic(this.paramFault(k))
+    }
+    return bound
+  }
+
+  /**
+   * Parameter `k`'s start (`side` 0) or end (`side` 1) in `head`, or why the
+   * route has no parameter `k`.
+   */
+  private tryParamBound(k: i32, side: i32): Result<i32, string> {
+    const bound: i32 = this.paramAt(k, side)
+    if (bound < 0) {
+      return Err(this.paramFault(k))
+    }
+    return Ok(bound)
+  }
+
+  /**
+   * Parameter `k`'s start (`side` 0) or end (`side` 1) in `head`, or -1 when
+   * the route has no parameter `k`: an offset in `head` is never negative, so
+   * -1 is no answer a span gives. It builds no `Result`, so the hot path
+   * allocates nothing. The literal bound on `k` comes first, so `2 * k + 1`
+   * is seen not to overflow; a route holds far fewer parameters.
+   */
+  private paramAt(k: i32, side: i32): i32 {
+    if (k < 0 || k >= this.paramCount || k > 65535) {
+      return -1
     }
     const at: i32 = 2 * k
     if (at + 1 >= toI32(this.params.length)) {
-      return Err(fault)
+      return -1
     }
-    return Ok(handlerDecimal(this.head, this.params[at], this.params[at + 1]))
+    return side === 0 ? this.params[at] : this.params[at + 1]
   }
 
-  /** Why the route has no parameter `k`, or `""` when it has one. */
+  /** Why `paramAt` gave -1 for parameter `k`. */
   private paramFault(k: i32): string {
     if (k < 0 || k >= this.paramCount) {
       return `HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`
     }
-    return ""
-  }
-
-  /**
-   * Where parameter `k`'s start is in `params`, `2 * k`, or -1 when the
-   * route has no parameter `k`. The literal bound keeps `2 * k` and the
-   * `+ 1` past it from overflowing; a route holds far fewer parameters.
-   */
-  private paramSlot(k: i32): i32 {
-    if (k < 0 || k >= this.paramCount || k > 65535) {
-      return -1
+    if (k > 65535) {
+      return `HttpRequest.param: parameter ${k} is past the 65536 a route can hold`
     }
-    return 2 * k
+    return `HttpRequest.param: the request holds no span for parameter ${k}`
   }
 
   /**
@@ -579,11 +575,7 @@ export class HttpRequest {
    * @returns how many decoded bytes were written, or `HANDLER_ABSENT` or a negative `ROUTER_*` code
    */
   query(name: string, out: u8[]): i32 {
-    const at: i32 = this.queryIndex(name)
-    if (at < 0) {
-      return HANDLER_ABSENT
-    }
-    return handlerFormDecode(this.head, this.queryValueStart, this.queryValueEnd, out)
+    return this.queryScan(name, out, true)
   }
 
   /**
@@ -606,13 +598,25 @@ export class HttpRequest {
    * @returns the byte offset in `head` where the matching `name=value` pair starts, or -1 when none matches
    */
   queryIndex(name: string): i32 {
+    // Without `decode` the walk writes nothing to `out`.
+    return this.queryScan(name, this.head, false)
+  }
+
+  /**
+   * `queryIndex`'s walk: with `decode`, the matching value decoded into `out`
+   * as `query` answers it (`HANDLER_ABSENT` when none matches), else the
+   * pair's start or -1. The decode reads the span the walk proved inside
+   * `head`, so it needs no check of its own.
+   */
+  private queryScan(name: string, out: u8[], decode: boolean): i32 {
+    const none: i32 = decode ? HANDLER_ABSENT : -1
     // The target lies inside `head`; the bound says so to the prover.
     const length: i32 = toI32(this.head.length)
     const end: i32 = this.targetEnd < length ? this.targetEnd : length
     // A path that runs to the target's end has no query.
     const pathEnd: i32 = this.pathEnd
     if (pathEnd < 0 || pathEnd >= end || pathEnd >= length) {
-      return -1
+      return none
     }
     let at: i32 = pathEnd + 1
     while (at < end) {
@@ -635,17 +639,22 @@ export class HttpRequest {
         keyEnd += 1
       }
       if (handlerFormIs(this.head, at, keyEnd, name)) {
-        this.queryValueStart = keyEnd < pairEnd ? keyEnd + 1 : pairEnd
+        // A pair with no `=` has an empty value, at its end. The length is
+        // worked in 64 bits: both ends lie inside `head`, so it is exact, but
+        // the prover keeps no lower bound on `keyEnd` across the loop.
+        const valueStart: i32 = keyEnd < pairEnd ? keyEnd + 1 : pairEnd
+        const valueLength: i32 = keyEnd < pairEnd ? toI32(toI64(pairEnd) - toI64(keyEnd) - 1) : 0
+        this.queryValueStart = valueStart
         this.queryValueEnd = pairEnd
-        return at
+        return decode ? handlerFormDecode(this.head, valueStart, valueLength, out) : at
       }
       // The last pair ends the query.
       if (pairEnd >= end) {
-        return -1
+        return none
       }
       at = pairEnd + 1
     }
-    return -1
+    return none
   }
 
   /**
@@ -667,23 +676,82 @@ export class HttpRequest {
   }
 
   /**
-   * Where field `i`'s value starts in `head`.
+   * Where field `i`'s value starts in `head`. Panics on an `i` that is not a
+   * field index, a caller contract: pass only what `header` answered, after
+   * checking it is not `HANDLER_ABSENT`.
    * @param i a field index, as `header` answered it
    * @returns the byte offset in `head` of the value's first byte
    */
   valueStart(i: i32): i32 {
-    const at: i32 = handlerSpanSlot(i, 2)
-    return at >= 0 && at < toI32(this.spans.length) ? this.spans[at] : 0
+    return this.valueBound(i, 2)
   }
 
   /**
-   * Where field `i`'s value ends in `head`.
+   * Where field `i`'s value ends in `head`. Panics on an `i` that is not a
+   * field index, a caller contract: pass only what `header` answered, after
+   * checking it is not `HANDLER_ABSENT`.
    * @param i a field index, as `header` answered it
    * @returns the byte offset in `head` just past the value's last byte
    */
   valueEnd(i: i32): i32 {
-    const at: i32 = handlerSpanSlot(i, 3)
-    return at >= 0 && at < toI32(this.spans.length) ? this.spans[at] : 0
+    return this.valueBound(i, 3)
+  }
+
+  /**
+   * Where field `i`'s value starts in `head`, or an error when `i` is not a
+   * field index `header` answered.
+   * @param i a field index, as `header` answered it
+   * @returns `Ok` with the byte offset in `head` of the value's first byte, or `Err` naming `i`
+   */
+  tryValueStart(i: i32): Result<i32, string> {
+    return this.tryValueBound(i, 2)
+  }
+
+  /**
+   * Where field `i`'s value ends in `head`, or an error when `i` is not a
+   * field index `header` answered.
+   * @param i a field index, as `header` answered it
+   * @returns `Ok` with the byte offset in `head` just past the value's last byte, or `Err` naming `i`
+   */
+  tryValueEnd(i: i32): Result<i32, string> {
+    return this.tryValueBound(i, 3)
+  }
+
+  /** Field `i`'s value start (`part` 2) or end (`part` 3): the one place the field contract panics. */
+  private valueBound(i: i32, part: i32): i32 {
+    const bound: i32 = this.valueAt(i, part)
+    if (bound < 0) {
+      // A field index `header` did not answer: the program's own mistake.
+      panic(this.valueFault(i))
+    }
+    return bound
+  }
+
+  /** Field `i`'s value start (`part` 2) or end (`part` 3) in `head`, or why `i` is no field index. */
+  private tryValueBound(i: i32, part: i32): Result<i32, string> {
+    const bound: i32 = this.valueAt(i, part)
+    if (bound < 0) {
+      return Err(this.valueFault(i))
+    }
+    return Ok(bound)
+  }
+
+  /**
+   * Field `i`'s value start (`part` 2) or end (`part` 3) in `head`, or -1 when
+   * `i` is no field index: an offset in `head` is never negative. It builds
+   * no `Result`, so the hot path allocates nothing.
+   */
+  private valueAt(i: i32, part: i32): i32 {
+    const at: i32 = handlerSpanSlot(i, part)
+    if (i < 0 || i >= this.headerCount || at < 0 || at >= toI32(this.spans.length)) {
+      return -1
+    }
+    return this.spans[at]
+  }
+
+  /** Why `valueAt` gave -1 for field `i`. */
+  private valueFault(i: i32): string {
+    return `HttpRequest.value: ${i} is not a field index of the ${this.headerCount} \`header\` answers`
   }
 
   /**
@@ -693,8 +761,14 @@ export class HttpRequest {
    * @returns true when the field is present and its first occurrence has exactly that value
    */
   headerIs(name: string, value: string): boolean {
+    // An absent field (`HANDLER_ABSENT`) is no field index: both answer -1.
     const i: i32 = this.header(name)
-    return i >= 0 && handlerSpanIs(this.head, this.valueStart(i), this.valueEnd(i), value)
+    const start: i32 = this.valueAt(i, 2)
+    const end: i32 = this.valueAt(i, 3)
+    if (start < 0 || end < 0) {
+      return false
+    }
+    return handlerSpanIs(this.head, start, end, value)
   }
 }
 
@@ -803,9 +877,10 @@ export class HttpHandler {
    * @param listener the listening socket's descriptor, still the program's to close
    * @param router the routes, which the handler keeps and consults at each request head
    * @param loop a readiness loop from `pollCreate` for the handler to own, or
-   *   -1 (the default) to make one here. Panics on limits below their
-   *   least and on a `pollCreate` failure, each a contract of this
-   *   constructor: use `openHttpHandler` for a `Result`.
+   *   -1 (the default) to make one here; any other negative is a failed
+   *   `pollCreate` passed through. Panics on limits below their least and on
+   *   a failed loop, each a contract of this constructor: use
+   *   `openHttpHandler` for a `Result`.
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
     const fault: string = handlerLimitsFault(limits)
@@ -845,7 +920,7 @@ export class HttpHandler {
     this.noFields = []
     this.namesBy = []
     this.valuesBy = []
-    this.loop = loop >= 0 ? loop : pollCreate()
+    this.loop = loop === -1 ? pollCreate() : loop
     if (this.loop < 0) {
       panic(`HttpHandler: pollCreate failed: ${this.loop}`)
     }
@@ -1902,11 +1977,11 @@ export class HttpHandler {
       if (taken === H1_AGAIN) {
         taken = 0
       } else if (taken < 0) {
-        // The length check above leaves the carrier no body to refuse; should
-        // it refuse one all the same, the response cannot be completed, and
-        // ending the connection is the one honest answer.
-        this.closeSlot(r.slot)
-        return HANDLER_DROPPED
+        // The carrier took nothing, so `r` is as it was: the same contract as
+        // the length check above, as `write` has always answered it.
+        return this.refused(
+          `HttpHandler.write: the carrier refused the body (${taken}): more than the length the response declared`
+        )
       }
     }
     if (taken < len) {
@@ -2059,7 +2134,8 @@ export class HttpHandler {
   /**
    * `sendFields`, with a broken contract answered as an `Err` instead of a
    * panic: a request not taken or already answered, a status outside 200 to
-   * 599 or a window outside `body` leave `r` as it was; a field the carrier
+   * 599 or, when a body is sent (`len` above 0, a status other than 204 and
+   * 304), a window outside `body` leave `r` as it was; a field the carrier
    * refuses closes the connection and hands `r` back.
    * @param r a request taken and not yet answered; the handler's again after an `Ok`
    * @param status the response status, from 200 to 599
@@ -2092,8 +2168,11 @@ export class HttpHandler {
     off: i32,
     len: i32
   ): i32 {
-    // The window first, so a refused one leaves `r` untouched.
-    if (handlerOutside(body, off, len)) {
+    // Only a body that is sent has a window; it is checked before the head
+    // goes, so a refused one leaves `r` untouched. A chunked length or a
+    // 204 or 304 sends none, as before.
+    const sends: boolean = len > 0 && status !== 204 && status !== 304
+    if (sends && handlerOutside(body, off, len)) {
       return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${body.length} bytes`)
     }
     const started: i32 = this.startCore(r, status, names, values, len)
@@ -2104,7 +2183,7 @@ export class HttpHandler {
     if (started !== HANDLER_SENT) {
       return started
     }
-    if (len > 0 && status !== 204 && status !== 304) {
+    if (sends) {
       // No pass between the body and the end: `end` drives the slot once.
       // The head declared `len` and the window is checked, so `put` has no
       // contract left to refuse; should it refuse one, the answer is lost.
@@ -2302,7 +2381,16 @@ export class HttpHandler {
   private refuseCore(r: HttpRequest): i32 {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
       const length: i32 = this.writeProblem(toI32(405), "Method Not Allowed", "")
-      this.allowValues = [this.problemType, this.allowFor(r)]
+      // The `Allow` value goes in the pair the constructor made, one store a
+      // 405; the length test, after `allowFor` runs, proves the index, and
+      // its other branch, never taken, answers the same by making the pair.
+      const allow: u8[] = this.allowFor(r)
+      const values: u8[][] = this.allowValues
+      if (toI32(values.length) >= 2) {
+        values[1] = allow
+      } else {
+        this.allowValues = [this.problemType, allow]
+      }
       return this.sendFieldsCore(
         r,
         toI32(405),
@@ -2415,10 +2503,25 @@ const handlerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): voi
   }
 }
 
-/** `n` copies of `fill`, made by pushing, so no length is taken on trust; none when `n` is not positive. */
+/**
+ * The first `n` elements' length as a `u16`, at most 65535, and 0 when `n` is
+ * not positive: an allocation of a `u16` length is not an `array-length`
+ * site, so the helpers below allocate once up to it and push only past it.
+ */
+const handlerHead = (n: i32): u16 => {
+  if (n <= 0) {
+    return 0
+  }
+  return toU16(n < 65535 ? n : 65535)
+}
+
+/** `n` copies of `fill`, none when `n` is not positive: one allocation up to 65535, pushed past it. */
 const handlerInts = (n: i32, fill: i32): i32[] => {
-  const out: i32[] = []
-  for (let k: i32 = 0; k < n; k++) {
+  const out: i32[] = new Array<i32>(handlerHead(n))
+  if (fill !== 0) {
+    out.fill(fill)
+  }
+  for (let k: i32 = 65535; k < n; k++) {
     out.push(fill)
   }
   return out
@@ -2426,8 +2529,8 @@ const handlerInts = (n: i32, fill: i32): i32[] => {
 
 /** `n` flags, each false, made as `handlerInts` makes its numbers. */
 const handlerFlags = (n: i32): boolean[] => {
-  const out: boolean[] = []
-  for (let k: i32 = 0; k < n; k++) {
+  const out: boolean[] = new Array<boolean>(handlerHead(n))
+  for (let k: i32 = 65535; k < n; k++) {
     out.push(false)
   }
   return out
@@ -2435,8 +2538,8 @@ const handlerFlags = (n: i32): boolean[] => {
 
 /** `n` zero bytes, made as `handlerInts` makes its numbers. */
 const handlerBytes = (n: i32): u8[] => {
-  const out: u8[] = []
-  for (let k: i32 = 0; k < n; k++) {
+  const out: u8[] = new Array<u8>(handlerHead(n))
+  for (let k: i32 = 65535; k < n; k++) {
     out.push(0)
   }
   return out
@@ -2623,19 +2726,15 @@ const handlerFormIs = (bytes: u8[], start: i32, end: i32, name: string): boolean
 }
 
 /**
- * `bytes[start .. end)` form-decoded into `out` from 0: its length,
+ * `bytes[start .. start + len)` form-decoded into `out` from 0: its length,
  * `ROUTER_BAD_ESCAPE`, or `ROUTER_NO_ROOM`. `%00` decodes like any byte, as a
  * route parameter's does.
  */
-const handlerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 => {
-  // `queryIndex` sets the span inside `head`; one a caller wrote is a bug.
-  if (start < 0 || end < 0 || end < start || end > toI32(bytes.length)) {
-    panic(`HttpRequest.query: the value span ${start} to ${end} is not inside the head`)
-  }
+const handlerFormDecode = (bytes: u8[], start: i32, len: i32, out: u8[]): i32 => {
   const length: i32 = percentDecode(
     bytes,
     start,
-    end - start,
+    len,
     out,
     HANDLER_ZERO,
     URL_DECODE_FORM | URL_DECODE_ALLOW_NUL

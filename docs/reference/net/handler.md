@@ -272,7 +272,7 @@ class HttpHandler
 | `tryProblem(r: HttpRequest, status: i32, title: string, detail: string): Result<i32, string>` | `problem`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, or a status outside 200 to 599, leaves `r` as it was. |
 | `tryRefuse(r: HttpRequest): Result<i32, string>` | `refuse`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered leaves `r` as it was. |
 | `trySend(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): Result<i32, string>` | `send`, with a broken contract answered as an `Err` instead of a panic, as `trySendFields` answers it. |
-| `trySendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): Result<i32, string>` | `sendFields`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, a status outside 200 to 599 or a window outside `body` leave `r` as it was; a field the carrier refuses closes the connection and hands `r` back. |
+| `trySendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): Result<i32, string>` | `sendFields`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, a status outside 200 to 599 or, when a body is sent (`len` above 0, a status other than 204 and 304), a window outside `body` leave `r` as it was; a field the carrier refuses closes the connection and hands `r` back. |
 | `trySendJson(r: HttpRequest, status: i32): Result<i32, string>` | `sendJson`, with a broken contract answered as an `Err` instead of a panic: no value begun with `json`, a request not taken or already answered, or a status outside 200 to 599, leaves `r` as it was. |
 | `tryStart(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): Result<i32, string>` | `start`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, a status outside 200 to 599 or a body length below `HTTP1_CHUNKED` leave `r` as it was; a field the carrier refuses closes the connection and hands `r` back. |
 | `tryWatch(fd: i32, id: i32): Result<boolean, string>` | `watch`, with an id outside the range answered as an `Err` instead of a panic. |
@@ -311,19 +311,21 @@ class HttpRequest
 | `header(name: string): i32` | The index of the first field named `name`, which is lowercase, or `HANDLER_ABSENT`. |
 | `headerIs(name: string, value: string): boolean` | Whether the first field named `name` (lowercase) has exactly the value `value`. |
 | `methodIs(method: string): boolean` | Whether the method is exactly `method` (methods are case-sensitive, RFC 9110 §9.1). |
-| `param(k: i32, out: u8[]): i32` | Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM` when `out` is too short. Nothing is written on a code. |
-| `paramDecimal(k: i32): i32` | Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1. |
-| `paramEnd(k: i32): i32` | Where parameter `k` ends in `head`. |
-| `paramIs(k: i32, text: string): boolean` | Whether parameter `k`, raw, is exactly `text`. |
-| `paramStart(k: i32): i32` | Where parameter `k` starts in `head`. Panics on a parameter the route does not have. |
+| `param(k: i32, out: u8[]): i32` | Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM` when `out` is too short. Nothing is written on a code. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramDecimal(k: i32): i32` | Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramEnd(k: i32): i32` | Where parameter `k` ends in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramIs(k: i32, text: string): boolean` | Whether parameter `k`, raw, is exactly `text`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramStart(k: i32): i32` | Where parameter `k` starts in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
 | `pathIs(path: string): boolean` | Whether the path, the target up to its `?`, is exactly `path`. |
 | `query(name: string, out: u8[]): i32` | The first query parameter named `name`, its value decoded into `out` from 0 — `+` as a space and `%XX` as its byte, the form encoding (application/x-www-form-urlencoded) — and its length; a name is compared decoded too. `HANDLER_ABSENT` when no parameter has the name, `ROUTER_BAD_ESCAPE` for a malformed escape in its value, `ROUTER_NO_ROOM` when `out` is too short. A name with no `=` has an empty value. |
 | `queryIndex(name: string): i32` | Finds the first parameter named `name`: where its pair starts, or -1; its raw value goes to `queryValue...`. |
 | `tryParamDecimal(k: i32): Result<i32, string>` | Parameter `k` read as a decimal number, as `paramDecimal` reads it, or an error naming the parameter the route does not have. |
 | `tryParamEnd(k: i32): Result<i32, string>` | Where parameter `k` ends in `head`, or an error naming the parameter the route does not have. |
 | `tryParamStart(k: i32): Result<i32, string>` | Where parameter `k` starts in `head`, or an error naming the parameter the route does not have. |
-| `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`. |
-| `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`. |
+| `tryValueEnd(i: i32): Result<i32, string>` | Where field `i`'s value ends in `head`, or an error when `i` is not a field index `header` answered. |
+| `tryValueStart(i: i32): Result<i32, string>` | Where field `i`'s value starts in `head`, or an error when `i` is not a field index `header` answered. |
+| `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`. Panics on an `i` that is not a field index, a caller contract: pass only what `header` answered, after checking it is not `HANDLER_ABSENT`. |
+| `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`. Panics on an `i` that is not a field index, a caller contract: pass only what `header` answered, after checking it is not `HANDLER_ABSENT`. |
 
 ## Limits
 

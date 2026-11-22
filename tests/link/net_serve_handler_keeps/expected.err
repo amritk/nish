@@ -1,1 +1,1 @@
-std/net/serve.ts:847:31: error: `serveTask<handle>` runs as a spawned task, in a region of its own that is freed when it ends, and hands `new Request(lend(st.reqs[k]))` to `handle`, which may keep it: a view `lend` borrows is its spawner's memory, lent only while the task runs
+std/net/serve.ts:851:31: error: `serveTask<handle>` runs as a spawned task, in a region of its own that is freed when it ends, and hands `new Request(lend(st.reqs[k]))` to `handle`, which may keep it: a view `lend` borrows is its spawner's memory, lent only while the task runs

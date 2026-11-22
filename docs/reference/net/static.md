@@ -155,7 +155,7 @@ class StaticFiles
 | `status: i32` | The status the last `serve` sent, or 0 when it sent none. |
 | `serve(server: HttpServer, r: HttpServerRequest, pathStart: i32, pathEnd: i32): i32` | Serves the file `r`'s head names at `[pathStart, pathEnd)`, a path relative to the root (one leading `/` is dropped), through `server`. |
 | `serveHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): i32` | `serve` through `nish/net/handler`'s HTTP/1.1 carrier. |
-| `tryServeHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): Result<i32, string>` | `serveHandler` through the handler's `try` calls: a misuse that makes `start`, `write` or `end` panic comes back as the handler's reason instead, with the file closed. |
+| `tryServeHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): Result<i32, string>` | `serveHandler` through the handler's `try` calls: a misuse that makes `start`, `write` or `end` panic comes back as the handler's reason instead, with the file closed; so does a field index the handler gives no value span for, before anything is sent. |
 
 ### StaticLimits
 
