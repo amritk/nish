@@ -820,8 +820,9 @@ export class AtomicI32Array {
       this.values = new Array<i32>(toU16(length))
     } else {
       this.values = []
+      const zero: i32 = 0
       for (let k: i32 = 0; k < length; k += 1) {
-        this.values.push(0)
+        this.values.push(zero)
       }
     }
     this.values.fill(0)
