@@ -243,11 +243,26 @@ const tlsReadVector = (r: TlsReader, width: i32, min: i32, max: i32): i32 => {
   for (let k: i32 = 0; k < width; k++) {
     n = (n << 8) | tlsReadU8(r)
   }
-  if (r.failed || n < min || n > max || n > r.end - r.at) {
+  const at: i32 = r.at
+  const end: i32 = r.end
+  // A width of at most 3 bytes reads at most 2^24 - 1, and a position is
+  // never past `data.length`: the bounds refuse only a reader no caller opens.
+  if (
+    r.failed ||
+    n < min ||
+    n > max ||
+    n < 0 ||
+    n > 16777215 ||
+    at < 0 ||
+    at > 1073741823 ||
+    end < 0 ||
+    end < at ||
+    n > end - at
+  ) {
     r.failed = true
-    return r.at
+    return at
   }
-  return r.at + n
+  return at + n
 }
 
 /**
@@ -262,6 +277,42 @@ const tlsReadList = (r: TlsReader, listEnd: i32): i32 => {
   r.end = listEnd
   return outer
 }
+
+/**
+ * How many bytes lie from the reader's position to `to`, an end a vector
+ * read of this reader answered. A `to` before the position, which no such
+ * end is, fails the reader and answers 0.
+ */
+const tlsReadSpan = (r: TlsReader, to: i32): i32 => {
+  const at: i32 = r.at
+  if (at < 0 || to < 0 || to < at) {
+    r.failed = true
+    return 0
+  }
+  return to - at
+}
+
+/**
+ * The reader's position plus `n`, unchecked against the window, which
+ * `tlsReadSkipTo` and the vector reads check. A position past 2^30 - 1,
+ * which no buffer this module reads reaches, fails the reader and answers
+ * the position.
+ */
+const tlsReadAhead = (r: TlsReader, n: i32): i32 => {
+  const at: i32 = r.at
+  if (at < 0 || at > 1073741823 || n < 0 || n > 1073741823) {
+    r.failed = true
+    return at
+  }
+  return at + n
+}
+
+/**
+ * The length of the window `from .. to` a 16-bit vector read opened at
+ * `from` and answered `to` for: 0 when the read failed and left `to` before
+ * `from`, which the failed reader reports.
+ */
+const tlsWindowLength = (from: i32, to: i32): i32 => (from < 0 || to < 0 || to < from ? 0 : to - from)
 
 /** Moves to `to`, the end of a vector this reader opened. */
 const tlsReadSkipTo = (r: TlsReader, to: i32): void => {
@@ -542,7 +593,7 @@ const tlsHelloRefuse = (hello: TlsClientHelloView, alert: i32): void => {
  */
 const tlsReadU16Vector = (r: TlsReader, width: i32, min: i32, max: i32): i32 => {
   const end: i32 = tlsReadVector(r, width, min, max)
-  if ((end - r.at) % 2 !== 0) {
+  if (tlsReadSpan(r, end) % 2 !== 0) {
     r.failed = true
     return r.at
   }
@@ -572,11 +623,8 @@ export const tlsListHas = (list: i32[], value: i32): boolean => list.indexOf(val
  * @returns true when one of the window's values is `value`.
  */
 export const tlsWindowHasU16 = (data: u8[], at: i32, length: i32, value: i32): boolean => {
-  for (
-    let k: i32 = at;
-    k + 1 < at + length && k >= 0 && k < toI32(data.length) && k + 1 < toI32(data.length);
-    k += 2
-  ) {
+  const end: i64 = toI64(at) + toI64(length)
+  for (let k: i32 = at; k >= 0 && k < toI32(data.length) - 1 && toI64(k) + 1 < end; k += 2) {
     if (((toI32(data[k]) << 8) | toI32(data[k + 1])) === value) {
       return true
     }
@@ -604,7 +652,7 @@ const tlsReadServerName = (r: TlsReader, hello: TlsClientHelloView): void => {
       }
       hello.hasServerName = true
       hello.serverNameAt = r.at
-      hello.serverNameLength = nameEnd - r.at
+      hello.serverNameLength = tlsReadSpan(r, nameEnd)
       while (!r.failed && r.at < nameEnd) {
         const c: i32 = tlsReadU8(r)
         if (c < 0x21 || c > 0x7e) {
@@ -627,7 +675,7 @@ const tlsReadKeyShare = (r: TlsReader, hello: TlsClientHelloView): void => {
   hello.hasKeyShare = true
   const listEnd: i32 = tlsReadVector(r, 2, 0, 65535)
   hello.sharesAt = r.at
-  hello.sharesLength = listEnd - r.at
+  hello.sharesLength = tlsReadSpan(r, listEnd)
   // The list's own end bounds every entry in it (see `tlsReadList`).
   const outerEnd: i32 = tlsReadList(r, listEnd)
   while (!r.failed && r.at < listEnd) {
@@ -639,12 +687,12 @@ const tlsReadKeyShare = (r: TlsReader, hello: TlsClientHelloView): void => {
     if (group === TLS_GROUP_X25519 && !r.failed) {
       hello.hasX25519Share = true
       hello.x25519ShareAt = r.at
-      hello.x25519ShareLength = shareEnd - r.at
+      hello.x25519ShareLength = tlsReadSpan(r, shareEnd)
     }
     if (group === TLS_GROUP_SECP256R1 && !r.failed) {
       hello.hasP256Share = true
       hello.p256ShareAt = r.at
-      hello.p256ShareLength = shareEnd - r.at
+      hello.p256ShareLength = tlsReadSpan(r, shareEnd)
     }
     tlsReadSkipTo(r, shareEnd)
   }
@@ -656,7 +704,7 @@ const tlsReadAlpn = (r: TlsReader, hello: TlsClientHelloView): void => {
   hello.hasAlpn = true
   const listEnd: i32 = tlsReadVector(r, 2, 2, 65535)
   hello.alpnAt = r.at
-  hello.alpnLength = listEnd - r.at
+  hello.alpnLength = tlsReadSpan(r, listEnd)
   // The list's own end bounds every entry in it (see `tlsReadList`).
   const outerEnd: i32 = tlsReadList(r, listEnd)
   while (!r.failed && r.at < listEnd) {
@@ -678,31 +726,37 @@ const tlsReadPreSharedKey = (r: TlsReader, hello: TlsClientHelloView): void => {
   hello.hasPreSharedKey = true
   const identitiesEnd: i32 = tlsReadVector(r, 2, 7, 65535)
   hello.pskIdentitiesAt = r.at
-  hello.pskIdentitiesLength = identitiesEnd - r.at
+  hello.pskIdentitiesLength = tlsReadSpan(r, identitiesEnd)
   // The list's own end bounds every entry in it (see `tlsReadList`).
   let outerEnd: i32 = tlsReadList(r, identitiesEnd)
-  while (!r.failed && r.at < identitiesEnd) {
+  // Each entry is at least 7 bytes of a list of at most 65535, so the count
+  // bound never ends the walk early.
+  let identities: i32 = 0
+  while (!r.failed && r.at < identitiesEnd && identities < 65535) {
     const identityEnd: i32 = tlsReadVector(r, 2, 1, 65535)
     tlsReadSkipTo(r, identityEnd)
     // obfuscated_ticket_age, which the server reads only for the identity it selects.
-    tlsReadSkipTo(r, r.at + 4)
+    tlsReadSkipTo(r, tlsReadAhead(r, 4))
     if (!r.failed) {
-      hello.pskIdentityCount = hello.pskIdentityCount + 1
+      identities++
     }
   }
+  hello.pskIdentityCount = identities
   r.end = outerEnd
   hello.pskBindersPrefixAt = r.at
   const bindersEnd: i32 = tlsReadVector(r, 2, 33, 65535)
   hello.pskBindersAt = r.at
-  hello.pskBindersLength = bindersEnd - r.at
+  hello.pskBindersLength = tlsReadSpan(r, bindersEnd)
   outerEnd = tlsReadList(r, bindersEnd)
-  while (!r.failed && r.at < bindersEnd) {
+  let binders: i32 = 0
+  while (!r.failed && r.at < bindersEnd && binders < 65535) {
     const binderEnd: i32 = tlsReadVector(r, 1, 32, 255)
     tlsReadSkipTo(r, binderEnd)
     if (!r.failed) {
-      hello.pskBinderCount = hello.pskBinderCount + 1
+      binders++
     }
   }
+  hello.pskBinderCount = binders
   r.end = outerEnd
 }
 
@@ -715,7 +769,7 @@ const tlsReadPskModes = (r: TlsReader, hello: TlsClientHelloView): void => {
   hello.hasPskModes = true
   const modesEnd: i32 = tlsReadVector(r, 1, 1, 255)
   hello.pskModesAt = r.at
-  hello.pskModesLength = modesEnd - r.at
+  hello.pskModesLength = tlsReadSpan(r, modesEnd)
   while (!r.failed && r.at < modesEnd) {
     if (tlsReadU8(r) === TLS_PSK_DHE_KE) {
       hello.pskDheKe = true
@@ -731,7 +785,7 @@ const tlsReadPskModes = (r: TlsReader, hello: TlsClientHelloView): void => {
  * `illegal_parameter`; one above the TLS 1.3 maximum is read as that maximum.
  */
 const tlsReadRecordSizeLimit = (r: TlsReader, end: i32, hello: TlsClientHelloView): void => {
-  if (end - r.at !== 2) {
+  if (tlsReadSpan(r, end) !== 2) {
     r.failed = true
     return
   }
@@ -751,21 +805,21 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
       break
     case TLS_EXT_SUPPORTED_GROUPS:
       hello.hasSupportedGroups = true
-      hello.groupsAt = r.at + 2
-      hello.groupsLength = tlsReadU16Vector(r, 2, 2, 65535) - hello.groupsAt
+      hello.groupsAt = tlsReadAhead(r, 2)
+      hello.groupsLength = tlsWindowLength(hello.groupsAt, tlsReadU16Vector(r, 2, 2, 65535))
       break
     case TLS_EXT_SIGNATURE_ALGORITHMS:
       hello.hasSignatureAlgorithms = true
-      hello.schemesAt = r.at + 2
-      hello.schemesLength = tlsReadU16Vector(r, 2, 2, 65534) - hello.schemesAt
+      hello.schemesAt = tlsReadAhead(r, 2)
+      hello.schemesLength = tlsWindowLength(hello.schemesAt, tlsReadU16Vector(r, 2, 2, 65534))
       break
     case TLS_EXT_ALPN:
       tlsReadAlpn(r, hello)
       break
     case TLS_EXT_SUPPORTED_VERSIONS:
       hello.hasSupportedVersions = true
-      hello.versionsAt = r.at + 1
-      hello.versionsLength = tlsReadU16Vector(r, 1, 2, 254) - hello.versionsAt
+      hello.versionsAt = tlsReadAhead(r, 1)
+      hello.versionsLength = tlsWindowLength(hello.versionsAt, tlsReadU16Vector(r, 1, 2, 254))
       break
     case TLS_EXT_KEY_SHARE:
       tlsReadKeyShare(r, hello)
@@ -779,7 +833,7 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
     case TLS_EXT_QUIC_TRANSPORT_PARAMETERS:
       hello.hasQuicTransportParameters = true
       hello.quicAt = r.at
-      hello.quicLength = end - r.at
+      hello.quicLength = tlsReadSpan(r, end)
       tlsReadSkipTo(r, end)
       break
     case TLS_EXT_RECORD_SIZE_LIMIT:
@@ -827,7 +881,8 @@ export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i
     hello.alert = TLS_ALERT_DECODE_ERROR
     return
   }
-  const end: i32 = off + len
+  // The guard above keeps the sum inside `data.length`.
+  const end: i32 = toI32(toI64(off) + toI64(len))
   const r: TlsReader = hello.reader
   r.data = data
   r.at = off
@@ -835,22 +890,22 @@ export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i
   r.failed = false
   hello.legacyVersion = tlsReadU16(r)
   hello.randomAt = r.at
-  tlsReadSkipTo(r, r.at + TLS_RANDOM_SIZE)
+  tlsReadSkipTo(r, tlsReadAhead(r, TLS_RANDOM_SIZE))
   const sessionEnd: i32 = tlsReadVector(r, 1, 0, 32)
   hello.sessionIdAt = r.at
-  hello.sessionIdLength = sessionEnd - r.at
+  hello.sessionIdLength = tlsReadSpan(r, sessionEnd)
   tlsReadSkipTo(r, sessionEnd)
-  hello.suitesAt = r.at + 2
-  hello.suitesLength = tlsReadU16Vector(r, 2, 2, 65534) - hello.suitesAt
+  hello.suitesAt = tlsReadAhead(r, 2)
+  hello.suitesLength = tlsWindowLength(hello.suitesAt, tlsReadU16Vector(r, 2, 2, 65534))
   const compressionEnd: i32 = tlsReadVector(r, 1, 1, 255)
-  hello.nullCompressionOnly = compressionEnd - r.at === 1 && tlsReadU8(r) === 0
+  hello.nullCompressionOnly = tlsReadSpan(r, compressionEnd) === 1 && tlsReadU8(r) === 0
   tlsReadSkipTo(r, compressionEnd)
   // A hello with no extensions block is well formed (§4.1.2 keeps it for
   // TLS 1.2 and earlier); it offers no TLS 1.3, which the server refuses.
   if (!r.failed && r.at < end) {
     const extensionsEnd: i32 = tlsReadVector(r, 2, 0, 65535)
     hello.extensionsAt = r.at
-    hello.extensionsLength = extensionsEnd - r.at
+    hello.extensionsLength = tlsReadSpan(r, extensionsEnd)
     // The extensions vector's own end bounds every extension in it: one whose
     // length runs past it is malformed even when the message's length still
     // balances.
@@ -912,21 +967,22 @@ export const tlsSelectPskIdentity = (hello: TlsClientHelloView, index: i32): boo
     return false
   }
   const data: u8[] = hello.data
+  // A list of at most 65535 bytes holds fewer entries than that.
+  if (index > 65535) {
+    return false
+  }
   let at: i32 = hello.pskIdentitiesAt
-  for (let k: i32 = 0; at >= 0 && at + 1 < toI32(data.length); k++) {
-    const length: i32 = (toI32(data[at]) << 8) | toI32(data[at + 1])
-    const age: i32 = at + 2 + length
-    if (age < 0 || age + 3 >= toI32(data.length)) {
+  for (let k: i32 = 0; k <= index && at >= 0 && at < toI32(data.length) - 1; k++) {
+    const length: i32 = tlsWindowU16(data, at)
+    // Past 2^31 - 1 the sum wraps negative, which is refused with the rest.
+    const age: i32 = toI32(toI64(at) + 2 + toI64(length))
+    if (age < 0 || age > toI32(data.length) - 4) {
       return false
     }
     if (k === index) {
       hello.pskIdentityAt = at + 2
       hello.pskIdentityLength = length
-      hello.pskTicketAge =
-        (toU32(data[age]) << 24) |
-        (toU32(data[age + 1]) << 16) |
-        (toU32(data[age + 2]) << 8) |
-        toU32(data[age + 3])
+      hello.pskTicketAge = tlsWindowU32(data, age)
       break
     }
     at = age + 4
@@ -937,14 +993,14 @@ export const tlsSelectPskIdentity = (hello: TlsClientHelloView, index: i32): boo
     return false
   }
   at = hello.pskBindersAt
-  for (let k: i32 = 0; at >= 0 && at < toI32(data.length); k++) {
+  for (let k: i32 = 0; k <= index && at >= 0 && at < toI32(data.length); k++) {
     const length: i32 = toI32(data[at])
     if (k === index) {
       hello.pskBinderAt = at + 1
       hello.pskBinderLength = length
       return true
     }
-    at = at + 1 + length
+    at = toI32(toI64(at) + 1 + toI64(length))
   }
   return false
 }
@@ -1050,18 +1106,45 @@ export class TlsClientHello {
 }
 
 /**
+ * The big-endian 16-bit value at `data[at]`, `data[at + 1]`, which the caller
+ * has checked lie inside `data`.
+ */
+const tlsWindowU16 = (data: u8[], at: i32): i32 => toI32(tlsWindowUint(data, at, 2))
+
+/** The big-endian 32-bit value at `data[at .. at + 4)`, which the caller has checked lie inside `data`. */
+const tlsWindowU32 = (data: u8[], at: i32): u32 => tlsWindowUint(data, at, 4)
+
+/** The big-endian value of the `width` bytes (at most 4) from `data[at]` that lie inside `data`. */
+const tlsWindowUint = (data: u8[], at: i32, width: i32): u32 => {
+  let v: u32 = toU32(0)
+  if (at < 0) {
+    return v
+  }
+  for (let j: i32 = at; j < toI32(data.length) && j - at < width; j++) {
+    v = (v << 8) | toU32(data[j])
+  }
+  return v
+}
+
+/**
  * A copy of `data[at .. at + length)`, which is how a window of a view becomes
  * an array of its own that outlives the buffer it was read from.
  *
  * @param data The buffer the window points into.
  * @param at Where the window starts in `data`, in bytes.
  * @param length How many bytes to copy; a negative one copies none.
- * @returns A fresh array of `length` bytes; nothing from outside `data` is copied into it.
+ * @returns A fresh array of the window's bytes; it stops where `data` ends, so it is
+ *   shorter than `length` when the window runs past the buffer.
  */
 export const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
-  const out: u8[] = new Array<u8>(length < 0 ? TLS_CODEC_FROM : length)
-  for (let k: i32 = 0; k < toI32(out.length) && at + k >= 0 && at + k < toI32(data.length); k++) {
-    out[k] = data[at + k]
+  const out: u8[] = []
+  for (let k: i32 = 0; k < length; k++) {
+    // Past 2^31 - 1 the sum wraps negative, which ends the copy as the buffer's end does.
+    const j: i32 = toI32(toI64(at) + toI64(k))
+    if (j < 0 || j >= toI32(data.length)) {
+      break
+    }
+    out.push(data[j])
   }
   return out
 }
@@ -1069,11 +1152,10 @@ export const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
 /** The 16-bit values of `data[at .. at + length)`, in a fresh list. */
 const tlsCopyU16Window = (data: u8[], at: i32, length: i32): i32[] => {
   const out: i32[] = []
-  for (
-    let k: i32 = at;
-    k + 1 < at + length && k >= 0 && k < toI32(data.length) && k + 1 < toI32(data.length);
-    k += 2
-  ) {
+  const end: i64 = toI64(at) + toI64(length)
+  // The step is widened because the `push` forgets the bound on `k`; a sum
+  // past 2^31 - 1 wraps negative and ends the walk.
+  for (let k: i32 = at; k >= 0 && k < toI32(data.length) - 1 && toI64(k) + 1 < end; k = toI32(toI64(k) + 2)) {
     out.push((toI32(data[k]) << 8) | toI32(data[k + 1]))
   }
   return out
@@ -1090,7 +1172,8 @@ const tlsCopyU16Window = (data: u8[], at: i32, length: i32): i32[] => {
  */
 export const tlsWindowString = (data: u8[], at: i32, length: i32): string => {
   const parts: string[] = []
-  for (let k: i32 = at; k < at + length && k >= 0 && k < toI32(data.length); k++) {
+  const end: i64 = toI64(at) + toI64(length)
+  for (let k: i32 = at; toI64(k) < end && k >= 0 && k < toI32(data.length); k++) {
     parts.push(String.fromCharCode(toI32(data[k])))
   }
   return parts.join("")
@@ -1125,39 +1208,28 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   hello.serverName = tlsWindowString(data, view.serverNameAt, view.serverNameLength)
   hello.quicTransportParameters = tlsCopyWindow(data, view.quicAt, view.quicLength)
   // The key shares, ALPN names and extension types, walked again; the read
-  // above has checked every length these loops follow.
+  // above has checked every length these loops follow. Positions are summed
+  // in 64 bits, and one that wraps past 2^31 - 1 ends its walk.
   let at: i32 = view.sharesAt
-  while (
-    at + 4 <= view.sharesAt + view.sharesLength &&
-    at >= 0 &&
-    at < toI32(data.length) &&
-    at + 3 < toI32(data.length)
-  ) {
-    // All four bytes are read before the `push`, which is a call and so
-    // forgets what the guard said about `data.length`.
-    const group: i32 = (toI32(data[at]) << 8) | toI32(data[at + 1])
-    const skip: i32 = (toI32(data[at + 2]) << 8) | toI32(data[at + 3])
-    hello.shareGroups.push(group)
-    at = at + 4 + skip
+  const sharesEnd: i64 = toI64(view.sharesAt) + toI64(view.sharesLength)
+  while (at >= 0 && at < toI32(data.length) - 3 && toI64(at) + 4 <= sharesEnd) {
+    const skip: i32 = tlsWindowU16(data, toI32(toI64(at) + 2))
+    hello.shareGroups.push(tlsWindowU16(data, at))
+    at = toI32(toI64(at) + 4 + toI64(skip))
   }
   at = view.alpnAt
-  while (at < view.alpnAt + view.alpnLength && at >= 0 && at < toI32(data.length)) {
+  const alpnEnd: i64 = toI64(view.alpnAt) + toI64(view.alpnLength)
+  while (at >= 0 && at < toI32(data.length) && toI64(at) < alpnEnd) {
     const n: i32 = toI32(data[at])
     hello.alpn.push(tlsCopyWindow(data, at + 1, n))
-    at = at + 1 + n
+    at = toI32(toI64(at) + 1 + toI64(n))
   }
   at = view.extensionsAt
-  while (
-    at + 4 <= view.extensionsAt + view.extensionsLength &&
-    at >= 0 &&
-    at < toI32(data.length) &&
-    at + 3 < toI32(data.length)
-  ) {
-    // Read before the `push`, as in the key-share walk above.
-    const kind: i32 = (toI32(data[at]) << 8) | toI32(data[at + 1])
-    const skip: i32 = (toI32(data[at + 2]) << 8) | toI32(data[at + 3])
-    hello.extensionTypes.push(kind)
-    at = at + 4 + skip
+  const extensionsEnd: i64 = toI64(view.extensionsAt) + toI64(view.extensionsLength)
+  while (at >= 0 && at < toI32(data.length) - 3 && toI64(at) + 4 <= extensionsEnd) {
+    const skip: i32 = tlsWindowU16(data, toI32(toI64(at) + 2))
+    hello.extensionTypes.push(tlsWindowU16(data, at))
+    at = toI32(toI64(at) + 4 + toI64(skip))
   }
   hello.nullCompressionOnly = view.nullCompressionOnly
   hello.hasSupportedVersions = view.hasSupportedVersions
@@ -1174,7 +1246,8 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   hello.pskDheKe = view.pskDheKe
   hello.pskModes = tlsCopyWindow(data, view.pskModesAt, view.pskModesLength)
   if (view.hasPreSharedKey) {
-    hello.pskBindersPrefix = view.pskBindersPrefixAt - off
+    // Both are in `[0, data.length]`, the prefix's end past `off`.
+    hello.pskBindersPrefix = toI32(toI64(view.pskBindersPrefixAt) - toI64(off))
   }
   for (let k: i32 = 0; k < view.pskIdentityCount && tlsSelectPskIdentity(view, k); k++) {
     hello.pskIdentities.push(tlsCopyWindow(data, view.pskIdentityAt, view.pskIdentityLength))
@@ -1194,23 +1267,21 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
  * makes room first and writes in place. The `tlsPut*` helpers are the same
  * shape: they take the position and answer the next.
  *
- * A position is never past `TLS_WRITE_LIMIT`. A step that would pass it, or
+ * A position is never past 2^30 - 1, far past any TLS message (§4 allows
+ * 2^24 - 1 a body). A step that would pass it, or
  * that starts from a negative position, answers -1, and every later step
  * from -1 answers -1 again: so a writer handed a field too long for any
  * message, or an offset no array reaches, answers -1 and writes nothing past
  * the failure, and its caller tests the end once.
  */
 const tlsAdvance = (at: i32, n: i32): i32 => {
-  // 2^30 - 1 each, `TLS_WRITE_LIMIT`: the sum stays inside an `i32`.
+  // 2^30 - 1 each, so the sum stays inside an `i32`.
   if (at < 0 || at > 1073741823 || n < 0 || n > 1073741823) {
     return -1
   }
   const next: i32 = at + n
   return next > 1073741823 ? -1 : next
 }
-
-/** The largest position a writer answers: 2^30 - 1, far past any TLS message (§4, 2^24 - 1 a body). */
-const TLS_WRITE_LIMIT: i32 = 1073741823
 
 const tlsPutU8 = (out: u8[], at: i32, v: i32): i32 => {
   const next: i32 = tlsAdvance(at, 1)
@@ -1267,7 +1338,15 @@ const tlsPutAscii = (out: u8[], at: i32, text: string): i32 => {
  * bytes can say answers -1; otherwise `end`.
  */
 const tlsPutLength = (out: u8[], start: i32, end: i32, width: i32): i32 => {
-  if (start < 3 || start > 1073741823 || end < start || end > 1073741823 || width < 1 || width > 3) {
+  if (
+    start < 3 ||
+    start > 1073741823 ||
+    end < 0 ||
+    end < start ||
+    end > 1073741823 ||
+    width < 1 ||
+    width > 3
+  ) {
     return -1
   }
   let n: i32 = end - start
@@ -1308,7 +1387,8 @@ const tlsHexNibble = (c: u8): i32 => {
  * @param text Lowercase hex digits, two a byte; a last odd digit is ignored, and nothing else is checked.
  * @param out The array to write into; a byte that would land outside it is dropped.
  * @param at Where the first byte goes in `out`.
- * @returns `at` plus the number of bytes `text` spells, written or not.
+ * @returns `at` plus the number of bytes `text` spells, written or not; -1 when `at` is
+ *   negative or the end would pass 2^30 - 1.
  */
 export const tlsHexInto = (text: string, out: u8[], at: i32): i32 => {
   const digits: i32 = toI32(text.length)
@@ -1373,7 +1453,16 @@ const tlsPutServerHello = (
   publicKey: u8[],
   selectedIdentity: i32
 ): i32 => {
-  let p: i32 = tlsPutHelloHead(out, tlsAdvance(at, 4), random, false, sessionId, sessionIdOff, sessionIdLength, suite)
+  let p: i32 = tlsPutHelloHead(
+    out,
+    tlsAdvance(at, 4),
+    random,
+    false,
+    sessionId,
+    sessionIdOff,
+    sessionIdLength,
+    suite
+  )
   const extensions: i32 = tlsAdvance(p, 2)
   p = extensions
   if (selectedIdentity >= 0) {
@@ -1409,7 +1498,8 @@ const tlsPutServerHello = (
  * @param suite The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_128_GCM_SHA256`.
  * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteServerHello = (
   out: u8[],
@@ -1440,7 +1530,8 @@ export const tlsWriteServerHello = (
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteServerHelloPsk = (
   out: u8[],
@@ -1478,7 +1569,8 @@ export const tlsWriteServerHelloPsk = (
  * @param sessionIdLength How many bytes the session id is, 0 to 32.
  * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
  * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteHelloRetryRequest = (
   out: u8[],
@@ -1490,7 +1582,16 @@ export const tlsWriteHelloRetryRequest = (
   group: i32
 ): i32 => {
   const none: u8[] = []
-  let p: i32 = tlsPutHelloHead(out, tlsAdvance(at, 4), none, true, sessionId, sessionIdOff, sessionIdLength, suite)
+  let p: i32 = tlsPutHelloHead(
+    out,
+    tlsAdvance(at, 4),
+    none,
+    true,
+    sessionId,
+    sessionIdOff,
+    sessionIdLength,
+    suite
+  )
   const extensions: i32 = tlsAdvance(p, 2)
   p = tlsPutU16(out, extensions, TLS_EXT_KEY_SHARE)
   p = tlsPutU16(out, p, 2)
@@ -1517,7 +1618,8 @@ export const tlsWriteHelloRetryRequest = (
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
  * @param recordSizeLimit The largest record plaintext the server takes, content type included, written as a `uint16`; 0 to send none.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteEncryptedExtensions = (
   out: u8[],
@@ -1564,7 +1666,8 @@ export const tlsWriteEncryptedExtensions = (
  * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
  * @param at Where the message, handshake header first, starts in `out`.
  * @param chain The DER certificates, leaf first, each written as it is.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
   const list: i32 = tlsAdvance(tlsPutU8(out, tlsAdvance(at, 4), 0), 3)
@@ -1587,7 +1690,8 @@ export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
  * @param at Where the message, handshake header first, starts in `out`.
  * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
  * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signature: u8[]): i32 => {
   const body: i32 = tlsAdvance(tlsPutU16(out, tlsAdvance(at, 4), scheme), 2)
@@ -1604,7 +1708,8 @@ export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signa
  * @param verifyData The buffer that holds the `verify_data`, the HMAC the key schedule computed.
  * @param off Where the `verify_data` starts in `verifyData`.
  * @param len How many bytes it is: the suite's hash length, 32 or 48.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32, len: i32): i32 => {
   const p: i32 = tlsPutWindow(out, tlsAdvance(at, 4), verifyData, off, len)
@@ -1630,7 +1735,8 @@ export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32,
  * @param ticketOff Where the ticket starts in `ticket`.
  * @param ticketLength How many bytes the ticket is: §4.6.1 allows 1 to 65535, not checked here.
  * @param extra Whole extensions, type and length included, written unchecked; empty for none.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteNewSessionTicket = (
   out: u8[],
@@ -1667,7 +1773,8 @@ export const tlsWriteNewSessionTicket = (
  * @param transcriptHash The buffer that holds the transcript hash through the server's Certificate.
  * @param off Where the hash starts in `transcriptHash`.
  * @param len How many bytes the hash is: the suite's hash length.
- * @returns Where the content ends in `out`: `at` plus 98 plus `len`, written or not.
+ * @returns Where the content ends in `out`: `at` plus 98 plus `len`, written or not; -1
+ *   when `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteCertificateVerifyContent = (
   out: u8[],
@@ -1685,6 +1792,19 @@ export const tlsWriteCertificateVerifyContent = (
   return tlsPutWindow(out, p, transcriptHash, off, len)
 }
 
+/**
+ * `n` zero bytes in a fresh array, the buffer a `tlsEncode*` fills after its
+ * writer measured it; a negative `n`, the measure of a message past 2^30 - 1
+ * bytes, gives an empty one, which the writer then leaves empty.
+ */
+const tlsZeros = (n: i32): u8[] => {
+  const out: u8[] = []
+  for (let k: i32 = 0; k < n; k++) {
+    out.push(0)
+  }
+  return out
+}
+
 /** The bytes of `name` as a string of one character a byte, which `tlsWriteEncryptedExtensions` writes back as they were. */
 const tlsBytesString = (name: u8[]): string => tlsWindowString(name, TLS_CODEC_FROM, toI32(name.length))
 
@@ -1698,12 +1818,12 @@ const tlsBytesString = (name: u8[]): string => tlsWindowString(name, TLS_CODEC_F
  * @param suite The cipher suite the server chose.
  * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, serverShare: u8[]): u8[] => {
   const none: u8[] = []
   const sessionIdLength: i32 = toI32(sessionId.length)
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteServerHello(
       none,
       TLS_CODEC_FROM,
@@ -1739,7 +1859,7 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeServerHelloPsk = (
   random: u8[],
@@ -1750,7 +1870,7 @@ export const tlsEncodeServerHelloPsk = (
 ): u8[] => {
   const none: u8[] = []
   const sessionIdLength: i32 = toI32(sessionId.length)
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteServerHelloPsk(
       none,
       TLS_CODEC_FROM,
@@ -1784,12 +1904,12 @@ export const tlsEncodeServerHelloPsk = (
  * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
  * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
  * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i32): u8[] => {
   const none: u8[] = []
   const sessionIdLength: i32 = toI32(sessionId.length)
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteHelloRetryRequest(none, TLS_CODEC_FROM, sessionId, TLS_CODEC_FROM, sessionIdLength, suite, group)
   )
   tlsWriteHelloRetryRequest(out, TLS_CODEC_FROM, sessionId, TLS_CODEC_FROM, sessionIdLength, suite, group)
@@ -1805,7 +1925,7 @@ export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
  * @param recordSizeLimit The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeEncryptedExtensions = (
   extra: u8[],
@@ -1816,7 +1936,7 @@ export const tlsEncodeEncryptedExtensions = (
 ): u8[] => {
   const none: u8[] = []
   const protocol: string = tlsBytesString(alpn)
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteEncryptedExtensions(
       none,
       TLS_CODEC_FROM,
@@ -1843,11 +1963,11 @@ export const tlsEncodeEncryptedExtensions = (
  * A server's Certificate (§4.4.2) in a fresh array (`tlsWriteCertificate`).
  *
  * @param chain The DER certificates, leaf first, each written as it is.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
   const none: u8[] = []
-  const out: u8[] = new Array<u8>(tlsWriteCertificate(none, TLS_CODEC_FROM, chain))
+  const out: u8[] = tlsZeros(tlsWriteCertificate(none, TLS_CODEC_FROM, chain))
   tlsWriteCertificate(out, TLS_CODEC_FROM, chain)
   return out
 }
@@ -1857,11 +1977,11 @@ export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
  *
  * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
  * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] => {
   const none: u8[] = []
-  const out: u8[] = new Array<u8>(tlsWriteCertificateVerify(none, TLS_CODEC_FROM, scheme, signature))
+  const out: u8[] = tlsZeros(tlsWriteCertificateVerify(none, TLS_CODEC_FROM, scheme, signature))
   tlsWriteCertificateVerify(out, TLS_CODEC_FROM, scheme, signature)
   return out
 }
@@ -1870,12 +1990,12 @@ export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] =
  * A Finished (§4.4.4) carrying `verifyData`, in a fresh array (`tlsWriteFinished`).
  *
  * @param verifyData The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
   const none: u8[] = []
   const length: i32 = toI32(verifyData.length)
-  const out: u8[] = new Array<u8>(tlsWriteFinished(none, TLS_CODEC_FROM, verifyData, TLS_CODEC_FROM, length))
+  const out: u8[] = tlsZeros(tlsWriteFinished(none, TLS_CODEC_FROM, verifyData, TLS_CODEC_FROM, length))
   tlsWriteFinished(out, TLS_CODEC_FROM, verifyData, TLS_CODEC_FROM, length)
   return out
 }
@@ -1888,7 +2008,7 @@ export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
  * @param nonce The whole `ticket_nonce`, 0 to 255 bytes.
  * @param ticket The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes, not checked here.
  * @param extra Whole extensions, type and length included, written unchecked; empty for none.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeNewSessionTicket = (
   lifetime: u32,
@@ -1900,7 +2020,7 @@ export const tlsEncodeNewSessionTicket = (
   const none: u8[] = []
   const nonceLength: i32 = toI32(nonce.length)
   const ticketLength: i32 = toI32(ticket.length)
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteNewSessionTicket(
       none,
       TLS_CODEC_FROM,
@@ -1941,7 +2061,7 @@ export const tlsEncodeNewSessionTicket = (
 export const tlsCertificateVerifyContent = (transcriptHash: u8[]): u8[] => {
   const none: u8[] = []
   const length: i32 = toI32(transcriptHash.length)
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteCertificateVerifyContent(none, TLS_CODEC_FROM, transcriptHash, TLS_CODEC_FROM, length)
   )
   tlsWriteCertificateVerifyContent(out, TLS_CODEC_FROM, transcriptHash, TLS_CODEC_FROM, length)
@@ -1996,7 +2116,8 @@ export const tlsClientOffersScheme = (scheme: i32): boolean =>
  * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
  * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
  * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
- * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not; -1 when
+ *   `at` is negative, a window is outside its buffer, or the end would pass 2^30 - 1.
  */
 export const tlsWriteClientHello = (
   out: u8[],
@@ -2096,7 +2217,7 @@ export const tlsWriteClientHello = (
  * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
  * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
  * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
- * @returns The whole message, handshake header included.
+ * @returns The whole message, handshake header included; empty for one past 2^30 - 1 bytes.
  */
 export const tlsEncodeClientHello = (
   random: u8[],
@@ -2110,7 +2231,7 @@ export const tlsEncodeClientHello = (
   cookie: u8[]
 ): u8[] => {
   const none: u8[] = []
-  const out: u8[] = new Array<u8>(
+  const out: u8[] = tlsZeros(
     tlsWriteClientHello(
       none,
       TLS_CODEC_FROM,
@@ -2304,6 +2425,14 @@ const tlsClientOffersExtension = (type: i32): boolean =>
   type === TLS_EXT_KEY_SHARE ||
   type === TLS_EXT_COOKIE
 
+/**
+ * `off + len`, the end of a window whose start and length are each in
+ * `[0, 2^31 - 1]`; a sum past that wraps negative, which every reader refuses
+ * as a position. The readers below call it only on a window `tlsFlightOpen`
+ * has checked lies inside its buffer.
+ */
+const tlsWindowEnd = (off: i32, len: i32): i32 => toI32(toI64(off) + toI64(len))
+
 /** Opens `view` on `data[off .. off + len)` and answers its reader, or `null` for a window outside `data` (`decode_error`). */
 const tlsFlightOpen = (view: TlsServerFlightView, data: u8[], off: i32, len: i32): TlsReader | null => {
   view.clear()
@@ -2315,7 +2444,7 @@ const tlsFlightOpen = (view: TlsServerFlightView, data: u8[], off: i32, len: i32
   const r: TlsReader = view.reader
   r.data = data
   r.at = off
-  r.end = off + len
+  r.end = tlsWindowEnd(off, len)
   r.failed = false
   return r
 }
@@ -2343,14 +2472,14 @@ const tlsReadServerHelloExtension = (r: TlsReader, type: i32, end: i32, view: Tl
     if (!view.isRetry) {
       const keyEnd: i32 = tlsReadVector(r, 2, 1, 65535)
       view.shareAt = r.at
-      view.shareLength = keyEnd - r.at
+      view.shareLength = tlsReadSpan(r, keyEnd)
       tlsReadSkipTo(r, keyEnd)
     }
   } else if (type === TLS_EXT_COOKIE && view.isRetry) {
     const cookieEnd: i32 = tlsReadVector(r, 2, 1, 65535)
     view.hasCookie = true
     view.cookieAt = r.at
-    view.cookieLength = cookieEnd - r.at
+    view.cookieLength = tlsReadSpan(r, cookieEnd)
     tlsReadSkipTo(r, cookieEnd)
   } else {
     tlsFlightRefuseExtension(
@@ -2372,7 +2501,7 @@ const tlsReadEncryptedExtension = (r: TlsReader, type: i32, end: i32, view: TlsS
     const nameEnd: i32 = tlsReadVector(r, 1, 1, 255)
     view.hasAlpn = true
     view.alpnAt = r.at
-    view.alpnLength = nameEnd - r.at
+    view.alpnLength = tlsReadSpan(r, nameEnd)
     tlsReadSkipTo(r, nameEnd)
     if (!r.failed && nameEnd !== listEnd) {
       tlsFlightRefuseExtension(view, TLS_ALERT_ILLEGAL_PARAMETER)
@@ -2429,10 +2558,9 @@ const tlsWindowIsHex = (data: u8[], at: i32, text: string): boolean => {
     return false
   }
   const digits: i32 = toI32(text.length)
-  const size: i32 = toI32(data.length)
   for (let i: i32 = 1; i < digits; i++) {
     const k: i32 = toI32(toI64(at) + toI64(i >> 1))
-    if ((i & 1) === 1 && k < size) {
+    if ((i & 1) === 1 && k >= 0 && k < toI32(data.length)) {
       const hi: i32 = tlsHexNibble(toU8(text.charCodeAt(i - 1)))
       const lo: i32 = tlsHexNibble(toU8(text.charCodeAt(i)))
       if (toI32(data[k]) !== ((hi << 4) | lo)) {
@@ -2461,18 +2589,19 @@ export const tlsReadServerHello = (view: TlsServerFlightView, data: u8[], off: i
   }
   view.legacyVersion = tlsReadU16(r)
   view.randomAt = r.at
-  view.isRetry = tlsWindowIsHex(data, r.at, TLS_HELLO_RETRY_RANDOM) && r.end - r.at >= TLS_RANDOM_SIZE
-  tlsReadSkipTo(r, r.at + TLS_RANDOM_SIZE)
+  view.isRetry =
+    tlsWindowIsHex(data, r.at, TLS_HELLO_RETRY_RANDOM) && tlsWindowLength(r.at, r.end) >= TLS_RANDOM_SIZE
+  tlsReadSkipTo(r, tlsReadAhead(r, TLS_RANDOM_SIZE))
   const sessionEnd: i32 = tlsReadVector(r, 1, 0, 32)
   view.sessionIdAt = r.at
-  view.sessionIdLength = sessionEnd - r.at
+  view.sessionIdLength = tlsReadSpan(r, sessionEnd)
   tlsReadSkipTo(r, sessionEnd)
   view.suite = tlsReadU16(r)
   view.compression = tlsReadU8(r)
-  if (!r.failed && r.at < off + len) {
+  if (!r.failed && r.at < tlsWindowEnd(off, len)) {
     tlsReadServerExtensions(r, view, true)
   }
-  tlsFlightClose(view, r, off + len)
+  tlsFlightClose(view, r, tlsWindowEnd(off, len))
 }
 
 /** The 8 bytes RFC 8446 §4.1.3 has a TLS 1.3 server put at the end of its random when it negotiates TLS 1.2 or below. */
@@ -2488,7 +2617,8 @@ const TLS_DOWNGRADE_11: string = "444f574e47524400"
  * @returns true when the random ends in the TLS 1.2 or the TLS 1.1 sentinel.
  */
 export const tlsServerHelloDowngrade = (view: TlsServerFlightView): boolean => {
-  const at: i32 = view.randomAt + TLS_RANDOM_SIZE - 8
+  // A wrapped sum is negative, which `tlsWindowIsHex` answers false for.
+  const at: i32 = toI32(toI64(view.randomAt) + toI64(TLS_RANDOM_SIZE - 8))
   return tlsWindowIsHex(view.data, at, TLS_DOWNGRADE_12) || tlsWindowIsHex(view.data, at, TLS_DOWNGRADE_11)
 }
 
@@ -2513,7 +2643,7 @@ export const tlsReadEncryptedExtensions = (
     return
   }
   tlsReadServerExtensions(r, view, false)
-  tlsFlightClose(view, r, off + len)
+  tlsFlightClose(view, r, tlsWindowEnd(off, len))
 }
 
 /**
@@ -2534,23 +2664,27 @@ export const tlsReadCertificate = (view: TlsServerFlightView, data: u8[], off: i
     return
   }
   const contextEnd: i32 = tlsReadVector(r, 1, 0, 255)
-  view.contextLength = contextEnd - r.at
+  view.contextLength = tlsReadSpan(r, contextEnd)
   tlsReadSkipTo(r, contextEnd)
   const listEnd: i32 = tlsReadVector(r, 3, 1, 16777215)
   view.certificatesAt = r.at
-  view.certificatesLength = listEnd - r.at
+  view.certificatesLength = tlsReadSpan(r, listEnd)
   const messageEnd: i32 = tlsReadList(r, listEnd)
-  while (!r.failed && r.at < listEnd) {
+  // Each entry is at least 6 bytes of a list of at most 2^24 - 1, so the
+  // count's bound never ends the walk.
+  let count: i32 = 0
+  while (!r.failed && r.at < listEnd && count < 16777215) {
     tlsReadSkipTo(r, tlsReadVector(r, 3, 1, 16777215))
     const extensionsEnd: i32 = tlsReadVector(r, 2, 0, 65535)
     if (extensionsEnd !== r.at) {
       tlsFlightRefuseExtension(view, TLS_ALERT_UNSUPPORTED_EXTENSION)
     }
     tlsReadSkipTo(r, extensionsEnd)
-    view.certificateCount = view.certificateCount + 1
+    count++
   }
+  view.certificateCount = count
   r.end = messageEnd
-  tlsFlightClose(view, r, off + len)
+  tlsFlightClose(view, r, tlsWindowEnd(off, len))
 }
 
 /**
@@ -2570,9 +2704,9 @@ export const tlsReadCertificateVerify = (view: TlsServerFlightView, data: u8[], 
   view.scheme = tlsReadU16(r)
   const signatureEnd: i32 = tlsReadVector(r, 2, 1, 65535)
   view.signatureAt = r.at
-  view.signatureLength = signatureEnd - r.at
+  view.signatureLength = tlsReadSpan(r, signatureEnd)
   tlsReadSkipTo(r, signatureEnd)
-  tlsFlightClose(view, r, off + len)
+  tlsFlightClose(view, r, tlsWindowEnd(off, len))
 }
 
 /**
@@ -2590,11 +2724,11 @@ export const tlsReadNewSessionTicket = (view: TlsServerFlightView, data: u8[], o
   if (r === null) {
     return
   }
-  tlsReadSkipTo(r, r.at + 8)
+  tlsReadSkipTo(r, tlsReadAhead(r, 8))
   tlsReadSkipTo(r, tlsReadVector(r, 1, 0, 255))
   tlsReadSkipTo(r, tlsReadVector(r, 2, 1, 65535))
   tlsReadSkipTo(r, tlsReadVector(r, 2, 0, 65534))
-  tlsFlightClose(view, r, off + len)
+  tlsFlightClose(view, r, tlsWindowEnd(off, len))
 }
 
 /**
@@ -2609,11 +2743,11 @@ export const tlsCopyCertificates = (view: TlsServerFlightView): u8[][] => {
   const r: TlsReader = new TlsReader(
     view.data,
     view.certificatesAt,
-    view.certificatesAt + view.certificatesLength
+    tlsWindowEnd(view.certificatesAt, view.certificatesLength)
   )
   while (view.alert === 0 && !r.failed && r.at < r.end) {
     const certificateEnd: i32 = tlsReadVector(r, 3, 1, 16777215)
-    chain.push(tlsCopyWindow(view.data, r.at, certificateEnd - r.at))
+    chain.push(tlsCopyWindow(view.data, r.at, tlsReadSpan(r, certificateEnd)))
     tlsReadSkipTo(r, certificateEnd)
     tlsReadSkipTo(r, tlsReadVector(r, 2, 0, 65535))
   }
