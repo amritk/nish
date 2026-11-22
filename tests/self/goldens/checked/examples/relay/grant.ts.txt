@@ -87,9 +87,9 @@ function grantCompress(h: u32[], w: u32[], k: u32[]): void -> @grantCompress
   callee +12:31 grantRotr -> @grantRotr
   callee +12:50 grantRotr -> @grantRotr
   local +13:11 t2: u32 (const)
-  callee +14:8 grantRotr -> @grantRotr
-  callee +14:26 grantRotr -> @grantRotr
-  callee +14:45 grantRotr -> @grantRotr
+  callee +13:22 grantRotr -> @grantRotr
+  callee +13:40 grantRotr -> @grantRotr
+  callee +13:59 grantRotr -> @grantRotr
 function grantSha256(data: u8[]): u8[] -> @grantSha256
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: grantCompress nish.wipe$arr.u32 nish.wipe$arr.u8 nish_array_grow
@@ -173,16 +173,16 @@ function GrantVerifier.verify(this: GrantVerifier, buf: u8[], off: i32, len: i32
   pointer secret: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds#0
   pointer out: size=40 writesThrough=true captured=false passedTo=grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0
   stackSites=3 stackLocals=3
-  callee -100:5 h3CheckWindow -> @nish.h3CheckWindow
-  local -98:11 a: i64 (const)
-  local -96:11 wide: i64 (const)
-  local -95:11 end: i32 (const)
-  local -94:9 first: i32 (let)
-  local -93:9 second: i32 (let)
-  local -92:14 k: i32 (let)
-  callee -85:18 grantReject -> @grantReject
-  callee -81:78 grantByte -> @grantByte
-  callee -81:110 grantByte -> @grantByte
+  callee -106:5 h3CheckWindow -> @nish.h3CheckWindow
+  local -104:11 a: i64 (const)
+  local -102:11 wide: i64 (const)
+  local -101:11 end: i32 (const)
+  local -100:9 first: i32 (let)
+  local -99:9 second: i32 (let)
+  local -98:14 k: i32 (let)
+  callee -91:18 grantReject -> @grantReject
+  callee -83:7 grantByte -> @grantByte
+  callee -82:7 grantByte -> @grantByte
   callee -80:14 grantReject -> @grantReject
   local -76:11 macText: string[] (const)
   local -75:11 payloadText: string[] (const)

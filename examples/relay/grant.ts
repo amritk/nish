@@ -111,8 +111,7 @@ const grantCompress = (h: u32[], w: u32[], k: u32[]): void => {
   for (let t: i32 = 0; t < 64; t++) {
     const t1: u32 =
       hh + (grantRotr(e, 6) ^ grantRotr(e, 11) ^ grantRotr(e, 25)) + ((e & f) ^ (~e & g)) + k[t] + w[t]
-    const t2: u32 =
-      (grantRotr(a, 2) ^ grantRotr(a, 13) ^ grantRotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))
+    const t2: u32 = (grantRotr(a, 2) ^ grantRotr(a, 13) ^ grantRotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))
     hh = g
     g = f
     f = e
@@ -286,7 +285,13 @@ export class GrantVerifier {
         }
       }
     }
-    if (second < 0 || first < 1 || toI64(first) - toI64(off) !== toI64(2) || grantByte(buf, off) !== 0x76 || grantByte(buf, first - 1) !== 0x31) {
+    if (
+      second < 0 ||
+      first < 1 ||
+      toI64(first) - toI64(off) !== toI64(2) ||
+      grantByte(buf, off) !== 0x76 ||
+      grantByte(buf, first - 1) !== 0x31
+    ) {
       return grantReject(out, CLOSE_TOKEN_INVALID, "malformed token")
     }
     // The two base64url parts as strings, which is what `base64urlDecode` reads,

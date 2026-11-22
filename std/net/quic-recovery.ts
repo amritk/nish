@@ -1279,7 +1279,8 @@ export class QuicRecovery {
       adjusted = quicRecoveryLess(latest, delay)
     }
     const smoothed: i64 = this.smoothedRtt
-    const gap: i64 = smoothed > adjusted ? quicRecoveryLess(smoothed, adjusted) : quicRecoveryLess(adjusted, smoothed)
+    const gap: i64 =
+      smoothed > adjusted ? quicRecoveryLess(smoothed, adjusted) : quicRecoveryLess(adjusted, smoothed)
     this.rttVar = quicRecoverySum(quicRecoveryProduct(3, this.rttVar), gap) / 4
     this.smoothedRtt = quicRecoverySum(quicRecoveryProduct(7, smoothed), adjusted) / 8
   }
@@ -1298,7 +1299,9 @@ export class QuicRecovery {
    */
   fineNow(now: i64): i64 {
     const coarse: i64 = quicRecoveryProduct(now, QUIC_RECOVERY_MICROS)
-    return this.micros >= coarse && this.micros < quicRecoverySum(coarse, QUIC_RECOVERY_MICROS) ? this.micros : coarse
+    return this.micros >= coarse && this.micros < quicRecoverySum(coarse, QUIC_RECOVERY_MICROS)
+      ? this.micros
+      : coarse
   }
 
   /**
@@ -1312,7 +1315,8 @@ export class QuicRecovery {
    */
   private fineSample(now: i64, sent: i64): i64 {
     const at: i64 = this.fineNow(now)
-    const floor: i64 = at === this.micros ? 1 : quicRecoveryProduct(QUIC_RECOVERY_GRANULARITY, QUIC_RECOVERY_MICROS)
+    const floor: i64 =
+      at === this.micros ? 1 : quicRecoveryProduct(QUIC_RECOVERY_GRANULARITY, QUIC_RECOVERY_MICROS)
     return quicRecoveryMax(quicRecoveryLess(at, sent), floor)
   }
 
@@ -1365,7 +1369,10 @@ export class QuicRecovery {
       if (sp.stateAt(s) !== QUIC_RECOVERY_SENT) {
         continue
       }
-      if (sp.timeAt(s) <= lostSendTime || quicRecoveryLess(sp.largestAcked, pn) >= QUIC_RECOVERY_PACKET_THRESHOLD) {
+      if (
+        sp.timeAt(s) <= lostSendTime ||
+        quicRecoveryLess(sp.largestAcked, pn) >= QUIC_RECOVERY_PACKET_THRESHOLD
+      ) {
         sp.markLost(s)
       } else {
         const at: i64 = quicRecoverySum(sp.timeAt(s), delay)
@@ -1574,7 +1581,10 @@ export class QuicRecovery {
     const target: i64 = quicRecoveryMax(cwnd, curve > ceiling ? ceiling : curve)
     // The window only grows within a stage, so the carry, below the window
     // it was a fraction of, stays below the one it is added against.
-    const step: i64 = quicRecoverySum(quicRecoveryProduct(quicRecoveryLess(target, cwnd), size), this.cubicCarry)
+    const step: i64 = quicRecoverySum(
+      quicRecoveryProduct(quicRecoveryLess(target, cwnd), size),
+      this.cubicCarry
+    )
     this.congestionWindow = quicRecoverySum(cwnd, step / cwnd)
     this.cubicCarry = step % cwnd
   }
@@ -1590,7 +1600,8 @@ export class QuicRecovery {
     // |t − K| is at most 40000, so its cube, 6.4 × 10¹³ at most, fits; the sign goes back on after the division.
     const size: u64 = d < 0 ? toU64(0) - toU64(d) : toU64(d)
     const cube: i64 = toI64(size * size * size)
-    const move: i64 = quicRecoveryProduct(cube, quicRecoveryProduct(2, this.datagramSize)) / QUIC_RECOVERY_CUBIC_SCALE
+    const move: i64 =
+      quicRecoveryProduct(cube, quicRecoveryProduct(2, this.datagramSize)) / QUIC_RECOVERY_CUBIC_SCALE
     return d < 0 ? quicRecoveryLess(this.cubicMax, move) : quicRecoverySum(this.cubicMax, move)
   }
 
@@ -1648,7 +1659,10 @@ export class QuicRecovery {
 
   /** smoothed_rtt + max(4 × rttvar, kGranularity): every probe timeout's period before max_ack_delay and the backoff. */
   private ptoBase(): i64 {
-    return quicRecoverySum(this.smoothedRtt, quicRecoveryMax(quicRecoveryProduct(4, this.rttVar), QUIC_RECOVERY_GRANULARITY))
+    return quicRecoverySum(
+      this.smoothedRtt,
+      quicRecoveryMax(quicRecoveryProduct(4, this.rttVar), QUIC_RECOVERY_GRANULARITY)
+    )
   }
 
   /**
@@ -1892,7 +1906,8 @@ export class QuicRecovery {
     if (per <= 0) {
       return least
     }
-    const milli: i64 = quicRecoveryProduct(quicRecoveryProduct(this.pacerWindow(), 5), QUIC_RECOVERY_MICROS) / per
+    const milli: i64 =
+      quicRecoveryProduct(quicRecoveryProduct(this.pacerWindow(), 5), QUIC_RECOVERY_MICROS) / per
     if (milli < toI64(least)) {
       return least
     }

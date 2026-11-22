@@ -9821,12 +9821,12 @@ function QuicRecovery.updateRtt(this: QuicRecovery, ackDelay: i64, now: i64): vo
   callee +13:18 quicRecoveryLess -> @nish.quicRecoveryLess
   local +15:11 smoothed: i64 (const)
   local +16:11 gap: i64 (const)
-  callee +16:44 quicRecoveryLess -> @nish.quicRecoveryLess
-  callee +16:83 quicRecoveryLess -> @nish.quicRecoveryLess
-  callee +17:19 quicRecoverySum -> @nish.quicRecoverySum
-  callee +17:35 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +18:24 quicRecoverySum -> @nish.quicRecoverySum
-  callee +18:40 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +17:29 quicRecoveryLess -> @nish.quicRecoveryLess
+  callee +17:68 quicRecoveryLess -> @nish.quicRecoveryLess
+  callee +18:19 quicRecoverySum -> @nish.quicRecoverySum
+  callee +18:35 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +19:24 quicRecoverySum -> @nish.quicRecoverySum
+  callee +19:40 quicRecoveryProduct -> @nish.quicRecoveryProduct
 function QuicRecovery.boundAckDelay(this: QuicRecovery, ackDelay: i64): i64 -> @nish.QuicRecovery.boundAckDelay [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: ackDelay
@@ -9850,9 +9850,9 @@ function QuicRecovery.fineSample(this: QuicRecovery, now: i64, sent: i64): i64 -
   local +0:11 at: i64 (const)
   callee +0:21 QuicRecovery.fineNow -> @nish.QuicRecovery.fineNow
   local +1:11 floor: i64 (const)
-  callee +1:49 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +2:12 quicRecoveryMax -> @nish.quicRecoveryMax
-  callee +2:28 quicRecoveryLess -> @nish.quicRecoveryLess
+  callee +2:32 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +3:12 quicRecoveryMax -> @nish.quicRecoveryMax
+  callee +3:28 quicRecoveryLess -> @nish.quicRecoveryLess
 function QuicRecovery.updatePacerRtt(this: QuicRecovery, sample: i64, ackDelay: i64, first: boolean): void -> @nish.QuicRecovery.updatePacerRtt [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -9896,12 +9896,12 @@ function QuicRecovery.detectLoss(this: QuicRecovery, sp: QuicSentPackets, now: i
   local +5:13 pn: i64 (const)
   callee +5:23 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
   callee +9:11 QuicSentPackets.stateAt -> @nish.QuicSentPackets.stateAt
-  callee +12:11 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
-  callee +12:43 quicRecoveryLess -> @nish.quicRecoveryLess
-  callee +13:9 QuicSentPackets.markLost -> @nish.QuicSentPackets.markLost
-  local +15:15 at: i64 (const)
-  callee +15:25 quicRecoverySum -> @nish.quicRecoverySum
-  callee +15:41 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
+  callee +13:9 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
+  callee +14:9 quicRecoveryLess -> @nish.quicRecoveryLess
+  callee +16:9 QuicSentPackets.markLost -> @nish.QuicSentPackets.markLost
+  local +18:15 at: i64 (const)
+  callee +18:25 quicRecoverySum -> @nish.quicRecoverySum
+  callee +18:41 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
 function QuicRecovery.packetsLost(this: QuicRecovery, sp: QuicSentPackets, now: i64): void -> @nish.QuicRecovery.packetsLost [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -10016,9 +10016,9 @@ function QuicRecovery.cubicAcked(this: QuicRecovery, size: i64, now: i64): void 
   callee +31:25 quicRecoveryMax -> @nish.quicRecoveryMax
   local +34:11 step: i64 (const)
   callee +34:23 quicRecoverySum -> @nish.quicRecoverySum
-  callee +34:39 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +34:59 quicRecoveryLess -> @nish.quicRecoveryLess
-  callee +35:29 quicRecoverySum -> @nish.quicRecoverySum
+  callee +35:7 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +35:27 quicRecoveryLess -> @nish.quicRecoveryLess
+  callee +38:29 quicRecoverySum -> @nish.quicRecoverySum
 function QuicRecovery.cubicWindow(this: QuicRecovery, t: i64): i64 -> @nish.QuicRecovery.cubicWindow [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
@@ -10031,10 +10031,10 @@ function QuicRecovery.cubicWindow(this: QuicRecovery, t: i64): i64 -> @nish.Quic
   local +2:11 size: u64 (const)
   local +3:11 cube: i64 (const)
   local +4:11 move: i64 (const)
-  callee +4:23 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +4:49 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +5:20 quicRecoveryLess -> @nish.quicRecoveryLess
-  callee +5:60 quicRecoverySum -> @nish.quicRecoverySum
+  callee +5:7 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +5:33 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +6:20 quicRecoveryLess -> @nish.quicRecoveryLess
+  callee +6:60 quicRecoverySum -> @nish.quicRecoverySum
 function QuicRecovery.cubicSpan(this: QuicRecovery, drop: i64): i64 -> @nish.QuicRecovery.cubicSpan [exported method]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: drop
@@ -10070,8 +10070,8 @@ function QuicRecovery.ptoBase(this: QuicRecovery): i64 -> @nish.QuicRecovery.pto
   pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 quicRecoverySum -> @nish.quicRecoverySum
-  callee +0:46 quicRecoveryMax -> @nish.quicRecoveryMax
-  callee +0:62 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +2:7 quicRecoveryMax -> @nish.quicRecoveryMax
+  callee +2:23 quicRecoveryProduct -> @nish.quicRecoveryProduct
 function QuicRecovery.ptoTime(this: QuicRecovery): i64 -> @nish.QuicRecovery.ptoTime [exported method]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.ptoSpace nish.QuicRecovery.ptoTimeOf
@@ -10224,9 +10224,9 @@ function QuicRecovery.pacerQuantum(this: QuicRecovery, least: i32, most: i32): i
   callee +0:22 quicRecoveryProduct -> @nish.quicRecoveryProduct
   callee +0:42 quicRecoveryMax -> @nish.quicRecoveryMax
   local +5:11 milli: i64 (const)
-  callee +5:24 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +5:44 quicRecoveryProduct -> @nish.quicRecoveryProduct
-  callee +5:64 QuicRecovery.pacerWindow -> @nish.QuicRecovery.pacerWindow
+  callee +6:7 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +6:27 quicRecoveryProduct -> @nish.quicRecoveryProduct
+  callee +6:47 QuicRecovery.pacerWindow -> @nish.QuicRecovery.pacerWindow
 function QuicRecovery.onPaced(this: QuicRecovery, now: i64, size: i32): void -> @nish.QuicRecovery.onPaced [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
