@@ -56,7 +56,11 @@ export const x509DrawP256Key = (): Secret<u8[]> => {
 export const x509DrawSerial = (): u8[] => {
   const serial: u8[] = new Array<u8>(X509_MAX_SERIAL)
   crypto.getRandomValues(serial)
-  serial[0] = (serial[0] & toU8(0x3f)) | toU8(0x40)
+  // `getRandomValues` fills the array in place and never resizes it, but a
+  // call forgets the length the bounds proof knew, so it is said again here.
+  if (serial.length > 0) {
+    serial[0] = (serial[0] & toU8(0x3f)) | toU8(0x40)
+  }
   return serial
 }
 
