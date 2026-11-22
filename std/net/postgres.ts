@@ -735,8 +735,17 @@ export class PgText {
    *   window, a byte that is not a digit, or an overflow.
    */
   int(b: u8[], start: i32, length: i32): i64 {
-    const end: i32 = start + length
-    if (length <= 0 || start < 0 || end < start || end > toI32(b.length)) {
+    // Two `i32`s summed in `i64` cannot overflow; past the buffer is refused,
+    // and the test on `end` states for the prover what the one on `last` proves.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
+    if (
+      length <= 0 ||
+      start < 0 ||
+      start >= toI32(b.length) ||
+      last > toI64(b.length) ||
+      end > toI32(b.length)
+    ) {
       this.failed = true
       return 0
     }
@@ -793,26 +802,28 @@ export class PgText {
       const v: i64 = head * scale + tail
       return negative ? -v : v
     }
-    // Accumulated as a negative number, so that the most negative i64 fits.
-    const lastDigit: i64 = negative ? 8 : 7
-    // The most negative i64 divided by ten, which a literal cannot spell exactly.
-    const minTenth: i64 = toI64(-922337203) * 1000000000 - 685477580
-    let acc: i64 = 0
+    // The magnitude is accumulated in `u64`, which wraps rather than checks,
+    // and is held to 2^63 for a negative value and 2^63 - 1 otherwise, so
+    // that the most negative i64 fits.
+    const lastDigit: u64 = negative ? toU64(8) : toU64(7)
+    // 2^63 divided by ten, which a literal cannot spell exactly.
+    const maxTenth: u64 = toU64(922337203) * toU64(1000000000) + toU64(685477580)
+    let acc: u64 = toU64(0)
     while (i < end) {
       const d: i32 = toI32(b[i]) - 48
       if (d < 0 || d > 9) {
         this.failed = true
         return 0
       }
-      const digit: i64 = toI64(d)
-      if (acc < minTenth || (acc === minTenth && digit > lastDigit)) {
+      const digit: u64 = toU64(d)
+      if (acc > maxTenth || (acc === maxTenth && digit > lastDigit)) {
         this.failed = true
         return 0
       }
-      acc = acc * 10 - digit
+      acc = acc * toU64(10) + digit
       i++
     }
-    return negative ? acc : -acc
+    return negative ? toI64(toU64(0) - acc) : toI64(acc)
   }
 
   /**
@@ -852,12 +863,19 @@ export class PgText {
    *   for a column it does not read or no room in `out`.
    */
   timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 {
+    // Two `i32`s summed in `i64` cannot overflow. The tests against
+    // `length - 19` and `length - 24` are what the prover reads the fixed
+    // part's and the output's reach from; the others refuse the rest.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
     if (
       start < 0 ||
       length < 19 ||
-      start > toI32(b.length) - length ||
+      start > toI32(b.length) - 19 ||
+      last > toI64(b.length) ||
+      end > toI32(b.length) ||
       at < 0 ||
-      at + 24 > toI32(out.length)
+      at > toI32(out.length) - 24
     ) {
       this.failed = true
       return -1
@@ -866,15 +884,10 @@ export class PgText {
     // belong and are not digits, so the other fourteen bytes are digits
     // exactly when the part holds five non-digits.
     let p: i32 = start + 19
-    const end: i32 = start + length
-    if (p < 0 || end > toI32(b.length)) {
-      this.failed = true
-      return -1
-    }
     let others: i32 = 0
     for (let i: i32 = start; i < p && i < toI32(b.length); i++) {
       const c: i32 = toI32(b[i])
-      if (c < 48 || c > 57) {
+      if ((c < 48 || c > 57) && others < 19) {
         others++
       }
     }
@@ -889,18 +902,24 @@ export class PgText {
       this.failed = true
       return -1
     }
-    let millis: i32 = 0
+    // Three digits at most, so the `u32` (which wraps rather than checks)
+    // stays below 1000.
+    let millis: u32 = 0
     if (p < end && toI32(b[p]) === 46) {
       p++
       let digits: i32 = 0
       while (p < end && toI32(b[p]) >= 48 && toI32(b[p]) <= 57) {
+        if (digits >= 6) {
+          this.failed = true
+          return -1
+        }
         if (digits < 3) {
-          millis = millis * 10 + toI32(b[p]) - 48
+          millis = millis * 10 + toU32(b[p]) - 48
         }
         digits++
         p++
       }
-      if (digits < 1 || digits > 6) {
+      if (digits < 1) {
         this.failed = true
         return -1
       }
@@ -909,7 +928,13 @@ export class PgText {
         digits++
       }
     }
-    if (p + 3 === end && toI32(b[p]) === 43 && toI32(b[p + 1]) === 48 && toI32(b[p + 2]) === 48) {
+    if (
+      p < toI32(b.length) - 2 &&
+      p + 3 === end &&
+      toI32(b[p]) === 43 &&
+      toI32(b[p + 1]) === 48 &&
+      toI32(b[p + 2]) === 48
+    ) {
       p = end
     }
     // The year's four bytes are digits, so their OR is '0' exactly when the year is 0000.
@@ -929,20 +954,19 @@ export class PgText {
   }
 }
 
-// The days from 0000-03-01, where the civil calendar's year starts for the
-// conversion below, to 2000-01-01, where PostgreSQL's binary times count from.
-const PG_EPOCH_DAYS: i64 = 730425
-// The first and last days `PgBinary.iso` writes, counted from 2000-01-01:
-// 0001-01-01 and 9999-12-31, the years four digits spell.
-const PG_FIRST_DAY: i64 = -730119
-const PG_LAST_DAY: i64 = 2921939
-
-/** `value`'s last `width` decimal digits into `out[at, at + width)`. */
-const pgDigits = (out: u8[], at: i32, value: i32, width: i32): void => {
-  let v: i32 = value
-  for (let i: i32 = width - 1; i >= 0; i--) {
-    out[at + i] = toU8((v % 10) + 48)
+/**
+ * `value`'s last `width` decimal digits into `out[at, at + width)`; the part
+ * of the window outside `out` is not written, and every caller's is inside.
+ */
+const pgDigits = (out: u8[], at: i32, value: u32, width: i32): void => {
+  // A `u32` wraps rather than checks; the digits are its remainders.
+  let v: u32 = value
+  // Two `i32`s summed in `i64` cannot overflow.
+  let k: i32 = toI32(toI64(at) + toI64(width) - 1)
+  while (k >= at && k >= 0 && k < toI32(out.length)) {
+    out[k] = toU8((v % 10) + 48)
     v = v / 10
+    k--
   }
 }
 
@@ -1003,7 +1027,7 @@ export class PgBinary {
    * @returns True for 1, false for 0; false with `failed` set otherwise.
    */
   bool(b: u8[], start: i32, length: i32): boolean {
-    if (length === 1 && this.inside(b, start, length)) {
+    if (length === 1 && start >= 0 && start < toI32(b.length)) {
       const c: i32 = toI32(b[start])
       if (c === 1) {
         return true
@@ -1069,35 +1093,40 @@ export class PgBinary {
       this.failed = true
       return -1
     }
-    // Floored, so that a time before 2000 keeps its day and is cut toward the past.
-    const dayMicros: i64 = toI64(86400000) * 1000
-    let days: i64 = micros / dayMicros
-    let rest: i64 = micros % dayMicros
-    if (rest < 0) {
-      days -= 1
-      rest += dayMicros
-    }
-    if (days < PG_FIRST_DAY || days > PG_LAST_DAY) {
+    // Shifted by 730120 days, a whole number of them, so that every day
+    // written, from 0001-01-01 (day -730119 counted from 2000-01-01) to
+    // 9999-12-31 (day 2921939), is non-negative and plain division floors:
+    // a time before 2000 keeps its day and is cut toward the past. `u64`
+    // wraps rather than checks; a time more than 730120 days before 2000
+    // wraps past 2^63 and is refused with every other day outside that span.
+    const shifted: u64 = toU64(micros) + toU64(730120) * toU64(86400000) * toU64(1000)
+    const ms: u64 = shifted / 1000
+    const day0: u64 = ms / 86400000
+    if (day0 < 1 || day0 > 3652059) {
       this.failed = true
       return -1
     }
     // The civil date of a day count: eras of 400 years (146097 days), each
-    // year starting on 1 March so that a leap day is its last.
-    const z: i64 = days + PG_EPOCH_DAYS
-    const era: i64 = z / 146097
-    const doe: i64 = z - era * 146097
-    const yoe: i64 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
-    const doy: i64 = doe - (365 * yoe + yoe / 4 - yoe / 100)
-    const mp: i64 = (5 * doy + 2) / 153
-    const day: i64 = doy - (153 * mp + 2) / 5 + 1
-    const month: i64 = mp < 10 ? mp + 3 : mp - 9
-    const year: i64 = yoe + era * 400 + (month <= 2 ? 1 : 0)
-    const millis: i32 = toI32(rest / 1000)
-    pgDigits(out, at, toI32(year), 4)
+    // year starting on 1 March so that a leap day is its last. The days from
+    // 0000-03-01, where that year starts, to 2000-01-01, where PostgreSQL's
+    // binary times count from, are 730425: 305 more than the shift.
+    // Every value below is a small non-negative number, so `u32`, which wraps
+    // rather than checks, computes it exactly.
+    const z: u32 = toU32(day0) + 305
+    const era: u32 = z / 146097
+    const doe: u32 = z - era * 146097
+    const yoe: u32 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    const doy: u32 = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    const mp: u32 = (5 * doy + 2) / 153
+    const day: u32 = doy - (153 * mp + 2) / 5 + 1
+    const month: u32 = mp < 10 ? mp + 3 : mp - 9
+    const year: u32 = yoe + era * 400 + (month <= 2 ? 1 : 0)
+    const millis: u32 = toU32(ms % 86400000)
+    pgDigits(out, at, year, 4)
     out[at + 4] = toU8(45)
-    pgDigits(out, at + 5, toI32(month), 2)
+    pgDigits(out, at + 5, month, 2)
     out[at + 7] = toU8(45)
-    pgDigits(out, at + 8, toI32(day), 2)
+    pgDigits(out, at + 8, day, 2)
     out[at + 10] = toU8(84)
     pgDigits(out, at + 11, millis / 3600000, 2)
     out[at + 13] = toU8(58)
