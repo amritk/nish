@@ -394,6 +394,13 @@ const quicPacketZeroed = (size: i32): u8[] => {
 }
 
 /**
+ * Byte `k` of a header-protection mask. Every caller has checked the mask is
+ * 5 bytes and `k` at most 4; any other `k` answers 0, which leaves the byte
+ * it masks unchanged.
+ */
+const quicPacketMaskByte = (mask: u8[], k: i32): u8 => (k >= 0 && k < toI32(mask.length) ? mask[k] : toU8(0))
+
+/**
  * The bytes `bytes[from .. to)` as a fresh array of exactly that size, so a
  * packet-sized copy is one allocation rather than a push-grown one. Every
  * caller has checked the window; one that is not inside `bytes` answers an
@@ -455,7 +462,7 @@ export const quicVarintSize = (value: i64): i32 => {
  */
 export const quicVarintPut = (buf: u8[], at: i32, value: i64, size: i32): i32 => {
   const needed: i32 = quicVarintSize(value)
-  if (needed === 0 || size < needed || at < 0 || at > toI32(buf.length) - size) {
+  if (needed === 0 || size < needed || size > 8 || at < 0 || toI64(at) + toI64(size) > toI64(buf.length)) {
     return -1
   }
   // The two-bit prefix is log2 of the size: 0, 1, 2 or 3 for 1, 2, 4 or 8 bytes.
@@ -469,17 +476,19 @@ export const quicVarintPut = (buf: u8[], at: i32, value: i64, size: i32): i32 =>
   } else if (size !== 1) {
     return -1
   }
+  // The check above put `at + size` inside `buf`, so it fits an `i32`.
+  const end: i32 = toI32(toI64(at) + toI64(size))
   for (let k: i32 = 0; k < size; k += 1) {
-    const shift: i64 = toI64(size - 1 - k) * 8
-    let b: i32 = toI32((value >> shift) & 255)
+    let b: i32 = toI32((value >> (toI64(size - 1 - k) * 8)) & 255)
     if (k === 0) {
       b = b | (prefix << 6)
     }
-    if (at + k < toI32(buf.length)) {
-      buf[at + k] = toU8(b)
+    const j: i32 = toI32(toI64(at) + toI64(k))
+    if (j >= 0 && j < toI32(buf.length)) {
+      buf[j] = toU8(b)
     }
   }
-  return at + size
+  return end
 }
 
 /**
@@ -555,13 +564,18 @@ export const quicVarintLength = (bytes: u8[], at: i32): i32 => {
  * @returns The integer, 0 to 2^62 - 1, or -1 when it cannot be read.
  */
 export const quicVarintRead = (bytes: u8[], at: i32, end: i32): i64 => {
-  const size: i32 = quicVarintLength(bytes, at)
-  if (size === 0 || end > toI32(bytes.length) || at + size > end) {
+  if (at < 0 || at >= toI32(bytes.length) || end > toI32(bytes.length)) {
     return -1
   }
+  const size: i32 = 1 << toI32(bytes[at] >> 6)
+  if (toI64(at) + toI64(size) > toI64(end)) {
+    return -1
+  }
+  // `at + size` is at most `end`, inside `bytes`.
+  const stop: i32 = toI32(toI64(at) + toI64(size))
   let value: i64 = toI64(bytes[at] & 0x3f)
-  for (let k: i32 = 1; k < size; k += 1) {
-    value = (value << 8) | toI64(bytes[at + k])
+  for (let j: i32 = at + 1; j < stop && j < toI32(bytes.length); j += 1) {
+    value = (value << 8) | toI64(bytes[j])
   }
   return value
 }
@@ -584,9 +598,11 @@ export const quicPacketNumberLength = (fullPn: i64, largestAcked: i64): i32 => {
   // `fullPn - largestAcked` packets are in flight with the new one, and the
   // receiver's window is centred on what it expects, so the encoding has to
   // span twice that: `unacked <= 2^(8n - 1)` for n bytes.
-  const unacked: i64 = fullPn - largestAcked
+  // Both are -1 to 2^62 - 1 and `fullPn` is the larger, so the difference
+  // is 1 to 2^62 and the `u64` subtraction, -1 included, is exact.
+  const unacked: u64 = toU64(fullPn) - toU64(largestAcked)
   for (let n: i32 = 1; n <= 4; n += 1) {
-    const half: i64 = toI64(1) << (toI64(n) * 8 - 1)
+    const half: u64 = toU64(1) << toU64(n * 8 - 1)
     if (unacked <= half) {
       return n
     }
@@ -610,13 +626,16 @@ export const quicPacketNumberDecode = (largestPn: i64, truncatedPn: i64, pnLengt
   if (pnLength < 1 || pnLength > 4 || largestPn < -1 || largestPn > QUIC_MAX_VARINT) {
     return -1
   }
-  const window: i64 = toI64(1) << (toI64(pnLength) * 8)
-  if (truncatedPn < 0 || truncatedPn >= window) {
+  const window: u64 = toU64(1) << toU64(pnLength * 8)
+  if (truncatedPn < 0 || toU64(truncatedPn) >= window) {
     return -1
   }
-  const expected: i64 = largestPn + 1
-  const halfWindow: i64 = window >> 1
-  const candidate: i64 = (expected & ~(window - 1)) | truncatedPn
+  // In `u64`, where nothing below can wrap: `largestPn` is -1 to 2^62 - 1,
+  // so `expected` is 0 to 2^62, and every sum stays under 2^63.
+  const expected: u64 = toU64(largestPn) + toU64(1)
+  const halfWindow: u64 = window >> toU64(1)
+  const candidate: u64 = (expected & ~(window - toU64(1))) | toU64(truncatedPn)
+  const limit: u64 = toU64(QUIC_MAX_VARINT)
   // The candidate shares `expected`'s high bits; one window up or down is
   // nearer when it falls outside (expected - half, expected + half]. The
   // bound checks keep the answer inside [0, 2^62). One case is left that
@@ -624,13 +643,13 @@ export const quicPacketNumberDecode = (largestPn: i64, truncatedPn: i64, pnLengt
   // `expected` is 2^62 itself, and a candidate equal to it falls through
   // both tests. Every packet number below 2^62 with these low bytes is a
   // window down, and the nearest of them is the answer.
-  if (candidate <= expected - halfWindow && candidate < QUIC_MAX_VARINT + 1 - window) {
-    return candidate + window
+  if (candidate + halfWindow <= expected && candidate + window <= limit) {
+    return toI64(candidate + window)
   }
-  if ((candidate > expected + halfWindow || candidate > QUIC_MAX_VARINT) && candidate >= window) {
-    return candidate - window
+  if ((candidate > expected + halfWindow || candidate > limit) && candidate >= window) {
+    return toI64(candidate - window)
   }
-  return candidate
+  return toI64(candidate)
 }
 
 /** Whether `cid` is a connection ID version 1 allows: 0 to 20 bytes. */
@@ -639,6 +658,15 @@ const quicPacketCidFits = (cid: u8[]): boolean => toI32(cid.length) <= QUIC_MAX_
 /** Whether `length` bytes from the start of `cid` are a connection ID version 1 allows: 0 to 20 bytes, inside `cid`. */
 const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
   length >= 0 && length <= QUIC_MAX_CID_LENGTH && length <= toI32(cid.length)
+
+/** A copy of `length` bytes of `bytes` from `from`, or an empty array for a window not inside it. */
+const quicPacketTake = (bytes: u8[], from: i32, length: i32): u8[] => {
+  if (from < 0 || length < 0 || toI64(from) + toI64(length) > toI64(bytes.length)) {
+    return []
+  }
+  // The window is inside `bytes`, so its end fits an `i32`.
+  return quicPacketSlice(bytes, from, toI32(toI64(from) + toI64(length)))
+}
 
 /**
  * Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the caller has checked both windows.
@@ -665,7 +693,8 @@ const quicPacketPutByte = (buf: u8[], at: i32, value: i32): void => {
  * Writes what every version 1 long header starts with (RFC 9000 §17.2) into
  * `buf` at `at`: the first byte, the version, and each connection ID (the
  * first `dcidLength` and `scidLength` bytes of `dcid` and `scid`) after its
- * length. Answers the offset past it; the caller has checked that it fits.
+ * length. Answers the offset past it, or -1, writing nothing, for an ID
+ * length outside 0 to 20 or a prefix that does not fit in `buf` from `at`.
  */
 const quicPacketPutLongPrefix = (
   buf: u8[],
@@ -676,28 +705,45 @@ const quicPacketPutLongPrefix = (
   scid: u8[],
   scidLength: i32
 ): i32 => {
+  // 20 is `QUIC_MAX_CID_LENGTH`, written out so the bounds prover narrows on it.
+  if (at < 0 || dcidLength < 0 || dcidLength > 20 || scidLength < 0 || scidLength > 20) {
+    return -1
+  }
+  if (toI64(at) + toI64(7 + dcidLength + scidLength) > toI64(buf.length)) {
+    return -1
+  }
+  // The check above put the whole prefix inside `buf`, so each offset in it fits an `i32`.
+  const scidAt: i32 = toI32(toI64(at) + toI64(6 + dcidLength))
   const version: i32 = toI32(QUIC_VERSION_1)
   quicPacketPutByte(buf, at, first)
-  quicPacketPutByte(buf, at + 1, (version >> 24) & 255)
-  quicPacketPutByte(buf, at + 2, (version >> 16) & 255)
-  quicPacketPutByte(buf, at + 3, (version >> 8) & 255)
-  quicPacketPutByte(buf, at + 4, version & 255)
-  quicPacketPutByte(buf, at + 5, dcidLength)
-  quicPacketCopy(buf, at + 6, dcid, 0, dcidLength)
-  const scidAt: i32 = at + 6 + dcidLength
+  quicPacketPutByte(buf, toI32(toI64(at) + 1), (version >> 24) & 255)
+  quicPacketPutByte(buf, toI32(toI64(at) + 2), (version >> 16) & 255)
+  quicPacketPutByte(buf, toI32(toI64(at) + 3), (version >> 8) & 255)
+  quicPacketPutByte(buf, toI32(toI64(at) + 4), version & 255)
+  quicPacketPutByte(buf, toI32(toI64(at) + 5), dcidLength)
+  quicPacketCopy(buf, toI32(toI64(at) + 6), dcid, 0, dcidLength)
   quicPacketPutByte(buf, scidAt, scidLength)
-  quicPacketCopy(buf, scidAt + 1, scid, 0, scidLength)
-  return scidAt + 1 + scidLength
+  quicPacketCopy(buf, toI32(toI64(scidAt) + 1), scid, 0, scidLength)
+  return toI32(toI64(scidAt) + toI64(1 + scidLength))
 }
 
-/** Writes the low `pnLength` bytes of `packetNumber` into `buf` at `at`, big-endian, and answers the offset past them. */
+/**
+ * Writes the low `pnLength` bytes of `packetNumber` into `buf` at `at`,
+ * big-endian, and answers the offset past them, or -1, writing nothing, for a
+ * `pnLength` outside 1 to 4 or bytes that do not fit in `buf` from `at`.
+ */
 const quicPacketPutNumber = (buf: u8[], at: i32, packetNumber: i64, pnLength: i32): i32 => {
+  if (at < 0 || pnLength < 1 || pnLength > 4 || toI64(at) + toI64(pnLength) > toI64(buf.length)) {
+    return -1
+  }
   for (let k: i32 = 0; k < pnLength; k += 1) {
-    if (at + k >= 0 && at + k < toI32(buf.length)) {
-      buf[at + k] = toU8(toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255))
+    // `at` and `k` are 0 or more and their sum is inside `buf`, so it fits an `i32`.
+    const j: i32 = toI32(toI64(at) + toI64(k))
+    if (j >= 0 && j < toI32(buf.length)) {
+      buf[j] = toU8(toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255))
     }
   }
-  return at + pnLength
+  return toI32(toI64(at) + toI64(pnLength))
 }
 
 /**
@@ -740,8 +786,14 @@ export const quicLongHeaderSize = (
   ) {
     return 0
   }
-  const token: i32 = type === QUIC_PACKET_INITIAL ? quicVarintSize(toI64(tokenLength)) + tokenLength : 0
-  return 7 + dcidLength + scidLength + token + 2 + pnLength
+  // Each term is an `i32` of 0 or more, so the unsigned sum is exact.
+  const token: u64 =
+    type === QUIC_PACKET_INITIAL ? toU64(quicVarintSize(toI64(tokenLength))) + toU64(tokenLength) : toU64(0)
+  const size: u64 = toU64(dcidLength) + toU64(scidLength) + toU64(9 + pnLength) + token
+  if (size > toU64(2147483647)) {
+    return 0
+  }
+  return toI32(size)
 }
 
 /**
@@ -792,8 +844,10 @@ export const quicPutLongHeader = (
     size === 0 ||
     !quicPacketCidWindowFits(dcid, dcidLength) ||
     !quicPacketCidWindowFits(scid, scidLength) ||
+    pnLength < 1 ||
+    pnLength > 4 ||
     at < 0 ||
-    at > toI32(buf.length) - size
+    toI64(at) + toI64(size) > toI64(buf.length)
   ) {
     return -1
   }
@@ -806,13 +860,17 @@ export const quicPutLongHeader = (
     scid,
     scidLength
   )
-  if (type === QUIC_PACKET_INITIAL) {
+  if (type === QUIC_PACKET_INITIAL && cursor >= 0) {
     cursor = quicVarintPut(buf, cursor, toI64(tokenLength), quicVarintSize(toI64(tokenLength)))
     quicPacketCopy(buf, cursor, token, 0, tokenLength)
-    cursor = cursor + tokenLength
+    // The size check above put the token inside `buf`, so the sum fits an `i32`.
+    cursor = cursor < 0 ? -1 : toI32(toI64(cursor) + toI64(tokenLength))
   }
-  cursor = quicVarintPut(buf, cursor, toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE), 2)
-  return quicPacketPutNumber(buf, cursor, packetNumber, pnLength)
+  if (cursor < 0) {
+    return -1
+  }
+  cursor = quicVarintPut(buf, cursor, toI64(pnLength) + toI64(payloadLength) + toI64(QUIC_AEAD_TAG_SIZE), 2)
+  return cursor < 0 ? -1 : quicPacketPutNumber(buf, cursor, packetNumber, pnLength)
 }
 
 /**
@@ -862,7 +920,7 @@ export const quicLongHeader = (
   if (size === 0) {
     return null
   }
-  const out: u8[] = new Array<u8>(size)
+  const out: u8[] = quicPacketZeroed(size)
   if (
     quicPutLongHeader(
       out,
@@ -911,23 +969,29 @@ export const quicPutShortHeader = (
   packetNumber: i64,
   pnLength: i32
 ): i32 => {
-  const size: i32 = 1 + dcidLength + pnLength
+  // 20 is `QUIC_MAX_CID_LENGTH`, written out so the bounds prover narrows on it.
   if (
-    !quicPacketCidWindowFits(dcid, dcidLength) ||
+    dcidLength < 0 ||
+    dcidLength > 20 ||
+    dcidLength > toI32(dcid.length) ||
     pnLength < 1 ||
     pnLength > 4 ||
     packetNumber < 0 ||
     packetNumber > QUIC_MAX_VARINT ||
     at < 0 ||
-    at > toI32(buf.length) - size
+    at >= toI32(buf.length)
   ) {
+    return -1
+  }
+  if (toI64(at) + toI64(1 + dcidLength + pnLength) > toI64(buf.length)) {
     return -1
   }
   const spinBit: i32 = spin ? 0x20 : 0
   const keyPhaseBit: i32 = keyPhase ? 0x04 : 0
   buf[at] = toU8((pnLength - 1) | spinBit | keyPhaseBit | 0x40)
-  quicPacketCopy(buf, at + 1, dcid, 0, dcidLength)
-  return quicPacketPutNumber(buf, at + 1 + dcidLength, packetNumber, pnLength)
+  // The check above put the header inside `buf`, so its offsets fit an `i32`.
+  quicPacketCopy(buf, toI32(toI64(at) + 1), dcid, 0, dcidLength)
+  return quicPacketPutNumber(buf, toI32(toI64(at) + toI64(1 + dcidLength)), packetNumber, pnLength)
 }
 
 /**
@@ -953,10 +1017,11 @@ export const quicShortHeader = (
   pnLength: i32
 ): u8[] | null => {
   const dcidLength: i32 = toI32(dcid.length)
-  if (!quicPacketCidFits(dcid) || pnLength < 1 || pnLength > 4) {
+  // 20 is `QUIC_MAX_CID_LENGTH`, written out so the bounds prover narrows on it.
+  if (dcidLength > 20 || pnLength < 1 || pnLength > 4) {
     return null
   }
-  const out: u8[] = new Array<u8>(1 + dcidLength + pnLength)
+  const out: u8[] = new Array<u8>(toU8(1 + dcidLength + pnLength))
   if (quicPutShortHeader(out, 0, dcid, dcidLength, spin, keyPhase, packetNumber, pnLength) < 0) {
     return null
   }
@@ -978,7 +1043,19 @@ const quicPacketCidLength = (bytes: u8[], at: i32, end: i32): i32 => {
     return -1
   }
   const length: i32 = toI32(bytes[at])
-  return at + 1 + length > end ? -1 : length
+  return toI64(at) + 1 + toI64(length) > toI64(end) ? -1 : length
+}
+
+/**
+ * `at + count` when both are 0 or more and the sum is at most `end`, else
+ * -1: a parser's step past `count` bytes that must stay inside the packet.
+ */
+const quicPacketSkip = (at: i32, count: i32, end: i32): i32 => {
+  if (at < 0 || count < 0 || toI64(at) + toI64(count) > toI64(end)) {
+    return -1
+  }
+  // The sum is at most `end`, so it fits an `i32`.
+  return toI32(toI64(at) + toI64(count))
 }
 
 /**
@@ -1019,47 +1096,53 @@ export const quicParseHeaderInto = (
   header.scidLength = 0
   header.tokenStart = 0
   header.tokenLength = 0
-  if (at < 0 || at >= end) {
+  if (at < 0 || at >= end || at >= toI32(datagram.length)) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
   const first: i32 = toI32(datagram[at])
+  // `at` is below `end`, so the byte after it is at most `end` and fits an `i32`.
+  const second: i32 = toI32(toI64(at) + 1)
   if ((first & 0x80) === 0) {
     header.type = QUIC_PACKET_SHORT
     if ((first & 0x40) === 0) {
       return quicPacketRefuse(header, QUIC_ERR_FIXED_BIT)
     }
-    if (shortDcidLength < 0 || shortDcidLength > QUIC_MAX_CID_LENGTH || at + 1 + shortDcidLength > end) {
+    const pnOffset: i32 = quicPacketSkip(second, shortDcidLength, end)
+    if (shortDcidLength > QUIC_MAX_CID_LENGTH || pnOffset < 0) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
-    header.dcidStart = at + 1
+    header.dcidStart = second
     header.dcidLength = shortDcidLength
-    header.pnOffset = at + 1 + shortDcidLength
+    header.pnOffset = pnOffset
     return QUIC_PACKET_OK
   }
-  if (at + 5 > end) {
+  const dcidLengthAt: i32 = quicPacketSkip(at, 5, end)
+  if (dcidLengthAt < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
   let version: i64 = 0
-  for (let k: i32 = at + 1; k < at + 5; k += 1) {
-    if (k < toI32(datagram.length)) {
-      version = (version << 8) | toI64(datagram[k])
+  for (let k: i32 = 1; k < 5; k += 1) {
+    const j: i32 = toI32(toI64(at) + toI64(k))
+    if (j >= 0 && j < toI32(datagram.length)) {
+      version = (version << 8) | toI64(datagram[j])
     }
   }
   header.version = version
-  const dcidLength: i32 = quicPacketCidLength(datagram, at + 5, end)
+  const dcidLength: i32 = quicPacketCidLength(datagram, dcidLengthAt, end)
   if (dcidLength < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
-  header.dcidStart = at + 6
+  // `quicPacketCidLength` put the ID inside `[dcidLengthAt, end)`, so these offsets fit an `i32`.
+  header.dcidStart = toI32(toI64(dcidLengthAt) + 1)
   header.dcidLength = dcidLength
-  const afterDcid: i32 = at + 6 + dcidLength
+  const afterDcid: i32 = toI32(toI64(dcidLengthAt) + 1 + toI64(dcidLength))
   const scidLength: i32 = quicPacketCidLength(datagram, afterDcid, end)
   if (scidLength < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
-  header.scidStart = afterDcid + 1
+  header.scidStart = toI32(toI64(afterDcid) + 1)
   header.scidLength = scidLength
-  let cursor: i32 = afterDcid + 1 + scidLength
+  let cursor: i32 = toI32(toI64(afterDcid) + 1 + toI64(scidLength))
   if (version !== QUIC_VERSION_1) {
     return quicPacketRefuse(header, QUIC_ERR_VERSION)
   }
@@ -1074,12 +1157,13 @@ export const quicParseHeaderInto = (
   if (type === QUIC_PACKET_RETRY) {
     // A Retry has no Length and no packet number: the token runs to the
     // integrity tag, and the tag to the end of the datagram (§17.2.5).
-    if (cursor + QUIC_RETRY_TAG_SIZE > end) {
+    if (toI64(cursor) + toI64(QUIC_RETRY_TAG_SIZE) > toI64(end)) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
+    // `cursor` is 0 or more and the tag fits before `end`, so both fit an `i32`.
     header.tokenStart = cursor
-    header.tokenLength = end - QUIC_RETRY_TAG_SIZE - cursor
-    header.pnOffset = end - QUIC_RETRY_TAG_SIZE
+    header.tokenLength = toI32(toI64(end) - toI64(QUIC_RETRY_TAG_SIZE) - toI64(cursor))
+    header.pnOffset = toI32(toI64(end) - toI64(QUIC_RETRY_TAG_SIZE))
     return QUIC_PACKET_OK
   }
   if (type === QUIC_PACKET_INITIAL) {
@@ -1087,24 +1171,29 @@ export const quicParseHeaderInto = (
     if (tokenLength < 0) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
-    cursor += quicVarintLength(datagram, cursor)
-    if (tokenLength > toI64(end - cursor)) {
+    cursor = quicPacketSkip(cursor, quicVarintLength(datagram, cursor), end)
+    if (cursor < 0 || tokenLength > toI64(end) - toI64(cursor)) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
     header.tokenStart = cursor
+    // The token fits before `end`, so its length fits an `i32`.
     header.tokenLength = toI32(tokenLength)
-    cursor = cursor + toI32(tokenLength)
+    cursor = quicPacketSkip(cursor, toI32(tokenLength), end)
   }
   const length: i64 = quicVarintRead(datagram, cursor, end)
   if (length < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
-  cursor += quicVarintLength(datagram, cursor)
-  if (length > toI64(end - cursor)) {
+  cursor = quicPacketSkip(cursor, quicVarintLength(datagram, cursor), end)
+  if (cursor < 0) {
+    return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
+  }
+  if (length > toI64(end) - toI64(cursor)) {
     return quicPacketRefuse(header, QUIC_ERR_LENGTH)
   }
   header.pnOffset = cursor
-  header.end = cursor + toI32(length)
+  // The packet fits before `end`, so its length fits an `i32`.
+  header.end = quicPacketSkip(cursor, toI32(length), end)
   return QUIC_PACKET_OK
 }
 
@@ -1128,11 +1217,12 @@ export const quicParseHeaderInto = (
 export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): QuicHeader => {
   const header: QuicHeader = new QuicHeader()
   quicParseHeaderInto(header, datagram, at, toI32(datagram.length), shortDcidLength)
-  header.dcid = quicPacketSlice(datagram, header.dcidStart, header.dcidStart + header.dcidLength)
-  header.scid = quicPacketSlice(datagram, header.scidStart, header.scidStart + header.scidLength)
-  header.token = quicPacketSlice(datagram, header.tokenStart, header.tokenStart + header.tokenLength)
+  header.dcid = quicPacketTake(datagram, header.dcidStart, header.dcidLength)
+  header.scid = quicPacketTake(datagram, header.scidStart, header.scidLength)
+  header.token = quicPacketTake(datagram, header.tokenStart, header.tokenLength)
   if (header.type === QUIC_PACKET_RETRY && header.error === QUIC_PACKET_OK) {
-    header.retryTag = quicPacketSlice(datagram, header.end - QUIC_RETRY_TAG_SIZE, header.end)
+    // A Retry's `pnOffset` is where its integrity tag starts.
+    header.retryTag = quicPacketTake(datagram, header.pnOffset, QUIC_RETRY_TAG_SIZE)
   }
   return header
 }
@@ -1301,7 +1391,10 @@ export const quicKeysUpdate = (
   }
   quicPacketPoint(slot, keys.aead)
   const next: QuicKeys = slot.keys
-  next.hp.set(keys.hp)
+  // `quicPacketPoint` sized the slot's key for `keys.aead`, which is `keys.hp`'s size.
+  if (!tryCopyBytes(next.hp, 0, keys.hp, 0, toI32(keys.hp.length))) {
+    return null
+  }
   const scratch: HkdfScratch = new HkdfScratch()
   {
     using _scope = arena()
@@ -1644,7 +1737,7 @@ export const quicInitialSecretsInto = (
   using _scope = arena()
   const none: u8[] = []
   const initial: u8[] = new Array<u8>(32)
-  hkdfExtractInto(kdf, 32, quicPacketInitialSalt(), quicPacketSlice(buf, at, at + length), initial, 0)
+  hkdfExtractInto(kdf, 32, quicPacketInitialSalt(), quicPacketTake(buf, at, length), initial, 0)
   hkdfExpandLabelInto(kdf, 32, initial, "client in", none, 0, 0, client, 0, 32)
   hkdfExpandLabelInto(kdf, 32, initial, "server in", none, 0, 0, server, 0, 32)
   secureZero(initial)
@@ -1734,35 +1827,48 @@ export const quicSealInPlace = (
   payloadLength: i32,
   packetNumber: i64
 ): i32 => {
-  const end: i32 = start + headerLength + payloadLength + QUIC_AEAD_TAG_SIZE
-  if (start < 0 || headerLength < 2 || payloadLength < 0 || end > toI32(buf.length) || end < start) {
+  if (
+    start < 0 ||
+    start >= toI32(buf.length) ||
+    headerLength < 2 ||
+    payloadLength < 0 ||
+    toI64(start) + toI64(headerLength) + toI64(payloadLength) + toI64(QUIC_AEAD_TAG_SIZE) > toI64(buf.length)
+  ) {
     return -1
   }
+  // Every offset below is at most `end`, which the check above put inside
+  // `buf`, so each fits an `i32`.
+  const end: i32 = toI32(
+    toI64(start) + toI64(headerLength) + toI64(payloadLength) + toI64(QUIC_AEAD_TAG_SIZE)
+  )
   const first: i32 = toI32(buf[start])
   const pnLength: i32 = (first & 3) + 1
-  const pnOffset: i32 = start + headerLength - pnLength
+  const pnOffset: i32 = toI32(toI64(start) + toI64(headerLength) - toI64(pnLength))
   if (
     !quicPacketKeysUsable(keys) ||
-    pnOffset < start + 1 ||
-    pnLength + payloadLength < 4 ||
+    toI64(pnOffset) < toI64(start) + 1 ||
+    toI64(pnLength) + toI64(payloadLength) < 4 ||
     packetNumber < 0 ||
     packetNumber > QUIC_MAX_VARINT
   ) {
     return -1
   }
   for (let k: i32 = 0; k < pnLength; k += 1) {
-    const want: i32 = toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255)
-    if (pnOffset + k < toI32(buf.length) && toI32(buf[pnOffset + k]) !== want) {
+    const want: i32 = toI32((packetNumber >> ((toI64(pnLength) - 1 - toI64(k)) * 8)) & 255)
+    const j: i32 = toI32(toI64(pnOffset) + toI64(k))
+    if (j >= 0 && j < toI32(buf.length) && toI32(buf[j]) !== want) {
       return -1
     }
   }
+  // `pnOffset` is past `start`, so 2 before it is -1 or more.
   if (
     (first & 0x80) !== 0 &&
-    quicVarintRead(buf, pnOffset - 2, pnOffset) !== toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE)
+    quicVarintRead(buf, toI32(toI64(pnOffset) - 2), pnOffset) !==
+      toI64(pnLength) + toI64(payloadLength) + toI64(QUIC_AEAD_TAG_SIZE)
   ) {
     return -1
   }
-  const payloadAt: i32 = start + headerLength
+  const payloadAt: i32 = toI32(toI64(start) + toI64(headerLength))
   {
     using _scope = arena()
     // The nonce is the IV with a public number XORed in, so it gives the IV
@@ -1773,27 +1879,30 @@ export const quicSealInPlace = (
       keys,
       nonce,
       quicPacketSlice(buf, start, payloadAt),
-      quicPacketSlice(buf, payloadAt, payloadAt + payloadLength)
+      quicPacketTake(buf, payloadAt, payloadLength)
     )
     wipe(nonce)
-    if (sealed === null || payloadAt + toI32(sealed.length) > toI32(buf.length)) {
+    if (sealed === null || !tryCopyBytes(buf, payloadAt, sealed, 0, toI32(sealed.length))) {
       return -1
     }
-    buf.set(sealed, payloadAt)
-    const sampleAt: i32 = pnOffset + 4
+    // The packet number and payload are at least 4 bytes and the tag's 16
+    // follow them, so the sample starts before `end` and fits an `i32`.
     const mask: u8[] | null = quicPacketMask(
       keys,
-      quicPacketSlice(buf, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+      quicPacketTake(buf, toI32(toI64(pnOffset) + 4), QUIC_SAMPLE_SIZE)
     )
     if (mask === null) {
       return -1
     }
-    const masked: boolean = toI32(mask.length) >= 5
-    if (masked) {
-      buf[start] = toU8(first ^ (toI32(mask[0]) & quicPacketProtectedBits(first)))
-      for (let k: i32 = 0; k < pnLength && k + 1 < toI32(mask.length); k += 1) {
-        if (pnOffset + k >= 0 && pnOffset + k < toI32(buf.length)) {
-          buf[pnOffset + k] = buf[pnOffset + k] ^ mask[k + 1]
+    // `buf` is not grown in between, so `start` is still inside it; the test
+    // restates that for the bounds proof, and a packet left unmasked is refused.
+    const masked: boolean = toI32(mask.length) >= 5 && start >= 0 && start < toI32(buf.length)
+    if (masked && start >= 0 && start < toI32(buf.length)) {
+      buf[start] = toU8(first ^ (toI32(quicPacketMaskByte(mask, 0)) & quicPacketProtectedBits(first)))
+      for (let k: i32 = 0; k < pnLength; k += 1) {
+        const j: i32 = toI32(toI64(pnOffset) + toI64(k))
+        if (j >= 0 && j < toI32(buf.length)) {
+          buf[j] = buf[j] ^ quicPacketMaskByte(mask, toI32(toI64(k) + 1))
         }
       }
     }
@@ -1836,10 +1945,16 @@ export const quicSealPacket = (
 ): u8[] | null => {
   const headerLength: i32 = toI32(header.length)
   const payloadLength: i32 = toI32(payload.length)
-  const packet: u8[] = new Array<u8>(headerLength + payloadLength + QUIC_AEAD_TAG_SIZE)
-  packet.set(header)
-  packet.set(payload, headerLength)
-  if (quicSealInPlace(keys, packet, 0, headerLength, payloadLength, packetNumber) < 0) {
+  const size: u64 = toU64(headerLength) + toU64(payloadLength) + toU64(QUIC_AEAD_TAG_SIZE)
+  if (size > toU64(2147483647)) {
+    return null
+  }
+  const packet: u8[] = quicPacketZeroed(toI32(size))
+  if (
+    !tryCopyBytes(packet, 0, header, 0, headerLength) ||
+    !tryCopyBytes(packet, headerLength, payload, 0, payloadLength) ||
+    quicSealInPlace(keys, packet, 0, headerLength, payloadLength, packetNumber) < 0
+  ) {
     return null
   }
   return packet
@@ -1887,42 +2002,47 @@ export const quicUnprotectHeader = (
     return []
   }
   const pnOffset: i32 = header.pnOffset
-  const sampleAt: i32 = pnOffset + 4
+  const start: i32 = header.start
   if (
-    header.start < 0 ||
-    header.start >= pnOffset ||
+    start < 0 ||
+    start >= datagramLength ||
+    start >= pnOffset ||
     header.end > datagramLength ||
-    sampleAt + QUIC_SAMPLE_SIZE > header.end
+    toI64(pnOffset) + 4 + toI64(QUIC_SAMPLE_SIZE) > toI64(header.end)
   ) {
     packet.error = QUIC_ERR_SAMPLE
     return []
   }
+  const protectedFirst: i32 = toI32(datagram[start])
+  // The check above put the sample inside the datagram, so its offset fits an `i32`.
   const mask: u8[] | null = quicPacketMask(
     keys,
-    quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+    quicPacketTake(datagram, toI32(toI64(pnOffset) + 4), QUIC_SAMPLE_SIZE)
   )
   if (mask === null) {
     packet.error = QUIC_ERR_KEYS
     return []
   }
   const usable: boolean = toI32(mask.length) >= 5
-  const protectedFirst: i32 = toI32(datagram[header.start])
   const long: boolean = (protectedFirst & 0x80) !== 0
   const first: i32 = usable
-    ? protectedFirst ^ (toI32(mask[0]) & quicPacketProtectedBits(protectedFirst))
+    ? protectedFirst ^ (toI32(quicPacketMaskByte(mask, 0)) & quicPacketProtectedBits(protectedFirst))
     : protectedFirst
   const pnLength: i32 = (first & 3) + 1
   // The sample check above put 20 bytes after `pnOffset` inside the packet,
-  // so the packet number's at most 4 are there too.
-  const clear: u8[] = quicPacketSlice(datagram, header.start, pnOffset + pnLength)
-  clear[0] = toU8(first)
+  // so the packet number's at most 4 are there too, and every offset below
+  // fits an `i32`.
+  const clear: u8[] = quicPacketTake(datagram, start, toI32(toI64(pnOffset) + toI64(pnLength) - toI64(start)))
   let truncated: i64 = 0
-  for (let k: i32 = 0; k < pnLength; k += 1) {
-    const at: i32 = pnOffset - header.start + k
-    if (at >= 0 && at < toI32(clear.length) && k + 1 < toI32(mask.length)) {
-      const b: u8 = clear[at] ^ mask[k + 1]
-      clear[at] = b
-      truncated = (truncated << 8) | toI64(b)
+  if (toI32(clear.length) > 0) {
+    clear[0] = toU8(first)
+    for (let k: i32 = 0; k < pnLength; k += 1) {
+      const at: i32 = toI32(toI64(pnOffset) - toI64(start) + toI64(k))
+      if (at >= 0 && at < toI32(clear.length)) {
+        const b: u8 = clear[at] ^ quicPacketMaskByte(mask, toI32(toI64(k) + 1))
+        clear[at] = b
+        truncated = (truncated << 8) | toI64(b)
+      }
     }
   }
   // The mask is the header-protection key's keystream: wiped once used, on
@@ -1998,7 +2118,11 @@ export const quicDecryptPayload = (
     packet.error = QUIC_ERR_KEYS
     return null
   }
-  const payloadStart: i32 = header.start + toI32(clear.length)
+  // A start past `header.end` leaves an empty window, which does not open.
+  const payloadStart: i32 =
+    toI64(header.start) + toI64(clear.length) > toI64(header.end)
+      ? header.end
+      : toI32(toI64(header.start) + toI64(clear.length))
   // The nonce gives the IV away (see `quicSealInPlace`): wiped once used.
   const nonce: u8[] = quicPacketNonce(keys, packet.packetNumber)
   const plain: u8[] | null = quicPacketOpen(
@@ -2119,18 +2243,13 @@ export const quicRetryPacket = (
   odcid: u8[],
   unused: i32
 ): u8[] | null => {
-  if (
-    !quicPacketCidFits(dcid) ||
-    !quicPacketCidFits(scid) ||
-    toI32(token.length) === 0 ||
-    unused < 0 ||
-    unused > 15
-  ) {
-    return null
-  }
   const dcidLength: i32 = toI32(dcid.length)
   const scidLength: i32 = toI32(scid.length)
-  const out: u8[] = new Array<u8>(7 + dcidLength + scidLength)
+  // 20 is `QUIC_MAX_CID_LENGTH`, written out so the bounds prover narrows on it.
+  if (dcidLength > 20 || scidLength > 20 || toI32(token.length) === 0 || unused < 0 || unused > 15) {
+    return null
+  }
+  const out: u8[] = new Array<u8>(toU8(7 + dcidLength + scidLength))
   quicPacketPutLongPrefix(out, 0, unused | 0xf0, dcid, dcidLength, scid, scidLength)
   quicPacketAppend(out, token)
   const tag: u8[] | null = quicRetryIntegrityTag(odcid, out)
