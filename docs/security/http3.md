@@ -380,6 +380,68 @@ valid token with a Retry and gives it no slot (`net_relay_forged`, "with
 retry on, each of four Initials without a token is answered with a Retry",
 "and none of them holds a slot"). The relay ships with `retry` off.
 
+## Panic sites
+
+WP82 took the four files off the panic ratchet's to-fix list. A site is one
+place the compiler would insert a panic (`build/nish --emit-panics`): an index,
+an arithmetic overflow, a `slice`, a divide, an explicit `panic`. Counted
+without the sites the prover discharges:
+
+| File | Before | After | What is left |
+| --- | --- | --- | --- |
+| `std/net/http3-frame.ts` | 21 | 1 | `h3CheckWindow`: a window outside the caller's buffer |
+| `std/net/qpack.ts` | 38 | 3 | `qpackCheckWindow`, `qpackPushInteger`'s prefix, `QpackDecoder`'s construction limit |
+| `std/net/http3.ts` | 248 | 5 | `http3CheckCap` and four checks of `Http3Connection`'s configuration |
+| `std/net/http3-server.ts` | 153 | 9 | three checks of `Http3Server`'s configuration; four `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |
+
+Every `panic` left checks an argument the program passes: a window, a cap or a
+configuration. None is reached by a byte a peer sends. The compiler counts
+each `nish:net` call that takes a buffer range as a `slice` site, proven or
+not (`src/panics.ts`), so the server's four sends and receives stay on the
+list. Each is given `rx` or `tx` with a range inside it, and the server's own
+guards hold that. Its two `io-exit` sites are the runtime's exit when the
+system cannot supply random bytes. Every other site is
+either proven or now returns a result. Where an index or a length comes from
+the wire (a varint, a frame length, a QPACK prefix or string length, a table
+reference), a value that does not fit is refused with the code the protocol
+already gives it: H3_FRAME_ERROR, H3_SETTINGS_ERROR,
+QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR, each sent as the
+connection's CONNECTION_CLOSE. `link/net_http3_malformed` feeds nine such
+inputs to the frame reader and the QPACK decoder and exits 0
+(`link/net_http3_malformed: exits with 0 and stdout matches expected.out`).
+
+Where a guard cannot fail, a comment says why: the index is below a length
+read on the line before, or the slot is one the connection numbered. The
+guard returns the answer the function already gave for "nothing to do".
+
+These changes alter what a caller sees:
+
+- `Http3Connection.share` used to panic when it was given pools whose buffers
+  were the wrong size for this connection. It now leaves them and keeps its
+  own pools. `Http3Server` always passes pools of the right size.
+- The idle and head deadlines in `Http3Connection.clock` are now summed in
+  `f64` (`http3Deadline`). That sum is exact for any clock below 2^53 ms and
+  saturates at `i64`'s maximum, where the `i64` sum would have overflowed.
+- `writeHead` stops adding to its section-size estimate once it passes 2^30
+  bytes. A section that large is already past any stream buffer, so it is
+  refused either way.
+- Each slot now keeps one `contentLeft` count, the content-length bytes still
+  owed, in place of the running body total and the declared length. A body
+  longer or shorter than its `content-length` is still H3_MESSAGE_ERROR on
+  the request.
+- QPACK's field copies are kept in power-of-two size classes. A class above
+  2^15 bytes, reached only under a field cap larger than the default 16,384,
+  now starts its buffer at 2^15 bytes and grows it as it fills.
+- `Http3Server.serve` now ignores a slot outside the pool. It used to panic
+  on one.
+- `Http3Server.tick` now returns without running timers when `now` is at or
+  past 2^50 ms. The old code ran them, and panicked at `i64`'s maximum. A
+  millisecond reading of the monotonic clock stays below 2^44.
+- `Http3Server` sets a slot's state before it restarts or releases the
+  slot's connection. The connection reads neither field.
+
+No public signature changed.
+
 ## What is and is not wiped
 
 HTTP/3 holds no key material: the packet keys are QUIC's and TLS's
