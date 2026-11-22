@@ -1,8 +1,12 @@
-// Opt-out (`--allow-panics`): `AtomicI32Array`'s constructor and its
-// element methods reach their `array-length` and `index` sites in
-// std/threads.ts, which no caller's guard removes; this file keeps no site of
-// its own. Follow-up: let a caller prove an `AtomicI32Array` element in range
-// as it proves a `spawn` slot, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`), for a `src/` gap, not a site of this file's: the
+// compiler writes `AtomicI32Array`'s element methods itself and records one
+// `index` site at each method's declaration (src/attributes.ts, "An atomic's
+// method"), so `add` (std/threads.ts:849:3), `load` (827:3) and every `spawn`
+// of a task that calls `add` reach a site no caller's guard removes; the
+// constructor's `new Array<i32>(length)` keeps an `array-length` site
+// (817:19) a caller's constant length does not prove either. Follow-up, in
+// `src/`: prove an element method's index at its call as `a[i]`'s is proved,
+// and a constant length at the constructor, then drop this opt-out.
 // smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
@@ -168,7 +172,13 @@ const round = (mode: string, high: i32, first: u32): u32[] => {
     {
       using s = scope()
       for (let t: i32 = 0; t < toI32(binned.length); t++) {
-        s.spawn(binLocked, new LockedShard(high | toI32(first + toU32(t)), PER_TASK, hist), binned, t)
+        const shard = new LockedShard(high | toI32(first + toU32(t)), PER_TASK, hist)
+        // The constructor is a call, and a call forgets what the loop's test
+        // proved about `binned`'s length: this test states it again at the
+        // spawn, which then keeps no slot check (docs/LANGUAGE.md, "Panic sites").
+        if (t < toI32(binned.length)) {
+          s.spawn(binLocked, shard, binned, t)
+        }
       }
     }
     using g = hist.lock()
@@ -182,11 +192,14 @@ const round = (mode: string, high: i32, first: u32): u32[] => {
     {
       using s = scope()
       for (let t: i32 = 0; t < toI32(binned.length); t++) {
-        const seed = high | toI32(first + toU32(t))
-        if (perValue) {
-          s.spawn(binPerValue, new Shard(seed, PER_TASK, bins), binned, t)
-        } else {
-          s.spawn(binShard, new Shard(seed, PER_TASK, bins), binned, t)
+        const shard = new Shard(high | toI32(first + toU32(t)), PER_TASK, bins)
+        // Never false, as above: the test states `binned`'s length again at the spawn.
+        if (t < toI32(binned.length)) {
+          if (perValue) {
+            s.spawn(binPerValue, shard, binned, t)
+          } else {
+            s.spawn(binShard, shard, binned, t)
+          }
         }
       }
     }
