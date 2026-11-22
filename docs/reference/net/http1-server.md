@@ -28,6 +28,7 @@ import {
   Http1Server,
   Http1TlsServer,
   HttpDate,
+  http1ConfigChecked,
 } from "nish/net/http1-server";
 ```
 
@@ -58,6 +59,12 @@ else if (server.rearm(slot, wants)) { pollModify(loop, server.fd(slot), wants & 
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="http1​Config​Checked" icon="phosphor/regular/function" href="#http1configchecked">
+
+`config` when every cap is one a connection can work with, the twin of the check `Http1Connection`'s constructor panics on: a program reading its caps from a file or flags checks them here, and refuses the bad one with the message the constructor would panic with, rather than panicking.
+
+</scalar-card>
 
 <scalar-card title="Http1​Config" icon="phosphor/regular/cube" href="#http1config">
 
@@ -237,6 +244,33 @@ Private helpers share the importing program's flat symbol namespace
 Written from RFC 9112, RFC 9110 and RFC 6455, not ported from another
 implementation.
 
+## Functions
+
+### http1ConfigChecked
+
+`config` when every cap is one a connection can work with, the twin of the
+check `Http1Connection`'s constructor panics on: a program reading its
+caps from a file or flags checks them here, and refuses the bad one with
+the message the constructor would panic with, rather than panicking.
+
+```ts
+const http1ConfigChecked: (
+  config: Http1Config,
+) => Result<Http1Config, string>
+```
+
+<scalar-field name="config" type="Http1Config" required>
+
+the caps to check, returned as they are when they pass
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;Http1Config, string&gt;">
+
+`config`, or the first cap outside its range, named with the range it must lie in
+
+</scalar-field>
+
 ## Classes
 
 ### Http1Config
@@ -276,7 +310,7 @@ class Http1Connection
 
 | Member | |
 | --- | --- |
-| `new Http1Connection(config: Http1Config, date: HttpDate \| null = null)` | A connection under `config`. A cap outside what the connection can work with panics. |
+| `new Http1Connection(config: Http1Config, date: HttpDate \| null = null)` | A connection under `config`. A cap outside what the connection can work with panics; `http1ConfigChecked` refuses the same caps as a `Result`. |
 | `bufferLimit: i32` | The most input the connection buffers, unread: the cap `inputRoom` holds it to. |
 | `closeAfter: boolean` | The connection closes once this exchange is over. |
 | `data: u8[]` | `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. |
@@ -327,7 +361,7 @@ class Http1Connection
 | `park(): void` | Gives the parser's input and head buffers to `inputs` and `heads` while the connection rests between exchanges: speaking HTTP, no request open, nothing fed and unread. Does nothing without the pools or otherwise, and keeps a head lent by `lendParsed`. |
 | `release(): void` | Gives `output` back to the pool once nothing in it is waiting: no bytes to send, no write held back for room. The carrier calls it after each send; a connection that keeps its own buffer keeps it. |
 | `respond(status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Answers the current request with `status` and the fields `names[k]`: `values[k]`, and the framing `bodyLength` asks for: a length, or `HTTP1_CHUNKED`, or `HTTP1_NO_BODY` for a 1xx, a 204 or a 304. A 1xx (but 101) is interim and the final status follows it. Answers 0; `H1_INVALID` for a status outside 100 to 599 or 101, a reserved field, a name or value `http1WriteResponseHead` refuses, or a head larger than the output; `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says when to try again); `H1_CLOSED` with no request to answer.<br><br>A response with no body (a `bodyLength` of 0, a HEAD, a 204 or a 304) is finished once this returns 0, and one with a length once `write` or `sendBody` has taken all of it: `end` is optional for both. A chunked body is finished only by `end`. |
-| `respondEncoded(status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32, enc: HttpCompressor, coding: i32): i32` | Answers the current request with all of `body[off .. off + len)` in one call: `respond`, `write` and `end`, the body compressed by `enc` when `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it, with `Content-Encoding: gzip` and the compressed `Content-Length`, and otherwise sent as it is; `Vary: Accept-Encoding` while `enc.vary` is set and the choice turned on the request (`HttpCompressor.varies`).<br><br>Under `enc.segmentMode` the compressed response goes out only when, head included, it takes fewer segments of `segmentMss(enc)` bytes than the body as it is, and a response that fits one segment as it is goes so without compressing (`enc.oneSegment`); `enc.decision` says what was chosen. A request that refuses identity (`identityRefused`) is sent gzip whatever the length, the saving or the segments (`enc.compressAnyway`). The program's fields may not name `Content-Encoding` or, with `enc.vary`, `Vary`.<br><br>The whole response is written or none of it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says when to try again, compressing again), `H1_INVALID` for a response larger than the output could ever hold or one `respond` refuses, `H1_CLOSED` with no request to answer (or, never for a body the room was checked for, when `write` takes less than all of it, which aborts the connection); 0 once it is queued. A window outside `body` panics. |
+| `respondEncoded(status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32, enc: HttpCompressor, coding: i32): i32` | Answers the current request with all of `body[off .. off + len)` in one call: `respond`, `write` and `end`, the body compressed by `enc` when `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it, with `Content-Encoding: gzip` and the compressed `Content-Length`, and otherwise sent as it is; `Vary: Accept-Encoding` while `enc.vary` is set and the choice turned on the request (`HttpCompressor.varies`).<br><br>Under `enc.segmentMode` the compressed response goes out only when, head included, it takes fewer segments of `segmentMss(enc)` bytes than the body as it is, and a response that fits one segment as it is goes so without compressing (`enc.oneSegment`); `enc.decision` says what was chosen. A request that refuses identity (`identityRefused`) is sent gzip whatever the length, the saving or the segments (`enc.compressAnyway`). The program's fields may not name `Content-Encoding` or, with `enc.vary`, `Vary`.<br><br>The whole response is written or none of it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says when to try again, compressing again), `H1_INVALID` for a response larger than the output could ever hold or one `respond` refuses, `H1_CLOSED` with no request to answer (or, never for a body the room was checked for, when `write` takes less than all of it, which aborts the connection); 0 once it is queued. A window outside `body` is `H1_INVALID` too, before anything is queued. |
 | `restart(): void` | Puts the connection back as the constructor left it, for the next peer. It allocates nothing. |
 | `segmentMss(enc: HttpCompressor): i32` | The segment `respondEncoded` counts in under `enc.segmentMode`: this connection's `mss` when the program set it, else `enc.mss` when the program set it (above 0), else the socket's (`socketMss`), else `HTTP_DEFAULT_MSS`. |
 | `sendBody(buf: readonly u8[], off: i32, len: i32): i32` | `write` of `buf[off .. off + len)`, sent from `buf` itself where it can be: under a `Content-Length` response on a connection whose carrier named its socket (`fd`, set by `Http1Server.accept`) and with no write held back, the queued output and the body leave in one `netWrite2`, and only what the socket did not take is copied into the output, the way `write` copies it (what does not fit is answered short, and `H1_WRITE` says when to send the rest).<br><br>Once it returns the connection holds no reference to `buf`, so the caller may reuse or give back its bytes at once. A chunked or empty response, a write held back (`H1_AGAIN` or a short answer not yet followed by `H1_WRITE`), and a connection with no socket (`Http1TlsServer`, a sans-IO carrier) copy all of it: it is `write`, with the same bytes on the wire. Answers what `write` answers, `H1_INVALID` for more than the response still owes; `H1_CLOSED` also when the socket failed during the send, which aborts the connection. A window outside `buf` panics. As with `write`, a `Content-Length` body sent in full needs no `end`. |

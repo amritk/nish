@@ -573,13 +573,11 @@ export class HttpServerRequest {
    * @returns the field's index for `valueStart` and `valueEnd`, or `HANDLER_ABSENT` when no field has the name
    */
   header(name: string): i32 {
-    const spans: i32[] = this.spans
-    const n: i32 = toI32(spans.length) - 3
     const count: i32 = this.headerCount
     // `spans` holds four entries per field, so `k` never stops the loop before `count` does.
     let k: i32 = 0
-    for (let i: i32 = 0; i < count && k >= 0 && k < n && k + 1 < toI32(spans.length); i++) {
-      if (httpServerSpanIs(this.head, spans[k], spans[k + 1], name)) {
+    for (let i: i32 = 0; i < count && k >= 0 && k + 3 < toI32(this.spans.length); i++) {
+      if (httpServerSpanIs(this.head, this.spans[k], this.spans[k + 1], name)) {
         return i
       }
       k += 4
@@ -607,13 +605,12 @@ export class HttpServerRequest {
 
   /** Entry `part` of field `i`'s four in `spans`, or -1 past the fields the request holds. */
   private spanAt(i: i32, part: i32): i32 {
-    const spans: i32[] = this.spans
     const wide: i64 = toI64(i) * toI64(4) + toI64(part)
-    const at: i32 = wide < toI64(0) || wide >= toI64(spans.length) ? -1 : toI32(wide)
-    if (i < 0 || i >= this.headerCount || at < 0 || at >= toI32(spans.length)) {
+    const at: i32 = wide < toI64(0) || wide >= toI64(this.spans.length) ? -1 : toI32(wide)
+    if (i < 0 || i >= this.headerCount || at < 0 || at >= toI32(this.spans.length)) {
       return -1
     }
-    return spans[at]
+    return this.spans[at]
   }
 
   /**
@@ -623,19 +620,8 @@ export class HttpServerRequest {
    * @returns true when the field is present and its first occurrence has exactly that value
    */
   headerIs(name: string, value: string): boolean {
-    const spans: i32[] = this.spans
-    const n: i32 = toI32(spans.length) - 3
-    const count: i32 = this.headerCount
-    let k: i32 = 0
-    for (let i: i32 = 0; i < count && k >= 0 && k < n && k + 3 < toI32(spans.length); i++) {
-      const valueStart: i32 = spans[k + 2]
-      const valueEnd: i32 = spans[k + 3]
-      if (httpServerSpanIs(this.head, spans[k], spans[k + 1], name)) {
-        return httpServerSpanIs(this.head, valueStart, valueEnd, value)
-      }
-      k += 4
-    }
-    return false
+    const i: i32 = this.header(name)
+    return i >= 0 && httpServerSpanIs(this.head, this.spanAt(i, 2), this.spanAt(i, 3), value)
   }
 }
 /** Appends `bytes[start .. end)` to an `Allow` value, after a `, ` if it is not the first. */
@@ -685,6 +671,35 @@ const httpServerZeros = <T>(n: i64, zero: T): T[] => {
     out.push(zero)
   }
   return out
+}
+
+/**
+ * `n` zeroed cells, clamped to 0 through 65535, in an array no one else holds.
+ *
+ * `spans` takes its array from here rather than from `httpServerZeros`: an
+ * array a plain function returns from `new` is one `HttpServerRequest` can keep
+ * boxed inside the object (`src/inline-arrays.ts`), which saves a header and a
+ * load per field lookup.
+ *
+ * @param n - how many cells
+ * @returns `n` zeros, or 65535 of them past that, or none below 0
+ */
+const httpServerCells = (n: i64): i32[] => new Array<i32>(httpServerU16(n))
+
+/**
+ * `n` clamped to 0 through 65535.
+ *
+ * @param n - the count to clamp
+ * @returns `n` as a `u16`, 0 below 0 and 65535 above it
+ */
+const httpServerU16 = (n: i64): u16 => {
+  if (n <= toI64(0)) {
+    return toU16(0)
+  }
+  if (n >= toI64(65535)) {
+    return toU16(65535)
+  }
+  return toU16(toI32(n))
 }
 
 /**
@@ -825,14 +840,6 @@ const httpServerAdd = (xs: i32[], at: i32, by: i32): i32 => {
   }
   xs[at] = toI32(next)
   return toI32(next)
-}
-
-/** Sets entry `at` of `xs` to `value`; nothing outside the table. */
-const httpServerSet = (xs: i32[], at: i64, value: i32): void => {
-  const i: i32 = at >= 0 && at < toI64(xs.length) ? toI32(at) : -1
-  if (i >= 0 && i < toI32(xs.length)) {
-    xs[i] = value
-  }
 }
 
 /** Panics unless `limits.<name>`, `value`, is within `low` to `high`. */
@@ -1790,14 +1797,12 @@ export class HttpServer {
     }
     const p = conn.parser
     copyBytes(r.head, HTTP_SERVER_ZERO, p.head, HTTP_SERVER_ZERO, p.headLength)
-    const from: i32[] = p.spans
-    const to: i32[] = r.spans
     for (
       let k: i32 = 0;
-      toI64(k) < toI64(p.headerCount) * toI64(4) && k < toI32(from.length) && k < toI32(to.length);
+      toI64(k) < toI64(p.headerCount) * toI64(4) && k < toI32(p.spans.length) && k < toI32(r.spans.length);
       k++
     ) {
-      to[k] = from[k]
+      r.spans[k] = p.spans[k]
     }
     r.headerCount = p.headerCount
     r.methodStart = p.methodStart
@@ -1982,7 +1987,7 @@ export class HttpServer {
     free.pop()
     if (toI32(r.head.length) === 0) {
       r.head = httpServerZeros(toI64(this.maxHead), toU8(0))
-      r.spans = httpServerZeros(toI64(4) * toI64(this.maxFields), 0)
+      r.spans = httpServerCells(toI64(4) * toI64(this.maxFields))
       r.params = httpServerZeros(toI64(2) * toI64(this.router.maxParams) + toI64(2), 0)
     }
     return at
@@ -3509,10 +3514,14 @@ export class HttpServer {
     const nameEnd: i32 = this.headAt
     this.put(r, value)
     // `listenHttp2Tls` and `listenH2c` size `spans` for every field a carrier passes.
-    httpServerSet(r.spans, toI64(4) * toI64(n), nameStart)
-    httpServerSet(r.spans, toI64(4) * toI64(n) + toI64(1), nameEnd)
-    httpServerSet(r.spans, toI64(4) * toI64(n) + toI64(2), nameEnd)
-    httpServerSet(r.spans, toI64(4) * toI64(n) + toI64(3), this.headAt)
+    const at: i64 = toI64(4) * toI64(n)
+    if (at >= toI64(0) && at + toI64(3) < toI64(r.spans.length)) {
+      const k: i32 = toI32(at)
+      r.spans[k] = nameStart
+      r.spans[k + 1] = nameEnd
+      r.spans[k + 2] = nameEnd
+      r.spans[k + 3] = this.headAt
+    }
   }
 
   // ---- HTTP/2 ---------------------------------------------------------------------
