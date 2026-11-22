@@ -136,7 +136,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/bytes.ts:236:69", "callee": "getU64BE", "via": "overflow" }
+                { "kind": "call", "at": "std/bytes.ts:236:69", "callee": "getU64BE", "via": "index" }
               ]
             },
             {
@@ -172,7 +172,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/bytes.ts:216:59", "callee": "getU64BE", "via": "overflow" }
+                { "kind": "call", "at": "std/bytes.ts:216:59", "callee": "getU64BE", "via": "index" }
               ]
             },
             {
@@ -244,19 +244,19 @@
               "panics": [
                 { "kind": "overflow", "at": "std/bytes.ts:165:39", "proven": true },
                 { "kind": "index", "at": "std/bytes.ts:167:14", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:168:14", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:168:14", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:168:16", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:169:15", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:169:15", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:169:17", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:169:50", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:169:50", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:169:52", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:170:15", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:170:15", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:170:17", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:171:16", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:171:16", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:171:18", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:172:17", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:172:17", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:172:19", "proven": true },
-                { "kind": "index", "at": "std/bytes.ts:172:50", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:172:50", "proven": false },
                 { "kind": "overflow", "at": "std/bytes.ts:172:52", "proven": true },
                 { "kind": "call", "at": "std/bytes.ts:175:10", "callee": "getU64BEByByte", "via": "overflow" }
               ]
@@ -430,7 +430,9 @@
               "exported": true,
               "capabilities": [],
               "witnesses": {},
-              "panics": []
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:481:10", "callee": "skipJsonTextWalk", "via": "index" }
+              ]
             },
             {
               "name": "tryCopyBytes",
