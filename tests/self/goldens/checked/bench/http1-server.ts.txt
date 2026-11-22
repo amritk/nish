@@ -5853,7 +5853,7 @@ function HttpRequest.paramIs(this: HttpRequest, k: i32, text: string): boolean -
   stackSites=0 stackLocals=0
   callee +0:12 handlerSpanIs -> @nish.handlerSpanIs
   callee +0:37 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
-  callee +0:60 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
+  callee +0:71 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
 function HttpRequest.param(this: HttpRequest, k: i32, out: u8[]): i32 -> @nish.HttpRequest.param [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.routerDecode
@@ -5864,7 +5864,7 @@ function HttpRequest.param(this: HttpRequest, k: i32, out: u8[]): i32 -> @nish.H
   stackSites=0 stackLocals=0
   callee +0:12 routerDecode -> @nish.routerDecode
   callee +0:36 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
-  callee +0:59 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
+  callee +0:70 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
 function HttpRequest.paramDecimal(this: HttpRequest, k: i32): i32 -> @nish.HttpRequest.paramDecimal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -5873,7 +5873,7 @@ function HttpRequest.paramDecimal(this: HttpRequest, k: i32): i32 -> @nish.HttpR
   stackSites=0 stackLocals=0
   callee +0:12 handlerDecimal -> @nish.handlerDecimal
   callee +0:38 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
-  callee +0:61 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
+  callee +0:72 HttpRequest.paramBound -> @nish.HttpRequest.paramBound
 function HttpRequest.tryParamStart(this: HttpRequest, k: i32): Result<i32, string> -> @nish.HttpRequest.tryParamStart [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   escaping: k
