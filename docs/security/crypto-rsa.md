@@ -8,8 +8,8 @@ it, and names the test that pins each property.
 **Result.** No forgery, panic, unbounded loop or non-canonical accept was
 found. All 4,189 Wycheproof RSA signature cases the module covers give their
 expected answer, at 2048, 3072, 4096 and 8192 bits. Every refusal rule was
-removed in turn, and a test failed each time, except for four guards that
-other rules make unreachable (see "Mutation check" below). Five findings are
+removed in turn, and a test failed each time, except for 23 guards that
+other rules or the callers make unreachable (see "Mutation check" below). Five findings are
 recorded. Each is a property of the module's design, kept on purpose and
 accepted, so none is counted in the README's Areas table.
 
@@ -181,40 +181,86 @@ cover what Wycheproof does not:
 
 **Mutation check.** A test that has never been seen to fail proves little. So
 each refusal rule in `std/crypto/rsa.ts` was replaced, one at a time, by
-`tests/link/crypto_rsa/mutate.py`, which edits the file, rebuilds `crypto_rsa`
-and runs it, and restores the file in a `finally`. It exits nonzero unless
-exactly the four guards below go uncaught. `git diff` was empty afterwards.
+`tests/link/crypto_rsa/mutate.py`, which edits the file, builds
+`crypto_rsa` and `crypto_rsa_der_refusals` in the debug profile with
+`--allow-panics`, runs both, and restores the file in a `finally`. A rule is
+caught when either run exits nonzero. The script exits nonzero unless exactly
+the rules in its `UNCAUGHT` list go uncaught and every other rule is caught.
+The run on commit c288673f9 printed "29 of 52 rules caught" and "every rule
+caught except those listed, each missed", and exited 0. `git diff
+std/crypto/rsa.ts` was empty afterwards.
 
-These 28 rules were each caught, by a failing check or by a panic in the debug
-profile ("index out of range", or an `i32` overflow):
+These 29 rules were each caught, by a failing check or by a panic in the debug
+profile ("index out of range", or "attempt to add with overflow"):
 
-- the DER tag;
-- the shortest-form rule for the one-octet (0x81) and two-octet (0x82) long
-  forms, and the refusal of longer forms;
-- the exponent ending the SEQUENCE, and the SEQUENCE ending the DER;
-- an empty INTEGER, a negative one, and a non-minimal one;
-- the bit length's lower and upper bounds, and n odd;
-- the exponent's length cap, e odd, and e ≥ 3;
-- the signature's length, and the signature below n;
-- the zero top byte `rsaOpen` requires when emLen is k − 1;
+- `rsaDerElement`: the tag; the element's start (`at`) inside the DER; room
+  for the 0x81 and 0x82 length octets, and the shortest-form rule for each;
+  the refusal of longer forms;
+- `rsaDerUnsigned`: a negative INTEGER, a lone zero byte, and a needless
+  leading zero;
+- `rsaParsePublicKey`: the SEQUENCE ending the DER, the exponent ending the
+  SEQUENCE, the bit length's lower and upper bounds, n odd, the exponent's
+  length cap, e odd, and e ≥ 3;
+- `rsaModPow`: the signature below n;
+- `rsaOpen`: the signature as long as n, and the zero top bytes it requires
+  when emLen is under k;
 - PKCS#1 v1.5's room check, and its whole-block comparison;
-- PSS's negative salt, its huge salt, its room check, the 0xbc trailer, the
-  top bits, the zero octets, the 0x01 separator, and the hash comparison.
+- PSS's huge salt, the top bits, the 0xbc trailer, the zero octets, the 0x01
+  separator, and the hash comparison.
 
-Four guards were removed and nothing failed. **None of them can be caught**,
-because another rule makes each one unreachable. They stay as defences that
-state a rule where the code relies on it:
+`crypto_rsa_der_refusals` catches the element-start, length-room and lone-zero
+rules with DER cut short after the modulus (an exponent tag with no length, a
+0x81 or 0x82 length with too few octets, an exponent of a lone zero byte).
+`crypto_rsa`'s "that signature without its zero byte, as long as the block, is
+refused" catches the signature-length rule, with a 2049-bit key's PSS
+signature that starts with a zero byte.
 
-- `rsaDerElement`'s `length > end - start`. The checks that the exponent
-  ends the SEQUENCE and the SEQUENCE ends the DER, and the next element's own
-  bounds, refuse every length this guard refuses.
-- `rsaVerifyPkcs1v15`'s `hashSize < 1`. With an unknown hash id, the
-  expected block is k + 32 bytes long, and no opened block of k bytes can
-  match it.
-- `rsaVerifyPss`'s `hashSize < 1`. With an unknown hash id, H is empty, and
-  no digest matches an empty H.
-- `rsaOpen`'s `size < 0 || size > k`. PKCS#1 v1.5 passes `size = k`, and PSS
-  passes `0 < emLen ≤ k`.
+These 23 guards were removed and nothing failed. **None of them can be
+caught alone**: another rule or every caller makes each one unreachable, as the
+run printed. They stay as defences that state a rule where the code relies
+on it, and most are what lets the prover discharge an index:
+
+- element end: every caller passes end = der.length, and an end below 2
+  leaves at > end - 2 true for every at >= 0.
+- fits: a span past der.length is refused after it returns: the SEQUENCE's
+  by `seq end`, the modulus's by the exponent's `element at`, the exponent's
+  by `e end`.
+- int range: start is a span's start, at least at + 2 >= 2.
+- empty int: an empty modulus reads e's tag 0x02 as its contents' first byte
+  and comes back empty, refused by `empty n or e`; an empty exponent ends the
+  buffer, so start >= total refuses it.
+- int in der: a span ends at most at end = der.length (`fits`), and a start at
+  der.length is a start at end.
+- bit length cap: every array it is given is a DER INTEGER's contents, at
+  most 65535 bytes under a two-octet length.
+- empty n or e: `empty int` refuses an INTEGER with no contents and `lone
+  zero` one of a zero byte alone, so a read INTEGER has a byte.
+- pow n size: a parsed modulus is 1024 to 8192 bits, 128 to 1024 bytes (`min
+  bits`, `max bits`).
+- pow s len: rsaOpen passes only a signature exactly as long as n (`sig len`).
+- pow e bits: a parsed exponent is odd and at least 3 (`odd e`, `e min`).
+- open size: PKCS#1 v1.5 passes k, the modulus's length, and PSS emLen =
+  (bits + 6) >> 3, which is 128 to k (`pss em size`).
+- open short: rsaModPow answers exactly n.length bytes, and size is at most
+  n.length.
+- pkcs hash0: an unknown id has hashSize 0 but rsaDigest still answers a
+  32-byte SHA-256 digest, so `expected` is k + 32 bytes and `pkcs compare`
+  refuses it (the hash id 0 and 4 tests).
+- pkcs hash max: rsaHashSize answers at most 64.
+- pkcs k max: a parsed modulus is at most 1024 bytes (`max bits`).
+- pss hash0: an unknown id has hashSize 0, so h is empty, and the 32-byte
+  SHA-256 digest rsaDigest answers never equals it (`pss hash`; the PSS hash
+  id 0 test).
+- pss hash max: rsaHashSize answers at most 64.
+- pss salt neg: a negative salt puts the zeros through the whole data block,
+  so no 0x01 is read and `!separated` refuses it.
+- pss bits: a parsed modulus is 1024 to 8192 bits (`min bits`, `max bits`).
+- pss em size: emLen is (bits + 6) / 8 for 1024 to 8192 bits.
+- pss room: a salt too long for the block makes the zeros' count negative, so
+  no 0x01 is read and `!separated` refuses it.
+- pss em len: rsaOpen answers exactly emLen bytes (`open short`, `top zeros`).
+- pss separated: with a salt of 0 or more and room for it, the 0x01's index is
+  inside the data block, so the loop always reaches it.
 
 ## Findings
 
