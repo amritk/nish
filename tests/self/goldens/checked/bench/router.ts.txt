@@ -571,8 +571,8 @@ function httpFieldValueValid(value: u8[]): boolean -> @nish.httpFieldValueValid 
   local +1:14 b: u8 (const)
   local +2:11 c: i32 (const)
   local +9:9 lastAt: i32 (const)
-  local +11:11 first: i32 (const)
-  local +12:11 last: i32 (const)
+  local +13:9 first: i32 (const)
+  local +14:9 last: i32 (const)
 function httpFieldIs(bytes: u8[], text: string): boolean -> @nish.httpFieldIs [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer bytes: size=0 writesThrough=false captured=false
