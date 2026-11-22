@@ -5994,15 +5994,14 @@ const p384ScalarInRange = (out: u32[], bytes: u8[], at: i32): boolean => {
 const p384DigestScalar = (out: u32[], digest: u8[]): void => {
   const length: i32 = toI32(digest.length)
   const bytes: u8[] = new Array<u8>(48)
-  let take: i32 = 48
-  if (length < 48) {
-    take = length
-  }
-  for (let i: i32 = 0; i < take && i < length; i++) {
-    const j: i32 = 48 - take + i
-    if (j >= 0 && j < 48) {
-      bytes[j] = digest[i]
+  // The leftmost 48 bytes, big-endian: each one shifts the buffer up a byte
+  // and comes in at the bottom, so a shorter digest ends right-aligned.
+  for (let i: i32 = 0; i < length && i < 48; i++) {
+    for (let j: i32 = 0; j < 47; j++) {
+      const above: i32 = j + 1
+      bytes[j] = bytes[above]
     }
+    bytes[47] = digest[i]
   }
   const a: u32[] = p384Limbs()
   p384LimbsFromBytes(a, bytes, 0)

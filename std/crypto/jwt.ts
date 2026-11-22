@@ -238,7 +238,13 @@ const jwtSignatureSize = (key: JwtKey): i32 => {
   return 64
 }
 
-const jwtCopy = (a: u8[]): u8[] => jwtSlice(a, toI32(0), toI32(a.length))
+const jwtCopy = (a: u8[]): u8[] => {
+  const out: u8[] = []
+  for (let k: i32 = 0; k < toI32(a.length); k += 1) {
+    out.push(a[k])
+  }
+  return out
+}
 
 const jwtLength = (a: u8[]): i32 => toI32(a.length)
 
@@ -542,7 +548,12 @@ const jwtSextet = (c: i32): i32 => {
  * `out` holds.
  */
 const jwtDecode = (src: u8[], off: i32, len: i32, out: u8[]): i32 => {
-  if (off < 0 || len < 0 || off > toI32(src.length) - len) {
+  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(src.length)) {
+    return -1
+  }
+  // The test above again, in the form the prover reads for `src[k]`.
+  const stop: i32 = toI32(toI64(off) + toI64(len))
+  if (stop > toI32(src.length)) {
     return -1
   }
   const tail: i32 = len & 3
@@ -562,10 +573,8 @@ const jwtDecode = (src: u8[], off: i32, len: i32, out: u8[]): i32 => {
   let acc: u32 = toU32(0)
   let bits: u32 = toU32(0)
   let at: i32 = 0
-  let k: i32 = off
-  for (let i: i32 = 0; i < len && k >= 0 && k < toI32(src.length); i += 1) {
+  for (let k: i32 = off; k < stop; k += 1) {
     const v: i32 = jwtSextet(toI32(src[k]))
-    k += 1
     if (v < 0) {
       return -1
     }
@@ -684,23 +693,6 @@ const jwtUtf8Byte = (cp: i32, width: i32, k: i32): i32 => {
 }
 
 /**
- * `a + b` for a reader position, held to the `i32` range. A position never
- * passes the window's end, which `src.length` bounds, so the hold is never
- * reached; were it reached, the position would sit past the window, where
- * every read answers `-1` and the reader fails.
- */
-const jwtStep = (a: i32, b: i32): i32 => {
-  const sum: i64 = toI64(a) + toI64(b)
-  if (sum > toI64(2147483647)) {
-    return 2147483647
-  }
-  if (sum < toI64(-2147483648)) {
-    return -2147483648
-  }
-  return toI32(sum)
-}
-
-/**
  * A pull reader of one JSON value in `src[off, off + len)`, a token per
  * `next()`, as strict as RFC 8259: UTF-8 checked, every escape and surrogate
  * pair checked, no control byte in a string, no trailing bytes. Keys and
@@ -749,18 +741,36 @@ class JwtJson {
   /** @internal Starts over on `src[off, off + len)`; a window outside `src` fails the first `next()`. */
   reset(src: u8[], off: i32, len: i32): void {
     this.src = src
+    const inside: boolean = off >= 0 && len >= 0 && len <= toI32(src.length) - off
     this.pos = off
-    this.end = jwtStep(off, len)
+    // Inside, `off + len` is at most `src.length`; outside, the reader is
+    // failed and `end` is never read.
+    this.end = inside ? toI32(toI64(off) + toI64(len)) : off
     this.depth = 0
     this.want = JWT_JSON_WANT_VALUE
     this.kind = JWT_JSON_ERR
-    this.failed = off < 0 || len < 0 || len > toI32(src.length) - off ? JWT_JSON_ERR : 0
+    this.failed = inside ? 0 : JWT_JSON_ERR
     this.integral = false
   }
 
   /** The byte at `i`, or `-1` past the window. */
   private at(i: i32): i32 {
     return i >= 0 && i < this.end && i < toI32(this.src.length) ? toI32(this.src[i]) : -1
+  }
+
+  /**
+   * `a + b` for a position or a count. A sum past the `i32` range fails the
+   * reader, which `next()`, `scanString`, `keyEquals` and `stringInto` then
+   * answer as a refusal, and gives the largest `i32`, a position past every
+   * window, so the loop that asked ends.
+   */
+  private step(a: i32, b: i32): i32 {
+    const sum: i64 = toI64(a) + toI64(b)
+    if (sum > toI64(2147483647) || sum < toI64(-2147483648)) {
+      this.fail()
+      return 2147483647
+    }
+    return toI32(sum)
   }
 
   /** Fails the reader for good. */
@@ -774,7 +784,7 @@ class JwtJson {
   private skipBlanks(): void {
     let b: i32 = this.at(this.pos)
     while (b === JWT_CH_SPACE || b === JWT_CH_TAB || b === JWT_CH_NEWLINE || b === JWT_CH_RETURN) {
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
       b = this.at(this.pos)
     }
   }
@@ -791,6 +801,13 @@ class JwtJson {
 
   /** @internal The token after the current one, or `JWT_JSON_ERR`, answered again on every later call. */
   next(): i32 {
+    const kind: i32 = this.advance()
+    // A step that failed the reader refuses this token too.
+    return this.failed !== 0 ? this.failed : kind
+  }
+
+  /** `next()`'s token, before the check for a failed step. */
+  private advance(): i32 {
     if (this.failed !== 0) {
       return this.failed
     }
@@ -806,7 +823,7 @@ class JwtJson {
     }
     if (want === JWT_JSON_WANT_COMMA_OR_CLOSE) {
       if (b === JWT_CH_COMMA) {
-        this.pos = jwtStep(this.pos, 1)
+        this.pos = this.step(this.pos, toI32(1))
         this.skipBlanks()
         const top: i32 = this.top()
         if (top < 0) {
@@ -840,7 +857,7 @@ class JwtJson {
       return this.fail()
     }
     this.tokStart = this.pos
-    this.pos = jwtStep(this.pos, 1)
+    this.pos = this.step(this.pos, toI32(1))
     this.tokEnd = this.pos
     this.depth = d - 1
     this.afterValue()
@@ -862,7 +879,7 @@ class JwtJson {
     if (this.at(this.pos) !== JWT_CH_COLON) {
       return this.fail()
     }
-    this.pos = jwtStep(this.pos, 1)
+    this.pos = this.step(this.pos, toI32(1))
     this.want = JWT_JSON_WANT_VALUE
     this.kind = JWT_JSON_KEY
     return JWT_JSON_KEY
@@ -881,7 +898,7 @@ class JwtJson {
       stack[d] = toU8(inObject ? JWT_JSON_IN_OBJECT : JWT_JSON_IN_ARRAY)
       this.depth = d + 1
       this.tokStart = this.pos
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
       this.tokEnd = this.pos
       this.want = inObject ? JWT_JSON_WANT_KEY_OR_CLOSE : JWT_JSON_WANT_VALUE_OR_CLOSE
       this.kind = inObject ? JWT_JSON_OBJECT_BEGIN : JWT_JSON_ARRAY_BEGIN
@@ -907,12 +924,12 @@ class JwtJson {
   private scanWord(word: string): boolean {
     const n: i32 = toI32(word.length)
     for (let i: i32 = 0; i < n; i += 1) {
-      if (this.at(jwtStep(this.pos, i)) !== toI32(word.charCodeAt(i))) {
+      if (this.at(this.step(this.pos, i)) !== toI32(word.charCodeAt(i))) {
         return false
       }
     }
     this.tokStart = this.pos
-    this.pos = jwtStep(this.pos, n)
+    this.pos = this.step(this.pos, n)
     this.tokEnd = this.pos
     return true
   }
@@ -938,7 +955,7 @@ class JwtJson {
         }
       }
       any = true
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
       b = this.at(this.pos)
     }
     return any
@@ -954,7 +971,7 @@ class JwtJson {
     this.tokStart = this.pos
     const negative: boolean = this.at(this.pos) === JWT_CH_MINUS
     if (negative) {
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
     }
     // 2^63 has no literal (NL2055): 1 shifted up 63 bits. A bare literal
     // would be a double under Node, where a `u64` is a BigInt.
@@ -964,12 +981,12 @@ class JwtJson {
     this.integral = true
     const first: i32 = this.at(this.pos)
     if (first === JWT_CH_0) {
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
     } else if (!this.scanDigits(limit)) {
       return false
     }
     if (this.at(this.pos) === JWT_CH_DOT) {
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
       this.integral = false
       if (!this.scanDigits(limit)) {
         return false
@@ -977,11 +994,11 @@ class JwtJson {
     }
     const e: i32 = this.at(this.pos)
     if (e === 101 || e === 69) {
-      this.pos = jwtStep(this.pos, 1)
+      this.pos = this.step(this.pos, toI32(1))
       this.integral = false
       const sign: i32 = this.at(this.pos)
       if (sign === JWT_CH_PLUS || sign === JWT_CH_MINUS) {
-        this.pos = jwtStep(this.pos, 1)
+        this.pos = this.step(this.pos, toI32(1))
       }
       if (!this.scanDigits(limit)) {
         return false
@@ -996,7 +1013,7 @@ class JwtJson {
    * joined, or `-1` for one RFC 8259 §7 refuses or a lone surrogate.
    */
   private escapeCodePoint(i: i32): i32 {
-    const c: i32 = this.at(jwtStep(i, 1))
+    const c: i32 = this.at(this.step(i, toI32(1)))
     if (c === JWT_CH_QUOTE || c === JWT_CH_BACKSLASH || c === 47) {
       return c
     }
@@ -1018,17 +1035,17 @@ class JwtJson {
     if (c !== 117) {
       return -1
     }
-    const hi: i32 = this.hex4(jwtStep(i, 2))
+    const hi: i32 = this.hex4(this.step(i, toI32(2)))
     if (hi < 0 || (hi >= 0xdc00 && hi <= 0xdfff)) {
       return -1
     }
     if (hi < 0xd800 || hi > 0xdbff) {
       return hi
     }
-    if (this.at(jwtStep(i, 6)) !== JWT_CH_BACKSLASH || this.at(jwtStep(i, 7)) !== 117) {
+    if (this.at(this.step(i, toI32(6))) !== JWT_CH_BACKSLASH || this.at(this.step(i, toI32(7))) !== 117) {
       return -1
     }
-    const lo: i32 = this.hex4(jwtStep(i, 8))
+    const lo: i32 = this.hex4(this.step(i, toI32(8)))
     if (lo < 0xdc00 || lo > 0xdfff) {
       return -1
     }
@@ -1041,7 +1058,7 @@ class JwtJson {
   private hex4(i: i32): i32 {
     let v: i32 = 0
     for (let k: i32 = 0; k < 4; k += 1) {
-      const d: i32 = jwtHexValue(this.at(jwtStep(i, k)))
+      const d: i32 = jwtHexValue(this.at(this.step(i, k)))
       if (d < 0) {
         return -1
       }
@@ -1052,7 +1069,7 @@ class JwtJson {
 
   /** How many bytes the escape at `i` takes, given the code point it decodes to. */
   private escapeLength(i: i32, cp: i32): i32 {
-    if (this.at(jwtStep(i, 1)) !== 117) {
+    if (this.at(this.step(i, toI32(1))) !== 117) {
       return 2
     }
     return cp >= 0x10000 ? 12 : 6
@@ -1081,12 +1098,12 @@ class JwtJson {
     } else {
       return -1
     }
-    const second: i32 = this.at(jwtStep(i, 1))
+    const second: i32 = this.at(this.step(i, toI32(1)))
     if (second < lo || second > hi) {
       return -1
     }
     for (let k: i32 = 2; k <= n; k += 1) {
-      const c: i32 = this.at(jwtStep(i, k))
+      const c: i32 = this.at(this.step(i, k))
       if (c < 0x80 || c > 0xbf) {
         return -1
       }
@@ -1097,7 +1114,7 @@ class JwtJson {
   /** The string at the cursor, checked, stepped over, its decoded length in `textBytes`. */
   private scanString(): boolean {
     this.tokStart = this.pos
-    let i: i32 = jwtStep(this.pos, 1)
+    let i: i32 = this.step(this.pos, toI32(1))
     let decoded: i32 = 0
     while (true) {
       const b: i32 = this.at(i)
@@ -1113,24 +1130,24 @@ class JwtJson {
         if (cp < 0) {
           return false
         }
-        decoded = jwtStep(decoded, jwtUtf8Width(cp))
-        i = jwtStep(i, this.escapeLength(i, cp))
+        decoded = this.step(decoded, jwtUtf8Width(cp))
+        i = this.step(i, this.escapeLength(i, cp))
       } else if (b < 0x80) {
-        decoded = jwtStep(decoded, 1)
-        i = jwtStep(i, 1)
+        decoded = this.step(decoded, toI32(1))
+        i = this.step(i, toI32(1))
       } else {
         const tail: i32 = this.utf8Tail(i)
         if (tail < 0) {
           return false
         }
-        decoded = jwtStep(decoded, jwtStep(tail, 1))
-        i = jwtStep(i, jwtStep(tail, 1))
+        decoded = this.step(decoded, this.step(tail, toI32(1)))
+        i = this.step(i, this.step(tail, toI32(1)))
       }
     }
-    this.pos = jwtStep(i, 1)
+    this.pos = this.step(i, toI32(1))
     this.tokEnd = this.pos
     this.textBytes = decoded
-    return true
+    return this.failed === 0
   }
 
   /** Whether the current token is a key or a string. */
@@ -1155,8 +1172,8 @@ class JwtJson {
     if (!this.isText() || n !== this.textBytes) {
       return false
     }
-    const end: i32 = jwtStep(this.tokEnd, -1)
-    let i: i32 = jwtStep(this.tokStart, 1)
+    const end: i32 = this.step(this.tokEnd, toI32(-1))
+    let i: i32 = this.step(this.tokStart, toI32(1))
     let o: i32 = 0
     while (i < end) {
       const b: i32 = this.at(i)
@@ -1168,7 +1185,7 @@ class JwtJson {
           return false
         }
         o += 1
-        i = jwtStep(i, 1)
+        i = this.step(i, toI32(1))
         continue
       }
       const cp: i32 = this.escapeCodePoint(i)
@@ -1182,23 +1199,23 @@ class JwtJson {
         }
         o += 1
       }
-      i = jwtStep(i, this.escapeLength(i, cp))
+      i = this.step(i, this.escapeLength(i, cp))
     }
-    return o === n
+    return o === n && this.failed === 0
   }
 
   /**
    * Writes the current key's or string's decoded bytes to `out` from `at` and
    * answers how many; `-1`, writing nothing, when the token is neither or
-   * `out` has too little room.
+   * `out` has too little room, and `-1` when a step failed the reader.
    * @internal
    */
   stringInto(out: u8[], at: i32): i32 {
     if (!this.isText() || at < 0 || toI64(at) > toI64(out.length) - toI64(this.textBytes)) {
       return -1
     }
-    const end: i32 = jwtStep(this.tokEnd, -1)
-    let i: i32 = jwtStep(this.tokStart, 1)
+    const end: i32 = this.step(this.tokEnd, toI32(-1))
+    let i: i32 = this.step(this.tokStart, toI32(1))
     let o: i32 = at
     while (i < end) {
       const b: i32 = this.at(i)
@@ -1206,8 +1223,8 @@ class JwtJson {
         if (o >= 0 && o < toI32(out.length)) {
           out[o] = toU8(b)
         }
-        o = jwtStep(o, 1)
-        i = jwtStep(i, 1)
+        o = this.step(o, toI32(1))
+        i = this.step(i, toI32(1))
         continue
       }
       const cp: i32 = this.escapeCodePoint(i)
@@ -1216,9 +1233,12 @@ class JwtJson {
         if (o >= 0 && o < toI32(out.length)) {
           out[o] = toU8(jwtUtf8Byte(cp, width, k))
         }
-        o = jwtStep(o, 1)
+        o = this.step(o, toI32(1))
       }
-      i = jwtStep(i, this.escapeLength(i, cp))
+      i = this.step(i, this.escapeLength(i, cp))
+    }
+    if (this.failed !== 0) {
+      return -1
     }
     return toI32(toI64(o) - toI64(at))
   }
@@ -1279,15 +1299,17 @@ const jwtClamp = (v: i64, lo: i64, hi: i64): i64 => {
   return v > hi ? hi : v
 }
 
-/** The bytes `[off, off + len)` of `src` as a fresh array, stopping at `src`'s end; both callers pass a window inside it. */
-const jwtSlice = (src: u8[], off: i32, len: i32): u8[] => {
-  const out: u8[] = []
-  let k: i32 = off
-  for (let i: i32 = 0; i < len && k >= 0 && k < toI32(src.length); i += 1) {
-    out.push(src[k])
-    k += 1
+/** The bytes `[off, off + len)` of `src` as a fresh array, or `null` for a window outside `src`. */
+const jwtSlice = (src: u8[], off: i32, len: i32): u8[] | null => {
+  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(src.length)) {
+    return null
   }
-  return out
+  // The test above again, in the form the prover reads for `src[k]`.
+  const stop: i32 = toI32(toI64(off) + toI64(len))
+  if (stop > toI32(src.length)) {
+    return null
+  }
+  return src.filter((_b: u8, k: number): boolean => toI32(k) >= off && toI32(k) < stop)
 }
 
 /**
@@ -1299,8 +1321,11 @@ const jwtSlice = (src: u8[], off: i32, len: i32): u8[] => {
  * Only HMAC verifies allocation-free (`hmacKeyedVerify`).
  */
 const jwtVerifyPublic = (key: JwtKey, src: u8[], off: i32, len: i32, sig: u8[], sigLen: i32): boolean => {
-  const msg: u8[] = jwtSlice(src, off, len)
-  const s: u8[] = jwtSlice(sig, 0, sigLen)
+  const msg: u8[] | null = jwtSlice(src, off, len)
+  const s: u8[] | null = jwtSlice(sig, 0, sigLen)
+  if (msg === null || s === null) {
+    return false
+  }
   const alg: i32 = key.alg
   const rsa: RsaPublicKey | null = key.rsa
   if (rsa !== null) {

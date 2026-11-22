@@ -1,0 +1,9 @@
+well-formed: key
+SEQUENCE length one past the buffer: null
+modulus length 255, past the buffer: null
+modulus long-form length 0xffff: null
+SEQUENCE tag 0x31: null
+modulus tag 0x03: null
+exponent tag 0x04: null
+four-byte length form: null
+last byte cut: null
