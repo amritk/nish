@@ -5,7 +5,7 @@
 import { HttpRequest } from "nish/net/handler"
 import { Request, Response } from "nish/net/serve"
 
-export function main(): i32 {
+export const main = (): i32 => {
   // A head of "/u/42/a%zz", with the route's two parameters `42` and `a%zz`.
   const raw: HttpRequest = new HttpRequest(0)
   const head: string = "/u/42/a%zz"
@@ -44,4 +44,4 @@ export function main(): i32 {
   const inside: Result<Response, string> = res.tryBytes("text/plain", buf, 1, 2)
   console.log(inside.isErr() ? `err ${inside.error}` : `set ${res.length} bytes of ${res.type}: ${String.fromBytes(res.body, 0, res.length)}`)
   return 0
-}
+};
