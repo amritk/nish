@@ -2395,12 +2395,18 @@ export class PgConnection {
    * buffer, the unsent bytes move to its start first: a builder call asks
    * before it takes any offset into the buffer, so nothing it holds moves.
    */
-  private room(size: i32): boolean {
-    const queued: i32 = this.outEnd - this.outStart
-    if (size < 0 || size > this.config.maxOutput - PG_TAIL - this.bindOwed - queued) {
+  private room(size: i64): boolean {
+    const start: i32 = this.outStart
+    const end: i32 = this.outEnd
+    if (size < toI64(0) || size > toI64(PG_MAX_CAP)) {
       return false
     }
-    if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
+    const n: i32 = toI32(size)
+    // Summed in `i64`, where no `i32` term overflows on its way to the test.
+    if (toI64(n) + toI64(end) - toI64(start) + toI64(PG_TAIL) + toI64(this.bindOwed) > toI64(this.config.maxOutput)) {
+      return false
+    }
+    if (start > 0 && toI64(n) + toI64(end) > toI64(this.out.length)) {
       this.compactOutput()
     }
     return true
@@ -2411,8 +2417,13 @@ export class PgConnection {
    * `terminate`) the way `room` does for the rest, so that the buffer is not
    * grown past `maxOutput` while sent bytes still fill its start.
    */
-  private tailRoom(size: i32): void {
-    if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
+  private tailRoom(size: i64): void {
+    // A tail message is a few bytes and what the bind owes, which `room` held
+    // under `maxOutput`; the test states that bound for the prover.
+    if (size < toI64(0) || size > toI64(PG_MAX_CAP)) {
+      return
+    }
+    if (this.outStart > 0 && toI64(toI32(size)) + toI64(this.outEnd) > toI64(this.out.length)) {
       this.compactOutput()
     }
   }
@@ -2420,24 +2431,31 @@ export class PgConnection {
   /** Moves the unsent output to the start of the buffer, the open bind's offsets with it. */
   private compactOutput(): void {
     const shift: i32 = this.outStart
-    if (shift === 0) {
+    const end: i32 = this.outEnd
+    // The sent bytes end at or before the queued ones; the test states that for the prover.
+    if (shift <= 0 || end < 0 || end < shift) {
       return
     }
-    copyBytes(this.out, 0, this.out, shift, this.outEnd - shift)
-    this.outEnd -= shift
+    const n: i32 = end - shift
+    copyBytes(this.out, 0, this.out, shift, n)
+    this.outEnd = n
     this.outStart = 0
-    if (this.bindAt >= 0) {
-      this.bindAt -= shift
-      this.paramCountAt -= shift
+    // An open bind and its array lie in the unsent bytes, past the shift.
+    const bindAt: i32 = this.bindAt
+    const countAt: i32 = this.paramCountAt
+    if (bindAt >= 0 && countAt >= 0) {
+      this.bindAt = bindAt - shift
+      this.paramCountAt = countAt - shift
     }
-    if (this.arrayAt >= 0) {
-      this.arrayAt -= shift
+    const arrayAt: i32 = this.arrayAt
+    if (arrayAt >= 0) {
+      this.arrayAt = arrayAt - shift
     }
   }
 
   /** Makes the output buffer at least `want` bytes long. */
-  private reserve(want: i32): void {
-    if (want > toI32(this.out.length)) {
+  private reserve(want: i64): void {
+    if (want > toI64(this.out.length)) {
       this.grow(want)
     }
   }
@@ -2446,38 +2464,62 @@ export class PgConnection {
    * `reserve` when the buffer is short: kept apart so that the test above,
    * which every put makes, is small enough to inline into it.
    */
-  private grow(want: i32): void {
-    const size: i32 = toI32(this.out.length)
-    const grown: u8[] = new Array<u8>(size <= PG_MAX_CAP && want < 2 * size ? 2 * size : want)
+  private grow(want: i64): void {
+    const doubled: i64 = toI64(this.out.length) * toI64(2)
+    const grown: u8[] = new Array<u8>(toI32(want < doubled && doubled <= toI64(PG_MAX_CAP) * toI64(2) ? doubled : want))
     grown.set(this.out, 0)
     this.out = grown
   }
 
+  // Each put reserves its bytes and then writes them: the end lies inside the
+  // buffer after `reserve`, and the test states that bound for the prover.
+
   private putByte(v: i32): void {
-    this.reserve(this.outEnd + 1)
-    this.out[this.outEnd] = toU8(v)
-    this.outEnd += 1
+    const end: i32 = this.outEnd
+    this.reserve(toI64(end) + toI64(1))
+    const b: u8[] = this.out
+    if (end < 0 || end >= toI32(b.length)) {
+      return
+    }
+    b[end] = toU8(v)
+    this.outEnd = end + 1
   }
 
   private putI32(v: i32): void {
-    this.reserve(this.outEnd + 4)
-    setI32BE(this.out, this.outEnd, v)
-    this.outEnd += 4
+    const end: i32 = this.outEnd
+    this.reserve(toI64(end) + toI64(4))
+    const b: u8[] = this.out
+    if (end < 0 || end > toI32(b.length) - 4) {
+      return
+    }
+    setI32BE(b, end, v)
+    this.outEnd = end + 4
   }
 
   private putI16(v: i32): void {
-    this.reserve(this.outEnd + 2)
-    setU16BE(this.out, this.outEnd, toU16(v))
-    this.outEnd += 2
+    const end: i32 = this.outEnd
+    this.reserve(toI64(end) + toI64(2))
+    const b: u8[] = this.out
+    if (end < 0 || end > toI32(b.length) - 2) {
+      return
+    }
+    setU16BE(b, end, toU16(v))
+    this.outEnd = end + 2
   }
 
   private putString(text: string): void {
     const n: i32 = toI32(text.length)
-    this.reserve(this.outEnd + n)
-    for (let i: i32 = 0; i < n; i++) {
-      this.out[this.outEnd + i] = toU8(text.charCodeAt(i))
+    let k: i32 = this.outEnd
+    this.reserve(toI64(k) + toI64(n))
+    const b: u8[] = this.out
+    if (k < 0) {
+      return
     }
-    this.outEnd += n
+    for (let i: i32 = 0; i < n && k < toI32(b.length); i++) {
+      b[k] = toU8(text.charCodeAt(i))
+      k++
+    }
+    this.outEnd = k
   }
 
   private putCString(text: string): void {
@@ -2500,7 +2542,12 @@ export class PgConnection {
 
   /** Writes the length of the message started at `at`. */
   private endMessage(at: i32): void {
-    setI32BE(this.out, at + 1, this.outEnd - at - 1)
+    const end: i32 = this.outEnd
+    // The message's type byte and length word lie before the end; the test states that for the prover.
+    if (at < 0 || end < 0 || end - at < 5 || at > toI32(this.out.length) - 5) {
+      return
+    }
+    setI32BE(this.out, at + 1, end - at - 1)
   }
 
   /**
@@ -2514,13 +2561,18 @@ export class PgConnection {
   }
 
   /** Opens a group if none is, for a message of `size` bytes; false, and no group opened, when none may be or there is no room. */
-  private canOpen(size: i32): boolean {
+  private canOpen(size: i64): boolean {
     if (!this.canSend() || this.bindAt >= 0 || !this.room(size)) {
       return false
     }
     if (!this.groupOpen) {
+      // canSend allowed a new group only under maxInFlight; the test states that for the prover.
+      const inFlight: i32 = this.inFlight
+      if (inFlight >= this.config.maxInFlight) {
+        return false
+      }
       this.groupOpen = true
-      this.inFlight += 1
+      this.inFlight = inFlight + 1
     }
     return true
   }
@@ -2548,7 +2600,7 @@ export class PgConnection {
       return false
     }
     const sqlLength: i32 = toI32(sql.length)
-    if (sqlLength > PG_MAX_CAP || !this.canOpen(toI32(16) + 2 * nameLength + sqlLength + 4 * types)) {
+    if (sqlLength > PG_MAX_CAP || !this.canOpen(toI64(16) + toI64(2) * toI64(nameLength) + toI64(sqlLength) + toI64(4) * toI64(types))) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_PARSE)
@@ -2574,7 +2626,7 @@ export class PgConnection {
    * @returns True when the Close was queued.
    */
   closeStatement(name: string): boolean {
-    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(7 + toI32(name.length))) {
+    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(toI64(7) + toI64(name.length))) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_CLOSE)
@@ -2619,7 +2671,7 @@ export class PgConnection {
   private openBind(name: string, binary: boolean): boolean {
     const opens: boolean = !this.groupOpen
     const extra: i32 = binary ? PG_BINARY_TAIL : 0
-    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(11 + extra + toI32(name.length))) {
+    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(toI64(11) + toI64(extra) + toI64(name.length))) {
       return false
     }
     this.bindOpened = opens
@@ -2645,11 +2697,13 @@ export class PgConnection {
     this.noArrayOpen()
     // Once the bind holds a binary parameter, every parameter owes its format code.
     const owed: i32 = this.binaryParamCount > 0 ? 2 : 0
-    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
+    const count: i32 = this.paramCount
+    if (this.bindAt < 0 || count < 0 || count >= 65535 || size > PG_MAX_CAP || !this.room(toI64(4) + toI64(size) + toI64(owed))) {
       return -1
     }
-    this.bindOwed += owed
-    this.paramCount += 1
+    // `room` held what the bind owes under `maxOutput`, so the sum fits an `i32`.
+    this.bindOwed = toI32(toI64(this.bindOwed) + toI64(owed))
+    this.paramCount = count + 1
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
     return at
@@ -2663,25 +2717,38 @@ export class PgConnection {
    */
   private startBinaryParam(size: i32): i32 {
     this.noArrayOpen()
-    const owed: i32 = this.binaryParamCount > 0 ? toI32(2) : toI32(2) * (this.paramCount + toI32(1))
-    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
+    const count: i32 = this.paramCount
+    const binary: i32 = this.binaryParamCount
+    // Each binary parameter is one of the bind's, so both counts stay under 65535.
+    if (this.bindAt < 0 || count < 0 || count >= 65535 || binary < 0 || binary > count || binary >= 65535) {
       return -1
     }
-    if (this.binaryParamCount < toI32(this.binaryParams.length)) {
-      this.binaryParams[this.binaryParamCount] = this.paramCount
-    } else {
-      this.binaryParams.push(this.paramCount)
+    const owed: i32 = binary > 0 ? toI32(2) : toI32(2) * (count + toI32(1))
+    if (size > PG_MAX_CAP || !this.room(toI64(4) + toI64(size) + toI64(owed))) {
+      return -1
     }
-    this.binaryParamCount += 1
-    this.bindOwed += owed
-    this.paramCount += 1
+    const params: i32[] = this.binaryParams
+    if (binary < toI32(params.length)) {
+      params[binary] = count
+    } else {
+      params.push(count)
+    }
+    this.binaryParamCount = binary + 1
+    // `room` held what the bind owes under `maxOutput`, so the sum fits an `i32`.
+    this.bindOwed = toI32(toI64(this.bindOwed) + toI64(owed))
+    this.paramCount = count + 1
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
     return at
   }
 
   private endParam(at: i32): void {
-    setI32BE(this.out, at, this.outEnd - at - 4)
+    const end: i32 = this.outEnd
+    // `startParam` wrote the length word at `at`; the test states that for the prover.
+    if (at < 0 || end < 0 || end - at < 4 || at > toI32(this.out.length) - 4) {
+      return
+    }
+    setI32BE(this.out, at, end - at - 4)
   }
 
   private noArrayOpen(): void {
@@ -2729,9 +2796,14 @@ export class PgConnection {
     if (at < 0) {
       return false
     }
-    this.reserve(this.outEnd + length)
-    copyBytes(this.out, this.outEnd, bytes, start, length)
-    this.outEnd += length
+    const end: i32 = this.outEnd
+    this.reserve(toI64(end) + toI64(length))
+    // `reserve` made the room; the test states that bound for the prover.
+    if (end < 0 || end > toI32(this.out.length) - length) {
+      return false
+    }
+    copyBytes(this.out, end, bytes, start, length)
+    this.outEnd = toI32(toI64(end) + toI64(length))
     this.endParam(at)
     return true
   }
@@ -2742,10 +2814,12 @@ export class PgConnection {
    * @returns True when it was written; false as every `param...` call is.
    */
   paramNull(): boolean {
-    if (this.startParam(toI32(0)) < 0) {
+    const at: i32 = this.startParam(toI32(0))
+    // `startParam` wrote the length word at `at`; the test states that bound for the prover.
+    if (at < 0 || at > toI32(this.out.length) - 4) {
       return false
     }
-    setI32BE(this.out, this.outEnd - 4, -1)
+    setI32BE(this.out, at, -1)
     return true
   }
 
@@ -2770,7 +2844,7 @@ export class PgConnection {
   /** `value` in decimal, `pgDecimalLength(value)` bytes. */
   private putDecimal(value: i64): void {
     const n: i32 = pgDecimalLength(value)
-    this.reserve(this.outEnd + n)
+    this.reserve(toI64(this.outEnd) + toI64(n))
     // `reserve` made the room, so the window is inside `out` and the answer is not -1.
     const end: i32 = pgPutDecimal(this.out, this.outEnd, value, n)
     if (end >= 0) {
@@ -2914,27 +2988,48 @@ export class PgConnection {
 
   private paramBinaryInts(values: i64[], start: i32, count: i32, oid: i32): boolean {
     const width: i32 = oid === PG_OID_INT4 ? 4 : 8
+    this.noArrayOpen()
+    // More elements than `maxOutput` holds bytes is past any bind's room, as `startBinaryParam` answers.
+    if (count < 0 || count > PG_MAX_CAP) {
+      return false
+    }
     // The header, its one dimension when there are elements, then each element's length word and bytes.
-    const size: i64 =
-      count > 0
-        ? toI64(PG_ARRAY_HEADER + PG_ARRAY_DIM) + toI64(count) * toI64(4 + width)
-        : toI64(PG_ARRAY_HEADER)
-    const at: i32 = this.startBinaryParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
+    let size: i64 = toI64(PG_ARRAY_HEADER)
+    if (count > 0) {
+      size = width === 4 ? toI64(20) + toI64(count) * toI64(8) : toI64(20) + toI64(count) * toI64(12)
+    }
+    if (size > toI64(PG_MAX_CAP)) {
+      return false
+    }
+    const at: i32 = this.startBinaryParam(toI32(size))
     if (at < 0) {
       return false
     }
-    this.reserve(this.outEnd + toI32(size))
+    this.reserve(toI64(this.outEnd) + toI64(toI32(size)))
     this.putArrayHeader(oid, count)
-    const end: i32 = start + count
+    const b: u8[] = this.out
+    let p: i32 = this.outEnd
+    // `pgIntWindow` held the window inside `values`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(count))
+    // `reserve` made room for every element; the loop's tests state that bound for the prover.
     for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
-      setI32BE(this.out, this.outEnd, width)
       if (width === 4) {
-        setI32BE(this.out, this.outEnd + 4, toI32(values[i]))
+        if (p < 0 || p > toI32(b.length) - 8) {
+          break
+        }
+        setI32BE(b, p, width)
+        setI32BE(b, p + 4, toI32(values[i]))
+        p = p + 8
       } else {
-        setI64BE(this.out, this.outEnd + 4, values[i])
+        if (p < 0 || p > toI32(b.length) - 12) {
+          break
+        }
+        setI32BE(b, p, width)
+        setI64BE(b, p + 4, values[i])
+        p = p + 12
       }
-      this.outEnd += 4 + width
     }
+    this.outEnd = p
     this.endParam(at)
     return true
   }
@@ -2993,7 +3088,7 @@ export class PgConnection {
   /** Whether the open array has room for an element of `size` bytes, its comma, and the `}` it owes. */
   private elementRoom(size: i64): boolean {
     const total: i64 = size + toI64(this.arrayCount > 0 ? 2 : 1)
-    return total <= toI64(PG_MAX_CAP) && this.room(toI32(total))
+    return total <= toI64(PG_MAX_CAP) && this.room(total)
   }
 
   /**
@@ -3011,12 +3106,14 @@ export class PgConnection {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: arrayElement() outside its source")
     }
-    // Both loops are bounded by `bytes.length` too, as `paramIntArray`'s are.
-    const end: i32 = start + length
+    // Both loops are bounded by `bytes.length` too, as `paramIntArray`'s are;
+    // the window is inside `bytes`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(length))
     let escapes: i32 = 0
     for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
       const c: i32 = toI32(bytes[i])
-      if (c === PG_QUOTE || c === PG_BACKSLASH) {
+      // An escape per byte at most, so fewer than `length` before this one.
+      if ((c === PG_QUOTE || c === PG_BACKSLASH) && escapes < length) {
         escapes += 1
       }
     }
@@ -3025,10 +3122,15 @@ export class PgConnection {
     }
     this.elementComma()
     this.putByte(PG_QUOTE)
-    this.reserve(this.outEnd + length + escapes + 1)
+    const at: i32 = this.outEnd
+    this.reserve(toI64(at) + toI64(length) + toI64(escapes) + toI64(1))
     if (escapes === 0) {
-      copyBytes(this.out, this.outEnd, bytes, start, length)
-      this.outEnd += length
+      // `reserve` made the room; the test states that bound for the prover.
+      if (at < 0 || at > toI32(this.out.length) - length) {
+        return false
+      }
+      copyBytes(this.out, at, bytes, start, length)
+      this.outEnd = toI32(toI64(at) + toI64(length))
     } else {
       for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
         const c: i32 = toI32(bytes[i])
@@ -3135,14 +3237,14 @@ export class PgConnection {
     if (width === 4 && !pgFitsInt4(value)) {
       panic("nish/net/postgres: binaryArrayInt() with an element outside int4")
     }
-    if (!this.room(4 + width)) {
+    if (!this.room(toI64(4) + toI64(width))) {
       return false
     }
     this.putI32(width)
     if (width === 4) {
       this.putI32(toI32(value))
     } else {
-      this.reserve(this.outEnd + 8)
+      this.reserve(toI64(this.outEnd) + toI64(8))
       setI64BE(this.out, this.outEnd, value)
       this.outEnd += 8
     }
@@ -3158,7 +3260,7 @@ export class PgConnection {
    */
   binaryArrayNull(): boolean {
     this.binaryArrayOpen()
-    if (!this.room(toI32(4))) {
+    if (!this.room(toI64(4))) {
       return false
     }
     this.putI32(toI32(-1))
@@ -3188,7 +3290,7 @@ export class PgConnection {
       }
       this.arrayOid = 0
     } else {
-      this.tailRoom(toI32(1))
+      this.tailRoom(toI64(1))
       this.putByte(PG_RBRACE)
     }
     this.endParam(this.arrayAt)
@@ -3211,7 +3313,7 @@ export class PgConnection {
       panic("nish/net/postgres: bindEnd() while an array is open")
     }
     const binary: boolean = this.bindBinary
-    this.tailRoom(PG_TAIL + this.bindOwed)
+    this.tailRoom(toI64(PG_TAIL) + toI64(this.bindOwed))
     const at: i32 = this.bindAt
     if (this.binaryParamCount > 0) {
       this.putFormatCodes()
@@ -3245,9 +3347,11 @@ export class PgConnection {
       return false
     }
     this.dropBind()
-    if (this.bindOpened) {
+    // The bind's group is in flight, so the count is positive.
+    const inFlight: i32 = this.inFlight
+    if (this.bindOpened && inFlight > 0) {
       this.groupOpen = false
-      this.inFlight -= 1
+      this.inFlight = inFlight - 1
     }
     return true
   }
@@ -3268,18 +3372,41 @@ export class PgConnection {
    */
   private putFormatCodes(): void {
     const from: i32 = this.paramCountAt
-    const codes: i32 = 2 * this.paramCount
-    this.reserve(this.outEnd + codes)
-    copyBytes(this.out, from + codes, this.out, from, this.outEnd - from)
-    this.outEnd += codes
-    setU16BE(this.out, from - 2, toU16(this.paramCount))
-    for (let i: i32 = 0; i < this.paramCount; i++) {
-      setU16BE(this.out, from + 2 * i, toU16(0))
+    const count: i32 = this.paramCount
+    const end: i32 = this.outEnd
+    // The count word lies before the parameters, a bind holds at most 65535 of
+    // them, and the end lies past the count; the test states that for the prover.
+    if (from < 2 || count < 0 || count > 65535 || end < 0 || end < from) {
+      return
     }
-    for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(this.binaryParams.length); k++) {
-      setU16BE(this.out, from + 2 * this.binaryParams[k], toU16(PG_FORMAT_BINARY))
+    const codes: i32 = count * 2
+    this.reserve(toI64(end) + toI64(codes))
+    const b: u8[] = this.out
+    if (end > toI32(b.length) - codes) {
+      return
     }
-    this.paramCountAt = from + codes
+    // `reserve` made the room, so both ends fit an `i32`.
+    const moved: i32 = toI32(toI64(from) + toI64(codes))
+    copyBytes(b, moved, b, from, end - from)
+    this.outEnd = toI32(toI64(end) + toI64(codes))
+    setU16BE(b, from - 2, toU16(count))
+    // Every code lies in `[from, from + codes)`, inside `b`.
+    for (let i: i32 = 0; i < count; i++) {
+      const at: i32 = toI32(toI64(from) + toI64(i) * toI64(2))
+      if (at > toI32(b.length) - 2) {
+        break
+      }
+      setU16BE(b, at, toU16(0))
+    }
+    const params: i32[] = this.binaryParams
+    for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(params.length); k++) {
+      const param: i32 = params[k]
+      if (param < 0 || param >= count) {
+        break
+      }
+      setU16BE(b, toI32(toI64(from) + toI64(param) * toI64(2)), toU16(PG_FORMAT_BINARY))
+    }
+    this.paramCountAt = moved
   }
 
   /**
@@ -3293,7 +3420,7 @@ export class PgConnection {
       return false
     }
     this.groupOpen = false
-    this.tailRoom(toI32(5))
+    this.tailRoom(toI64(5))
     const at: i32 = this.startMessage(PG_FE_SYNC)
     this.endMessage(at)
     return true
@@ -3308,7 +3435,7 @@ export class PgConnection {
     if (this.bindAt >= 0) {
       this.dropBind()
     }
-    this.tailRoom(toI32(5))
+    this.tailRoom(toI64(5))
     const at: i32 = this.startMessage(PG_FE_TERMINATE)
     this.endMessage(at)
   }
