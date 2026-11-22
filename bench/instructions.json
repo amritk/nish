@@ -44,6 +44,6 @@
     "std-net-dns-message": { "n": 5000, "instructions": 96298847 },
     "std-net-http2-frame": { "n": 1000, "instructions": 181527148 },
     "pg-codec": { "n": 2000, "instructions": 186746194 },
-    "pg-carrier": { "n": 1500, "instructions": 83407028 }
+    "pg-carrier": { "n": 1500, "instructions": 83217150 }
   }
 }
