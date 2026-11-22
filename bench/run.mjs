@@ -666,6 +666,11 @@ const STD_COUNTED = [
   { name: "std-threads", what: "scope spawns into proven slots, and parallelMapInto" },
   { name: "std-json-typed", what: "jsonDecode of a nested document into fresh objects" },
   { name: "std-cli-args", what: "Cli.parse of three command lines over one tree" },
+  {
+    name: "pg-codec",
+    what: "PgConnection Bind/Execute build and binary/text DataRow decode on canned bytes",
+  },
+  { name: "pg-carrier", what: "PgCarrier plain and batched queries against a loopback stand-in server" },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
