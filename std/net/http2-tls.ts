@@ -267,7 +267,8 @@ export class Http2TlsServer {
     while (toI32(this.connections.length) < slot) {
       this.build()
     }
-    const conn: Http2Connection = slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
+    const conn: Http2Connection =
+      slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
     conn.restart()
     conn.begin(monotonicNanos())
     return slot

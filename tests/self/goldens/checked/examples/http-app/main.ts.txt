@@ -39754,7 +39754,7 @@ function Http2Connection.expired(this: Http2Connection, now: i64): boolean -> @n
   pointer this: size=344 writesThrough=false captured=false passedTo=nish.Http2Connection.settingsLate#0
   stackSites=0 stackLocals=0
   callee +0:7 Http2Connection.settingsLate -> @nish.Http2Connection.settingsLate
-  callee +0:33 http2Since -> @nish.http2Since
+  callee +1:7 http2Since -> @nish.http2Since
 function Http2Connection.expiresNoSooner(this: Http2Connection, now: i64): i64 -> @nish.Http2Connection.expiresNoSooner [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
@@ -40689,20 +40689,18 @@ function HpackHuffman.constructor(this: HpackHuffman): void -> @nish.HpackHuffma
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:11 codes: i32[] (const)
-  local +1:11 lengths: i32[] (const)
-  local +2:11 symbols: i32[] (const)
-  local +3:11 firstCode: i32[] (const)
-  local +4:11 countAt: i32[] (const)
-  local +5:11 baseRank: i32[] (const)
-  local +8:11 table: string (const)
-  local +9:14 sym: i32 (let)
-  local +13:9 code: u32 (let)
-  local +14:9 rank: u32 (let)
-  local +16:11 len: i32 (let)
-  local +23:13 start: u32 (const)
-  local +26:16 sym: i32 (let)
-  local +28:15 at: i32 (const)
+  local +0:11 table: string (const)
+  local +1:14 sym: i32 (let)
+  local +5:14 sym: i32 (let)
+  local +6:13 len: i32 (const)
+  local +14:9 code: u32 (let)
+  local +15:9 rank: u32 (let)
+  local +17:11 len: i32 (let)
+  local +26:13 count: u32 (const)
+  local +34:14 sym: i32 (let)
+  local +35:13 len: i32 (const)
+  local +43:15 done: u32 (const)
+  local +44:15 at: i32 (const)
 function hpackHuffmanLength(h: HpackHuffman, src: u8[], off: i32, len: i32): i32 -> @nish.hpackHuffmanLength [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
@@ -40711,12 +40709,11 @@ function hpackHuffmanLength(h: HpackHuffman, src: u8[], off: i32, len: i32): i32
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 hpackCheckWindow -> @nish.hpackCheckWindow
-  local +1:9 lengths: i32[] (const)
-  local +3:7 bits: u64 (let)
-  local +8:9 end: i64 (const)
-  local +9:12 i: i32 (let)
-  local +10:11 sym: i32 (const)
-  local +16:9 bytes: u64 (const)
+  local +2:7 bits: u64 (let)
+  local +7:9 end: i64 (const)
+  local +8:12 i: i32 (let)
+  local +9:11 sym: i32 (const)
+  local +15:9 bytes: u64 (const)
 function hpackHuffmanEncode(h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): void -> @nish.hpackHuffmanEncode [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -40726,9 +40723,7 @@ function hpackHuffmanEncode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -17:3 hpackCheckWindow -> @nish.hpackCheckWindow
-  local -16:9 lengths: i32[] (const)
-  local -15:9 codes: i32[] (const)
+  callee -15:3 hpackCheckWindow -> @nish.hpackCheckWindow
   local -14:7 acc: u64 (let)
   local -12:7 bits: u32 (let)
   local -11:9 end: i64 (const)
@@ -40745,11 +40740,7 @@ function hpackHuffmanDecode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -38:3 hpackCheckWindow -> @nish.hpackCheckWindow
-  local -37:9 firstCode: i32[] (const)
-  local -36:9 countAt: i32[] (const)
-  local -35:9 baseRank: i32[] (const)
-  local -34:9 symbols: i32[] (const)
+  callee -34:3 hpackCheckWindow -> @nish.hpackCheckWindow
   local -31:7 code: u32 (let)
   local -30:7 bits: u32 (let)
   local -29:9 end: i64 (const)
@@ -41699,14 +41690,14 @@ const H2C_AGAIN: i32 = -11
 const H2C_NO_FD: i32 = -1
 const H2C_NANOS_PER_MS: i64 = 1000000
 const H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
-struct H2cSlot (class) size=48 align=8
-  field at: i32 index=0 offset=0 initialized
-  field fd: i32 index=1 offset=4 initialized
-  field got: i32 index=2 offset=8 initialized
-  field since: i64 index=3 offset=16 initialized
-  field ended: boolean index=4 offset=24 initialized
-  field preface: u8[] index=5 offset=32
-  field conn: Http2Connection index=6 offset=40
+struct H2cSlot (class) size=40 align=8
+  field since: i64 index=0 offset=0 initialized
+  field preface: u8[] index=1 offset=8
+  field conn: Http2Connection index=2 offset=16
+  field at: i32 index=3 offset=24 initialized
+  field fd: i32 index=4 offset=28 initialized
+  field got: i32 index=5 offset=32 initialized
+  field ended: boolean index=6 offset=36 initialized
   constructor -> @nish.H2cSlot.constructor
 struct Http2CleartextServer (class) size=80 align=8 exported
   field config: Http2Config index=0 offset=0
@@ -41744,7 +41735,7 @@ struct Http2CleartextServer (class) size=80 align=8 exported
 function H2cSlot.constructor(this: H2cSlot, at: i32, conn: Http2Connection): void -> @nish.H2cSlot.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: at conn
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=40 writesThrough=true captured=false
   pointer conn: size=344 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Http2CleartextServer.constructor(this: Http2CleartextServer, config: Http2Config, listener: i32, size: i32, prefaceTimeout: i32): void -> @nish.Http2CleartextServer.constructor [exported constructor]
@@ -42093,9 +42084,9 @@ function Http2TlsServer.accept(this: Http2TlsServer, serverRandom: u8[], ephemer
   callee +1:29 TlsTcpServer.size -> @nish.TlsTcpServer.size
   callee +7:7 Http2TlsServer.build -> @nish.Http2TlsServer.build
   local +9:11 conn: Http2Connection (const)
-  callee +9:100 Http2TlsServer.build -> @nish.Http2TlsServer.build
-  callee +10:5 Http2Connection.restart -> @nish.Http2Connection.restart
-  callee +11:5 Http2Connection.begin -> @nish.Http2Connection.begin
+  callee +10:72 Http2TlsServer.build -> @nish.Http2TlsServer.build
+  callee +11:5 Http2Connection.restart -> @nish.Http2Connection.restart
+  callee +12:5 Http2Connection.begin -> @nish.Http2Connection.begin
 function Http2TlsServer.readable(this: Http2TlsServer, slot: i32): i32 -> @nish.Http2TlsServer.readable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTcpServer.readable

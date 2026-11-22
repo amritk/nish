@@ -810,7 +810,8 @@ export class Http2Connection {
    */
   expired(now: i64): boolean {
     return (
-      this.settingsLate(now) || http2Since(now, this.lastActive) > toI64(this.config.idleTimeout) * toI64(1000000)
+      this.settingsLate(now) ||
+      http2Since(now, this.lastActive) > toI64(this.config.idleTimeout) * toI64(1000000)
     )
   }
 

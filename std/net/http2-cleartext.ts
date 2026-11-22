@@ -108,20 +108,20 @@ const H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
  * slot is made by the first accept into it and kept, with its connection.
  */
 class H2cSlot {
+  /** When the slot was accepted, in `monotonicNanos`: its preface deadline's start. */
+  since: i64 = 0
+  /** The slot's 24 preface bytes, read here until they are whole. */
+  preface: u8[]
+  /** The slot's HTTP/2 connection, the one `connections` holds at `at`. */
+  conn: Http2Connection
   /** The slot's number, its place in `held` and in `connections`. */
   at: i32 = 0
   /** The slot's socket, -1 while the slot is free. */
   fd: i32 = -1
   /** How many preface bytes the slot has read; 24 once the preface is whole and fed. */
   got: i32 = 0
-  /** When the slot was accepted, in `monotonicNanos`: its preface deadline's start. */
-  since: i64 = 0
   /** Whether the slot's socket has ended and `endInput` was called for it. */
   ended: boolean = false
-  /** The slot's 24 preface bytes, read here until they are whole. */
-  preface: u8[]
-  /** The slot's HTTP/2 connection, the one `connections` holds at `at`. */
-  conn: Http2Connection
 
   constructor(at: i32, conn: Http2Connection) {
     this.at = at
@@ -395,7 +395,7 @@ export class Http2CleartextServer {
       // `netRead` answers at most the 24 - `have` bytes it was asked for, so the unsigned sum is at most 24.
       const end: i32 = toI32(toU32(have) + toU32(n))
       for (let k: i32 = have; k < end; k++) {
-        if (k < 0 || k >= toI32(preface.length) || k >= want.length) {
+        if (k < 0 || k >= toI32(preface.length) || k >= toI32(want.length)) {
           break
         }
         if (toI32(preface[k]) !== toI32(want.charCodeAt(k))) {

@@ -458,51 +458,68 @@ export class HpackHuffman {
 
   /** Rebuilds the code from Appendix B's 257 code lengths. Build one and reuse it: each build allocates. */
   constructor() {
-    const codes: i32[] = new Array<i32>(257)
-    const lengths: i32[] = new Array<i32>(257)
-    const symbols: i32[] = new Array<i32>(257)
-    const firstCode: i32[] = new Array<i32>(31)
-    const countAt: i32[] = new Array<i32>(31)
-    const baseRank: i32[] = new Array<i32>(31)
+    // Every access below goes through the field, never a local holding its array, which is what lets
+    // the layout pass store each array inside the object (`src/inline-arrays.ts`).
+    this.codes = new Array<i32>(257)
+    this.lengths = new Array<i32>(257)
+    this.symbols = new Array<i32>(257)
+    this.firstCode = new Array<i32>(31)
+    this.countAt = new Array<i32>(31)
+    this.baseRank = new Array<i32>(31)
     // Every bound below is the array's own length, which the constants fix at 257 symbols and 31 code
     // lengths, so no test ever stops a loop early.
     const table: string = HPACK_HUFFMAN_LENGTHS
-    for (let sym: i32 = 0; sym < toI32(lengths.length) && sym < toI32(table.length); sym += 1) {
-      lengths[sym] = toI32(table.charCodeAt(sym)) - 60
+    for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(table.length); sym += 1) {
+      this.lengths[sym] = toI32(table.charCodeAt(sym)) - 60
     }
-    // Unsigned: the code is below 2^30 and the rank at most 257, so neither can wrap.
+    // How many symbols each length has. Appendix B's lengths are 5 to 30, so every one lands in a row.
+    for (let sym: i32 = 0; sym < toI32(this.lengths.length); sym += 1) {
+      const len: i32 = this.lengths[sym]
+      if (len >= 0 && len < toI32(this.countAt.length)) {
+        this.countAt[len] = toI32(toU32(this.countAt[len]) + 1)
+      }
+    }
+    // Canonical order is by length, then by symbol: each length's first code and rank follow from the
+    // counts of the shorter ones. Unsigned: the code is below 2^30 and the rank at most 257, so neither
+    // can wrap. Each count goes back to 0, to count again as the pass after hands the codes out.
     let code: u32 = 0
     let rank: u32 = 0
     for (
       let len: i32 = 5;
       len <= HPACK_HUFFMAN_MAX_BITS &&
-      len < toI32(firstCode.length) &&
-      len < toI32(baseRank.length) &&
-      len < toI32(countAt.length);
+      len < toI32(this.firstCode.length) &&
+      len < toI32(this.baseRank.length) &&
+      len < toI32(this.countAt.length);
       len += 1
     ) {
-      const start: u32 = rank
-      firstCode[len] = toI32(code)
-      baseRank[len] = toI32(start)
-      for (let sym: i32 = 0; sym < toI32(lengths.length) && sym < toI32(codes.length); sym += 1) {
-        // Appendix B has 257 symbols, so the rank never reaches past `symbols`.
-        const at: i32 = toI32(rank)
-        if (lengths[sym] === len && at >= 0 && at < toI32(symbols.length)) {
-          codes[sym] = toI32(code)
-          symbols[at] = sym
-          code += 1
-          rank += 1
+      this.firstCode[len] = toI32(code)
+      this.baseRank[len] = toI32(rank)
+      const count: u32 = toU32(this.countAt[len])
+      this.countAt[len] = 0
+      code = (code + count) << 1
+      rank += count
+    }
+    // Walking the symbols in order hands each length its codes in symbol order, as the canonical code
+    // does, and leaves every count as it was. Appendix B has 257 symbols, so the rank never reaches
+    // past `symbols`.
+    for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(this.codes.length); sym += 1) {
+      const len: i32 = this.lengths[sym]
+      if (
+        len >= 5 &&
+        len <= HPACK_HUFFMAN_MAX_BITS &&
+        len < toI32(this.firstCode.length) &&
+        len < toI32(this.baseRank.length) &&
+        len < toI32(this.countAt.length)
+      ) {
+        const done: u32 = toU32(this.countAt[len])
+        const at: i32 = toI32(toU32(this.baseRank[len]) + done)
+        if (at >= 0 && at < toI32(this.symbols.length)) {
+          this.codes[sym] = toI32(toU32(this.firstCode[len]) + done)
+          this.symbols[at] = sym
+          this.countAt[len] = toI32(done + 1)
         }
       }
-      countAt[len] = toI32(rank - start)
-      code = code << 1
     }
-    this.codes = codes
-    this.lengths = lengths
-    this.symbols = symbols
-    this.firstCode = firstCode
-    this.countAt = countAt
-    this.baseRank = baseRank
   }
 }
 
@@ -520,7 +537,6 @@ export class HpackHuffman {
  */
 export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i32): i32 => {
   hpackCheckWindow("hpackHuffmanLength", src, off, len)
-  const lengths: i32[] = h.lengths
   // Unsigned: at most 30 bits for each of fewer than 2^31 octets, far below 2^64.
   let bits: u64 = 0
   // Widened, so `off + len` cannot wrap. The window check has already proved
@@ -530,10 +546,10 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
   const end: i64 = toI64(off) + toI64(len)
   for (let i: i32 = off; i >= 0 && toI64(i) < end && i < toI32(src.length); i += 1) {
     const sym: i32 = toI32(src[i])
-    if (sym >= toI32(lengths.length)) {
+    if (sym >= toI32(h.lengths.length)) {
       return HPACK_HUFFMAN_TOO_LONG
     }
-    bits += toU64(lengths[sym] & 31)
+    bits += toU64(h.lengths[sym] & 31)
   }
   const bytes: u64 = (bits + toU64(7)) >> toU64(3)
   if (bytes > toU64(2147483647)) {
@@ -558,19 +574,17 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
  */
 export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): void => {
   hpackCheckWindow("hpackHuffmanEncode", src, off, len)
-  const lengths: i32[] = h.lengths
-  const codes: i32[] = h.codes
   let acc: u64 = 0
   // Unsigned: fewer than eight waiting bits plus one code of at most 31, so it never wraps.
   let bits: u32 = 0
   const end: i64 = toI64(off) + toI64(len)
   for (let i: i32 = off; i >= 0 && toI64(i) < end && i < toI32(src.length); i += 1) {
     const sym: i32 = toI32(src[i])
-    if (sym >= toI32(lengths.length) || sym >= toI32(codes.length)) {
+    if (sym >= toI32(h.lengths.length) || sym >= toI32(h.codes.length)) {
       break
     }
-    const n: u32 = toU32(lengths[sym] & 31)
-    acc = (acc << toU64(n)) | toU64(codes[sym])
+    const n: u32 = toU32(h.lengths[sym] & 31)
+    acc = (acc << toU64(n)) | toU64(h.codes[sym])
     bits += n
     while (bits >= 8) {
       bits -= 8
@@ -607,10 +621,6 @@ export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i3
  */
 export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): i32 => {
   hpackCheckWindow("hpackHuffmanDecode", src, off, len)
-  const firstCode: i32[] = h.firstCode
-  const countAt: i32[] = h.countAt
-  const baseRank: i32[] = h.baseRank
-  const symbols: i32[] = h.symbols
   // Unsigned, and `bits` never passes 30: the code is complete, so thirty bits always end a symbol,
   // and the row test below gives up before a 31st.
   let code: u32 = 0
@@ -624,23 +634,23 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
       const row: i32 = toI32(bits)
       if (
         row > HPACK_HUFFMAN_MAX_BITS ||
-        row >= toI32(firstCode.length) ||
-        row >= toI32(countAt.length) ||
-        row >= toI32(baseRank.length)
+        row >= toI32(h.firstCode.length) ||
+        row >= toI32(h.countAt.length) ||
+        row >= toI32(h.baseRank.length)
       ) {
         return HPACK_ERR_HUFFMAN_PADDING
       }
       if (row >= 5) {
         // Both sides fit an `i32`, so the `i64` difference cannot wrap.
-        const at: i64 = toI64(code) - toI64(firstCode[row])
-        if (at >= 0 && at < toI64(countAt[row])) {
-          // `at` is below `countAt[row]`, so in `[0, 2^31)`; the unsigned sum of two such cannot wrap,
+        const at: i64 = toI64(code) - toI64(h.firstCode[row])
+        if (at >= 0 && at < toI64(h.countAt[row])) {
+          // `at` is below `h.countAt[row]`, so in `[0, 2^31)`; the unsigned sum of two such cannot wrap,
           // and one past `symbols` matches no code.
-          const slot: i32 = toI32(toU32(baseRank[row]) + toU32(at))
-          if (slot < 0 || slot >= toI32(symbols.length)) {
+          const slot: i32 = toI32(toU32(h.baseRank[row]) + toU32(at))
+          if (slot < 0 || slot >= toI32(h.symbols.length)) {
             return HPACK_ERR_HUFFMAN_PADDING
           }
-          const sym: i32 = symbols[slot]
+          const sym: i32 = h.symbols[slot]
           if (sym === HPACK_EOS) {
             return HPACK_ERR_HUFFMAN_EOS
           }
