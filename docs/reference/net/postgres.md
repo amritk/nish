@@ -576,7 +576,7 @@ class PgBatchClock
 | `lastReason: i32` | Why the last batch started: the reason `check` last answered, `PG_CLOCK_WAIT` when it started without one. |
 | `lastSize: i32` | The size of the last batch started, 0 before the first. |
 | `lastWaitUs: i64` | How long the oldest item of the last batch waited, in microseconds. |
-| `arrived(nowUs: i64): boolean` | Records an item queued at `nowUs`; false when `queueSize` are waiting. A time before the last one given counts as the last one, so a clock that steps back cannot make an item older than its neighbours. |
+| `arrived(nowUs: i64): boolean` | Records an item queued at `nowUs`; false when `queueSize` are waiting. A time before the last one given counts as the last one, so a clock that steps back cannot make an item older than its neighbours. The clock's times run from 0 to 2^52 microseconds (about 142 years); a time outside that, here or in any other call, counts as the nearest end. |
 | `check(nowUs: i64, inFlight: i32): i32` | The reason a batch should start at `nowUs`, with `inFlight` batches (or groups) still running, or `PG_CLOCK_WAIT`. It only says; the program starts the batch when a connection is free, then calls `started`. |
 | `deadline(): i64` | When the oldest waiting item will have waited `maxWaitUs`. |
 | `started(size: i32, nowUs: i64): void` | Records a batch of the `size` oldest items started at `nowUs`, and moves the average toward it; the first batch sets it. Panics when `size` is below 1 or more than are waiting or than `maxCount`. |
