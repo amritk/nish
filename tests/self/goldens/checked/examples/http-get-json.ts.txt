@@ -17585,11 +17585,11 @@ function tlsHeldCopy(held: u8[], from: u8[]): void -> @nish.tlsHeldCopy
 function tlsHeldWindow(caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] -> @nish.tlsHeldWindow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hashOff
-  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  calls: nish_array_grow nish_panic nish_str_concat nish_str_from_i32
   pointer transcriptHash: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 window: u8[] (const)
-  local +1:12 j: i32 (let)
+  local +2:9 j: i32 (let)
 function tlsHeldCheck(caller: string, hashLength: i32, held: Secret<u8[]>): void -> @nish.tlsHeldCheck
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.expose$arr.u8$i32$fn.18.nish.tlsHeldLength nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
