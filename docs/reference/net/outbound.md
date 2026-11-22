@@ -231,7 +231,7 @@ The records, each sixteen address bytes and a two-byte port, reordered in place.
 
 <scalar-field name="count" type="i32" required>
 
-How many records `addresses` holds from its start; one past its end, or a negative count, keeps none of them.
+How many records `addresses` holds from its start; records past `addresses`' end are not read, and a negative count keeps none.
 
 </scalar-field>
 

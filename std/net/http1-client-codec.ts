@@ -1715,8 +1715,8 @@ const http1ClientBodyWindow = (p: Http1ResponseParser, after: i32): i32 => {
 }
 
 /**
- * The body bytes `maxBody` still allows: `maxBody - bodyTotal`. Unsigned:
- * both stay in 0 to 2^53, the constructor's clamp, so it does not wrap.
+ * The body bytes `maxBody` still allows: `maxBody - bodyTotal`, negative
+ * when a caller lowered `maxBody` under it (unsigned, then read signed).
  */
 const http1ClientRoom = (p: Http1ResponseParser): i64 => toI64(toU64(p.maxBody) - toU64(p.bodyTotal))
 

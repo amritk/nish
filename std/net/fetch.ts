@@ -1461,7 +1461,6 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
 
 // --- helpers -----------------------------------------------------------------
 
-/** A parser with the options' limits. */
 /**
  * `ms` milliseconds after `start` on the monotonic clock, or
  * `HTTP_CLIENT_NEVER` for a `start` outside [0, 2^62] or a negative `ms`,
@@ -1516,6 +1515,7 @@ const httpClientTlsPending = (conn: TlsRecordClient): i32 => {
   return end > start ? end - start : 0
 }
 
+/** A parser with the options' limits. */
 const httpClientParser = (options: HttpOptions): Http1ResponseParser =>
   new Http1ResponseParser(
     options.maxHeaderBytes,

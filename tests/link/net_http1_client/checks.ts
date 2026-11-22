@@ -1061,6 +1061,17 @@ export const http1ClientChecks = (): i32 => {
     '200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody "hello world"\nneeds more'
   );
   t.eqStr("the body read until close at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\n\r\nhello", closing()), '200 "OK" 1.1 close length -1 []\nbody "hello"\nclosed');
+  const lowered: Http1ResponseParser = limitedParser(toI32(3), toI32(5));
+  const loweredHead: u8[] = bytesOf("HTTP/1.1 200 OK\r\n\r\nhel");
+  expectAs(lowered, closing());
+  lowered.feed(loweredHead, zero, toI32(loweredHead.length));
+  t.eqI32("a body read until close, part-read: the head", lowered.next(), HTTP1_HEAD);
+  t.eqI32("a body read until close, part-read: three bytes", lowered.next(), HTTP1_BODY);
+  lowered.maxBody = toI64(1);
+  const loweredTail: u8[] = bytesOf("lo");
+  lowered.feed(loweredTail, zero, toI32(loweredTail.length));
+  lowered.next();
+  t.eqI32("maxBody lowered below the bytes read is over the limit, not unlimited", lowered.error, HTTP1_E_BODY_LIMIT);
   const trailer1: string = "Expires: never\r\n\r\n";
   atCap(t, "the trailer section", toI32(4), toI32(trailer1.length), `HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n${trailer1}`, plain(), HTTP1_E_TRAILER_LIMIT);
   t.eqStr(

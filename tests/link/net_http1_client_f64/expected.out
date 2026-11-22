@@ -233,6 +233,9 @@ PASS  a body read until close: one past it
 PASS  the Content-Length body at the limit, whole
 PASS  the chunked body at the limit, whole
 PASS  the body read until close at the limit, whole
+PASS  a body read until close, part-read: the head
+PASS  a body read until close, part-read: three bytes
+PASS  maxBody lowered below the bytes read is over the limit, not unlimited
 PASS  the trailer section: exactly at the limit
 PASS  the trailer section: one past it
 PASS  a Content-Length over the body limit on a response to HEAD is not refused
@@ -409,4 +412,4 @@ PASS  spans mode: past the last field, a name and a value are empty
 PASS  strings mode: after reset() the next response's head reads
 PASS  strings mode: reason is what reasonText() answers
 PASS  strings mode: reset() leaves no field of the response it cut behind
-http1-client: 411 passed, 0 failed, 0 skipped
+http1-client: 414 passed, 0 failed, 0 skipped

@@ -207,7 +207,7 @@ export const outboundAddressAllowed = (policy: OutboundPolicy, addr: u8[], off: 
  *
  * @param policy The policy each address is checked against, as `outboundAddressAllowed` checks it.
  * @param addresses The records, each sixteen address bytes and a two-byte port, reordered in place.
- * @param count How many records `addresses` holds from its start; one past its end, or a negative count, keeps none of them.
+ * @param count How many records `addresses` holds from its start; records past `addresses`' end are not read, and a negative count keeps none.
  * @returns How many records were kept, now `addresses`' first ones; 0 when every one was refused.
  */
 export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i32): i32 => {
