@@ -19823,6 +19823,16 @@ const DECLARED = [
     changelog: "postgres-carrier and postgres-async panic-free",
     why: "the program calls std/net/postgres-async.ts, whose sites are now proved or bounded by small helpers: `PgAsyncPool.live` is declared readonly, so the attribute groups renumber, and the frames the program's async functions keep change size",
   })),
+  ...[
+    "tests/link/std_postgres_batch_clock_config_panic/main.ts",
+    "tests/link/std_postgres_batch_clock_started_panic/main.ts",
+    "tests/link/std_postgres_batch_clock_turns_panic/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "postgres panic-free",
+    why: "the program declares std/net/postgres.ts's `PgBatchClock` methods, which gains the private `oldest` and `waited` helpers its ring sites are proved through, so the module declares two more methods, its attribute groups renumber and the values after them move",
+  })),
   {
     program: "tests/link/spawn_slot_proven/main.ts",
     file: "exit",
