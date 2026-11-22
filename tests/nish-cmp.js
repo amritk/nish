@@ -10132,6 +10132,10 @@ const HASH_MAC_KDF_WHY = Object.fromEntries([
     `${name}.ll`,
     `std/crypto/sha512.ts's engine absorbs a long array whole and finishes into a caller's array, so the ${name}.ll module declares its new signatures`,
   ]),
+  ...["client", "tls"].map((name) => [
+    `${name}.ll`,
+    `std/crypto/sha256.ts's hasher gains updateAll and ct.ts's timingSafeEqualAt loses its panic attributes, so the ${name}.ll module declares the new signatures and renumbers its attribute groups`,
+  ]),
   [
     "ct.ll",
     "std/crypto/ct.ts's timingSafeEqual and timingSafeEqualAt read under guards the prover discharges, so the ct.ll module a program reaching nish/crypto/ct writes drops its nish_panic_index calls and renumbers its values",
@@ -10142,6 +10146,7 @@ const HASH_MAC_KDF_WHY = Object.fromEntries([
  * go, so each of them moves. No corpus program's own module is named ct.
  */
 const HASH_MAC_KDF_CT_PROGRAMS = [
+  "bench/std-http1.ts",
   "bench/http-app-carrier.ts",
   "bench/http1-request/main.ts",
   "bench/http1-server.ts",
@@ -11111,6 +11116,10 @@ const HASH_MAC_KDF_MOVES = [
   {
     files: ["hkdf.ll", "hmac.ll", "record.ll", "std-net-tls-record.ll"],
     movedPrograms: ["bench/std-net-tls-record.ts"],
+  },
+  {
+    files: ["client.ll", "hkdf.ll", "hmac.ll", "record.ll", "tls.ll"],
+    movedPrograms: ["bench/std-http1.ts"],
   },
   { files: ["ct.ll"], movedPrograms: HASH_MAC_KDF_CT_PROGRAMS },
 ]
