@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9866,
+  "total": 9315,
   "explicit": {
-    "kept": 343,
-    "toFix": 138
+    "kept": 341,
+    "toFix": 136
   },
   "modules": {
     "std/base64.ts": {
@@ -248,13 +248,9 @@
       "slice": 4
     },
     "std/net/fetch.ts": {
-      "array-length": 9,
-      "index": 20,
       "io-exit": 3,
-      "overflow": 64,
       "panic": 1,
-      "pop": 2,
-      "slice": 13
+      "slice": 8
     },
     "std/net/grpc.ts": {
       "array-length": 1,
@@ -300,10 +296,7 @@
       "slice": 1
     },
     "std/net/http1-client-codec.ts": {
-      "array-length": 4,
-      "index": 42,
-      "overflow": 108,
-      "panic": 3
+      "panic": 1
     },
     "std/net/http1-codec.ts": {
       "array-length": 6,
@@ -369,13 +362,6 @@
       "index": 4,
       "overflow": 7,
       "slice": 6
-    },
-    "std/net/outbound.ts": {
-      "array-length": 2,
-      "index": 25,
-      "overflow": 28,
-      "panic": 2,
-      "slice": 2
     },
     "std/net/postgres-async.ts": {
       "array-length": 31,
@@ -493,17 +479,11 @@
       "slice": 4
     },
     "std/net/tls-tcp.ts": {
-      "index": 44,
       "io-exit": 3,
-      "overflow": 12,
       "slice": 5
     },
     "std/net/tls.ts": {
-      "array-length": 31,
-      "divide": 1,
-      "index": 23,
-      "io-exit": 1,
-      "overflow": 65
+      "io-exit": 1
     },
     "std/net/tls/client.ts": {
       "array-length": 3,
@@ -547,10 +527,6 @@
       "index": 1
     },
     "std/net/upstream.ts": {
-      "array-length": 6,
-      "divide": 6,
-      "index": 21,
-      "overflow": 27,
       "panic": 4,
       "slice": 3
     },
@@ -1478,16 +1454,6 @@
       "module": "std/net/http3.ts",
       "function": "Http3Connection.constructor",
       "reason": "config caps, QUIC stream limits, connection window and datagram setting must be mutually consistent; all the program's static configuration"
-    },
-    {
-      "module": "std/net/outbound.ts",
-      "function": "outboundAddressPublic",
-      "reason": "sixteen address bytes must fit at off in addr; the caller controls the offset"
-    },
-    {
-      "module": "std/net/outbound.ts",
-      "function": "outboundFilter",
-      "reason": "count records must fit in addresses; the caller controls count against the array it passes"
     },
     {
       "module": "std/net/postgres-async.ts",
