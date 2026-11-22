@@ -87,7 +87,7 @@
  */
 
 import { Secret, expose, exposeWith, wipe } from "nish:secret"
-import { SHA512_SIZE, Sha512 } from "nish/crypto/sha512"
+import { Sha512 } from "nish/crypto/sha512"
 import {
   f25519Add,
   f25519Add64,
@@ -95,6 +95,7 @@ import {
   f25519Copy,
   f25519Decode,
   f25519Encode,
+  f25519EncodeInto,
   f25519Invert,
   f25519Mul,
   f25519Mul64,
@@ -125,6 +126,9 @@ const ED25519_HALF: i32 = 32
 
 /** The limbs of one table entry: four field elements of ten. */
 const ED25519_ENTRY: i32 = 40
+
+/** The limbs of the table of `1 p` to `8 p`: eight entries. */
+const ED25519_TABLE: i32 = 8 * ED25519_ENTRY
 
 /** d = -121665/121666, the curve's constant, little-endian (RFC 8032 §5.1). */
 const ed25519D = (): i64[] => {
@@ -355,23 +359,51 @@ const ed25519SetIdentity = (out: Ed25519Point): void => {
   f25519Copy(out.t, f25519Zero())
 }
 
+/**
+ * `dst[j] ^= mask & (dst[j] ^ src[from + j])` for the ten limbs `j`: `src`'s
+ * limbs from `from` where `mask` is all ones, `dst` kept where it is zero.
+ * Each index is tested against its array as the walk goes, which every caller
+ * here passes; the test reads only public lengths, never `mask`.
+ */
+const ed25519Blend = (dst: i64[], src: i64[], from: i32, mask: i64): void => {
+  let k: i32 = from
+  let j: i32 = 0
+  while (j < 10 && j < toI32(dst.length) && k >= 0 && k < toI32(src.length)) {
+    dst[j] = dst[j] ^ (mask & (dst[j] ^ src[k]))
+    k += 1
+    j += 1
+  }
+}
+
+/**
+ * Copies the ten limbs of `src` into `table` from `at`, each index tested
+ * against its array as the walk goes.
+ */
+const ed25519Put = (table: i64[], at: i32, src: i64[]): void => {
+  let k: i32 = at
+  let j: i32 = 0
+  while (j < 10 && j < toI32(src.length) && k >= 0 && k < toI32(table.length)) {
+    table[k] = src[j]
+    k += 1
+    j += 1
+  }
+}
+
 /** Stores the cached `q` as entry `i` of `table`. */
 const ed25519TableStore = (table: i64[], i: i32, q: Ed25519Cached): void => {
-  if (toI32(table.length) < 8 * ED25519_ENTRY || i < 0 || i >= 8 || toI32(q.ypx.length) < 10) {
+  if (i < 0 || i >= 8) {
     return
   }
   const at: i32 = i * ED25519_ENTRY
-  for (let j: i32 = 0; j < 10; j++) {
-    table[at + j] = q.ypx[j]
-    table[at + 10 + j] = q.ymx[j]
-    table[at + 20 + j] = q.t2d[j]
-    table[at + 30 + j] = q.z2[j]
-  }
+  ed25519Put(table, at, q.ypx)
+  ed25519Put(table, at + 10, q.ymx)
+  ed25519Put(table, at + 20, q.t2d)
+  ed25519Put(table, at + 30, q.z2)
 }
 
 /** `1 p` to `8 p`, cached, as eight entries of forty limbs. */
 const ed25519Table = (p: Ed25519Point, s: Ed25519Scratch): i64[] => {
-  const table: i64[] = new Array<i64>(8 * ED25519_ENTRY)
+  const table: i64[] = new Array<i64>(ED25519_TABLE)
   const one = new Ed25519Cached()
   ed25519ToCached(one, p, s)
   ed25519TableStore(table, 0, one)
@@ -421,9 +453,6 @@ const ed25519Digits = (k: u8[]): i64[] => {
  * by a masked swap and a masked select of the negation.
  */
 const ed25519Select = (out: Ed25519Cached, table: i64[], digit: i64, s: Ed25519Scratch): void => {
-  if (toI32(table.length) < 8 * ED25519_ENTRY || toI32(out.ypx.length) < 10 || toI32(s.a.length) < 10) {
-    return
-  }
   const sign: i64 = digit >> toI64(63)
   const magnitude: i64 = f25519Sub64(digit ^ sign, sign)
   f25519Copy(out.ypx, f25519Small(toI64(1)))
@@ -435,18 +464,16 @@ const ed25519Select = (out: Ed25519Cached, table: i64[], digit: i64, s: Ed25519S
     // the only difference here whose sign bit is set.
     const hit: i64 = f25519Sub64(magnitude ^ toI64(i + 1), toI64(1)) >> toI64(63)
     const at: i32 = i * ED25519_ENTRY
-    for (let j: i32 = 0; j < 10; j++) {
-      out.ypx[j] = out.ypx[j] ^ (hit & (out.ypx[j] ^ table[at + j]))
-      out.ymx[j] = out.ymx[j] ^ (hit & (out.ymx[j] ^ table[at + 10 + j]))
-      out.t2d[j] = out.t2d[j] ^ (hit & (out.t2d[j] ^ table[at + 20 + j]))
-      out.z2[j] = out.z2[j] ^ (hit & (out.z2[j] ^ table[at + 30 + j]))
-    }
+    ed25519Blend(out.ypx, table, at, hit)
+    ed25519Blend(out.ymx, table, at + 10, hit)
+    ed25519Blend(out.t2d, table, at + 20, hit)
+    ed25519Blend(out.z2, table, at + 30, hit)
   }
   f25519Swap(out.ypx, out.ymx, sign & toI64(1))
-  for (let j: i32 = 0; j < 10; j++) {
+  for (let j: i32 = 0; j < 10 && j < toI32(out.t2d.length) && j < toI32(s.a.length); j++) {
     s.a[j] = f25519Sub64(toI64(0), out.t2d[j])
-    out.t2d[j] = out.t2d[j] ^ (sign & (out.t2d[j] ^ s.a[j]))
   }
+  ed25519Blend(out.t2d, s.a, 0, sign)
 }
 
 /**
@@ -554,7 +581,8 @@ const ed25519Decode = (bytes: u8[], s: Ed25519Scratch): Ed25519Point | null => {
   }
   const y: i64[] = f25519Decode(bytes)
   // f25519Decode takes y modulo p; re-encoding refuses every y of p or more.
-  const canonical: u8[] = f25519Encode(y)
+  const canonical: u8[] = new Array<u8>(32)
+  f25519EncodeInto(canonical, y)
   canonical[31] = canonical[31] | (bytes[31] & toU8(0x80))
   if (!ed25519SameBytes(canonical, bytes, ED25519_HALF)) {
     return null
@@ -589,7 +617,8 @@ const ed25519Decode = (bytes: u8[], s: Ed25519Scratch): Ed25519Point | null => {
     f25519Mul(x, x, ed25519SqrtM1())
   }
 
-  const xBytes: u8[] = f25519Encode(x)
+  const xBytes: u8[] = new Array<u8>(32)
+  f25519EncodeInto(xBytes, x)
   if ((xBytes[0] & toU8(1)) !== sign) {
     if (ed25519SameBytes(xBytes, new Array<u8>(32), ED25519_HALF)) {
       return null
@@ -730,7 +759,8 @@ const ed25519Expand = (seed: u8[]): u8[] => {
   hasher.update(seed, ED25519_FROM, ED25519_SEED_SIZE)
   const h: u8[] = hasher.digest()
   ed25519WipeHasher(hasher)
-  if (toI32(h.length) < SHA512_SIZE) {
+  // SHA-512's 64 bytes, as a literal the prover reads for h[0] and h[31].
+  if (toI32(h.length) < 64) {
     return h
   }
   h[0] = h[0] & toU8(248)
