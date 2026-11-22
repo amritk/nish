@@ -81,7 +81,7 @@
  *
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
-import { copyBytes } from "nish/bytes"
+import { copyBytes, tryCopyBytes } from "nish/bytes"
 import { urlIsHostPort } from "nish/net/url"
 import {
   and,
@@ -463,13 +463,18 @@ export class Http1Parser {
     if (this.state === HTTP1_S_CLOSED || this.state === HTTP1_S_ERROR) {
       return
     }
-    http1Reserve(this, len)
+    if (!http1Reserve(this, len)) {
+      http1Fail(this, 413, "more than 2^30 bytes buffered")
+      return
+    }
     const buf: u8[] = this.buf
     const at: i32 = this.end
     // One move: http1Reserve made room for `len` bytes at `at`, and the
-    // window was checked above.
-    copyBytes(buf, at, data, off, len)
-    this.end = at + len
+    // window was checked above, so it always succeeds.
+    if (tryCopyBytes(buf, at, data, off, len)) {
+      // In range, because the move fit: `at + len` is at most `buf.length`.
+      this.end = toI32(toU32(at) + toU32(len))
+    }
   }
 
   /**
@@ -489,19 +494,16 @@ export class Http1Parser {
    * @returns the first such field's value with its surrounding whitespace trimmed, or `null` when the request has none
    */
   header(name: string): string | null {
-    const i: i32 = this.headerIndex(name)
-    if (i < 0) {
+    const spans: i32[] = this.spans
+    const k: i32 = http1FieldSpans(this, name)
+    if (k < 0 || k >= toI32(spans.length) - 3) {
       return null
     }
+    const i: i32 = k >>> 2
     if (this.keepText && i < toI32(this.values.length)) {
       return this.values[i]
     }
-    const spans: i32[] = this.spans
-    const at: i32 = 4 * i
-    if (at + 3 >= toI32(spans.length)) {
-      return null
-    }
-    return http1Text(this.head, spans[at + 2], spans[at + 3], false)
+    return http1Text(this.head, spans[k + 2], spans[k + 3], false)
   }
 
   /**
@@ -510,14 +512,8 @@ export class Http1Parser {
    * @returns which field it is, so its spans are `spans[4 * i ..]`, or -1 when the request has none
    */
   headerIndex(name: string): i32 {
-    const spans: i32[] = this.spans
-    const count: i32 = this.headerCount
-    for (let i: i32 = 0; i < count && 4 * i + 1 < toI32(spans.length); i += 1) {
-      if (http1HeadIs(this.head, spans[4 * i], spans[4 * i + 1], name, true)) {
-        return i
-      }
-    }
-    return -1
+    const k: i32 = http1FieldSpans(this, name)
+    return k < 0 ? -1 : k >>> 2
   }
 
   /**
@@ -527,12 +523,12 @@ export class Http1Parser {
    * @returns true when that field exists and its trimmed value is `value`, with nothing allocated
    */
   headerIs(name: string, value: string): boolean {
-    const i: i32 = this.headerIndex(name)
     const spans: i32[] = this.spans
-    if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+    const k: i32 = http1FieldSpans(this, name)
+    if (k < 0 || k >= toI32(spans.length) - 3) {
       return false
     }
-    return http1HeadIs(this.head, spans[4 * i + 2], spans[4 * i + 3], value, false)
+    return http1HeadIs(this.head, spans[k + 2], spans[k + 3], value, false)
   }
 
   /**
@@ -565,19 +561,23 @@ export class Http1Parser {
       return false
     }
     const spans: i32[] = this.spans
+    const n: i32 = toI32(spans.length)
     let found: i32 = -1
-    for (let i: i32 = 0; i < this.headerCount && 4 * i + 1 < toI32(spans.length); i += 1) {
-      if (http1HeadIs(this.head, spans[4 * i], spans[4 * i + 1], "upgrade", false)) {
+    // Field `i` has its spans at `spans[k ..]`, `k` four times `i`.
+    let k: i32 = 0
+    for (let i: i32 = 0; i < this.headerCount && k < n - 3; i += 1) {
+      if (http1HeadIs(this.head, spans[k], spans[k + 1], "upgrade", false)) {
         if (found >= 0) {
           return false
         }
-        found = i
+        found = k
       }
+      k += 4
     }
-    if (found < 0 || 4 * found + 3 >= toI32(spans.length)) {
+    if (found < 0 || found >= n - 3) {
       return false
     }
-    return http1HeadIs(this.head, spans[4 * found + 2], spans[4 * found + 3], protocol, true)
+    return http1HeadIs(this.head, spans[found + 2], spans[found + 3], protocol, true)
   }
 
   /**
@@ -597,7 +597,8 @@ export class Http1Parser {
    * @returns the count of unread input bytes, at `buf[start ..]`
    */
   buffered(): i32 {
-    return this.end - this.start
+    // `start` never passes `end`, and both are offsets into `buf`.
+    return toI32(toU32(this.end) - toU32(this.start))
   }
 
   /**
@@ -605,16 +606,12 @@ export class Http1Parser {
    * @returns a copy the caller owns of the bytes that belong to the next protocol, empty when none arrived yet
    */
   upgradeBytes(): u8[] {
-    let n: i32 = this.end - this.start
-    if (n < 0) {
-      n = 0
-    }
-    const out: u8[] = new Array<u8>(n)
-    const outLength: i32 = toI32(out.length)
     const buf: u8[] = this.buf
-    const from: i32 = this.start
-    for (let k: i32 = 0; k < outLength; k += 1) {
-      out[k] = buf[from + k]
+    const to: i32 = this.end
+    // Built by `push`, so no length is computed for `new Array`.
+    const out: u8[] = []
+    for (let k: i32 = this.start; k >= 0 && k < toI32(buf.length) && k < to; k += 1) {
+      out.push(buf[k])
     }
     return out
   }
@@ -656,35 +653,68 @@ export const HTTP1_FIRST_HEAD: i32 = 256
 /** The spans a parser makes at its first field line: four per field, room for sixteen. */
 const HTTP1_FIRST_SPANS: i32 = 64
 
-/** Makes room for `len` more bytes at `p.end`, moving the live bytes down first. */
-const http1Reserve = (p: Http1Parser, len: i32): void => {
+/** The largest input buffer a parser grows to: 2^30 bytes. */
+const HTTP1_MOST_INPUT: i32 = 1073741824
+
+/**
+ * Makes room for `len` more bytes at `p.end`, moving the live bytes down
+ * first. False when that would take a buffer past `HTTP1_MOST_INPUT`, which
+ * the caller refuses.
+ */
+const http1Reserve = (p: Http1Parser, len: i32): boolean => {
   const old: u8[] = p.buf
-  const capacity: i32 = toI32(old.length)
-  if (len <= capacity - p.end) {
-    return
+  const capacity: u32 = toU32(old.length)
+  // `len` is non-negative and `start <= end <= buf.length` always, so these
+  // unsigned counts are the real ones and add up without wrapping in u32.
+  const want: u32 = toU32(len)
+  const end: u32 = toU32(p.end)
+  if (want <= capacity - end) {
+    return true
   }
-  const live: i32 = p.end - p.start
-  let size: i32 = capacity < HTTP1_FIRST_INPUT ? HTTP1_FIRST_INPUT : capacity
-  while (size - live < len) {
-    if (size > 1073741823) {
-      panic("Http1Parser: more than 2^31 - 1 bytes buffered")
-    }
+  const from: i32 = p.start
+  const live: u32 = end - toU32(from)
+  if (want > toU32(HTTP1_MOST_INPUT) - live) {
+    return false
+  }
+  let size: u32 = capacity < toU32(HTTP1_FIRST_INPUT) ? toU32(HTTP1_FIRST_INPUT) : capacity
+  while (size - live < want) {
     size = size * 2
   }
   // A fresh array when it has to grow, and the same one otherwise: either way
   // the live bytes move to the front, and every index into them moves too.
-  const buf: u8[] = size === capacity ? old : new Array<u8>(size)
-  const from: i32 = p.start
-  if (live > 0) {
-    // One move, overlapping when the buffer is the same one.
-    copyBytes(buf, 0, old, from, live)
+  // One move, overlapping when the buffer is the same one; the offsets keep it
+  // in range.
+  const buf: u8[] = size === capacity ? old : http1Grown(old, from, live, size)
+  if (size === capacity) {
+    tryCopyBytes(buf, 0, old, from, toI32(live))
   }
   p.buf = buf
-  p.lineStart -= from
-  p.lineEnd -= from
-  p.scan -= from
+  p.lineStart = toI32(toU32(p.lineStart) - toU32(from))
+  p.lineEnd = toI32(toU32(p.lineEnd) - toU32(from))
+  p.scan = toI32(toU32(p.scan) - toU32(from))
   p.start = 0
-  p.end = live
+  p.end = toI32(live)
+  return true
+}
+
+/**
+ * A buffer of `size` bytes whose first `live` are `old[from ..]`. Built by
+ * `push`, so no length is computed for `new Array`; the first input buffer,
+ * `HTTP1_FIRST_INPUT` bytes, is the common one and copies nothing.
+ */
+const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
+  if (old.length === 0 && size === toU32(HTTP1_FIRST_INPUT)) {
+    return new Array<u8>(HTTP1_FIRST_INPUT)
+  }
+  const buf: u8[] = []
+  const to: i32 = toI32(toU32(from) + live)
+  for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to; k += 1) {
+    buf.push(old[k])
+  }
+  while (toU32(buf.length) < size) {
+    buf.push(0)
+  }
+  return buf
 }
 
 /** Refuses the input with `status`. Answers `HTTP1_ERROR`, so a caller can `return` it. */
@@ -694,6 +724,25 @@ const http1Fail = (p: Http1Parser, status: i32, reason: string): i32 => {
   p.reason = reason
   p.keepAlive = false
   return HTTP1_ERROR
+}
+
+/**
+ * Where the first field named `name` (any case) has its spans: `k` such that
+ * the field is `spans[k .. k + 4)`, four times its index, or -1 when the
+ * request has none.
+ */
+const http1FieldSpans = (p: Http1Parser, name: string): i32 => {
+  const spans: i32[] = p.spans
+  const count: i32 = p.headerCount
+  const n: i32 = toI32(spans.length)
+  let k: i32 = 0
+  for (let i: i32 = 0; i < count && k < n - 3; i += 1) {
+    if (http1HeadIs(p.head, spans[k], spans[k + 1], name, true)) {
+      return k
+    }
+    k += 4
+  }
+  return -1
 }
 
 /** Clears the per-request fields and waits for a request line. */
