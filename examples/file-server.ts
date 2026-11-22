@@ -1,8 +1,11 @@
-// Opt-out (`--allow-panics`): the HTTP calls reach panic sites in
-// `std/net/http1-codec` and `std/net/http1-server`, and the slice of
-// `fileReadAt`'s window keeps a range check the checker cannot yet discharge.
-// Follow-up: make those modules panic-free and teach the prover `fileReadAt`'s
-// bound, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): `respond`, `methodIs` and `end` reach overflow
+// sites in `std/net/http1-codec` (WP80 S3); `readable` and `connection` reach
+// `Http1Config`'s cap check and `write` its caller-window check, the panics
+// `std/net/http1-server` keeps for a program's own mistake (WP80 S4); the
+// windows of `netRead`/`netWrite` behind `writable`, `next` and `flush`, and of
+// `fileReadAt` here, keep a range check no proof removes yet (a `src/` prover
+// gap). Follow-up: once those are gone, build this file without
+// `--allow-panics`.
 //
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each

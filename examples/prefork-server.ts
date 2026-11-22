@@ -1,7 +1,12 @@
-// Opt-out (`--allow-panics`): calls into `std/net/http1-codec`,
-// `std/net/http1-server` and `std/net/prefork` reach their panic sites; this
-// file keeps none of its own. Follow-up: make those modules panic-free, then
-// build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): `preforkArgs` and `preforkWorkers` reach panic
+// sites in `std/net/prefork` (WP80 S2); `respond` and `end` reach overflow
+// sites in `std/net/http1-codec` (WP80 S3); `readable` and `connection` reach
+// `Http1Config`'s cap check and `write` its caller-window check, the panics
+// `std/net/http1-server` keeps for a program's own mistake (WP80 S4); the
+// windows of `netRead`/`netWrite` behind `writable`, `next` and `flush` keep a
+// range check no proof removes yet (a `src/` prover gap). This file keeps none
+// of its own. Follow-up: once those are gone, build this file without
+// `--allow-panics`.
 //
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker
 // process per core, each binds its own SO_REUSEPORT listener on the port, and
