@@ -406,15 +406,16 @@ wrapping deadline would change what `fail`, `tick` and `nextDeadlineNanos`
 report.
 
 Explicit panics go from 14 to 21 in `dns-config.ts` and from 3 to 4 in
-`dns.ts`; `dns-message.ts` and `dns-resolver.ts` keep theirs. Ten are new
-and three are gone, each new one a guard on an argument only the caller can
+`dns.ts`, 17 to 25 across the two; `dns-message.ts` and `dns-resolver.ts`
+keep theirs. Eleven are new, ten in `dns-config.ts` and one in `dns.ts`, and
+three are gone, each new one a guard on an argument only the caller can
 get wrong, which no byte of a reply or a file reaches:
 
 - `dnsParseIpv4: out has no room for four bytes from at`, and
   `dnsParseIpv6: out is shorter than 16 bytes` at its two writes: the address
   parsers' output window, which every caller in these modules sizes first.
-- `dnsParseAddress: the window is outside the array`: the input window,
-  checked where `dnsLineEnd` and `dnsWordEnd` checked it before.
+- `dnsParseAddress: the window is outside the array`: `dnsParseAddressVia`'s
+  input window.
 - `dnsHostsFind: hosts is not a table dnsParseHosts filled`, at four reads,
   and `dnsHostsFind: out has no room for max addresses`, at two writes: a
   `DnsHosts` whose counts do not fit its own arrays, which only a write to
@@ -427,7 +428,8 @@ The three gone are `dnsLineEnd: the window is outside the array` and
 `dnsWordEnd: the window is outside the array`, with the helpers folded into
 their callers, and `dnsFallbackServers`', below.
 
-One panic is gone. `dnsParseResolvConf` with no nameserver line writes
+The `dnsFallbackServers` panic is gone because its cause is fixed.
+`dnsParseResolvConf` with no nameserver line writes
 127.0.0.1 and ::1 into `config.servers`, and panicked
 (`dnsFallbackServers: servers has no room for two addresses`) when the
 caller had replaced that array with one too short for two addresses. It now
