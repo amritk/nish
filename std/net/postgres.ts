@@ -3681,18 +3681,91 @@ class PgPoolSlot {
     this.leads = new Array<i32>(ring)
   }
 
-  /** @internal Used by `PgPool.dispatch` and `PgPool.next` in this module. */
-  push(ticket: i32, leads: i32): void {
-    const at: i32 = (this.head + this.count) % toI32(this.tickets.length)
-    this.tickets[at] = ticket
-    this.leads[at] = leads
-    this.count += 1
+  /**
+   * Records a group at the ring's tail; false, and nothing recorded, only when the ring is full,
+   * which the pool never lets it be: `dispatch` hands a slot a group only while its ring has room.
+   * @internal Used by `PgPool.dispatch` and `PgPool.next` in this module.
+   */
+  push(ticket: i32, leads: i32): boolean {
+    const tickets: i32[] = this.tickets
+    const leadCounts: i32[] = this.leads
+    const head: i32 = this.head
+    const count: i32 = this.count
+    const size: i32 = toI32(tickets.length)
+    // `head` is a slot of the ring and `count` below its size; the test states those bounds for the prover.
+    if (count < 0 || count >= size || head < 0 || head >= size) {
+      return false
+    }
+    // Below twice the ring's size, at most 2048.
+    const sum: i64 = toI64(head) + toI64(count)
+    const at: i32 = toI32(sum < toI64(size) ? sum : sum - toI64(size))
+    // `at` is a slot of the ring, which both arrays are; the test states that for the prover.
+    if (at < 0 || at >= toI32(tickets.length) || at >= toI32(leadCounts.length)) {
+      return false
+    }
+    tickets[at] = ticket
+    leadCounts[at] = leads
+    this.count = count + 1
+    return true
   }
 
-  /** @internal Used by `PgPool.next` in this module. */
+  /**
+   * Drops the oldest group in flight; nothing when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
   pop(): void {
-    this.head = (this.head + 1) % toI32(this.tickets.length)
-    this.count -= 1
+    const head: i32 = this.head
+    const count: i32 = this.count
+    const size: i32 = toI32(this.tickets.length)
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (count <= 0 || head < 0 || head >= size) {
+      return
+    }
+    const after: i32 = head + 1
+    this.head = after === size ? 0 : after
+    this.count = count - 1
+  }
+
+  /**
+   * The ticket of the oldest group in flight; -1 when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
+  oldest(): i32 {
+    const tickets: i32[] = this.tickets
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(tickets.length)) {
+      return -1
+    }
+    return tickets[head]
+  }
+
+  /**
+   * How many of the pool's prepares still lead the oldest group in flight; 0 when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
+  leading(): i32 {
+    const leadCounts: i32[] = this.leads
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(leadCounts.length)) {
+      return 0
+    }
+    return leadCounts[head]
+  }
+
+  /**
+   * Sets how many prepares lead the oldest group in flight; nothing when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
+  setLeading(n: i32): void {
+    const leadCounts: i32[] = this.leads
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(leadCounts.length)) {
+      return
+    }
+    leadCounts[head] = n
   }
 }
 
@@ -3842,14 +3915,29 @@ export class PgPool {
    *   after 2^31-1; or `PG_POOL_FULL`.
    */
   request(): i32 {
-    const room: i32 = toI32(this.queue.length)
-    if (this.queueCount === room) {
+    const queue: i32[] = this.queue
+    const room: i32 = toI32(queue.length)
+    const head: i32 = this.queueHead
+    const count: i32 = this.queueCount
+    // Full at `count === room`; below that, `count` is not negative and `head` is a slot of the
+    // ring, which the test states for the prover.
+    if (count < 0 || count >= room || head < 0 || head >= room) {
+      return PG_POOL_FULL
+    }
+    // Below twice the queue's size, at most 2^21.
+    const sum: i64 = toI64(head) + toI64(count)
+    const at: i32 = toI32(sum < toI64(room) ? sum : sum - toI64(room))
+    // `at` is a slot of the ring; the test states that bound for the prover.
+    if (at < 0 || at >= toI32(queue.length)) {
       return PG_POOL_FULL
     }
     const ticket: i32 = this.nextTicket
-    this.nextTicket = ticket === 2147483647 ? 0 : ticket + 1
-    this.queue[(this.queueHead + this.queueCount) % room] = ticket
-    this.queueCount += 1
+    this.nextTicket = 0
+    if (ticket < 2147483647) {
+      this.nextTicket = ticket + 1
+    }
+    queue[at] = ticket
+    this.queueCount = count + 1
     return ticket
   }
 
@@ -3871,7 +3959,13 @@ export class PgPool {
   inFlight(): i32 {
     let n: i32 = 0
     for (const slot of this.slots) {
-      n += slot.count
+      const count: i32 = slot.count
+      // A slot's ring holds at most `maxInFlight`, at most 1024, and the pool at most 1024
+      // slots, so the sum stays at most 2^20; the test states those bounds for the prover.
+      if (count < 0 || count > 1024 || n > 1047552) {
+        return n
+      }
+      n += count
     }
     return n
   }
@@ -3893,47 +3987,74 @@ export class PgPool {
     if (this.building >= 0 || this.queueCount === 0) {
       return PG_POOL_NONE
     }
+    const slots: PgPoolSlot[] = this.slots
     const cap: i32 = this.config.maxInFlight
     const pack: boolean = this.config.pack
     let best: i32 = -1
     let load: i32 = 0
     let starting: i32 = 0
     let idle: i32 = -1
-    for (let s: i32 = 0; s < this.size; s++) {
-      const slot: PgPoolSlot = this.slots[s]
+    for (let s: i32 = 0; s < toI32(slots.length); s++) {
+      const slot: PgPoolSlot = slots[s]
       const conn: PgConnection | null = slot.conn
       if (slot.state === PG_SLOT_READY && conn !== null) {
-        if (conn.inFlight < cap && (best < 0 || (!pack && conn.inFlight < load))) {
+        // The slot's ring must have room too: a group dropped on a failed connection stays on
+        // it until the failure drains it.
+        if (
+          conn.inFlight < cap &&
+          slot.count < toI32(slot.tickets.length) &&
+          (best < 0 || (!pack && conn.inFlight < load))
+        ) {
           best = s
           load = conn.inFlight
         }
       } else if (slot.state === PG_SLOT_WANTED || slot.state === PG_SLOT_STARTING) {
-        starting += 1
+        // At most one for each slot, so below the slot count; the test states that for the prover.
+        if (starting < toI32(slots.length)) {
+          starting += 1
+        }
       } else if (slot.state === PG_SLOT_IDLE && idle < 0) {
         idle = s
       }
     }
     if (best < 0) {
-      if (idle >= 0 && toI64(this.queueCount) > toI64(starting) * toI64(cap)) {
-        this.slots[idle].state = PG_SLOT_WANTED
+      const spare: PgPoolSlot | null = this.slotAt(idle)
+      if (spare !== null && toI64(this.queueCount) > toI64(starting) * toI64(cap)) {
+        spare.state = PG_SLOT_WANTED
       }
       return PG_POOL_NONE
     }
-    const ticket: i32 = this.queue[this.queueHead]
-    this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
-    this.queueCount -= 1
-    const slot: PgPoolSlot = this.slots[best]
-    const conn: PgConnection = this.connection(best)
-    let leads: i32 = 0
-    while (slot.queued < toI32(this.names.length)) {
-      const k: i32 = slot.queued
-      if (!conn.prepare(this.names[k], this.sqls[k], this.types[k])) {
-        break
-      }
-      slot.queued += 1
-      leads += 1
+    const slot: PgPoolSlot | null = this.slotAt(best)
+    const ticket: i32 = this.dequeue()
+    // `best` is a slot the loop found, and a request waits; the test states both for the prover.
+    if (slot === null || ticket < 0) {
+      return PG_POOL_NONE
     }
-    slot.push(ticket, leads)
+    const conn: PgConnection = this.connection(best)
+    const names: string[] = this.names
+    const sqls: string[] = this.sqls
+    const types: i32[][] = this.types
+    const start: i32 = slot.queued
+    let k: i32 = start
+    // The three lists grow together, so one bound holds for all; the tests state it for each.
+    while (
+      k >= 0 &&
+      k < toI32(names.length) &&
+      k < toI32(sqls.length) &&
+      k < toI32(types.length) &&
+      conn.prepare(names[k], sqls[k], types[k])
+    ) {
+      k += 1
+    }
+    slot.queued = k
+    let leads: i32 = 0
+    if (start >= 0 && k >= 0 && k >= start) {
+      leads = k - start
+    }
+    // The loop above chose `best` only with room on its ring; the test states that for the prover.
+    if (!slot.push(ticket, leads)) {
+      return PG_POOL_NONE
+    }
     this.building = best
     this.ticket = ticket
     return best
@@ -3952,17 +4073,24 @@ export class PgPool {
     if (s < 0) {
       return false
     }
-    const slot: PgPoolSlot = this.slots[s]
+    const slot: PgPoolSlot | null = this.slotAt(s)
+    // `building` names a slot `dispatch` handed a request to; the test states that for the prover.
+    if (slot === null) {
+      this.building = -1
+      return false
+    }
     const conn: PgConnection = this.connection(s)
     if (conn.sync()) {
       this.building = -1
       return true
     }
-    if (conn.inFlight < slot.count) {
+    const count: i32 = slot.count
+    if (conn.inFlight < count) {
       // No message opened the group. A failed connection reports the request
       // lost with the rest; a live one would never answer it, so it is dropped.
-      if (conn.failure === PG_ERR_NONE) {
-        slot.count -= 1
+      // The request is on the slot's ring, so `count` is above 0; the test states that for the prover.
+      if (conn.failure === PG_ERR_NONE && count > 0) {
+        slot.count = count - 1
       }
       this.building = -1
     }
@@ -3975,8 +4103,9 @@ export class PgPool {
    * @returns The lowest wanted slot, or `PG_POOL_NONE` when no slot is wanted.
    */
   wanted(): i32 {
-    for (let s: i32 = 0; s < this.size; s++) {
-      if (this.slots[s].state === PG_SLOT_WANTED) {
+    const slots: PgPoolSlot[] = this.slots
+    for (let s: i32 = 0; s < toI32(slots.length); s++) {
+      if (slots[s].state === PG_SLOT_WANTED) {
         return s
       }
     }
@@ -3995,7 +4124,8 @@ export class PgPool {
    *   `PgConnection` constructor takes them; a new one for every connection.
    */
   connect(slot: i32, nonce: u8[]): void {
-    if (slot < 0 || slot >= this.size || this.slots[slot].state !== PG_SLOT_WANTED) {
+    const s: PgPoolSlot | null = this.slotAt(slot)
+    if (s === null || s.state !== PG_SLOT_WANTED) {
       panic("nish/net/postgres: PgPool.connect on a slot that wants no connection")
     }
     if (this.password.gone) {
@@ -4005,7 +4135,6 @@ export class PgPool {
     if (this.config.tls !== PG_TLS_DISABLE && carried === null) {
       panic("nish/net/postgres: PgConfig.tls asks for TLS, which only PgCarrier speaks")
     }
-    const s: PgPoolSlot = this.slots[slot]
     s.conn = new PgConnection(carried !== null ? carried : this.config, this.password.bytes, nonce)
     s.state = PG_SLOT_STARTING
     s.queued = 0
@@ -4023,7 +4152,8 @@ export class PgPool {
    * @returns The slot's connection, owned by the pool: a later `connect` on the slot replaces it.
    */
   connection(slot: i32): PgConnection {
-    const conn: PgConnection | null = slot < 0 || slot >= this.size ? null : this.slots[slot].conn
+    const s: PgPoolSlot | null = this.slotAt(slot)
+    const conn: PgConnection | null = s !== null ? s.conn : null
     if (conn === null) {
       panic("nish/net/postgres: PgPool.connection on a slot with no connection")
     }
@@ -4047,31 +4177,40 @@ export class PgPool {
    */
   next(slot: i32): i32 {
     const conn: PgConnection = this.connection(slot)
-    const s: PgPoolSlot = this.slots[slot]
-    if (s.state === PG_SLOT_IDLE || s.state === PG_SLOT_WANTED) {
+    const s: PgPoolSlot | null = this.slotAt(slot)
+    // `connection(slot)` refused a slot out of range; the test states that for the prover.
+    if (s === null || s.state === PG_SLOT_IDLE || s.state === PG_SLOT_WANTED) {
       this.ticket = -1
       return PG_NEED_MORE
     }
     while (s.state === PG_SLOT_STARTING || s.state === PG_SLOT_READY) {
-      this.ticket = s.count > 0 ? s.tickets[s.head] : -1
+      this.ticket = s.oldest()
       const event: i32 = conn.next()
+      const lead: i32 = s.leading()
       if (event === PG_READY) {
         s.state = PG_SLOT_READY
-      } else if (event === PG_DESCRIBED && s.count > 0 && s.leads[s.head] > 0) {
-        s.leads[s.head] -= 1
-        s.described += 1
+      } else if (event === PG_DESCRIBED && lead > 0) {
+        s.setLeading(lead - 1)
+        const described: i32 = s.described
+        // Only a queued prepare is described, so `described` stays below `queued`; the test
+        // states that for the prover.
+        if (described < s.queued) {
+          s.described = described + 1
+        }
         continue
-      } else if (event === PG_ERROR && s.count > 0 && s.leads[s.head] > 0) {
+      } else if (event === PG_ERROR && lead > 0) {
         // The rest of the group's prepares were skipped: the next request prepares them again.
-        s.leads[s.head] = 0
+        s.setLeading(0)
         s.queued = s.described
       } else if (event === PG_GROUP_DONE) {
         s.pop()
       } else if (event === PG_FAILED) {
         if (s.state === PG_SLOT_STARTING && this.queueCount > 0 && !this.anyReady()) {
-          s.push(this.queue[this.queueHead], toI32(0))
-          this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
-          this.queueCount -= 1
+          // A starting slot was given no request, so its ring is empty and takes this one.
+          const ticket: i32 = this.dequeue()
+          if (ticket >= 0) {
+            s.push(ticket, 0)
+          }
         }
         if (this.building === slot) {
           this.building = -1
@@ -4082,13 +4221,38 @@ export class PgPool {
       return event
     }
     if (s.state === PG_SLOT_DRAINING && s.count > 0) {
-      this.ticket = s.tickets[s.head]
+      this.ticket = s.oldest()
       s.pop()
       return PG_LOST
     }
     s.state = PG_SLOT_IDLE
     this.ticket = -1
     return PG_FAILED
+  }
+
+  /** The slot at `slot`, or null when `slot` is not one of the pool's. */
+  private slotAt(slot: i32): PgPoolSlot | null {
+    const slots: PgPoolSlot[] = this.slots
+    if (slot < 0 || slot >= toI32(slots.length)) {
+      return null
+    }
+    return slots[slot]
+  }
+
+  /** Takes the oldest waiting request off the queue and answers its ticket; -1 when none waits. */
+  private dequeue(): i32 {
+    const queue: i32[] = this.queue
+    const head: i32 = this.queueHead
+    const count: i32 = this.queueCount
+    // `queueHead` is a slot of the queue's ring; the test states that bound for the prover.
+    if (count <= 0 || head < 0 || head >= toI32(queue.length)) {
+      return -1
+    }
+    const ticket: i32 = queue[head]
+    const after: i32 = head + 1
+    this.queueHead = after === toI32(queue.length) ? 0 : after
+    this.queueCount = count - 1
+    return ticket
   }
 
   private anyReady(): boolean {
