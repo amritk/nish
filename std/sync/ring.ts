@@ -334,8 +334,10 @@ export class SpscRing {
     if (this.reserved >= 0) {
       panic("nish/sync/ring: tryPush while a reservation is open; commit or abandon it first")
     }
+    // The length is tested before it is rounded: within 3 of 2^31 the rounded
+    // size wraps negative and would pass the size test alone.
     const need: i32 = ringRecordBytes(len)
-    if (len < 0 || need > this.capacity) {
+    if (len < 0 || len > ringSub(this.capacity, 4) || need > this.capacity) {
       panic(`nish/sync/ring: a record of ${len} bytes does not fit a ring of ${this.capacity}`)
     }
     const end: i64 = ringPos(this.tail, toI64(need))

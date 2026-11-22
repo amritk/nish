@@ -706,12 +706,19 @@ class PreforkSupervisor {
     ) {
       return false
     }
-    // Read before any call, while the test above still covers each index:
-    // -1 stands for an array that is empty, and is read only when it is not.
+    // Read before any call, while the test above still covers each index.
+    // The UDP and listener descriptors are lists of none or one, so an empty
+    // array passes nothing on rather than a stand-in descriptor.
     const slot: PreforkSlot = slots[index]
     const serviceEnd: i32 = toService[index]
-    const udpFd: i32 = index < toI32(udp.length) ? udp[index] : -1
-    const listenerFd: i32 = index < toI32(listeners.length) ? listeners[index] : -1
+    const udpFd: i32[] = []
+    if (index < toI32(udp.length)) {
+      udpFd.push(udp[index])
+    }
+    const listenerFd: i32[] = []
+    if (index < toI32(listeners.length)) {
+      listenerFd.push(listeners[index])
+    }
     const fds: i32[] = []
     let own: i32 = -1
     if (this.config.supervisorChannels) {
@@ -749,12 +756,12 @@ class PreforkSupervisor {
       argv.push(this.args[i])
     }
     const channels: boolean = fds.length > 0
-    if (udp.length > 0) {
-      fds.push(udpFd)
+    for (const fd of udpFd) {
+      fds.push(fd)
       argv.push(`${PREFORK_UDP_FLAG}${toU32(fds.length) + 2},${udp.length}`)
     }
-    if (listeners.length > 0) {
-      fds.push(listenerFd)
+    for (const fd of listenerFd) {
+      fds.push(fd)
       argv.push(`${PREFORK_LISTENER_FLAG}${toU32(fds.length) + 2}`)
     }
     if (channels) {
@@ -1176,42 +1183,35 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
 }
 
 /**
- * `preforkWith`, calling `onChannel(state, index, fd, events)` in the
- * supervisor whenever worker `index`'s supervisor channel `fd` is readable or
- * hung up: `events` is `pollWait`'s, 1 readable and 4 added on a hang-up or
- * error. The callback reads what is waiting, since an end left readable wakes
- * the loop again at once, and may write back, but never closes `fd`: the
- * supervisor closes it after a hang-up, when the worker is reaped and when it
- * stops, and a restarted worker comes with a new one.
- *
- * Panics, besides, when `serviceWorker` is not below the worker count or the
- * count is above 64 with a service worker (63 with `listenPort`), the most
- * `spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
- * than `availableParallelism()`; when `listenUdp` asks for more than 255
- * workers (62 with a service worker); and, through `preforkInvalid`, on
- * seqpacket channels off Linux. A listener or UDP socket that cannot bind,
- * or a refused steering that leaves one worker beside a `serviceWorker` past
- * 0, answers `PREFORK_SPAWN_FAILED` before any worker starts.
+ * `preforkWith` for a caller built without `--allow-panics`: a config that
+ * breaks `preforkSupervise`'s contract is answered as `Err`, naming the field
+ * and the limit it passed, before any worker starts, rather than a panic.
  *
  * @param args the process's arguments, `process.argv`
- * @param config the supervisor's settings, every field checked (a bad one
- *   panics) in the supervisor and each worker alike; past that check a
- *   worker reads only `pin`
- * @param state the program's own value, passed to every `onChannel` call
- * @param onChannel what the supervisor runs when worker `index`'s channel
- *   `fd` wakes it, with `pollWait`'s `events`
- * @returns in a worker, its index at once; in the supervisor, once it is done,
- *   `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
+ * @param config the supervisor's settings, checked in the supervisor and
+ *   each worker alike as `preforkWith` checks them
+ * @returns `Ok` with what `preforkWith` answers (a worker's index, or the
+ *   supervisor's `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or
+ *   `PREFORK_SPAWN_FAILED`), or `Err` with why the config was refused
  */
-export const preforkSupervise = <S>(
+export const tryPreforkWith = (args: string[], config: PreforkConfig): Result<i32, string> => {
+  const buf: u8[] = new Array<u8>(512)
+  return preforkRun(args, config, buf, preforkDiscard)
+}
+
+/**
+ * `preforkSupervise`, answering a config that breaks its contract as `Err`
+ * with the reason, before any worker starts, where `preforkSupervise` panics.
+ */
+const preforkRun = <S>(
   args: string[],
   config: PreforkConfig,
   state: S,
   onChannel: (state: S, index: i32, fd: i32, events: i32) => void
-): i32 => {
+): Result<i32, string> => {
   const invalid: string = preforkInvalid(config)
   if (invalid !== "") {
-    panic(`nish/net/prefork: ${invalid}`)
+    return Err(invalid)
   }
   const pin: boolean = config.pin && platform === "linux"
   const index: i32 = preforkIndex(args)
@@ -1220,11 +1220,11 @@ export const preforkSupervise = <S>(
     if (pinned < 0) {
       console.error(`nish/net/prefork: worker ${index} runs unpinned (${pinned})`)
     }
-    return index
+    return Ok(index)
   }
   let count: i32 = preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
   if (config.listenUdp && count > PREFORK_UDP_MAX) {
-    panic(`nish/net/prefork: listenUdp with ${count} workers, above ${PREFORK_UDP_MAX}`)
+    return Err(`listenUdp with ${count} workers, above ${PREFORK_UDP_MAX}`)
   }
   // A held listener is one more descriptor for every worker, the service one
   // too, and a held UDP socket one more again.
@@ -1235,11 +1235,11 @@ export const preforkSupervise = <S>(
     fdMax = 63
   }
   if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
-    panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above ${fdMax} workers`)
+    return Err(`serviceWorker not below ${count} workers, or above ${fdMax} workers`)
   }
   const cpus: i32 = pin ? availableParallelism() : 0
   if (pin && count > cpus) {
-    panic(`nish/net/prefork: pin with ${count} workers on ${cpus} CPUs`)
+    return Err(`pin with ${count} workers on ${cpus} CPUs`)
   }
   if (config.pin && !pin) {
     console.error("nish/net/prefork: pinning needs Linux; the workers run unpinned")
@@ -1253,14 +1253,14 @@ export const preforkSupervise = <S>(
     if (loop >= 0) {
       netClose(loop)
     }
-    return PREFORK_SPAWN_FAILED
+    return Ok(PREFORK_SPAWN_FAILED)
   }
   // The UDP group first: a refused steering runs one worker, so it decides
   // the count everything after it is made for.
   const udp: i32[] = config.listenUdp ? preforkBindUdp(config, count) : []
   if (config.listenUdp && udp.length === 0) {
     netClose(loop)
-    return PREFORK_SPAWN_FAILED
+    return Ok(PREFORK_SPAWN_FAILED)
   }
   if (config.listenUdp) {
     count = toI32(udp.length)
@@ -1272,12 +1272,12 @@ export const preforkSupervise = <S>(
       netClose(udp[i])
     }
     netClose(loop)
-    return PREFORK_SPAWN_FAILED
+    return Ok(PREFORK_SPAWN_FAILED)
   }
   const supervisor = new PreforkSupervisor(config, args, count, loop, udp)
   if (config.listenPort >= 0 && !supervisor.listen(pin)) {
     netClose(loop)
-    return PREFORK_SPAWN_FAILED
+    return Ok(PREFORK_SPAWN_FAILED)
   }
   // Token 0 is the signal pipe, token i + 1 worker i's channel.
   // Pushed, not sized, so the length is never a product the prover must check.
@@ -1339,7 +1339,48 @@ export const preforkSupervise = <S>(
   supervisor.stop(loop, signals, ready)
   supervisor.closeListeners()
   netClose(loop)
-  return result
+  return Ok(result)
+}
+
+/**
+ * `preforkWith`, calling `onChannel(state, index, fd, events)` in the
+ * supervisor whenever worker `index`'s supervisor channel `fd` is readable or
+ * hung up: `events` is `pollWait`'s, 1 readable and 4 added on a hang-up or
+ * error. The callback reads what is waiting, since an end left readable wakes
+ * the loop again at once, and may write back, but never closes `fd`: the
+ * supervisor closes it after a hang-up, when the worker is reaped and when it
+ * stops, and a restarted worker comes with a new one.
+ *
+ * Panics, besides, when `serviceWorker` is not below the worker count or the
+ * count is above 64 with a service worker (63 with `listenPort`), the most
+ * `spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
+ * than `availableParallelism()`; when `listenUdp` asks for more than 255
+ * workers (62 with a service worker); and, through `preforkInvalid`, on
+ * seqpacket channels off Linux. A listener or UDP socket that cannot bind,
+ * or a refused steering that leaves one worker beside a `serviceWorker` past
+ * 0, answers `PREFORK_SPAWN_FAILED` before any worker starts.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @param config the supervisor's settings, every field checked (a bad one
+ *   panics) in the supervisor and each worker alike; past that check a
+ *   worker reads only `pin`
+ * @param state the program's own value, passed to every `onChannel` call
+ * @param onChannel what the supervisor runs when worker `index`'s channel
+ *   `fd` wakes it, with `pollWait`'s `events`
+ * @returns in a worker, its index at once; in the supervisor, once it is done,
+ *   `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
+ */
+export const preforkSupervise = <S>(
+  args: string[],
+  config: PreforkConfig,
+  state: S,
+  onChannel: (state: S, index: i32, fd: i32, events: i32) => void
+): i32 => {
+  const ran = preforkRun(args, config, state, onChannel)
+  if (ran.isErr()) {
+    panic(`nish/net/prefork: ${ran.error}`)
+  }
+  return ran.value
 }
 
 /**

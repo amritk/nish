@@ -34,7 +34,7 @@ import {
   PREFORK_WORKERS_EXITED,
   PreforkConfig,
   preforkArgs,
-  preforkWith,
+  tryPreforkWith,
 } from "nish/net/prefork"
 import { monotonicNanos } from "nish:process"
 import {
@@ -238,7 +238,12 @@ const supervise = (name: string): i32 => {
   const config = new PreforkConfig()
   config.workers = CLIENTS + 1
   config.restart = false
-  const ended = preforkWith(process.argv, config)
+  const ran = tryPreforkWith(process.argv, config)
+  if (ran.isErr()) {
+    console.error(`the workers: ${ran.error}`)
+    return 1
+  }
+  const ended: i32 = ran.value
   const unlinked = unlinkRegion(name)
   if (unlinked.isErr()) {
     console.error(`unlink the region: ${unlinked.error.message}`)
@@ -262,7 +267,12 @@ export const main = (): i32 => {
   if (!flag.startsWith(PREFORK_WORKER_FLAG)) {
     return supervise(name)
   }
-  const me: i32 = preforkWith(process.argv, new PreforkConfig())
+  const ran = tryPreforkWith(process.argv, new PreforkConfig())
+  if (ran.isErr()) {
+    console.error(`the workers: ${ran.error}`)
+    return 1
+  }
+  const me: i32 = ran.value
   if (me > CLIENTS) {
     return 0
   }
