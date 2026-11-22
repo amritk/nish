@@ -313,7 +313,12 @@ Two panics this table listed are gone since WP81 S1, each a misuse whose
 answer the function already had. `pgAsyncAnswer` read before its turn, or
 after its connection failed, fails the answer with `PG_ERR_CLOSED` and
 `reusable` false, as a lost connection does, so `pgAsyncDone` closes the
-connection rather than read on out of step. `PgCarrier`'s lookup of a
+connection rather than read on out of step. For an answer asked for before
+its turn, `pgAsyncDone` marks the connection lost from that seat on, since no
+task reads past an answer nobody read: "before its turn: ok=false failure=9",
+"ahead of it: ok=true … first=q", "live: 0" (`link/std_postgres_async_pipeline`).
+Before the fix it freed the seat alone and left the unread answer in front of
+every later seat on the connection: "live: 1". `PgCarrier`'s lookup of a
 batcher's slot no longer panics: an id `attach` never gave is still refused
 by `runInt` and `runText`, as above.
 

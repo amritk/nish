@@ -2395,6 +2395,11 @@ export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable:
       pgAsyncDoom(pool, s, pgAsyncStep(seq, PG_ASYNC_SEQ_MASK))
     }
     pgAsyncWakeTurns(pool, s, seat)
+  } else if (turn >= 0) {
+    // Its answer was asked for before its turn and never read: nothing reads
+    // past it, so the seats behind it would wait for good. The connection is
+    // lost from here, as for an answer read out of step.
+    pgAsyncDoom(pool, s, seq)
   }
   pgAsyncFree(pool, seat)
 }
