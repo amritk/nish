@@ -70,8 +70,6 @@
  * another implementation.
  */
 
-import { tryCopyBytes } from "nish/bytes"
-
 /** A field section that has the shape asked for. */
 export const HTTP_FIELDS_OK: i32 = 0
 
@@ -713,26 +711,35 @@ export const HTTP_DATE_LAST_SECOND: i64 = 253402300799
 const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJulAugSepOctNovDec"
 
 /**
- * Pushes the three letters at `HTTP_FIELDS_DATE_NAMES[3 * index ..)` onto
- * `date`. Every weekday and month names a slot inside the table, so the test
- * always holds; it is what proves the index, and a miss would leave `date`
- * short, which `httpDateWrite` refuses rather than send.
+ * Writes `b` at `out[at + k]`. `httpDateWrite` measured the room first, so the
+ * test always holds; it is what proves the index, and nothing is allocated.
+ * `at + k` stays inside `out`, so the u32 sum does not wrap.
  */
-const httpFieldsPushName = (date: u8[], index: u32): void => {
+const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
+  const pos: i32 = toI32(toU32(at) + toU32(k))
+  if (pos >= 0 && pos < toI32(out.length)) {
+    out[pos] = toU8(b)
+  }
+}
+
+/**
+ * Writes the three letters at `HTTP_FIELDS_DATE_NAMES[3 * index ..)` at
+ * `out[at + k ..)`. Every weekday and month names a slot inside the table.
+ */
+const httpFieldsPutName = (out: u8[], at: i32, k: i32, index: u32): void => {
   const names: string = HTTP_FIELDS_DATE_NAMES
-  const n: i32 = toI32(names.length)
-  for (let k: u32 = 0; k < 3; k++) {
-    const pos: i32 = toI32(index * 3 + k)
-    if (pos >= 0 && pos < n) {
-      date.push(toU8(names.charCodeAt(pos)))
+  for (let d: u32 = 0; d < 3; d++) {
+    const pos: i32 = toI32(index * 3 + d)
+    if (pos >= 0 && pos < toI32(names.length)) {
+      httpFieldsPut(out, at, toI32(toU32(k) + d), toU32(names.charCodeAt(pos)))
     }
   }
 }
 
-/** Pushes `n`, 0 to 99, as two digits onto `date`. */
-const httpFieldsPushTwo = (date: u8[], n: u32): void => {
-  date.push(toU8(toU32(48) + n / 10))
-  date.push(toU8(toU32(48) + (n % 10)))
+/** Writes `n`, 0 to 99, as two digits at `out[at + k ..)`. */
+const httpFieldsPutTwo = (out: u8[], at: i32, k: i32, n: u32): void => {
+  httpFieldsPut(out, at, k, toU32(48) + n / 10)
+  httpFieldsPut(out, at, toI32(toU32(k) + toU32(1)), toU32(48) + (n % 10))
 }
 
 /**
@@ -784,32 +791,25 @@ export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
   const day: u32 = toU32(dayOfYear - (153 * marchMonth + 2) / 5 + 1)
   const month: u32 = toU32(marchMonth < 10 ? marchMonth + 3 : marchMonth - 9)
   const year: u32 = toU32(yearOfEra + era * 400) + (month <= 2 ? 1 : 0)
-  const date: u8[] = []
-  httpFieldsPushName(date, weekday)
-  date.push(44)
-  date.push(32)
-  httpFieldsPushTwo(date, day)
-  date.push(32)
-  httpFieldsPushName(date, 6 + month)
-  date.push(32)
-  httpFieldsPushTwo(date, year / 100)
-  httpFieldsPushTwo(date, year % 100)
-  date.push(32)
-  httpFieldsPushTwo(date, inDay / 3600)
-  date.push(58)
-  httpFieldsPushTwo(date, (inDay / 60) % 60)
-  date.push(58)
-  httpFieldsPushTwo(date, inDay % 60)
-  date.push(32)
-  date.push(71)
-  date.push(77)
-  date.push(84)
-  // The test at the top made the room, and `date` is always whole, so the
-  // copy always happens; it is a copy that cannot panic, and its refusal is
-  // this function's own.
-  if (!tryCopyBytes(out, at, date, 0, HTTP_DATE_SIZE)) {
-    return -1
-  }
+  httpFieldsPutName(out, at, 0, weekday)
+  httpFieldsPut(out, at, 3, 44)
+  httpFieldsPut(out, at, 4, 32)
+  httpFieldsPutTwo(out, at, 5, day)
+  httpFieldsPut(out, at, 7, 32)
+  httpFieldsPutName(out, at, 8, 6 + month)
+  httpFieldsPut(out, at, 11, 32)
+  httpFieldsPutTwo(out, at, 12, year / 100)
+  httpFieldsPutTwo(out, at, 14, year % 100)
+  httpFieldsPut(out, at, 16, 32)
+  httpFieldsPutTwo(out, at, 17, inDay / 3600)
+  httpFieldsPut(out, at, 19, 58)
+  httpFieldsPutTwo(out, at, 20, (inDay / 60) % 60)
+  httpFieldsPut(out, at, 22, 58)
+  httpFieldsPutTwo(out, at, 23, inDay % 60)
+  httpFieldsPut(out, at, 25, 32)
+  httpFieldsPut(out, at, 26, 71)
+  httpFieldsPut(out, at, 27, 77)
+  httpFieldsPut(out, at, 28, 84)
   // The date fits in `out` from `at`, so the end is at most its length.
   return toI32(toU32(at) + toU32(HTTP_DATE_SIZE))
 }

@@ -2606,11 +2606,17 @@ const http1DecimalDigits = (n: i32): i32 => {
  */
 export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   const n: i32 = toI32(text.length)
-  // Every caller has made sure it fits; past `out`'s end nothing is written.
-  let j: i32 = at
-  for (let k: i32 = 0; k < n && j >= 0 && j < toI32(out.length); k += 1) {
+  // Every caller has made sure it fits; outside `out` nothing is written.
+  // Before its start the text is skipped, so a negative `at` writes the tail.
+  let k: i32 = 0
+  if (at < 0) {
+    k = at > -n ? http1Less(0, at) : n
+  }
+  let j: i32 = http1Past(at, k)
+  while (k >= 0 && k < n && j >= 0 && j < toI32(out.length)) {
     out[j] = toU8(text.charCodeAt(k))
     j += 1
+    k += 1
   }
   return http1Past(at, n)
 }
