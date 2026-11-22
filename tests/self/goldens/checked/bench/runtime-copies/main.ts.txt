@@ -602,6 +602,7 @@ function jsonShortEscape(code: i32): i32 -> @nish.jsonShortEscape
 function jsonHexByte(nibble: i32): i32 -> @nish.jsonHexByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+  local +0:9 digit: i32 (const)
 function jsonIsPlainByte(code: i32): boolean -> @nish.jsonIsPlainByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

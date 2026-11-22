@@ -1,5 +1,5 @@
 %struct.Style = type { i1, i1, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8* }
-%struct.HelpMenu = type { %struct.Style*, i8*, i32, i32, %struct.nish_array*, i32 }
+%struct.HelpMenu = type { %struct.Style*, i8*, i32, i32, %struct.nish_array*, i1 }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -85,13 +85,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #1
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
-declare extern_weak void @nish_panic_overflow(i32 noundef) #5
-declare i64 @llvm.smin.i64(i64, i64) #6
-declare i64 @llvm.smax.i64(i64, i64) #6
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #6
+declare i64 @llvm.smin.i64(i64, i64) #5
+declare i64 @llvm.smax.i64(i64, i64) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -1118,40 +1115,39 @@ join.end:
   ret i8* %60
 }
 
-define internal noundef nonnull align 8 i8* @nish.padTo(i32 noundef %width, i32 noundef %column) #1 {
+define internal noundef nonnull align 8 i8* @nish.padTo(i32 noundef %fixed, i32 noundef %first, i32 noundef %second, i32 noundef %column) #0 {
 entry:
-  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %width, i32 2)
-  %1 = extractvalue { i32, i1 } %0, 0
-  %2 = extractvalue { i32, i1 } %0, 1
-  br i1 %2, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %3 = icmp sle i32 %1, %column
-  br i1 %3, label %cond.true, label %cond.false
+  %0 = sext i32 %fixed to i64
+  %1 = sext i32 %first to i64
+  %2 = add nsw i64 %0, %1
+  %3 = sext i32 %second to i64
+  %4 = add nsw i64 %2, %3
+  %5 = sext i32 2 to i64
+  %6 = add nsw i64 %4, %5
+  %7 = sext i32 %column to i64
+  %8 = icmp sle i64 %6, %7
+  br i1 %8, label %cond.true, label %cond.false
 
 cond.true:
-  %4 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %column, i32 %width)
-  %5 = extractvalue { i32, i1 } %4, 0
-  %6 = extractvalue { i32, i1 } %4, 1
-  br i1 %6, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
+  %9 = sext i32 %column to i64
+  %10 = sext i32 %fixed to i64
+  %11 = sub nsw i64 %9, %10
+  %12 = sext i32 %first to i64
+  %13 = sub nsw i64 %11, %12
+  %14 = sext i32 %second to i64
+  %15 = sub nsw i64 %13, %14
+  %16 = trunc i64 %15 to i32
   br label %cond.end
 
 cond.false:
   br label %cond.end
 
 cond.end:
-  %7 = phi i32 [ %5, %ovf.ok.1 ], [ 2, %cond.false ]
-  %8 = call i64 @nish_arena_mark()
-  %9 = call i8* @nish.spaces(i32 %7)
-  %10 = call i8* @nish_arena_keep(i64 %8, i8* %9)
-  ret i8* %10
-
-ovf.fail:
-  %ovf.op = phi i32 [ 0, %entry ], [ 1, %cond.true ]
-  call void @nish_panic_overflow(i32 %ovf.op)
-  unreachable
+  %17 = phi i32 [ %16, %cond.true ], [ 2, %cond.false ]
+  %18 = call i64 @nish_arena_mark()
+  %19 = call i8* @nish.spaces(i32 %17)
+  %20 = call i8* @nish_arena_keep(i64 %18, i8* %19)
+  ret i8* %20
 }
 
 define void @nish.HelpMenu.constructor(%struct.HelpMenu* noundef nonnull noalias align 8 dereferenceable(40) nocapture %this, %struct.Style* noundef nonnull align 8 dereferenceable(88) %style, i8* noundef nonnull noalias readonly align 8 %program, i32 noundef %column, i32 noundef %usageColumn) #0 {
@@ -1175,7 +1171,7 @@ entry:
   %9 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
   store %struct.nish_array* %5, %struct.nish_array** %9, align 8, !tbaa !36
   %10 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 5
-  store i32 0, i32* %10, align 4, !tbaa !37
+  store i1 false, i1* %10, align 1, !tbaa !37
   ret void
 }
 
@@ -1287,133 +1283,108 @@ define void @nish.HelpMenu.usage(%struct.HelpMenu* noundef nonnull align 8 deref
 entry:
   %style.addr = alloca %struct.Style*, align 8
   %lead.addr = alloca i8*, align 8
-  %width.addr = alloca i32, align 4
+  %pad.addr = alloca i8*, align 8
   %text.addr = alloca i8*, align 8
   %0 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 0
   %1 = load %struct.Style*, %struct.Style** %0, align 8, !tbaa !32
   store %struct.Style* %1, %struct.Style** %style.addr, align 8
   %2 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 5
-  %3 = load i32, i32* %2, align 4, !tbaa !37
-  %4 = icmp eq i32 %3, 0
-  br i1 %4, label %cond.true, label %cond.false
+  %3 = load i1, i1* %2, align 1, !tbaa !37
+  br i1 %3, label %cond.true, label %cond.false
 
 cond.true:
-  %5 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %6 = call i64 @nish_arena_mark()
-  %7 = call i8* @nish.Style.heading(%struct.Style* %5, i8* bitcast ({ i64, [7 x i8] }* @.str.66 to i8*))
-  %8 = call i8* @nish_arena_keep(i64 %6, i8* %7)
-  %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.64 to i8*))
+  %4 = call i64 @nish_arena_mark()
+  %5 = call i8* @nish.spaces(i32 7)
+  %6 = call i8* @nish_arena_keep(i64 %4, i8* %5)
   br label %cond.end
 
 cond.false:
-  %10 = call i64 @nish_arena_mark()
-  %11 = call i8* @nish.spaces(i32 7)
-  %12 = call i8* @nish_arena_keep(i64 %10, i8* %11)
+  %7 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %8 = call i64 @nish_arena_mark()
+  %9 = call i8* @nish.Style.heading(%struct.Style* %7, i8* bitcast ({ i64, [7 x i8] }* @.str.66 to i8*))
+  %10 = call i8* @nish_arena_keep(i64 %8, i8* %9)
+  %11 = call i8* @nish_str_concat(i8* %10, i8* bitcast ({ i64, [2 x i8] }* @.str.64 to i8*))
   br label %cond.end
 
 cond.end:
-  %13 = phi i8* [ %9, %cond.true ], [ %12, %cond.false ]
-  store i8* %13, i8** %lead.addr, align 8
-  %14 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 1
-  %15 = load i8*, i8** %14, align 8, !tbaa !33
-  %16 = bitcast i8* %15 to i64*
-  %17 = load i64, i64* %16, align 8
-  %18 = trunc i64 %17 to i32
-  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 8, i32 %18)
-  %20 = extractvalue { i32, i1 } %19, 0
-  %21 = extractvalue { i32, i1 } %19, 1
-  br i1 %21, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %22 = bitcast i8* %shape to i64*
-  %23 = load i64, i64* %22, align 8
-  %24 = trunc i64 %23 to i32
-  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %24)
-  %26 = extractvalue { i32, i1 } %25, 0
-  %27 = extractvalue { i32, i1 } %25, 1
-  br i1 %27, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  store i32 %26, i32* %width.addr, align 4
-  %28 = bitcast i8* %description to i64*
-  %29 = load i64, i64* %28, align 8
-  %30 = trunc i64 %29 to i32
-  %31 = icmp sgt i32 %30, 0
-  br i1 %31, label %cond.true.1, label %cond.false.1
+  %12 = phi i8* [ %6, %cond.true ], [ %11, %cond.false ]
+  store i8* %12, i8** %lead.addr, align 8
+  %13 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 1
+  %14 = load i8*, i8** %13, align 8, !tbaa !33
+  %15 = bitcast i8* %14 to i64*
+  %16 = load i64, i64* %15, align 8
+  %17 = trunc i64 %16 to i32
+  %18 = bitcast i8* %shape to i64*
+  %19 = load i64, i64* %18, align 8
+  %20 = trunc i64 %19 to i32
+  %21 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 3
+  %22 = load i32, i32* %21, align 4, !tbaa !35
+  %23 = call i64 @nish_arena_mark()
+  %24 = call i8* @nish.padTo(i32 8, i32 %17, i32 %20, i32 %22)
+  %25 = call i8* @nish_arena_keep(i64 %23, i8* %24)
+  store i8* %25, i8** %pad.addr, align 8
+  %26 = bitcast i8* %description to i64*
+  %27 = load i64, i64* %26, align 8
+  %28 = trunc i64 %27 to i32
+  %29 = icmp sgt i32 %28, 0
+  br i1 %29, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
-  %32 = load i32, i32* %width.addr, align 4
-  %33 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 3
-  %34 = load i32, i32* %33, align 4, !tbaa !35
-  %35 = call i64 @nish_arena_mark()
-  %36 = call i8* @nish.padTo(i32 %32, i32 %34)
-  %37 = call i8* @nish_arena_keep(i64 %35, i8* %36)
-  %38 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %39 = call i64 @nish_arena_mark()
-  %40 = call i8* @nish.Style.dim(%struct.Style* %38, i8* %description)
-  %41 = call i8* @nish_arena_keep(i64 %39, i8* %40)
-  %42 = call i8* @nish_str_concat(i8* %37, i8* %41)
+  %30 = load i8*, i8** %pad.addr, align 8
+  %31 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %32 = call i64 @nish_arena_mark()
+  %33 = call i8* @nish.Style.dim(%struct.Style* %31, i8* %description)
+  %34 = call i8* @nish_arena_keep(i64 %32, i8* %33)
+  %35 = call i8* @nish_str_concat(i8* %30, i8* %34)
   br label %cond.end.1
 
 cond.false.1:
   br label %cond.end.1
 
 cond.end.1:
-  %43 = phi i8* [ %42, %cond.true.1 ], [ bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), %cond.false.1 ]
-  store i8* %43, i8** %text.addr, align 8
-  %44 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
-  %45 = load %struct.nish_array*, %struct.nish_array** %44, align 8, !tbaa !36
-  %46 = load i8*, i8** %lead.addr, align 8
-  %47 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %48 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 1
-  %49 = load i8*, i8** %48, align 8, !tbaa !33
-  %50 = call i64 @nish_arena_mark()
-  %51 = call i8* @nish.Style.name(%struct.Style* %47, i8* %49)
-  %52 = call i8* @nish_arena_keep(i64 %50, i8* %51)
-  %53 = call i8* @nish_str_concat(i8* %46, i8* %52)
-  %54 = call i8* @nish_str_concat(i8* %53, i8* bitcast ({ i64, [2 x i8] }* @.str.64 to i8*))
-  %55 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %56 = call i64 @nish_arena_mark()
-  %57 = call i8* @nish.Style.flag(%struct.Style* %55, i8* %shape)
-  %58 = call i8* @nish_arena_keep(i64 %56, i8* %57)
-  %59 = call i8* @nish_str_concat(i8* %54, i8* %58)
-  %60 = load i8*, i8** %text.addr, align 8
-  %61 = call i8* @nish_str_concat(i8* %59, i8* %60)
-  %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %45, i64 0, i32 0
-  %63 = load i64, i64* %62, align 8, !alias.scope !20, !noalias !21, !tbaa !25
-  %64 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %45, i64 0, i32 1
-  %65 = load i64, i64* %64, align 8, !alias.scope !20, !noalias !21, !tbaa !26
-  %66 = icmp eq i64 %63, %65
-  br i1 %66, label %push.grow, label %push.store
+  %36 = phi i8* [ %35, %cond.true.1 ], [ bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), %cond.false.1 ]
+  store i8* %36, i8** %text.addr, align 8
+  %37 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
+  %38 = load %struct.nish_array*, %struct.nish_array** %37, align 8, !tbaa !36
+  %39 = load i8*, i8** %lead.addr, align 8
+  %40 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %41 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 1
+  %42 = load i8*, i8** %41, align 8, !tbaa !33
+  %43 = call i64 @nish_arena_mark()
+  %44 = call i8* @nish.Style.name(%struct.Style* %40, i8* %42)
+  %45 = call i8* @nish_arena_keep(i64 %43, i8* %44)
+  %46 = call i8* @nish_str_concat(i8* %39, i8* %45)
+  %47 = call i8* @nish_str_concat(i8* %46, i8* bitcast ({ i64, [2 x i8] }* @.str.64 to i8*))
+  %48 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %49 = call i64 @nish_arena_mark()
+  %50 = call i8* @nish.Style.flag(%struct.Style* %48, i8* %shape)
+  %51 = call i8* @nish_arena_keep(i64 %49, i8* %50)
+  %52 = call i8* @nish_str_concat(i8* %47, i8* %51)
+  %53 = load i8*, i8** %text.addr, align 8
+  %54 = call i8* @nish_str_concat(i8* %52, i8* %53)
+  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 0
+  %56 = load i64, i64* %55, align 8, !alias.scope !20, !noalias !21, !tbaa !25
+  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 1
+  %58 = load i64, i64* %57, align 8, !alias.scope !20, !noalias !21, !tbaa !26
+  %59 = icmp eq i64 %56, %58
+  br i1 %59, label %push.grow, label %push.store
 
 push.grow:
-  call void @nish_array_grow(%struct.nish_array* %45, i64 8)
+  call void @nish_array_grow(%struct.nish_array* %38, i64 8)
   br label %push.store
 
 push.store:
-  %67 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %45, i64 0, i32 2
-  %68 = load i8*, i8** %67, align 8, !alias.scope !20, !noalias !21, !tbaa !27
-  %69 = bitcast i8* %68 to i8**
-  %70 = getelementptr inbounds i8*, i8** %69, i64 %63
-  store i8* %61, i8** %70, align 8, !alias.scope !21, !noalias !20, !tbaa !29
-  %71 = add i64 %63, 1
-  store i64 %71, i64* %62, align 8, !alias.scope !20, !noalias !21, !tbaa !25
-  %72 = trunc i64 %71 to i32
-  %73 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 5
-  %74 = load i32, i32* %73, align 4, !tbaa !37
-  %75 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %74, i32 1)
-  %76 = extractvalue { i32, i1 } %75, 0
-  %77 = extractvalue { i32, i1 } %75, 1
-  br i1 %77, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  %78 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 5
-  store i32 %76, i32* %78, align 4, !tbaa !37
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 2
+  %61 = load i8*, i8** %60, align 8, !alias.scope !20, !noalias !21, !tbaa !27
+  %62 = bitcast i8* %61 to i8**
+  %63 = getelementptr inbounds i8*, i8** %62, i64 %56
+  store i8* %54, i8** %63, align 8, !alias.scope !21, !noalias !20, !tbaa !29
+  %64 = add i64 %56, 1
+  store i64 %64, i64* %55, align 8, !alias.scope !20, !noalias !21, !tbaa !25
+  %65 = trunc i64 %64 to i32
+  %66 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 5
+  store i1 true, i1* %66, align 1, !tbaa !37
   ret void
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
 }
 
 define void @nish.HelpMenu.section(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i8* noundef nonnull noalias readonly align 8 %title) #1 {
@@ -1473,116 +1444,94 @@ push.store.1:
 define void @nish.HelpMenu.row(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i8* noundef nonnull noalias readonly align 8 %flag, i8* noundef nonnull noalias readonly align 8 %meta, i8* noundef nonnull noalias readonly align 8 %description) #1 {
 entry:
   %style.addr = alloca %struct.Style*, align 8
-  %width.addr = alloca i32, align 4
+  %pad.addr = alloca i8*, align 8
   %placeholder.addr = alloca i8*, align 8
   %0 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 0
   %1 = load %struct.Style*, %struct.Style** %0, align 8, !tbaa !32
   store %struct.Style* %1, %struct.Style** %style.addr, align 8
-  %2 = bitcast i8* %flag to i64*
+  %2 = bitcast i8* %meta to i64*
   %3 = load i64, i64* %2, align 8
   %4 = trunc i64 %3 to i32
-  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 2, i32 %4)
-  %6 = extractvalue { i32, i1 } %5, 0
-  %7 = extractvalue { i32, i1 } %5, 1
-  br i1 %7, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %8 = bitcast i8* %meta to i64*
-  %9 = load i64, i64* %8, align 8
-  %10 = trunc i64 %9 to i32
-  %11 = icmp sgt i32 %10, 0
-  br i1 %11, label %cond.true, label %cond.false
+  %5 = icmp sgt i32 %4, 0
+  br i1 %5, label %cond.true, label %cond.false
 
 cond.true:
-  %12 = bitcast i8* %meta to i64*
-  %13 = load i64, i64* %12, align 8
-  %14 = trunc i64 %13 to i32
-  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 1, i32 %14)
-  %16 = extractvalue { i32, i1 } %15, 0
-  %17 = extractvalue { i32, i1 } %15, 1
-  br i1 %17, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
   br label %cond.end
 
 cond.false:
   br label %cond.end
 
 cond.end:
-  %18 = phi i32 [ %16, %ovf.ok.1 ], [ 0, %cond.false ]
-  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %18)
-  %20 = extractvalue { i32, i1 } %19, 0
-  %21 = extractvalue { i32, i1 } %19, 1
-  br i1 %21, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  store i32 %20, i32* %width.addr, align 4
-  %22 = bitcast i8* %meta to i64*
-  %23 = load i64, i64* %22, align 8
-  %24 = trunc i64 %23 to i32
-  %25 = icmp sgt i32 %24, 0
-  br i1 %25, label %cond.true.1, label %cond.false.1
+  %6 = phi i32 [ 3, %cond.true ], [ 2, %cond.false ]
+  %7 = bitcast i8* %flag to i64*
+  %8 = load i64, i64* %7, align 8
+  %9 = trunc i64 %8 to i32
+  %10 = bitcast i8* %meta to i64*
+  %11 = load i64, i64* %10, align 8
+  %12 = trunc i64 %11 to i32
+  %13 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 2
+  %14 = load i32, i32* %13, align 4, !tbaa !34
+  %15 = call i64 @nish_arena_mark()
+  %16 = call i8* @nish.padTo(i32 %6, i32 %9, i32 %12, i32 %14)
+  %17 = call i8* @nish_arena_keep(i64 %15, i8* %16)
+  store i8* %17, i8** %pad.addr, align 8
+  %18 = bitcast i8* %meta to i64*
+  %19 = load i64, i64* %18, align 8
+  %20 = trunc i64 %19 to i32
+  %21 = icmp sgt i32 %20, 0
+  br i1 %21, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
-  %26 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %27 = call i64 @nish_arena_mark()
-  %28 = call i8* @nish.Style.meta(%struct.Style* %26, i8* %meta)
-  %29 = call i8* @nish_arena_keep(i64 %27, i8* %28)
-  %30 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.64 to i8*), i8* %29)
+  %22 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %23 = call i64 @nish_arena_mark()
+  %24 = call i8* @nish.Style.meta(%struct.Style* %22, i8* %meta)
+  %25 = call i8* @nish_arena_keep(i64 %23, i8* %24)
+  %26 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.64 to i8*), i8* %25)
   br label %cond.end.1
 
 cond.false.1:
   br label %cond.end.1
 
 cond.end.1:
-  %31 = phi i8* [ %30, %cond.true.1 ], [ bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), %cond.false.1 ]
-  store i8* %31, i8** %placeholder.addr, align 8
-  %32 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !36
-  %34 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %35 = call i64 @nish_arena_mark()
-  %36 = call i8* @nish.Style.flag(%struct.Style* %34, i8* %flag)
-  %37 = call i8* @nish_arena_keep(i64 %35, i8* %36)
-  %38 = call i8* @nish_str_concat(i8* bitcast ({ i64, [3 x i8] }* @.str.65 to i8*), i8* %37)
-  %39 = load i8*, i8** %placeholder.addr, align 8
-  %40 = call i8* @nish_str_concat(i8* %38, i8* %39)
-  %41 = load i32, i32* %width.addr, align 4
-  %42 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 2
-  %43 = load i32, i32* %42, align 4, !tbaa !34
-  %44 = call i64 @nish_arena_mark()
-  %45 = call i8* @nish.padTo(i32 %41, i32 %43)
-  %46 = call i8* @nish_arena_keep(i64 %44, i8* %45)
-  %47 = call i8* @nish_str_concat(i8* %40, i8* %46)
-  %48 = load %struct.Style*, %struct.Style** %style.addr, align 8
-  %49 = call i64 @nish_arena_mark()
-  %50 = call i8* @nish.Style.dim(%struct.Style* %48, i8* %description)
-  %51 = call i8* @nish_arena_keep(i64 %49, i8* %50)
-  %52 = call i8* @nish_str_concat(i8* %47, i8* %51)
-  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
-  %54 = load i64, i64* %53, align 8, !alias.scope !20, !noalias !21, !tbaa !25
-  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
-  %56 = load i64, i64* %55, align 8, !alias.scope !20, !noalias !21, !tbaa !26
-  %57 = icmp eq i64 %54, %56
-  br i1 %57, label %push.grow, label %push.store
+  %27 = phi i8* [ %26, %cond.true.1 ], [ bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), %cond.false.1 ]
+  store i8* %27, i8** %placeholder.addr, align 8
+  %28 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !36
+  %30 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %31 = call i64 @nish_arena_mark()
+  %32 = call i8* @nish.Style.flag(%struct.Style* %30, i8* %flag)
+  %33 = call i8* @nish_arena_keep(i64 %31, i8* %32)
+  %34 = call i8* @nish_str_concat(i8* bitcast ({ i64, [3 x i8] }* @.str.65 to i8*), i8* %33)
+  %35 = load i8*, i8** %placeholder.addr, align 8
+  %36 = call i8* @nish_str_concat(i8* %34, i8* %35)
+  %37 = load i8*, i8** %pad.addr, align 8
+  %38 = call i8* @nish_str_concat(i8* %36, i8* %37)
+  %39 = load %struct.Style*, %struct.Style** %style.addr, align 8
+  %40 = call i64 @nish_arena_mark()
+  %41 = call i8* @nish.Style.dim(%struct.Style* %39, i8* %description)
+  %42 = call i8* @nish_arena_keep(i64 %40, i8* %41)
+  %43 = call i8* @nish_str_concat(i8* %38, i8* %42)
+  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 0
+  %45 = load i64, i64* %44, align 8, !alias.scope !20, !noalias !21, !tbaa !25
+  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 1
+  %47 = load i64, i64* %46, align 8, !alias.scope !20, !noalias !21, !tbaa !26
+  %48 = icmp eq i64 %45, %47
+  br i1 %48, label %push.grow, label %push.store
 
 push.grow:
-  call void @nish_array_grow(%struct.nish_array* %33, i64 8)
+  call void @nish_array_grow(%struct.nish_array* %29, i64 8)
   br label %push.store
 
 push.store:
-  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
-  %59 = load i8*, i8** %58, align 8, !alias.scope !20, !noalias !21, !tbaa !27
-  %60 = bitcast i8* %59 to i8**
-  %61 = getelementptr inbounds i8*, i8** %60, i64 %54
-  store i8* %52, i8** %61, align 8, !alias.scope !21, !noalias !20, !tbaa !29
-  %62 = add i64 %54, 1
-  store i64 %62, i64* %53, align 8, !alias.scope !20, !noalias !21, !tbaa !25
-  %63 = trunc i64 %62 to i32
+  %49 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 2
+  %50 = load i8*, i8** %49, align 8, !alias.scope !20, !noalias !21, !tbaa !27
+  %51 = bitcast i8* %50 to i8**
+  %52 = getelementptr inbounds i8*, i8** %51, i64 %45
+  store i8* %43, i8** %52, align 8, !alias.scope !21, !noalias !20, !tbaa !29
+  %53 = add i64 %45, 1
+  store i64 %53, i64* %44, align 8, !alias.scope !20, !noalias !21, !tbaa !25
+  %54 = trunc i64 %53 to i32
   ret void
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
 }
 
 define void @nish.HelpMenu.note(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
@@ -1753,9 +1702,8 @@ attributes #1 = { nounwind "probe-stack"="inline-asm" }
 attributes #2 = { nounwind readonly "probe-stack"="inline-asm" }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
-attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #6 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!38, !39, !40, !41, !42}
 !0 = !{!"nish TBAA"}
@@ -1789,13 +1737,13 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !28 = !{!"element ptr", !1, i64 0}
 !29 = !{!28, !28, i64 0}
 !30 = !{!"i32", !1, i64 0}
-!31 = !{!"HelpMenu", !3, i64 0, !3, i64 8, !30, i64 16, !30, i64 20, !3, i64 24, !30, i64 32}
+!31 = !{!"HelpMenu", !3, i64 0, !3, i64 8, !30, i64 16, !30, i64 20, !3, i64 24, !2, i64 32}
 !32 = !{!31, !3, i64 0}
 !33 = !{!31, !3, i64 8}
 !34 = !{!31, !30, i64 16}
 !35 = !{!31, !30, i64 20}
 !36 = !{!31, !3, i64 24}
-!37 = !{!31, !30, i64 32}
+!37 = !{!31, !2, i64 32}
 !38 = !{i32 8, !"cf-protection-branch", i32 1}
 !39 = !{i32 8, !"cf-protection-return", i32 1}
 !40 = !{i32 8, !"branch-target-enforcement", i32 1}
