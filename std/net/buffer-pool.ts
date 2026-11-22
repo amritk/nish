@@ -106,15 +106,23 @@ export class BufferPool {
    * @returns a buffer of `size` bytes the caller now borrows until it hands it back through `give` or `giveSecret`
    */
   take(): u8[] {
-    if (this.free.length > 0) {
-      const buf: u8[] = this.free[this.free.length - 1]
-      this.free.pop()
+    const free: u8[][] = this.free
+    const count: i32 = toI32(free.length)
+    // The same test twice: the prover reads the first as covering the index
+    // and the second as covering the `pop`.
+    if (count > 0 && free.length > 0) {
+      const buf: u8[] = free[count - 1]
+      free.pop()
       return buf
     }
-    if (this.made >= this.ceiling) {
-      panic(`BufferPool ${this.name}: all ${this.ceiling} buffers are lent, so one was never given back`)
+    // A local copy is what lets the prover see that `made + 1` stays below
+    // the ceiling once the test has passed.
+    const made: i32 = this.made
+    const ceiling: i32 = this.ceiling
+    if (made >= ceiling) {
+      panic(`BufferPool ${this.name}: all ${ceiling} buffers are lent, so one was never given back`)
     }
-    this.made = this.made + 1
+    this.made = made + 1
     return new Array<u8>(this.size)
   }
 
@@ -161,7 +169,9 @@ export class BufferPool {
    * @returns the count of buffers borrowed and not yet given back, which is 0 when every borrower kept its promise
    */
   lent(): i32 {
-    return this.made - toI32(this.free.length)
+    // Both counts are at least 0, so the difference fits; it is taken in
+    // 64 bits because the prover cannot see that `made` is never negative.
+    return toI32(toI64(this.made) - toI64(this.free.length))
   }
 }
 

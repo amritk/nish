@@ -90,7 +90,7 @@ declare function nishshm_read(h: i32, at: i32, dst: u8[], n: u64, off: u64, len:
 declare function nishshm_write(h: i32, at: i32, src: readonly u8[], n: u64, off: u64, len: u64): void
 declare function nishshm_wait_i32(h: i32, at: i32, expected: i32, timeoutMs: i32): i32
 declare function nishshm_wake(h: i32, at: i32, count: i32): i32
-declare function strerror(errnum: i32): string
+declare function strerror(errnum: i32): string | null
 
 // The window intrinsics (`src/shm-window.ts`): each body is a call of itself,
 // which the compiler replaces with `nishshm_lend` or `nishshm_give_back`. They
@@ -149,14 +149,24 @@ export class ShmError {
    */
   constructor(code: i32) {
     this.code = code
-    this.message = code === 95 ? "not supported on this platform" : strerror(code)
+    // POSIX lets `strerror` answer NULL, so the type says so and the code
+    // stands in for the text rather than stop the program over a message.
+    const text = code === 95 ? "not supported on this platform" : strerror(code)
+    this.message = text === null ? `error ${code}` : text
   }
 }
+
+/**
+ * The errno a failed runtime call answered, negated back to positive. The
+ * negation wraps through `u32`, so a stray `-2147483648` from C stays itself
+ * instead of overflowing; the runtime only answers small errnos.
+ */
+const shmErrno = (rc: i32): i32 => toI32(toU32(0) - toU32(rc))
 
 /** `Ok()` for 0, the error for a negated errno. */
 const shmDone = (rc: i32): Result<void, ShmError> => {
   if (rc < 0) {
-    return Err(new ShmError(-rc))
+    return Err(new ShmError(shmErrno(rc)))
   }
   return Ok()
 }
@@ -177,7 +187,7 @@ const shmDone = (rc: i32): Result<void, ShmError> => {
 export const createRegion = (name: string, bytes: i32): Result<SharedRegion, ShmError> => {
   const h: i32 = nishshm_create(name, bytes)
   if (h < 0) {
-    return Err(new ShmError(-h))
+    return Err(new ShmError(shmErrno(h)))
   }
   return Ok(new SharedRegion(h))
 }
@@ -198,7 +208,7 @@ export const createRegion = (name: string, bytes: i32): Result<SharedRegion, Shm
 export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
   const h: i32 = nishshm_open(name)
   if (h < 0) {
-    return Err(new ShmError(-h))
+    return Err(new ShmError(shmErrno(h)))
   }
   return Ok(new SharedRegion(h))
 }

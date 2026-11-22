@@ -1,3 +1,16 @@
+// Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
+// `std/sync/ring` no longer stops it, but three calls still reach sites in
+// other modules. `getI32LE` and its kin in `std/bytes` reach their index
+// checks (an offset past the array is the caller's contract) and the
+// overflow of `off + i`, which a golden outside this change pins.
+// `createRegion`, `openRegion` and `unlinkRegion` reach the `ffi-nul` check
+// of the region's name, which the prover proves only for a literal.
+// `preforkWith` reaches the panics `preforkSupervise` keeps for a config that
+// breaks its contract. Follow-up: a checked twin of the `std/bytes`
+// accessors, a prover rule for a name already tested for NUL, and a checked
+// `preforkWith`; then build this file without `--allow-panics`.
+// smoke: args --allow-panics
+//
 // Work handed across cores without a socket: `nish/net/prefork` starts five
 // worker processes, worker 0 owns a table of counters, and workers 1 to 4
 // send it jobs ("add this to counter k") through one shared `MpscRing` and get
@@ -6,7 +19,7 @@
 // it starts the workers, which open it by name; when they have all exited the
 // supervisor reads the totals out of the region and unlinks it.
 //
-//     build/nish examples/prefork-jobs.ts --link build/prefork-jobs
+//     build/nish --allow-panics examples/prefork-jobs.ts --link build/prefork-jobs
 //     build/prefork-jobs           # 4 workers sent 40000 jobs, ...
 //     build/prefork-jobs my-name   # the region is /dev/shm/my-name
 //
@@ -24,7 +37,14 @@ import {
   preforkWith,
 } from "nish/net/prefork"
 import { monotonicNanos } from "nish:process"
-import { attachMpscRing, MpscRing, mpscRingBytes, RING_CORRUPT, RING_EMPTY, tryInitMpscRing } from "nish/sync/ring"
+import {
+  attachMpscRing,
+  MpscRing,
+  mpscRingBytes,
+  RING_CORRUPT,
+  RING_EMPTY,
+  tryInitMpscRing,
+} from "nish/sync/ring"
 import {
   createRegion,
   openRegion,
@@ -66,8 +86,8 @@ const regionBytes = (): i32 => answersAt(CLIENTS + 1)
  * The next record, sleeping on the doorbell when there is none; polling off
  * Linux. `take` and `takeWait` answer a slot a peer scribbled on as
  * `RING_CORRUPT` where `tryPop` and `popWait` would stop the program, which
- * is what lets this file build without `--allow-panics`; the callers treat
- * it as a ring they can no longer trust.
+ * is why the rings need no `--allow-panics`; the callers treat it as a ring
+ * they can no longer trust.
  */
 const takeRecord = (ring: MpscRing, buf: u8[]): i32 => {
   const n: i32 = ring.takeWait(buf, toI32(0), WAIT_MS)

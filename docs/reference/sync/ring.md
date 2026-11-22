@@ -7,7 +7,10 @@ Bounded lock-free queues of byte records in a shared region, for handing work be
 ```ts
 import {
   MpscRing,
+  RING_CORRUPT,
   RING_EMPTY,
+  RING_FULL,
+  RING_TOO_LONG,
   RING_TOO_SMALL,
   SpscRing,
   attachMpscRing,
@@ -16,6 +19,7 @@ import {
   initSpscRing,
   mpscRingBytes,
   spscRingBytes,
+  tryInitMpscRing,
 } from "nish/sync/ring";
 ```
 
@@ -72,6 +76,12 @@ The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base: the
 <scalar-card title="spsc​Ring​Bytes" icon="phosphor/regular/function" href="#spscringbytes">
 
 The bytes an `SpscRing` of `capacity` data bytes takes from its base: the 256-byte header and the data.
+
+</scalar-card>
+
+<scalar-card title="try​Init​Mpsc​Ring" icon="phosphor/regular/function" href="#tryinitmpscring">
+
+`initMpscRing`, with a shape or a place it cannot use answered as an `Err` rather than a panic, for a caller built with `--deny-panics` or one whose shape comes from outside.
 
 </scalar-card>
 
@@ -225,16 +235,16 @@ the region the ring lives in, as this process mapped it
 <scalar-field name="base" type="i32" required>
 
 the byte offset of the ring's header, a multiple of 64 inside
-  the region; anything else panics, and so does a ring whose slots would
-  run past the region's end
+  the region
 
 </scalar-field>
 
 <scalar-field name="returns" type="Result&lt;MpscRing, string&gt;">
 
 a new `MpscRing` that starts from the consumer's position as the
-  header holds it now, or the reason there is no ring at `base`: no MPSC
-  magic, or a shape no `initMpscRing` writes
+  header holds it now, or the reason there is no ring at `base`: a base
+  that is not a multiple of 64 in the region, no MPSC magic, a shape no
+  `initMpscRing` writes, or slots that would run past the region's end
 
 </scalar-field>
 
@@ -260,16 +270,16 @@ the region the ring lives in, as this process mapped it
 <scalar-field name="base" type="i32" required>
 
 the byte offset of the ring's header, a multiple of 64 inside
-  the region; anything else panics, and so does a ring whose data would run
-  past the region's end
+  the region
 
 </scalar-field>
 
 <scalar-field name="returns" type="Result&lt;SpscRing, string&gt;">
 
 a new `SpscRing` that starts from both positions as the header
-  holds them now, or the reason there is no ring at `base`: no SPSC magic,
-  or a capacity no `initSpscRing` writes
+  holds them now, or the reason there is no ring at `base`: a base that is
+  not a multiple of 64 in the region, no SPSC magic, a capacity no
+  `initSpscRing` writes, or data that would run past the region's end
 
 </scalar-field>
 
@@ -441,6 +451,62 @@ how many bytes from the ring's base the region must hold
 
 </scalar-field>
 
+### tryInitMpscRing
+
+`initMpscRing`, with a shape or a place it cannot use answered as an `Err`
+rather than a panic, for a caller built with `--deny-panics` or one whose
+shape comes from outside. It writes the header exactly as `initMpscRing`
+does, and writes nothing when it answers an `Err`.
+
+```ts
+const tryInitMpscRing: (
+  region: SharedRegion,
+  base: i32,
+  slots: i32,
+  slotBytes: i32,
+  doorbell: boolean,
+) => Result<MpscRing, string>
+```
+
+<scalar-field name="region" type="SharedRegion" required>
+
+the region the ring lives in
+
+</scalar-field>
+
+<scalar-field name="base" type="i32" required>
+
+the byte offset of the ring's header, a multiple of 64 with
+  `mpscRingBytes(slots, slotBytes)` bytes of the region from it
+
+</scalar-field>
+
+<scalar-field name="slots" type="i32" required>
+
+how many records the ring holds at once, a power of two from 2
+
+</scalar-field>
+
+<scalar-field name="slotBytes" type="i32" required>
+
+the longest record, in bytes, a multiple of 8 from 8
+
+</scalar-field>
+
+<scalar-field name="doorbell" type="boolean" required>
+
+whether a consumer's `popWait` may sleep on Linux's futex,
+  at the cost of a `SEQ_CST` store and load on every push
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;MpscRing, string&gt;">
+
+a new `MpscRing` on the empty ring, or the message
+  `initMpscRing` would panic with
+
+</scalar-field>
+
 ## Classes
 
 ### MpscRing
@@ -456,10 +522,13 @@ class MpscRing
 | --- | --- |
 | `new MpscRing(region: SharedRegion, base: i32)` | Reads the header of the ring at `base`: its shape, its doorbell and the consumer's position (an `ACQUIRE` load). It checks nothing; a program gets its ring from `initMpscRing` or `attachMpscRing`, which check the place and the magic first. |
 | `head: i64` | The consumer's position: records ever popped (this object's, as the consumer). |
+| `offer(src: readonly u8[], off: i32, len: i32): i32` | `tryPush`, with a record too long for a slot answered rather than a panic, for a caller built with `--deny-panics` or one whose lengths come from outside. It claims and publishes the slot exactly as `tryPush` does. |
 | `popBatch(dst: u8[], lens: i32[]): i32` | Moves up to `lens.length` records into `dst`, back to back from 0, while they fit, and sets `lens[i]` to each one's length: how many it moved. Unlike `SpscRing.popBatch` it costs what as many `tryPop`s would: an `ACQUIRE` load and a `RELEASE` store per record. |
 | `popWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `SpscRing.popWait`, for this ring: `tryPop`, but on an empty ring it polls briefly and then sleeps until a push rings the doorbell, for at most `timeoutMs`, checked between rounds of polling. A ring without a doorbell, or one off Linux, answers `SHM_UNSUPPORTED` after a round that finds nothing. |
+| `take(dst: u8[], off: i32): i32` | `tryPop`, with a slot another process scribbled on answered as `RING_CORRUPT` rather than a panic, for a caller built with `--deny-panics`. The loads and stores are `tryPop`'s. |
+| `takeWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `popWait` on `take`: a slot another process scribbled on ends the wait as `RING_CORRUPT` rather than a panic, for a caller built with `--deny-panics`. It polls and sleeps exactly as `popWait` does. |
 | `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. The slot's sequence number is loaded `ACQUIRE`, and the slot is freed for the producers with a `RELEASE` store of it. |
-| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Queues `src[off, off + len)` as one record: false when every slot is taken now. A record longer than a slot panics. The producer claims a slot with a `RELAXED` compare-exchange on the enqueue position, after an `ACQUIRE` load of the slot's sequence number; it copies the record in and publishes it with one store of that number, `RELEASE`, or `SEQ_CST` followed by the doorbell check on a doorbell ring. |
+| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Queues `src[off, off + len)` as one record: false when every slot is taken now. A record longer than a slot panics; `offer` answers it as `RING_TOO_LONG` instead. The producer claims a slot with a `RELAXED` compare-exchange on the enqueue position, after an `ACQUIRE` load of the slot's sequence number; it copies the record in and publishes it with one store of that number, `RELEASE`, or `SEQ_CST` followed by the doorbell check on a doorbell ring. |
 
 ### SpscRing
 
@@ -493,11 +562,37 @@ class SpscRing
 
 <scalar-grid cols="2">
 
+<scalar-card title="-3" icon="phosphor/regular/hash">
+
+`RING_CORRUPT: i32`
+
+`MpscRing.take`, `MpscRing.takeWait`: the consumer's slot holds a length no
+producer writes, so another process scribbled on the ring. Nothing is moved
+and the slot stays as it is; `tryPop` panics on it instead.
+
+</scalar-card>
+
 <scalar-card title="-1" icon="phosphor/regular/hash">
 
 `RING_EMPTY: i32`
 
 `tryPop`, `popWait`: the ring is empty (or the wait ran out).
+
+</scalar-card>
+
+<scalar-card title="-4" icon="phosphor/regular/hash">
+
+`RING_FULL: i32`
+
+`MpscRing.offer`: every slot is taken now; nothing is written.
+
+</scalar-card>
+
+<scalar-card title="-5" icon="phosphor/regular/hash">
+
+`RING_TOO_LONG: i32`
+
+`MpscRing.offer`: the record is longer than a slot, or its length is negative; nothing is written.
 
 </scalar-card>
 

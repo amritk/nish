@@ -10959,10 +10959,14 @@ function BufferPool.constructor(this: BufferPool, name: string, size: i32, ceili
 function BufferPool.take(this: BufferPool): u8[] -> @nish.BufferPool.take [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  calls: nish_panic nish_str_concat nish_str_from_i32
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -6:11 free: u8[][] (const)
+  local -5:11 count: i32 (const)
   local -1:13 buf: u8[] (const)
+  local +5:11 made: i32 (const)
+  local +6:11 ceiling: i32 (const)
 function BufferPool.give(this: BufferPool, buf: u8[], used: i32): void -> @nish.BufferPool.give [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -10982,8 +10986,7 @@ function BufferPool.giveSecret(this: BufferPool, buf: u8[], used: i32): void -> 
   stackSites=0 stackLocals=0
   callee -2:5 bufferPoolCheckGive -> @nish.bufferPoolCheckGive
 function BufferPool.lent(this: BufferPool): i32 -> @nish.BufferPool.lent [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function bufferPoolCheckGive(pool: BufferPool, buf: u8[], used: i32): void -> @nish.bufferPoolCheckGive
