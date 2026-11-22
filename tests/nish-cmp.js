@@ -18642,6 +18642,12 @@ const DECLARED = [
     changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
+  {
+    program: "bench/std-net-quic-packet.ts",
+    file: "std-net-quic-packet.ll",
+    changelog: "the std/net QUIC wire layer panic-free",
+    why: "the bench's own module calls the QUIC packet functions, whose declares lose their panic attributes and whose checked header parse now returns a refusal instead of panicking (WP82 S4)",
+  },
 ]
 
 /**
