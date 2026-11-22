@@ -1,18 +1,12 @@
-// Opt-out (`--allow-panics`): calls into `std/bytes`, `std/net/prefork`,
-// `std/sync/ring` and `std/sync/shm` reach their panic sites; this file keeps
-// none of its own. Follow-up: make those modules panic-free, then build this
-// file without `--allow-panics`.
-// smoke: args --allow-panics
-//
 // Work handed across cores without a socket: `nish/net/prefork` starts five
 // worker processes, worker 0 owns a table of counters, and workers 1 to 4
 // send it jobs ("add this to counter k") through one shared `MpscRing` and get
-// each answer ("counter k is now v") back on an `SpscRing` of their own. All
+// each answer ("counter k is now v") back on an `MpscRing` of their own. All
 // five rings live in one `nish/sync/shm` region the supervisor creates before
 // it starts the workers, which open it by name; when they have all exited the
 // supervisor reads the totals out of the region and unlinks it.
 //
-//     build/nish --allow-panics examples/prefork-jobs.ts --link build/prefork-jobs
+//     build/nish examples/prefork-jobs.ts --link build/prefork-jobs
 //     build/prefork-jobs           # 4 workers sent 40000 jobs, ...
 //     build/prefork-jobs my-name   # the region is /dev/shm/my-name
 //
@@ -30,17 +24,7 @@ import {
   preforkWith,
 } from "nish/net/prefork"
 import { monotonicNanos } from "nish:process"
-import {
-  attachMpscRing,
-  attachSpscRing,
-  initMpscRing,
-  initSpscRing,
-  MpscRing,
-  mpscRingBytes,
-  RING_EMPTY,
-  SpscRing,
-  spscRingBytes,
-} from "nish/sync/ring"
+import { attachMpscRing, MpscRing, mpscRingBytes, RING_CORRUPT, RING_EMPTY, tryInitMpscRing } from "nish/sync/ring"
 import {
   createRegion,
   openRegion,
@@ -65,7 +49,8 @@ const JOBS_AT: i32 = 64
 const JOB_SLOTS: i32 = 64
 const JOB_BYTES: i32 = 16 // [client i32][seq i32][counter i32][amount i32]
 const ANSWER_BYTES: i32 = 12 // [seq i32][value i64]
-const ANSWER_RING: i32 = 1024
+const ANSWER_SLOTS: i32 = WINDOW
+const ANSWER_SLOT: i32 = 16 // a slot holds one answer, rounded up to 8
 const WAIT_MS: i32 = 1000 // how long a worker waits on an empty ring
 // The sum is a `u32`, whose arithmetic wraps rather than panics: `worker` is 1
 // to 5 and the region is some tens of kilobytes, far below 4294967295.
@@ -73,19 +58,20 @@ const answersAt = (worker: i32): i32 =>
   toI32(
     toU32(JOBS_AT) +
       toU32(mpscRingBytes(JOB_SLOTS, JOB_BYTES)) +
-      (toU32(worker) - 1) * toU32(spscRingBytes(ANSWER_RING))
+      (toU32(worker) - 1) * toU32(mpscRingBytes(ANSWER_SLOTS, ANSWER_SLOT))
   )
 const regionBytes = (): i32 => answersAt(CLIENTS + 1)
 
-/** The next record, sleeping on the doorbell when there is none; polling off Linux. */
-const takeJob = (ring: MpscRing, buf: u8[]): i32 => {
-  const n: i32 = ring.popWait(buf, toI32(0), WAIT_MS)
-  return n === SHM_UNSUPPORTED ? ring.tryPop(buf, toI32(0)) : n
-}
-
-const takeAnswer = (ring: SpscRing, buf: u8[]): i32 => {
-  const n: i32 = ring.popWait(buf, toI32(0), WAIT_MS)
-  return n === SHM_UNSUPPORTED ? ring.tryPop(buf, toI32(0)) : n
+/**
+ * The next record, sleeping on the doorbell when there is none; polling off
+ * Linux. `take` and `takeWait` answer a slot a peer scribbled on as
+ * `RING_CORRUPT` where `tryPop` and `popWait` would stop the program, which
+ * is what lets this file build without `--allow-panics`; the callers treat
+ * it as a ring they can no longer trust.
+ */
+const takeRecord = (ring: MpscRing, buf: u8[]): i32 => {
+  const n: i32 = ring.takeWait(buf, toI32(0), WAIT_MS)
+  return n === SHM_UNSUPPORTED ? ring.take(buf, toI32(0)) : n
 }
 
 /**
@@ -99,9 +85,9 @@ const owner = (region: SharedRegion): i32 => {
     console.error(`the job ring: ${jobs.error}`)
     return 1
   }
-  const answers: SpscRing[] = []
+  const answers: MpscRing[] = []
   for (let c: i32 = 0; c < CLIENTS; c++) {
-    const ring = attachSpscRing(region, answersAt(c + 1))
+    const ring = attachMpscRing(region, answersAt(c + 1))
     if (ring.isErr()) {
       console.error(`an answer ring: ${ring.error}`)
       return 1
@@ -114,7 +100,9 @@ const owner = (region: SharedRegion): i32 => {
   const answer: u8[] = new Array<u8>(toU16(ANSWER_BYTES))
   let done: i32 = 0
   let answered: u64 = toU64(0)
-  while (done < CLIENTS && takeJob(jobs.value, job) !== RING_EMPTY) {
+  // Every answer below 0 ends the loop: an empty ring, a record too long for
+  // `job`, or a ring a peer scribbled on.
+  while (done < CLIENTS && takeRecord(jobs.value, job) >= 0) {
     const client: i32 = getI32LE(job, 0)
     const counter: i32 = getI32LE(job, 8)
     if (counter < 0) {
@@ -132,7 +120,7 @@ const owner = (region: SharedRegion): i32 => {
     setI32LE(answer, 0, getI32LE(job, 4))
     setI64LE(answer, 4, toI64(counters[counter]))
     // The client never has more in flight than its ring holds.
-    answers[slot].tryPush(answer, toI32(0), ANSWER_BYTES)
+    answers[slot].offer(answer, toI32(0), ANSWER_BYTES)
     answered = answered + 1
   }
   let total: u64 = toU64(0)
@@ -155,7 +143,7 @@ const client = (region: SharedRegion, me: i32): i32 => {
     console.error(`the job ring: ${jobs.error}`)
     return 1
   }
-  const answers = attachSpscRing(region, answersAt(me))
+  const answers = attachMpscRing(region, answersAt(me))
   if (answers.isErr()) {
     console.error(`my answer ring: ${answers.error}`)
     return 1
@@ -172,7 +160,7 @@ const client = (region: SharedRegion, me: i32): i32 => {
       setI32LE(job, 4, toI32(sent))
       setI32LE(job, 8, toI32(sent) % COUNTERS)
       setI32LE(job, 12, toI32(sent))
-      if (!jobs.value.tryPush(job, toI32(0), JOB_BYTES)) {
+      if (jobs.value.offer(job, toI32(0), JOB_BYTES) !== 0) {
         break
       }
       sent = sent + 1
@@ -184,8 +172,9 @@ const client = (region: SharedRegion, me: i32): i32 => {
       }
       continue
     }
-    if (takeAnswer(answers.value, answer) === RING_EMPTY) {
-      break // a second with no answer: the owner is gone
+    const took: i32 = takeRecord(answers.value, answer)
+    if (took === RING_EMPTY || took === RING_CORRUPT) {
+      break // a second with no answer, or a scribbled ring: the owner is gone
     }
     since = toU64(monotonicNanos())
     got = got + 1
@@ -195,7 +184,7 @@ const client = (region: SharedRegion, me: i32): i32 => {
     }
   }
   setI32LE(job, 8, -1)
-  for (let k: i32 = 0; k < 1000000 && !jobs.value.tryPush(job, toI32(0), JOB_BYTES); k++) {
+  for (let k: i32 = 0; k < 1000000 && jobs.value.offer(job, toI32(0), JOB_BYTES) !== 0; k++) {
     // full: the owner is behind, so spin a while
   }
   region.addI32(FAILURES_AT, toI32(wrong + (toU32(JOBS) - got)), SEQ_CST)
@@ -214,9 +203,17 @@ const supervise = (name: string): i32 => {
     return 1
   }
   const region = created.value
-  initMpscRing(region, JOBS_AT, JOB_SLOTS, JOB_BYTES, true)
+  const made = tryInitMpscRing(region, JOBS_AT, JOB_SLOTS, JOB_BYTES, true)
+  if (made.isErr()) {
+    console.error(`the job ring: ${made.error}`)
+    return 1
+  }
   for (let c: i32 = 0; c < CLIENTS; c++) {
-    initSpscRing(region, answersAt(c + 1), ANSWER_RING, true)
+    const ring = tryInitMpscRing(region, answersAt(c + 1), ANSWER_SLOTS, ANSWER_SLOT, true)
+    if (ring.isErr()) {
+      console.error(`an answer ring: ${ring.error}`)
+      return 1
+    }
   }
   const config = new PreforkConfig()
   config.workers = CLIENTS + 1
