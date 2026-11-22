@@ -2050,10 +2050,13 @@ export class PgConnection {
 
   /** Makes the column arrays hold at least `n`. */
   private reserveColumns(n: i32): void {
-    if (n <= toI32(this.colStarts.length)) {
+    const have: i32 = toI32(this.colStarts.length)
+    // A row or description holds at most `maxColumns`, 65535, so the arrays
+    // stay under it too; the test states that for the prover.
+    if (n <= have || have > 65535) {
       return
     }
-    const size: i32 = n < 2 * toI32(this.colStarts.length) ? 2 * toI32(this.colStarts.length) : n
+    const size: i32 = n < have * 2 ? have * 2 : n
     const starts: i32[] = new Array<i32>(size)
     const lengths: i32[] = new Array<i32>(size)
     const types: i32[] = new Array<i32>(size)
@@ -2243,7 +2246,7 @@ export class PgConnection {
   /** AuthenticationSASL: the mechanisms, each NUL-terminated, then a 0; SCRAM-SHA-256 must be among them. */
   private scramStart(body: i32, end: i32): i32 {
     const b: u8[] = this.input
-    if (body < 0 || end > toI32(b.length)) {
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length)) {
       return this.fail(PG_ERR_FRAME)
     }
     let offered: boolean = false
@@ -2259,7 +2262,7 @@ export class PgConnection {
         break
       }
       const nameEnd: i32 = pgFind(b, p, end, 0)
-      if (nameEnd === end) {
+      if (nameEnd < 0 || nameEnd < p || nameEnd >= end) {
         return this.fail(PG_ERR_FRAME)
       }
       if (pgBytesAre(b, p, nameEnd - p, "SCRAM-SHA-256")) {
@@ -2294,16 +2297,23 @@ export class PgConnection {
    */
   private scramContinue(body: i32, end: i32): i32 {
     const b: u8[] = this.input
-    if (body < 0 || end > toI32(b.length)) {
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length)) {
       return this.fail(PG_ERR_FRAME)
     }
+    // Each comma lies inside the body, the salt's after the nonce's, so every
+    // position below is inside the body; the tests state that for the prover.
     const nonceEnd: i32 = pgFind(b, body, end, 44)
-    const saltEnd: i32 = pgFind(b, nonceEnd + 1 < end ? nonceEnd + 1 : end, end, 44)
+    if (nonceEnd < 0 || nonceEnd < body || nonceEnd >= end || body > toI32(b.length) - 2) {
+      return this.fail(PG_ERR_SCRAM)
+    }
+    const saltStart: i32 = nonceEnd + 1
+    const saltEnd: i32 = pgFind(b, saltStart, end, 44)
     if (
-      nonceEnd === end ||
-      saltEnd === end ||
+      saltEnd < 0 ||
+      saltEnd < saltStart ||
+      saltEnd >= end ||
       !pgBytesAre(b, body, 2, "r=") ||
-      !pgBytesAre(b, nonceEnd + 1, 2, "s=") ||
+      !pgBytesAre(b, saltStart, 2, "s=") ||
       end - saltEnd < 4 ||
       !pgBytesAre(b, saltEnd + 1, 2, "i=")
     ) {
@@ -2311,12 +2321,14 @@ export class PgConnection {
     }
     // The nonce extends ours with printable characters other than a comma.
     const ours: i32 = toI32(this.clientNonce.length)
-    if (nonceEnd - body - 2 <= ours || !pgBytesAre(b, body + 2, ours, this.clientNonce)) {
+    const nonceAt: i32 = body + 2
+    if (ours < 0 || nonceEnd - nonceAt <= ours || !pgBytesAre(b, nonceAt, ours, this.clientNonce)) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const nonceStart: i32 = body + 2 + ours
-    const digitsStart: i32 = saltEnd + 3
-    if (nonceStart < 0 || nonceEnd > toI32(b.length)) {
+    // Both lie before a comma inside the body, so they fit an `i32`.
+    const nonceStart: i32 = toI32(toI64(nonceAt) + toI64(ours))
+    const digitsStart: i32 = toI32(toI64(saltEnd) + toI64(3))
+    if (nonceStart < 0) {
       return this.fail(PG_ERR_SCRAM)
     }
     for (let i: i32 = nonceStart; i < nonceEnd && i < toI32(b.length); i++) {
@@ -2334,12 +2346,16 @@ export class PgConnection {
       if (d < 0 || d > 9 || iterations > this.config.maxIterations) {
         return this.fail(PG_ERR_SCRAM)
       }
+      // The digits are bounded by `PG_MAX_ITERATIONS` (written out so the prover sees it), so this fits.
+      if (iterations < 0 || iterations > 214748363) {
+        return this.fail(PG_ERR_SCRAM)
+      }
       iterations = iterations * 10 + d
     }
     if (iterations < this.config.minIterations || iterations > this.config.maxIterations) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const salt: u8[] | null = base64StdPadDecode(String.fromBytes(b, nonceEnd + 3, saltEnd))
+    const salt: u8[] | null = base64StdPadDecode(String.fromBytes(b, toI32(toI64(saltStart) + toI64(2)), saltEnd))
     if (salt === null || salt.length === 0) {
       return this.fail(PG_ERR_SCRAM)
     }
@@ -2351,7 +2367,7 @@ export class PgConnection {
     if (salted === null) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const withoutProof: string = `c=biws,r=${String.fromBytes(b, body + 2, nonceEnd)}`
+    const withoutProof: string = `c=biws,r=${String.fromBytes(b, nonceAt, nonceEnd)}`
     const authMessage: u8[] = pgBytesOf(
       `${this.firstBare()},${String.fromBytes(b, body, end)},${withoutProof}`
     )
@@ -2372,10 +2388,10 @@ export class PgConnection {
   /** AuthenticationSASLFinal: exactly `v=` and the ServerSignature, compared in constant time. */
   private scramFinal(body: i32, end: i32): i32 {
     const b: u8[] = this.input
-    if (end - body < 2 || !pgBytesAre(b, body, 2, "v=")) {
+    if (body < 0 || end < 0 || end - body < 2 || !pgBytesAre(b, body, 2, "v=")) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const signature: u8[] | null = base64StdPadDecode(String.fromBytes(b, body + 2, end))
+    const signature: u8[] | null = base64StdPadDecode(String.fromBytes(b, toI32(toI64(body) + toI64(2)), end))
     if (signature === null || signature.length !== 32) {
       return this.fail(PG_ERR_SCRAM)
     }
@@ -3481,7 +3497,8 @@ export class PgConnection {
       return ""
     }
     const start: i32 = this.colStarts[c]
-    return String.fromBytes(this.input, start, start + length)
+    // `readRow` held the column inside the row, so its end fits an `i32`.
+    return String.fromBytes(this.input, start, toI32(toI64(start) + toI64(length)))
   }
 
   /**
