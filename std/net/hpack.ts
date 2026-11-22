@@ -123,6 +123,9 @@ export const HPACK_ERR_SIZE_UPDATE_MISSING: i32 = -8
  */
 export const HPACK_ERR_COPY_BUDGET: i32 = -9
 
+/** What `hpackHuffmanLength` answers for a coded length that does not fit `i32`, or a code cut short. */
+const HPACK_HUFFMAN_TOO_LONG: i32 = 2147483647
+
 /**
  * How many times the larger of the table's maximum size and a block's length
  * the decoder copies into its table for one block, at most
@@ -528,13 +531,13 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
   for (let i: i32 = off; i >= 0 && toI64(i) < end && i < toI32(src.length); i += 1) {
     const sym: i32 = toI32(src[i])
     if (sym >= toI32(lengths.length)) {
-      return 2147483647
+      return HPACK_HUFFMAN_TOO_LONG
     }
     bits += toU64(lengths[sym] & 31)
   }
   const bytes: u64 = (bits + toU64(7)) >> toU64(3)
   if (bytes > toU64(2147483647)) {
-    return 2147483647
+    return HPACK_HUFFMAN_TOO_LONG
   }
   return toI32(bytes)
 }
@@ -786,7 +789,7 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
 
 /**
  * Appends `data` as a §5.2 string literal: Huffman-coded when `huffman` is
- * true, else raw. A caller who wants the shorter of the two compares
+ * true and the coded length fits below 2^31 - 1, else raw. A caller who wants the shorter of the two compares
  * `hpackHuffmanLength` with the raw length.
  * @param h The code to encode with when `huffman` is true.
  * @param out Where the literal goes, appended after what it holds: its length with a 7-bit prefix and the
@@ -796,8 +799,11 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
  */
 export const hpackEncodeString = (h: HpackHuffman, out: u8[], data: u8[], huffman: boolean): void => {
   const n: i32 = toI32(data.length)
-  if (huffman) {
-    hpackEncodeInteger(out, 128, 7, hpackHuffmanLength(h, data, 0, n))
+  // `hpackHuffmanLength` answers 2^31 - 1 when the coded length does not fit, or the code is cut short; the
+  // octets then go raw, so the length written is always the length that follows.
+  const coded: i32 = huffman ? hpackHuffmanLength(h, data, 0, n) : HPACK_HUFFMAN_TOO_LONG
+  if (coded < HPACK_HUFFMAN_TOO_LONG) {
+    hpackEncodeInteger(out, 128, 7, coded)
     hpackHuffmanEncode(h, data, 0, n, out)
     return
   }
