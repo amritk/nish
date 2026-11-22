@@ -266,7 +266,30 @@ The window guards that replaced panics are of the same kind: the `false` of
 outside their buffer, which the parser's `0 <= start <= end <= buf.length` and
 `headUsed <= head.length` rule out, and the failed `tryCopyBytes` in
 `feed`, `http1ClientReserve` and `http1ClientKeep`, whose ranges were checked
-just before. No input reaches them, so no check does.
+just before. So are the other guards WP82 added for the same reason:
+
+- `http1ClientTargetOk`'s second `target.length < 1` test, after its own
+  `n === 0` test of the same length, and its `colon >= n` arm, where `colon`
+  is an index below `n`;
+- the `j >= 0 && j <= spans.length - 4` conjuncts of the span walks
+  (`get`, `http1ClientTally`, `http1ClientConnectionHas` and the
+  `Content-Length` pass of `http1ClientEndOfHead`), whose `spans` holds four
+  entries for each of `spanCount`; `http1ClientSpanAt`'s `-1` past index
+  536870911, and the `""` that `fieldName(i)` and `fieldValue(i)` answer for
+  a span outside `spans`, behind an index already tested against `spanCount`;
+- the `a < 0 || b > head.length` arms of `http1ClientHeadIs` and
+  `http1ClientHeadSameWord`, and the `head.length` conjuncts of their loops
+  and of the list scans, whose spans `http1ClientKeep` wrote inside `head`;
+- the `i < buf.length` conjuncts of the field-name, chunk-size and OWS loops
+  in `http1ClientFieldLine` and `http1ClientChunkSize`, whose line end is
+  already clamped to the buffer;
+- `http1ClientBodyWindow`'s `start < 0 || end < 0` arms, and `tunnelBytes`'s
+  `from < 0 || to > buf.length` arms and loop conjuncts, which the parser's
+  `0 <= start <= end <= buf.length` rules out;
+- the `a + 12` and `a + 13` range tests of `http1ClientStatusLine`, which a
+  line of that width inside `buf` already meets.
+
+No input reaches them, so no check does.
 
 **Every condition is observed, or recorded as equivalent.** A mechanical
 mutation sweep of `std/net/http1-client-codec.ts` deleted each operand of each `&&`
@@ -274,8 +297,16 @@ and `||`, moved each `<`, `<=`, `>` and `>=` boundary by one, deleted each
 assignment statement (every reset and clamp among them) and made false each
 `if` whose body is one statement, and ran the five `net_http1_client` link
 tests against each mutant. A mutant is killed when any test's stdout, exit
-status or stderr changes. The sweep predates the window guards above, which
-were added to remove panic sites: their conditions are not in the table.
+status or stderr changes.
+
+**The sweep predates WP82 and has not been re-run.** The table was last
+recorded in c71ab8f52. WP82's rewrite of the module (from 8f28112bd) changed
+conditions it names and added the guards listed above, which it never
+mutated: the status line's `b - a < 12` is now a 64-bit `width < 12` with an
+`a <= buf.length - 12` bound, the reason phrase's `b - a > 13` is now
+`width > 12` with an `a <= buf.length - 13` bound, and `tunnelBytes` no
+longer has an `n > 0` test. The counts and classes below are that earlier
+module's.
 
 | Class | Mutants | Killed | Survived | Invalid |
 | --- | --- | --- | --- | --- |

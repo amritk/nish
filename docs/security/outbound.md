@@ -24,9 +24,9 @@ and 6to4 addresses are judged by the IPv4 address they carry. A policy turns
 off the proxy, which would otherwise resolve and connect on the client's
 behalf, and caps redirects, total time and body size at the stricter of its own
 limits and the options'. A kept connection is reused only under the policy it
-was dialled under. Five findings were fixed while the module was written (OB-1
-High, OB-2 and OB-8 Medium, OB-3 and OB-4 Low); four are open (OB-5 to OB-7 and
-OB-9, Low).
+was dialled under. Six findings are fixed: five while the module was written
+(OB-1 High, OB-2 and OB-8 Medium, OB-3 and OB-4 Low) and OB-10 (Low) in WP82;
+four are open (OB-5 to OB-7 and OB-9, Low).
 
 ## Scope
 

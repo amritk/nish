@@ -131,7 +131,8 @@ refused, redacted or followed holds for both by construction. What differs:
 - **The body is read whole before `fetch` answers**, capped by
   `maxBodyBytes` (and by the outbound policy's cap under one), so a body
   without end costs at most that and fails with `HTTP_E_BODY_TOO_LARGE`. The
-  buffer grows in 64-bit arithmetic and stops at one array's reach
+  asynchronous client's buffer is grown by `push`, to exactly the bytes read;
+  its next length is summed in 64 bits and stops at one array's reach
   (`HTTP_CLIENT_ASYNC_BODY_MAX`, 2^31 - 1 bytes): a `maxBodyBytes` raised
   past it fails there with `HTTP_E_BODY_TOO_LARGE` rather than wrapping. A
   redirect's own body is read to `HTTP_CLIENT_DRAIN_BYTES` only, and, as

@@ -15,12 +15,12 @@ library module ([`export` and `import`](https://github.com/amritk/nish/blob/main
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): the TLS record
 layer under an `https:` fetch keeps panic sites no proof removes yet, and so
-do the range check of the `netRead` builtin a body read reaches and the URL
-parser `fetch` calls, so those calls are refused by default for now. The
+do the range checks of the `netRead` and `netWrite` builtins a body read and
+a request write reach and the URL parser `fetch` calls, so those calls are refused by default for now. The
 sums and the `panic` call in your own code build under the default once a
 guard bounds each sum and the `panic` becomes an error answer.
 
-<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that reaches the `netRead` range check and `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
@@ -76,7 +76,7 @@ parse is not echoed at all. The URL is named as it parses: in
 `http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
 path, which is echoed, so put credentials in a header, not in a URL:
 
-<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` range check and `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/fetch";

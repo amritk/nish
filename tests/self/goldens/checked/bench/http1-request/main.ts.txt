@@ -2709,7 +2709,8 @@ function exposeWith<u8[], i32, i32, tlsZeroHeld>(s: Secret<u8[]>, arg: i32, f: v
   stackSites=0 stackLocals=0
   callee +0:93 tlsZeroHeld -> @nish.tlsZeroHeld
 function expose<u8[], u8[], tlsHeldClone>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsHeldClone
   calls: nish.tlsHeldClone
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -9072,12 +9073,14 @@ function tlsHeldCopyIn(held: u8[], from: u8[]): i32 -> @nish.tlsHeldCopyIn [expo
   stackSites=0 stackLocals=0
   local -1:12 k: i32 (let)
 function tlsHeldClone(held: u8[]): u8[] -> @nish.tlsHeldClone [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.tlsZeros
   pointer held: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 copy: u8[] (const)
-  local +1:12 k: i32 (let)
+  local -2:9 copy: u8[] (const)
+  callee -2:22 tlsZeros -> @nish.tlsZeros
+  local -1:12 k: i32 (let)
 function tlsHeldCopyOver(from: u8[], to: Secret<u8[]>): i32 -> @nish.tlsHeldCopyOver [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$i32$fn.18.nish.tlsHeldCopyIn

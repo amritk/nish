@@ -413,6 +413,7 @@ export class Upstream {
       return UPSTREAM_E_FULL
     }
     const r: UpstreamResponse | null = this.slot(free[top])
+    // The free list holds only places of `calls`, so `r` is never null; the test proves the read.
     if (r === null) {
       return UPSTREAM_E_FULL
     }
@@ -547,6 +548,8 @@ export class Upstream {
     // Every call has the same timeout, so the oldest waiting call is the first to expire.
     while (this.waiting.count > 0) {
       const r: UpstreamResponse | null = this.slot(this.waiting.peek())
+      // `waiting` holds only places of `calls` and is not empty here, so `r` is never null;
+      // stopping on null leaves the ring as it is rather than spinning on a place it cannot read.
       if (r === null || r.deadline > now) {
         break
       }
@@ -650,6 +653,7 @@ export class Upstream {
   /** Writes what the socket takes of the call's head, then waits to read. */
   private send(c: UpstreamConnection): void {
     const r: UpstreamResponse | null = this.slot(c.call)
+    // `dispatch` sends only a connection it gave a place of `calls`, so `r` is never null.
     if (r === null) {
       this.finish(c, UPSTREAM_E_CLOSED)
       return
@@ -721,6 +725,7 @@ export class Upstream {
       if (event === HTTP1_NEED_MORE) {
         return
       }
+      // The loop runs only while `c.call` is a place `dispatch` gave it, so `r` is never null.
       if (r === null) {
         this.finish(c, UPSTREAM_E_CLOSED)
         return
