@@ -435,8 +435,11 @@ const preforkUdpField = (args: string[], at: i32): i32 => {
     if (flag.startsWith(PREFORK_UDP_FLAG)) {
       const value: string = flag.substring(PREFORK_UDP_FLAG.length)
       const comma: i32 = toI32(value.indexOf(","))
-      const fd: string = comma < 0 ? "" : value.substring(0, comma)
-      const size: string = comma < 0 ? "" : value.substring(toI64(comma) + 1)
+      if (comma < 0 || comma > toI32(value.length)) {
+        return -1
+      }
+      const fd: string = value.substring(0, comma)
+      const size: string = value.substring(toI64(comma) + 1)
       if (!preforkDigits(fd) || !preforkDigits(size)) {
         return -1
       }

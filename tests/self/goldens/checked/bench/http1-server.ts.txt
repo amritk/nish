@@ -40990,11 +40990,11 @@ function preforkUdpField(args: string[], at: i32): i32 -> @nish.preforkUdpField
   local +6:11 flag: string (const)
   local +8:13 value: string (const)
   local +9:13 comma: i32 (const)
-  local +10:13 fd: string (const)
-  local +11:13 size: string (const)
-  callee +12:12 preforkDigits -> @nish.preforkDigits
-  callee +12:34 preforkDigits -> @nish.preforkDigits
-  local +15:13 count: i32 (const)
+  local +13:13 fd: string (const)
+  local +14:13 size: string (const)
+  callee +15:12 preforkDigits -> @nish.preforkDigits
+  callee +15:34 preforkDigits -> @nish.preforkDigits
+  local +18:13 count: i32 (const)
 function preforkUdpListener(args: string[]): i32 -> @nish.preforkUdpListener [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.preforkUdpField

@@ -167,7 +167,7 @@ const ringSub = (a: i32, b: i32): i32 => toI32(toU32(a) - toU32(b))
 const ringGap = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
 
 /** The bytes an SPSC record of `len` takes: its length word and the payload, rounded up to 4. */
-const ringRecordBytes = (len: i32): i32 => ringAdd(toI32((toU32(len) + toU32(3)) & toU32(~3)), 4)
+const ringRecordBytes = (len: i32): i32 => ringAdd(toI32((toU32(len) + toU32(3)) & ~toU32(3)), 4)
 
 /**
  * Whether a ring of `bytes` fits its region from `base` with its header
