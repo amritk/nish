@@ -18495,7 +18495,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "checks.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
   ...[
@@ -18508,7 +18508,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "inplace.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
   ...[
@@ -18517,7 +18517,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "net_quic_frame_checks.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
   ...[
@@ -18526,7 +18526,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "quic-conn-ack.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "the module itself: ECN counts stop at 2^62-1 and every index is guarded, so its bodies and attributes change (WP82 S4)",
   })),
   ...[
@@ -18576,7 +18576,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "quic-datagram.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "the module itself: its queue and frame helpers now guard every index and size, so their bodies, and the attributes of the functions that can no longer panic, change (WP82 S4)",
   })),
   ...[
@@ -18585,7 +18585,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "quic-frame.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "the module itself: its writers guard every index and refuse instead of panicking, so their bodies and attributes change (WP82 S4)",
   })),
   ...[
@@ -18627,7 +18627,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "quic-stream.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the `quic-frame.ts` writers move, because those writers no longer panic (WP82 S4)",
   })),
   ...[
@@ -18636,7 +18636,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "refusals.ll",
-    changelog: "make the std/net QUIC wire layer panic-free",
+    changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
 ]
