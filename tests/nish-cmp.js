@@ -18515,6 +18515,18 @@ const DECLARED = [
     changelog: "std/net TLS, fetch and outbound client side panic-free",
     why: "`Http1ResponseParser.buffered` no longer reaches a panic site, so its declaration takes the `nounwind willreturn readonly` attribute group (#2) in place of plain `nounwind` (#0) (WP82 S3)",
   })),
+  ...["bench/http1-conn/main.ts", "tests/link/net_serve_rss_flat/main.ts"].map((program) => ({
+    program,
+    file: "tls.ll",
+    changelog: "std/net TLS, fetch and outbound client side panic-free",
+    why: 'std/net/tls.ts sizes its arrays under bounds the prover reads, so the "array length out of range" panic and its string leave the module and the values after them renumber (WP82 S3)',
+  })),
+  {
+    program: "bench/http1-conn/main.ts",
+    file: "client.ll",
+    changelog: "std/net TLS, fetch and outbound client side panic-free",
+    why: "`TlsSecretPool`'s constructor no longer reaches a panic site, so its declaration takes plain `nounwind` (#0) in place of attribute group #3 (WP82 S3)",
+  },
 ]
 
 /**
