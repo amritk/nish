@@ -1300,12 +1300,16 @@ export class QuicStreams {
    * every byte a write reached: below `sendEnd`, which past a whole buffer is
    * all of it. Called only once nothing can be sent again from it — every
    * byte acknowledged, or the side reset — and before a reset moves
-   * `sendEnd` back.
+   * `sendEnd` back. Nothing when the reserve is full: then `stream` keeps
+   * them, zeroed, until the next give-back.
    */
   private giveSend(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (pools !== null && stream.sendBuf.length > 0) {
-      pools.keep(stream.sendBuf, stream.sendAcked, toI32(quicStreamMin(stream.sendEnd, toI64(stream.size))))
+      const used: i32 = toI32(quicStreamMin(stream.sendEnd, toI64(stream.size)))
+      if (!pools.keep(stream.sendBuf, stream.sendAcked, used)) {
+        return
+      }
       stream.sendBuf = this.none
       stream.sendAcked = this.none
     }
@@ -1759,7 +1763,8 @@ export class QuicStreams {
    * @param length How many bytes the frame carries.
    * @param fin Whether the frame carries the FIN, fixing the final size at `offset + length`.
    * @returns `QUIC_ERROR_NO_ERROR` (0), or `QUIC_ERROR_STREAM_LIMIT`, `QUIC_ERROR_STREAM_STATE`,
-   *   `QUIC_ERROR_FINAL_SIZE` or `QUIC_ERROR_FLOW_CONTROL` to close the connection with.
+   *   `QUIC_ERROR_FINAL_SIZE` or `QUIC_ERROR_FLOW_CONTROL` to close the connection with;
+   *   `QUIC_ERROR_INTERNAL` for a negative argument or a `length` past the end of `buf`.
    */
   onStream(id: i64, offset: i64, buf: u8[], from: i32, length: i32, fin: boolean): i64 {
     // The frame parser hands a frame that lies inside its packet, at a varint offset: never taken.

@@ -10796,9 +10796,10 @@ function QuicStreams.giveSend(this: QuicStreams, stream: QuicStream): void -> @n
   pointer this: size=344 writesThrough=false captured=false
   pointer stream: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -3:11 pools: QuicStreamPools | null (const)
-  callee -1:7 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
-  callee -1:58 quicStreamMin -> @nish.quicStreamMin
+  local -6:11 pools: QuicStreamPools | null (const)
+  local -4:13 used: i32 (const)
+  callee -4:31 quicStreamMin -> @nish.quicStreamMin
+  callee -3:12 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
 function QuicStreams.reset(this: QuicStreams): void -> @nish.QuicStreams.reset [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
