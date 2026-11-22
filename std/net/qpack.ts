@@ -1266,11 +1266,11 @@ export class QpackEncoder {
         }
         // A group shifted into the sign bit is past the limit too.
         const grown: i64 = toI64(b & 127) << toI64(shift)
-        const left: i64 = grown < 0 ? -1 : spare - grown
-        if (left < 0) {
+        const room: i64 = grown < 0 ? -1 : spare - grown
+        if (room < 0) {
           return this.refuse(QPACK_REASON_INTEGER)
         }
-        this.pendingId = QPACK_MAX_INTEGER - left
+        this.pendingId = QPACK_MAX_INTEGER - room
         if ((b & 128) === 0) {
           this.cancelled(this.pendingId)
           this.pendingShift = -1

@@ -395,7 +395,13 @@ export class Http3CidIndex {
     const keys: u8[] = this.keys
     const lengths: i32[] = this.lengths
     // 107374182 is `I32_MAX / QUIC_MAX_CID_LENGTH`, past `H3_SERVER_SLOT_LIMIT`'s entries.
-    if (length <= 0 || length > QUIC_MAX_CID_LENGTH || e < 0 || e >= toI32(lengths.length) || e >= 107374182) {
+    if (
+      length <= 0 ||
+      length > QUIC_MAX_CID_LENGTH ||
+      e < 0 ||
+      e >= toI32(lengths.length) ||
+      e >= 107374182
+    ) {
       return
     }
     if (this.find(buf, at, length) >= 0) {
@@ -533,7 +539,12 @@ export class Http3Wheel {
     const nextOf = this.nextOf
     const prevOf = this.prevOf
     const bucketOf = this.bucketOf
-    if (slot < 0 || slot >= toI32(bucketOf.length) || slot >= toI32(nextOf.length) || slot >= toI32(prevOf.length)) {
+    if (
+      slot < 0 ||
+      slot >= toI32(bucketOf.length) ||
+      slot >= toI32(nextOf.length) ||
+      slot >= toI32(prevOf.length)
+    ) {
       // Past the first two, never taken: the constructor gives each per-slot array `slots` entries.
       return
     }
@@ -1008,7 +1019,14 @@ export class Http3Server {
     const count: i32 = this.readyCount
     const length: i32 = toI32(ring.length)
     // Never false past its first two terms: `ready` keeps `head` in the ring, which is at most 65536 long.
-    if ((queued[slot] & 1) === 0 && count < length && head >= 0 && head <= 65535 && count >= 0 && count <= 65535) {
+    if (
+      (queued[slot] & 1) === 0 &&
+      count < length &&
+      head >= 0 &&
+      head <= 65535 &&
+      count >= 0 &&
+      count <= 65535
+    ) {
       // `(head + count) % length`, both below `length`.
       const sum: i32 = head + count
       const at: i32 = sum >= length ? sum - length : sum
@@ -1514,7 +1532,12 @@ export class Http3Server {
     const quics: QuicConnection[] = this.quics
     const conns: Http3Connection[] = this.conns
     const addresses: u8[][] = this.addresses
-    if (slot < 0 || slot >= toI32(quics.length) || slot >= toI32(conns.length) || slot >= toI32(addresses.length)) {
+    if (
+      slot < 0 ||
+      slot >= toI32(quics.length) ||
+      slot >= toI32(conns.length) ||
+      slot >= toI32(addresses.length)
+    ) {
       // Never taken: `flush` passes a slot that holds a connection, which `build` made in all three.
       return
     }
