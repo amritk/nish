@@ -7,6 +7,8 @@ A command tree for a large command-line tool: declared once with a builder, pars
 ```ts
 import {
   Cli,
+  CliArgument,
+  CliFlag,
   PARSE_ERROR,
   PARSE_HELP,
   PARSE_OK,
@@ -52,6 +54,18 @@ A command tree: groups, which only hold commands, and leaf commands, which a pro
 
 </scalar-card>
 
+<scalar-card title="Cli​Argument" icon="phosphor/regular/cube" href="#cliargument">
+
+A positional argument as declared, answered by `Cli.tryArgument`: `ParseResult.readPositional` and `readPositionals` take it.
+
+</scalar-card>
+
+<scalar-card title="Cli​Flag" icon="phosphor/regular/cube" href="#cliflag">
+
+A flag as declared, answered by `Cli.tryFlag` and `Cli.tryGlobalFlag`: `ParseResult`'s `read` methods take it, and need no handle check to.
+
+</scalar-card>
+
 <scalar-card title="Parse​Result" icon="phosphor/regular/cube" href="#parseresult">
 
 What `Cli.parse` found: the command the arguments name and every value they set, or that they ask for help or the version, or what is wrong with them.
@@ -66,7 +80,11 @@ Nish has no function values, so a command
 cannot carry its handler; what a builder gives instead is a handle for
 every command, flag and argument, so the program reads a value by the
 handle it declared rather than by a name a typo can miss, and every
-declaration mistake panics at the call that made it.
+declaration mistake panics at the call that made it. Each declaration has
+a `try` twin (`tryCommand`, `tryFlag`, ...) that answers the same mistake
+as an `Err` instead, and the twins that declare a flag or an argument
+answer a `CliFlag` or `CliArgument` that `ParseResult`'s `read` methods
+take, so a program that uses them reaches no panic.
 
 </scalar-detail>
 
@@ -156,12 +174,50 @@ class Cli
 | `parse(argv: string[], start: i32): ParseResult` | Parses `argv` from index `start` (1 for `process.argv`, past the program's path) in one walk over it. |
 | `repeatable(f: i32): void` | Makes `f` gather every value it is given, in order, for `ParseResult.values`. |
 | `required(f: i32): void` | Makes `f` an error to leave out, for the command that owns it (every command, for a global); a group's flag cannot be, as no parse ends at one. |
+| `tryAlias(handle: i32, name: string): Result<void, string>` | `alias`, answering a mistake rather than panicking on it. |
+| `tryArgument(cmd: i32, spec: string, description: string): Result<CliArgument, string>` | `argument`, answering a mistake rather than panicking on it. |
+| `tryCommand(parent: i32, name: string, id: i32, description: string): Result<i32, string>` | `command`, answering a mistake rather than panicking on it. |
+| `tryDefaultValue(f: i32, value: string): Result<void, string>` | `defaultValue`, answering a mistake rather than panicking on it. |
+| `tryEpilog(handle: i32, text: string): Result<void, string>` | `epilog`, answering a mistake rather than panicking on it. |
+| `tryFlag(cmd: i32, spec: string, description: string): Result<CliFlag, string>` | `flag`, answering a mistake rather than panicking on it. |
+| `tryGlobalFlag(spec: string, description: string): Result<CliFlag, string>` | `globalFlag`, answering a mistake rather than panicking on it. |
+| `tryGroup(parent: i32, name: string, description: string): Result<i32, string>` | `group`, answering a mistake rather than panicking on it. |
+| `tryNegatable(f: i32): Result<void, string>` | `negatable`, answering a mistake rather than panicking on it. |
+| `tryRepeatable(f: i32): Result<void, string>` | `repeatable`, answering a mistake rather than panicking on it. |
+| `tryRequired(f: i32): Result<void, string>` | `required`, answering a mistake rather than panicking on it. |
+
+### CliArgument
+
+A positional argument as declared, answered by `Cli.tryArgument`:
+`ParseResult.readPositional` and `readPositionals` take it.
+
+```ts
+class CliArgument
+```
+
+| Member | |
+| --- | --- |
+| `handle: i32` | The argument's handle, for `ParseResult.positional` and `positionals`. |
+
+### CliFlag
+
+A flag as declared, answered by `Cli.tryFlag` and `Cli.tryGlobalFlag`:
+`ParseResult`'s `read` methods take it, and need no handle check to.
+
+```ts
+class CliFlag
+```
+
+| Member | |
+| --- | --- |
+| `handle: i32` | The flag's handle, for the methods that take one, such as `Cli.tryDefaultValue`. |
 
 ### ParseResult
 
 What `Cli.parse` found: the command the arguments name and every value
 they set, or that they ask for help or the version, or what is wrong with
-them. Values are read by the handles the tree was declared with.
+them. Values are read by the handles the tree was declared with, or by the
+`CliFlag` and `CliArgument` its `try` twins answered.
 
 ```ts
 class ParseResult
@@ -178,14 +234,20 @@ class ParseResult
 | `kind: i32` | `PARSE_OK`, `PARSE_HELP`, `PARSE_VERSION` or `PARSE_ERROR`. |
 | `message: string` | The error line for `PARSE_ERROR`, the version line for `PARSE_VERSION`, else empty. |
 | `path: string` | The command line that names it: `api users keys list`. |
-| `flag(f: i32): boolean` | Whether flag `f` is on: a boolean's value (true by default for one declared `--no-x`), or for a flag with a value, whether it was given. |
+| `flag(f: i32): boolean` | Whether flag `f` is on, as `readFlag` answers. |
 | `help(style: Style): string` | The help of the command the arguments reached, painted with `style`. |
-| `positional(a: i32): string \| null` | The argument `a`'s value, or null when it was not given or belongs to another command. |
-| `positionals(a: i32): string[]` | Every value from argument `a` on: all a variadic one took, or the one value of any other. |
+| `positional(a: i32): string \| null` | The argument `a`'s value, as `readPositional` answers. |
+| `positionals(a: i32): string[]` | Every value from argument `a` on, as `readPositionals` answers. |
+| `readFlag(f: CliFlag): boolean` | Whether flag `f` is on: a boolean's value (true by default for one declared `--no-x`), or for a flag with a value, whether it was given. |
+| `readPositional(a: CliArgument): string \| null` | The argument `a`'s value, or null when it was not given or belongs to another command. |
+| `readPositionals(a: CliArgument): string[]` | Every value from argument `a` on: all a variadic one took, or the one value of any other. |
+| `readSource(f: CliFlag): i32` | Where flag `f`'s value came from: `SOURCE_ARGV`, `SOURCE_DEFAULT` or `SOURCE_UNSET`. |
+| `readValue(f: CliFlag): string \| null` | The value of flag `f`: the last one given (empty for `[value]` given none), else its default, else null. |
+| `readValues(f: CliFlag): string[]` | Every value of flag `f` in order for a repeatable one, the last alone for any other, else its default alone, else none. |
 | `rest(): string[]` | The tokens after `--`, in order. They are positionals too, so an argument may also have taken them. |
-| `source(f: i32): i32` | Where flag `f`'s value came from: `SOURCE_ARGV`, `SOURCE_DEFAULT` or `SOURCE_UNSET`. |
-| `value(f: i32): string \| null` | The value of flag `f`: the last one given (empty for `[value]` given none), else its default, else null. |
-| `values(f: i32): string[]` | Every value of flag `f` in order for a repeatable one, the last alone for any other, else its default alone, else none. |
+| `source(f: i32): i32` | Where flag `f`'s value came from, as `readSource` answers. |
+| `value(f: i32): string \| null` | The value of flag `f`, as `readValue` answers. |
+| `values(f: i32): string[]` | Every value of flag `f`, as `readValues` answers. |
 
 ## Constants
 

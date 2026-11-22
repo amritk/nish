@@ -63,6 +63,28 @@ const report = (got: ParsedFlags): string => {
   return `command "${got.command}" {${set.join(" ")}} ${quoted(got.positionals)}`
 }
 
+// The answer's public arrays, one element per flag in declaration order.
+const arrays = (got: ParsedFlags): void => {
+  const counts: string[] = []
+  for (const c of got.counts) {
+    counts.push(`${c}`)
+  }
+  const numbers: string[] = []
+  for (const n of got.numbers) {
+    numbers.push(`${n}`)
+  }
+  const bools: string[] = []
+  for (const b of got.bools) {
+    bools.push(`${b}`)
+  }
+  const lists: string[] = []
+  for (const l of got.lists) {
+    lists.push(quoted(l))
+  }
+  console.log(`counts ${counts.join(",")}; texts ${quoted(got.texts)}; numbers ${numbers.join(",")}`)
+  console.log(`  bools ${bools.join(",")}; lists ${lists.join(" ")}`)
+}
+
 const show = (table: FlagTable, args: string[]): void => {
   console.log(`${quoted(args)} -> ${report(table.parse(args))}`)
 }
@@ -139,6 +161,20 @@ export const main = (): i32 => {
   show(remotes(), ["remote", "add", "origin"])
   show(git(), ["remote", "add", "--jobs", "x"])
   show(git(), ["--bogus", "push"])
+  console.log("no- names:")
+  // A flag named `no-x` beside a flag `x` that is not a boolean: `--no-x`
+  // is the flag of that name, and `--no-` alone names no flag.
+  const negations = new FlagTable("neg")
+  negations.string("cache", "<dir>", "cache here")
+  negations.string("no-cache", "<why>", "do not cache")
+  negations.boolean("verbose", "say more")
+  const negated = negations.parse(["--no-cache", "slow", "--no-verbose"])
+  console.log(`"${negated.str("no-cache")}" "${negated.str("cache")}" ${negated.has("cache")} ${negated.bool("verbose")} ${negated.has("verbose")}`)
+  console.log(`${negations.parse(["--no-"]).message}`)
+  console.log("arrays:")
+  arrays(plain().parse(["--jobs=3", "--no-verbose", "--include", "a", "--include=b", "--output", "o"]))
+  const nothing: string[] = []
+  arrays(plain().parse(nothing))
   console.log("help:")
   const menu = new HelpMenu(new Style(false, true), "git-lite", 28, 30)
   menu.usage("<command> [flags]", "a small git")

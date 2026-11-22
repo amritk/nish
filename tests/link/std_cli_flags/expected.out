@@ -66,6 +66,14 @@ errors:
 ["remote" "add" "origin"] -> command "remote add" {} ["origin"]
 ["remote" "add" "--jobs" "x"] -> error 3 at "x": git-lite: --jobs needs a number, not "x" / usage: git-lite remote add <name> <url> [flags]
 ["--bogus" "push"] -> error 1 at "--bogus": git-lite: unknown flag --bogus / usage: git-lite <command> [flags]
+no- names:
+"slow" "" false false true
+unknown flag --no-
+arrays:
+counts 1,1,1,2; texts ["o" "3" "" ""]; numbers 0,3,0,0
+  bools false,false,false,false; lists [] [] [] ["a" "b"]
+counts 0,0,0,0; texts ["" "" "" ""]; numbers 0,0,0,0
+  bools false,false,false,false; lists [] [] [] []
 help:
 usage: git-lite <command> [flags]  a small git
 
