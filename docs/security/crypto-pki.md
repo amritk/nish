@@ -670,9 +670,12 @@ reaching its summary shows none of them panicked. Its checks are
 `the leaf: …` and `the intermediate: …` lines.
 
 `std/crypto/pki.ts` keeps no panic site under the no-panic check since #2150
-(WP83 S4): every index is proven in range by a check beside it, every count
-and budget is summed in 64 bits and refused past its bound before it is
-stored, and the hex of a key's hash is built without `String.fromBytes`.
+(WP83 S4): every index is proven in range by a check beside it, each count
+is refused past its bound before it is incremented (the name-check and
+chain-byte budgets are summed in 64 bits), and the hex that keys the trust
+store's maps, a subject or issuer Name's DER or a key's hash, is built without
+`String.fromBytes`. The host-name lines of `crypto_pki_malformed` reach the
+rewritten IPv4, IPv6 and DNS readers with an otherwise valid chain.
 `tests/std-panics.json` lists the module with no sites, so a new one fails the
 `std-panics` section.
 

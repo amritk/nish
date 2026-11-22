@@ -6,7 +6,7 @@
 // from `pkiVerifyServer` as PKI_ERR_MALFORMED, whichever position it holds.
 // The process reaching its summary is the proof that none of them panicked.
 import { Suite } from "nish/testing"
-import { PKI_ERR_MALFORMED, PKI_OK, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki"
+import { PKI_ERR_HOSTNAME, PKI_ERR_MALFORMED, PKI_OK, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki"
 import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509"
 import { fromHex } from "../crypto_x25519/hex"
 import { INT, LEAF, NOW_MS, ROOT } from "../crypto_pki/fixtures"
@@ -106,6 +106,38 @@ export const main = (): i32 => {
     refused(s, store, `the ${which}: an OCTET STRING for tbsCertificate`, edit(der, 4, 0x04), leaf, int)
     refused(s, store, `the ${which}: a zero tag`, edit(der, 0, 0x00), leaf, int)
     refused(s, store, `the ${which}: a high-tag-number tag`, edit(der, 0, 0x1f), leaf, int)
+  }
+
+  // The leaf names DNS:example.com, DNS:*.example.org, IP:192.0.2.1 and
+  // IP:2001:db8::1. Each malformed host name below reaches the IPv4, IPv6 and
+  // DNS readers with the chain otherwise valid, and is answered
+  // PKI_ERR_HOSTNAME; each spelling of a name the leaf holds is accepted.
+  const matched: string[] = ["192.0.2.1", "2001:db8::1", "2001:0db8:0:0:0:0:0:1", "a.example.org", "EXAMPLE.COM", "example.com."]
+  for (const host of matched) {
+    const code: i32 = pkiVerifyServer([leaf, int], host, NOW_MS, store).code
+    if (code === PKI_OK) {
+      s.pass(`the host ${host} is accepted`)
+    } else {
+      s.fail(`the host ${host} is accepted`, pkiReason(code))
+    }
+  }
+  const unmatched: string[] = [
+    "", ".", "*.", "*.example.org", "a..example.org", "a.b.example.org", "example.com..",
+    "256.1.1.1", "192.0.2.01", "192.0.2", "192.0.2.1.5", "1.2.3.4294967297",
+    "1:2:3:4:5:6:7:8:9", "2001:db8::1::", "2001:db8:::1", "12345::1", "[::]", "::",
+    "::ffff:1.2.3.4", "2001:db8::g", ":2001:db8::1", "2001:db8::1:"
+  ]
+  let wrong: string = ""
+  for (const host of unmatched) {
+    const code: i32 = pkiVerifyServer([leaf, int], host, NOW_MS, store).code
+    if (code !== PKI_ERR_HOSTNAME) {
+      wrong = `${wrong} "${host}": ${pkiReason(code)};`
+    }
+  }
+  if (wrong === "") {
+    s.pass(`each of ${unmatched.length} malformed or unnamed hosts is refused as a host-name mismatch`)
+  } else {
+    s.fail("each malformed or unnamed host is refused as a host-name mismatch", wrong)
   }
   return s.done()
 }

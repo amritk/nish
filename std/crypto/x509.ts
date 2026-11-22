@@ -1256,6 +1256,14 @@ const x509EndsWith = (text: string, suffix: string): boolean => {
 }
 
 /**
+ * `text.substring(from, to)` where the range is checked to lie in `text`, so
+ * the bounds proof holds without JavaScript's clamp; `""` outside it, which
+ * neither caller reaches (each passes `0 <= from <= to <= text.length`).
+ */
+const x509Part = (text: string, from: i32, to: i32): string =>
+  from >= 0 && from <= to && to <= toI32(text.length) ? text.substring(from, to) : ""
+
+/**
  * `der` as a PEM block (RFC 7468 §2): `-----BEGIN label-----`, the base64 of
  * the DER in lines of 64 characters, and `-----END label-----`, each line
  * ending in a line feed.
@@ -1270,10 +1278,9 @@ export const derToPem = (der: u8[], label: string): string => {
   const lines: string[] = [`-----BEGIN ${label}-----`]
   let at: i32 = 0
   while (at < n) {
-    // Unsigned: `at` is below `n`, so adding 64 cannot wrap.
-    const step: u32 = toU32(at) + 64
-    const end: i32 = step < toU32(n) ? toI32(step) : n
-    lines.push(body.substring(at, end))
+    // `n` is a length, so `n - 64` cannot wrap, and `at + 64` is then below `n`.
+    const end: i32 = at < n - 64 ? at + 64 : n
+    lines.push(x509Part(body, at, end))
     at = end
   }
   lines.push(`-----END ${label}-----`)
@@ -1313,7 +1320,7 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
     if (lineEnd > lineStart && lineEnd >= 1 && lineEnd <= toI32(pem.length) && toI32(pem.charCodeAt(lineEnd - 1)) === 13) {
       lineEnd--
     }
-    const line: string = pem.substring(lineStart, lineEnd)
+    const line: string = x509Part(pem, lineStart, lineEnd)
     lineStart = next
     const length: i32 = toI32(line.length)
     if (inside === "") {

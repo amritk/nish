@@ -114,6 +114,27 @@ const pkiRootsSkip = (load: PkiRootsLoad): void => {
   load.out.skipped = load.out.skipped + 1
 }
 
+/**
+ * What the line `text[from .. to)` is: 1 for a `-----BEGIN ...-----` line, 2
+ * for a line that starts `-----END `, 0 for any other. The line is cut here,
+ * so it is released when this returns rather than kept by the caller's loop.
+ */
+const pkiRootsLineKind = (text: string, from: i32, to: i32): i32 => {
+  const line: string = pkiRootsPart(text, from, to)
+  if (line.startsWith("-----BEGIN ") && line.endsWith("-----") && line.length > 16) {
+    return 1
+  }
+  return line.startsWith("-----END ") ? 2 : 0
+}
+
+/**
+ * `text.substring(from, to)` where the range is checked to lie in `text`, so
+ * the bounds proof holds without JavaScript's clamp; `""` outside it, which
+ * no caller reaches (each passes `0 <= from <= to <= text.length`).
+ */
+const pkiRootsPart = (text: string, from: i32, to: i32): string =>
+  from >= 0 && from <= to && to <= toI32(text.length) ? text.substring(from, to) : ""
+
 /** The lower-case hex digit of `v`, 0 to 15. */
 const pkiRootsHexChar = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
 
@@ -154,11 +175,14 @@ const pkiRootsKeep = (load: PkiRootsLoad, der: u8[]): void => {
 }
 
 /**
- * One PEM block, `text` whole from its BEGIN line through its END line. A block
- * labelled other than CERTIFICATE gives `pemToDer` no DER, so it is skipped too.
+ * One PEM block, `text[from .. to)` whole from its BEGIN line through its END
+ * line. A block labelled other than CERTIFICATE gives `pemToDer` no DER, so it
+ * is skipped too. The caller's range is always in the text; it is checked
+ * again here so the bounds proof holds without JavaScript's clamp.
  */
-const pkiRootsBlock = (load: PkiRootsLoad, text: string): void => {
-  const ders: u8[][] | null = pemToDer(text, "CERTIFICATE")
+const pkiRootsBlock = (load: PkiRootsLoad, text: string, from: i32, to: i32): void => {
+  const block: string = from >= 0 && from <= to && to <= toI32(text.length) ? text.substring(from, to) : ""
+  const ders: u8[][] | null = pemToDer(block, "CERTIFICATE")
   if (ders === null) {
     pkiRootsSkip(load)
     return
@@ -204,15 +228,15 @@ const pkiRootsSplit = (load: PkiRootsLoad, text: string): void => {
       }
       end = end - 1
     }
-    const line: string = text.substring(lineStart, end)
-    if (line.startsWith("-----BEGIN ") && line.endsWith("-----") && line.length > 16) {
+    const kind: i32 = pkiRootsLineKind(text, lineStart, end)
+    if (kind === 1) {
       if (open) {
         pkiRootsSkip(load)
       }
       open = true
       blockStart = lineStart
-    } else if (open && line.startsWith("-----END ")) {
-      pkiRootsBlock(load, text.substring(blockStart, next))
+    } else if (open && kind === 2) {
+      pkiRootsBlock(load, text, blockStart, next)
       open = false
     }
     lineStart = next
@@ -341,7 +365,7 @@ const pkiRootsSplitDirs = (list: string): string[] => {
   for (let i: i32 = 0; i < toI32(list.length); i = i + 1) {
     if (toI32(list.charCodeAt(i)) === 58) {
       if (i > start) {
-        out.push(list.substring(start, i))
+        out.push(pkiRootsPart(list, start, i))
       }
       start = i + 1
     }

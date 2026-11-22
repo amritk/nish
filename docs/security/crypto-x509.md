@@ -249,7 +249,7 @@ unsigned sum the prover bounds, and refused past the buffer before it is used.
 | `std/crypto/x509-random.ts`, `x509DrawSerial` | `io-exit` | The same call, for the serial. |
 
 `tests/link/crypto_x509_malformed` reaches its summary on every edited input
-(the row above), and `tests/link/crypto_pki_malformed` does the same through
+(the "No malformed certificate … panics" row of the table above), and `tests/link/crypto_pki_malformed` does the same through
 path validation (`crypto-pki.md`, PKI-2).
 
 ## Doc corrections for the security-policy stage

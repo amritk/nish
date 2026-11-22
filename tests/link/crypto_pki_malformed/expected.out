@@ -19,4 +19,11 @@ PASS  the intermediate: a SET for its SEQUENCE
 PASS  the intermediate: an OCTET STRING for tbsCertificate
 PASS  the intermediate: a zero tag
 PASS  the intermediate: a high-tag-number tag
-pki malformed: 21 passed, 0 failed, 0 skipped
+PASS  the host 192.0.2.1 is accepted
+PASS  the host 2001:db8::1 is accepted
+PASS  the host 2001:0db8:0:0:0:0:0:1 is accepted
+PASS  the host a.example.org is accepted
+PASS  the host EXAMPLE.COM is accepted
+PASS  the host example.com. is accepted
+PASS  each of 22 malformed or unnamed hosts is refused as a host-name mismatch
+pki malformed: 28 passed, 0 failed, 0 skipped
