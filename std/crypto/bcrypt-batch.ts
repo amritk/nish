@@ -216,9 +216,12 @@ class BcryptBatchShare {
   }
 }
 
-/** The holder at `list[i]` of `share`, or at `list[0]` past the batch's end (that lane is then passed as null). */
-const bcryptBatchLane = (share: BcryptBatchShare, list: i32[], i: i32): BcryptBatchKey => {
-  const at: i32 = i < toI32(list.length) ? list[i] : list[0]
+/** The holder at `list[i]` of `share`, or null for a lane past the first `n` of `list`, which reads nothing. */
+const bcryptBatchLane = (share: BcryptBatchShare, list: i32[], n: i32, i: i32): BcryptBatchKey | null => {
+  if (i < 0 || i >= n || i >= toI32(list.length)) {
+    return null
+  }
+  const at: i32 = list[i]
   return share.passwords[at]
 }
 
@@ -233,7 +236,8 @@ const bcryptBatchVerifyAlone = (held: BcryptBatchKey, hash: string): string => {
 
 /**
  * One `bcryptVerifyN` over the first `n` of `list`: a holder's field is
- * passed only as a call's argument, so each lane count is its own call.
+ * passed only as a call's argument, so each lane count is its own call. A
+ * lane past `n` is null and reads nothing; an empty batch is an error.
  */
 const bcryptBatchVerifyLanes = (
   share: BcryptBatchShare,
@@ -241,25 +245,28 @@ const bcryptBatchVerifyLanes = (
   n: i32,
   hashes: string[]
 ): Result<boolean[], string> => {
-  const a: BcryptBatchKey = bcryptBatchLane(share, list, 0)
-  const b: BcryptBatchKey = bcryptBatchLane(share, list, 1)
-  const c: BcryptBatchKey = bcryptBatchLane(share, list, 2)
-  const d: BcryptBatchKey = bcryptBatchLane(share, list, 3)
-  const e: BcryptBatchKey = bcryptBatchLane(share, list, 4)
-  const f: BcryptBatchKey = bcryptBatchLane(share, list, 5)
-  if (n <= 1) {
+  const a: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 0)
+  if (a === null) {
+    return Err("bcrypt: a batch has no lanes")
+  }
+  const b: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 1)
+  const c: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 2)
+  const d: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 3)
+  const e: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 4)
+  const f: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 5)
+  if (b === null) {
     return bcryptVerifyN(a.key, null, null, null, null, null, hashes)
   }
-  if (n === 2) {
+  if (c === null) {
     return bcryptVerifyN(a.key, b.key, null, null, null, null, hashes)
   }
-  if (n === 3) {
+  if (d === null) {
     return bcryptVerifyN(a.key, b.key, c.key, null, null, null, hashes)
   }
-  if (n === 4) {
+  if (e === null) {
     return bcryptVerifyN(a.key, b.key, c.key, d.key, null, null, hashes)
   }
-  if (n === 5) {
+  if (f === null) {
     return bcryptVerifyN(a.key, b.key, c.key, d.key, e.key, null, hashes)
   }
   return bcryptVerifyN(a.key, b.key, c.key, d.key, e.key, f.key, hashes)
@@ -272,25 +279,28 @@ const bcryptBatchHashLanes = (
   n: i32,
   salts: u8[]
 ): Result<string[], string> => {
-  const a: BcryptBatchKey = bcryptBatchLane(share, list, 0)
-  const b: BcryptBatchKey = bcryptBatchLane(share, list, 1)
-  const c: BcryptBatchKey = bcryptBatchLane(share, list, 2)
-  const d: BcryptBatchKey = bcryptBatchLane(share, list, 3)
-  const e: BcryptBatchKey = bcryptBatchLane(share, list, 4)
-  const f: BcryptBatchKey = bcryptBatchLane(share, list, 5)
-  if (n <= 1) {
+  const a: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 0)
+  if (a === null) {
+    return Err("bcrypt: a batch has no lanes")
+  }
+  const b: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 1)
+  const c: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 2)
+  const d: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 3)
+  const e: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 4)
+  const f: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 5)
+  if (b === null) {
     return bcryptHashN(a.key, null, null, null, null, null, salts, share.cost)
   }
-  if (n === 2) {
+  if (c === null) {
     return bcryptHashN(a.key, b.key, null, null, null, null, salts, share.cost)
   }
-  if (n === 3) {
+  if (d === null) {
     return bcryptHashN(a.key, b.key, c.key, null, null, null, salts, share.cost)
   }
-  if (n === 4) {
+  if (e === null) {
     return bcryptHashN(a.key, b.key, c.key, d.key, null, null, salts, share.cost)
   }
-  if (n === 5) {
+  if (f === null) {
     return bcryptHashN(a.key, b.key, c.key, d.key, e.key, null, salts, share.cost)
   }
   return bcryptHashN(a.key, b.key, c.key, d.key, e.key, f.key, salts, share.cost)
