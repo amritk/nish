@@ -20973,14 +20973,14 @@ function hpackHuffmanDecode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -34:3 hpackCheckWindow -> @nish.hpackCheckWindow
-  local -31:7 code: u32 (let)
-  local -30:7 bits: u32 (let)
-  local -29:9 end: i64 (const)
-  local -28:12 i: i32 (let)
-  local -27:11 byte: u32 (const)
-  local -26:14 k: u32 (let)
-  local -23:13 row: i32 (const)
+  callee -37:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  local -34:7 code: u32 (let)
+  local -33:7 bits: u32 (let)
+  local -32:9 end: i64 (const)
+  local -31:12 i: i32 (let)
+  local -30:11 byte: u32 (const)
+  local -29:14 k: u32 (let)
+  local -26:13 row: i32 (const)
   local -12:15 at: i64 (const)
   local -8:17 slot: i32 (const)
   local -4:17 sym: i32 (const)

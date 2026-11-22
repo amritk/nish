@@ -632,15 +632,18 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
       code = (code << 1) | ((byte >> (k - 1)) & 1)
       bits += 1
       const row: i32 = toI32(bits)
-      if (
-        row > HPACK_HUFFMAN_MAX_BITS ||
-        row >= toI32(h.firstCode.length) ||
-        row >= toI32(h.countAt.length) ||
-        row >= toI32(h.baseRank.length)
-      ) {
+      if (row > HPACK_HUFFMAN_MAX_BITS) {
         return HPACK_ERR_HUFFMAN_PADDING
       }
+      // No code is shorter than five bits, so the tables are read only from there on.
       if (row >= 5) {
+        if (
+          row >= toI32(h.firstCode.length) ||
+          row >= toI32(h.countAt.length) ||
+          row >= toI32(h.baseRank.length)
+        ) {
+          return HPACK_ERR_HUFFMAN_PADDING
+        }
         // Both sides fit an `i32`, so the `i64` difference cannot wrap.
         const at: i64 = toI64(code) - toI64(h.firstCode[row])
         if (at >= 0 && at < toI64(h.countAt[row])) {

@@ -125,6 +125,7 @@
  *
  * Written from RFC 9113 and RFC 8441, not ported from another implementation.
  */
+import { tryCopyBytes } from "nish/bytes"
 import { BufferPool } from "nish/net/buffer-pool"
 import {
   HPACK_DEFAULT_TABLE_SIZE,
@@ -421,15 +422,9 @@ const http2Compact = (buf: u8[], start: i32, end: i32): i32 => {
     return end
   }
   const keep: i32 = end - start
-  const length: i32 = toI32(buf.length)
-  // `from` is read only inside `[0, length)`, so `from + 1` cannot wrap.
-  let from: i32 = start
-  for (let k: i32 = 0; start > 0 && k < keep && k < length; k++) {
-    if (from < 0 || from >= length) {
-      return keep
-    }
-    buf[k] = buf[from]
-    from = from + 1
+  // A span past `buf` is not copied; the connection keeps `end` inside its buffer, so the copy runs.
+  if (start > 0) {
+    tryCopyBytes(buf, 0, buf, start, keep)
   }
   return keep
 }
@@ -994,26 +989,15 @@ export class Http2Connection {
     }
     const room: i32 = this.inputTail()
     const n: i32 = len < room ? len : room
-    const input: u8[] = this.input
-    const size: i32 = toI32(input.length)
-    const length: i32 = toI32(buf.length)
-    // `inputTail` left `room` bytes free from `inputEnd`, and `http2CheckWindow` held `[off, off + len)`
-    // inside `buf`, so the copy stops at `n` and `to` and `from` stay inside their buffers when read.
-    let to: i32 = this.inputEnd
-    let from: i32 = off
-    let taken: i32 = 0
-    for (let k: i32 = 0; k < n; k++) {
-      if (to < 0 || to >= size || from < 0 || from >= length) {
-        break
-      }
-      input[to] = buf[from]
-      to = to + 1
-      from = from + 1
-      taken = k + 1
+    // `inputTail` left `room` bytes free from `inputEnd` and `http2CheckWindow` held `[off, off + len)`
+    // inside `buf`, so the copy runs; were either window wrong, nothing would be taken.
+    if (!tryCopyBytes(this.input, this.inputEnd, buf, off, n)) {
+      return 0
     }
-    this.inputEnd = to
-    this.inputUsed = to > this.inputUsed ? to : this.inputUsed
-    return taken
+    // `n` is at most the room after `inputEnd` in the input buffer, so the sum stays an i32.
+    this.inputEnd = toI32(toI64(this.inputEnd) + toI64(n))
+    this.inputUsed = this.inputEnd > this.inputUsed ? this.inputEnd : this.inputUsed
+    return n
   }
 
   /**
@@ -1551,27 +1535,18 @@ export class Http2Connection {
     this.holdBlock()
     // Past H2_MAX_FRAGMENTS the connection fails just below, so the i64 count fits back in an i32.
     this.blockFragments = toI32(toI64(this.blockFragments) + toI64(1))
-    const block: u8[] = this.block
-    const input: u8[] = this.input
-    const size: i32 = toI32(block.length)
-    const length: i32 = toI32(input.length)
+    const size: i32 = toI32(this.block.length)
     const start: i32 = this.blockLength
     const n: i32 = f.contentLength
     if (this.blockFragments > H2_MAX_FRAGMENTS || start < 0 || start > size || n > size - start) {
       return false
     }
-    // The fragment fits after `blockLength` by the test above, and the frame's content lies inside the
-    // input, so `to` and `from` stay inside their buffers when read and `+ 1` cannot wrap.
-    let to: i32 = start
-    let from: i32 = f.contentStart
-    for (let k: i32 = 0; k < n; k++) {
-      if (to < 0 || to >= size || from < 0 || from >= length) {
-        break
-      }
-      block[to] = input[from]
-      to = to + 1
-      from = from + 1
+    // The fragment fits after `blockLength` by the test above, and the frame's content lies inside the input.
+    if (!tryCopyBytes(this.block, start, this.input, f.contentStart, n)) {
+      return false
     }
+    // `start + n <= size` by the test above, so the sum stays an i32.
+    const to: i32 = toI32(toI64(start) + toI64(n))
     this.blockLength = to
     this.blockUsed = to > this.blockUsed ? to : this.blockUsed
     return true

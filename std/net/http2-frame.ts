@@ -298,6 +298,12 @@ const http2FramePut32 = (out: u8[], at: i32, value: i64): boolean => {
   return true
 }
 
+/**
+ * A frame length summed in `i64`, held at its largest when past an `i32`: `http2WriteHeader` refuses
+ * that as past 2^24 − 1, as it does any length there.
+ */
+const http2FrameLength = (total: i64): i32 => (total > toI64(H2_MAX_WINDOW) ? H2_MAX_WINDOW : toI32(total))
+
 /** `a + b` for two offsets whose sum a caller has checked fits an `i32`; widened, so it cannot wrap. */
 const http2FrameAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
 
@@ -687,17 +693,14 @@ const http2FrameWritePadded = (
     panic(`http2Write: ${pad} bytes of padding, past 255`)
   }
   const padded: boolean = pad >= 0
-  // `fixed` is 0 or 4, `pad` -1 to 255 and `len` 0 to 2^31 − 1, so the
-  // widened sums cannot wrap; a length past an `i32` is held at its largest,
-  // which `http2WriteHeader` refuses as past 2^24 − 1, as it does any length
-  // there.
+  // `fixed` is 0 or 4, `pad` -1 to 255 and `len` 0 to 2^31 − 1, so the widened sums cannot wrap.
   const head: i32 = padded ? toI32(toI64(fixed) + toI64(1)) : fixed
   const tail: i32 = padded ? pad : H2_FRAME_ZERO
   const total: i64 = toI64(head) + toI64(len) + toI64(tail)
   const at2: i32 = http2WriteHeader(
     out,
     at,
-    total > toI64(H2_MAX_WINDOW) ? H2_MAX_WINDOW : toI32(total),
+    http2FrameLength(total),
     type,
     padded ? flags | H2_FLAG_PADDED : flags & ~H2_FLAG_PADDED,
     streamId
@@ -896,14 +899,12 @@ export const http2WriteSettings = (out: u8[], at: i32, ids: i32[], values: i64[]
       panic(`http2WriteSettings: setting ${ids[k]} = ${values[k]}`)
     }
   }
-  // Summed in `i64`, where `n` settings cannot wrap; a length past an `i32`
-  // is held at its largest, which `http2WriteHeader` refuses as past
-  // 2^24 − 1, as it does any length there.
+  // Summed in `i64`, where `n` settings cannot wrap.
   const total: i64 = toI64(n) * toI64(H2_SETTING_SIZE)
   const body: i32 = http2WriteHeader(
     out,
     at,
-    total > toI64(H2_MAX_WINDOW) ? H2_MAX_WINDOW : toI32(total),
+    http2FrameLength(total),
     H2_FRAME_SETTINGS,
     H2_FRAME_ZERO,
     H2_FRAME_ZERO
@@ -1037,14 +1038,12 @@ export const http2WriteGoaway = (
 ): i32 => {
   http2FrameCheckStream("http2WriteGoaway", lastStreamId)
   http2FrameCheckWindow("http2WriteGoaway", debug, off, toI64(len))
-  // `len` is 0 to 2^31 − 1, so the sum fits an `i64`; a length past an
-  // `i32` is held at its largest, which `http2WriteHeader` refuses as past
-  // 2^24 − 1, as it does any length there.
+  // `len` is 0 to 2^31 − 1, so the sum fits an `i64`.
   const total: i64 = toI64(8) + toI64(len)
   const body: i32 = http2WriteHeader(
     out,
     at,
-    total > toI64(H2_MAX_WINDOW) ? H2_MAX_WINDOW : toI32(total),
+    http2FrameLength(total),
     H2_FRAME_GOAWAY,
     H2_FRAME_ZERO,
     H2_FRAME_ZERO
