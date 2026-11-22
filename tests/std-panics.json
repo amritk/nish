@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9428,
+  "total": 9242,
   "explicit": {
     "kept": 352,
-    "toFix": 137
+    "toFix": 134
   },
   "modules": {
     "std/base64.ts": {
@@ -216,8 +216,6 @@
     },
     "std/net/buffer-pool.ts": {
       "array-length": 1,
-      "index": 1,
-      "overflow": 2,
       "panic": 6
     },
     "std/net/dns-config.ts": {
@@ -390,11 +388,8 @@
       "slice": 13
     },
     "std/net/prefork.ts": {
-      "array-length": 1,
-      "index": 30,
-      "overflow": 20,
-      "panic": 4,
-      "slice": 3
+      "panic": 1,
+      "slice": 1
     },
     "std/net/qpack.ts": {
       "index": 6,
@@ -588,13 +583,10 @@
       "overflow": 9
     },
     "std/sync/ring.ts": {
-      "overflow": 123,
       "panic": 16
     },
     "std/sync/shm.ts": {
-      "ffi-nul": 3,
-      "ffi-null": 1,
-      "overflow": 3
+      "ffi-nul": 3
     },
     "std/synth.ts": {
       "array-length": 1,
