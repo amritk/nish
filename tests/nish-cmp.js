@@ -18509,6 +18509,19 @@ const DECLARED = [
     changelog: "make the HTTP/1 server panic-free",
     why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it), so those modules and the header and IR after them differ (WP80 S4)",
   })),
+  // Reported only under `--no-sidecars`.
+  {
+    program: "bench/http1-conn/main.ts",
+    file: "main.ll",
+    changelog: "make the HTTP/1 server panic-free",
+    why: "`Http1Connection` moves its offsets and counts to i64 and its checks to refusals, so the struct, the inlined connection calls and the panic blocks they drop change (WP80 S4)",
+  },
+  ...["bytes.ll", "http-compress.ll", "zlib.ll"].map((file) => ({
+    program: "bench/http1-conn/main.ts",
+    file,
+    changelog: "make the HTTP/1 server panic-free",
+    why: "the reference compiles the bench against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it); the bench reaches them through this change's std/net/http1-server.ts (WP80 S4)",
+  })),
 ]
 
 /**
