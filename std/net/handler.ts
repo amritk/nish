@@ -432,7 +432,7 @@ export class HttpRequest {
    * @returns the byte offset in `head` of the parameter's first raw byte
    */
   paramStart(k: i32): i32 {
-    return this.paramBound(k, 0)
+    return this.paramBound(k, HANDLER_ZERO)
   }
 
   /**
@@ -441,7 +441,7 @@ export class HttpRequest {
    * @returns the byte offset in `head` just past the parameter's last raw byte
    */
   paramEnd(k: i32): i32 {
-    return this.paramBound(k, 1)
+    return this.paramBound(k, toI32(1))
   }
 
   /**
@@ -451,7 +451,7 @@ export class HttpRequest {
    * @returns true when the raw parameter bytes are exactly `text`
    */
   paramIs(k: i32, text: string): boolean {
-    return handlerSpanIs(this.head, this.paramBound(k, 0), this.paramBound(k, 1), text)
+    return handlerSpanIs(this.head, this.paramBound(k, HANDLER_ZERO), this.paramBound(k, toI32(1)), text)
   }
 
   /**
@@ -463,7 +463,7 @@ export class HttpRequest {
    * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
-    return routerDecode(this.head, this.paramBound(k, 0), this.paramBound(k, 1), out)
+    return routerDecode(this.head, this.paramBound(k, HANDLER_ZERO), this.paramBound(k, toI32(1)), out)
   }
 
   /**
@@ -473,7 +473,7 @@ export class HttpRequest {
    * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
    */
   paramDecimal(k: i32): i32 {
-    return handlerDecimal(this.head, this.paramBound(k, 0), this.paramBound(k, 1))
+    return handlerDecimal(this.head, this.paramBound(k, HANDLER_ZERO), this.paramBound(k, toI32(1)))
   }
 
   /**
@@ -482,7 +482,7 @@ export class HttpRequest {
    * @returns `Ok` with the byte offset in `head` of the parameter's first raw byte, or `Err` when the route has no parameter `k`
    */
   tryParamStart(k: i32): Result<i32, string> {
-    return this.tryParamBound(k, 0)
+    return this.tryParamBound(k, HANDLER_ZERO)
   }
 
   /**
@@ -491,7 +491,7 @@ export class HttpRequest {
    * @returns `Ok` with the byte offset in `head` just past the parameter's last raw byte, or `Err` when the route has no parameter `k`
    */
   tryParamEnd(k: i32): Result<i32, string> {
-    return this.tryParamBound(k, 1)
+    return this.tryParamBound(k, toI32(1))
   }
 
   /**
@@ -501,11 +501,11 @@ export class HttpRequest {
    * @returns `Ok` with the number, or -1 when the parameter is empty, holds a non-digit or overflows; `Err` when the route has no parameter `k`
    */
   tryParamDecimal(k: i32): Result<i32, string> {
-    const start = this.tryParamBound(k, 0)
+    const start = this.tryParamBound(k, HANDLER_ZERO)
     if (start.isErr()) {
       return Err(start.error)
     }
-    const end = this.tryParamBound(k, 1)
+    const end = this.tryParamBound(k, toI32(1))
     if (end.isErr()) {
       return Err(end.error)
     }
@@ -686,7 +686,7 @@ export class HttpRequest {
    * @returns the byte offset in `head` of the value's first byte
    */
   valueStart(i: i32): i32 {
-    return this.valueBound(i, 2)
+    return this.valueBound(i, toI32(2))
   }
 
   /**
@@ -697,7 +697,7 @@ export class HttpRequest {
    * @returns the byte offset in `head` just past the value's last byte
    */
   valueEnd(i: i32): i32 {
-    return this.valueBound(i, 3)
+    return this.valueBound(i, toI32(3))
   }
 
   /**
@@ -707,7 +707,7 @@ export class HttpRequest {
    * @returns `Ok` with the byte offset in `head` of the value's first byte, or `Err` naming `i`
    */
   tryValueStart(i: i32): Result<i32, string> {
-    return this.tryValueBound(i, 2)
+    return this.tryValueBound(i, toI32(2))
   }
 
   /**
@@ -717,7 +717,7 @@ export class HttpRequest {
    * @returns `Ok` with the byte offset in `head` just past the value's last byte, or `Err` naming `i`
    */
   tryValueEnd(i: i32): Result<i32, string> {
-    return this.tryValueBound(i, 3)
+    return this.tryValueBound(i, toI32(3))
   }
 
   /** Field `i`'s value start (`part` 2) or end (`part` 3): the one place the field contract panics. */
@@ -766,8 +766,8 @@ export class HttpRequest {
   headerIs(name: string, value: string): boolean {
     // An absent field (`HANDLER_ABSENT`) is no field index: both answer -1.
     const i: i32 = this.header(name)
-    const start: i32 = this.valueAt(i, 2)
-    const end: i32 = this.valueAt(i, 3)
+    const start: i32 = this.valueAt(i, toI32(2))
+    const end: i32 = this.valueAt(i, toI32(3))
     if (start < 0 || end < 0) {
       return false
     }
@@ -2541,7 +2541,7 @@ const handlerHead = (n: i32): u16 => {
   if (n <= 0) {
     return 0
   }
-  return toU16(n < 65535 ? n : 65535)
+  return toU16(n < 65535 ? n : toI32(65535))
 }
 
 /** `n` copies of `fill`, none when `n` is not positive: one allocation up to 65535, pushed past it. */

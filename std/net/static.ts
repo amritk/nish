@@ -148,7 +148,7 @@ const staticSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
  */
 const staticValue = (r: HttpRequest, i: i32, start: boolean): Result<i32, string> => {
   if (i < 0) {
-    return Ok(-1)
+    return Ok(toI32(-1))
   }
   return start ? r.tryValueStart(i) : r.tryValueEnd(i)
 }
