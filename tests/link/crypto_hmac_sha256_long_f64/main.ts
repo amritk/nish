@@ -1,17 +1,27 @@
-// `hmacSha256` of an array longer than 2^31 - 1 bytes panics (exit 1) before it
-// hashes anything. Under `--number-mode f64` a length is exact, but `toI32` of
-// it saturates at 2^31 - 1, so without the check this answered the tag of
-// the first 2^31 - 1 bytes: one answer for every message sharing them, which
-// is a collision, and for a MAC a forgery: the tag of the prefix verifies
-// every longer message that starts with it. The array is zero-filled and
-// never read on the path that panics; docs/security/crypto-k1.md, K1-1.
+// `hmacSha256` of a message longer than 2^31 - 1 bytes hashes all of the message.
+// Under `--number-mode f64` a length is exact but `toI32` of it saturates at
+// 2^31 - 1, so a message taken through `toI32` would be cut to a prefix; the
+// hasher walks a longer array with a `number` offset instead. The expected tag
+// over 2^31 zero bytes is Python's `hmac.new(bytes([1, 2]), message, hashlib.sha256)`.
+// docs/security/crypto-k1.md, finding K1-1.
 import { hmacSha256 } from "nish/crypto/hmac";
+
+const HEX_DIGITS: string = "0123456789abcdef";
+
+const hex = (bytes: u8[]): string => {
+  const parts: string[] = [];
+  for (const b of bytes) {
+    const v: i32 = toI32(b);
+    parts.push(HEX_DIGITS.substring(v >> 4, (v >> 4) + 1));
+    parts.push(HEX_DIGITS.substring(v & 15, (v & 15) + 1));
+  }
+  return parts.join("");
+};
 
 export const main = (): i32 => {
   const n: number = 2147483648;
   const message: u8[] = new Array<u8>(n);
   console.log("a 2^31-byte message");
-  const out: u8[] = hmacSha256([toU8(1), toU8(2)], message);
-  console.log(`unreachable: ${out.length} bytes of the tag of a prefix`);
+  console.log(hex(hmacSha256([toU8(1), toU8(2)], message)));
   return 0;
 };

@@ -783,6 +783,14 @@ export class AtomicI64 {
 }
 
 /**
+ * The panic of an atomic array made with a negative length: the message
+ * `new Array` of one prints, so the two refuse it alike.
+ */
+const negativeAtomicLength = (): void => {
+  panic("array length out of range")
+}
+
+/**
  * `length` `i32` counters in one contiguous buffer, each of which a scope's
  * tasks and a parallel body may update together (docs/LANGUAGE.md,
  * "Atomic arrays"). It is `AtomicI32` with the element's index first: each
@@ -814,7 +822,13 @@ export class AtomicI32Array {
    */
   constructor(length: i32) {
     this.length = length
-    this.values = new Array<i32>(length)
+    if (length >= 0) {
+      this.values = new Array<i32>(length)
+    } else {
+      negativeAtomicLength()
+      // Never reached: `negativeAtomicLength` stops the program.
+      this.values = []
+    }
     this.values.fill(0)
   }
 
@@ -964,7 +978,13 @@ export class AtomicI64Array {
    */
   constructor(length: i32) {
     this.length = length
-    this.values = new Array<i64>(length)
+    if (length >= 0) {
+      this.values = new Array<i64>(length)
+    } else {
+      negativeAtomicLength()
+      // Never reached: `negativeAtomicLength` stops the program.
+      this.values = []
+    }
     this.values.fill(0)
   }
 

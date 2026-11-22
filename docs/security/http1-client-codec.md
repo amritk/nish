@@ -12,8 +12,9 @@ starts from evidence. It names functions rather than lines, so it holds at any c
 **Result.** Every response-smuggling shape RFC 9112 names is refused, never
 repaired, with its own `HTTP1_E_` code, and a refusal is final. The events,
 the de-chunked body and the error code are the same however the input is cut.
-A panic is only ever the program's own mistake (a `feed` window outside its
-buffer, more than 2^30 bytes fed and not read).
+A panic is only ever the program's own mistake, a `feed` window outside its
+buffer. More than 2^30 bytes fed and not read, or kept of one head, is the
+refusal `HTTP1_E_MEMORY_LIMIT`.
 
 Every cap is a number the program passes to the constructor, or a constant of
 the module. The writer counts and checks the whole head before it writes a
@@ -28,7 +29,7 @@ reused with `reset` allocates nothing per response.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-client-codec.ts` | `http1WriteRequestHead`, `http1RequestHead`, `http1UpgradeRequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientHeadArray`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `expectUpgrade`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`, `fieldsAsSpans`, `reset`, `fields`, `fieldName`, `fieldValue`, `reasonText`) and its helpers (`http1ClientReserve`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientDigitAt`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientKeep`, `http1ClientSpan`, `http1ClientHeadIs`, `http1ClientHeadSameWord`, `http1ClientHeadTrimStart`, `http1ClientHeadTrimEnd`, `http1ClientHeadListHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`), and the byte and text helpers both halves use (`http1ClientDigits`, `http1ClientPutDecimal`, `http1ClientIsSchemeByte`, `http1ClientIsComma`, `http1ClientTrimStart`, `http1ClientTrimEnd`) |
+| `std/net/http1-client-codec.ts` | `http1WriteRequestHead`, `http1RequestHead`, `http1UpgradeRequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientHeadArray`, `http1ClientZeros`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`, `http1ClientListElementIs`); `Http1ResponseParser` (`expect`, `expectUpgrade`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`, `fieldsAsSpans`, `reset`, `fields`, `fieldName`, `fieldValue`, `reasonText`) and its helpers (`http1ClientReserve`, `http1ClientSpanAt`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientIsDigit`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientKeep`, `http1ClientSpan`, `http1ClientHeadIs`, `http1ClientHeadSameWord`, `http1ClientHeadTrimStart`, `http1ClientHeadTrimEnd`, `http1ClientHeadListHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientRoom`, `http1ClientCloseBody`, `http1ClientNext`), and the byte and text helpers both halves use (`http1ClientDigits`, `http1ClientPutDecimal`, `http1ClientIsSchemeByte`, `http1ClientIsComma`, `http1ClientTrimStart`, `http1ClientTrimEnd`) |
 
 Out of scope: `std/net/http1-codec.ts`, whose byte classes, text helpers and chunk
 writers the client imports and whose record is
@@ -71,7 +72,7 @@ the response whole and cut, and panics when the two digests of the events,
 statuses, fields, de-chunked body, tunnel and error code differ, on a status
 outside 100 to 999, on names and values of different lengths, on a body window
 outside its buffer, on more body than `maxBody`, on `HTTP1_UPGRADE` without a
-CONNECT, on an error code outside 1 to 17 or an error that leaves bytes
+CONNECT, on an error code outside 1 to 18 or an error that leaves bytes
 buffered, and on an unknown event.
 
 The sanitizer runtimes libFuzzer needs were not installed where this stage
@@ -252,13 +253,43 @@ text pinned by its `expected.stderr`.
 
 **What no check reaches.** Every branch of `std/net/http1-client-codec.ts` is run
 by the checks above but these, measured with V8 coverage on the module's
-`--emit-ts` output. The panic when more than 2^30 bytes are fed and not read
-would need a feed past 1 GiB. The rest are invariant guards that no input
+`--emit-ts` output. The refusal of more than 2^30 bytes fed and not read is
+reached (`refused: more than 2^30 bytes fed and not read`, a 1 GiB feed); the
+same refusal of a head kept past 2^30 bytes would need a 1 GiB head. The rest are invariant guards that no input
 can reach and that let the compiler drop a bounds check: the
 return of `http1ClientPutField` for a field index out of range, whose
 callers pass only indexes they loop over, and the `: buf.length` arm of the
 line-end clamps in `http1ClientStatusLine`, `http1ClientFieldLine` and
 `http1ClientChunkSize`, whose line end the parser found inside the buffer.
+The window guards that replaced panics are of the same kind: the `false` of
+`http1ClientReserve` and the `-1` of `http1ClientKeep` for a window or offset
+outside their buffer, which the parser's `0 <= start <= end <= buf.length` and
+`headUsed <= head.length` rule out, and the failed `tryCopyBytes` in
+`feed`, `http1ClientReserve` and `http1ClientKeep`, whose ranges were checked
+just before. So are the other guards WP82 added for the same reason:
+
+- `http1ClientTargetOk`'s second `target.length < 1` test, after its own
+  `n === 0` test of the same length, and its `colon >= n` arm, where `colon`
+  is an index below `n`;
+- the `j >= 0 && j <= spans.length - 4` conjuncts of the span walks
+  (`get`, `http1ClientTally`, `http1ClientConnectionHas` and the
+  `Content-Length` pass of `http1ClientEndOfHead`), whose `spans` holds four
+  entries for each of `spanCount`; `http1ClientSpanAt`'s `-1` past index
+  536870911, and the `""` that `fieldName(i)` and `fieldValue(i)` answer for
+  a span outside `spans`, behind an index already tested against `spanCount`;
+- the `a < 0 || b > head.length` arms of `http1ClientHeadIs` and
+  `http1ClientHeadSameWord`, and the `head.length` conjuncts of their loops
+  and of the list scans, whose spans `http1ClientKeep` wrote inside `head`;
+- the `i < buf.length` conjuncts of the field-name, chunk-size and OWS loops
+  in `http1ClientFieldLine` and `http1ClientChunkSize`, whose line end is
+  already clamped to the buffer;
+- `http1ClientBodyWindow`'s `start < 0 || end < 0` arms, and `tunnelBytes`'s
+  `from < 0 || to > buf.length` arms and loop conjuncts, which the parser's
+  `0 <= start <= end <= buf.length` rules out;
+- the `a + 12` and `a + 13` range tests of `http1ClientStatusLine`, which a
+  line of that width inside `buf` already meets.
+
+No input reaches them, so no check does.
 
 **Every condition is observed, or recorded as equivalent.** A mechanical
 mutation sweep of `std/net/http1-client-codec.ts` deleted each operand of each `&&`
@@ -267,6 +298,15 @@ assignment statement (every reset and clamp among them) and made false each
 `if` whose body is one statement, and ran the five `net_http1_client` link
 tests against each mutant. A mutant is killed when any test's stdout, exit
 status or stderr changes.
+
+**The sweep predates WP82 and has not been re-run.** The table was last
+recorded in c71ab8f52. WP82's rewrite of the module (from 8f28112bd) changed
+conditions it names and added the guards listed above, which it never
+mutated: the status line's `b - a < 12` is now a 64-bit `width < 12` with an
+`a <= buf.length - 12` bound, the reason phrase's `b - a > 13` is now
+`width > 12` with an `a <= buf.length - 13` bound, and `tunnelBytes` no
+longer has an `n > 0` test. The counts and classes below are that earlier
+module's.
 
 | Class | Mutants | Killed | Survived | Invalid |
 | --- | --- | --- | --- | --- |
@@ -297,7 +337,7 @@ classes, none of which a test can observe:
   only for a head of exactly 2^30 bytes, a 1 GiB allocation.
 - **Growth only** (5). `http1ClientReserve`'s tests decide whether the buffer
   is reused or grown, and to what size, never what it holds. Its
-  `size > 2^30` panic moved to `>=` differs only past 1 GiB fed.
+  `size > 2^30` refusal moved to `>=` differs only past 1 GiB fed.
 - **The scan hint** (4). The hint `http1ClientTakeLine` leaves behind on
   `HTTP1_NEED_MORE`, and its `p.scan > p.start` choice, decide only how much
   of a line is scanned again. The writes that pull `scan` up to `start` after

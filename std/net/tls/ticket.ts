@@ -133,6 +133,29 @@ const TLS_TICKET_PLAIN_FIXED: i32 = 24
 const TLS_TICKET_NAME_AT: i32 = 22
 
 /**
+ * `a + b`, held at the `i64` range's ends rather than past them. Two values of one
+ * sign sum within 2^64 of zero, so their sum in `u64` reads across the sign bit only
+ * when it has left the range.
+ */
+const tlsTicketAdd = (a: i64, b: i64): i64 => {
+  if (a >= 0) {
+    if (b < 0) {
+      return a + b
+    }
+    const sum: i64 = toI64(toU64(a) + toU64(b))
+    return sum >= 0 ? sum : toI64((toU64(0) - toU64(1)) >> toU64(1))
+  }
+  if (b >= 0) {
+    return a + b
+  }
+  const sum: i64 = toI64(toU64(a) + toU64(b))
+  return sum < 0 ? sum : toI64(toU64(1) << toU64(63))
+}
+
+/** `now - then` for a `now` no earlier than `then`: exact, since two `i64`s in that order differ by less than 2^64. */
+const tlsTicketElapsed = (now: i64, then: i64): u64 => toU64(now) - toU64(then)
+
+/**
  * A ticket key's public record. A class, so the program may keep it in a
  * field or anywhere else; the key it describes is a `Secret` the program
  * keeps in a local.
@@ -165,8 +188,11 @@ export class TlsTicketKeyInfo {
    * @param other The record to copy from, left unchanged.
    */
   copyFrom(other: TlsTicketKeyInfo): void {
-    for (let k: i32 = 0; k < TLS_TICKET_KEY_ID_SIZE; k++) {
-      this.id[k] = other.id[k]
+    const to: u8[] = this.id
+    const from: u8[] = other.id
+    // Both ids are `TLS_TICKET_KEY_ID_SIZE` bytes from the constructor, so the length bounds never stop the copy.
+    for (let k: i32 = 0; k < TLS_TICKET_KEY_ID_SIZE && k < toI32(to.length) && k < toI32(from.length); k++) {
+      to[k] = from[k]
     }
     this.createdAt = other.createdAt
     this.sealed = other.sealed
@@ -219,10 +245,11 @@ export class TlsTicketState {
   /**
    * When the ticket stops opening: its issue time plus its lifetime. It opens at that instant, and not after.
    *
-   * @returns The expiry in `monotonicNanos()`, which `TlsTicketStrikes.take` takes as its `expiresAt`.
+   * @returns The expiry in `monotonicNanos()`, which `TlsTicketStrikes.take` takes as its `expiresAt`;
+   *   one past the `i64` range is held at its end.
    */
   expiresAt(): i64 {
-    return this.issuedAt + toI64(this.lifetime) * TLS_TICKET_NANOS
+    return tlsTicketAdd(this.issuedAt, toI64(this.lifetime) * TLS_TICKET_NANOS)
   }
 }
 
@@ -252,31 +279,39 @@ export const tlsTicketKeyDraw = (info: TlsTicketKeyInfo, now: i64): Secret<u8[]>
  * @returns True when the program should rotate now; the key still opens tickets for a while after.
  */
 export const tlsTicketKeyDue = (info: TlsTicketKeyInfo, now: i64): boolean =>
-  now - info.createdAt >= TLS_TICKET_SEAL_WINDOW || info.sealed >= info.sealCap
+  (now >= info.createdAt && tlsTicketElapsed(now, info.createdAt) >= toU64(TLS_TICKET_SEAL_WINDOW)) ||
+  info.sealed >= info.sealCap
 
 /** True when the key `info` describes may seal at `now`: within its issue window, inclusive, and under its cap. */
 const tlsTicketKeySeals = (info: TlsTicketKeyInfo, now: i64): boolean =>
-  now >= info.createdAt && now - info.createdAt <= TLS_TICKET_SEAL_WINDOW && info.sealed < info.sealCap
+  now >= info.createdAt &&
+  tlsTicketElapsed(now, info.createdAt) <= toU64(TLS_TICKET_SEAL_WINDOW) &&
+  info.sealed < info.sealCap
 
 /** True when the key `info` describes may open at `now`: within 14 hours of its draw, inclusive. */
 const tlsTicketKeyOpens = (info: TlsTicketKeyInfo, now: i64): boolean =>
-  now >= info.createdAt && now - info.createdAt <= TLS_TICKET_OPEN_WINDOW
+  now >= info.createdAt && tlsTicketElapsed(now, info.createdAt) <= toU64(TLS_TICKET_OPEN_WINDOW)
 
 /** The plaintext's length for `state`, or -1 when the state cannot be sealed. */
 const tlsTicketPlainLength = (state: TlsTicketState): i32 => {
   const hashLength: i32 = tlsSuiteHashLength(state.suite)
+  const nameLength: i32 = state.serverNameLength
+  const pskLength: i32 = state.pskLength
+  // A known suite's hash is 32 or 48 bytes, so the PSK's bound below never refuses one the hash test passed.
   if (
     hashLength === 0 ||
-    state.pskLength !== hashLength ||
-    state.pskLength > toI32(state.psk.length) ||
-    state.serverNameLength < 0 ||
-    state.serverNameLength > TLS_TICKET_SERVER_NAME_MAX ||
-    state.serverNameLength > toI32(state.serverName.length) ||
+    pskLength !== hashLength ||
+    pskLength < 0 ||
+    pskLength > 48 ||
+    pskLength > toI32(state.psk.length) ||
+    nameLength < 0 ||
+    nameLength > 255 ||
+    nameLength > toI32(state.serverName.length) ||
     state.lifetime < 0
   ) {
     return -1
   }
-  return TLS_TICKET_PLAIN_FIXED + state.serverNameLength + state.pskLength
+  return TLS_TICKET_PLAIN_FIXED + nameLength + pskLength
 }
 
 /**
@@ -289,33 +324,91 @@ const tlsTicketPlainLength = (state: TlsTicketState): i32 => {
  */
 export const tlsTicketSize = (state: TlsTicketState): i32 => {
   const plain: i32 = tlsTicketPlainLength(state)
-  return plain < 0 ? 0 : TLS_TICKET_KEY_ID_SIZE + TLS_TICKET_NONCE_SIZE + plain + POLY1305_TAG_SIZE
-}
-
-/** Writes `value`'s low `size` bytes big-endian at `at`. */
-const tlsTicketPut = (buf: u8[], at: i32, value: i64, size: i32): void => {
-  for (let k: i32 = 0; k < size; k++) {
-    buf[at + k] = toU8(toI32((value >> (toI64(size - 1 - k) * 8)) & 255))
+  // `tlsTicketPlainLength` answers at most 327, so the upper test never refuses.
+  if (plain < 0 || plain > 327) {
+    return 0
   }
+  return TLS_TICKET_KEY_ID_SIZE + TLS_TICKET_NONCE_SIZE + plain + POLY1305_TAG_SIZE
 }
 
-/** Reads `size` bytes big-endian at `at`. */
+/**
+ * Writes `value`'s low `size` bytes, 0 to 8, big-endian at `at`, and answers
+ * true; false, writing nothing, when they do not all fit in `buf`. Every
+ * caller has sized `buf` to hold them and refuses on false.
+ */
+const tlsTicketPut = (buf: u8[], at: i32, value: i64, size: i32): boolean => {
+  if (at < 0 || size < 0 || size > 8 || at > toI32(buf.length) - size) {
+    return false
+  }
+  for (let j: i32 = at; j < toI32(buf.length) && j - at < size; j++) {
+    const shift: i64 = toI64(size - 1) * 8 - toI64(j - at) * 8
+    buf[j] = toU8(toI32((value >> shift) & 255))
+  }
+  return true
+}
+
+/**
+ * Reads `size` bytes, 0 to 8, big-endian at `at`, or -1 when they do not all
+ * lie inside `buf`. `tlsTicketParse` checks every window before it reads, so
+ * no read reaches the -1; an 8-byte value may itself be -1, and only that
+ * entry check stands for those.
+ */
 const tlsTicketGet = (buf: u8[], at: i32, size: i32): i64 => {
   let value: i64 = 0
-  for (let k: i32 = 0; k < size; k++) {
-    value = (value << 8) | toI64(buf[at + k])
+  if (at < 0 || size < 0 || size > 8 || at > toI32(buf.length) - size) {
+    return -1
+  }
+  for (let j: i32 = at; j < toI32(buf.length) && j - at < size; j++) {
+    value = (value << 8) | toI64(buf[j])
   }
   return value
 }
 
-/** A copy of `buf[from .. to)`. */
-const tlsTicketRange = (buf: u8[], from: i32, to: i32): u8[] => {
-  const out: u8[] = new Array<u8>(to - from)
-  for (let k: i32 = 0; k < toI32(out.length); k++) {
-    const at: i32 = from + k
-    if (at >= 0 && at < toI32(buf.length)) {
-      out[k] = buf[at]
+/**
+ * Copies `length` bytes from `src[srcAt]` to `dst[dstAt]` and answers true;
+ * false, copying nothing, when either window does not fit. Every caller has
+ * checked both windows and refuses on false; the bounds in the loop are the
+ * prover's.
+ */
+const tlsTicketCopy = (dst: u8[], dstAt: i32, src: u8[], srcAt: i32, length: i32): boolean => {
+  if (
+    length < 0 ||
+    dstAt < 0 ||
+    srcAt < 0 ||
+    toI64(dstAt) + toI64(length) > toI64(dst.length) ||
+    toI64(srcAt) + toI64(length) > toI64(src.length)
+  ) {
+    return false
+  }
+  for (let k: i32 = 0; k < length; k++) {
+    // A position past an `i32` wraps negative and is skipped like one past the array.
+    const to: i32 = toI32(toI64(dstAt) + toI64(k))
+    const from: i32 = toI32(toI64(srcAt) + toI64(k))
+    if (to >= 0 && to < toI32(dst.length) && from >= 0 && from < toI32(src.length)) {
+      dst[to] = src[from]
     }
+  }
+  return true
+}
+
+/**
+ * A copy of `buf[from .. to)`, in an array made at its exact size so that no
+ * growth leaves a stray copy of a plaintext behind; empty when the window is
+ * not within `buf` or is longer than 65,535 bytes, which no caller asks for:
+ * a ticket over that length is refused before it is opened.
+ */
+const tlsTicketRange = (buf: u8[], from: i32, to: i32): u8[] => {
+  const none: u8[] = []
+  if (from < 0 || to > toI32(buf.length)) {
+    return none
+  }
+  const length: i64 = toI64(to) - toI64(from)
+  if (length < 0 || length > 65535) {
+    return none
+  }
+  const out: u8[] = new Array<u8>(toU16(length))
+  if (!tlsTicketCopy(out, 0, buf, from, toI32(out.length))) {
+    return none
   }
   return out
 }
@@ -357,8 +450,8 @@ const tlsTicketSealExposed = (key: u8[], input: u8[]): u8[] => {
  *
  * @param key The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
  * @param info The key's record: its id heads the ticket and its count goes up by one on a seal.
- * @param state What the ticket carries; its `issuedAt` is overwritten with `now`, unless the key
- *   cannot seal at `now`, the state does not fit a ticket or `out` is too short.
+ * @param state What the ticket carries; its `issuedAt` is overwritten with `now` only when the
+ *   ticket is sealed, so a refusal leaves the state untouched.
  * @param now The issue time, in `monotonicNanos()`.
  * @param out Where the ticket is written, from index 0; at least `tlsTicketSize(state)` bytes.
  * @returns How many bytes of `out` hold the ticket, or 0 when nothing was sealed.
@@ -372,38 +465,58 @@ export const tlsTicketSeal = (
 ): i32 => {
   const plainLength: i32 = tlsTicketPlainLength(state)
   const size: i32 = tlsTicketSize(state)
-  if (!tlsTicketKeySeals(info, now) || plainLength < 0 || size > toI32(out.length)) {
+  const nameLength: i32 = state.serverNameLength
+  const pskLength: i32 = state.pskLength
+  const id: u8[] = info.id
+  // `tlsTicketPlainLength` has bounded the plaintext and both lengths, and a key that seals has `sealed`
+  // under its cap, so the tests after the first three never refuse a record `tlsTicketKeyDraw` filled.
+  if (
+    !tlsTicketKeySeals(info, now) ||
+    plainLength < 0 ||
+    size > toI32(out.length) ||
+    plainLength > 327 ||
+    nameLength < 0 ||
+    nameLength > 255 ||
+    pskLength < 0 ||
+    pskLength > 48 ||
+    toI32(id.length) !== TLS_TICKET_KEY_ID_SIZE
+  ) {
     return 0
   }
   using _scope = arena()
-  state.issuedAt = now
   const head: i32 = TLS_TICKET_KEY_ID_SIZE + TLS_TICKET_NONCE_SIZE
-  const input: u8[] = new Array<u8>(head + plainLength)
+  const input: u8[] = new Array<u8>(toU16(head + plainLength))
   const nonce: u8[] = new Array<u8>(TLS_TICKET_NONCE_SIZE)
   crypto.getRandomValues(nonce)
-  input.set(info.id, 0)
-  input.set(nonce, TLS_TICKET_KEY_ID_SIZE)
-  tlsTicketPut(input, head, toI64(state.suite), 2)
-  tlsTicketPut(input, head + 2, now, 8)
-  tlsTicketPut(input, head + 10, toI64(state.lifetime), 4)
-  tlsTicketPut(input, head + 14, state.chainStart, 8)
   const nameAt: i32 = head + TLS_TICKET_NAME_AT
-  input[nameAt] = toU8(state.serverNameLength)
-  for (let k: i32 = 0; k < state.serverNameLength; k++) {
-    input[nameAt + 1 + k] = state.serverName[k]
-  }
-  const pskAt: i32 = nameAt + 1 + state.serverNameLength
-  input[pskAt] = toU8(state.pskLength)
-  for (let k: i32 = 0; k < state.pskLength; k++) {
-    input[pskAt + 1 + k] = state.psk[k]
+  const pskAt: i32 = nameAt + 1 + nameLength
+  // `input` was made at the plaintext's size, so every field fits; a state
+  // whose arrays are shorter than its lengths is refused, not sealed short.
+  const filled: boolean =
+    tlsTicketCopy(input, 0, id, 0, TLS_TICKET_KEY_ID_SIZE) &&
+    tlsTicketCopy(input, TLS_TICKET_KEY_ID_SIZE, nonce, 0, TLS_TICKET_NONCE_SIZE) &&
+    tlsTicketPut(input, head, toI64(state.suite), 2) &&
+    tlsTicketPut(input, head + 2, now, 8) &&
+    tlsTicketPut(input, head + 10, toI64(state.lifetime), 4) &&
+    tlsTicketPut(input, head + 14, state.chainStart, 8) &&
+    tlsTicketPut(input, nameAt, toI64(nameLength), 1) &&
+    tlsTicketCopy(input, nameAt + 1, state.serverName, 0, nameLength) &&
+    tlsTicketPut(input, pskAt, toI64(pskLength), 1) &&
+    tlsTicketCopy(input, pskAt + 1, state.psk, 0, pskLength)
+  if (!filled) {
+    secureZero(input)
+    return 0
   }
   const sealed: u8[] = exposeWith(key, input, tlsTicketSealExposed)
   let written: i32 = 0
-  if (toI32(sealed.length) === plainLength + POLY1305_TAG_SIZE) {
-    out.set(info.id, 0)
-    out.set(nonce, TLS_TICKET_KEY_ID_SIZE)
-    out.set(sealed, head)
-    info.sealed = info.sealed + 1
+  if (
+    toI32(sealed.length) === plainLength + POLY1305_TAG_SIZE &&
+    tlsTicketCopy(out, 0, input, 0, head) &&
+    tlsTicketCopy(out, head, sealed, 0, toI32(sealed.length))
+  ) {
+    // Under its cap, so the count never reaches the `i64` top `tlsTicketAdd` would hold it at.
+    info.sealed = tlsTicketAdd(info.sealed, 1)
+    state.issuedAt = now
     written = size
   }
   secureZero(input)
@@ -445,12 +558,20 @@ const tlsTicketParse = (plain: u8[], now: i64, out: TlsTicketState): boolean => 
   const issuedAt: i64 = tlsTicketGet(plain, 2, 8)
   const lifetime: i64 = tlsTicketGet(plain, 10, 4)
   const chainStart: i64 = tlsTicketGet(plain, 14, 8)
-  const nameLength: i32 = toI32(plain[TLS_TICKET_NAME_AT])
+  // Each length is one byte, so its bound below never refuses. The name's bound stays the literal 255
+  // (`TLS_TICKET_SERVER_NAME_MAX`): the prover reads literal guards, and the sums below need it.
+  const nameLength: i32 = toI32(tlsTicketGet(plain, TLS_TICKET_NAME_AT, 1))
+  if (nameLength < 0 || nameLength > 255) {
+    return false
+  }
   const pskAt: i32 = TLS_TICKET_NAME_AT + 1 + nameLength
   if (pskAt >= length) {
     return false
   }
-  const pskLength: i32 = toI32(plain[pskAt])
+  const pskLength: i32 = toI32(tlsTicketGet(plain, pskAt, 1))
+  if (pskLength < 0 || pskLength > 255) {
+    return false
+  }
   const hashLength: i32 = tlsSuiteHashLength(suite)
   if (
     pskAt + 1 + pskLength !== length ||
@@ -466,32 +587,41 @@ const tlsTicketParse = (plain: u8[], now: i64, out: TlsTicketState): boolean => 
   out.lifetime = toI32(lifetime)
   out.chainStart = chainStart
   out.serverNameLength = nameLength
-  for (let k: i32 = 0; k < nameLength; k++) {
-    out.serverName[k] = plain[TLS_TICKET_NAME_AT + 1 + k]
-  }
   out.pskLength = pskLength
-  for (let k: i32 = 0; k < pskLength; k++) {
-    out.psk[k] = plain[pskAt + 1 + k]
+  // Both windows were checked above; a copy that cannot land whole refuses.
+  if (
+    !tlsTicketCopy(out.serverName, 0, plain, TLS_TICKET_NAME_AT + 1, nameLength) ||
+    !tlsTicketCopy(out.psk, 0, plain, pskAt + 1, pskLength)
+  ) {
+    return false
   }
   return (
     lifetime <= toI64(TLS_TICKET_LIFETIME_SECONDS) &&
     chainStart <= issuedAt &&
     issuedAt <= now &&
     now <= out.expiresAt() &&
-    now - chainStart <= TLS_TICKET_CHAIN_LIMIT
+    tlsTicketElapsed(now, chainStart) <= toU64(TLS_TICKET_CHAIN_LIMIT)
   )
 }
 
-/** True when `ticket` is long enough to hold a state and names `info`'s key id. */
+/**
+ * True when `ticket` is long enough to hold a state, no longer than 65,535 bytes
+ * (a `ticket<1..2^16-1>`, RFC 8446 §4.6.1), and names `info`'s key id.
+ */
 const tlsTicketNamesKey = (info: TlsTicketKeyInfo, ticket: u8[]): boolean => {
   if (
     toI32(ticket.length) <
-    TLS_TICKET_KEY_ID_SIZE + TLS_TICKET_NONCE_SIZE + TLS_TICKET_PLAIN_FIXED + POLY1305_TAG_SIZE
+      TLS_TICKET_KEY_ID_SIZE + TLS_TICKET_NONCE_SIZE + TLS_TICKET_PLAIN_FIXED + POLY1305_TAG_SIZE ||
+    toI32(ticket.length) > 65535
   ) {
     return false
   }
-  for (let k: i32 = 0; k < TLS_TICKET_KEY_ID_SIZE && k < toI32(ticket.length); k++) {
-    if (ticket[k] !== info.id[k]) {
+  const id: u8[] = info.id
+  if (toI32(id.length) !== TLS_TICKET_KEY_ID_SIZE) {
+    return false
+  }
+  for (let k: i32 = 0; k < TLS_TICKET_KEY_ID_SIZE && k < toI32(ticket.length) && k < toI32(id.length); k++) {
+    if (ticket[k] !== id[k]) {
       return false
     }
   }
@@ -501,8 +631,8 @@ const tlsTicketNamesKey = (info: TlsTicketKeyInfo, ticket: u8[]): boolean => {
 /**
  * Opens `ticket` under `key`, the key `info` describes, into `out`, and
  * answers whether it opened at `now`. False — with nothing of the key read —
- * when the ticket names another key id or the key is past 14 hours of awake
- * time; false when the tag does not verify, the plaintext is malformed, or the
+ * when the ticket names another key id, is longer than 65,535 bytes, or the key
+ * is past 14 hours of awake time; false when the tag does not verify, the plaintext is malformed, or the
  * ticket is outside its bounds (`tlsTicketParse`). On true, `out` holds the
  * state and the ticket's nonce in `id`, its strike-register id. On false after
  * the AEAD ran, the state's PSK array is wiped. The plaintext is wiped once,
@@ -529,12 +659,10 @@ export const tlsTicketOpen = (
   }
   using _scope = arena()
   const plain: u8[] = exposeWith(key, ticket, tlsTicketOpenExposed)
-  const opened: boolean = tlsTicketParse(plain, now, out)
-  if (opened) {
-    for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE; k++) {
-      out.id[k] = ticket[TLS_TICKET_KEY_ID_SIZE + k]
-    }
-  } else {
+  const opened: boolean =
+    tlsTicketParse(plain, now, out) &&
+    tlsTicketCopy(out.id, 0, ticket, TLS_TICKET_KEY_ID_SIZE, TLS_TICKET_NONCE_SIZE)
+  if (!opened) {
     secureZero(out.psk)
   }
   secureZero(plain)
@@ -584,18 +712,29 @@ export class TlsTicketStrikes {
   longest: i32
 
   /**
-   * Makes the whole table now, so that no `take` ever allocates; it panics on a capacity below 1.
+   * Makes the whole table now, so that no `take` ever allocates; it panics on a capacity below 1, or above
+   * 178,956,969, past which the ids' table would not fit an `i32` length.
    *
    * @param capacity How many ids the register can hold at once, `TLS_TICKET_STRIKES_DEFAULT` when in doubt.
    */
   constructor(capacity: i32) {
-    if (capacity < 1) {
-      panic("TlsTicketStrikes: a capacity below 1")
+    if (capacity < 1 || capacity > 178956969) {
+      panic("TlsTicketStrikes: a capacity below 1 or above 178956969")
     }
     this.capacity = capacity
-    this.ids = new Array<u8>(capacity * TLS_TICKET_NONCE_SIZE)
-    this.expires = new Array<i64>(capacity)
-    this.used = new Array<u8>(capacity)
+    const ids: u8[] = []
+    const expires: i64[] = []
+    const used: u8[] = []
+    for (let slot: i32 = 0; slot < capacity; slot++) {
+      for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE; k++) {
+        ids.push(0)
+      }
+      expires.push(0)
+      used.push(0)
+    }
+    this.ids = ids
+    this.expires = expires
+    this.used = used
     this.filled = 0
     this.longest = 0
     this.refusedFull = 0
@@ -608,11 +747,17 @@ export class TlsTicketStrikes {
    * @returns A slot index, from 0 to `capacity - 1`.
    */
   home(id: u8[]): i32 {
-    let hash: i64 = 2166136261
-    for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
-      hash = ((hash ^ toI64(id[k])) * 16777619) & 4294967295
+    const capacity: i64 = toI64(this.capacity)
+    // The constructor refuses a capacity below 1, so this never answers.
+    if (capacity < 1) {
+      return 0
     }
-    return toI32(hash % toI64(this.capacity))
+    // FNV-1a keeps 32 bits, which a `u64` product of a 32-bit hash and the prime holds exactly.
+    let hash: u64 = 2166136261
+    for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
+      hash = ((hash ^ toU64(id[k])) * 16777619) & 4294967295
+    }
+    return toI32(toI64(hash) % capacity)
   }
 
   /**
@@ -621,9 +766,15 @@ export class TlsTicketStrikes {
    * @internal Read by `net/tls.ts`.
    */
   holds(slot: i32, id: u8[]): boolean {
+    const ids: u8[] = this.ids
+    // A slot outside the table holds nothing; the constructor bounds the table at 178,956,969 slots.
+    if (slot < 0 || slot > 178956969) {
+      return false
+    }
     const at: i32 = slot * TLS_TICKET_NONCE_SIZE
     for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
-      if (this.ids[at + k] !== id[k]) {
+      const j: i32 = toI32(toI64(at) + toI64(k))
+      if (j < 0 || j >= toI32(ids.length) || ids[j] !== id[k]) {
         return false
       }
     }
@@ -638,9 +789,12 @@ export class TlsTicketStrikes {
    * @returns The number of slots ever used that hold `id`.
    */
   count(id: u8[]): i32 {
+    const capacity: i32 = this.capacity
+    const used: u8[] = this.used
     let found: i32 = 0
-    for (let slot: i32 = 0; slot < this.capacity; slot++) {
-      if (this.used[slot] !== 0 && this.holds(slot, id)) {
+    // `found` is at most `capacity`, so its bound never stops the count.
+    for (let slot: i32 = 0; slot < capacity && slot < toI32(used.length); slot++) {
+      if (used[slot] !== 0 && this.holds(slot, id) && found < 2147483647) {
         found++
       }
     }
@@ -654,9 +808,17 @@ export class TlsTicketStrikes {
    * @returns The number of live entries, from 0 to `capacity`.
    */
   live(now: i64): i32 {
+    const capacity: i32 = this.capacity
+    const used: u8[] = this.used
+    const expires: i64[] = this.expires
     let held: i32 = 0
-    for (let slot: i32 = 0; slot < this.capacity; slot++) {
-      if (this.used[slot] !== 0 && this.expires[slot] >= now) {
+    // `held` is at most `capacity`, so its bound never stops the count.
+    for (
+      let slot: i32 = 0;
+      slot < capacity && slot < toI32(used.length) && slot < toI32(expires.length);
+      slot++
+    ) {
+      if (used[slot] !== 0 && expires[slot] >= now && held < 2147483647) {
         held++
       }
     }
@@ -683,48 +845,78 @@ export class TlsTicketStrikes {
     if (toI32(id.length) !== TLS_TICKET_NONCE_SIZE) {
       return false
     }
-    const bound: i64 = now + TLS_TICKET_LIFETIME_NANOS
+    const bound: i64 = tlsTicketAdd(now, TLS_TICKET_LIFETIME_NANOS)
     const until: i64 = expiresAt < bound ? expiresAt : bound
+    const capacity: i32 = this.capacity
+    const used: u8[] = this.used
+    const expires: i64[] = this.expires
+    const ids: u8[] = this.ids
+    const longest: i32 = this.longest
     const home: i32 = this.home(id)
+    // The constructor makes `capacity` slots in each array and `home` answers one of them, so a table this
+    // does not describe is refused, failing closed, and never reached.
+    if (capacity < 1 || home < 0 || home >= capacity) {
+      return false
+    }
+    const divisor: i64 = toI64(capacity)
+    if (divisor < 1) {
+      return false
+    }
     let free: i32 = -1
-    for (let n: i32 = 0; n < this.capacity; n++) {
-      const slot: i32 = (home + n) % this.capacity
-      if (this.used[slot] === 0) {
+    for (let n: i32 = 0; n < capacity; n++) {
+      const slot: i32 = toI32((toI64(home) + toI64(n)) % divisor)
+      if (slot < 0 || slot >= toI32(used.length) || slot >= toI32(expires.length)) {
+        return false
+      }
+      if (used[slot] === 0) {
         if (free < 0) {
           free = slot
         }
         break
       }
-      if (this.expires[slot] < now) {
+      if (expires[slot] < now) {
         if (free < 0) {
           free = slot
         }
-      } else if (n <= this.longest && this.holds(slot, id)) {
+      } else if (n <= longest && this.holds(slot, id)) {
         return false
       }
-      if (free >= 0 && n >= this.longest) {
+      if (free >= 0 && n >= longest) {
         break
       }
     }
     if (free < 0) {
-      this.refusedFull = this.refusedFull + 1
+      this.refusedFull = tlsTicketAdd(this.refusedFull, 1)
       return false
     }
-    if (this.used[free] === 0) {
-      this.used[free] = 1
-      this.filled = this.filled + 1
+    if (free >= toI32(used.length) || free >= toI32(expires.length) || free > 178956969) {
+      return false
     }
     const at: i32 = free * TLS_TICKET_NONCE_SIZE
+    if (at > toI32(ids.length) - TLS_TICKET_NONCE_SIZE) {
+      return false
+    }
+    if (used[free] === 0) {
+      used[free] = 1
+      const filled: i32 = this.filled
+      // `filled` counts slots ever used, at most `capacity`, so its bound never stops it.
+      if (filled < 2147483647) {
+        this.filled = filled + 1
+      }
+    }
     for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
-      this.ids[at + k] = id[k]
+      const j: i32 = toI32(toI64(at) + toI64(k))
+      if (j >= 0 && j < toI32(ids.length)) {
+        ids[j] = id[k]
+      }
     }
-    this.expires[free] = until
-    let distance: i32 = free - home
+    expires[free] = until
+    let distance: i64 = toI64(free) - toI64(home)
     if (distance < 0) {
-      distance = distance + this.capacity
+      distance = distance + toI64(capacity)
     }
-    if (distance > this.longest) {
-      this.longest = distance
+    if (distance > toI64(longest)) {
+      this.longest = toI32(distance)
     }
     return true
   }

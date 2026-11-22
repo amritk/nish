@@ -255,7 +255,7 @@ export const tlsClientChain = (chain: u8[][], serverName: string, nowMs: i64, tr
  */
 export const tlsClientVerdict = (tls: TlsClient, trust: TlsClientTrust, nowMs: i64): i32 => {
   const chain: u8[][] = tls.peerCertificates()
-  if (toI32(chain.length) === 0) {
+  if (toI32(chain.length) < 1) {
     return TLS_ALERT_BAD_CERTIFICATE
   }
   const leaf: X509Certificate | null = x509ParseCertificate(chain[0])

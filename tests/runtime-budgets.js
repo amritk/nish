@@ -1116,7 +1116,16 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * counts ECT(0), ECT(1) and CE, and the connection and the server each keep
  * the codepoint the datagram in hand arrived with.
  *
- * Moved to **111,528 bytes** (+368) when the QUIC engine stopped reaching a
+ * Moved to **111,240 bytes** (+80) by the panic-free QUIC wire helpers (WP82 S4,
+ * `docs/security/quic.md`): `quicDatagramBytes`, `quicDatagramLengths`,
+ * `quicPacketTake` and `quicCidSequences` grow a long array with `push` or return
+ * another call's array, so the layout pass cannot prove they return a fresh array
+ * (`freshReturnOf`, `src/inline-arrays.ts`) and the fields they fill keep a
+ * pointer to a header of their own instead of a boxed `len` and `data`: the
+ * datagram ring takes 32 bytes more, the packet header 32 and the
+ * connection-ID retire list 16.
+ *
+ * Moved to **SLOTFIG bytes** (+SLOTDELTA) when the QUIC engine stopped reaching a
  * panic site (#2142): methods of recovery's sent-packet rings, the stream table
  * and the connection now read array fields into a local to guard an index, and a
  * field taken as a value is no longer stored inline, so its array keeps the
@@ -1124,7 +1133,7 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * array fields are stored inline"). Recovery's rings take +240, the streams +96
  * and the connection +32.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111528
+export const HTTP3_SERVER_SLOT_BYTES = 111240
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
