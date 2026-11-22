@@ -521,10 +521,7 @@ How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` 
 `s` percent-decoded with `flags`, or null when `percentDecode` refuses it
 or what it decodes to is not valid UTF-8, which is where
 `decodeURIComponent` throws. `s` is expected to be ASCII, as a URL on the
-wire is. It allocates its answer, a byte at a time as `String.fromCharCode`
-makes it, so natively the answer is the decoded UTF-8 and under
-`--emit-ts` a decoded byte above 127 is one UTF-16 unit: `%C3%A9` is `é`
-natively and two units under Node.
+wire is. It allocates its answer.
 
 ```ts
 const urlDecode: (s: string, flags: i32) => string | null
@@ -706,9 +703,7 @@ The first value for `name` in the query of the request target `target`,
 form-decoded strictly: `""` for a key written without `=`, as
 `URLSearchParams.get` answers, and null when the target has no query, the
 key is absent, the value is malformed or not UTF-8, or the key comes after
-`URL_DEFAULT_MAX_PAIRS` pairs. It allocates its answer, which under
-`--emit-ts` keeps a decoded byte above 127 as one UTF-16 unit, as
-`urlDecode` does.
+`URL_DEFAULT_MAX_PAIRS` pairs. It allocates its answer.
 
 ```ts
 const urlQueryGet: (

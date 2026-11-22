@@ -20,6 +20,7 @@ import {
   HTTP_COMPRESS_TOO_LARGE,
   HTTP_COMPRESS_TOO_LITTLE_SAVED,
   HTTP_COMPRESS_TOO_SMALL,
+  HTTP_DECODE_BAD_CALL,
   HTTP_DECODE_MALFORMED,
   HTTP_DECODE_TOO_LARGE,
   HTTP_DEFAULT_MSS,
@@ -497,7 +498,8 @@ class HttpBodyDecoder
 | `new HttpBodyDecoder(limit: i32)` | A decoder that refuses a body decoding to more than `limit` bytes; a `limit` under 1 panics. |
 | `readonly limit: i32` | The most bytes a body may decode to; one more is `HTTP_DECODE_TOO_LARGE`. |
 | `output: u8[]` | Where `decode` writes, from index 0. A caller may take the array and leave another in its place, which `decode` then writes into, or grows past. |
-| `decode(coding: i32, src: u8[], off: i32, len: i32): i32` | Decodes `src[off .. off + len)`, one body in `coding`, into `output` from index 0. Another coding than `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE`, or a window outside `src`, panics. |
+| `decode(coding: i32, src: u8[], off: i32, len: i32): i32` | Decodes `src[off .. off + len)`, one body in `coding`, into `output` from index 0. Another coding than `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE`, or a window outside `src`, panics; `tryDecode` answers `HTTP_DECODE_BAD_CALL` instead. |
+| `tryDecode(coding: i32, src: u8[], off: i32, len: i32): i32` | `decode` that answers `HTTP_DECODE_BAD_CALL`, decoding nothing, where `decode` panics: a coding other than `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE`, or a window outside `src`. The coding often comes from a request's `Content-Encoding` (`httpContentEncoding`), so a caller that passes it on unchecked uses this one. |
 
 ### HttpCompressor
 
@@ -612,9 +614,10 @@ Nothing offered is acceptable, identity included (§12.5.3: 406, or identity any
 `HTTP_COMPRESS_FAILED: i32`
 
 The encoder's gzip member could not be written into `output` or reframed as
-zlib, so the body went as it is. `output` holds `compressBound(maxLength)`
-bytes and every member an encoder writes carries its 18 bytes of header and
-trailer, so no body `compress` or `compressAnyway` accepts reaches it.
+zlib, so the body went as it is. `output` is built with
+`compressBound(maxLength)` bytes, room for any body `compress` or
+`compressAnyway` accepts; it is reached when a caller has since shrunk
+`output` (`readonly` keeps the array, not its length).
 
 </scalar-card>
 
@@ -670,6 +673,15 @@ or the saving asked for was the whole body, so no encoder ran.
 `HTTP_COMPRESS_TOO_SMALL: i32`
 
 The body was shorter than `minLength`, too small to be worth compressing.
+
+</scalar-card>
+
+<scalar-card title="-3" icon="phosphor/regular/hash">
+
+`HTTP_DECODE_BAD_CALL: i32`
+
+`HttpBodyDecoder.tryDecode`: the coding is neither gzip nor deflate, or the
+window lies outside its buffer; nothing was decoded.
 
 </scalar-card>
 
