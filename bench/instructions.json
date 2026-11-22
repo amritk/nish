@@ -41,6 +41,10 @@
     "crypto-jwt-verify": { "size": 0, "iterations": 12000, "instructions": 271034368 },
     "std-threads": { "n": 20000, "instructions": 130000000 },
     "std-json-typed": { "n": 2000, "instructions": 160000000 },
-    "std-cli-args": { "n": 20000, "instructions": 95000000 }
+    "std-cli-args": { "n": 20000, "instructions": 95000000 },
+    "std-net-quic-packet": { "n": 50000, "instructions": 132844631 },
+    "std-net-tls-record": { "n": 1000, "instructions": 159165518 },
+    "std-net-dns-message": { "n": 5000, "instructions": 96298847 },
+    "std-net-http2-frame": { "n": 1000, "instructions": 181527148 }
   }
 }
