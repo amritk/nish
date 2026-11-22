@@ -510,7 +510,10 @@ const http1ServerCheckWindow = (what: string, buf: readonly u8[], off: i32, len:
 /**
  * `n` zeroed bytes, the length a `Http1Config` cap checked: one `new Array`
  * up to 65535, which a `u16` length proves, and pushes on that past it. A
- * negative `n`, which no checked cap is, answers no bytes.
+ * negative `n` answers an empty buffer, by contract rather than by panic. No
+ * caller in this module reaches it: they pass `outputSize`, which
+ * `http1ServerConfigFault` holds at 1024 or more, and the positive constants
+ * `HTTP1_FIRST_INPUT` and `HTTP1_FIRST_HEAD`.
  */
 const http1ServerBytes = (n: i32): u8[] => {
   if (n < 0) {
@@ -843,10 +846,18 @@ const http1ServerReserved = (name: u8[]): boolean =>
  */
 export class Http1OutputPool {
   // Widest first, so the layout packs without padding.
-  /** The buffers given back and not yet taken again; `made - free.length` is how many are out. */
+  /**
+   * The buffers given back and not yet taken again; `made - free.length` is
+   * how many are out, while `made` is below 2^31 - 1 (see `made`).
+   */
   free: u8[][]
   private size: i32 = 0
-  /** How many buffers the pool has made. */
+  /**
+   * How many buffers the pool has made, up to 2^31 - 1, where it stays: past
+   * that it undercounts, and so does `made - free.length`. This module's
+   * pools make buffers of 256 bytes or more, so reaching it takes 512 GiB of
+   * buffers.
+   */
   made: i32 = 0
   /** How many buffers `free` has room for without growing. */
   private room: i32 = 0
@@ -875,7 +886,7 @@ export class Http1OutputPool {
       free.pop()
       return buf
     }
-    // A count past 2^31 - 1 buffers is past any arena: it stays there.
+    // Held at 2^31 - 1 rather than wrapped: see `made`.
     const was: i32 = this.made
     const made: i32 = was < 2147483647 ? was + 1 : was
     this.made = made

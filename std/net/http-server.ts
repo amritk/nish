@@ -1875,8 +1875,21 @@ export class HttpServer {
     copyBytes(r.head, HTTP_SERVER_ZERO, p.head, HTTP_SERVER_ZERO, p.headLength)
     const from: i32[] = p.spans
     const into: i32[] = r.spans
+    // Four spans per field. `listenHttp1` refuses a `maxHeaders` past
+    // `maxFields`, the parser stops at `maxHeaders`, and `obtain` made
+    // `into` 4 * `maxFields` long, so every span fits; a head that did not
+    // is refused 431 whole rather than copied in part.
     const used: i64 = toI64(p.headerCount) * toI64(4)
-    for (let k: i32 = 0; toI64(k) < used && k < toI32(from.length) && k < toI32(into.length); k++) {
+    if (p.headerCount < 0 || used > toI64(toI32(from.length)) || used > toI64(toI32(into.length))) {
+      this.free.push(r)
+      conn.closeAfter = true
+      conn.respond(431, this.noFields, this.noFields, toI32(0))
+      return
+    }
+    // The length tests below only restate the refusal above for the prover,
+    // which keeps no fact from it: they never end the copy early.
+    const n: i32 = toI32(used)
+    for (let k: i32 = 0; k < n && k < toI32(from.length) && k < toI32(into.length); k++) {
       into[k] = from[k]
     }
     r.headerCount = p.headerCount

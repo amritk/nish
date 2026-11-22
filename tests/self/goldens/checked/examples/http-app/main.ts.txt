@@ -39443,10 +39443,10 @@ function HttpServer.roomy(this: HttpServer, conn: Http1Connection): boolean -> @
 function HttpServer.begin(this: HttpServer, s: HttpServerH1Slot, conn: Http1Connection): void -> @nish.HttpServer.begin [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.Http1Connection.respond nish.HttpServer.admit nish.HttpServer.obtain nish.HttpServerRequest.methodIs nish.copyBytes
+  calls: nish.Http1Connection.respond nish.HttpServer.admit nish.HttpServer.obtain nish.HttpServerRequest.methodIs nish.copyBytes nish_array_grow
   pointer this: size=552 writesThrough=false captured=false passedTo=nish.HttpServer.obtain#0 nish.HttpServer.admit#0
   pointer s: size=24 writesThrough=true captured=false
-  pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0
+  pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.respond#0
   stackSites=0 stackLocals=0
   local +2:11 r: HttpServerRequest | null (const)
   callee +2:41 HttpServer.obtain -> @nish.HttpServer.obtain
@@ -39455,10 +39455,12 @@ function HttpServer.begin(this: HttpServer, s: HttpServerH1Slot, conn: Http1Conn
   callee +12:5 copyBytes -> @nish.copyBytes
   local +13:11 from: i32[] (const)
   local +14:11 into: i32[] (const)
-  local +15:11 used: i64 (const)
-  local +16:14 k: i32 (let)
-  callee +29:9 HttpServerRequest.methodIs -> @nish.HttpServerRequest.methodIs
-  callee +34:5 HttpServer.admit -> @nish.HttpServer.admit
+  local +19:11 used: i64 (const)
+  callee +23:7 Http1Connection.respond -> @nish.Http1Connection.respond
+  local +28:11 n: i32 (const)
+  local +29:14 k: i32 (let)
+  callee +42:9 HttpServerRequest.methodIs -> @nish.HttpServerRequest.methodIs
+  callee +47:5 HttpServer.admit -> @nish.HttpServer.admit
 function HttpServer.gather(this: HttpServer, s: HttpServerH1Slot, conn: Http1Connection): void -> @nish.HttpServer.gather [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpServer.append

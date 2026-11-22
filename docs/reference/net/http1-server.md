@@ -388,8 +388,8 @@ class Http1OutputPool
 | Member | |
 | --- | --- |
 | `new Http1OutputPool(size: i32)` | An empty pool: no buffer is made until the first `take`. |
-| `free: u8[][]` | The buffers given back and not yet taken again; `made - free.length` is how many are out. |
-| `made: i32` | How many buffers the pool has made. |
+| `free: u8[][]` | The buffers given back and not yet taken again; `made - free.length` is how many are out, while `made` is below 2^31 - 1 (see `made`). |
+| `made: i32` | How many buffers the pool has made, up to 2^31 - 1, where it stays: past that it undercounts, and so does `made - free.length`. This module's pools make buffers of 256 bytes or more, so reaching it takes 512 GiB of buffers. |
 
 ### Http1Server
 
