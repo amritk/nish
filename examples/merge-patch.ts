@@ -1,6 +1,8 @@
-// Opt-out (`--allow-panics`): calls into `std/json` and `std/json-tokenizer`
-// reach their panic sites; this file keeps none of its own. Follow-up: make
-// those modules panic-free, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): this file keeps no panic site of its own, but
+// its calls into `std/json-typed`, `std/json` and `std/json-tokenizer` reach
+// theirs, which WP80's S1 removes, and through them `bytesUtf8End`'s index at
+// bytes.ts:592, whose fix moves the `tests/link/std_bytes` golden and so waits
+// on WP80's follow-up. Then build this file without `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's
