@@ -10123,6 +10123,33 @@ const stdPanicFree = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
   )
 
+/** The changelog words of WP80 S3, which proves or drops the panic sites of the HTTP/1 wire layer. */
+const WIRE_PANIC_FREE = "make the HTTP/1 wire layer panic-free"
+const wirePanicFreeDeclared = () => [
+  ...["tests/link/net_http_fields/main.ts", "tests/link/net_http_fields_f64/main.ts"].map((program) => ({
+    program,
+    file: "checks.ll",
+    changelog: WIRE_PANIC_FREE,
+    why: "httpFieldValueValid and httpFieldsCheckOutgoing lose their panic sites, so their declarations gain `readonly` (and `willreturn`) and take another attribute group",
+  })),
+  ...[
+    "tests/link/std_url/main.ts",
+    "tests/link/std_url_pairs/main.ts",
+    "tests/link/std_url_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: WIRE_PANIC_FREE,
+    why: "urlQueryGet starts its query through the new internal UrlQuery.over, so its declaration joins the module's and the attribute groups and values after it renumber",
+  })),
+  {
+    program: "tests/link/net_http1_wire_refusals/main.ts",
+    file: "exit",
+    changelog: WIRE_PANIC_FREE,
+    why: "the program calls tryFeed, http1TryWriteChunk, tryPercentDecode, tryCompress and their failure codes, which the seed's std does not have, so only the candidate compiles it",
+  },
+]
+
 // WP83 S1 proves or drops the panic sites of std/crypto's hashes, MACs and
 // key derivation, so the module each of them writes changes in every program
 // that reaches it. Older declarations name some of these files on their own
@@ -11155,6 +11182,7 @@ const hashMacKdfDeclared = () =>
   )
 
 const DECLARED = [
+  ...wirePanicFreeDeclared(),
   ...hashMacKdfDeclared(),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
