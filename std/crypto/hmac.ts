@@ -85,24 +85,16 @@ const hmacPadInto = (out: u8[], key: u8[], off: i32, len: i32, pad: i32): void =
   const keyLength: i32 = toI32(key.length)
   // Bounded by both lengths, so both indices are proved in range.
   let i: i32 = 0
-  while (i < len && i < outLength && off + i >= 0 && off + i < keyLength) {
-    out[i] = key[off + i] ^ padByte
+  let p: i32 = off
+  while (i < len && i < outLength && p >= 0 && p < keyLength) {
+    out[i] = key[p] ^ padByte
     i += 1
+    p += 1
   }
   while (i < outLength) {
     out[i] = padByte
     i += 1
   }
-}
-
-/**
- * `key XOR pad` over a whole block of `blockSize` bytes, in a fresh array, with
- * `key` already no longer than a block (`hmacPadInto`).
- */
-const hmacPadBlock = (key: u8[], blockSize: i32, pad: i32): u8[] => {
-  const out: u8[] = new Array<u8>(blockSize)
-  hmacPadInto(out, key, HMAC_FROM, toI32(key.length), pad)
-  return out
 }
 
 /**
@@ -141,20 +133,9 @@ const hmacWipeSha512 = (h: Sha512): void => {
   h.engine.finished = true
 }
 
-/**
- * Panics on a key longer than 2^31 - 1 bytes, before any `toI32` of its
- * length: under `--number-mode f64` that would saturate, and the key hashed
- * would be a prefix, so two keys sharing it would MAC alike (K1-1).
- */
-const hmacCheckKey = (key: u8[]): void => {
-  if (key.length > 2147483647) {
-    panic("hmac: a key longer than 2^31 - 1 bytes")
-  }
-}
-
 /** Whether `[off, off + len)` is a window inside an array of `length` elements. */
 const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
-  off >= 0 && len >= 0 && off <= length - len
+  off >= 0 && len >= 0 && length >= 0 && off <= length - len
 
 /**
  * Keys `inner` with `k XOR ipad` and `outer` with `k XOR opad`, `k` no longer
@@ -162,7 +143,8 @@ const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
  * wiped once both have absorbed it.
  */
 const hmacPadsSha256 = (inner: Sha256, outer: Sha256, k: u8[]): void => {
-  const pad: u8[] = hmacPadBlock(k, SHA256_BLOCK, HMAC_IPAD)
+  const pad: u8[] = new Array<u8>(SHA256_BLOCK)
+  hmacPadInto(pad, k, HMAC_FROM, toI32(k.length), HMAC_IPAD)
   inner.update(pad, HMAC_FROM, SHA256_BLOCK)
   hmacPadInto(pad, k, HMAC_FROM, toI32(k.length), HMAC_OPAD)
   outer.update(pad, HMAC_FROM, SHA256_BLOCK)
@@ -175,13 +157,12 @@ const hmacPadsSha256 = (inner: Sha256, outer: Sha256, k: u8[]): void => {
  * and that hasher are wiped once the key blocks are absorbed.
  */
 const hmacKeySha256 = (inner: Sha256, outer: Sha256, key: u8[]): void => {
-  hmacCheckKey(key)
   if (toI32(key.length) <= SHA256_BLOCK) {
     hmacPadsSha256(inner, outer, key)
     return
   }
   const hasher = new Sha256()
-  hasher.update(key, HMAC_FROM, toI32(key.length))
+  hasher.updateAll(key)
   const hashed: u8[] = hasher.digest()
   hmacWipeSha256(hasher)
   hmacPadsSha256(inner, outer, hashed)
@@ -190,7 +171,8 @@ const hmacKeySha256 = (inner: Sha256, outer: Sha256, key: u8[]): void => {
 
 /** `hmacPadsSha256` for SHA-384's 128-byte block. */
 const hmacPadsSha384 = (inner: Sha384, outer: Sha384, k: u8[]): void => {
-  const pad: u8[] = hmacPadBlock(k, SHA512_BLOCK, HMAC_IPAD)
+  const pad: u8[] = new Array<u8>(SHA512_BLOCK)
+  hmacPadInto(pad, k, HMAC_FROM, toI32(k.length), HMAC_IPAD)
   inner.update(pad, HMAC_FROM, SHA512_BLOCK)
   hmacPadInto(pad, k, HMAC_FROM, toI32(k.length), HMAC_OPAD)
   outer.update(pad, HMAC_FROM, SHA512_BLOCK)
@@ -203,13 +185,12 @@ const hmacPadsSha384 = (inner: Sha384, outer: Sha384, k: u8[]): void => {
  * and that hasher are wiped once the key blocks are absorbed.
  */
 const hmacKeySha384 = (inner: Sha384, outer: Sha384, key: u8[]): void => {
-  hmacCheckKey(key)
   if (toI32(key.length) <= SHA512_BLOCK) {
     hmacPadsSha384(inner, outer, key)
     return
   }
   const hasher = new Sha384()
-  hasher.update(key, HMAC_FROM, toI32(key.length))
+  hasher.engine.absorbAll(key)
   const hashed: u8[] = hasher.digest()
   hmacWipeSha384(hasher)
   hmacPadsSha384(inner, outer, hashed)
@@ -218,7 +199,8 @@ const hmacKeySha384 = (inner: Sha384, outer: Sha384, key: u8[]): void => {
 
 /** `hmacPadsSha256` for SHA-512's 128-byte block. */
 const hmacPadsSha512 = (inner: Sha512, outer: Sha512, k: u8[]): void => {
-  const pad: u8[] = hmacPadBlock(k, SHA512_BLOCK, HMAC_IPAD)
+  const pad: u8[] = new Array<u8>(SHA512_BLOCK)
+  hmacPadInto(pad, k, HMAC_FROM, toI32(k.length), HMAC_IPAD)
   inner.update(pad, HMAC_FROM, SHA512_BLOCK)
   hmacPadInto(pad, k, HMAC_FROM, toI32(k.length), HMAC_OPAD)
   outer.update(pad, HMAC_FROM, SHA512_BLOCK)
@@ -231,13 +213,12 @@ const hmacPadsSha512 = (inner: Sha512, outer: Sha512, k: u8[]): void => {
  * and that hasher are wiped once the key blocks are absorbed.
  */
 const hmacKeySha512 = (inner: Sha512, outer: Sha512, key: u8[]): void => {
-  hmacCheckKey(key)
   if (toI32(key.length) <= SHA512_BLOCK) {
     hmacPadsSha512(inner, outer, key)
     return
   }
   const hasher = new Sha512()
-  hasher.update(key, HMAC_FROM, toI32(key.length))
+  hasher.engine.absorbAll(key)
   const hashed: u8[] = hasher.digest()
   hmacWipeSha512(hasher)
   hmacPadsSha512(inner, outer, hashed)
@@ -428,55 +409,46 @@ export class HmacSha512 {
 /**
  * The HMAC-SHA-256 of all of `data` under `key`, as a fresh 32-byte array.
  *
- * `data` longer than 2^31 - 1 bytes panics, as `sha256` does and for its
- * reason: under `--number-mode f64` the tag would be of a prefix, and a tag
- * that verifies every message sharing that prefix is a forgery. A key that
- * long panics in the constructor for the same reason.
+ * `data` longer than 2^31 - 1 bytes (possible under `--number-mode f64`) is
+ * MACed whole, as `sha256` hashes it, never cut to a prefix: a tag that
+ * verified every message sharing a prefix would be a forgery. A key that long
+ * is hashed whole in the constructor for the same reason.
  *
  * @param key The secret key; it is read, not kept.
  * @param data The whole message.
  * @returns A fresh 32-byte tag, which the caller owns.
  */
 export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
-  if (data.length > 2147483647) {
-    panic("hmacSha256: a message longer than 2^31 - 1 bytes")
-  }
   const mac = new HmacSha256(key)
-  mac.update(data, HMAC_FROM, toI32(data.length))
+  mac.inner.updateAll(data)
   return mac.digest()
 }
 
 /**
  * The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array.
- * `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+ * `data` longer than 2^31 - 1 bytes is MACed whole, as in `hmacSha256`.
  *
  * @param key The secret key; it is read, not kept.
  * @param data The whole message.
  * @returns A fresh 48-byte tag, which the caller owns.
  */
 export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
-  if (data.length > 2147483647) {
-    panic("hmacSha384: a message longer than 2^31 - 1 bytes")
-  }
   const mac = new HmacSha384(key)
-  mac.update(data, HMAC_FROM, toI32(data.length))
+  mac.inner.engine.absorbAll(data)
   return mac.digest()
 }
 
 /**
  * The HMAC-SHA-512 of all of `data` under `key`, as a fresh 64-byte array.
- * `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+ * `data` longer than 2^31 - 1 bytes is MACed whole, as in `hmacSha256`.
  *
  * @param key The secret key; it is read, not kept.
  * @param data The whole message.
  * @returns A fresh 64-byte tag, which the caller owns.
  */
 export const hmacSha512 = (key: u8[], data: u8[]): u8[] => {
-  if (data.length > 2147483647) {
-    panic("hmacSha512: a message longer than 2^31 - 1 bytes")
-  }
   const mac = new HmacSha512(key)
-  mac.update(data, HMAC_FROM, toI32(data.length))
+  mac.inner.engine.absorbAll(data)
   return mac.digest()
 }
 
@@ -724,8 +696,10 @@ export class HmacSha256Scratch {
     this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
     secureZero(innerDigest)
     const tag: u8[] = this.outer.digest()
-    for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
-      out[at + i] = tag[i]
+    let p: i32 = at
+    for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(tag.length) && p >= 0 && p < toI32(out.length); i += 1) {
+      out[p] = tag[i]
+      p += 1
     }
     secureZero(tag)
   }
@@ -839,8 +813,10 @@ export class HmacSha384Scratch {
     this.outer.update(innerDigest, HMAC_FROM, SHA384_SIZE)
     secureZero(innerDigest)
     const tag: u8[] = this.outer.digest()
-    for (let i: i32 = 0; i < SHA384_SIZE && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
-      out[at + i] = tag[i]
+    let p: i32 = at
+    for (let i: i32 = 0; i < SHA384_SIZE && i < toI32(tag.length) && p >= 0 && p < toI32(out.length); i += 1) {
+      out[p] = tag[i]
+      p += 1
     }
     secureZero(tag)
   }
@@ -912,14 +888,15 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
   const dk: u8[] = new Array<u8>(length)
   // dkLen is an i32, so it never reaches RFC 8018's (2^32 - 1) * hLen bound,
   // and the block index below never passes 2^26.
-  let block: i32 = 1
+  let block: u32 = 1
   let done: i32 = 0
-  while (done < length) {
+  while (done >= 0 && done < length) {
     // U_1 = PRF(P, S || INT(i)), INT(i) four bytes, most significant first.
-    index[0] = toU8((block >> 24) & 0xff)
-    index[1] = toU8((block >> 16) & 0xff)
-    index[2] = toU8((block >> 8) & 0xff)
-    index[3] = toU8(block & 0xff)
+    let shift: u32 = 24
+    for (let b: i32 = 0; b < PBKDF2_INDEX && b < toI32(index.length); b += 1) {
+      index[b] = toU8(block >>> shift)
+      shift -= 8
+    }
     hmacCopySha256(keyedInner, work)
     work.update(salt, HMAC_FROM, toI32(salt.length))
     work.update(index, HMAC_FROM, PBKDF2_INDEX)
@@ -936,11 +913,11 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
         t[j] = t[j] ^ u[j]
       }
     }
-    const take: i32 = length - done < SHA256_SIZE ? length - done : SHA256_SIZE
-    for (let j: i32 = 0; j < take && j < toI32(t.length) && done + j < toI32(dk.length); j += 1) {
-      dk[done + j] = t[j]
+    // T_i fills the next 32 bytes of DK, or what is left of it.
+    for (let j: i32 = 0; j < SHA256_SIZE && j < toI32(t.length) && done >= 0 && done < toI32(dk.length); j += 1) {
+      dk[done] = t[j]
+      done += 1
     }
-    done += take
     block += 1
   }
   wipe(u)
@@ -1021,6 +998,9 @@ export const HMAC_SHA512: i32 = 3
 /** Words of one chaining value: eight, for SHA-256's `u32` and SHA-512's `u64` alike. */
 const HMAC_WORDS: i32 = 8
 
+/** Both midstates, inner then outer: twice `HMAC_WORDS`. */
+const HMAC_MIDSTATE_WORDS: i32 = 16
+
 /** The tag length of `hash` in bytes, 0 for no hash `HmacKey` knows. */
 const hmacTagSize = (hash: i32): i32 => {
   if (hash === HMAC_SHA256) {
@@ -1042,21 +1022,19 @@ const hmacTagSize = (hash: i32): i32 => {
  * wiped before it answers.
  */
 const hmacMidstates = (key: u8[], hash: i32): u64[] => {
-  const out: u64[] = new Array<u64>(2 * HMAC_WORDS)
+  const out: u64[] = new Array<u64>(HMAC_MIDSTATE_WORDS)
   if (hash === HMAC_SHA256) {
     const inner = new Sha256()
     const outer = new Sha256()
     hmacKeySha256(inner, outer, key)
-    for (
-      let i: i32 = 0;
-      i < HMAC_WORDS && i < toI32(inner.state.length) && i < toI32(outer.state.length);
-      i += 1
-    ) {
-      const j: i32 = i + HMAC_WORDS
-      if (i < toI32(out.length) && j < toI32(out.length)) {
-        out[i] = toU64(inner.state[i])
-        out[j] = toU64(outer.state[i])
-      }
+    const from: u32[] = inner.state
+    const to: u32[] = outer.state
+    const size: i32 = toI32(out.length)
+    let j: i32 = HMAC_WORDS
+    for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(from.length) && i < toI32(to.length) && i < size && j >= 0 && j < size; i += 1) {
+      out[i] = toU64(from[i])
+      out[j] = toU64(to[i])
+      j += 1
     }
     hmacWipeSha256(inner)
     hmacWipeSha256(outer)
@@ -1080,12 +1058,12 @@ const hmacMidstates = (key: u8[], hash: i32): u64[] => {
 
 /** `out[0 .. 8) = inner`, `out[8 .. 16) = outer`, for the SHA-512 family. */
 const hmacMidstates512 = (out: u64[], inner: u64[], outer: u64[]): void => {
-  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(inner.length) && i < toI32(outer.length); i += 1) {
-    const j: i32 = i + HMAC_WORDS
-    if (i < toI32(out.length) && j < toI32(out.length)) {
-      out[i] = inner[i]
-      out[j] = outer[i]
-    }
+  const size: i32 = toI32(out.length)
+  let j: i32 = HMAC_WORDS
+  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(inner.length) && i < toI32(outer.length) && i < size && j >= 0 && j < size; i += 1) {
+    out[i] = inner[i]
+    out[j] = outer[i]
+    j += 1
   }
 }
 
@@ -1196,7 +1174,7 @@ export class HmacKey {
 
 /** A plain copy of the 16 midstate words, for `expose` to run; the caller wipes it. */
 const hmacCopyWords = (pads: u64[]): u64[] => {
-  const out: u64[] = new Array<u64>(2 * HMAC_WORDS)
+  const out: u64[] = new Array<u64>(HMAC_MIDSTATE_WORDS)
   for (let i: i32 = 0; i < toI32(out.length) && i < toI32(pads.length); i += 1) {
     out[i] = pads[i]
   }
@@ -1207,8 +1185,10 @@ const hmacCopyWords = (pads: u64[]): u64[] => {
 const hmacResume256 = (h: Sha256, mid: u64[], at: i32): void => {
   hmacWipeSha256(h)
   const state: u32[] = h.state
-  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(state.length) && at + i < toI32(mid.length); i += 1) {
-    state[i] = toU32(mid[at + i])
+  let p: i32 = at
+  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(state.length) && p >= 0 && p < toI32(mid.length); i += 1) {
+    state[i] = toU32(mid[p])
+    p += 1
   }
   h.total = toI64(SHA256_BLOCK)
   h.finished = false
@@ -1218,8 +1198,10 @@ const hmacResume256 = (h: Sha256, mid: u64[], at: i32): void => {
 const hmacResume512 = (h: Sha512, mid: u64[], at: i32): void => {
   hmacWipeSha512(h)
   const state: u64[] = h.engine.state
-  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(state.length) && at + i < toI32(mid.length); i += 1) {
-    state[i] = mid[at + i]
+  let p: i32 = at
+  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(state.length) && p >= 0 && p < toI32(mid.length); i += 1) {
+    state[i] = mid[p]
+    p += 1
   }
   h.engine.count = toU64(SHA512_BLOCK)
   h.engine.finished = false
@@ -1290,8 +1272,10 @@ export const hmacKeyedInto = (key: HmacKey, data: u8[], off: i32, len: i32, out:
   }
   using _scope = arena()
   const tag: u8[] = hmacKeyedTag(key, data, off, len)
-  for (let i: i32 = 0; i < size && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
-    out[at + i] = tag[i]
+  let p: i32 = at
+  for (let i: i32 = 0; i < size && i < toI32(tag.length) && p >= 0 && p < toI32(out.length); i += 1) {
+    out[p] = tag[i]
+    p += 1
   }
   wipe(tag)
 }
