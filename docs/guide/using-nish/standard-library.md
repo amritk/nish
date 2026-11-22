@@ -1860,8 +1860,7 @@ in the reference.
 sections of flags with their placeholders and descriptions lined up in
 columns, and notes. It is what `nish --help` itself is built with.
 
-<!-- allow-panics: calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HelpMenu, agentDriven, styleFor } from "nish/cli";
 
@@ -1962,8 +1961,7 @@ two SGR lists, one for the theme and one for the failsafe:
 Set a pair before you build the menu; an empty list leaves that role plain.
 The defaults are the ones described above.
 
-<!-- allow-panics: calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
 
