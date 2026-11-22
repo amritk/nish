@@ -11393,6 +11393,21 @@ const DECLARED = [
     changelog: "safegcd",
     why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
   })),
+  // WP83 S3: std/crypto/p384.ts proves every index and overflow site, so the
+  // module every importer writes loses its panic calls and their declarations.
+  {
+    file: "p384.ll",
+    changelog: "P-256, P-384, RSA and JWT",
+    why: "std/crypto/p384.ts proves every index and overflow site, so the module every importer of nish/crypto/p384 writes no longer declares or calls nish_panic_index and nish_panic_overflow; no importer's own module moves",
+  },
+  // WP83 S3: std/crypto/rsa.ts reads DER through an RsaDerSpan, so the header
+  // of each program that exports rsa's types forward-declares one more struct.
+  ...["tests/link/crypto_rsa/main.ts", "tests/link/crypto_wycheproof_rsa/main.ts"].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "P-256, P-384, RSA and JWT",
+    why: "std/crypto/rsa.ts gains the RsaDerSpan class its DER reader returns, so the header these programs emit forward-declares it and renumbers the structs after it",
+  })),
   // #1542: HmacSha256 holds a 32-byte inner-digest buffer and gains
   // digestInto, and Sha256 gains digestInto, so every module that imports
   // either, and every module or header that lays HmacSha256 out, moves.
