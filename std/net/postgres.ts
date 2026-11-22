@@ -2067,35 +2067,40 @@ export class PgConnection {
 
   /** 'D': DataRow, each column's length (-1 for NULL) and bytes, which must fill the message exactly. */
   private readRow(body: i32, end: i32): i32 {
+    const b: u8[] = this.input
+    // dispatch hands over a frame inside the buffer; the test states that bound for the prover.
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length) || body > toI32(b.length) - 2) {
+      return this.fail(PG_ERR_FRAME)
+    }
     if (end - body < 2) {
       return this.fail(PG_ERR_FRAME)
     }
-    const b: u8[] = this.input
     const n: i32 = toI32(getU16BE(b, body))
+    let p: i32 = body + 2
     if (n > this.config.maxColumns) {
       return this.fail(PG_ERR_TOO_BIG)
     }
     this.reserveColumns(n)
     const starts: i32[] = this.colStarts
     const lengths: i32[] = this.colLengths
-    let p: i32 = body + 2
     // reserveColumns made both arrays hold n; the length tests prove the indices.
     for (let c: i32 = 0; c < n && c < toI32(starts.length) && c < toI32(lengths.length); c++) {
       // The buffer tests never fail on a frame next() cut from it; they prove the indices.
-      if (end - p < 4 || p < 0 || p + 3 >= toI32(b.length)) {
+      if (p < 0 || end < p || end - p < 4 || p > toI32(b.length) - 4) {
         return this.fail(PG_ERR_FRAME)
       }
       // getI32BE written out: a call per column was a fifth of the row's cost.
       const length: i32 =
         (toI32(b[p]) << 24) | (toI32(b[p + 1]) << 16) | (toI32(b[p + 2]) << 8) | toI32(b[p + 3])
-      p += 4
+      p = p + 4
       if (length < -1 || length > end - p) {
         return this.fail(PG_ERR_FRAME)
       }
       starts[c] = p
       lengths[c] = length
       if (length > 0) {
-        p += length
+        // The value ends inside the frame, so the sum fits an `i32`.
+        p = toI32(toI64(p) + toI64(length))
       }
     }
     if (p !== end) {
@@ -2107,22 +2112,29 @@ export class PgConnection {
 
   /** 'T': RowDescription; each field is a name and 18 bytes, the type's OID 6 bytes into them. */
   private readDescription(body: i32, end: i32): i32 {
+    const b: u8[] = this.input
+    // dispatch hands over a frame inside the buffer; the test states that bound for the prover.
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length) || body > toI32(b.length) - 2) {
+      return this.fail(PG_ERR_FRAME)
+    }
     if (end - body < 2) {
       return this.fail(PG_ERR_FRAME)
     }
-    const b: u8[] = this.input
     const n: i32 = toI32(getU16BE(b, body))
+    let p: i32 = body + 2
     if (n > this.config.maxColumns) {
       return this.fail(PG_ERR_TOO_BIG)
     }
     this.reserveColumns(n)
-    let p: i32 = body + 2
-    for (let c: i32 = 0; c < n; c++) {
+    const types: i32[] = this.colTypes
+    // reserveColumns made the array hold n; the length test proves the index.
+    for (let c: i32 = 0; c < n && c < toI32(types.length); c++) {
       const nameEnd: i32 = pgFind(b, p, end, 0)
-      if (end - nameEnd < 19) {
+      // pgFind answers at or past `p`, so `nameEnd` is not negative; the test states that for the prover.
+      if (nameEnd < 0 || end < 0 || end - nameEnd < 19 || nameEnd > toI32(b.length) - 19) {
         return this.fail(PG_ERR_FRAME)
       }
-      this.colTypes[c] = getI32BE(b, nameEnd + 7)
+      types[c] = getI32BE(b, nameEnd + 7)
       p = nameEnd + 19
     }
     if (p !== end) {
@@ -2135,7 +2147,7 @@ export class PgConnection {
   /** 'E' and 'N': the fields, each a type byte and a string, then a 0; `null` when they do not fill the message exactly. */
   private readError(body: i32, end: i32): PgError | null {
     const b: u8[] = this.input
-    if (body < 0 || end > toI32(b.length)) {
+    if (body < 0 || end < 0 || end > toI32(b.length)) {
       return null
     }
     let severity: string = ""
@@ -2159,7 +2171,7 @@ export class PgConnection {
         break
       }
       const valueEnd: i32 = pgFind(b, p + 1, end, 0)
-      if (valueEnd === end) {
+      if (valueEnd < 0 || valueEnd >= end) {
         return null
       }
       const value: string = String.fromBytes(b, p + 1, valueEnd)
@@ -3411,10 +3423,20 @@ export class PgConnection {
    */
   tagIs(word: string): boolean {
     const n: i32 = toI32(word.length)
-    if (n > this.tagLength || !pgBytesAre(this.input, this.tagStart, n, word)) {
+    const start: i32 = this.tagStart
+    const b: u8[] = this.input
+    if (n > this.tagLength || !pgBytesAre(b, start, n, word)) {
       return false
     }
-    return n === this.tagLength || toI32(this.input[this.tagStart + n]) === 32
+    if (n === this.tagLength) {
+      return true
+    }
+    // The tag lies inside the buffer, so the byte after the word does; the test states that for the prover.
+    const at: i32 = toI32(toI64(start) + toI64(n))
+    if (at < 0 || at >= toI32(b.length)) {
+      return false
+    }
+    return toI32(b[at]) === 32
   }
 
   /**
@@ -3425,18 +3447,32 @@ export class PgConnection {
    *   tag has none (`BEGIN`) or it does not fit an i64.
    */
   tagRows(): i64 {
-    const end: i32 = this.tagStart + this.tagLength
+    const start: i32 = this.tagStart
+    const b: u8[] = this.input
+    const last: i64 = toI64(start) + toI64(this.tagLength)
+    // The tag lies inside the buffer; the test states that bound for the prover.
+    if (start < 0 || last < toI64(start) || last > toI64(b.length)) {
+      return -1
+    }
+    const end: i32 = toI32(last)
+    if (end < 0) {
+      return -1
+    }
     let p: i32 = end
-    while (p > this.tagStart && toI32(this.input[p - 1]) >= 48 && toI32(this.input[p - 1]) <= 57) {
+    while (p > start && p > 0 && p <= toI32(b.length)) {
+      const digit: i32 = toI32(b[p - 1])
+      if (digit < 48 || digit > 57) {
+        break
+      }
       p--
     }
-    if (p === end || p === this.tagStart || toI32(this.input[p - 1]) !== 32) {
+    if (p === end || p <= start || p <= 0 || p > toI32(b.length) || toI32(b[p - 1]) !== 32) {
       return -1
     }
     // Read without touching `text.failed`, which belongs to the program's own decoding.
     const failed: boolean = this.text.failed
     this.text.failed = false
-    const rows: i64 = this.text.int(this.input, p, end - p)
+    const rows: i64 = this.text.int(b, p, end - p)
     const overflowed: boolean = this.text.failed
     this.text.failed = failed
     return overflowed ? -1 : rows
