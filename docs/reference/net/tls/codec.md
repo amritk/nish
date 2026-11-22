@@ -529,7 +529,9 @@ How many bytes to copy; a negative one copies none.
 <scalar-field name="returns" type="u8[]">
 
 A fresh array of the window's bytes; it stops where `data` ends, so it is
-  shorter than `length` when the window runs past the buffer.
+  shorter than `length` when the window runs past the buffer. Callers in
+  `std/net/tls` pass a window a parsed view validated, or check the copy's length
+  (`tlsHeldWindow` in `schedule.ts`).
 
 </scalar-field>
 
@@ -549,9 +551,9 @@ The DER certificates, leaf first, each written as it is.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): a certificate or the whole list
+  past 2^24 - 1 bytes.
 
 </scalar-field>
 
@@ -580,9 +582,8 @@ The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the signature past 65,535 bytes.
 
 </scalar-field>
 
@@ -660,9 +661,10 @@ A HelloRetryRequest's `cookie` to echo; empty to send none.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the session id or an ALPN
+  protocol past 255 bytes, or the server name, a list (suites, groups, schemes, ALPN, key
+  shares), the key share, the cookie or the extensions past 65,535.
 
 </scalar-field>
 
@@ -713,9 +715,9 @@ The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the ALPN protocol past 255 bytes,
+  or `quicTransportParameters` or the extensions past 65,535.
 
 </scalar-field>
 
@@ -735,9 +737,8 @@ The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for `verifyData` past 2^24 - 1
+  bytes.
 
 </scalar-field>
 
@@ -774,9 +775,8 @@ The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the session id past 255 bytes.
 
 </scalar-field>
 
@@ -814,7 +814,7 @@ The whole `ticket_nonce`, 0 to 255 bytes.
 
 <scalar-field name="ticket" type="u8[]" required>
 
-The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes, not checked here.
+The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes; past 65535 answers empty, and 0 is not checked.
 
 </scalar-field>
 
@@ -826,9 +826,9 @@ Whole extensions, type and length included, written unchecked; empty for none.
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the nonce past 255 bytes, or the
+  ticket or the extensions past 65,535.
 
 </scalar-field>
 
@@ -874,9 +874,9 @@ The server's key share, its `key_exchange`: 32 bytes of x25519, or a
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the session id past 255 bytes, or
+  the key share or the extensions past 65,535.
 
 </scalar-field>
 
@@ -929,9 +929,9 @@ The index, from 0, of the client's PSK identity the server accepts; only its low
 
 <scalar-field name="returns" type="u8[]">
 
-The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or
-  with a vector longer than its length field holds (`tlsPutLength`: extensions past 65,535 bytes, ALPN
-  past 255, a certificate list past 2^24 - 1, a cookie or key share past 65,535).
+The whole message, handshake header included; empty for one past 2^30 - 1 bytes, or for
+  a vector longer than its length field holds (`tlsPutLength`): the session id past 255 bytes, or
+  the key share or the extensions past 65,535.
 
 </scalar-field>
 
@@ -1418,7 +1418,8 @@ How many bytes the window holds; any part outside `data` is left out.
 
 <scalar-field name="returns" type="string">
 
-A fresh string, one character for each byte read.
+A fresh string, one character for each byte read. Every caller in
+  `std/net/tls` validates the window first, so no byte is left out there.
 
 </scalar-field>
 
@@ -1456,9 +1457,10 @@ The DER certificates, leaf first, each written as it is.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): a certificate or the whole list past 2^24 - 1
+  bytes.
 
 </scalar-field>
 
@@ -1502,9 +1504,9 @@ The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the signature past 65,535 bytes.
 
 </scalar-field>
 
@@ -1558,8 +1560,7 @@ How many bytes the hash is: the suite's hash length.
 <scalar-field name="returns" type="i32">
 
 Where the content ends in `out`: `at` plus 98 plus `len`, written or not; -1
-  when `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+  when `at` is negative, the window is outside `transcriptHash`, or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1658,9 +1659,11 @@ A HelloRetryRequest's `cookie` to echo; empty to send none.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the session id or an ALPN protocol past 255
+  bytes, or the server name, a list (suites, groups, schemes, ALPN, key shares), the key share,
+  the cookie or the extensions past 65,535.
 
 </scalar-field>
 
@@ -1731,9 +1734,10 @@ The largest record plaintext the server takes, content type included, written as
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the ALPN protocol past 255 bytes, or
+  `quicTransportParameters` or the extensions past 65,535.
 
 </scalar-field>
 
@@ -1783,9 +1787,9 @@ How many bytes it is: the suite's hash length, 32 or 48.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, the window is outside `verifyData`, `len` is past 2^24 - 1 (the handshake header's
+  length field), or the end would pass 2^30 - 1.
 
 </scalar-field>
 
@@ -1852,9 +1856,9 @@ The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the session id past 255 bytes.
 
 </scalar-field>
 
@@ -1939,7 +1943,7 @@ Where the ticket starts in `ticket`.
 
 <scalar-field name="ticketLength" type="i32" required>
 
-How many bytes the ticket is: §4.6.1 allows 1 to 65535, not checked here.
+How many bytes the ticket is: §4.6.1 allows 1 to 65535; past 65535 answers -1, and 0 is not checked.
 
 </scalar-field>
 
@@ -1951,9 +1955,10 @@ Whole extensions, type and length included, written unchecked; empty for none.
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the nonce past 255 bytes, or the ticket or the
+  extensions past 65,535.
 
 </scalar-field>
 
@@ -2030,9 +2035,10 @@ The server's key share, its `key_exchange`: 32 bytes of x25519, or a
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the session id past 255 bytes, or the key share
+  or the extensions past 65,535.
 
 </scalar-field>
 
@@ -2116,9 +2122,10 @@ The index, from 0, of the client's PSK identity the server accepts; only its low
 
 <scalar-field name="returns" type="i32">
 
-Where the message ends in `out`: `at` plus its length, written or not; -1 when
-  `at` is negative, a window is outside its buffer, a vector is longer than
-  its length field holds (`tlsPutLength`), or the end would pass 2^30 - 1.
+Where the message ends in `out`: `at` plus its length, written or not; -1 when `at` is
+  negative, a window is outside its buffer, the end would pass 2^30 - 1, or a vector is longer
+  than its length field holds (`tlsPutLength`): the session id past 255 bytes, or the key share
+  or the extensions past 65,535.
 
 </scalar-field>
 

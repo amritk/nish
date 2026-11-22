@@ -339,8 +339,8 @@ The key's record: its id heads the ticket and its count goes up by one on a seal
 
 <scalar-field name="state" type="TlsTicketState" required>
 
-What the ticket carries; its `issuedAt` is overwritten with `now`, unless the key
-  cannot seal at `now`, the state does not fit a ticket or `out` is too short.
+What the ticket carries; its `issuedAt` is overwritten with `now` only when the
+  ticket is sealed, so a refusal leaves the state untouched.
 
 </scalar-field>
 

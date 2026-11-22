@@ -17536,8 +17536,8 @@ function tlsPutHelloHead(out: u8[], at: i32, random: u8[], retry: boolean, sessi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU16
   escaping: at sessionIdLength sessionIdOff suite
-  calls: nish.tlsHexInto nish.tlsPutBytes nish.tlsPutU16 nish.tlsPutU8 nish.tlsPutWindow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsHexInto#1 nish.tlsPutBytes#0 nish.tlsPutU8#0 nish.tlsPutWindow#0 nish.tlsPutU16#0 nish.tlsPutU8#0
+  calls: nish.tlsAdvance nish.tlsHexInto nish.tlsPutBytes nish.tlsPutLength nish.tlsPutU16 nish.tlsPutU8 nish.tlsPutWindow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsHexInto#1 nish.tlsPutBytes#0 nish.tlsPutWindow#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU8#0
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   stackSites=0 stackLocals=0
@@ -17545,10 +17545,12 @@ function tlsPutHelloHead(out: u8[], at: i32, random: u8[], retry: boolean, sessi
   callee +0:16 tlsPutU16 -> @nish.tlsPutU16
   callee +1:15 tlsHexInto -> @nish.tlsHexInto
   callee +1:60 tlsPutBytes -> @nish.tlsPutBytes
-  callee +2:7 tlsPutU8 -> @nish.tlsPutU8
+  local +2:9 id: i32 (const)
+  callee +2:19 tlsAdvance -> @nish.tlsAdvance
   callee +3:7 tlsPutWindow -> @nish.tlsPutWindow
-  callee +4:7 tlsPutU16 -> @nish.tlsPutU16
-  callee +5:10 tlsPutU8 -> @nish.tlsPutU8
+  callee +4:7 tlsPutLength -> @nish.tlsPutLength
+  callee +5:7 tlsPutU16 -> @nish.tlsPutU16
+  callee +6:10 tlsPutU8 -> @nish.tlsPutU8
 function tlsPutServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, publicKey: u8[], selectedIdentity: i32): i32 -> @nish.tlsPutServerHello
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutHelloHead
@@ -17711,8 +17713,8 @@ function tlsWriteNewSessionTicket(out: u8[], at: i32, lifetime: u32, ageAdd: u32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU32
   escaping: ageAdd at lifetime nonceLength nonceOff ticketLength ticketOff
-  calls: nish.tlsAdvance nish.tlsPutBytes nish.tlsPutHeader nish.tlsPutLength nish.tlsPutU16 nish.tlsPutU32 nish.tlsPutU8 nish.tlsPutWindow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU32#0 nish.tlsPutU32#0 nish.tlsPutU8#0 nish.tlsPutWindow#0 nish.tlsPutU16#0 nish.tlsPutWindow#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
+  calls: nish.tlsAdvance nish.tlsPutBytes nish.tlsPutHeader nish.tlsPutLength nish.tlsPutU32 nish.tlsPutWindow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU32#0 nish.tlsPutU32#0 nish.tlsPutWindow#0 nish.tlsPutLength#0 nish.tlsPutWindow#0 nish.tlsPutLength#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   pointer ticket: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   pointer extra: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
@@ -17721,15 +17723,19 @@ function tlsWriteNewSessionTicket(out: u8[], at: i32, lifetime: u32, ageAdd: u32
   callee +0:16 tlsPutU32 -> @nish.tlsPutU32
   callee +0:31 tlsPutU32 -> @nish.tlsPutU32
   callee +0:46 tlsAdvance -> @nish.tlsAdvance
-  callee +1:7 tlsPutU8 -> @nish.tlsPutU8
+  local +1:9 nonceAt: i32 (const)
+  callee +1:24 tlsAdvance -> @nish.tlsAdvance
   callee +2:7 tlsPutWindow -> @nish.tlsPutWindow
-  callee +3:7 tlsPutU16 -> @nish.tlsPutU16
-  callee +4:7 tlsPutWindow -> @nish.tlsPutWindow
-  local +5:9 extensions: i32 (const)
-  callee +5:27 tlsAdvance -> @nish.tlsAdvance
-  callee +6:7 tlsPutBytes -> @nish.tlsPutBytes
-  callee +7:7 tlsPutLength -> @nish.tlsPutLength
-  callee +8:10 tlsPutHeader -> @nish.tlsPutHeader
+  callee +3:7 tlsPutLength -> @nish.tlsPutLength
+  local +4:9 ticketAt: i32 (const)
+  callee +4:25 tlsAdvance -> @nish.tlsAdvance
+  callee +5:7 tlsPutWindow -> @nish.tlsPutWindow
+  callee +6:7 tlsPutLength -> @nish.tlsPutLength
+  local +7:9 extensions: i32 (const)
+  callee +7:27 tlsAdvance -> @nish.tlsAdvance
+  callee +8:7 tlsPutBytes -> @nish.tlsPutBytes
+  callee +9:7 tlsPutLength -> @nish.tlsPutLength
+  callee +10:10 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteCertificateVerifyContent(out: u8[], at: i32, transcriptHash: u8[], off: i32, len: i32): i32 -> @nish.tlsWriteCertificateVerifyContent [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
@@ -17899,7 +17905,7 @@ function tlsWriteClientHello(out: u8[], at: i32, random: u8[], sessionId: u8[], 
   sharedWrite: via nish.tlsPutU16
   escaping: at serverName shareGroup
   calls: nish.tlsAdvance nish.tlsPutAscii nish.tlsPutBytes nish.tlsPutClientSchemes nish.tlsPutHeader nish.tlsPutLength nish.tlsPutU16 nish.tlsPutU8
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutU8#0 nish.tlsPutBytes#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutU8#0 nish.tlsPutU8#0 nish.tlsPutU16#0 nish.tlsPutU8#0 nish.tlsPutAscii#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutClientSchemes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutAscii#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU8#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutU8#0 nish.tlsPutU8#0 nish.tlsPutU16#0 nish.tlsPutU8#0 nish.tlsPutAscii#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutClientSchemes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutAscii#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU8#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   pointer suites: size=0 writesThrough=false captured=false
@@ -17912,84 +17918,86 @@ function tlsWriteClientHello(out: u8[], at: i32, random: u8[], sessionId: u8[], 
   callee +0:16 tlsPutU16 -> @nish.tlsPutU16
   callee +0:31 tlsAdvance -> @nish.tlsAdvance
   callee +1:7 tlsPutBytes -> @nish.tlsPutBytes
-  callee +2:7 tlsPutU8 -> @nish.tlsPutU8
+  local +2:9 id: i32 (const)
+  callee +2:19 tlsAdvance -> @nish.tlsAdvance
   callee +3:7 tlsPutBytes -> @nish.tlsPutBytes
-  local +4:9 suiteList: i32 (const)
-  callee +4:26 tlsAdvance -> @nish.tlsAdvance
-  local +6:14 suite: i32 (const)
-  callee +7:9 tlsPutU16 -> @nish.tlsPutU16
-  callee +9:7 tlsPutLength -> @nish.tlsPutLength
-  callee +10:7 tlsPutU8 -> @nish.tlsPutU8
-  callee +10:21 tlsPutU8 -> @nish.tlsPutU8
-  local +11:9 extensions: i32 (const)
-  callee +11:27 tlsAdvance -> @nish.tlsAdvance
-  callee +14:9 tlsPutU16 -> @nish.tlsPutU16
-  local +15:11 body: i32 (const)
-  callee +15:23 tlsAdvance -> @nish.tlsAdvance
-  local +16:11 list: i32 (const)
+  callee +4:7 tlsPutLength -> @nish.tlsPutLength
+  local +5:9 suiteList: i32 (const)
+  callee +5:26 tlsAdvance -> @nish.tlsAdvance
+  local +7:14 suite: i32 (const)
+  callee +8:9 tlsPutU16 -> @nish.tlsPutU16
+  callee +10:7 tlsPutLength -> @nish.tlsPutLength
+  callee +11:7 tlsPutU8 -> @nish.tlsPutU8
+  callee +11:21 tlsPutU8 -> @nish.tlsPutU8
+  local +12:9 extensions: i32 (const)
+  callee +12:27 tlsAdvance -> @nish.tlsAdvance
+  callee +15:9 tlsPutU16 -> @nish.tlsPutU16
+  local +16:11 body: i32 (const)
   callee +16:23 tlsAdvance -> @nish.tlsAdvance
-  local +17:11 name: i32 (const)
+  local +17:11 list: i32 (const)
   callee +17:23 tlsAdvance -> @nish.tlsAdvance
-  callee +17:34 tlsPutU8 -> @nish.tlsPutU8
-  callee +18:9 tlsPutAscii -> @nish.tlsPutAscii
-  callee +19:9 tlsPutLength -> @nish.tlsPutLength
+  local +18:11 name: i32 (const)
+  callee +18:23 tlsAdvance -> @nish.tlsAdvance
+  callee +18:34 tlsPutU8 -> @nish.tlsPutU8
+  callee +19:9 tlsPutAscii -> @nish.tlsPutAscii
   callee +20:9 tlsPutLength -> @nish.tlsPutLength
   callee +21:9 tlsPutLength -> @nish.tlsPutLength
-  callee +23:7 tlsPutU16 -> @nish.tlsPutU16
-  local +24:9 groupsBody: i32 (const)
-  callee +24:27 tlsAdvance -> @nish.tlsAdvance
-  local +25:9 groupList: i32 (const)
-  callee +25:26 tlsAdvance -> @nish.tlsAdvance
-  local +27:14 group: i32 (const)
-  callee +28:9 tlsPutU16 -> @nish.tlsPutU16
-  callee +30:7 tlsPutLength -> @nish.tlsPutLength
+  callee +22:9 tlsPutLength -> @nish.tlsPutLength
+  callee +24:7 tlsPutU16 -> @nish.tlsPutU16
+  local +25:9 groupsBody: i32 (const)
+  callee +25:27 tlsAdvance -> @nish.tlsAdvance
+  local +26:9 groupList: i32 (const)
+  callee +26:26 tlsAdvance -> @nish.tlsAdvance
+  local +28:14 group: i32 (const)
+  callee +29:9 tlsPutU16 -> @nish.tlsPutU16
   callee +31:7 tlsPutLength -> @nish.tlsPutLength
-  callee +32:7 tlsPutU16 -> @nish.tlsPutU16
-  local +33:9 schemesBody: i32 (const)
-  callee +33:28 tlsAdvance -> @nish.tlsAdvance
-  local +34:9 schemeList: i32 (const)
-  callee +34:27 tlsAdvance -> @nish.tlsAdvance
-  callee +35:7 tlsPutClientSchemes -> @nish.tlsPutClientSchemes
-  callee +36:7 tlsPutLength -> @nish.tlsPutLength
+  callee +32:7 tlsPutLength -> @nish.tlsPutLength
+  callee +33:7 tlsPutU16 -> @nish.tlsPutU16
+  local +34:9 schemesBody: i32 (const)
+  callee +34:28 tlsAdvance -> @nish.tlsAdvance
+  local +35:9 schemeList: i32 (const)
+  callee +35:27 tlsAdvance -> @nish.tlsAdvance
+  callee +36:7 tlsPutClientSchemes -> @nish.tlsPutClientSchemes
   callee +37:7 tlsPutLength -> @nish.tlsPutLength
-  callee +39:9 tlsPutU16 -> @nish.tlsPutU16
-  local +40:11 body: i32 (const)
-  callee +40:23 tlsAdvance -> @nish.tlsAdvance
-  local +41:11 list: i32 (const)
+  callee +38:7 tlsPutLength -> @nish.tlsPutLength
+  callee +40:9 tlsPutU16 -> @nish.tlsPutU16
+  local +41:11 body: i32 (const)
   callee +41:23 tlsAdvance -> @nish.tlsAdvance
-  local +43:16 protocol: string (const)
-  local +44:13 name: i32 (const)
-  callee +44:25 tlsAdvance -> @nish.tlsAdvance
-  callee +45:11 tlsPutAscii -> @nish.tlsPutAscii
-  callee +46:11 tlsPutLength -> @nish.tlsPutLength
-  callee +48:9 tlsPutLength -> @nish.tlsPutLength
+  local +42:11 list: i32 (const)
+  callee +42:23 tlsAdvance -> @nish.tlsAdvance
+  local +44:16 protocol: string (const)
+  local +45:13 name: i32 (const)
+  callee +45:25 tlsAdvance -> @nish.tlsAdvance
+  callee +46:11 tlsPutAscii -> @nish.tlsPutAscii
+  callee +47:11 tlsPutLength -> @nish.tlsPutLength
   callee +49:9 tlsPutLength -> @nish.tlsPutLength
-  callee +51:7 tlsPutU16 -> @nish.tlsPutU16
-  callee +51:22 tlsPutU16 -> @nish.tlsPutU16
+  callee +50:9 tlsPutLength -> @nish.tlsPutLength
   callee +52:7 tlsPutU16 -> @nish.tlsPutU16
-  callee +52:22 tlsPutU8 -> @nish.tlsPutU8
+  callee +52:22 tlsPutU16 -> @nish.tlsPutU16
   callee +53:7 tlsPutU16 -> @nish.tlsPutU16
-  local +54:9 shareBody: i32 (const)
-  callee +54:26 tlsAdvance -> @nish.tlsAdvance
-  local +55:9 shareList: i32 (const)
+  callee +53:22 tlsPutU8 -> @nish.tlsPutU8
+  callee +54:7 tlsPutU16 -> @nish.tlsPutU16
+  local +55:9 shareBody: i32 (const)
   callee +55:26 tlsAdvance -> @nish.tlsAdvance
-  local +56:9 key: i32 (const)
-  callee +56:20 tlsAdvance -> @nish.tlsAdvance
-  callee +56:31 tlsPutU16 -> @nish.tlsPutU16
-  callee +57:7 tlsPutBytes -> @nish.tlsPutBytes
-  callee +58:7 tlsPutLength -> @nish.tlsPutLength
+  local +56:9 shareList: i32 (const)
+  callee +56:26 tlsAdvance -> @nish.tlsAdvance
+  local +57:9 key: i32 (const)
+  callee +57:20 tlsAdvance -> @nish.tlsAdvance
+  callee +57:31 tlsPutU16 -> @nish.tlsPutU16
+  callee +58:7 tlsPutBytes -> @nish.tlsPutBytes
   callee +59:7 tlsPutLength -> @nish.tlsPutLength
   callee +60:7 tlsPutLength -> @nish.tlsPutLength
-  callee +62:9 tlsPutU16 -> @nish.tlsPutU16
-  local +63:11 body: i32 (const)
-  callee +63:23 tlsAdvance -> @nish.tlsAdvance
-  local +64:11 value: i32 (const)
-  callee +64:24 tlsAdvance -> @nish.tlsAdvance
-  callee +65:9 tlsPutBytes -> @nish.tlsPutBytes
-  callee +66:9 tlsPutLength -> @nish.tlsPutLength
+  callee +61:7 tlsPutLength -> @nish.tlsPutLength
+  callee +63:9 tlsPutU16 -> @nish.tlsPutU16
+  local +64:11 body: i32 (const)
+  callee +64:23 tlsAdvance -> @nish.tlsAdvance
+  local +65:11 value: i32 (const)
+  callee +65:24 tlsAdvance -> @nish.tlsAdvance
+  callee +66:9 tlsPutBytes -> @nish.tlsPutBytes
   callee +67:9 tlsPutLength -> @nish.tlsPutLength
-  callee +69:7 tlsPutLength -> @nish.tlsPutLength
-  callee +70:10 tlsPutHeader -> @nish.tlsPutHeader
+  callee +68:9 tlsPutLength -> @nish.tlsPutLength
+  callee +70:7 tlsPutLength -> @nish.tlsPutLength
+  callee +71:10 tlsPutHeader -> @nish.tlsPutHeader
 function tlsEncodeClientHello(random: u8[], sessionId: u8[], suites: i32[], groups: i32[], shareGroup: i32, sharePublic: u8[], serverName: string, alpn: string[], cookie: u8[]): u8[] -> @nish.tlsEncodeClientHello [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsWriteClientHello
@@ -19032,7 +19040,7 @@ function tlsTicketSealExposed(key: u8[], input: u8[]): u8[] -> @nish.tlsTicketSe
   local +10:11 none: u8[] (const)
 function tlsTicketSeal(key: Secret<u8[]>, info: TlsTicketKeyInfo, state: TlsTicketState, now: i64, out: u8[]): i32 -> @nish.tlsTicketSeal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:3
+  sharedWrite: +0:5
   escaping: now
   calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketSealExposed nish.tlsTicketAdd nish.tlsTicketCopy nish.tlsTicketKeySeals nish.tlsTicketPlainLength nish.tlsTicketPut nish.tlsTicketSize nish_arena_mark nish_arena_release nish_random_fill nish_wipe
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketSealExposed#0
@@ -19040,37 +19048,37 @@ function tlsTicketSeal(key: Secret<u8[]>, info: TlsTicketKeyInfo, state: TlsTick
   pointer state: size=56 writesThrough=true captured=false passedTo=nish.tlsTicketPlainLength#0 nish.tlsTicketSize#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsTicketCopy#0 nish.tlsTicketCopy#0
   stackSites=0 stackLocals=0
-  local -21:9 plainLength: i32 (const)
-  callee -21:28 tlsTicketPlainLength -> @nish.tlsTicketPlainLength
-  local -20:9 size: i32 (const)
-  callee -20:21 tlsTicketSize -> @nish.tlsTicketSize
-  local -19:9 nameLength: i32 (const)
-  local -18:9 pskLength: i32 (const)
-  local -17:9 id: u8[] (const)
-  callee -13:6 tlsTicketKeySeals -> @nish.tlsTicketKeySeals
-  local -1:9 _scope: i64 (const)
-  local +1:9 head: i32 (const)
-  local +2:9 input: u8[] (const)
-  local +3:9 nonce: u8[] (const)
-  local +5:9 nameAt: i32 (const)
-  local +6:9 pskAt: i32 (const)
-  local +9:9 filled: boolean (const)
-  callee +10:5 tlsTicketCopy -> @nish.tlsTicketCopy
-  callee +11:5 tlsTicketCopy -> @nish.tlsTicketCopy
-  callee +12:5 tlsTicketPut -> @nish.tlsTicketPut
-  callee +13:5 tlsTicketPut -> @nish.tlsTicketPut
-  callee +14:5 tlsTicketPut -> @nish.tlsTicketPut
-  callee +15:5 tlsTicketPut -> @nish.tlsTicketPut
-  callee +16:5 tlsTicketPut -> @nish.tlsTicketPut
-  callee +17:5 tlsTicketCopy -> @nish.tlsTicketCopy
-  callee +18:5 tlsTicketPut -> @nish.tlsTicketPut
-  callee +19:5 tlsTicketCopy -> @nish.tlsTicketCopy
-  local +24:9 sealed: u8[] (const)
-  callee +24:24 exposeWith<u8[], u8[], u8[], tlsTicketSealExposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketSealExposed
-  local +25:7 written: i32 (let)
-  callee +28:5 tlsTicketCopy -> @nish.tlsTicketCopy
-  callee +29:5 tlsTicketCopy -> @nish.tlsTicketCopy
-  callee +32:19 tlsTicketAdd -> @nish.tlsTicketAdd
+  local -52:9 plainLength: i32 (const)
+  callee -52:28 tlsTicketPlainLength -> @nish.tlsTicketPlainLength
+  local -51:9 size: i32 (const)
+  callee -51:21 tlsTicketSize -> @nish.tlsTicketSize
+  local -50:9 nameLength: i32 (const)
+  local -49:9 pskLength: i32 (const)
+  local -48:9 id: u8[] (const)
+  callee -44:6 tlsTicketKeySeals -> @nish.tlsTicketKeySeals
+  local -32:9 _scope: i64 (const)
+  local -31:9 head: i32 (const)
+  local -30:9 input: u8[] (const)
+  local -29:9 nonce: u8[] (const)
+  local -27:9 nameAt: i32 (const)
+  local -26:9 pskAt: i32 (const)
+  local -23:9 filled: boolean (const)
+  callee -22:5 tlsTicketCopy -> @nish.tlsTicketCopy
+  callee -21:5 tlsTicketCopy -> @nish.tlsTicketCopy
+  callee -20:5 tlsTicketPut -> @nish.tlsTicketPut
+  callee -19:5 tlsTicketPut -> @nish.tlsTicketPut
+  callee -18:5 tlsTicketPut -> @nish.tlsTicketPut
+  callee -17:5 tlsTicketPut -> @nish.tlsTicketPut
+  callee -16:5 tlsTicketPut -> @nish.tlsTicketPut
+  callee -15:5 tlsTicketCopy -> @nish.tlsTicketCopy
+  callee -14:5 tlsTicketPut -> @nish.tlsTicketPut
+  callee -13:5 tlsTicketCopy -> @nish.tlsTicketCopy
+  local -8:9 sealed: u8[] (const)
+  callee -8:24 exposeWith<u8[], u8[], u8[], tlsTicketSealExposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketSealExposed
+  local -7:7 written: i32 (let)
+  callee -4:5 tlsTicketCopy -> @nish.tlsTicketCopy
+  callee -3:5 tlsTicketCopy -> @nish.tlsTicketCopy
+  callee +0:19 tlsTicketAdd -> @nish.tlsTicketAdd
 function tlsTicketOpenExposed(key: u8[], ticket: u8[]): u8[] -> @nish.tlsTicketOpenExposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Open
