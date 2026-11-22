@@ -724,7 +724,11 @@ const quicFrameRoom = (buf: u8[], at: i32, end: i32, header: i32, length: i32): 
 /** `at + count` for a cursor inside a frame `quicFrameRoom` fitted before `end`, so the sum fits. */
 const quicFrameAdvance = (at: i32, count: i32): i32 => toI32(toI64(at) + toI64(count))
 
-/** Writes one byte and answers the offset past it; the caller has checked the room. */
+/**
+ * Writes one byte and answers the offset past it. Every caller has checked the
+ * room with `quicFrameRoom` or made it with `quicFrameGrow`, so the bounds
+ * guard never skips the byte.
+ */
 const quicFramePutByte = (buf: u8[], at: i32, value: i32): i32 => {
   if (at >= 0 && at < toI32(buf.length)) {
     buf[at] = toU8(value)
@@ -914,7 +918,8 @@ export const quicPutAck = (
   let previousSmallest: i64 = 0
   for (let k: i32 = 0; k < rangeCount; k += 1) {
     // `quicAckSize` held `rangeCount` to half the array and checked every
-    // pair, so the slots fit and the differences are exact in wrapping u64.
+    // pair, so the slots fit, the guard below never skips a pair, and the
+    // differences are exact in wrapping u64.
     const pair: i32 = toI32(toI64(k) * 2)
     const next: i32 = toI32(toI64(pair) + 1)
     if (pair >= 0 && pair < toI32(ranges.length) && next >= 0 && next < toI32(ranges.length)) {
@@ -1676,7 +1681,8 @@ export const quicPushNewToken = (out: u8[], token: u8[]): boolean => {
  * `length` bytes: the type, the Length and the payload. This is the size RFC
  * 9221 §3 holds to `max_datagram_frame_size`.
  *
- * @param length The payload's size in bytes.
+ * @param length The payload's size in bytes, 0 or more. A negative one is not refused: it
+ *   answers `1 + length`, which is not a frame's size.
  * @returns The whole frame's size in bytes, held at 2^31 − 1, a size no buffer has room for.
  */
 export const quicDatagramSize = (length: i32): i32 => {

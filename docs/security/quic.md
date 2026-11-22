@@ -147,8 +147,8 @@ runs under `--number-mode f64` in `net_quic_packet_f64`.
   input that would reach it is refused with -1, `null`, `false` or an empty
   answer. Sites of kind call, oom and unchecked are not counted. None of the
   six is listed in `tests/std-panics.json`, so a new site fails
-  `std-panics: no std/ module gains its first panic site` (this one is pinned
-  there, not in `net_quic_packet`).
+  `std-panics: no std/ module gains its first panic site`. That check, not a
+  `net_quic_packet` case, is what pins this bound.
 
 ### Q2's connection
 

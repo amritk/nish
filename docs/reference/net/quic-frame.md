@@ -514,7 +514,8 @@ const quicDatagramSize: (length: i32) => i32
 
 <scalar-field name="length" type="i32" required>
 
-The payload's size in bytes.
+The payload's size in bytes, 0 or more. A negative one is not refused: it
+  answers `1 + length`, which is not a frame's size.
 
 </scalar-field>
 

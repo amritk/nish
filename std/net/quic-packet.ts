@@ -476,7 +476,8 @@ export const quicVarintPut = (buf: u8[], at: i32, value: i64, size: i32): i32 =>
   } else if (size !== 1) {
     return -1
   }
-  // The check above put `at + size` inside `buf`, so it fits an `i32`.
+  // The first check put `at + size` inside `buf`, so it fits an `i32`, and
+  // every `j` below is inside `buf`: the bounds guard never skips a byte.
   const end: i32 = toI32(toI64(at) + toI64(size))
   for (let k: i32 = 0; k < size; k += 1) {
     let b: i32 = toI32((value >> (toI64(size - 1 - k) * 8)) & 255)
@@ -737,7 +738,8 @@ const quicPacketPutNumber = (buf: u8[], at: i32, packetNumber: i64, pnLength: i3
     return -1
   }
   for (let k: i32 = 0; k < pnLength; k += 1) {
-    // `at` and `k` are 0 or more and their sum is inside `buf`, so it fits an `i32`.
+    // `at` and `k` are 0 or more and the first check put their sum inside
+    // `buf`, so it fits an `i32` and the bounds guard never skips a byte.
     const j: i32 = toI32(toI64(at) + toI64(k))
     if (j >= 0 && j < toI32(buf.length)) {
       buf[j] = toU8(toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255))
@@ -1120,6 +1122,8 @@ export const quicParseHeaderInto = (
   if (dcidLengthAt < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
+  // `quicPacketSkip` put `at + 5` inside the datagram, so the guard below
+  // never skips a version byte.
   let version: i64 = 0
   for (let k: i32 = 1; k < 5; k += 1) {
     const j: i32 = toI32(toI64(at) + toI64(k))
@@ -1391,7 +1395,8 @@ export const quicKeysUpdate = (
   }
   quicPacketPoint(slot, keys.aead)
   const next: QuicKeys = slot.keys
-  // `quicPacketPoint` sized the slot's key for `keys.aead`, which is `keys.hp`'s size.
+  // `quicPacketPoint` sized the slot's key for `keys.aead`, and `quicPacketKeysUsable`
+  // fixed `keys.hp` at that size, so this copy never refuses: nothing has been derived.
   if (!tryCopyBytes(next.hp, 0, keys.hp, 0, toI32(keys.hp.length))) {
     return null
   }
@@ -1755,7 +1760,10 @@ const quicPacketNonce = (keys: QuicKeys, packetNumber: i64): u8[] => {
   const nonce: u8[] = new Array<u8>(QUIC_IV_SIZE)
   const nonceLength: i32 = toI32(nonce.length)
   for (let k: i32 = 0; k < nonceLength; k += 1) {
-    // Byte `k` of the nonce takes byte `k - 4` of the number's eight.
+    // Byte `k` of the nonce takes byte `k - 4` of the number's eight. Every
+    // caller holds keys `quicPacketKeysUsable` passed, which fixes `keys.iv`
+    // at `QUIC_IV_SIZE` bytes, so the `: 0` never runs; without that check a
+    // short IV would give a wrong nonce here, not a refusal.
     const pn: i64 = k < 4 ? 0 : (packetNumber >> (toI64(11 - k) * 8)) & 255
     const iv: i32 = k < toI32(keys.iv.length) ? toI32(keys.iv[k]) : 0
     nonce[k] = toU8(iv ^ toI32(pn))
@@ -2033,6 +2041,8 @@ export const quicUnprotectHeader = (
   // so the packet number's at most 4 are there too, and every offset below
   // fits an `i32`.
   const clear: u8[] = quicPacketTake(datagram, start, toI32(toI64(pnOffset) + toI64(pnLength) - toI64(start)))
+  // The same sample check rules out an empty `clear`, so the guard below
+  // always holds and `truncated` is the real packet number.
   let truncated: i64 = 0
   if (toI32(clear.length) > 0) {
     clear[0] = toU8(first)
