@@ -27,7 +27,7 @@ const digest: u8[] = sha1(message); // 20 bytes
 
 <scalar-card title="sha1" icon="phosphor/regular/function" href="#sha1">
 
-The SHA-1 digest of all of `data`, as a fresh 20-byte array: `Sha1`'s `digestInto` over the whole of it, with a hasher of its own.
+The SHA-1 digest of all of `data`, as a fresh 20-byte array.
 
 </scalar-card>
 
@@ -67,12 +67,11 @@ Written from the specification, not ported from another implementation.
 
 ### sha1
 
-The SHA-1 digest of all of `data`, as a fresh 20-byte array: `Sha1`'s
-`digestInto` over the whole of it, with a hasher of its own.
+The SHA-1 digest of all of `data`, as a fresh 20-byte array.
 
-An array longer than 2^31 - 1 bytes panics, for the reason `sha256` gives:
-under `--number-mode f64`, `toI32` of a longer length saturates, and the
-answer would be the digest of a prefix.
+It walks `data` with a `number` offset and copies each block into the
+hasher's own buffer, so an array longer than 2^31 - 1 bytes (possible under
+`--number-mode f64`) is hashed whole, never cut to a prefix.
 
 ```ts
 const sha1: (data: u8[]) => u8[]
@@ -118,7 +117,7 @@ class Sha1
 | `h: u32[]` | The chaining value H of FIPS 180-4 §6.1.2, five words. |
 | `last: u8[]` | The last one or two blocks: the message's tail and its padding (§5.1.1). |
 | `w: u32[]` | The 80-word message schedule, reused for every block. |
-| `digestInto(data: u8[], start: i32, length: i32, out: u8[], at: i32): void` | Writes the SHA-1 digest of `data[start .. start + length)` into `out[at .. at + 20)`, allocating nothing. A range outside `data` or `out` panics, as does a message longer than 2^31 - 1 bytes. |
+| `digestInto(data: u8[], start: i32, length: i32, out: u8[], at: i32): boolean` | Writes the SHA-1 digest of `data[start .. start + length)` into `out[at .. at + 20)`, allocating nothing. A range outside `data` or `out` writes nothing and answers `false`. |
 
 ## Constants
 

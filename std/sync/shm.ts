@@ -90,7 +90,7 @@ declare function nishshm_read(h: i32, at: i32, dst: u8[], n: u64, off: u64, len:
 declare function nishshm_write(h: i32, at: i32, src: readonly u8[], n: u64, off: u64, len: u64): void
 declare function nishshm_wait_i32(h: i32, at: i32, expected: i32, timeoutMs: i32): i32
 declare function nishshm_wake(h: i32, at: i32, count: i32): i32
-declare function strerror(errnum: i32): string
+declare function strerror(errnum: i32): string | null
 
 // The window intrinsics (`src/shm-window.ts`): each body is a call of itself,
 // which the compiler replaces with `nishshm_lend` or `nishshm_give_back`. They
@@ -149,16 +149,52 @@ export class ShmError {
    */
   constructor(code: i32) {
     this.code = code
-    this.message = code === 95 ? "not supported on this platform" : strerror(code)
+    // POSIX lets `strerror` answer NULL, so the type says so and the code
+    // stands in for the text rather than stop the program over a message.
+    const text = code === 95 ? "not supported on this platform" : strerror(code)
+    this.message = text === null ? `error ${code}` : text
   }
 }
+
+/**
+ * The errno a failed runtime call answered, negated back to positive. The
+ * negation wraps through `u32`, so a stray `-2147483648` from C stays itself
+ * instead of overflowing; the runtime only answers small errnos.
+ */
+const shmErrno = (rc: i32): i32 => toI32(toU32(0) - toU32(rc))
 
 /** `Ok()` for 0, the error for a negated errno. */
 const shmDone = (rc: i32): Result<void, ShmError> => {
   if (rc < 0) {
-    return Err(new ShmError(-rc))
+    return Err(new ShmError(shmErrno(rc)))
   }
   return Ok()
+}
+
+/**
+ * Whether `name` keeps `createRegion`'s rules: 1 to 30 of
+ * `A-Z a-z 0-9 . _ -`, not starting with `.`. The runtime checks them too;
+ * checking here answers a NUL byte as `SHM_INVALID` before C would read it.
+ */
+const shmNameOk = (name: string): boolean => {
+  const n: i32 = toI32(name.length)
+  if (n < 1 || n > 30) {
+    return false
+  }
+  for (let i: i32 = 0; i < n; i++) {
+    const c: i32 = toI32(name.charCodeAt(i))
+    const ok =
+      (c >= 65 && c <= 90) ||
+      (c >= 97 && c <= 122) ||
+      (c >= 48 && c <= 57) ||
+      c === 46 ||
+      c === 95 ||
+      c === 45
+    if (!ok || (i === 0 && c === 46)) {
+      return false
+    }
+  }
+  return true
 }
 
 /**
@@ -175,9 +211,12 @@ const shmDone = (rc: i32): Result<void, ShmError> => {
  *   system gave
  */
 export const createRegion = (name: string, bytes: i32): Result<SharedRegion, ShmError> => {
+  if (!shmNameOk(name)) {
+    return Err(new ShmError(SHM_INVALID))
+  }
   const h: i32 = nishshm_create(name, bytes)
   if (h < 0) {
-    return Err(new ShmError(-h))
+    return Err(new ShmError(shmErrno(h)))
   }
   return Ok(new SharedRegion(h))
 }
@@ -196,9 +235,12 @@ export const createRegion = (name: string, bytes: i32): Result<SharedRegion, Shm
  *   system gave
  */
 export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
+  if (!shmNameOk(name)) {
+    return Err(new ShmError(SHM_INVALID))
+  }
   const h: i32 = nishshm_open(name)
   if (h < 0) {
-    return Err(new ShmError(-h))
+    return Err(new ShmError(shmErrno(h)))
   }
   return Ok(new SharedRegion(h))
 }
@@ -211,7 +253,12 @@ export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
  * @returns `Ok()` once the name is gone, or the `ShmError`: `SHM_NOT_FOUND`,
  *   `SHM_INVALID`, code 95 on wasi, or the errno the system gave
  */
-export const unlinkRegion = (name: string): Result<void, ShmError> => shmDone(nishshm_unlink(name))
+export const unlinkRegion = (name: string): Result<void, ShmError> => {
+  if (!shmNameOk(name)) {
+    return Err(new ShmError(SHM_INVALID))
+  }
+  return shmDone(nishshm_unlink(name))
+}
 
 /**
  * A fence of `order`, for the accesses around it: C11's
