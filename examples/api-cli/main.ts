@@ -1,7 +1,12 @@
-// Opt-out (`--allow-panics`): calls into `std/cli-args`, `std/collections`
-// and `std/json` reach their index, slice and overflow panic sites; this file
-// keeps none of its own. Follow-up: make those modules panic-free, then build
-// this file without `--allow-panics`.
+// Opt-out (`--allow-panics`), for the declaration-time misuse panics
+// `std/cli-args` keeps, not a site of this file's: declaring the tree calls
+// `globalFlag` (the `FlagSpec` constructor's panic, std/cli-args.ts:199:9),
+// `group`, `flag`, `argument`, `alias` and `epilog` (`checkCommand`, 372:7),
+// `defaultValue` and `repeatable` (`checkFlag`, 380:7) and `command` (504:7),
+// each of which panics on a misdeclared tree. Parsing and reading the result
+// reach no site. Follow-up: drop this opt-out once a declaration's misuse is
+// refused at compile time or the declarations may be built in an opted-out
+// scope.
 //
 // A command tree for an HTTP API's command-line client, on `nish/cli-args`:
 // `users list|get|keys list|keys create` and `projects list`, with global
