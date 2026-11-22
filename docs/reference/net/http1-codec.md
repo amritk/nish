@@ -6,6 +6,7 @@ An incremental HTTP/1.1 request parser and a response writer, sans-IO: bytes in,
 
 ```ts
 import {
+  HTTP1_BAD_WINDOW,
   HTTP1_BODY,
   HTTP1_CHUNKED,
   HTTP1_CLOSED,
@@ -35,6 +36,7 @@ import {
   http1ResponseHead,
   http1SameWord,
   http1Text,
+  http1TryWriteChunk,
   http1WriteChunk,
   http1WriteLastChunk,
   http1WriteResponseHead,
@@ -142,6 +144,12 @@ Whether `text[a .. b)` is `word`, which is lowercase, in any ASCII case.
 <scalar-card title="http1​Text" icon="phosphor/regular/function" href="#http1text">
 
 `buf[from .. to)` as a string, each upper-case ASCII letter lowered when `lower`.
+
+</scalar-card>
+
+<scalar-card title="http1​Try​Write​Chunk" icon="phosphor/regular/function" href="#http1trywritechunk">
+
+`http1WriteChunk` that answers `HTTP1_BAD_WINDOW`, with `out` untouched, where `http1WriteChunk` panics: a window outside `data`.
 
 </scalar-card>
 
@@ -683,6 +691,59 @@ a fresh string of those bytes, one character per byte
 
 </scalar-field>
 
+### http1TryWriteChunk
+
+`http1WriteChunk` that answers `HTTP1_BAD_WINDOW`, with `out` untouched,
+where `http1WriteChunk` panics: a window outside `data`. A caller a strict
+module reaches uses this one.
+
+```ts
+const http1TryWriteChunk: (
+  out: u8[],
+  at: i32,
+  data: readonly u8[],
+  off: i32,
+  len: i32,
+) => i32
+```
+
+<scalar-field name="out" type="u8[]" required>
+
+the caller's buffer the chunk is written into
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+where in `out` the chunk starts
+
+</scalar-field>
+
+<scalar-field name="data" type="readonly u8[]" required>
+
+the body bytes to send
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+where in `data` the chunk's bytes start
+
+</scalar-field>
+
+<scalar-field name="len" type="i32" required>
+
+how many bytes of `data` the chunk carries
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the offset in `out` just past the chunk, `HTTP1_NO_ROOM` when it
+  does not fit, or `HTTP1_BAD_WINDOW` when the window lies outside `data`
+
+</scalar-field>
+
 ### http1WriteChunk
 
 Writes `data[off .. off + len)` as one chunk of a chunked body (RFC 9112
@@ -906,6 +967,7 @@ class Http1Parser
 | `restart(): void` | Puts the parser back as the constructor left it, for the next connection, keeping every buffer it has grown: a slot that is reused allocates nothing to start over. |
 | `resting(): boolean` | Whether the parser waits for a request line with nothing fed and unread, so its input and head buffers hold nothing it needs: a caller may lend them out and leave empty arrays in `buf`, `body` and `head`, which the next feed and head make or the caller puts back first. |
 | `targetIs(text: string): boolean` | Whether the request target is exactly `text`. |
+| `tryFeed(data: u8[], off: i32, len: i32): boolean` | `feed` that answers false, taking nothing and leaving the parser as it was, where `feed` panics: a window outside `data`. A caller a strict module reaches uses this one. |
 | `upgradeBytes(): u8[]` | After `HTTP1_UPGRADE`: every byte fed past the request, as a fresh array. |
 | `upgradeIs(protocol: string): boolean` | Whether the request asked to switch to exactly `protocol` (any case): one `Upgrade` field holding that one token, with `upgrade` in `Connection`. |
 
@@ -922,6 +984,14 @@ The longest method this parser reads; a longer one is a 400.
 ## Constants
 
 <scalar-grid cols="2">
+
+<scalar-card title="-3" icon="phosphor/regular/hash">
+
+`HTTP1_BAD_WINDOW: i32`
+
+`http1TryWriteChunk`: the window lies outside the body bytes; nothing is written.
+
+</scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 

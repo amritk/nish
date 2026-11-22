@@ -104,6 +104,33 @@ const H2C_NANOS_PER_MS: i64 = 1000000
 const H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 /**
+ * One slot's socket and preface: what `accept` sets and `close` clears. The
+ * slot is made by the first accept into it and kept, with its connection.
+ */
+class H2cSlot {
+  /** When the slot was accepted, in `monotonicNanos`: its preface deadline's start. */
+  since: i64 = 0
+  /** The slot's 24 preface bytes, read here until they are whole. */
+  preface: u8[]
+  /** The slot's HTTP/2 connection, the one `connections` holds at `at`. */
+  conn: Http2Connection
+  /** The slot's number, its place in `held` and in `connections`. */
+  at: i32 = 0
+  /** The slot's socket, -1 while the slot is free. */
+  fd: i32 = -1
+  /** How many preface bytes the slot has read; 24 once the preface is whole and fed. */
+  got: i32 = 0
+  /** Whether the slot's socket has ended and `endInput` was called for it. */
+  ended: boolean = false
+
+  constructor(at: i32, conn: Http2Connection) {
+    this.at = at
+    this.conn = conn
+    this.preface = new Array<u8>(H2C_PREFACE_SIZE)
+  }
+}
+
+/**
  * A pool of HTTP/2 connections over plain TCP, with prior knowledge, on one
  * listening socket. `connection(slot)` is the HTTP/2 side of each slot.
  */
@@ -123,18 +150,10 @@ export class Http2CleartextServer {
   date: HttpDate
   /** The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. */
   readonly pools: Http2Pools
-  /** Each slot's socket, -1 while the slot is free; as long as the slots built so far. */
-  private fds: i32[]
-  /** The slots closed since they were used, a stack `accept` takes from before it builds a new one. */
-  private free: i32[]
-  /** Every slot's 24 preface bytes, slot `k`'s at `24 * k`; made whole by the constructor. */
-  private prefaces: u8[]
-  /** How many preface bytes each slot has read; 24 once the preface is whole and fed. */
-  private got: i32[]
-  /** When each slot was accepted, in `monotonicNanos`: its preface deadline's start. */
-  private since: i64[]
-  /** Whether each slot's socket has ended and `endInput` was called for it. */
-  private ended: boolean[]
+  /** The slots accepted into so far, slot `k` at `k`; a free one keeps its socket at -1. */
+  private held: H2cSlot[]
+  /** The slots closed since they were used, a stack `accept` takes from before it makes a new one. */
+  private free: H2cSlot[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   private peer: u8[]
   /** How many slots the pool may hold. */
@@ -143,14 +162,18 @@ export class Http2CleartextServer {
   private listener: i32 = -1
   /** Nanoseconds a slot may wait for its whole preface before `expire` closes it. */
   private prefaceNanos: i64 = 0
-  /** How many held slots have not read their whole preface: `expire` walks none while this is 0. */
-  private waiting: i32 = 0
+  /**
+   * How many held slots have not read their whole preface: `expire` walks none
+   * while this is 0. At most one per slot, and `accept` and `close` keep it
+   * exact, so the unsigned count neither wraps up nor goes below 0.
+   */
+  private waiting: u32 = 0
 
   /**
    * A pool of `size` slots serving HTTP/2 under `config` on `listener`. Only
    * slot 0's connection is made here, so a config it refuses panics now, with
    * its words; every other slot's is made by the first `accept` into it and
-   * kept. The slots' preface arrays, 24 bytes each, are made here too.
+   * kept, with the slot's 24-byte preface array.
    *
    * @param config The caps every slot's connection is made under; kept, and shared by every slot.
    * @param listener The listening socket from `tcpListen`; the program still owns it and closes it.
@@ -170,12 +193,8 @@ export class Http2CleartextServer {
     this.slots = size
     this.prefaceNanos = toI64(prefaceTimeout) * H2C_NANOS_PER_MS
     this.connections = []
-    this.fds = []
+    this.held = []
     this.free = []
-    this.got = []
-    this.since = []
-    this.ended = []
-    this.prefaces = new Array<u8>(size * H2C_PREFACE_SIZE)
     this.peer = new Array<u8>(H2C_ADDRESS_SIZE)
     this.date = new HttpDate()
     // Formatted once now, so no slot ever sends the bytes before a first format.
@@ -187,17 +206,30 @@ export class Http2CleartextServer {
     first.pools = this.pools
   }
 
-  /** Makes the next slot's connection, on this pool's buffers and `date`. */
-  private build(): void {
+  /** Makes the next slot's connection, on this pool's buffers and `date`, and answers it. */
+  private build(): Http2Connection {
     const conn: Http2Connection = new Http2Connection(this.config)
     conn.date = this.date.current()
     conn.pools = this.pools
     this.connections.push(conn)
+    return conn
+  }
+
+  /** The slot `slot` names, or null when it is out of range or never accepted into. */
+  private at(slot: i32): H2cSlot | null {
+    return slot >= 0 && slot < toI32(this.held.length) ? this.held[slot] : null
+  }
+
+  /** The slot `slot` names when it holds a socket, or null. */
+  private open(slot: i32): H2cSlot | null {
+    const s: H2cSlot | null = this.at(slot)
+    return s !== null && s.fd >= 0 ? s : null
   }
 
   /** Whether `slot` holds a socket and has read its whole preface. */
   private live(slot: i32): boolean {
-    return this.holds(slot) && this.got[slot] === H2C_PREFACE_SIZE
+    const s: H2cSlot | null = this.open(slot)
+    return s !== null && s.got === H2C_PREFACE_SIZE
   }
 
   /**
@@ -215,13 +247,14 @@ export class Http2CleartextServer {
    * @returns Slots with an open socket, whether their preface is whole or not; 0 to `size()`.
    */
   busy(): i32 {
-    let n: i32 = 0
-    for (const fd of this.fds) {
-      if (fd >= 0) {
-        n = n + 1
+    // At most one per slot, so the unsigned count cannot wrap.
+    let n: u32 = 0
+    for (const s of this.held) {
+      if (s.fd >= 0) {
+        n += 1
       }
     }
-    return n
+    return toI32(n)
   }
 
   /**
@@ -231,7 +264,7 @@ export class Http2CleartextServer {
    * @returns True when `slot` is in range and holds a socket.
    */
   holds(slot: i32): boolean {
-    return slot >= 0 && slot < toI32(this.fds.length) && this.fds[slot] >= 0
+    return this.open(slot) !== null
   }
 
   /**
@@ -242,7 +275,8 @@ export class Http2CleartextServer {
    *   none.
    */
   fd(slot: i32): i32 {
-    return this.holds(slot) ? this.fds[slot] : -1
+    const s: H2cSlot | null = this.open(slot)
+    return s !== null ? s.fd : H2C_NO_FD
   }
 
   /**
@@ -265,8 +299,14 @@ export class Http2CleartextServer {
    */
   connection(slot: i32): Http2Connection {
     this.date.current()
-    const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : H2C_ZERO
-    return this.connections[at]
+    if (slot >= 0 && slot < toI32(this.connections.length)) {
+      return this.connections[slot]
+    }
+    // Slot 0's connection, made by the constructor, answers for any other slot, so this builds none.
+    if (toI32(this.connections.length) > 0) {
+      return this.connections[0]
+    }
+    return this.build()
   }
 
   /**
@@ -284,33 +324,44 @@ export class Http2CleartextServer {
     if (fd < 0) {
       return fd
     }
-    let k: i32 = H2C_POOL_FULL
-    if (this.free.length > 0) {
-      k = this.free[this.free.length - 1]
-      this.free.pop()
-    } else if (toI32(this.fds.length) < this.slots) {
-      k = toI32(this.fds.length)
-      this.fds.push(H2C_NO_FD)
-      this.got.push(H2C_ZERO)
-      this.since.push(toI64(H2C_ZERO))
-      this.ended.push(false)
-    }
-    if (k < 0) {
+    const s: H2cSlot | null = this.take()
+    if (s === null) {
       netClose(fd)
       return H2C_POOL_FULL
     }
-    // Slots are built in order, so this makes one connection at most.
-    while (toI32(this.connections.length) <= k) {
+    // `restart` gives back every buffer; the preface is read before any is borrowed.
+    s.conn.restart()
+    s.fd = fd
+    s.got = H2C_ZERO
+    s.since = monotonicNanos()
+    s.ended = false
+    this.waiting += 1
+    return s.at
+  }
+
+  /** A free slot for `accept`: a closed one first, then the next never used; null when every slot is busy. */
+  private take(): H2cSlot | null {
+    const free: H2cSlot[] = this.free
+    const f: i32 = toI32(free.length)
+    // `f > 0` proves the index and `free.length > 0` the `pop`, which the prover reads only off the array.
+    if (f > 0 && free.length > 0) {
+      const s: H2cSlot = free[f - 1]
+      free.pop()
+      return s
+    }
+    const k: i32 = toI32(this.held.length)
+    if (k >= this.slots) {
+      return null
+    }
+    // Slots are made in order and slot 0's connection by the constructor, so this makes one connection at
+    // most.
+    while (toI32(this.connections.length) < k) {
       this.build()
     }
-    // `restart` gives back every buffer; the preface is read before any is borrowed.
-    this.connections[k].restart()
-    this.fds[k] = fd
-    this.got[k] = H2C_ZERO
-    this.since[k] = monotonicNanos()
-    this.ended[k] = false
-    this.waiting = this.waiting + 1
-    return k
+    const conn: Http2Connection = k < toI32(this.connections.length) ? this.connections[k] : this.build()
+    const s: H2cSlot = new H2cSlot(k, conn)
+    this.held.push(s)
+    return s
   }
 
   /**
@@ -322,16 +373,18 @@ export class Http2CleartextServer {
    * @returns True once the preface is whole; false while it is not, or once the slot is closed.
    */
   private admit(slot: i32): boolean {
-    if (!this.holds(slot)) {
+    const s: H2cSlot | null = this.open(slot)
+    if (s === null) {
       return false
     }
-    if (this.got[slot] === H2C_PREFACE_SIZE) {
+    if (s.got === H2C_PREFACE_SIZE) {
       return true
     }
-    const base: i32 = slot * H2C_PREFACE_SIZE
-    while (this.got[slot] < H2C_PREFACE_SIZE) {
-      const have: i32 = this.got[slot]
-      const n: i32 = netRead(this.fds[slot], this.prefaces, base + have, H2C_PREFACE_SIZE - have)
+    const preface: u8[] = s.preface
+    const want: string = H2C_PREFACE
+    let have: i32 = s.got
+    while (have >= 0 && have < H2C_PREFACE_SIZE) {
+      const n: i32 = netRead(s.fd, preface, have, H2C_PREFACE_SIZE - have)
       if (n === H2C_AGAIN) {
         return false
       }
@@ -339,16 +392,22 @@ export class Http2CleartextServer {
         this.close(slot)
         return false
       }
-      for (let k: i32 = have; k < have + n; k++) {
-        if (toI32(this.prefaces[base + k]) !== toI32(H2C_PREFACE.charCodeAt(k))) {
+      // `netRead` answers at most the 24 - `have` bytes it was asked for, so the unsigned sum is at most 24.
+      const end: i32 = toI32(toU32(have) + toU32(n))
+      for (let k: i32 = have; k < end; k++) {
+        if (k < 0 || k >= toI32(preface.length) || k >= toI32(want.length)) {
+          break
+        }
+        if (toI32(preface[k]) !== toI32(want.charCodeAt(k))) {
           this.close(slot)
           return false
         }
       }
-      this.got[slot] = have + n
+      s.got = end
+      have = end
     }
-    this.waiting = this.waiting - 1
-    this.connections[slot].feed(this.prefaces, base, H2C_PREFACE_SIZE)
+    this.waiting -= 1
+    s.conn.feed(preface, H2C_ZERO, H2C_PREFACE_SIZE)
     return true
   }
 
@@ -391,28 +450,29 @@ export class Http2CleartextServer {
    *   that failed, a free slot, or one closed for a bad preface.
    */
   next(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    const s: H2cSlot | null = this.open(slot)
+    if (s === null) {
       return H2_ERROR
     }
     if (!this.admit(slot)) {
-      return this.holds(slot) ? H2_NEED_MORE : H2_ERROR
+      return s.fd >= 0 ? H2_NEED_MORE : H2_ERROR
     }
     this.date.current()
-    const conn: Http2Connection = this.connections[slot]
+    const conn: Http2Connection = s.conn
     // The socket is read straight into the connection's input, so a byte is
     // copied once on its way in.
-    while (!this.ended[slot]) {
+    while (!s.ended) {
       const room: i32 = conn.inputTail()
       if (room <= 0) {
         break
       }
-      const n: i32 = netRead(this.fds[slot], conn.input, conn.inputEnd, room)
+      const n: i32 = netRead(s.fd, conn.input, conn.inputEnd, room)
       if (n === H2C_AGAIN) {
         break
       }
       if (n <= 0) {
         // The peer's end, or a socket that failed: either way nothing more comes.
-        this.ended[slot] = true
+        s.ended = true
         conn.endInput()
         break
       }
@@ -439,20 +499,22 @@ export class Http2CleartextServer {
    *   preface.
    */
   flush(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    const s: H2cSlot | null = this.open(slot)
+    if (s === null) {
       return H2C_DONE
     }
-    if (!this.live(slot)) {
+    if (s.got !== H2C_PREFACE_SIZE) {
       return H2C_WANT_READ
     }
-    const conn: Http2Connection = this.connections[slot]
+    const conn: Http2Connection = s.conn
     while (conn.wantsWrite()) {
-      const n: i32 = netWrite(
-        this.fds[slot],
-        conn.output,
-        conn.outputStart,
-        conn.outputEnd - conn.outputStart
-      )
+      const start: i32 = conn.outputStart
+      const end: i32 = conn.outputEnd
+      if (start < 0 || end < start) {
+        break
+      }
+      // Both ends checked just above, so the unsigned difference is the span's length and does not wrap.
+      const n: i32 = netWrite(s.fd, conn.output, start, toI32(toU32(end) - toU32(start)))
       if (n === H2C_AGAIN) {
         break
       }
@@ -466,7 +528,7 @@ export class Http2CleartextServer {
     if (conn.isDone()) {
       return H2C_DONE
     }
-    const read: i32 = this.ended[slot] ? H2C_ZERO : H2C_WANT_READ
+    const read: i32 = s.ended ? H2C_ZERO : H2C_WANT_READ
     return conn.wantsWrite() ? read | H2C_WANT_WRITE : read
   }
 
@@ -482,14 +544,21 @@ export class Http2CleartextServer {
     if (this.waiting === 0) {
       return 0
     }
-    let n: i32 = 0
-    for (let k: i32 = 0; k < toI32(this.fds.length); k++) {
-      if (this.fds[k] >= 0 && this.got[k] < H2C_PREFACE_SIZE && now - this.since[k] >= this.prefaceNanos) {
-        this.close(k)
-        n = n + 1
+    // At most one per slot, so the unsigned count cannot wrap.
+    let n: u32 = 0
+    for (const s of this.held) {
+      // `now` at or past `since`, so the unsigned difference is the wait, which does not wrap.
+      if (
+        s.fd >= 0 &&
+        s.got < H2C_PREFACE_SIZE &&
+        now >= s.since &&
+        toU64(now) - toU64(s.since) >= toU64(this.prefaceNanos)
+      ) {
+        this.close(s.at)
+        n += 1
       }
     }
-    return n
+    return toI32(n)
   }
 
   /**
@@ -500,17 +569,18 @@ export class Http2CleartextServer {
    * @param slot The slot to free; for a free or unknown slot nothing is closed.
    */
   close(slot: i32): void {
-    if (!this.holds(slot)) {
+    const s: H2cSlot | null = this.open(slot)
+    if (s === null) {
       return
     }
-    netClose(this.fds[slot])
-    this.fds[slot] = -1
-    if (this.got[slot] < H2C_PREFACE_SIZE) {
-      this.waiting = this.waiting - 1
+    netClose(s.fd)
+    s.fd = H2C_NO_FD
+    if (s.got < H2C_PREFACE_SIZE) {
+      this.waiting -= 1
     }
-    this.got[slot] = H2C_ZERO
-    this.free.push(slot)
-    this.connections[slot].drop()
+    s.got = H2C_ZERO
+    this.free.push(s)
+    s.conn.drop()
   }
 
   /**

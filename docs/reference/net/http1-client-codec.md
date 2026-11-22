@@ -17,6 +17,7 @@ import {
   HTTP1_E_HEADER_LIMIT,
   HTTP1_E_INFORMATIONAL_LIMIT,
   HTTP1_E_LENGTH,
+  HTTP1_E_MEMORY_LIMIT,
   HTTP1_E_NONE,
   HTTP1_E_STATUS_LINE,
   HTTP1_E_STATUS_LINE_LIMIT,
@@ -385,7 +386,7 @@ class Http1ResponseParser
 | `buffered(): i32` | How many bytes were fed and not consumed yet. |
 | `expect(methodWasHead: boolean, wasConnect: boolean): void` | Says what the request this response answers was: a response to HEAD has no body, and a 2xx to CONNECT is a tunnel. It takes effect only while the parser waits for a response's first status line, and the parser forgets it after that response's `HTTP1_END`; anywhere else it does nothing, so a pipelining caller says it once per response, after the last one's end. |
 | `expectUpgrade(): void` | Says the request this response answers asked to switch protocols (it was written by `http1UpgradeRequestHead`), so a 101 is that switch: the parser answers `HTTP1_HEAD` with its status and fields readable, `HTTP1_END`, and then `HTTP1_UPGRADE`, and `tunnelBytes()` answers what was fed past the head. Any other status is read as it would be without it. It is said after `expect`, which clears it, and like `expect` it takes effect only while the parser waits for a response's first status line. Without it a 101 is refused with `HTTP1_E_SWITCH`: a server may not switch a connection whose client never asked. |
-| `feed(data: u8[], off: i32, len: i32): void` | Appends `data[off .. off + len)` to the input. A window outside `data` panics. After `finish()`, or once the parser has closed or refused, the input is dropped; in a tunnel it is kept for `tunnelBytes()`. |
+| `feed(data: u8[], off: i32, len: i32): void` | Appends `data[off .. off + len)` to the input. A window outside `data` panics. After `finish()`, or once the parser has closed or refused, the input is dropped; in a tunnel it is kept for `tunnelBytes()`. Input that would leave more than 2^30 bytes fed and not read is refused with `HTTP1_E_MEMORY_LIMIT`. |
 | `fieldName(i: i32): string` | Field `i`'s name, in lowercase, as a fresh string. |
 | `fields(): i32` | How many fields the response last read has; trailers are not kept. |
 | `fieldsAsSpans(): void` | Stops filling `names`, `values` and `reason`, which then stay empty: a response's fields are read through `fields()`, `fieldName`, `fieldValue`, `reasonText` and `header`, which make a string only when asked. A parser kept for many responses allocates nothing per response this way. |
@@ -509,6 +510,16 @@ The most interim 1xx responses the parser reads before a final one.
 `HTTP1_E_LENGTH: i32`
 
 `error`: a `Content-Length` that is not a run of digits, or values that differ (a value past 2^53 differs from any).
+
+</scalar-card>
+
+<scalar-card title="18" icon="phosphor/regular/hash">
+
+`HTTP1_E_MEMORY_LIMIT: i32`
+
+`error`: the parser would hold more than 2^30 bytes, the most one of its
+arrays holds: input fed and not yet read, or a response head's kept reason
+phrase and fields.
 
 </scalar-card>
 

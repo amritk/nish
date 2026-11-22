@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 8391,
+  "total": 5245,
   "explicit": {
-    "kept": 347,
-    "toFix": 115
+    "kept": 340,
+    "toFix": 90
   },
   "modules": {
     "std/base64.ts": {
@@ -59,8 +59,6 @@
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
-      "index": 8,
-      "overflow": 21,
       "panic": 7
     },
     "std/crypto/bcrypt-batch.ts": {
@@ -82,25 +80,17 @@
       "index": 61,
       "overflow": 22
     },
-    "std/crypto/ct.ts": {
-      "index": 2
-    },
     "std/crypto/ed25519.ts": {
       "array-length": 1,
       "index": 19,
       "panic": 2
     },
     "std/crypto/hkdf.ts": {
-      "array-length": 4,
-      "index": 18,
-      "overflow": 22,
-      "panic": 16
+      "panic": 14
     },
     "std/crypto/hmac.ts": {
-      "array-length": 4,
-      "index": 11,
-      "overflow": 22,
-      "panic": 14
+      "array-length": 1,
+      "panic": 10
     },
     "std/crypto/jwt.ts": {
       "array-length": 7,
@@ -135,26 +125,11 @@
       "index": 23,
       "overflow": 32
     },
-    "std/crypto/scram.ts": {
-      "panic": 1
-    },
-    "std/crypto/sha1.ts": {
-      "array-length": 1,
-      "index": 11,
-      "overflow": 12,
-      "panic": 7
-    },
     "std/crypto/sha256.ts": {
-      "index": 5,
-      "overflow": 14,
-      "panic": 9,
-      "range": 15
+      "panic": 2
     },
     "std/crypto/sha512.ts": {
-      "array-length": 1,
-      "index": 20,
-      "overflow": 14,
-      "panic": 5
+      "panic": 3
     },
     "std/crypto/x25519.ts": {
       "overflow": 4
@@ -206,8 +181,6 @@
     },
     "std/net/buffer-pool.ts": {
       "array-length": 1,
-      "index": 1,
-      "overflow": 2,
       "panic": 6
     },
     "std/net/dns-config.ts": {
@@ -226,13 +199,9 @@
       "slice": 4
     },
     "std/net/fetch.ts": {
-      "array-length": 9,
-      "index": 20,
       "io-exit": 3,
-      "overflow": 64,
       "panic": 1,
-      "pop": 2,
-      "slice": 13
+      "slice": 8
     },
     "std/net/grpc.ts": {
       "array-length": 1,
@@ -251,21 +220,10 @@
       "slice": 1
     },
     "std/net/hpack.ts": {
-      "array-length": 1,
-      "index": 33,
-      "overflow": 70,
-      "panic": 9,
-      "pop": 6
+      "panic": 8
     },
     "std/net/http-compress.ts": {
-      "array-length": 3,
-      "index": 9,
-      "overflow": 15,
-      "panic": 10
-    },
-    "std/net/http-fields.ts": {
-      "index": 17,
-      "overflow": 28
+      "panic": 9
     },
     "std/net/http-server.ts": {
       "array-length": 3,
@@ -274,65 +232,35 @@
       "slice": 1
     },
     "std/net/http1-client-codec.ts": {
-      "array-length": 4,
-      "index": 42,
-      "overflow": 108,
-      "panic": 3
+      "panic": 1
     },
     "std/net/http1-codec.ts": {
-      "array-length": 6,
-      "index": 63,
-      "overflow": 224,
-      "panic": 5
+      "panic": 3
     },
     "std/net/http1-server.ts": {
       "panic": 2,
       "slice": 4
     },
     "std/net/http2-cleartext.ts": {
-      "array-length": 1,
-      "index": 28,
-      "overflow": 14,
       "panic": 2,
       "slice": 3
     },
     "std/net/http2-frame.ts": {
-      "index": 27,
-      "overflow": 41,
       "panic": 13
     },
-    "std/net/http2-tls.ts": {
-      "index": 5,
-      "overflow": 3
-    },
     "std/net/http2.ts": {
-      "array-length": 2,
-      "divide": 2,
-      "index": 10,
-      "overflow": 77,
-      "panic": 4
+      "panic": 3
     },
     "std/net/http3-frame.ts": {
-      "divide": 1,
-      "index": 4,
-      "overflow": 15,
       "panic": 1
     },
     "std/net/http3-server.ts": {
-      "array-length": 15,
-      "divide": 3,
-      "index": 52,
       "io-exit": 2,
-      "overflow": 74,
       "panic": 3,
       "slice": 4
     },
     "std/net/http3.ts": {
-      "array-length": 17,
-      "divide": 3,
-      "index": 159,
-      "overflow": 64,
-      "panic": 5
+      "panic": 4
     },
     "std/net/oidc.ts": {
       "array-length": 1,
@@ -340,26 +268,13 @@
       "overflow": 7,
       "slice": 6
     },
-    "std/net/outbound.ts": {
-      "array-length": 2,
-      "index": 25,
-      "overflow": 28,
-      "panic": 2,
-      "slice": 2
-    },
     "std/net/postgres-async.ts": {
-      "array-length": 31,
-      "index": 213,
       "io-exit": 1,
-      "overflow": 149,
       "panic": 10,
       "slice": 14
     },
     "std/net/postgres-carrier.ts": {
-      "array-length": 22,
-      "index": 87,
       "io-exit": 4,
-      "overflow": 22,
       "panic": 12,
       "slice": 6
     },
@@ -372,43 +287,19 @@
       "slice": 13
     },
     "std/net/prefork.ts": {
-      "array-length": 1,
-      "index": 30,
-      "overflow": 20,
-      "panic": 4,
-      "slice": 3
+      "panic": 1,
+      "slice": 1
     },
     "std/net/qpack.ts": {
-      "index": 6,
-      "overflow": 29,
       "panic": 3
     },
     "std/net/quic-listener.ts": {
-      "array-length": 2,
-      "index": 18,
-      "overflow": 60,
-      "panic": 1,
-      "pop": 1
-    },
-    "std/net/quic-recovery.ts": {
-      "array-length": 7,
-      "divide": 11,
-      "index": 8,
-      "overflow": 98
+      "panic": 1
     },
     "std/net/quic-stream.ts": {
-      "array-length": 3,
-      "divide": 2,
-      "index": 16,
-      "overflow": 106,
-      "panic": 4,
-      "pop": 1
+      "panic": 1
     },
     "std/net/quic.ts": {
-      "array-length": 18,
-      "divide": 4,
-      "index": 11,
-      "overflow": 169,
       "panic": 1
     },
     "std/net/router.ts": {
@@ -432,73 +323,27 @@
       "slice": 4
     },
     "std/net/tls-tcp.ts": {
-      "index": 44,
       "io-exit": 3,
-      "overflow": 12,
       "slice": 5
     },
     "std/net/tls.ts": {
-      "array-length": 31,
-      "divide": 1,
-      "index": 23,
-      "io-exit": 1,
-      "overflow": 65
-    },
-    "std/net/tls/client.ts": {
-      "array-length": 3,
-      "index": 7,
-      "overflow": 26
-    },
-    "std/net/tls/codec.ts": {
-      "array-length": 11,
-      "index": 7,
-      "overflow": 131
-    },
-    "std/net/tls/record-client.ts": {
-      "index": 18,
-      "overflow": 45
-    },
-    "std/net/tls/record-server.ts": {
-      "index": 19,
-      "overflow": 44
-    },
-    "std/net/tls/record.ts": {
-      "array-length": 2,
-      "index": 26,
-      "overflow": 34
+      "io-exit": 1
     },
     "std/net/tls/schedule.ts": {
-      "array-length": 18,
-      "index": 2,
-      "overflow": 4,
-      "panic": 2
+      "panic": 3
     },
     "std/net/tls/ticket.ts": {
-      "array-length": 5,
-      "divide": 2,
-      "index": 25,
       "io-exit": 3,
-      "overflow": 31,
-      "panic": 1,
-      "slice": 5
-    },
-    "std/net/tls/verify.ts": {
-      "index": 1
+      "panic": 1
     },
     "std/net/upstream.ts": {
-      "array-length": 6,
-      "divide": 6,
-      "index": 21,
-      "overflow": 27,
       "panic": 4,
       "slice": 3
     },
     "std/net/url.ts": {
       "array-length": 3,
-      "index": 24,
-      "overflow": 57,
       "panic": 2,
-      "slice": 10
+      "slice": 7
     },
     "std/net/websocket.ts": {
       "array-length": 8,
@@ -539,13 +384,10 @@
       "overflow": 9
     },
     "std/sync/ring.ts": {
-      "overflow": 123,
       "panic": 16
     },
     "std/sync/shm.ts": {
-      "ffi-nul": 3,
-      "ffi-null": 1,
-      "overflow": 3
+      "ffi-nul": 3
     },
     "std/synth.ts": {
       "array-length": 1,
@@ -1429,16 +1271,6 @@
       "reason": "config caps, QUIC stream limits, connection window and datagram setting must be mutually consistent; all the program's static configuration"
     },
     {
-      "module": "std/net/outbound.ts",
-      "function": "outboundAddressPublic",
-      "reason": "sixteen address bytes must fit at off in addr; the caller controls the offset"
-    },
-    {
-      "module": "std/net/outbound.ts",
-      "function": "outboundFilter",
-      "reason": "count records must fit in addresses; the caller controls count against the array it passes"
-    },
-    {
       "module": "std/net/postgres-async.ts",
       "function": "pgAsyncCheckCaps",
       "reason": "pool caps must lie inside documented ranges; they are static configuration the program sets"
@@ -1450,8 +1282,18 @@
     },
     {
       "module": "std/net/postgres-async.ts",
-      "function": "PgAsyncResult.cell",
+      "function": "PgAsyncResult.isNull",
       "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "PgAsyncResult.text",
+      "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
+    },
+    {
+      "module": "std/net/postgres-async.ts",
+      "function": "pgAsyncConnect",
+      "reason": "the target must resolve and a TCP host must be a numeric address; static configuration the program sets"
     },
     {
       "module": "std/net/postgres-async.ts",
@@ -1480,6 +1322,11 @@
     },
     {
       "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.constructor",
+      "reason": "caps and watch id within their documented ranges, a numeric TCP address, no TLS on a Unix socket, and a poll set that opens; static configuration the program sets"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
       "function": "PgCarrier.next",
       "reason": "next() must not be called before send() ends PG_CARRIER_BUILD; a call-order contract the caller controls"
     },
@@ -1490,8 +1337,18 @@
     },
     {
       "module": "std/net/postgres-carrier.ts",
+      "function": "PgCarrier.attached",
+      "reason": "the batcher id runInt or runText names must be one attach answered; a static registration contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
       "function": "PgCarrier.send",
       "reason": "send() requires an open PG_CARRIER_BUILD; a call-order contract the caller controls"
+    },
+    {
+      "module": "std/net/postgres-carrier.ts",
+      "function": "pgCarrierTrust",
+      "reason": "PG_TLS_VERIFY_FULL needs a readable root certificate; static TLS configuration the program sets"
     },
     {
       "module": "std/net/postgres.ts",
@@ -1740,8 +1597,8 @@
     },
     {
       "module": "std/net/url.ts",
-      "function": "urlDecodeRun",
-      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content"
+      "function": "urlDecodeChecked",
+      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content. tryPercentDecode answers URL_DECODE_ERR_WINDOW instead"
     },
     {
       "module": "std/net/websocket.ts",

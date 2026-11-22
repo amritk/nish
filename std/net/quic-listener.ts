@@ -290,7 +290,12 @@ const quicListenerWipeRoom = (bytes: u8[], room: i32): void => {
 
 /** An empty array with room for `size` bytes, so pushing up to that many allocates nothing. */
 const quicListenerRoom = (size: i32): u8[] => {
-  const out: u8[] = new Array<u8>(size)
+  // Every room is a datagram's or a connection ID's, under 65536 bytes, so it
+  // is allocated at once; a larger one would grow to its size push by push.
+  const out: u8[] = size > 0 && size <= 65535 ? new Array<u8>(toU16(size)) : []
+  while (toI32(out.length) < size) {
+    out.push(toU8(0))
+  }
   while (out.length > 0) {
     out.pop()
   }
@@ -299,7 +304,7 @@ const quicListenerRoom = (size: i32): u8[] => {
 
 /** Sets `bytes`' length to `length` in the room it already has: popped, or pushed with zeros. */
 const quicListenerResize = (bytes: u8[], length: i32): void => {
-  while (toI32(bytes.length) > length) {
+  while (bytes.length > 0 && toI32(bytes.length) > length) {
     bytes.pop()
   }
   while (toI32(bytes.length) < length) {
@@ -315,10 +320,13 @@ const quicListenerRefill = (to: u8[], from: u8[], at: i32, length: i32): void =>
 
 /** Writes `value`'s low `size` bytes into `buf` at `at`, big-endian. */
 const quicListenerPutNumber = (buf: u8[], at: i32, value: i64, size: i32): void => {
-  for (let k: i32 = 0; k < size; k += 1) {
-    if (at + k >= 0 && at + k < toI32(buf.length)) {
-      buf[at + k] = toU8(toI32((value >> (toI64(size - 1 - k) * 8)) & 255))
-    }
+  if (at < 0 || size < 0 || size > 8) {
+    return
+  }
+  let k: i32 = 0
+  for (let i: i32 = at; i < toI32(buf.length) && k < size; i += 1) {
+    buf[i] = toU8(toI32((value >> (toI64(size - 1 - k) * 8)) & 255))
+    k += 1
   }
 }
 
@@ -337,10 +345,6 @@ const quicListenerRetryKey = (): u8[] => [
 const quicListenerRetryNonce = (): u8[] => [
   0x46, 0x15, 0x99, 0xd3, 0x5d, 0x63, 0x2b, 0xf2, 0x23, 0x98, 0x25, 0xbb,
 ]
-
-/** Whether `[at, at + len)` is a window inside an array of `length` elements: `p256WindowFits`' test. */
-const quicListenerWindowFits = (length: i32, at: i32, len: i32): boolean =>
-  at >= 0 && len >= 0 && at <= length - len
 
 /**
  * The server's answers to datagrams no connection owns, under one
@@ -392,7 +396,7 @@ export class QuicListener {
   private retryKey: AesKey
   /** What `handle` answers into before it copies the answer out. */
   spare: QuicListenerAnswer
-  private counter: i64 = 0
+  private counter: u64 = 0
   /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
   private now: i64 = 0
   /** When the reset budget was last topped up (-1: never yet), and the stateless resets that may go now. */
@@ -400,9 +404,12 @@ export class QuicListener {
   private resetBudget: i32 = 0
   /** Where the unused bytes of `pool` start: `QUIC_LISTENER_POOL` when it is spent. */
   poolHead: i32 = 0
-  /** Stateless resets sent, and ones the rate limit held back. */
+  /** Stateless resets sent, held at 2147483647. */
   resetsSent: i32 = 0
-  /** Stateless resets the rate limit held back, which a log or test reads to see the limit working. */
+  /**
+   * Stateless resets the rate limit held back, held at 2147483647, which a
+   * log or test reads to see the limit working.
+   */
   resetsLimited: i32 = 0
   /** Whether the configuration and entropy were usable. */
   private usable: boolean = false
@@ -483,29 +490,38 @@ export class QuicListener {
     if (this.poolHead >= QUIC_LISTENER_POOL) {
       this.refill()
     }
-    let b: i32 = 0
-    if (this.poolHead >= 0 && this.poolHead < toI32(this.pool.length)) {
-      b = toI32(this.pool[this.poolHead])
-      this.pool[this.poolHead] = toU8(0)
+    const pool: u8[] = this.pool
+    const head: i32 = this.poolHead
+    // Never taken: `refill` leaves the head at 0 of a pool `QUIC_LISTENER_POOL` long.
+    if (head < 0 || head >= toI32(pool.length)) {
+      this.poolHead = QUIC_LISTENER_POOL
+      return 0
     }
-    this.poolHead = this.poolHead + 1
+    const b: i32 = toI32(pool[head])
+    pool[head] = toU8(0)
+    this.poolHead = head + 1
     return b
   }
 
   /** Writes `count` unpredictable bytes into `out` at `at`. */
   private randomInto(out: u8[], at: i32, count: i32): void {
+    let i: i32 = at
     for (let k: i32 = 0; k < count; k += 1) {
       const b: i32 = this.randomByte()
-      if (at + k >= 0 && at + k < toI32(out.length)) {
-        out[at + k] = toU8(b)
+      if (i < toI32(out.length)) {
+        if (i >= 0) {
+          out[i] = toU8(b)
+        }
+        i += 1
       }
     }
   }
 
   /** The generator's next block, HMAC-SHA256 under the seed of the counter, into `pool`. */
   private refill(): void {
-    quicListenerPutNumber(this.block, 0, this.counter, QUIC_LISTENER_BLOCK)
-    this.counter = this.counter + 1
+    const counter: u64 = this.counter
+    quicListenerPutNumber(this.block, 0, toI64(counter), QUIC_LISTENER_BLOCK)
+    this.counter = counter + toU64(1)
     const mac: HmacSha256Scratch = this.kdf.sha256
     {
       using _scope = arena()
@@ -538,7 +554,8 @@ export class QuicListener {
    *   `QUIC_LISTEN_RETRY`, `QUIC_LISTEN_INVALID_TOKEN` or `QUIC_LISTEN_STATELESS_RESET`.
    */
   handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32 {
-    if (!quicListenerWindowFits(toI32(datagram.length), at, len)) {
+    // `[at, at + len)` inside `datagram`: `p256WindowFits`' test.
+    if (at < 0 || len < 0 || at > toI32(datagram.length) - len) {
       panic(
         `QuicListener.handleWindow: the window [${at}, ${at} + ${len}) is outside a datagram of ${toI32(datagram.length)} bytes`
       )
@@ -555,7 +572,8 @@ export class QuicListener {
       return answer.kind
     }
     const header: QuicHeader = this.header
-    quicParseHeaderInto(header, datagram, at, at + len, QUIC_CONN_CID_LENGTH)
+    const end: i32 = toI32(toI64(at) + toI64(len))
+    quicParseHeaderInto(header, datagram, at, end, QUIC_CONN_CID_LENGTH)
     if (header.error === QUIC_ERR_VERSION) {
       // §5.2.2: answer an unsupported version only in a datagram that could
       // start a connection, and §6.1: never a Version Negotiation packet.
@@ -571,7 +589,12 @@ export class QuicListener {
       // RFC 9000 §21.11: an ID whose worker byte names a sibling in the
       // steered group is that sibling's, and a reset under the shared key
       // would end its live connection. Byte 0 at or above N is no worker's.
-      const owner: i32 = toI32(datagram[header.dcidStart])
+      const dcidAt: i32 = header.dcidStart
+      // Never taken: a short header the parser read has its DCID inside the datagram.
+      if (dcidAt < 0 || dcidAt >= toI32(datagram.length)) {
+        return answer.kind
+      }
+      const owner: i32 = toI32(datagram[dcidAt])
       if (
         quicWorkerByte(this.config) >= 0 &&
         owner < this.config.workerCount &&
@@ -579,7 +602,7 @@ export class QuicListener {
       ) {
         return answer.kind
       }
-      this.statelessReset(answer, len, datagram, header.dcidStart, header.dcidLength)
+      this.statelessReset(answer, len, datagram, dcidAt, header.dcidLength)
       return answer.kind
     }
     // §14.1, §7.2, §5.2.2: only an Initial in a full-sized datagram, sent to
@@ -588,7 +611,14 @@ export class QuicListener {
       return answer.kind
     }
     const tokenAt: i32 = header.tokenStart
-    if (header.tokenLength === 0 || toI32(datagram[tokenAt]) !== QUIC_LISTENER_TOKEN_MARKER) {
+    // A token the parser read lies inside the datagram, so the bounds test
+    // fails only for no token.
+    const marked: boolean =
+      header.tokenLength !== 0 &&
+      tokenAt >= 0 &&
+      tokenAt < toI32(datagram.length) &&
+      toI32(datagram[tokenAt]) === QUIC_LISTENER_TOKEN_MARKER
+    if (!marked) {
       if (!this.config.retry) {
         answer.kind = QUIC_LISTEN_ACCEPT
         return answer.kind
@@ -596,15 +626,13 @@ export class QuicListener {
       this.retry(answer, datagram, header, address)
       return answer.kind
     }
-    if (this.tokenValid(datagram, header, address)) {
+    const odcidLength: i32 = this.tokenOdcid(datagram, header, address)
+    // `tokenOdcid` answers a length only for a token whose head, 10 bytes
+    // (`QUIC_LISTENER_TOKEN_HEAD`, as a literal the prover reads), lies inside the datagram.
+    if (odcidLength >= 0 && tokenAt >= 0 && tokenAt <= toI32(datagram.length) - 10) {
       answer.kind = QUIC_LISTEN_ACCEPT
       answer.retried = true
-      quicListenerRefill(
-        answer.originalDcid,
-        datagram,
-        tokenAt + QUIC_LISTENER_TOKEN_HEAD,
-        toI32(datagram[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1])
-      )
+      quicListenerRefill(answer.originalDcid, datagram, tokenAt + 10, odcidLength)
       quicListenerRefill(answer.retryScid, datagram, header.dcidStart, header.dcidLength)
       return answer.kind
     }
@@ -655,11 +683,15 @@ export class QuicListener {
     const unused: i32 = this.randomByte()
     const dcidLength: i32 = header.dcidLength
     const scidLength: i32 = header.scidLength
+    // Never taken: a long header's ID lengths are a byte each.
+    if (dcidLength < 0 || dcidLength > 255 || scidLength < 0 || scidLength > 255) {
+      return
+    }
     const reply: u8[] = answer.reply
     quicListenerResize(reply, 11 + dcidLength + scidLength)
-    reply[0] = toU8((unused & 0x3f) | 0xc0)
+    quicListenerPutNumber(reply, 0, toI64((unused & 0x3f) | 0xc0), 1)
     quicListenerPutNumber(reply, 1, 0, 4)
-    reply[5] = toU8(scidLength)
+    quicListenerPutNumber(reply, 5, toI64(scidLength), 1)
     quicPacketCopy(reply, 6, datagram, header.scidStart, scidLength)
     const dcidAt: i32 = 6 + scidLength
     quicListenerPutNumber(reply, dcidAt, toI64(dcidLength), 1)
@@ -710,35 +742,54 @@ export class QuicListener {
    * and still within its lifetime: the lengths add up, the MAC matches
    * (compared in constant time), and it was issued no later than now and
    * less than `retryTokenLifetime` ago. The token is read in `datagram`.
+   * Answers the length of the original DCID the token carries when it is
+   * good, else -1.
    */
-  private tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean {
+  private tokenOdcid(datagram: u8[], header: QuicHeader, address: u8[]): i32 {
     const tokenAt: i32 = header.tokenStart
     const length: i32 = header.tokenLength
     if (length < QUIC_LISTENER_TOKEN_HEAD + QUIC_LISTENER_TOKEN_MAC_SIZE) {
-      return false
+      return -1
     }
-    const odcidLength: i32 = toI32(datagram[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1])
+    // Never taken: the parser read the token inside the datagram. The prover
+    // reads a literal, so 10 is `QUIC_LISTENER_TOKEN_HEAD` and 9 its last byte.
+    if (tokenAt < 0 || tokenAt > toI32(datagram.length) - 10) {
+      return -1
+    }
+    const odcidLength: i32 = toI32(datagram[tokenAt + 9])
+    const timeAt: i32 = tokenAt + 1
+    if (odcidLength > QUIC_MAX_CID_LENGTH) {
+      return -1
+    }
     const head: i32 = QUIC_LISTENER_TOKEN_HEAD + odcidLength
-    if (odcidLength > QUIC_MAX_CID_LENGTH || head + QUIC_LISTENER_TOKEN_MAC_SIZE !== length) {
-      return false
+    if (head + QUIC_LISTENER_TOKEN_MAC_SIZE !== length) {
+      return -1
     }
     this.tokenMac(datagram, tokenAt, head, datagram, header.dcidStart, header.dcidLength, address)
     const same: boolean = timingSafeEqualAt(
       this.tag,
       0,
       datagram,
-      tokenAt + head,
+      toI32(toI64(tokenAt) + toI64(head)),
       QUIC_LISTENER_TOKEN_MAC_SIZE
     )
     secureZero(this.tag)
     if (!same) {
-      return false
+      return -1
     }
-    let issued: i64 = 0
-    for (let k: i32 = 1; k < QUIC_LISTENER_TOKEN_HEAD - 1; k += 1) {
-      issued = (issued << 8) | toI64(datagram[tokenAt + k])
+    let issued: u64 = 0
+    let j: i32 = timeAt
+    for (let k: i32 = 1; k < QUIC_LISTENER_TOKEN_HEAD - 1 && j < toI32(datagram.length); k += 1) {
+      issued = (issued << toU64(8)) | toU64(datagram[j])
+      j += 1
     }
-    return issued <= this.now && this.now - issued < this.config.retryTokenLifetime
+    // `now` never falls below 0, where it starts, and the lifetime is 1 or more (the config checks it).
+    const now: i64 = this.now
+    const lifetime: i64 = this.config.retryTokenLifetime
+    if (now < 0 || lifetime <= 0 || issued > toU64(now)) {
+      return -1
+    }
+    return toU64(now) - issued < toU64(lifetime) ? odcidLength : -1
   }
 
   /**
@@ -751,6 +802,10 @@ export class QuicListener {
   private retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void {
     const scidLength: i32 = header.scidLength
     const odcidLength: i32 = header.dcidLength
+    // Never taken: a long header's ID lengths are a byte each.
+    if (scidLength < 0 || scidLength > 255 || odcidLength < 0 || odcidLength > 255) {
+      return
+    }
     const retryScidAt: i32 = 7 + scidLength
     const tokenAt: i32 = retryScidAt + QUIC_CONN_CID_LENGTH
     const macAt: i32 = tokenAt + QUIC_LISTENER_TOKEN_HEAD + odcidLength
@@ -761,20 +816,20 @@ export class QuicListener {
     const worker: i32 = quicWorkerByte(this.config)
     if (worker >= 0) {
       // The retried Initial is sent to this ID, so it steers back here.
-      reply[retryScidAt] = toU8(worker)
+      quicListenerPutNumber(reply, retryScidAt, toI64(worker), 1)
     }
-    reply[tokenAt] = toU8(QUIC_LISTENER_TOKEN_MARKER)
+    quicListenerPutNumber(reply, tokenAt, toI64(QUIC_LISTENER_TOKEN_MARKER), 1)
     quicListenerPutNumber(reply, tokenAt + 1, this.now, 8)
-    reply[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1] = toU8(odcidLength)
+    quicListenerPutNumber(reply, tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1, toI64(odcidLength), 1)
     quicPacketCopy(reply, tokenAt + QUIC_LISTENER_TOKEN_HEAD, datagram, header.dcidStart, odcidLength)
     this.tokenMac(reply, tokenAt, macAt - tokenAt, reply, retryScidAt, QUIC_CONN_CID_LENGTH, address)
     quicPacketCopy(reply, macAt, this.tag, 0, QUIC_LISTENER_TOKEN_MAC_SIZE)
     secureZero(this.tag)
-    reply[0] = toU8((this.randomByte() & 15) | 0xf0)
+    quicListenerPutNumber(reply, 0, toI64((this.randomByte() & 15) | 0xf0), 1)
     quicListenerPutNumber(reply, 1, 1, 4)
-    reply[5] = toU8(scidLength)
+    quicListenerPutNumber(reply, 5, toI64(scidLength), 1)
     quicPacketCopy(reply, 6, datagram, header.scidStart, scidLength)
-    reply[retryScidAt - 1] = toU8(QUIC_CONN_CID_LENGTH)
+    quicListenerPutNumber(reply, retryScidAt - 1, toI64(QUIC_CONN_CID_LENGTH), 1)
     if (this.retryTag(reply, tagAt, datagram, header.dcidStart, odcidLength)) {
       answer.kind = QUIC_LISTEN_RETRY
     } else {
@@ -791,8 +846,12 @@ export class QuicListener {
    * Answers whether it was made.
    */
   private retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean {
+    // Never taken: `retry` holds the ID to a byte's length and its reply under 600 bytes.
+    if (odcidLength < 0 || odcidLength > 255 || tagAt < 0 || tagAt > 1024) {
+      return false
+    }
     using _scope = arena()
-    const pseudo: u8[] = new Array<u8>(1 + odcidLength + tagAt)
+    const pseudo: u8[] = new Array<u8>(toU16(1 + odcidLength + tagAt))
     quicListenerPutNumber(pseudo, 0, toI64(odcidLength), 1)
     quicPacketCopy(pseudo, 1, datagram, odcidAt, odcidLength)
     quicPacketCopy(pseudo, 1 + odcidLength, reply, 0, tagAt)
@@ -863,7 +922,7 @@ export class QuicListener {
       0,
       this.none
     )
-    const payloadLength: i32 = frameEnd - headerLength
+    const payloadLength: i32 = headerLength > 0 && frameEnd > 0 ? frameEnd - headerLength : -1
     const put: i32 =
       headerLength > 0 && frameEnd > 0
         ? quicPutLongHeader(
@@ -901,22 +960,39 @@ export class QuicListener {
 
   /** Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. */
   private takeReset(): boolean {
-    if (this.resetRefilled < 0) {
-      this.resetRefilled = this.now
-      this.resetBudget = QUIC_LISTENER_RESET_BURST
+    // `now` never falls below 0, where it starts, and `refilled` is never
+    // after it, so the u64 sums below are the i64 ones.
+    const now: i64 = this.now
+    let refilled: i64 = this.resetRefilled
+    let budget: i32 = this.resetBudget
+    if (refilled < 0) {
+      refilled = now
+      budget = QUIC_LISTENER_RESET_BURST
     }
-    const earned: i64 = (this.now - this.resetRefilled) / QUIC_LISTENER_RESET_INTERVAL
-    if (earned > 0) {
-      const room: i64 = toI64(QUIC_LISTENER_RESET_BURST - this.resetBudget)
-      this.resetBudget = this.resetBudget + toI32(earned < room ? earned : room)
-      this.resetRefilled = this.resetRefilled + earned * QUIC_LISTENER_RESET_INTERVAL
+    if (now > refilled) {
+      // 100 is `QUIC_LISTENER_RESET_INTERVAL`, as a literal the prover reads.
+      const earned: u64 = (toU64(now) - toU64(refilled)) / toU64(100)
+      let k: u64 = 0
+      while (k < earned && budget >= 0 && budget < QUIC_LISTENER_RESET_BURST) {
+        budget += 1
+        k += toU64(1)
+      }
+      refilled = toI64(toU64(refilled) + earned * toU64(QUIC_LISTENER_RESET_INTERVAL))
     }
-    if (this.resetBudget <= 0) {
-      this.resetsLimited = this.resetsLimited + 1
+    this.resetRefilled = refilled
+    if (budget <= 0) {
+      this.resetBudget = budget
+      const limited: i32 = this.resetsLimited
+      if (limited < 2147483647) {
+        this.resetsLimited = limited + 1
+      }
       return false
     }
-    this.resetBudget = this.resetBudget - 1
-    this.resetsSent = this.resetsSent + 1
+    this.resetBudget = budget - 1
+    const sent: i32 = this.resetsSent
+    if (sent < 2147483647) {
+      this.resetsSent = sent + 1
+    }
     return true
   }
 
@@ -937,22 +1013,28 @@ export class QuicListener {
     dcidAt: i32,
     dcidLength: i32
   ): void {
-    if (n <= QUIC_LISTENER_MIN_RESET || !this.takeReset()) {
+    // The prover reads literals: 21 is `QUIC_LISTENER_MIN_RESET`, 43
+    // `QUIC_LISTENER_SHORT_TRIGGER` and 1200 `QUIC_CONN_DATAGRAM_SIZE`.
+    if (n <= 21 || !this.takeReset()) {
       return
     }
     let size: i32 = n - 1
-    if (n > QUIC_LISTENER_SHORT_TRIGGER) {
-      const most: i32 = n - 1 < QUIC_CONN_DATAGRAM_SIZE ? n - 1 : QUIC_CONN_DATAGRAM_SIZE
-      const span: i32 = most - QUIC_LISTENER_SHORT_TRIGGER + 1
+    if (n > 43) {
+      // The sizes from 43 to the smaller of n - 1 and 1200.
+      const span: i32 = n <= 1200 ? n - 43 : 1158
       const high: i32 = this.randomByte()
-      const r: i32 = (high << 8) | this.randomByte()
-      size = QUIC_LISTENER_SHORT_TRIGGER + (span > 0 ? r % span : 0)
+      const r: i32 = ((high & 255) << 8) | this.randomByte()
+      const extra: i32 = span > 0 ? r % span : 0
+      size = toI32(toI64(QUIC_LISTENER_SHORT_TRIGGER) + toI64(extra))
     }
     const reply: u8[] = answer.reply
-    const tokenAt: i32 = size - QUIC_RESET_TOKEN_SIZE
+    const tokenAt: i32 = toI32(toI64(size) - toI64(QUIC_RESET_TOKEN_SIZE))
     quicListenerResize(reply, size)
     this.randomInto(reply, QUIC_LISTENER_FROM, tokenAt)
-    reply[0] = toU8((toI32(reply[0]) & 0x3f) | 0x40)
+    // `size` is over 21 bytes, so the first is there.
+    if (reply.length > 0) {
+      reply[0] = toU8((toI32(reply[0]) & 0x3f) | 0x40)
+    }
     quicConnResetTokenInto(
       this.kdf.sha256,
       this.config.statelessResetKey,
@@ -988,6 +1070,19 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
 }
 
 /**
+ * `now + delay` for a pacer's delay, which is never below 0: summed in `u64`,
+ * where it cannot overflow, and held at the largest `i64` when a `now` near it
+ * would carry past; no caller's clock comes near.
+ */
+const quicListenerLater = (now: i64, delay: i64): i64 => {
+  if (delay <= 0) {
+    return now
+  }
+  const sum: i64 = toI64(toU64(now) + toU64(delay))
+  return now >= 0 && sum < 0 ? toI64((toU64(0) - toU64(1)) >> toU64(1)) : sum
+}
+
+/**
  * When `quicListenerTakePaced` next lets `conn` send a full datagram, in the
  * caller's milliseconds: `now` when it may already.
  *
@@ -996,7 +1091,7 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
  * @returns A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
  */
 export const quicListenerPaceTime = (conn: QuicConnection, now: i64): i64 =>
-  now + conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE)
+  quicListenerLater(now, conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE))
 
 /** The most credit a paced flight waits for before it starts: four datagrams. */
 export const QUIC_LISTENER_FLIGHT_QUANTUM: i32 = 4800
@@ -1018,7 +1113,7 @@ const quicListenerQuantum = (conn: QuicConnection): i32 =>
  * @returns A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
  */
 export const quicListenerFlightTime = (conn: QuicConnection, now: i64): i64 =>
-  now + conn.recovery.pacerDelay(now, quicListenerQuantum(conn))
+  quicListenerLater(now, conn.recovery.pacerDelay(now, quicListenerQuantum(conn)))
 
 /** The most datagrams one GSO send carries: Linux's `UDP_MAX_SEGMENTS`. */
 export const QUIC_LISTENER_FLIGHT_MAX: i32 = 64
@@ -1076,28 +1171,36 @@ export const quicListenerTakeFlight = (
   if (conn.recovery.pacerDelay(now, quicListenerQuantum(conn)) > 0) {
     return length
   }
+  // `length` counts up from 0 by datagrams `takeDatagramWithin` fitted in
+  // `cap - length`, so it stays within `cap`; the sums are taken in `i64`,
+  // where they cannot overflow. A window past the end of an `i32` sums to a
+  // negative index, which `takeDatagramWithin` refuses, as it does any
+  // window outside `buf`.
+  let count: i32 = 0
   while (
-    flight.count < QUIC_LISTENER_FLIGHT_MAX &&
-    length + QUIC_CONN_DATAGRAM_SIZE <= cap &&
+    count < QUIC_LISTENER_FLIGHT_MAX &&
+    toI64(length) + toI64(QUIC_CONN_DATAGRAM_SIZE) <= toI64(cap) &&
     conn.recovery.pacerDelay(now, conn.datagramSize()) <= 0
   ) {
     // The codepoint `takeDatagramInto` would mark the next datagram with: one send carries one.
     const next: i32 = conn.ecnMarking ? conn.recovery.ecnCodepoint() : 0
-    if (flight.count > 0 && next !== flight.ecn) {
+    if (count > 0 && next !== flight.ecn) {
       return length
     }
-    const room: i32 = flight.count > 0 && flight.segment < cap - length ? flight.segment : cap - length
-    const n: i32 = conn.takeDatagramWithin(buf, at + length, room, now)
+    const left: i32 = toI32(toI64(cap) - toI64(length))
+    const room: i32 = count > 0 && flight.segment < left ? flight.segment : left
+    const n: i32 = conn.takeDatagramWithin(buf, toI32(toI64(at) + toI64(length)), room, now)
     if (n <= 0) {
       return length
     }
     conn.recovery.onPaced(now, n)
-    if (flight.count === 0) {
+    if (count === 0) {
       flight.segment = n
       flight.ecn = conn.datagramEcn
     }
-    flight.count = flight.count + 1
-    length = length + n
+    count += 1
+    flight.count = count
+    length = toI32(toI64(length) + toI64(n))
     if (n < flight.segment || n < conn.datagramSize()) {
       return length
     }
@@ -1133,12 +1236,17 @@ export const quicListenerReceiveSegments = (
     conn.receiveWindow(buf, off, len, now)
     return 1
   }
+  // `at` climbs from 0 to `len` by segments of at least a byte, so the sums,
+  // taken in `i64`, fit, and `count` stays below `len`. A window past the end
+  // of an `i32` sums to a negative index, which `receiveWindow` drops, as it
+  // does any window outside `buf`.
   let count: i32 = 0
   let at: i32 = 0
-  while (at < len) {
-    const n: i32 = len - at < segment ? len - at : segment
-    conn.receiveWindow(buf, off + at, n, now)
-    at = at + n
+  while (at < len && count < 2147483647) {
+    const left: i32 = toI32(toI64(len) - toI64(at))
+    const n: i32 = left < segment ? left : segment
+    conn.receiveWindow(buf, toI32(toI64(off) + toI64(at)), n, now)
+    at = toI32(toI64(at) + toI64(n))
     count += 1
   }
   return count

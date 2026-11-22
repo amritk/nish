@@ -444,13 +444,14 @@ The buffer that frame was read from, unchanged since.
 
 <scalar-field name="k" type="i32" required>
 
-Which setting, 0 to `http2SettingCount(frame)` − 1; nothing here checks the bound.
+Which setting, 0 to `http2SettingCount(frame)` − 1.
 
 </scalar-field>
 
 <scalar-field name="returns" type="i32">
 
-The 16-bit identifier, 0 to 65,535: an `H2_SETTINGS_*`, or one this module does not know.
+The 16-bit identifier, 0 to 65,535: an `H2_SETTINGS_*`, or one this module does not know; -1
+  for a `k` outside 0 to `http2SettingCount(frame)` − 1, or a setting not inside `buf`.
 
 </scalar-field>
 
@@ -480,13 +481,14 @@ The buffer that frame was read from, unchanged since.
 
 <scalar-field name="k" type="i32" required>
 
-Which setting, 0 to `http2SettingCount(frame)` − 1; nothing here checks the bound.
+Which setting, 0 to `http2SettingCount(frame)` − 1.
 
 </scalar-field>
 
 <scalar-field name="returns" type="i64">
 
-The value as sent, 0 to 2^32 − 1, not yet checked: `http2SettingError` checks it.
+The value as sent, 0 to 2^32 − 1, not yet checked: `http2SettingError` checks it; -1 for a `k`
+  outside 0 to `http2SettingCount(frame)` − 1, or a setting not inside `buf`.
 
 </scalar-field>
 

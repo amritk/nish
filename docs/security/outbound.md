@@ -24,15 +24,15 @@ and 6to4 addresses are judged by the IPv4 address they carry. A policy turns
 off the proxy, which would otherwise resolve and connect on the client's
 behalf, and caps redirects, total time and body size at the stricter of its own
 limits and the options'. A kept connection is reused only under the policy it
-was dialled under. Five findings were fixed while the module was written (OB-1
-High, OB-2 and OB-8 Medium, OB-3 and OB-4 Low); four are open (OB-5 to OB-7 and
-OB-9, Low).
+was dialled under. Six findings are fixed: five while the module was written
+(OB-1 High, OB-2 and OB-8 Medium, OB-3 and OB-4 Low) and OB-10 (Low) in WP82;
+four are open (OB-5 to OB-7 and OB-9, Low).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/outbound.ts` | `OutboundPolicy` (`allowHost`, `permit`), `outboundAddressPublic`, `outboundAddressAllowed`, `outboundFilter`, `outboundHostAllowed`, `outboundAddressText`; and the helpers (`outboundPermitted`, `outboundCarriedV4`, `outboundV4Public`, `outboundZeros`, `outboundPrefixMatch`, `outboundDecimal`, `outboundIsLiteral`, `outboundLower`, `outboundTrimDot`) |
+| `std/net/outbound.ts` | `OutboundPolicy` (`allowHost`, `permit`), `outboundAddressPublic`, `outboundAddressAllowed`, `outboundFilter`, `outboundHostAllowed`, `outboundAddressText`; and the helpers (`outboundText`, `outboundSixteen`, `outboundPublic`, `outboundPermitted`, `outboundMapped`, `outboundCarriedV4`, `outboundV4Public`, `outboundZeros`, `outboundPrefixMatch`, `outboundDecimal`, `outboundIsLiteral`, `outboundLower`, `outboundTrimDot`) |
 | `std/net/fetch.ts` | The policy's hooks only: `HttpOptions.outbound`, `HTTP_E_BLOCKED`, `FetchSyncClient.hostRefusal`, the policy branch of `FetchSyncClient.dial`, the proxy choice and the kept-connection reuse test in `FetchSyncClient.open` (`FetchSyncClient.routePolicy`, `httpClientSamePolicy`), the hop check in `FetchSyncClient.fetch`, and `httpClientBodyCap`, `httpClientTotalMs`, `httpClientMaxRedirects`. The rest of the client is [`fetch.md`](fetch.md)'s |
 
 Out of scope: the stub resolver of `std/net/dns-resolver.ts` and the address
@@ -82,6 +82,7 @@ addresses, and should answer them with a fixed message instead.
 | OB-7 | Low | `OutboundPolicy.permit` | A permitted prefix is permitted for every name, so an attacker's name that resolves into it reaches the internal service it was opened for. | **Open, by design.** A permit is an address decision; pairing it with `allowHost` ties it to names. Pinned by `a redirect to a name is followed when an address it resolves to is permitted`, so a change to this is a decision, not an accident. |
 | OB-8 | Medium | `FetchSyncClient.open` | A client kept its connection from a fetch made before a policy was set and reused it for the next fetch to the same origin, so a policy set on a client that had already reached `127.0.0.1` sent the policed fetch down that connection without `dial`'s check. | **Fixed** before the module shipped: a connection remembers the policy it was dialled under (`routePolicy`) and is reused only under the same one. Before, `once a policy is set, the connection kept from before it is not reused, and the fetch is HTTP_E_BLOCKED` failed; after, it passes. |
 | OB-9 | Low | `outboundCarriedV4` | Only the well-known NAT64 prefix `64:ff9b::/96` is read as carrying an IPv4 address. A network that translates through a prefix of its own (RFC 6052 network-specific prefixes) delivers `<prefix>:7f00:1` to `127.0.0.1`, and the policy judges it as the global IPv6 address it looks like. | **Open, accepted.** The prefix is the network's choice and cannot be seen from the address; an operator on such a network can refuse it with `allowHost`, or the resolver that synthesises it can be left out of the policed path. |
+| OB-10 | Low | `outboundAddressPublic`, `outboundAddressAllowed`, `outboundAddressText`, `outboundFilter`, `OutboundPolicy.permit` | An offset with fewer than sixteen bytes after it, or a negative count, panicked: a program that passed the policy an address it had not checked (a record past the end of a short answer) stopped instead of refusing it. | **Fixed** (WP82): every index in the module is proven, and nothing in it panics. An address that does not fit is neither public nor allowed and has no text; `outboundFilter` keeps only the records that fit, and none for a negative count; `permit` refuses an address of more than 64 characters and a length of more than three digits. Before, `outboundFilter keeps only the records that fit, and none for a negative count` and `an address whose sixteen bytes do not fit at the offset is neither public nor allowed, and has no text` panicked; after, they pass. |
 
 ## Fuzzing
 
@@ -158,7 +159,8 @@ resolver answers `localhost` itself, with 127.0.0.1 and then ::1 (RFC 6761
   inside a byte matches on its bits`, `an IPv6 prefix`, `an address without a
   length is the address alone`, `0.0.0.0/0 is every IPv4 address and no IPv6
   one`, `a prefix too long for its address, a bad address or length, or a
-  short IPv4 form, is refused and adds nothing`.
+  short IPv4 form, is refused and adds nothing`, `permit refuses a prefix longer than its address, more than three digits, an oversized address and an empty one`, `a prefix that ends inside a byte covers exactly its bits`.
+- **An address that does not fit is refused, never a panic.** OB-10's two checks.
 - **The allowlist matches names, not lookalikes.** `an allowed name matches
   in any case, with or without its trailing dot`, `but only itself`, `a
   leading dot allows the name and the names under it, nothing that only ends

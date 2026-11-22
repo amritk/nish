@@ -358,6 +358,7 @@ export const main = (): i32 => {
   // A warm connection: stepped and plain requests leave the arena as it was.
   // The requests are made once, and a hundred rounds warm the pool first.
   app.logging = false
+  t.ok("the server's date pins for the warm rounds", app.h.server.date.pin(toI64(1700000000) * toI64(1000)))
   const home: u8[] = ascii("GET / HTTP/1.1\r\nHost: t\r\n\r\n")
   const plain: u8[] = ascii("GET /plain HTTP/1.1\r\nHost: t\r\n\r\n")
   let good: i32 = rounds(app, c, home, plain, toI32(100))
@@ -365,6 +366,7 @@ export const main = (): i32 => {
   const before: i64 = Arena.used()
   good += rounds(app, c, home, plain, toI32(500))
   const kept: i64 = Arena.used() - before
+  app.h.server.date.unpin()
   t.eqI32("a warm connection answers twelve hundred stepped and plain requests", good, toI32(1200))
   t.eqI64("and the arena stays flat", kept, toI64(0))
   t.eqI32("and the pool makes no request past its warm size", app.h.pooled(), pooled)

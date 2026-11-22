@@ -19,6 +19,7 @@
 //   trail  a row and its ReadyForQuery, then part of a NotificationResponse
 //          in the same write
 //   cellpast  a DataRow cell whose length runs past the frame's end
+//   colpast   a DataRow whose column count, 3, is past its one cell
 //   negative  a DataRow cell of length -2
 //   slack  a DataRow with bytes after its last cell
 //   unended   an ErrorResponse field with no NUL before the frame ends
@@ -444,6 +445,12 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board, names: string[
     o.int16(1)
     o.int32(100)
     o.text("ab")
+    o.finish()
+  } else if (sql === "colpast") {
+    o.begin(68)
+    o.int16(3)
+    o.int32(1)
+    o.text("a")
     o.finish()
   } else if (sql === "negative") {
     o.begin(68)

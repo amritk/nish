@@ -172,11 +172,14 @@ export const tlsNextTrafficSecret = (hashLength: i32, trafficSecret: Secret<u8[]
  * @returns `true` when `off` and `len` are not negative and the window ends at or before `length`.
  */
 export const tlsRecordWindowFits = (length: i32, off: i32, len: i32): boolean =>
-  off >= 0 && len >= 0 && off <= length - len
+  // An array's length is never negative, and with it and `len` both at least 0 the subtraction cannot overflow.
+  off >= 0 && len >= 0 && length >= 0 && off <= length - len
 
 /** The five header bytes of a record of `type` and body length `len`, written at `out[at]`. */
 const tlsWriteRecordHeader = (out: u8[], at: i32, type: i32, len: i32): void => {
-  if (at < 0 || at > toI32(out.length) - TLS_RECORD_HEADER_SIZE) {
+  // Every caller checks the whole header window first (`tlsRecordWindowFits`, or a five-byte `aad` at 0), so
+  // this return is never taken; a position past 2^30 - 1 is none any buffer this layer writes reaches.
+  if (at < 0 || at > 1073741823 || at + 4 >= toI32(out.length)) {
     return
   }
   out[at] = toU8(type)
@@ -207,12 +210,18 @@ export const tlsRecordLength = (buf: u8[], off: i32, avail: i32): i32 => {
   if (avail < TLS_RECORD_HEADER_SIZE) {
     return 0
   }
+  // The window fits and holds the five header bytes, so `off + 4` is inside `buf`; a start past 2^30 - 1 is
+  // none any buffer this layer reads reaches.
+  if (off < 0 || off > 1073741823 || off + 4 >= toI32(buf.length)) {
+    return -TLS_ALERT_INTERNAL_ERROR
+  }
   const type: i32 = toI32(buf[off])
   if (type < TLS_CONTENT_CHANGE_CIPHER_SPEC || type > TLS_CONTENT_APPLICATION_DATA) {
     return -TLS_ALERT_UNEXPECTED_MESSAGE
   }
   const length: i32 = (toI32(buf[off + 3]) << 8) | toI32(buf[off + 4])
-  if (length > TLS_MAX_CIPHERTEXT) {
+  // 16640 is `TLS_MAX_CIPHERTEXT`, written out so the bound reaches the sum below; two bytes are never negative.
+  if (length < 0 || length > 16640) {
     return -TLS_ALERT_RECORD_OVERFLOW
   }
   return TLS_RECORD_HEADER_SIZE + length
@@ -286,7 +295,14 @@ export class TlsRecordReader {
    * @returns `TLS_MAX_RECORD` less the bytes held and not yet consumed.
    */
   space(): i32 {
-    return TLS_MAX_RECORD - (this.end - this.start)
+    const start: i32 = this.start
+    const end: i32 = this.end
+    // Every method keeps `0 <= start <= end <= TLS_MAX_RECORD` (16645); the guard only states it for the
+    // subtractions, and a reader outside it, which none is, takes nothing.
+    if (start < 0 || start > 16645 || end < 0 || end > 16645 || end < start) {
+      return 0
+    }
+    return TLS_MAX_RECORD - (end - start)
   }
 
   /**
@@ -310,22 +326,46 @@ export class TlsRecordReader {
     if (this.buffer.length === 0) {
       this.buffer = this.pool.take()
     }
-    const held: i32 = this.end - this.start
+    const buffer: u8[] = this.buffer
+    let start: i32 = this.start
+    let end: i32 = this.end
+    // Every method keeps `0 <= start <= end <= TLS_MAX_RECORD` (16645), and `off` is inside `data`, so no array
+    // reaches 2^30: the guard only states it for the sums below.
+    if (start < 0 || start > 16645 || end < 0 || end > 16645 || end < start || off < 0 || off > 1073741823) {
+      return -TLS_ALERT_INTERNAL_ERROR
+    }
+    const held: i32 = end - start
     // The held bytes move to the front only when the new ones would not fit after them.
-    if (this.start > 0 && TLS_MAX_RECORD - this.end < len) {
-      for (let k: i32 = 0; k < held; k++) {
-        this.buffer[k] = this.buffer[this.start + k]
+    if (start > 0 && TLS_MAX_RECORD - end < len) {
+      let k: i32 = 0
+      for (let j: i32 = start; j < end && j < toI32(buffer.length) && k < toI32(buffer.length); j++) {
+        buffer[k] = buffer[j]
+        k++
       }
-      this.start = 0
-      this.end = held
+      start = 0
+      end = held
+      this.start = start
+      this.end = end
     }
-    const room: i32 = TLS_MAX_RECORD - this.end
+    // `held` was between 0 and 16645 as `end` was: restated for the arithmetic below.
+    if (end < 0 || end > 16645) {
+      return -TLS_ALERT_INTERNAL_ERROR
+    }
+    const room: i32 = TLS_MAX_RECORD - end
     const take: i32 = len < room ? len : room
-    for (let k: i32 = 0; k < take; k++) {
-      this.buffer[this.end + k] = data[off + k]
+    // The buffer is `TLS_MAX_RECORD` bytes and the window is inside `data`: neither array bound below binds,
+    // so the loop copies all `take` bytes and `k` ends at `end + take`.
+    let k: i32 = end
+    for (
+      let j: i32 = off;
+      j - off < take && j < toI32(data.length) && k >= 0 && k < toI32(buffer.length);
+      j++
+    ) {
+      buffer[k] = data[j]
+      k++
     }
-    this.end = this.end + take
-    return take
+    this.end = k
+    return k - end
   }
 
   /**
@@ -337,8 +377,14 @@ export class TlsRecordReader {
    *     `TLS_ALERT_*` value, the alert to send.
    */
   next(): i32 {
-    const avail: i32 = this.end - this.start
-    const length: i32 = tlsRecordLength(this.buffer, this.start, avail)
+    const start: i32 = this.start
+    const end: i32 = this.end
+    // `0 <= start <= end <= TLS_MAX_RECORD` (16645) always holds; the guard states it for the subtraction.
+    if (start < 0 || start > 16645 || end < 0 || end > 16645 || end < start) {
+      return -TLS_ALERT_INTERNAL_ERROR
+    }
+    const avail: i32 = end - start
+    const length: i32 = tlsRecordLength(this.buffer, start, avail)
     return length > avail ? 0 : length
   }
 
@@ -350,15 +396,24 @@ export class TlsRecordReader {
    * @param n How many bytes to let go, usually what `next` answered. Clamped to 0 and to the bytes held.
    */
   consume(n: i32): void {
-    const held: i32 = this.end - this.start
+    const start: i32 = this.start
+    const end: i32 = this.end
+    // `0 <= start <= end <= TLS_MAX_RECORD` (16645) always holds; the guard states it for the arithmetic.
+    if (start < 0 || start > 16645 || end < 0 || end > 16645 || end < start) {
+      return
+    }
+    const held: i32 = end - start
     let take: i32 = n < held ? n : held
-    if (take < 0) {
+    if (take < 0 || take > 16645) {
+      // Never above: `take` is at most `held`.
       take = 0
     }
-    this.start = this.start + take
-    if (this.start === this.end) {
+    const at: i32 = start + take
+    if (at === end) {
       this.start = 0
       this.end = 0
+    } else {
+      this.start = at
     }
   }
 }
@@ -651,6 +706,19 @@ export class TlsRecordProtection {
     if (!tlsRecordWindowFits(toI32(data.length), off, len) || len > TLS_MAX_PLAINTEXT || padding < 0) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
+    // The bounds the sums and copies below need, in literals the prover reads: 16384 is `TLS_MAX_PLAINTEXT`,
+    // a padding past it is refused below in either direction, and no buffer this layer writes reaches 2^30.
+    if (
+      off < 0 ||
+      off > 1073741823 ||
+      len < 0 ||
+      len > 16384 ||
+      padding > 16384 ||
+      at < 0 ||
+      at > 1073741823
+    ) {
+      return -TLS_ALERT_INTERNAL_ERROR
+    }
     if (this.suite === 0) {
       // Application data is never sent in the clear, as `open` never reads
       // it so: a cleartext direction asked for some has lost its keys.
@@ -662,12 +730,22 @@ export class TlsRecordProtection {
         return -TLS_ALERT_INTERNAL_ERROR
       }
       tlsWriteRecordHeader(out, at, type, len)
-      for (let k: i32 = 0; k < len; k++) {
-        out[at + TLS_RECORD_HEADER_SIZE + k] = data[off + k]
+      // Both windows were checked, so neither array bound in the loop binds.
+      let j: i32 = off
+      for (
+        let k: i32 = at + TLS_RECORD_HEADER_SIZE;
+        j - off < len && j < toI32(data.length) && k >= 0 && k < toI32(out.length);
+        k++
+      ) {
+        out[k] = data[j]
+        j++
       }
       return TLS_RECORD_HEADER_SIZE + len
     }
-    if (padding > TLS_MAX_INNER_PLAINTEXT - 1 - len || this.sequence === TLS_LAST_SEQUENCE) {
+    // The number never passes `TLS_LAST_SEQUENCE` (2^53 - 1) and starts at 0: the guard is that rule, and it
+    // keeps the step at the end from overflowing.
+    const sequence: i64 = this.sequence
+    if (padding > TLS_MAX_INNER_PLAINTEXT - 1 - len || sequence < 0 || sequence >= 9007199254740991) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
     const inner: i32 = len + 1 + padding
@@ -675,9 +753,15 @@ export class TlsRecordProtection {
     if (!tlsRecordWindowFits(toI32(out.length), at, TLS_RECORD_HEADER_SIZE + body)) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
-    const plaintext: u8[] = new Array<u8>(inner)
-    for (let k: i32 = 0; k < len && k < toI32(plaintext.length); k++) {
-      plaintext[k] = data[off + k]
+    // `inner` is at most 2^14 + 1, so it is a u16 as it is.
+    const plaintext: u8[] = new Array<u8>(toU16(inner))
+    if (len >= toI32(plaintext.length)) {
+      return -TLS_ALERT_INTERNAL_ERROR
+    }
+    let j: i32 = off
+    for (let k: i32 = 0; k < len && k < toI32(plaintext.length) && j < toI32(data.length); k++) {
+      plaintext[k] = data[j]
+      j++
     }
     plaintext[len] = toU8(type)
     const aad: u8[] = new Array<u8>(5)
@@ -694,11 +778,16 @@ export class TlsRecordProtection {
     if (sealed === null || toI32(sealed.length) !== body) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
+    const ciphertext: u8[] = sealed
     tlsWriteRecordHeader(out, at, TLS_CONTENT_APPLICATION_DATA, body)
-    for (let k: i32 = 0; k < body && k < toI32(sealed.length); k++) {
-      out[at + TLS_RECORD_HEADER_SIZE + k] = sealed[k]
+    // The window at `out[at]` was checked for the whole record, so neither array bound in the loop binds.
+    let k: i32 = at + TLS_RECORD_HEADER_SIZE
+    for (let i: i32 = 0; i < body && i < toI32(ciphertext.length) && k >= 0 && k < toI32(out.length); i++) {
+      out[k] = ciphertext[i]
+      k++
     }
-    this.sequence = this.sequence + toI64(1)
+    // Unsigned, the step cannot panic; it cannot wrap either, since `sequence` is below 2^53 - 1.
+    this.sequence = toI64(toU64(sequence) + toU64(1))
     return TLS_RECORD_HEADER_SIZE + body
   }
 
@@ -741,6 +830,19 @@ export class TlsRecordProtection {
     if (declared !== len) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
+    // `len` is a whole record's, so at most `TLS_MAX_RECORD` (16645) and with its header inside `record`; no
+    // buffer this layer reads or writes reaches 2^30. The guard states that for the sums and copies below.
+    if (
+      off < 0 ||
+      off > 1073741823 ||
+      len < 5 ||
+      len > 16645 ||
+      off + 4 >= toI32(record.length) ||
+      at < 0 ||
+      at > 1073741823
+    ) {
+      return -TLS_ALERT_INTERNAL_ERROR
+    }
     const type: i32 = toI32(record[off])
     const body: i32 = len - TLS_RECORD_HEADER_SIZE
     if (this.suite === 0) {
@@ -753,8 +855,15 @@ export class TlsRecordProtection {
       if (!tlsRecordWindowFits(toI32(out.length), at, body)) {
         return -TLS_ALERT_INTERNAL_ERROR
       }
-      for (let k: i32 = 0; k < body; k++) {
-        out[at + k] = record[off + TLS_RECORD_HEADER_SIZE + k]
+      // Both windows were checked, so neither array bound in the loop binds.
+      let j: i32 = off + TLS_RECORD_HEADER_SIZE
+      for (
+        let k: i32 = at;
+        k - at < body && k < toI32(out.length) && j >= 0 && j < toI32(record.length);
+        k++
+      ) {
+        out[k] = record[j]
+        j++
       }
       this.contentType = type
       return body
@@ -765,29 +874,43 @@ export class TlsRecordProtection {
     if (body < TLS_RECORD_TAG_SIZE + 1) {
       return -TLS_ALERT_BAD_RECORD_MAC
     }
-    if (this.sequence === TLS_LAST_SEQUENCE) {
+    // The number never passes `TLS_LAST_SEQUENCE` (2^53 - 1) and starts at 0: the guard is that rule, and it
+    // keeps the step below from wrapping.
+    const sequence: i64 = this.sequence
+    if (sequence < 0 || sequence >= 9007199254740991) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
-    const sealed: u8[] = new Array<u8>(body)
-    for (let k: i32 = 0; k < body && k < toI32(sealed.length); k++) {
-      sealed[k] = record[off + TLS_RECORD_HEADER_SIZE + k]
+    // `body` is at most 2^14 + 256, so it is a u16 as it is.
+    const sealed: u8[] = new Array<u8>(toU16(body))
+    let j: i32 = off + TLS_RECORD_HEADER_SIZE
+    for (let k: i32 = 0; k < body && k < toI32(sealed.length) && j >= 0 && j < toI32(record.length); k++) {
+      sealed[k] = record[j]
+      j++
     }
     const aad: u8[] = new Array<u8>(5)
-    for (let k: i32 = 0; k < TLS_RECORD_HEADER_SIZE && k < toI32(aad.length); k++) {
-      aad[k] = record[off + k]
+    j = off
+    for (
+      let k: i32 = 0;
+      k < TLS_RECORD_HEADER_SIZE && k < toI32(aad.length) && j >= 0 && j < toI32(record.length);
+      k++
+    ) {
+      aad[k] = record[j]
+      j++
     }
     const nonce: u8[] = new Array<u8>(12)
     this.nonceInto(nonce)
     const aes: AesKey | null = this.aesForSuite()
-    const inner: u8[] | null =
+    const opened: u8[] | null =
       aes !== null ? aesGcmOpen(aes, nonce, aad, sealed) : chacha20Poly1305Open(this.key, nonce, aad, sealed)
     secureZero(nonce)
-    if (inner === null) {
+    if (opened === null) {
       return -TLS_ALERT_BAD_RECORD_MAC
     }
+    const inner: u8[] = opened
     // The record authenticated, so it is the peer's, and its number is spent
-    // whatever its content turns out to be.
-    this.sequence = this.sequence + toI64(1)
+    // whatever its content turns out to be. Unsigned, the step cannot panic, and it cannot wrap from below
+    // 2^53 - 1.
+    this.sequence = toI64(toU64(sequence) + toU64(1))
     const innerLength: i32 = toI32(inner.length)
     if (innerLength > TLS_MAX_INNER_PLAINTEXT) {
       return -TLS_ALERT_RECORD_OVERFLOW
@@ -797,7 +920,7 @@ export class TlsRecordProtection {
     // addresses read depend on how much of the record was padding.
     let last: i32 = -1
     let found: i32 = 0
-    for (let k: i32 = 0; k < innerLength; k++) {
+    for (let k: i32 = 0; k < innerLength && k < toI32(inner.length); k++) {
       const b: i32 = toI32(inner[k])
       const keep: i32 = (0 - b) >> 31
       last = (k & keep) | (last & ~keep)
@@ -809,8 +932,11 @@ export class TlsRecordProtection {
     if (!tlsRecordWindowFits(toI32(out.length), at, last)) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
-    for (let k: i32 = 0; k < last && k < innerLength; k++) {
-      out[at + k] = inner[k]
+    // The window at `out[at]` was checked, so the output bound in the loop never binds.
+    let k: i32 = at
+    for (let i: i32 = 0; i < last && i < toI32(inner.length) && k >= 0 && k < toI32(out.length); i++) {
+      out[k] = inner[i]
+      k++
     }
     this.contentType = found
     return last
