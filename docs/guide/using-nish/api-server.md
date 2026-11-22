@@ -308,8 +308,8 @@ answer.
 flags, a log line a request, problems for bad input, and the graceful stop
 above with a deadline. It answers through the `try` calls, so of the handler's own panic sites it
 reaches only one its header names; build it with `nish examples/http-app/main.ts --allow-panics
---link http-app` all the same, for the router and server sites its header
-lists, and run `./http-app 8080`. Copy it and change it: logging and
+--link http-app` all the same, for the router, server and slice sites its
+header lists, and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
 

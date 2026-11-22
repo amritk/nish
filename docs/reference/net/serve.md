@@ -367,7 +367,7 @@ class ServeStats
 | `new ServeStats()` |  |
 | `answered: i32` | Requests answered, by a task or by the server itself. |
 | `busy: i32` | Requests answered 503 because `inFlight` tasks were already running. |
-| `failed: i32` | Answers a task wrote that broke a cap or a rule, answered 500 instead. |
+| `failed: i32` | Answers that failed: one a task wrote that broke a cap or a rule, or a request the server could not hand a task, answered 500 instead before its head; and one whose head or body the carrier refused, whose connection is closed with it unfinished. |
 | `sends: i64` | The writes the server began to send answers, counted at the end of each loop turn: a pipelined burst that fits the output is one. |
 | `slots: i32` | How many slots the server made: the most requests ever in flight at once. |
 | `usedEnd: i64` | `Arena.used()` in the server's loop once `maxRequests` were answered, before draining. |

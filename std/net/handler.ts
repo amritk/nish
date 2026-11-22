@@ -783,15 +783,16 @@ export class HttpRequest {
  * depends on whether the response's head went out:
  *
  * - **Refused before the head** — a request not taken or already answered,
- *   a status outside 200 to 599, a body window outside its buffer: nothing
- *   is sent and `r` is as it was, so a request still owed an answer can be
- *   answered again (a bare 500, say).
+ *   a status outside 200 to 599, a one-shot answer's body window outside its
+ *   buffer (`trySend`): nothing is sent and `r` is as it was, so a request
+ *   still owed an answer can be answered again (a bare 500, say).
  * - **Abandoned after the head** — a head the carrier refuses (a reserved
- *   field, a name or value that is not field text), a body window outside
- *   its buffer or more body than the declared length (`tryWrite`), or a body
- *   short of it (`tryEnd`): the response cannot be completed, so the
- *   connection is closed and `r` is the handler's again. Nothing more is
- *   owed for `r`; a further answer for it is refused too.
+ *   field, a name or value that is not field text), a `tryWrite` window
+ *   outside its buffer or more body than the declared length (the head went
+ *   out with `tryStart`, so these fall here, not above), or a body short of
+ *   it (`tryEnd`): the response cannot be completed, so the connection is
+ *   closed and `r` is the handler's again. Nothing more is owed for `r`; a
+ *   further answer for it is refused too.
  *
  * The plain methods panic with the same message where their twins refuse.
  */

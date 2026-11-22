@@ -64,7 +64,7 @@ import { copyBytes } from "nish/bytes"
 import { HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
 import { HTTP_DATE_SIZE, httpDateWrite, httpFieldBytes } from "nish/net/http-fields"
 import { HttpServer, HttpServerRequest } from "nish/net/http-server"
-import { percentDecode } from "nish/net/url"
+import { tryPercentDecode } from "nish/net/url"
 
 /** What `serve` answers when it sent nothing: the file is missing or not a regular file, or the path was refused (`refused`). */
 export const STATIC_NOT_FOUND: i32 = -30
@@ -903,7 +903,7 @@ export class StaticFiles {
       return STATIC_NOT_FOUND
     }
     const path: u8[] = this.path
-    const decoded: i32 = percentDecode(head, pathStart, length, path, 0, 0)
+    const decoded: i32 = tryPercentDecode(head, pathStart, length, path, 0, 0)
     if (decoded < 0) {
       this.refused = true
       return STATIC_NOT_FOUND

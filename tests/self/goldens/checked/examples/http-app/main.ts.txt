@@ -38401,7 +38401,7 @@ import httpDateWrite from "nish/net/http-fields" -> function @nish.httpDateWrite
 import httpFieldBytes from "nish/net/http-fields" -> function @nish.httpFieldBytes
 import HttpServer from "nish/net/http-server" -> struct HttpServer
 import HttpServerRequest from "nish/net/http-server" -> struct HttpServerRequest
-import percentDecode from "nish/net/url" -> function @nish.percentDecode
+import tryPercentDecode from "nish/net/url" -> function @nish.tryPercentDecode
 const STATIC_NOT_FOUND: i32 = -30 [exported]
 const STATIC_IDENTITY: i32 = 0
 const STATIC_BR: i32 = 1
@@ -38895,16 +38895,16 @@ function StaticFiles.staticResolve(this: StaticFiles, head: u8[], pathStart: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: pathEnd pathStart
-  calls: nish.StaticFiles.staticAccept nish.StaticFiles.staticClose nish.percentDecode nish.staticAdd nish.staticByte nish.staticPut nish.staticSub nish_arena_mark nish_arena_release nish_file_close nish_file_open nish_file_size nish_panic_slice nish_realpath nish_stat_mtime nish_str_at nish_str_concat nish_str_new
+  calls: nish.StaticFiles.staticAccept nish.StaticFiles.staticClose nish.staticAdd nish.staticByte nish.staticPut nish.staticSub nish.tryPercentDecode nish_arena_mark nish_arena_release nish_file_close nish_file_open nish_file_size nish_panic_slice nish_realpath nish_stat_mtime nish_str_at nish_str_concat nish_str_new
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.StaticFiles.staticAccept#0 nish.StaticFiles.staticClose#0
-  pointer head: size=0 writesThrough=false captured=false passedTo=nish.percentDecode#0 nish.StaticFiles.staticAccept#1
+  pointer head: size=0 writesThrough=false captured=false passedTo=nish.tryPercentDecode#0 nish.StaticFiles.staticAccept#1
   stackSites=0 stackLocals=0
   local -3:11 _scope: i64 (const)
   local -2:11 length: i32 (const)
   callee -2:25 staticSub -> @nish.staticSub
   local +3:11 path: u8[] (const)
   local +4:11 decoded: i32 (const)
-  callee +4:26 percentDecode -> @nish.percentDecode
+  callee +4:26 tryPercentDecode -> @nish.tryPercentDecode
   local +12:11 room: i32 (const)
   local +13:9 m: i32 (let)
   callee +14:24 staticByte -> @nish.staticByte

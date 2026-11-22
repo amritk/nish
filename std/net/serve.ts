@@ -213,7 +213,12 @@ export class ServeStats {
   answered: i32 = 0
   /** Requests answered 503 because `inFlight` tasks were already running. */
   busy: i32 = 0
-  /** Answers a task wrote that broke a cap or a rule, answered 500 instead. */
+  /**
+   * Answers that failed: one a task wrote that broke a cap or a rule, or a
+   * request the server could not hand a task, answered 500 instead before
+   * its head; and one whose head or body the carrier refused, whose
+   * connection is closed with it unfinished.
+   */
   failed: i32 = 0
   /** How many slots the server made: the most requests ever in flight at once. */
   slots: i32 = 0
@@ -758,7 +763,7 @@ const serveType = (st: ServeState, type: u8[], len: i32): i32 => {
     return -1
   }
   // A control byte other than a tab would make the carrier refuse the head,
-  // which `ServeConns.send` treats as a program's mistake and panics on.
+  // which `ServeConns.send` answers by closing the connection unanswered.
   for (let j: i32 = 0; j < len && j < toI32(type.length); j++) {
     if ((type[j] < 32 && type[j] !== 9) || type[j] === 127) {
       return -1

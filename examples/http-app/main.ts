@@ -1,15 +1,15 @@
 // Opt-out (`--allow-panics`): `nish/net/handler`, `nish/net/serve` and
-// `nish/net/static` keep no panic site this program reaches but one, and it
-// answers through their `try` calls. What it still reaches: the index and
-// overflow sites of `std/net/http1-server`, through every answer, `wait`,
-// `next`, `drain` and `connections`; `std/net/router`'s sites, through
-// `Router`, `add` and `tryRefuse`; `std/net/url`'s panic, through
-// `tryServeHandler`; the limits panic of the `HttpHandler` constructor, which
-// `openHttpHandler` calls only once the limits passed the same check, a proof
-// the prover cannot yet make; and app.ts's `String.fromBytes` slice, a range
-// check it cannot yet discharge. Follow-up: make those modules panic-free and
-// teach the prover both bounds, then build this program without
-// `--allow-panics`.
+// `nish/net/static` keep no panic site this program reaches but the two named
+// below, and it answers through their `try` calls. What it still reaches: the caps panic of
+// `std/net/http1-server`'s `Http1Connection` constructor, through every
+// answer, `wait`, `next` and `drain`, which the handler's limits checked
+// already, a proof the prover cannot yet make; `std/net/router`'s sites,
+// through `Router`, `add` and `tryRefuse`; the limits panic of the
+// `HttpHandler` constructor, which `openHttpHandler` calls only once the
+// limits passed the same check; and two `String.fromBytes` slices, app.ts's
+// and the one `tryServeHandler` reaches in `std/net/static`, range checks it
+// cannot yet discharge. Follow-up: make the router panic-free and teach the
+// prover those bounds, then build this program without `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
