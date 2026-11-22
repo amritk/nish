@@ -481,7 +481,6 @@ export class Http1Parser {
       return true
     }
     if (!http1Reserve(this, len)) {
-      http1Fail(this, 413, "more than 2^30 bytes buffered")
       return true
     }
     const buf: u8[] = this.buf
@@ -679,22 +678,31 @@ const HTTP1_MOST_INPUT: i32 = 1073741824
 
 /**
  * Makes room for `len` more bytes at `p.end`, moving the live bytes down
- * first. False when that would take a buffer past `HTTP1_MOST_INPUT`, which
- * the caller refuses.
+ * first. False, with the parser refused, when that would take a buffer past
+ * `HTTP1_MOST_INPUT` (a 413) or the live bytes are not a window of `buf` (a
+ * 400).
  */
 const http1Reserve = (p: Http1Parser, len: i32): boolean => {
   const old: u8[] = p.buf
   const capacity: u32 = toU32(old.length)
-  // `len` is non-negative and `start <= end <= buf.length` always, so these
-  // unsigned counts are the real ones and add up without wrapping in u32.
+  const from: i32 = p.start
+  if (len < 0 || from < 0 || p.end < from || p.end > toI32(capacity)) {
+    // The parser keeps `0 <= start <= end <= buf.length`. The fields are
+    // public, so a caller may have moved them: such a parser is refused with
+    // a 400 rather than read outside `buf`.
+    http1Fail(p, 400, "the input window is out of order")
+    return false
+  }
+  // `len` is non-negative and `start <= end <= buf.length`, checked above, so
+  // these unsigned counts are the real ones and add up without wrapping in u32.
   const want: u32 = toU32(len)
   const end: u32 = toU32(p.end)
   if (want <= capacity - end) {
     return true
   }
-  const from: i32 = p.start
   const live: u32 = end - toU32(from)
   if (want > toU32(HTTP1_MOST_INPUT) - live) {
+    http1Fail(p, 413, "more than 2^30 bytes buffered")
     return false
   }
   let size: u32 = capacity < toU32(HTTP1_FIRST_INPUT) ? toU32(HTTP1_FIRST_INPUT) : capacity
@@ -706,8 +714,11 @@ const http1Reserve = (p: Http1Parser, len: i32): boolean => {
   // One move, overlapping when the buffer is the same one; the offsets keep it
   // in range.
   const buf: u8[] = size === capacity ? old : http1Grown(old, from, live, size)
-  if (size === capacity) {
-    tryCopyBytes(buf, 0, old, from, toI32(live))
+  if (size === capacity && !tryCopyBytes(buf, 0, old, from, toI32(live))) {
+    // Never false: the window was checked above. Were it, the parser is
+    // refused rather than left with bytes it did not move.
+    http1Fail(p, 400, "the input window is out of order")
+    return false
   }
   p.buf = buf
   p.lineStart = toI32(toU32(p.lineStart) - toU32(from))
@@ -1139,15 +1150,17 @@ const http1HeadGrow = (p: Http1Parser, n: i32): boolean => {
  * last line, so a short line is copied as whole vectors and a vector load at
  * any byte of the head is in bounds: the name and value compares read one. A
  * vector's lanes past the line write bytes past `headLength`, which nothing
- * reads until the section scan overwrites them.
+ * reads until the section scan overwrites them. It answers -1, with the
+ * parser refused, when the line or the head's length is out of order or the
+ * line does not fit: the caller returns `HTTP1_ERROR` then.
  */
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const at: i32 = p.headLength
   if (from < 0 || to < from || at < 0) {
-    // Never taken: the line is a window of `buf` and the head's length is a
-    // count. Were it taken, the request is refused, not read short.
+    // `http1RequestLine` checks the line and grows the head first, so this
+    // refuses only a parser whose public fields were moved out of order.
     http1Fail(p, 400, "the request line is outside the buffer")
-    return at
+    return -1
   }
   // `0 <= from <= to`, so the u32 difference is the line's length.
   const n: i32 = toI32(toU32(to) - toU32(from))
@@ -1162,9 +1175,10 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
     store(loadU8x16(buf, from), head, at)
     store(loadU8x16(buf, from + 16), head, at + 16)
   } else if (!tryCopyBytes(head, at, buf, from, n)) {
-    // Never taken: `http1HeadGrow` left room for the line.
+    // `http1HeadGrow` left room for the line, so this refuses only a head
+    // moved by hand.
     http1Fail(p, 400, "the request line does not fit the head")
-    return at
+    return -1
   }
   // Both are at most 2^30, so the u32 sum fits.
   p.headLength = toI32(toU32(at) + toU32(n))
@@ -1563,6 +1577,9 @@ const http1RequestLine = (p: Http1Parser): i32 => {
     }
   }
   const at: i32 = http1HeadAppend(p, a, b)
+  if (at < 0) {
+    return HTTP1_ERROR
+  }
   p.methodStart = at
   // Each mark is within the line, `a` to `b`, and the line is in the head.
   p.methodEnd = http1Past(at, toI32(toU32(methodEnd) - toU32(a)))
@@ -2150,7 +2167,8 @@ const http1Section = (p: Http1Parser): i32 => {
               }
             }
             if (!tryCopyBytes(p.head, http1Past(q, delta), buf, q, http1Less(end, q))) {
-              // Never taken: the head was grown past `endAt` just above.
+              // The head was grown past `endAt` just above, so this refuses
+              // only a head moved by hand.
               return http1Fail(p, 431, "a head of more than 2^30 bytes")
             }
             head = p.head
@@ -2505,6 +2523,12 @@ export const http1TryWriteChunk = (out: u8[], at: i32, data: readonly u8[], off:
   }
   // It fits, so none of the offsets below passes `outLength`.
   const end: i32 = http1Past(at, digits)
+  const headEnd: i32 = http1Past(end, 2)
+  // The bytes go first, so a copy that fails leaves `out` untouched. It
+  // cannot: the window is inside `data` and the chunk fits, both checked.
+  if (!tryCopyBytes(out, headEnd, data, off, len)) {
+    return HTTP1_NO_ROOM
+  }
   let v: i32 = len
   // The digits are written last first, `out[k - 1]` each time.
   for (let k: i32 = end; k > 0 && k > at && k <= toI32(out.length); k -= 1) {
@@ -2512,11 +2536,7 @@ export const http1TryWriteChunk = (out: u8[], at: i32, data: readonly u8[], off:
     out[k - 1] = toU8(d < 10 ? 48 + d : 87 + d)
     v = v >> 4
   }
-  const headEnd: i32 = http1PutCrlf(out, end)
-  if (!tryCopyBytes(out, headEnd, data, off, len)) {
-    // Never taken: the window is inside `data`, and it fits.
-    return HTTP1_NO_ROOM
-  }
+  http1PutCrlf(out, end)
   return http1PutCrlf(out, http1Past(headEnd, len))
 }
 

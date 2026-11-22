@@ -4,12 +4,21 @@ PASS  tryFeed: a negative length answers false
 PASS  and takes nothing
 PASS  tryFeed: the whole data answers true
 PASS  and is buffered
-PASS  tryFeed: past 2^30 buffered still answers true
+PASS  tryFeed: a start below zero still answers true
 PASS  and next() refuses
-PASS  with a 413
+PASS  with a 400
+PASS  because the window is out of order
 PASS  tryFeed: an end past the buffer still answers true
 PASS  and next() refuses
-PASS  with a 413
+PASS  with a 400
+PASS  next(): a start past the end is refused
+PASS  with a 400
+PASS  because the window is out of order
+PASS  a head with a length body is a head
+PASS  and its first bytes are a body event
+PASS  next(): a negative count left is refused
+PASS  with a 400
+PASS  because the body window is out of order
 PASS  a well-formed head is a head
 PASS  a request line ended in a bare LF is refused
 PASS  with a 400
@@ -21,6 +30,8 @@ PASS  a line cut short waits for more
 PASS  http1TryWriteChunk: a window past the data
 PASS  http1TryWriteChunk: a negative length
 PASS  http1TryWriteChunk: a good window writes `5\r\nhello\r\n`
+PASS  http1TryWriteChunk: a chunk past `out`
+PASS  leaves `out` untouched
 PASS  tryPercentDecode: a window past the source
 PASS  tryPercentDecode: an output index past the output
 PASS  tryPercentDecode: `%C3%A9` decodes to two bytes
@@ -42,4 +53,14 @@ PASS  tryCompress: the whole body compresses
 PASS  and is sent
 PASS  tryCompressAnyway: so does a short one
 PASS  and is sent
-net_http1_wire_refusals: 44 passed, 0 failed, 0 skipped
+PASS  tryCompress: deflate compresses the body
+PASS  and is sent
+PASS  tryDecode: the zlib stream decodes to the body
+PASS  ending as it does
+PASS  tryCompressAnyway: deflate compresses a short body
+PASS  tryDecode: which decodes back to its five bytes
+PASS  tryDecode: identity is no coding it decodes
+PASS  tryDecode: a window past the source
+PASS  tryCompressAnyway: an output shrunk by hand
+PASS  fails
+net_http1_wire_refusals: 65 passed, 0 failed, 0 skipped

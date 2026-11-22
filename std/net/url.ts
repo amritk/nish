@@ -543,25 +543,18 @@ export class UrlQuery {
 /**
  * Whether `bytes[off, off + len)`, decoded strictly in form mode, is `name`'s
  * bytes. Nothing is written: a malformed escape or `%00` in the key matches
- * no name. `UrlQuery.next` sets the window inside `bytes`, but its fields are
- * public: a window a caller moved past `bytes` reads as the part inside it,
- * and one that starts outside reads as the empty key, which matches only "".
+ * no name, and so does a window outside `bytes`. Its one caller,
+ * `urlQueryFind`, passes the window `UrlQuery.next` has just set inside
+ * `bytes`, so that refusal is only for a caller that edits the public fields.
  */
 const urlKeyEquals = (bytes: u8[], off: i32, len: i32, name: string): boolean => {
   const n: i32 = toI32(name.length)
   const size: i32 = toI32(bytes.length)
-  if (off < 0 || off > size) {
-    return n === 0
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    return false
   }
-  // The fields are public, so the window may run past `bytes`; reading stops
-  // at its end either way, so the end is clamped there. A negative `len` is an
-  // empty window. Otherwise `off + len` is at most `size` and cannot wrap.
-  let end: i32 = size
-  if (len <= 0) {
-    end = off
-  } else if (len <= size - off) {
-    end = toI32(toU32(off) + toU32(len))
-  }
+  // `off + len` is at most `size`, checked above, so it cannot wrap.
+  const end: i32 = toI32(toU32(off) + toU32(len))
   let i: i32 = off
   let o: i32 = 0
   while (i >= 0 && i < end && i < size) {
@@ -682,71 +675,38 @@ const urlIsUtf8 = (buf: u8[], off: i32, len: i32): boolean => {
 /** `s`'s bytes, or null when it holds a code unit past 0xFF (only possible under Node, where a string is UTF-16). */
 const urlBytesOf = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
-  // Pushed a byte at a time: an array made at a length read from a string
-  // keeps a length check that no proof removes.
-  const bytes: u8[] = []
+  const bytes: u8[] = new Array<u8>(n)
   let i: i32 = 0
-  while (i < n) {
+  while (i < n && i < toI32(bytes.length)) {
     const c: i32 = toI32(s.charCodeAt(i))
     if (c > 0xff) {
       return null
     }
-    bytes.push(toU8(c))
+    bytes[i] = toU8(c)
     i += 1
   }
   return bytes
 }
 
-/**
- * `bytes[a, b)` as a string, a byte at a time, with A to Z lower-cased when
- * `lower` is set: `String.fromBytes` keeps a range check that no proof
- * removes, and natively `fromCharCode` makes exactly one byte.
- */
-const urlBytesText = (bytes: u8[], a: i32, b: i32, lower: boolean): string => {
-  const parts: string[] = []
-  let i: i32 = a
-  while (i >= 0 && i < b && i < toI32(bytes.length)) {
-    const c: i32 = toI32(bytes[i])
-    parts.push(String.fromCharCode(lower && c >= 65 && c <= 90 ? c + 32 : c))
-    i += 1
-  }
-  return parts.join("")
-}
-
 /** `percentDecode` of `src[off, off + len)` as a new string, or null on an error or when the result is not UTF-8. */
 const urlDecodeString = (src: u8[], off: i32, len: i32, flags: i32): string | null => {
-  // `len` bytes of room; decoding never makes the text longer. A length that
-  // fits a `u16`, every real target, is one allocation whose length needs no
-  // check; a longer one is pushed a byte at a time for the same reason as in
-  // `urlBytesOf`.
-  let out: u8[] = []
-  if (len >= 0 && len <= 65535) {
-    out = new Array<u8>(toU16(len))
-  } else {
-    let k: i32 = 0
-    while (k < len) {
-      out.push(0)
-      k += 1
-    }
-  }
-  // Its callers pass a window built from `src.length`, so
-  // `URL_DECODE_ERR_WINDOW` cannot come back; if it did, it is a refusal
-  // like any other negative answer.
-  const n: i32 = tryPercentDecode(src, off, len, out, 0, flags)
+  // `len` bytes of room; decoding never makes the text longer.
+  const out: u8[] = new Array<u8>(len)
+  // A window outside `src` is a caller contract, kept as `percentDecode`'s
+  // panic rather than answered as null: both callers, `urlDecode` and
+  // `urlQueryGet`, cut the window from `src.length`.
+  const n: i32 = percentDecode(src, off, len, out, 0, flags)
   if (n < 0 || !urlIsUtf8(out, 0, n)) {
     return null
   }
-  return urlBytesText(out, 0, n, false)
+  return String.fromBytes(out, 0, n)
 }
 
 /**
  * `s` percent-decoded with `flags`, or null when `percentDecode` refuses it
  * or what it decodes to is not valid UTF-8, which is where
  * `decodeURIComponent` throws. `s` is expected to be ASCII, as a URL on the
- * wire is. It allocates its answer, a byte at a time as `String.fromCharCode`
- * makes it, so natively the answer is the decoded UTF-8 and under
- * `--emit-ts` a decoded byte above 127 is one UTF-16 unit: `%C3%A9` is `é`
- * natively and two units under Node.
+ * wire is. It allocates its answer.
  *
  * @param s The encoded text; a code unit past 0xFF (possible only under Node) answers null.
  * @param flags `URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
@@ -765,9 +725,7 @@ export const urlDecode = (s: string, flags: i32): string | null => {
  * form-decoded strictly: `""` for a key written without `=`, as
  * `URLSearchParams.get` answers, and null when the target has no query, the
  * key is absent, the value is malformed or not UTF-8, or the key comes after
- * `URL_DEFAULT_MAX_PAIRS` pairs. It allocates its answer, which under
- * `--emit-ts` keeps a decoded byte above 127 as one UTF-16 unit, as
- * `urlDecode` does.
+ * `URL_DEFAULT_MAX_PAIRS` pairs. It allocates its answer.
  *
  * @param target A request target such as `/search?q=nish`; everything after its first `?` is the query.
  * @param name The key to look for, as it reads decoded; ASCII, as `urlQueryFind` asks.
@@ -832,6 +790,25 @@ export class Url {
   port: i32 = -1
   /** True when the URL has a `//` authority; `mailto:a@b` has none and `file:///x` has an empty one. */
   hasAuthority: boolean = false
+}
+
+/** `bytes[a, b)` as a string with A to Z lower-cased. */
+const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
+  // `a <= b` is the caller's contract: a window the other way round is a
+  // negative length, and `new Array` refuses it.
+  const out: u8[] = new Array<u8>(toI32(toU32(b) - toU32(a)))
+  let j: i32 = 0
+  while (j < toI32(out.length)) {
+    const i: i32 = toI32(toU32(a) + toU32(j))
+    if (i < 0 || i >= toI32(bytes.length)) {
+      break
+    }
+    const c: i32 = toI32(bytes[i])
+    // `c | 32` is `c + 32` for A to Z, whose bit 5 is clear.
+    out[j] = c >= 65 && c <= 90 ? toU8(c | 32) : toU8(c)
+    j += 1
+  }
+  return String.fromBytes(out, 0, toI32(out.length))
 }
 
 /** The first `c` in `bytes[a, b)`, or `b`. */
@@ -1008,12 +985,8 @@ const urlLooksNumeric = (bytes: u8[], a: i32, b: i32): boolean => {
   return i === end
 }
 
-/**
- * Reads the authority `bytes[a, b)` into `u`, or answers false when it breaks
- * a rule `urlParse` names. `bytes` are `s`'s, all printable ASCII, so a part
- * is cut from `s` itself, which clamps its range rather than checking it.
- */
-const urlReadAuthority = (s: string, bytes: u8[], a: i32, b: i32, u: Url): boolean => {
+/** Reads the authority `bytes[a, b)` into `u`, or answers false when it breaks a rule `urlParse` names. */
+const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
   const at: i32 = urlFind(bytes, a, b, URL_AT)
   let h: i32 = a
   if (at < b) {
@@ -1024,9 +997,9 @@ const urlReadAuthority = (s: string, bytes: u8[], a: i32, b: i32, u: Url): boole
       return false
     }
     const colon: i32 = urlFind(bytes, a, at, URL_COLON)
-    u.username = s.substring(a, colon)
+    u.username = String.fromBytes(bytes, a, colon)
     if (colon < at) {
-      u.password = s.substring(colon + 1, at)
+      u.password = String.fromBytes(bytes, colon + 1, at)
     }
     h = at + 1
   }
@@ -1037,9 +1010,9 @@ const urlReadAuthority = (s: string, bytes: u8[], a: i32, b: i32, u: Url): boole
   // `h` lies inside the window, which lies inside `bytes`; the bounds are
   // spelled out for the proof.
   if (h >= 0 && h < b && h < toI32(bytes.length) && toI32(bytes[h]) === URL_OPEN_BRACKET) {
-    u.host = urlBytesText(bytes, h + 1, portAt - 1, true)
+    u.host = urlLowerString(bytes, h + 1, portAt - 1)
   } else {
-    u.host = urlBytesText(bytes, h, portAt, true)
+    u.host = urlLowerString(bytes, h, portAt)
   }
   if (portAt < b && portAt + 1 < b) {
     const port: i32 = urlPortOf(bytes, portAt + 1, b)
@@ -1160,19 +1133,16 @@ const urlReadReference = (s: string): Url | null => {
     }
     i += 1
   }
-  // Every byte is printable ASCII now, so `s` and `bytes` agree index for
-  // index on every host, and a part is cut from `s`, which clamps its range
-  // rather than checking it. `urlFind` answers an index at most `n`, so the
-  // tests against the length below always hold; they are spelled out for the
-  // proof.
+  // `urlFind` answers an index at most `n`, so the tests against the length
+  // below always hold; they are spelled out for the proof.
   const u: Url = new Url()
   const hash: i32 = urlFind(bytes, 0, n, URL_HASH)
   if (hash < n) {
-    u.fragment = s.substring(hash + 1, n)
+    u.fragment = String.fromBytes(bytes, hash + 1, n)
   }
   const question: i32 = urlFind(bytes, 0, hash, URL_QUESTION)
   if (question < hash) {
-    u.query = s.substring(question + 1, hash)
+    u.query = String.fromBytes(bytes, question + 1, hash)
   }
   let pos: i32 = 0
   if (question > 0 && toI32(bytes.length) > 0 && urlIsAlpha(toI32(bytes[0]))) {
@@ -1185,7 +1155,7 @@ const urlReadReference = (s: string): Url | null => {
       j += 1
     }
     if (j < question && j < toI32(bytes.length) && toI32(bytes[j]) === URL_COLON) {
-      u.scheme = urlBytesText(bytes, 0, j, true)
+      u.scheme = urlLowerString(bytes, 0, j)
       pos = j + 1
     }
   }
@@ -1198,12 +1168,12 @@ const urlReadReference = (s: string): Url | null => {
   ) {
     const end: i32 = urlFind(bytes, pos + 2, question, URL_SLASH)
     u.hasAuthority = true
-    if (!urlReadAuthority(s, bytes, pos + 2, end, u)) {
+    if (!urlReadAuthority(bytes, pos + 2, end, u)) {
       return null
     }
     pos = end
   }
-  u.path = s.substring(pos, question)
+  u.path = String.fromBytes(bytes, pos, question)
   return u
 }
 

@@ -130,9 +130,10 @@ export const HTTP_COMPRESS_TOO_LITTLE_SAVED: i32 = 4
 export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
 /**
  * The encoder's gzip member could not be written into `output` or reframed as
- * zlib, so the body went as it is. `output` holds `compressBound(maxLength)`
- * bytes and every member an encoder writes carries its 18 bytes of header and
- * trailer, so no body `compress` or `compressAnyway` accepts reaches it.
+ * zlib, so the body went as it is. `output` is built with
+ * `compressBound(maxLength)` bytes, room for any body `compress` or
+ * `compressAnyway` accepts; it is reached when a caller has since shrunk
+ * `output` (`readonly` keeps the array, not its length).
  */
 export const HTTP_COMPRESS_FAILED: i32 = 6
 /** `tryCompress` and `tryCompressAnyway`: the window lies outside the body, so nothing was compressed. */
@@ -1106,6 +1107,11 @@ export const httpTryContentEncoding = (buf: u8[], start: i32, end: i32): i32 => 
 export const HTTP_DECODE_TOO_LARGE: i32 = -1
 /** `HttpBodyDecoder.decode`: the body is not a whole, well-formed stream of its coding. */
 export const HTTP_DECODE_MALFORMED: i32 = -2
+/**
+ * `HttpBodyDecoder.tryDecode`: the coding is neither gzip nor deflate, or the
+ * window lies outside its buffer; nothing was decoded.
+ */
+export const HTTP_DECODE_BAD_CALL: i32 = -3
 
 /** The first output buffer `HttpBodyDecoder` makes, when its limit allows that many bytes. */
 const HTTP_DECODE_FIRST: i32 = 4096
@@ -1151,7 +1157,8 @@ export class HttpBodyDecoder {
   /**
    * Decodes `src[off .. off + len)`, one body in `coding`, into `output`
    * from index 0. Another coding than `HTTP_CODING_GZIP` or
-   * `HTTP_CODING_DEFLATE`, or a window outside `src`, panics.
+   * `HTTP_CODING_DEFLATE`, or a window outside `src`, panics; `tryDecode`
+   * answers `HTTP_DECODE_BAD_CALL` instead.
    * @param coding `HTTP_CODING_GZIP` (one gzip member or several) or `HTTP_CODING_DEFLATE` (a zlib stream)
    * @param src the array that holds the encoded body
    * @param off where the body starts in `src`
@@ -1165,8 +1172,31 @@ export class HttpBodyDecoder {
     if (coding !== HTTP_CODING_GZIP && coding !== HTTP_CODING_DEFLATE) {
       panic(`HttpBodyDecoder.decode: coding ${coding} is neither gzip nor deflate`)
     }
-    if (off < 0 || len < 0 || off > toI32(src.length) - len) {
+    const end: i32 = this.tryDecode(coding, src, off, len)
+    if (end === HTTP_DECODE_BAD_CALL) {
       panic("HttpBodyDecoder.decode: the window lies outside its buffer")
+    }
+    return end
+  }
+
+  /**
+   * `decode` that answers `HTTP_DECODE_BAD_CALL`, decoding nothing, where
+   * `decode` panics: a coding other than `HTTP_CODING_GZIP` or
+   * `HTTP_CODING_DEFLATE`, or a window outside `src`. The coding often comes
+   * from a request's `Content-Encoding` (`httpContentEncoding`), so a caller
+   * that passes it on unchecked uses this one.
+   * @param coding `HTTP_CODING_GZIP` (one gzip member or several) or `HTTP_CODING_DEFLATE` (a zlib stream)
+   * @param src the array that holds the encoded body
+   * @param off where the body starts in `src`
+   * @param len how many bytes the body is; every one must belong to the stream
+   * @returns what `decode` answers, or `HTTP_DECODE_BAD_CALL`
+   */
+  tryDecode(coding: i32, src: u8[], off: i32, len: i32): i32 {
+    if (coding !== HTTP_CODING_GZIP && coding !== HTTP_CODING_DEFLATE) {
+      return HTTP_DECODE_BAD_CALL
+    }
+    if (off < 0 || len < 0 || off > toI32(src.length) - len) {
+      return HTTP_DECODE_BAD_CALL
     }
     const limit: i32 = this.limit
     // A first guess of four times the input, so most bodies decode at once.
