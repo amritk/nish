@@ -470,11 +470,14 @@ export class Http1Parser {
     const buf: u8[] = this.buf
     const at: i32 = this.end
     // One move: http1Reserve made room for `len` bytes at `at`, and the
-    // window was checked above, so it always succeeds.
-    if (tryCopyBytes(buf, at, data, off, len)) {
-      // In range, because the move fit: `at + len` is at most `buf.length`.
-      this.end = toI32(toU32(at) + toU32(len))
+    // window was checked above, so it always succeeds; were it to fail, the
+    // parser refuses rather than drop the bytes.
+    if (!tryCopyBytes(buf, at, data, off, len)) {
+      http1Fail(this, 413, "the buffer could not take the input")
+      return
     }
+    // In range, because the move fit: `at + len` is at most `buf.length`.
+    this.end = toI32(toU32(at) + toU32(len))
   }
 
   /**
@@ -1111,7 +1114,8 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const at: i32 = p.headLength
   if (from < 0 || to < from || at < 0) {
     // Never taken: the line is a window of `buf` and the head's length is a
-    // count.
+    // count. Were it taken, the request is refused, not read short.
+    http1Fail(p, 400, "the request line is outside the buffer")
     return at
   }
   // `0 <= from <= to`, so the u32 difference is the line's length.
@@ -1126,8 +1130,10 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   } else if (n <= 32 && from <= toI32(buf.length) - 32 && at <= toI32(head.length) - 32) {
     store(loadU8x16(buf, from), head, at)
     store(loadU8x16(buf, from + 16), head, at + 16)
-  } else {
-    tryCopyBytes(head, at, buf, from, n)
+  } else if (!tryCopyBytes(head, at, buf, from, n)) {
+    // Never taken: `http1HeadGrow` left room for the line.
+    http1Fail(p, 400, "the request line does not fit the head")
+    return at
   }
   // Both are at most 2^30, so the u32 sum fits.
   p.headLength = toI32(toU32(at) + toU32(n))
