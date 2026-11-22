@@ -261,6 +261,12 @@ return of `http1ClientPutField` for a field index out of range, whose
 callers pass only indexes they loop over, and the `: buf.length` arm of the
 line-end clamps in `http1ClientStatusLine`, `http1ClientFieldLine` and
 `http1ClientChunkSize`, whose line end the parser found inside the buffer.
+The window guards that replaced panics are of the same kind: the `false` of
+`http1ClientReserve` and the `-1` of `http1ClientKeep` for a window or offset
+outside their buffer, which the parser's `0 <= start <= end <= buf.length` and
+`headUsed <= head.length` rule out, and the failed `tryCopyBytes` in
+`feed`, `http1ClientReserve` and `http1ClientKeep`, whose ranges were checked
+just before. No input reaches them, so no check does.
 
 **Every condition is observed, or recorded as equivalent.** A mechanical
 mutation sweep of `std/net/http1-client-codec.ts` deleted each operand of each `&&`
@@ -268,7 +274,8 @@ and `||`, moved each `<`, `<=`, `>` and `>=` boundary by one, deleted each
 assignment statement (every reset and clamp among them) and made false each
 `if` whose body is one statement, and ran the five `net_http1_client` link
 tests against each mutant. A mutant is killed when any test's stdout, exit
-status or stderr changes.
+status or stderr changes. The sweep predates the window guards above, which
+were added to remove panic sites: their conditions are not in the table.
 
 | Class | Mutants | Killed | Survived | Invalid |
 | --- | --- | --- | --- | --- |
