@@ -1597,7 +1597,7 @@ export class PgConnection {
     }
     this.clientNonce = base64StdPadEncode(head)
 
-    const at: i32 = this.outEnd
+    const at: i32 = 0
     this.putI32(PG_ZERO)
     this.putI32(PG_PROTOCOL)
     this.putParam("user", config.user)
@@ -1614,7 +1614,8 @@ export class PgConnection {
       this.putParam("options", config.options)
     }
     this.putByte(PG_ZERO)
-    setI32BE(this.out, at, this.outEnd - at)
+    // The message is the first in the buffer, so its length is the buffer's end.
+    setI32BE(this.out, at, this.outEnd)
   }
 
   // --- Buffers -----------------------------------------------------------------
@@ -1643,7 +1644,12 @@ export class PgConnection {
    *   is full, which `next()` mends by compacting or growing it.
    */
   inputRoom(): i32 {
-    return toI32(this.input.length) - this.inEnd
+    const end: i32 = this.inEnd
+    // `inEnd` stays inside the buffer; the test states that bound for the prover.
+    if (end < 0 || end > toI32(this.input.length)) {
+      return 0
+    }
+    return toI32(this.input.length) - end
   }
 
   /**
@@ -1652,10 +1658,12 @@ export class PgConnection {
    * @param n The bytes the read wrote, from 0 to `inputRoom()`.
    */
   received(n: i32): void {
-    if (n < 0 || n > this.inputRoom()) {
+    // Summed in `i64`, the end cannot overflow on its way to the test.
+    const last: i64 = toI64(this.inEnd) + toI64(n)
+    if (n < 0 || n > this.inputRoom() || last > toI64(this.input.length)) {
       panic("nish/net/postgres: received more than inputRoom()")
     }
-    this.inEnd += n
+    this.inEnd = toI32(last)
   }
 
   /**
@@ -1669,13 +1677,14 @@ export class PgConnection {
    *   caller's to give again after `next()`.
    */
   receive(src: u8[], start: i32, length: i32): i32 {
-    if (start < 0 || length < 0 || length > toI32(src.length) - start) {
+    if (start < 0 || length < 0 || toI64(start) + toI64(length) > toI64(src.length)) {
       panic("nish/net/postgres: receive() outside its source")
     }
     const room: i32 = this.inputRoom()
     const n: i32 = length < room ? length : room
     copyBytes(this.input, this.inEnd, src, start, n)
-    this.inEnd += n
+    // `inputRoom` keeps the end inside the buffer, so the sum fits an `i32`.
+    this.inEnd = toI32(toI64(this.inEnd) + toI64(n))
     return n
   }
 
@@ -1713,10 +1722,12 @@ export class PgConnection {
    * @param n The bytes the write took.
    */
   sent(n: i32): void {
-    if (n < 0 || n > this.outputEnd() - this.outStart) {
+    // Summed in `i64`, the start cannot overflow on its way to the test.
+    const last: i64 = toI64(this.outStart) + toI64(n)
+    if (n < 0 || last > toI64(this.outputEnd())) {
       panic("nish/net/postgres: sent more than was queued")
     }
-    this.outStart += n
+    this.outStart = toI32(last)
     if (this.outStart === this.outEnd) {
       this.outStart = 0
       this.outEnd = 0
@@ -1790,15 +1801,20 @@ export class PgConnection {
       if (this.state === PG_STATE_FAILED) {
         return PG_FAILED
       }
-      const avail: i32 = this.inEnd - this.inStart
+      const at: i32 = this.inStart
+      const inEnd: i32 = this.inEnd
+      const b: u8[] = this.input
+      // inStart and inEnd stay within the buffer, so these tests never fail;
+      // they prove the subtraction and the indices.
+      if (at < 0 || inEnd < 0 || inEnd < at || inEnd > toI32(b.length)) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      const avail: i32 = inEnd - at
       if (avail < 5) {
         this.compact()
         return PG_NEED_MORE
       }
-      const at: i32 = this.inStart
-      const b: u8[] = this.input
-      // inStart and inEnd stay within the buffer, so this test never fails; it proves the indices.
-      if (at < 0 || at + 4 >= toI32(b.length)) {
+      if (at > toI32(b.length) - 5) {
         return this.fail(PG_ERR_FRAME)
       }
       const type: i32 = toI32(b[at])
@@ -1814,18 +1830,23 @@ export class PgConnection {
       if (avail - 1 < length) {
         this.compact()
         const size: i32 = toI32(this.input.length)
-        if (size < length + 1) {
-          // Doubled, up to one message of maxMessage, so that a run of growing messages copies each byte a bounded number of times.
-          const cap: i32 = this.config.maxMessage + 1
-          const doubled: i32 = size < cap / 2 ? size * 2 : cap
-          const grown: u8[] = new Array<u8>(doubled > length + 1 ? doubled : length + 1)
+        if (size <= length) {
+          // Doubled, up to one message of maxMessage, so that a run of growing
+          // messages copies each byte a bounded number of times. Reckoned in
+          // `i64`, where no `i32` doubled or plus one overflows.
+          const cap: i64 = toI64(this.config.maxMessage) + toI64(1)
+          const want: i64 = toI64(length) + toI64(1)
+          const doubled: i64 = toI64(size) * toI64(2) < cap ? toI64(size) * toI64(2) : cap
+          const grown: u8[] = new Array<u8>(toI32(doubled > want ? doubled : want))
           grown.set(this.input, 0)
           this.input = grown
         }
         return PG_NEED_MORE
       }
-      this.inStart = at + 1 + length
-      const event: i32 = this.dispatch(type, at + 5, at + 1 + length)
+      // The whole message is in `[at, inEnd)`, so its end fits an `i32`.
+      const end: i32 = toI32(toI64(at) + toI64(1) + toI64(length))
+      this.inStart = end
+      const event: i32 = this.dispatch(type, at + 5, end)
       if (event !== PG_NEED_MORE) {
         return event
       }
@@ -1835,10 +1856,12 @@ export class PgConnection {
   /** Moves the unread input, at most one partial message, to the start of the buffer. */
   private compact(): void {
     const start: i32 = this.inStart
-    if (start === 0) {
+    const end: i32 = this.inEnd
+    // `inEnd` never falls below `inStart`; the test states that for the prover.
+    if (start <= 0 || end < 0 || end < start) {
       return
     }
-    const n: i32 = this.inEnd - start
+    const n: i32 = end - start
     copyBytes(this.input, 0, this.input, start, n)
     this.inStart = 0
     this.inEnd = n
