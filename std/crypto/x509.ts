@@ -1283,11 +1283,16 @@ export const derToPem = (der: u8[], label: string): string => {
   while (at < n) {
     // `n` is a length, so `n - 64` cannot wrap, and `at + 64` is then below `n`.
     const end: i32 = at < n - 64 ? at + 64 : n
-    // Always true; said again so the bounds proof sees both cuts within `body`.
-    if (at < 0 || end < at || end < 0 || end > body.length) {
+    // `at` is always in `body`, said again for the bounds proof; a line that
+    // stops short of the end is cut below the length, the last one runs to it.
+    if (at < 0 || at >= n) {
       break
     }
-    lines.push(body.substring(at, end))
+    if (end >= 0 && end < n) {
+      lines.push(body.substring(at, end))
+    } else {
+      lines.push(body.substring(at))
+    }
     at = end
   }
   lines.push(`-----END ${label}-----`)
@@ -1332,11 +1337,13 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
     ) {
       lineEnd--
     }
-    // Always true (`lineStart` < `n`, the CR step stops at it); said again for the bounds proof.
-    if (lineStart < 0 || lineEnd < lineStart || lineEnd < 0 || lineEnd > pem.length) {
+    // Always false (`lineStart` < `n`, the CR step stops at it); said again for the bounds proof.
+    if (lineStart < 0 || lineStart > n || lineEnd < lineStart || lineEnd > n) {
       return null
     }
-    const line: string = pem.substring(lineStart, lineEnd)
+    // A line that stops short of the end is cut below the length; the last one runs to it.
+    const line: string =
+      lineEnd >= 0 && lineEnd < n ? pem.substring(lineStart, lineEnd) : pem.substring(lineStart)
     lineStart = next
     const length: i32 = toI32(line.length)
     if (inside === "") {
