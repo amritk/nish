@@ -209,14 +209,14 @@ export class QuicDatagramQueue {
         this.lengths[k] = length
       }
     }
-    this.head = this.slot(1)
+    this.head = this.slot(toI32(1))
   }
 
   /** Forgets the oldest datagram. */
   private drop(): void {
     const count: i32 = this.count
     if (count > 0) {
-      this.head = this.slot(1)
+      this.head = this.slot(toI32(1))
       this.count = count - 1
     }
   }

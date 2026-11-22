@@ -555,7 +555,7 @@ export class QuicCidTable {
     }
     const at: i32 = this.retireHead
     const first: i64 = at >= 0 && at < size ? this.retirePending[at] : -1
-    this.retireHead = this.retireSlot(1)
+    this.retireHead = this.retireSlot(toI32(1))
     this.retireCount = count - 1
     return first
   }
