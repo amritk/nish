@@ -2237,10 +2237,11 @@ function tlsSelectPskIdentity(hello: TlsClientHelloView, index: i32): boolean ->
   local +14:12 k: i32 (let)
   local +15:11 length: i32 (const)
   callee +15:25 tlsWindowU16 -> @nish.tlsWindowU16
-  local +17:11 age: i32 (const)
-  callee +24:28 tlsWindowU32 -> @nish.tlsWindowU32
-  local +35:12 k: i32 (let)
-  local +36:11 length: i32 (const)
+  local +20:11 age: i32 (const)
+  local +27:13 ticketAge: i64 (const)
+  callee +27:30 tlsWindowU32 -> @nish.tlsWindowU32
+  local +44:12 k: i32 (let)
+  local +45:11 length: i32 (const)
 function TlsClientHello.constructor(this: TlsClientHello): void -> @nish.TlsClientHello.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=160 writesThrough=true captured=false
@@ -2252,20 +2253,20 @@ function tlsWindowU16(data: u8[], at: i32): i32 -> @nish.tlsWindowU16
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.tlsWindowUint#0
   stackSites=0 stackLocals=0
   callee +0:58 tlsWindowUint -> @nish.tlsWindowUint
-function tlsWindowU32(data: u8[], at: i32): u32 -> @nish.tlsWindowU32
+function tlsWindowU32(data: u8[], at: i32): i64 -> @nish.tlsWindowU32
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
   calls: nish.tlsWindowUint
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.tlsWindowUint#0
   stackSites=0 stackLocals=0
   callee +0:52 tlsWindowUint -> @nish.tlsWindowUint
-function tlsWindowUint(data: u8[], at: i32, width: i32): u32 -> @nish.tlsWindowUint
+function tlsWindowUint(data: u8[], at: i32, width: i32): i64 -> @nish.tlsWindowUint
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:7 v: u32 (let)
-  local +4:12 j: i32 (let)
+  local +0:7 v: i64 (let)
+  local +1:12 j: i32 (let)
 function tlsCopyWindow(data: u8[], at: i32, length: i32): u8[] -> @nish.tlsCopyWindow [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -2317,19 +2318,21 @@ function tlsParseClientHello(data: u8[], off: i32, len: i32): TlsClientHello -> 
   local +21:9 sharesEnd: i64 (const)
   local +23:11 skip: i32 (const)
   callee +23:23 tlsWindowU16 -> @nish.tlsWindowU16
-  callee +24:28 tlsWindowU16 -> @nish.tlsWindowU16
-  local +28:9 alpnEnd: i64 (const)
-  local +30:11 n: i32 (const)
-  callee +31:21 tlsCopyWindow -> @nish.tlsCopyWindow
-  local +35:9 extensionsEnd: i64 (const)
-  local +37:11 skip: i32 (const)
-  callee +37:23 tlsWindowU16 -> @nish.tlsWindowU16
-  callee +38:31 tlsWindowU16 -> @nish.tlsWindowU16
-  callee +54:20 tlsCopyWindow -> @nish.tlsCopyWindow
-  local +59:12 k: i32 (let)
-  callee +59:53 tlsSelectPskIdentity -> @nish.tlsSelectPskIdentity
-  callee +60:30 tlsCopyWindow -> @nish.tlsCopyWindow
-  callee +62:27 tlsCopyWindow -> @nish.tlsCopyWindow
+  local +24:11 entry: i32 (const)
+  callee +24:24 tlsWindowU16 -> @nish.tlsWindowU16
+  local +35:9 alpnEnd: i64 (const)
+  local +37:11 n: i32 (const)
+  callee +38:21 tlsCopyWindow -> @nish.tlsCopyWindow
+  local +42:9 extensionsEnd: i64 (const)
+  local +44:11 skip: i32 (const)
+  callee +44:23 tlsWindowU16 -> @nish.tlsWindowU16
+  local +45:11 entry: i32 (const)
+  callee +45:24 tlsWindowU16 -> @nish.tlsWindowU16
+  callee +68:20 tlsCopyWindow -> @nish.tlsCopyWindow
+  local +73:12 k: i32 (let)
+  callee +73:53 tlsSelectPskIdentity -> @nish.tlsSelectPskIdentity
+  callee +74:30 tlsCopyWindow -> @nish.tlsCopyWindow
+  callee +76:27 tlsCopyWindow -> @nish.tlsCopyWindow
 function tlsAdvance(at: i32, n: i32): i32 -> @nish.tlsAdvance
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
