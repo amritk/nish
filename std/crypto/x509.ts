@@ -1283,6 +1283,10 @@ export const derToPem = (der: u8[], label: string): string => {
   while (at < n) {
     // `n` is a length, so `n - 64` cannot wrap, and `at + 64` is then below `n`.
     const end: i32 = at < n - 64 ? at + 64 : n
+    // Always true; said again so the bounds proof sees both cuts within `body`.
+    if (at < 0 || end < at || end < 0 || end > body.length) {
+      break
+    }
     lines.push(body.substring(at, end))
     at = end
   }
@@ -1327,6 +1331,10 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
       toI32(pem.charCodeAt(lineEnd - 1)) === 13
     ) {
       lineEnd--
+    }
+    // Always true (`lineStart` < `n`, the CR step stops at it); said again for the bounds proof.
+    if (lineStart < 0 || lineEnd < lineStart || lineEnd < 0 || lineEnd > pem.length) {
+      return null
     }
     const line: string = pem.substring(lineStart, lineEnd)
     lineStart = next

@@ -354,14 +354,14 @@ const pkiRootsSplitDirs = (list: string): string[] => {
   let start: i32 = 0
   for (let i: i32 = 0; i < toI32(list.length); i = i + 1) {
     if (toI32(list.charCodeAt(i)) === 58) {
-      if (i > start) {
+      if (i > start && start >= 0) {
         out.push(list.substring(start, i))
       }
       start = i + 1
     }
   }
   const n: i32 = toI32(list.length)
-  if (n > start) {
+  if (n > start && start >= 0) {
     out.push(list.substring(start, n))
   }
   return out
