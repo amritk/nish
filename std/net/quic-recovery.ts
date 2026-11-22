@@ -324,10 +324,11 @@ export class QuicSentPackets {
    *
    * @param capacity How many sent packets the ring records at once, fixed for its life: in flight and
    *   settled alike, until `compact` drops the settled ones. `QUIC_RECOVERY_HANDSHAKE_CAPACITY` or
-   *   `QUIC_RECOVERY_APPLICATION_CAPACITY`.
+   *   `QUIC_RECOVERY_APPLICATION_CAPACITY`. A `u8`, so no ring is larger than 255 slots and an
+   *   index sum of two slots stays far inside `i32`.
    */
-  constructor(capacity: i32) {
-    this.capacity = capacity
+  constructor(capacity: u8) {
+    this.capacity = toI32(capacity)
     this.pn = new Array<i64>(capacity)
     this.timeSent = new Array<i64>(capacity)
     this.fineSent = new Array<i64>(capacity)
@@ -707,9 +708,9 @@ export class QuicRecovery {
    */
   constructor() {
     this.spaces = [
-      new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),
-      new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),
-      new QuicSentPackets(QUIC_RECOVERY_APPLICATION_CAPACITY),
+      new QuicSentPackets(toU8(QUIC_RECOVERY_HANDSHAKE_CAPACITY)),
+      new QuicSentPackets(toU8(QUIC_RECOVERY_HANDSHAKE_CAPACITY)),
+      new QuicSentPackets(toU8(QUIC_RECOVERY_APPLICATION_CAPACITY)),
     ]
     this.reset()
   }
