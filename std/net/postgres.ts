@@ -6067,6 +6067,7 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
   if (port < 1 || port > 65535) {
     return pgTargetFailed(PG_TARGET_BAD_PORT)
   }
+  // biome-ignore lint/style/useExplicitLengthCheck: `< 1` is the form that proves `charCodeAt(0)` below
   if (host.length < 1) {
     return pgTargetFailed(PG_TARGET_BAD_HOST)
   }
