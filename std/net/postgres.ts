@@ -1880,12 +1880,21 @@ export class PgConnection {
   /** One message, `[body, end)` its contents; answers its event, or `PG_NEED_MORE` when it has none. */
   private dispatch(type: i32, body: i32, end: i32): i32 {
     const state: i32 = this.state
+    const b: u8[] = this.input
+    // `next` hands over a message inside the buffer; the test states that bound for the prover.
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length)) {
+      return this.fail(PG_ERR_FRAME)
+    }
+    const size: i32 = end - body
     if (type === 82) {
       // 'R': an authentication request.
-      if (state >= PG_STATE_STARTING || end - body < 4) {
-        return this.fail(end - body < 4 ? PG_ERR_FRAME : PG_ERR_UNEXPECTED)
+      if (state >= PG_STATE_STARTING || size < 4) {
+        return this.fail(size < 4 ? PG_ERR_FRAME : PG_ERR_UNEXPECTED)
       }
-      return this.authenticate(getI32BE(this.input, body), body + 4, end)
+      if (body > toI32(b.length) - 4) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      return this.authenticate(getI32BE(b, body), body + 4, end)
     }
     if (type === 69 || type === 78) {
       // 'E' and 'N': an error or a notice.
@@ -1894,8 +1903,9 @@ export class PgConnection {
         return this.fail(PG_ERR_FRAME)
       }
       if (type === 78) {
-        if (this.notices < 2147483647) {
-          this.notices += 1
+        const notices: i32 = this.notices
+        if (notices >= 0 && notices < 2147483647) {
+          this.notices = notices + 1
         }
         this.lastNotice = error
         return PG_NOTICE
@@ -1912,27 +1922,42 @@ export class PgConnection {
     }
     if (type === 83) {
       // 'S': ParameterStatus, name and value.
-      const nameEnd: i32 = pgFind(this.input, body, end, 0)
-      if (nameEnd === end || pgFind(this.input, nameEnd + 1, end, 0) !== end - 1) {
+      const nameEnd: i32 = pgFind(b, body, end, 0)
+      // pgFind answers inside `[body, end]`; the test states that bound for the prover.
+      if (nameEnd < 0 || nameEnd < body || nameEnd >= end) {
         return this.fail(PG_ERR_FRAME)
       }
-      if (pgBytesAre(this.input, body, nameEnd - body, "client_encoding")) {
-        if (!pgBytesAre(this.input, nameEnd + 1, end - 2 - nameEnd, "UTF8")) {
+      const value: i32 = nameEnd + 1
+      const valueEnd: i32 = end - 1
+      if (valueEnd < 0 || valueEnd < value || pgFind(b, value, end, 0) !== valueEnd) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      const nameLength: i32 = nameEnd - body
+      const valueLength: i32 = valueEnd - value
+      if (pgBytesAre(b, body, nameLength, "client_encoding")) {
+        if (!pgBytesAre(b, value, valueLength, "UTF8")) {
           return this.fail(PG_ERR_ENCODING)
         }
-      } else if (pgBytesAre(this.input, body, nameEnd - body, "DateStyle")) {
+      } else if (pgBytesAre(b, body, nameLength, "DateStyle")) {
         // "ISO, MDY": the output style comes first, the input order after the comma.
-        const valueLength: i32 = end - 2 - nameEnd
-        const iso: boolean = valueLength >= 3 && pgBytesAre(this.input, nameEnd + 1, 3, "ISO")
-        if (!iso || (valueLength > 3 && toI32(this.input[nameEnd + 4]) !== PG_COMMA)) {
+        if (valueLength < 3 || !pgBytesAre(b, value, 3, "ISO")) {
           return this.fail(PG_ERR_SETTING)
         }
-      } else if (pgBytesAre(this.input, body, nameEnd - body, "TimeZone")) {
-        if (!pgBytesAre(this.input, nameEnd + 1, end - 2 - nameEnd, "UTC")) {
+        if (valueLength > 3) {
+          // The value runs past its fourth byte; the test states that bound for the prover.
+          if (value > toI32(b.length) - 4) {
+            return this.fail(PG_ERR_SETTING)
+          }
+          if (toI32(b[value + 3]) !== PG_COMMA) {
+            return this.fail(PG_ERR_SETTING)
+          }
+        }
+      } else if (pgBytesAre(b, body, nameLength, "TimeZone")) {
+        if (!pgBytesAre(b, value, valueLength, "UTC")) {
           return this.fail(PG_ERR_SETTING)
         }
-      } else if (pgBytesAre(this.input, body, nameEnd - body, "server_version")) {
-        this.serverVersion = String.fromBytes(this.input, nameEnd + 1, end - 1)
+      } else if (pgBytesAre(b, body, nameLength, "server_version")) {
+        this.serverVersion = String.fromBytes(b, value, valueEnd)
       }
       return PG_NEED_MORE
     }
@@ -1945,18 +1970,18 @@ export class PgConnection {
     }
     if (type === 75) {
       // 'K': BackendKeyData, the process id and the cancel key.
-      if (state !== PG_STATE_STARTING || end - body !== 8) {
+      if (state !== PG_STATE_STARTING || size !== 8) {
         return this.fail(state !== PG_STATE_STARTING ? PG_ERR_UNEXPECTED : PG_ERR_FRAME)
       }
-      this.backendPid = getI32BE(this.input, body)
+      this.backendPid = getI32BE(b, body)
       return PG_NEED_MORE
     }
     if (type === 90) {
       // 'Z': ReadyForQuery, and the transaction status.
-      if (end - body !== 1) {
+      if (size !== 1 || body >= toI32(b.length)) {
         return this.fail(PG_ERR_FRAME)
       }
-      const status: i32 = toI32(this.input[body])
+      const status: i32 = toI32(b[body])
       if (status !== 73 && status !== 84 && status !== 69) {
         return this.fail(PG_ERR_FRAME)
       }
@@ -1965,10 +1990,11 @@ export class PgConnection {
         this.state = PG_STATE_READY
         return PG_READY
       }
-      if (this.inFlight === 0 || (this.inFlight === 1 && this.groupOpen)) {
+      const inFlight: i32 = this.inFlight
+      if (inFlight <= 0 || (inFlight === 1 && this.groupOpen)) {
         return this.fail(PG_ERR_UNEXPECTED)
       }
-      this.inFlight -= 1
+      this.inFlight = inFlight - 1
       this.groupFailed = this.errorInGroup
       this.errorInGroup = false
       return PG_GROUP_DONE
@@ -1981,11 +2007,11 @@ export class PgConnection {
     }
     if (type === 67) {
       // 'C': CommandComplete, the tag.
-      if (end - body < 1 || pgFind(this.input, body, end, 0) !== end - 1) {
+      if (size < 1 || pgFind(b, body, end, 0) !== end - 1) {
         return this.fail(PG_ERR_FRAME)
       }
       this.tagStart = body
-      this.tagLength = end - 1 - body
+      this.tagLength = size - 1
       return PG_COMPLETE
     }
     if (type === 73) {
@@ -2003,7 +2029,7 @@ export class PgConnection {
     }
     if (type === 116) {
       // 't': ParameterDescription.
-      if (end - body < 2 || end - body !== toI32(getU16BE(this.input, body)) * 4 + 2) {
+      if (size < 2 || size !== toI32(getU16BE(b, body)) * 4 + 2) {
         return this.fail(PG_ERR_FRAME)
       }
       return PG_NEED_MORE
