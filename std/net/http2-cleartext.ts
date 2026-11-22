@@ -341,8 +341,13 @@ export class Http2CleartextServer {
 
   /** A free slot for `accept`: a closed one first, then the next never used; null when every slot is busy. */
   private take(): H2cSlot | null {
-    if (this.free.length > 0) {
-      return this.free.pop()
+    const free: H2cSlot[] = this.free
+    const f: i32 = toI32(free.length)
+    // `f > 0` proves the index and `free.length > 0` the `pop`, which the prover reads only off the array.
+    if (f > 0 && free.length > 0) {
+      const s: H2cSlot = free[f - 1]
+      free.pop()
+      return s
     }
     const k: i32 = toI32(this.held.length)
     if (k >= this.slots) {
