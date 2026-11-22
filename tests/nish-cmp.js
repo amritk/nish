@@ -20301,6 +20301,7 @@ const DECLARED = [
     ["tests/link/net_hpack_negative_resize/main.ts", "main.ll"],
     ["tests/link/net_hpack_negative_settings_limit/main.ts", "main.ll"],
     ["tests/link/net_hpack_negative_table_size/main.ts", "main.ll"],
+    ["tests/link/net_http3_malformed/main.ts", "hpack.ll"],
     ["tests/link/net_http2_frame/main.ts", "checks.ll"],
     ["tests/link/net_http2_frame/main.ts", "net_hpack_checks.ll"],
     ["tests/link/net_http2_frame_f64/main.ts", "net_hpack_checks.ll"],
