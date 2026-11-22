@@ -95,7 +95,6 @@ import {
   f25519Copy,
   f25519Decode,
   f25519Encode,
-  f25519EncodeInto,
   f25519Invert,
   f25519Mul,
   f25519Mul64,
@@ -581,8 +580,10 @@ const ed25519Decode = (bytes: u8[], s: Ed25519Scratch): Ed25519Point | null => {
   }
   const y: i64[] = f25519Decode(bytes)
   // f25519Decode takes y modulo p; re-encoding refuses every y of p or more.
-  const canonical: u8[] = new Array<u8>(32)
-  f25519EncodeInto(canonical, y)
+  const canonical: u8[] = f25519Encode(y)
+  if (toI32(canonical.length) !== 32) {
+    return null
+  }
   canonical[31] = canonical[31] | (bytes[31] & toU8(0x80))
   if (!ed25519SameBytes(canonical, bytes, ED25519_HALF)) {
     return null
@@ -617,8 +618,10 @@ const ed25519Decode = (bytes: u8[], s: Ed25519Scratch): Ed25519Point | null => {
     f25519Mul(x, x, ed25519SqrtM1())
   }
 
-  const xBytes: u8[] = new Array<u8>(32)
-  f25519EncodeInto(xBytes, x)
+  const xBytes: u8[] = f25519Encode(x)
+  if (toI32(xBytes.length) !== 32) {
+    return null
+  }
   if ((xBytes[0] & toU8(1)) !== sign) {
     if (ed25519SameBytes(xBytes, new Array<u8>(32), ED25519_HALF)) {
       return null

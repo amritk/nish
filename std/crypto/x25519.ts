@@ -526,13 +526,13 @@ const f25519DecodeInto = (f: i64[], bytes: u8[]): void => {
       b = b & toI64(0x7f)
     }
     acc = acc | (b << bits)
-    bits = f25519Add64(bits, toI64(8))
+    bits = bits + toI64(8)
     if (limb >= 0 && limb < 10) {
       const width: i64 = f25519Width(limb)
       if (bits >= width) {
         f[limb] = acc & f25519LimbMask(limb)
         acc = acc >> width
-        bits = f25519Sub64(bits, width)
+        bits = bits - width
         limb = limb + 1
       }
     }
@@ -565,15 +565,9 @@ export const f25519Encode = (f: i64[]): u8[] => {
 
 /**
  * `f25519Encode`'s reduction and packing, into `out`, 32 bytes. Apart for the
- * same reason as `f25519DecodeInto`, and so a caller holding a buffer of the
- * constant length 32 can index it with a proof.
- *
- * @param out The 32 bytes to write.
- * @param f The element, reduced.
- *
- * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ * same reason as `f25519DecodeInto`.
  */
-export const f25519EncodeInto = (out: u8[], f: i64[]): void => {
+const f25519EncodeInto = (out: u8[], f: i64[]): void => {
   const h: i64[] = new Array<i64>(10)
   f25519Copy(h, f)
   f25519Carry(h)
@@ -592,16 +586,16 @@ export const f25519EncodeInto = (out: u8[], f: i64[]): void => {
   let at: i32 = 0
   for (let i: i32 = 0; i < 10; i++) {
     acc = acc | (h[i] << bits)
-    bits = f25519Add64(bits, f25519Width(i))
-    while (bits >= toI64(8) && at >= 0 && at < 32 && at < toI32(out.length)) {
+    bits = bits + f25519Width(i)
+    while (bits >= toI64(8) && at >= 0 && at < 32) {
       out[at] = toU8(acc & toI64(0xff))
       acc = acc >> toI64(8)
-      bits = f25519Sub64(bits, toI64(8))
+      bits = bits - toI64(8)
       at = at + 1
     }
   }
   // 255 bits leave seven over: the last byte, with its top bit clear.
-  if (at >= 0 && at < 32 && at < toI32(out.length)) {
+  if (at >= 0 && at < 32) {
     out[at] = toU8(acc & toI64(0xff))
   }
 }
