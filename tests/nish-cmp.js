@@ -10155,6 +10155,8 @@ const HASH_MAC_KDF_CT_PROGRAMS = [
   "bench/jwt-verify/main.ts",
   "bench/p256.ts",
   "bench/pg-batch-clock.ts",
+  "bench/pg-carrier.ts",
+  "bench/pg-codec.ts",
   "bench/pg-decode/main.ts",
   "bench/quic-goodput.ts",
   "bench/sha256-block/main.ts",
@@ -11123,6 +11125,14 @@ const HASH_MAC_KDF_MOVES = [
     files: ["client.ll", "hkdf.ll", "hmac.ll", "record.ll", "tls.ll"],
     movedPrograms: ["bench/std-http1.ts"],
   },
+  {
+    files: ["client.ll", "hkdf.ll", "hmac.ll", "record.ll", "scram.ll", "tls.ll"],
+    movedPrograms: ["bench/pg-carrier.ts"],
+  },
+  {
+    files: ["hmac.ll", "scram.ll"],
+    movedPrograms: ["bench/pg-codec.ts"],
+  },
   { files: ["ct.ll"], movedPrograms: HASH_MAC_KDF_CT_PROGRAMS },
 ]
 const hashMacKdfDeclared = () =>
@@ -11331,6 +11341,7 @@ const DECLARED = [
     {
       "bench/http-app-carrier.ts": ["buffer-pool.ll"],
       "bench/http1-request/main.ts": ["buffer-pool.ll"],
+      "bench/pg-carrier.ts": ["buffer-pool.ll"],
       "bench/http1-server.ts": ["buffer-pool.ll"],
       "bench/quic-goodput.ts": ["buffer-pool.ll", "quic-stream.ll"],
       "bench/std-http1.ts": ["buffer-pool.ll", "record.ll"],
