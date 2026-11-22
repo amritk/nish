@@ -658,7 +658,7 @@ export class TlsTcpServer {
       this.setLinger(slot, TLS_TCP_LINGERED)
       return TLS_RECORD_DONE
     }
-    this.setLinger(slot, 0)
+    this.setLinger(slot, toI32(0))
     conn.wipeKeys()
     conn.release()
     return this.drain(slot)
