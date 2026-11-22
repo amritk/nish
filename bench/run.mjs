@@ -666,6 +666,10 @@ const STD_COUNTED = [
   { name: "std-threads", what: "scope spawns into proven slots, and parallelMapInto" },
   { name: "std-json-typed", what: "jsonDecode of a nested document into fresh objects" },
   { name: "std-cli-args", what: "Cli.parse of three command lines over one tree" },
+  { name: "std-net-quic-packet", what: "QUIC headers written and parsed, varints and packet numbers" },
+  { name: "std-net-tls-record", what: "TLS 1.3 records sealed and opened under AES-128-GCM" },
+  { name: "std-net-dns-message", what: "DNS queries built and captured replies parsed" },
+  { name: "std-net-http2-frame", what: "HTTP/2 frames parsed and their HPACK header blocks decoded" },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
