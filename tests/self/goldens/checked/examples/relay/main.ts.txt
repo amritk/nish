@@ -24890,15 +24890,15 @@ function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [
   sharedWrite: +0:7
   calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local -59:9 out: u8[][] (const)
-  local -58:9 n: i32 (const)
-  local -56:7 inside: string (let)
-  local -55:7 body: string[] (let)
-  local -54:7 shortSeen: boolean (let)
-  local -53:7 lineStart: i32 (let)
-  local -51:9 lineEnd: i32 (let)
-  local -46:11 next: i32 (const)
-  local -33:11 line: string (const)
+  local -62:9 out: u8[][] (const)
+  local -61:9 n: i32 (const)
+  local -59:7 inside: string (let)
+  local -58:7 body: string[] (let)
+  local -57:7 shortSeen: boolean (let)
+  local -56:7 lineStart: i32 (let)
+  local -54:9 lineEnd: i32 (let)
+  local -49:11 next: i32 (const)
+  local -34:11 line: string (const)
   local -31:11 length: i32 (const)
   callee -29:11 x509StartsWith -> @nish.x509StartsWith
   callee -29:50 x509EndsWith -> @nish.x509EndsWith
