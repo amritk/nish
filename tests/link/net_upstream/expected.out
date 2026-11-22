@@ -44,3 +44,4 @@ PASS  deadline: a call queued behind the connections cap fails UPSTREAM_E_TIMEOU
 PASS  connect: a refused connection fails the call UPSTREAM_E_CONNECT
 PASS  policy: an allowed name that resolves only to refused addresses is UPSTREAM_E_BLOCKED
 PASS  lookup: a name with no address is UPSTREAM_E_LOOKUP
+PASS  slot: a negative head room gives an empty head, not a panic

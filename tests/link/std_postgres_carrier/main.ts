@@ -8,8 +8,9 @@
 // server does, holds an Execute of `slow` until told to go on, closes the
 // connection on an Execute of `die` (and on a batch holding a key past 4999),
 // answers an Execute of `bad` (and a batch holding a key past 2999) with an
-// ErrorResponse, and answers the batcher's statement with a row `v<key>` for
-// each key below 1000. It counts the batcher's executions and the keys the
+// ErrorResponse, answers an Execute of `short`, `colpast` or `cellpast` with a
+// DataRow that does not add up, and answers the batcher's statement with a
+// row `v<key>` for each key below 1000. It counts the batcher's executions and the keys the
 // last one carried.
 //
 //   1. Routing: a plain query's row answers its request, a batch of keys
@@ -35,9 +36,14 @@
 //   7. Connects: a server that accepts and never answers fails the query at
 //      the connect timeout, a port with no listener fails it at once, and a
 //      full carrier answers PG_CARRIER_FULL.
+//   8. Hostile frames: a DataRow whose length is under its own 4 bytes, one
+//      whose column count is past the cells its frame holds, and one whose
+//      cell runs past the frame's end each fail their query as
+//      PG_CARRIER_FAILED with failure PG_ERR_FRAME, with no panic, and the
+//      next query is answered on a new connection.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
-import { PG_ERR_CLOSED, PG_ERR_NONE, PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgError, PgPool, pgTarget } from "nish/net/postgres"
+import { PG_ERR_CLOSED, PG_ERR_FRAME, PG_ERR_NONE, PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgError, PgPool, pgTarget } from "nish/net/postgres"
 import {
   PG_CARRIER_BUILD,
   PG_CARRIER_DONE,
@@ -79,6 +85,9 @@ const SLOW: i32 = 1
 const DIE: i32 = 2
 const USERS: i32 = 3
 const BAD: i32 = 4
+const SHORT: i32 = 5
+const COLPAST: i32 = 6
+const CELLPAST: i32 = 7
 
 // What a stand-in connection's bound statement is.
 const KIND_OTHER: i32 = 0
@@ -87,6 +96,9 @@ const KIND_SLOW: i32 = 2
 const KIND_DIE: i32 = 3
 const KIND_USERS: i32 = 4
 const KIND_BAD: i32 = 5
+const KIND_SHORT: i32 = 6
+const KIND_COLPAST: i32 = 7
+const KIND_CELLPAST: i32 = 8
 
 const ascii = (text: string): u8[] => {
   const out: u8[] = new Array<u8>(text.length)
@@ -269,7 +281,16 @@ class Backend {
     for (let k: i32 = 0; k < 8; k++) {
       this.conns.push(new BackendConn())
     }
-    this.names = [ascii("echo"), ascii("slow"), ascii("die"), ascii("users"), ascii("bad")]
+    this.names = [
+      ascii("echo"),
+      ascii("slow"),
+      ascii("die"),
+      ascii("users"),
+      ascii("bad"),
+      ascii("short"),
+      ascii("colpast"),
+      ascii("cellpast"),
+    ]
     this.peer = new Array<u8>(32)
   }
 
@@ -469,6 +490,25 @@ class Backend {
       this.holding = false
       c.row(this.names[1], ZERO, toI32(4))
       c.complete(toI32(1))
+    } else if (c.kind === KIND_SHORT) {
+      // A DataRow whose length, 3, is under its own 4 bytes.
+      c.byte(68)
+      c.int32(toI32(3))
+    } else if (c.kind === KIND_COLPAST) {
+      // Three columns, and the frame ends after the first cell.
+      c.begin(68)
+      c.int16(toI32(3))
+      c.int32(toI32(1))
+      c.byte(97)
+      c.end()
+    } else if (c.kind === KIND_CELLPAST) {
+      // One cell of 100 bytes, and the frame ends after 2 of them.
+      c.begin(68)
+      c.int16(toI32(1))
+      c.int32(toI32(100))
+      c.byte(97)
+      c.byte(98)
+      c.end()
     } else if (c.kind === KIND_USERS) {
       // `{5,6,2000}`: a row `v<key>`, ordinal, for each key below 1000.
       let rows: i32 = 0
@@ -541,6 +581,9 @@ class App {
     router.add("GET", "/die")
     router.add("GET", "/users/:id")
     router.add("GET", "/bad")
+    router.add("GET", "/short")
+    router.add("GET", "/colpast")
+    router.add("GET", "/cellpast")
     const limits = new HandlerLimits()
     limits.slots = 8
     const listener: i32 = tcpListen("127.0.0.1", 0, 64)
@@ -560,6 +603,9 @@ class App {
     this.pool.register("slow", "select 'slow'", types)
     this.pool.register("die", "select 'die'", types)
     this.pool.register("bad", "select * from missing", types)
+    this.pool.register("short", "select 'short'", types)
+    this.pool.register("colpast", "select 'colpast'", types)
+    this.pool.register("cellpast", "select 'cellpast'", types)
     const carrierLimits = new PgCarrierLimits()
     this.carrier = new PgCarrier(carrierLimits, this.pool, pgTarget("127.0.0.1", this.backend.port), this.h)
     const batch = new PgBatchConfig()
@@ -592,7 +638,7 @@ class App {
     let q: i32 = PG_CARRIER_FULL
     if (req.route === USERS) {
       q = this.carrier.runInt(req, this.users, toI64(req.paramDecimal(ZERO)), USERS)
-    } else if (req.route === ECHO || req.route === SLOW || req.route === DIE || req.route === BAD) {
+    } else if (req.route === ECHO || req.route === SLOW || req.route === DIE || req.route === BAD || req.route >= SHORT) {
       q = this.carrier.run(req, req.route)
     } else {
       this.h.refuse(req)
@@ -628,6 +674,12 @@ class App {
           conn.bindStart("slow")
         } else if (c.tag === BAD) {
           conn.bindStart("bad")
+        } else if (c.tag === SHORT) {
+          conn.bindStart("short")
+        } else if (c.tag === COLPAST) {
+          conn.bindStart("colpast")
+        } else if (c.tag === CELLPAST) {
+          conn.bindStart("cellpast")
         } else {
           conn.bindStart("die")
         }
@@ -1101,6 +1153,22 @@ const connects = (app: App): void => {
   refused.close()
 }
 
+/** The query at `path`, which the stand-in answers with a DataRow that does not add up, fails as a broken frame, and the next query is answered on a new connection. */
+const hostile = (app: App, path: string, tag: i32, what: string): void => {
+  const c = connect(app)
+  const accepted: i32 = app.backend.accepted
+  sendAll(app, c, ascii(`GET ${path} HTTP/1.1\r\nHost: t\r\n\r\n`))
+  check(app, `a DataRow with ${what} is the program's 503`, response(app, c) && answer(c, 503, ascii("")))
+  check(
+    app,
+    "as PG_CARRIER_FAILED with failure PG_ERR_FRAME",
+    app.lastFailedTag === tag && app.lastFailure === PG_ERR_FRAME && app.lastSocketError === 0,
+  )
+  sendAll(app, c, ascii("GET /echo/5 HTTP/1.1\r\nHost: t\r\n\r\n"))
+  check(app, "the next query is answered on a new connection", response(app, c) && answer(c, 200, ascii("5")) && app.backend.accepted > accepted)
+  netClose(c.fd)
+}
+
 export const main = (): i32 => {
   const app = new App()
   routing(app)
@@ -1110,6 +1178,9 @@ export const main = (): i32 => {
   flat(app)
   closing(app)
   connects(app)
+  hostile(app, "/short", SHORT, "a truncated length")
+  hostile(app, "/colpast", COLPAST, "a column count past the frame")
+  hostile(app, "/cellpast", CELLPAST, "a cell cut short")
   app.carrier.close()
   app.pool.dispose()
   return app.failures === 0 ? 0 : 1

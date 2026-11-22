@@ -40,6 +40,7 @@ import {
   HTTP1_E_HEADER_LIMIT,
   HTTP1_E_INFORMATIONAL_LIMIT,
   HTTP1_E_LENGTH,
+  HTTP1_E_MEMORY_LIMIT,
   HTTP1_E_NONE,
   HTTP1_E_STATUS_LINE,
   HTTP1_E_STATUS_LINE_LIMIT,
@@ -1060,6 +1061,17 @@ export const http1ClientChecks = (): i32 => {
     '200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody "hello world"\nneeds more'
   );
   t.eqStr("the body read until close at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\n\r\nhello", closing()), '200 "OK" 1.1 close length -1 []\nbody "hello"\nclosed');
+  const lowered: Http1ResponseParser = limitedParser(toI32(3), toI32(5));
+  const loweredHead: u8[] = bytesOf("HTTP/1.1 200 OK\r\n\r\nhel");
+  expectAs(lowered, closing());
+  lowered.feed(loweredHead, zero, toI32(loweredHead.length));
+  t.eqI32("a body read until close, part-read: the head", lowered.next(), HTTP1_HEAD);
+  t.eqI32("a body read until close, part-read: three bytes", lowered.next(), HTTP1_BODY);
+  lowered.maxBody = toI64(1);
+  const loweredTail: u8[] = bytesOf("lo");
+  lowered.feed(loweredTail, zero, toI32(loweredTail.length));
+  lowered.next();
+  t.eqI32("maxBody lowered below the bytes read is over the limit, not unlimited", lowered.error, HTTP1_E_BODY_LIMIT);
   const trailer1: string = "Expires: never\r\n\r\n";
   atCap(t, "the trailer section", toI32(4), toI32(trailer1.length), `HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n${trailer1}`, plain(), HTTP1_E_TRAILER_LIMIT);
   t.eqStr(
@@ -1160,6 +1172,19 @@ export const http1ClientChecks = (): i32 => {
   );
   const twoFinals: string = `${continues}HTTP/1.1 204 No Content\r\n\r\n${continues}HTTP/1.1 204 No Content\r\n\r\n`;
   t.eqStr("the interim count starts again for each request", outcomeOf(smallParser(), twoFinals, plain()), "ends 2, error 0");
+  // One feed of 2^30 + 1 bytes is refused before any of it is copied: the
+  // parser holds at most 2^30 bytes fed and not read.
+  const floodBytes: i32 = 1073741825;
+  const flood: u8[] = new Array<u8>(floodBytes);
+  const flooded: Http1ResponseParser = smallParser();
+  flooded.feed(flood, zero, toI32(flood.length));
+  const floodedNext: boolean = flooded.next() === HTTP1_ERROR;
+  t.eqStr(
+    "refused: more than 2^30 bytes fed and not read",
+    `${floodedNext}, error ${flooded.error}, ${flooded.buffered()} buffered`,
+    `true, error ${HTTP1_E_MEMORY_LIMIT}, 0 buffered`
+  );
+  t.eqI32("HTTP1_E_MEMORY_LIMIT is 18, after every older code", HTTP1_E_MEMORY_LIMIT, toI32(18));
 
   // --- The writer ------------------------------------------------------------
   const none: i64 = toI64(HTTP1_NO_BODY);

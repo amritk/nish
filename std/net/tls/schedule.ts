@@ -75,7 +75,7 @@ import {
   hmacSha384,
   hmacSha384Secret,
 } from "nish/crypto/hmac"
-import { tlsHexInto } from "nish/net/tls/codec"
+import { tlsCopyWindow, tlsHexInto } from "nish/net/tls/codec"
 import { timingSafeEqualAt } from "nish/crypto/ct"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
@@ -206,6 +206,13 @@ export const tlsEmptyHash = (hashLength: i32): u8[] => {
 }
 
 /**
+ * HashLen zero bytes in a fresh array: 48 for SHA-384 and 32 for any other
+ * value, as `tlsEmptyHash` reads a hash length. A `u16` length is one an
+ * allocation never refuses.
+ */
+const tlsHashZeros = (hashLength: i32): u8[] => new Array<u8>(toU16(hashLength === 48 ? 48 : 32))
+
+/**
  * Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes
  * held as a `Secret`.
  *
@@ -230,8 +237,8 @@ export const tlsDeriveSecret = (
  * @returns A fresh `Secret` holding the early secret, which the caller owns and wipes.
  */
 export const tlsEarlySecret = (hashLength: i32): Secret<u8[]> => {
-  const salt: Secret<u8[]> = secret(new Array<u8>(hashLength))
-  const ikm: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const salt: Secret<u8[]> = secret(tlsHashZeros(hashLength))
+  const ikm: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   const early: Secret<u8[]> = tlsExtract(hashLength, salt, ikm)
   wipe(salt)
   wipe(ikm)
@@ -248,7 +255,7 @@ export const tlsEarlySecret = (hashLength: i32): Secret<u8[]> => {
  * @returns A fresh `Secret` holding the early secret, which the caller owns and wipes.
  */
 export const tlsPskEarlySecret = (hashLength: i32, psk: Secret<u8[]>): Secret<u8[]> => {
-  const salt: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const salt: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   const early: Secret<u8[]> = tlsExtract(hashLength, salt, psk)
   wipe(salt)
   return early
@@ -327,7 +334,7 @@ export const tlsMasterSecret = (hashLength: i32, handshakeSecret: Secret<u8[]>):
     "derived",
     tlsEmptyHash(hashLength)
   )
-  const zeros: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const zeros: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   const master: Secret<u8[]> = tlsExtract(hashLength, derived, zeros)
   wipe(derived)
   wipe(zeros)
@@ -479,18 +486,27 @@ export class TlsTranscript {
       hmacCopySha256(this.sha256, this.twin256)
       digest = this.twin256.digest()
     }
-    for (let k: i32 = 0; k < toI32(digest.length) && at + k >= 0 && at + k < toI32(out.length); k++) {
-      out[at + k] = digest[k]
+    if (at < 0) {
+      return
+    }
+    // A position past an `i32` wraps negative and is skipped, as one past `out` is.
+    for (let k: i32 = 0; k < toI32(digest.length); k++) {
+      const to: i32 = toI32(toI64(at) + toI64(k))
+      if (to >= 0 && to < toI32(out.length)) {
+        out[to] = digest[k]
+      }
     }
   }
 
   /**
    * The transcript hash of everything absorbed so far, in a fresh array; the transcript goes on.
    *
-   * @returns The `hashLength` bytes of the hash so far. It is public, so it is plain.
+   * @returns The `hashLength` bytes of the hash so far, or none while no hash is named (a
+   *   `hashLength` of 0). It is public, so it is plain.
    */
   hash(): u8[] {
-    const out: u8[] = new Array<u8>(this.hashLength)
+    const length: i32 = this.hashLength
+    const out: u8[] = length === 32 || length === 48 ? tlsHashZeros(length) : []
     this.hashInto(out, TLS_SCHEDULE_FROM)
     return out
   }
@@ -583,11 +599,11 @@ export const tlsMasterSecretInto = (
   handshakeSecret: u8[],
   out: u8[]
 ): void => {
-  const empty: u8[] = new Array<u8>(hashLength)
+  const empty: u8[] = tlsHashZeros(hashLength)
   tlsEmptyHashInto(hashLength, empty)
-  const salt: u8[] = new Array<u8>(hashLength)
+  const salt: u8[] = tlsHashZeros(hashLength)
   tlsDeriveSecretInto(kdf, hashLength, handshakeSecret, "derived", empty, TLS_SCHEDULE_FROM, salt)
-  hkdfExtractInto(kdf, hashLength, salt, new Array<u8>(hashLength), out, TLS_SCHEDULE_FROM)
+  hkdfExtractInto(kdf, hashLength, salt, tlsHashZeros(hashLength), out, TLS_SCHEDULE_FROM)
   secureZero(salt)
 }
 
@@ -615,7 +631,7 @@ export const tlsFinishedVerifyDataInto = (
   at: i32
 ): void => {
   const none: u8[] = []
-  const finishedKey: u8[] = new Array<u8>(hashLength)
+  const finishedKey: u8[] = tlsHashZeros(hashLength)
   hkdfExpandLabelInto(
     kdf,
     hashLength,
@@ -652,7 +668,7 @@ export const tlsFinishedVerifyDataInto = (
  * @param out Where the early secret is written, from index 0; the caller owns and wipes it.
  */
 export const tlsPskEarlySecretInto = (kdf: HkdfScratch, hashLength: i32, psk: u8[], out: u8[]): void => {
-  hkdfExtractInto(kdf, hashLength, new Array<u8>(hashLength), psk, out, TLS_SCHEDULE_FROM)
+  hkdfExtractInto(kdf, hashLength, tlsHashZeros(hashLength), psk, out, TLS_SCHEDULE_FROM)
 }
 
 /**
@@ -665,7 +681,7 @@ export const tlsPskEarlySecretInto = (kdf: HkdfScratch, hashLength: i32, psk: u8
  * @param out Where the binder key is written, from index 0; the caller owns and wipes it.
  */
 export const tlsBinderKeyInto = (kdf: HkdfScratch, hashLength: i32, earlySecret: u8[], out: u8[]): void => {
-  const empty: u8[] = new Array<u8>(hashLength)
+  const empty: u8[] = tlsHashZeros(hashLength)
   tlsEmptyHashInto(hashLength, empty)
   tlsDeriveSecretInto(kdf, hashLength, earlySecret, "res binder", empty, TLS_SCHEDULE_FROM, out)
 }
@@ -687,7 +703,7 @@ export const tlsHandshakeSaltInto = (
   earlySecret: u8[],
   out: u8[]
 ): void => {
-  const empty: u8[] = new Array<u8>(hashLength)
+  const empty: u8[] = tlsHashZeros(hashLength)
   tlsEmptyHashInto(hashLength, empty)
   tlsDeriveSecretInto(kdf, hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, out)
 }
@@ -765,7 +781,7 @@ export const tlsBinderVerify = (
   if (binderLength !== hashLength) {
     return false
   }
-  const expected: u8[] = new Array<u8>(hashLength)
+  const expected: u8[] = tlsHashZeros(hashLength)
   tlsFinishedVerifyDataInto(kdf, hashLength, binderKey, truncatedHash, hashOff, expected, TLS_SCHEDULE_FROM)
   const verified: boolean = timingSafeEqualAt(binder, binderOff, expected, TLS_SCHEDULE_FROM, hashLength)
   secureZero(expected)
@@ -844,11 +860,16 @@ const tlsHeldCopy = (held: u8[], from: u8[]): void => {
   }
 }
 
-/** `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the context a held form hands HKDF. */
-const tlsHeldWindow = (hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
-  const window: u8[] = new Array<u8>(hashLength)
-  for (let k: i32 = 0; k < toI32(window.length); k++) {
-    window[k] = transcriptHash[hashOff + k]
+/**
+ * `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the
+ * context a held form hands HKDF. Panics naming `caller` when the window is
+ * not inside `transcriptHash`, as `tlsHeldCheck` does for a wrong hash length:
+ * a shorter context would derive another secret without a word.
+ */
+const tlsHeldWindow = (caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
+  const window: u8[] = tlsCopyWindow(transcriptHash, hashOff, hashLength)
+  if (toI32(window.length) !== hashLength) {
+    panic(`${caller}: a transcript hash at ${hashOff} outside its ${transcriptHash.length} bytes`)
   }
   return window
 }
@@ -881,8 +902,8 @@ const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, 
  * `tlsDeriveSecret` into a held `Secret`: Derive-Secret (RFC 8446 §7.1) of
  * `prk` with `label` and the transcript hash `transcriptHash[hashOff ..
  * hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
- * may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
- * HashLen bytes.
+ * may be `prk`. Panics unless `hashLength` is 32 or 48, both hold HashLen
+ * bytes and the transcript hash's window is inside `transcriptHash`.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param prk The held stage of the schedule to derive from. It is only overwritten when it is also `dst`.
@@ -901,7 +922,7 @@ export const tlsDeriveSecretHeld = (
 ): void => {
   tlsHeldCheck("tlsDeriveSecretHeld", hashLength, prk)
   tlsHeldCheck("tlsDeriveSecretHeld", hashLength, dst)
-  const context: u8[] = tlsHeldWindow(hashLength, transcriptHash, hashOff)
+  const context: u8[] = tlsHeldWindow("tlsDeriveSecretHeld", hashLength, transcriptHash, hashOff)
   if (hashLength === SHA384_SIZE) {
     hkdfExpandLabelSha384Held(dst, prk, label, context)
   } else {
@@ -928,15 +949,11 @@ export const tlsHandshakeSecretHeld = (
   dst: Secret<u8[]>
 ): void => {
   tlsHeldCheck("tlsHandshakeSecretHeld", hashLength, dst)
-  const derived: Secret<u8[]> = secret(new Array<u8>(hashLength))
-  tlsDeriveSecretHeld(
-    hashLength,
-    earlySecret,
-    "derived",
-    tlsEmptyHash(hashLength),
-    TLS_SCHEDULE_FROM,
-    derived
-  )
+  // Sized by the empty hash, not by a second test of `hashLength`, which `-O2`
+  // would thread into a copy of the derivation (and its wipes) for each size.
+  const empty: u8[] = tlsEmptyHash(hashLength)
+  const derived: Secret<u8[]> = secret(new Array<u8>(toU16(empty.length)))
+  tlsDeriveSecretHeld(hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, derived)
   tlsExtractHeld(hashLength, derived, ecdhe, dst)
   wipe(derived)
 }
@@ -958,7 +975,7 @@ export const tlsMasterSecretHeld = (
   dst: Secret<u8[]>
 ): void => {
   tlsHeldCheck("tlsMasterSecretHeld", hashLength, dst)
-  const derived: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const derived: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   tlsDeriveSecretHeld(
     hashLength,
     handshakeSecret,
@@ -967,7 +984,7 @@ export const tlsMasterSecretHeld = (
     TLS_SCHEDULE_FROM,
     derived
   )
-  const zeros: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const zeros: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   tlsExtractHeld(hashLength, derived, zeros, dst)
   wipe(derived)
   wipe(zeros)
@@ -979,7 +996,8 @@ export const tlsMasterSecretHeld = (
  * `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
  * §4.4.4). The finished key is held and wiped before it returns;
  * `verify_data` goes on the wire, so it is plain. Panics unless `hashLength`
- * is 32 or 48 and `baseKey` holds HashLen bytes.
+ * is 32 or 48, `baseKey` holds HashLen bytes and the transcript hash's window
+ * is inside `transcriptHash`.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param baseKey The sender's held handshake traffic secret. It stays the caller's: this does not wipe it.
@@ -994,14 +1012,15 @@ export const tlsFinishedVerifyDataHeld = (
   hashOff: i32
 ): u8[] => {
   tlsHeldCheck("tlsFinishedVerifyDataHeld", hashLength, baseKey)
+  // Refused before the finished key exists, so a panic leaves no key unwiped.
+  const transcript: u8[] = tlsHeldWindow("tlsFinishedVerifyDataHeld", hashLength, transcriptHash, hashOff)
   const none: u8[] = []
-  const finishedKey: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const finishedKey: Secret<u8[]> = secret(tlsHashZeros(hashLength))
   if (hashLength === SHA384_SIZE) {
     hkdfExpandLabelSha384Held(finishedKey, baseKey, "finished", none)
   } else {
     hkdfExpandLabelSha256Held(finishedKey, baseKey, "finished", none)
   }
-  const transcript: u8[] = tlsHeldWindow(hashLength, transcriptHash, hashOff)
   const verifyData: u8[] =
     hashLength === SHA384_SIZE
       ? hmacSha384Secret(finishedKey, transcript)

@@ -280,7 +280,7 @@ class Http3Connection
 
 | Member | |
 | --- | --- |
-| `new Http3Connection(config: Http3Config, quic: QuicConnection)` | A connection under `config` over `quic`, whose configuration must let a HEADERS frame of `maxFieldSectionSize` fit half a stream's buffer, and one on every request stream fit half the connection's window, and let the client open the three unidirectional streams it needs and this side open its own three (§6.2). A cap out of range panics. |
+| `new Http3Connection(config: Http3Config, quic: QuicConnection)` | A connection under `config` over `quic`, whose configuration must let a HEADERS frame of `maxFieldSectionSize` fit half a stream's buffer, and one on every request stream fit half the connection's window, and let the client open the three unidirectional streams it needs and this side open its own three (§6.2). Each QUIC stream limit is at most 1,024. A cap out of range panics. |
 | `data: u8[]` | H3_DATA's bytes, and where a payload being skipped is read to: a `bodyChunk`-byte buffer borrowed from `dataPool` for the read that needs it and held while an H3_DATA window is live, else an empty array. Any event but H3_DATA gives the buffer back, zeroed as far as reads wrote. |
 | `dataLength: i32` | H3_DATA's window length in bytes, 1 to `bodyChunk`; valid until the next `next()`. |
 | `dataPool: BufferPool` | Where `data` is borrowed from: the connection's own pool until its server lends it the server's. |

@@ -29,23 +29,25 @@ trail: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=false first=t
 connected 2 of 2
 quick: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
 cellpast: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+colpast: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
 negative: ok=false failure=1 socket=0 rows=0 tag= reusable=false
-connected 2 of 2
 slack: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
 unended: ok=false failure=1 socket=0 rows=0 tag= reusable=false
-connected 2 of 2
 noend: ok=false failure=1 socket=0 rows=0 tag= reusable=false
-reshape: ok=false failure=1 socket=0 rows=1 tag= reusable=false first=a
 connected 2 of 2
+reshape: ok=false failure=1 socket=0 rows=1 tag= reusable=false first=a
 midframe: ok=false failure=9 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
 large: ok=true failure=0 socket=0 rows=2 tag=SELECT 2 reusable=true first=s
 large cell: 20000 bytes
 split: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=p
 fat: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=300 bytes
 manyc: ok=false failure=2 socket=0 rows=0 tag=UPDATE 1 reusable=true
 manye: ok=false failure=2 socket=0 rows=0 tag= reusable=true
-live after the hostile frames: 1, dropped 15
+live after the hostile frames: 2, dropped 16
 a claim with every connection held: -2 after 1 wait
-statements seen: 41
-connections made: 16
+statements seen: 43
+connections made: 18
 a server that never answers its startup: 0 live, 0 made

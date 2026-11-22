@@ -185,9 +185,11 @@ byte 0x5c, repeated a block long. The key is absorbed into both hashers in
 the constructor, so a `HmacSha256` is a keyed inner hash waiting for the
 message and a keyed outer hash waiting for the inner digest.
 
-Like the hashers underneath, a `digest` ends the computation: a later
-`update` or a second `digest` panics in the hasher it reaches, and so does
-a window outside its buffer. The only branch on the key is on its length,
+A `digest` ends the computation: a later `update` or a second `digest`
+panics, and so does a window outside its buffer. For SHA-384 and SHA-512
+the inner hasher panics. For SHA-256 the inner `Sha256` answers a second
+digest with the digest of its wiped, all-zero state, so the panic comes
+from the outer hasher's `update`, before anything is written. The only branch on the key is on its length,
 which HMAC does not keep secret; a received tag is compared with
 `timingSafeEqual`, never `===`.
 
@@ -395,10 +397,10 @@ Where the tag starts in `tag`.
 
 The HMAC-SHA-256 of all of `data` under `key`, as a fresh 32-byte array.
 
-`data` longer than 2^31 - 1 bytes panics, as `sha256` does and for its
-reason: under `--number-mode f64` the tag would be of a prefix, and a tag
-that verifies every message sharing that prefix is a forgery. A key that
-long panics in the constructor for the same reason.
+`data` longer than 2^31 - 1 bytes (possible under `--number-mode f64`) is
+MACed whole, as `sha256` hashes it, never cut to a prefix: a tag that
+verified every message sharing a prefix would be a forgery. A key that long
+is hashed whole in the constructor for the same reason.
 
 ```ts
 const hmacSha256: (key: u8[], data: u8[]) => u8[]
@@ -494,7 +496,7 @@ The tag to check, as received.
 ### hmacSha384
 
 The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array.
-`data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+`data` longer than 2^31 - 1 bytes is MACed whole, as in `hmacSha256`.
 
 ```ts
 const hmacSha384: (key: u8[], data: u8[]) => u8[]
@@ -587,7 +589,7 @@ The tag to check, as received.
 ### hmacSha512
 
 The HMAC-SHA-512 of all of `data` under `key`, as a fresh 64-byte array.
-`data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+`data` longer than 2^31 - 1 bytes is MACed whole, as in `hmacSha256`.
 
 ```ts
 const hmacSha512: (key: u8[], data: u8[]) => u8[]
@@ -800,7 +802,7 @@ class HmacSha256
 | `innerDigest: u8[]` | Where `digestInto` puts the inner digest on its way into `outer`, so that it allocates nothing; zero except during that call, which wipes it. |
 | `outer: Sha256` | H(K XOR opad, …), fed the key block in the constructor and the inner digest last. |
 | `digest(): u8[]` | Ends the computation and wipes both hashers and the inner digest. The tag is the one allocation. |
-| `digestInto(out: u8[], at: i32): void` | Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and wipes both hashers and the inner digest, with nothing allocated. A window outside `out` panics before anything is written; so does a second `digest` or `digestInto`, in the inner hasher. |
+| `digestInto(out: u8[], at: i32): void` | Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and wipes both hashers and the inner digest, with nothing allocated. A window outside `out` panics before anything is written; so does a second `digest` or `digestInto`, in the outer hasher's `update`. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. |
 
 ### HmacSha256Scratch

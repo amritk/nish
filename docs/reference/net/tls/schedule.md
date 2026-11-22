@@ -506,8 +506,8 @@ A fresh `Secret` holding the HashLen derived bytes, which the caller owns and wi
 `tlsDeriveSecret` into a held `Secret`: Derive-Secret (RFC 8446 §7.1) of
 `prk` with `label` and the transcript hash `transcriptHash[hashOff ..
 hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
-may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
-HashLen bytes.
+may be `prk`. Panics unless `hashLength` is 32 or 48, both hold HashLen
+bytes and the transcript hash's window is inside `transcriptHash`.
 
 ```ts
 const tlsDeriveSecretHeld: (
@@ -798,7 +798,8 @@ the HMAC of `transcriptHash[hashOff .. hashOff + hashLength)` under
 `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
 §4.4.4). The finished key is held and wiped before it returns;
 `verify_data` goes on the wire, so it is plain. Panics unless `hashLength`
-is 32 or 48 and `baseKey` holds HashLen bytes.
+is 32 or 48, `baseKey` holds HashLen bytes and the transcript hash's window
+is inside `transcriptHash`.
 
 ```ts
 const tlsFinishedVerifyDataHeld: (

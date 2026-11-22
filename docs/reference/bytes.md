@@ -36,6 +36,14 @@ import {
   skipJsonPlain,
   skipJsonText,
   tryCopyBytes,
+  tryGetI32LE,
+  tryGetI64LE,
+  tryGetU32LE,
+  tryGetU64LE,
+  trySetI32LE,
+  trySetI64LE,
+  trySetU32LE,
+  trySetU64LE,
 } from "nish/bytes";
 ```
 
@@ -233,6 +241,54 @@ The first index in `[from, to)` whose byte a JSON writer cannot copy as itself �
 <scalar-card title="try​Copy​Bytes" icon="phosphor/regular/function" href="#trycopybytes">
 
 `copyBytes` that answers `false`, and writes nothing, where `copyBytes` panics: for a negative `count` or a range that does not lie inside its array.
+
+</scalar-card>
+
+<scalar-card title="try​Get​I32​LE" icon="phosphor/regular/function" href="#trygeti32le">
+
+`getI32LE` that answers an offset whose four bytes do not all lie in `b` as `Err`, where `getI32LE` panics.
+
+</scalar-card>
+
+<scalar-card title="try​Get​I64​LE" icon="phosphor/regular/function" href="#trygeti64le">
+
+`getI64LE` that answers an offset whose eight bytes do not all lie in `b` as `Err`, where `getI64LE` panics.
+
+</scalar-card>
+
+<scalar-card title="try​Get​U32​LE" icon="phosphor/regular/function" href="#trygetu32le">
+
+`getU32LE` that answers an offset whose four bytes do not all lie in `b` as `Err`, where `getU32LE` panics `index`: the form a strict module reads a record it did not size itself with.
+
+</scalar-card>
+
+<scalar-card title="try​Get​U64​LE" icon="phosphor/regular/function" href="#trygetu64le">
+
+`getU64LE` that answers an offset whose eight bytes do not all lie in `b` as `Err`, where `getU64LE` panics.
+
+</scalar-card>
+
+<scalar-card title="try​Set​I32​LE" icon="phosphor/regular/function" href="#tryseti32le">
+
+`setI32LE` that answers `false`, and writes nothing, where `setI32LE` panics.
+
+</scalar-card>
+
+<scalar-card title="try​Set​I64​LE" icon="phosphor/regular/function" href="#tryseti64le">
+
+`setI64LE` that answers `false`, and writes nothing, where `setI64LE` panics.
+
+</scalar-card>
+
+<scalar-card title="try​Set​U32​LE" icon="phosphor/regular/function" href="#trysetu32le">
+
+`setU32LE` that answers `false`, and writes nothing, where `setU32LE` panics: for an offset whose four bytes do not all lie in `b`.
+
+</scalar-card>
+
+<scalar-card title="try​Set​U64​LE" icon="phosphor/regular/function" href="#trysetu64le">
+
+`setU64LE` that answers `false`, and writes nothing, where `setU64LE` panics: for an offset whose eight bytes do not all lie in `b`.
 
 </scalar-card>
 
@@ -1244,5 +1300,274 @@ How many bytes to copy; zero copies nothing.
 
 `true` once the bytes are copied, or `false` when either range
   lies outside its array and nothing was written.
+
+</scalar-field>
+
+### tryGetI32LE
+
+`getI32LE` that answers an offset whose four bytes do not all lie in `b`
+as `Err`, where `getI32LE` panics.
+
+```ts
+const tryGetI32LE: (
+  b: u8[],
+  off: i32,
+) => Result<i32, string>
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 3]`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;i32, string&gt;">
+
+The number read, from -2^31 to 2^31 - 1, or `Err` naming the
+  offset and the array's length when a byte of the four lies outside `b`.
+
+</scalar-field>
+
+### tryGetI64LE
+
+`getI64LE` that answers an offset whose eight bytes do not all lie in `b`
+as `Err`, where `getI64LE` panics.
+
+```ts
+const tryGetI64LE: (
+  b: u8[],
+  off: i32,
+) => Result<i64, string>
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;i64, string&gt;">
+
+The number read, from -2^63 to 2^63 - 1, or `Err` naming the
+  offset and the array's length when a byte of the eight lies outside `b`.
+
+</scalar-field>
+
+### tryGetU32LE
+
+`getU32LE` that answers an offset whose four bytes do not all lie in `b`
+as `Err`, where `getU32LE` panics `index`: the form a strict module reads a
+record it did not size itself with.
+
+```ts
+const tryGetU32LE: (
+  b: u8[],
+  off: i32,
+) => Result<u32, string>
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 3]`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;u32, string&gt;">
+
+The number read, or `Err` naming the offset and the array's length
+  when a byte of the four lies outside `b`.
+
+</scalar-field>
+
+### tryGetU64LE
+
+`getU64LE` that answers an offset whose eight bytes do not all lie in `b`
+as `Err`, where `getU64LE` panics.
+
+```ts
+const tryGetU64LE: (
+  b: u8[],
+  off: i32,
+) => Result<u64, string>
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;u64, string&gt;">
+
+The number read, or `Err` naming the offset and the array's length
+  when a byte of the eight lies outside `b`.
+
+</scalar-field>
+
+### trySetI32LE
+
+`setI32LE` that answers `false`, and writes nothing, where `setI32LE`
+panics.
+
+```ts
+const trySetI32LE: (b: u8[], off: i32, v: i32) => boolean
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the four at `off` change.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 3]`.
+
+</scalar-field>
+
+<scalar-field name="v" type="i32" required>
+
+The number to store, as its two's-complement bits.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` once the bytes are written, or `false` when a byte of the
+  four lies outside `b` and nothing was written.
+
+</scalar-field>
+
+### trySetI64LE
+
+`setI64LE` that answers `false`, and writes nothing, where `setI64LE`
+panics.
+
+```ts
+const trySetI64LE: (b: u8[], off: i32, v: i64) => boolean
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`.
+
+</scalar-field>
+
+<scalar-field name="v" type="i64" required>
+
+The number to store, as its two's-complement bits.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` once the bytes are written, or `false` when a byte of the
+  eight lies outside `b` and nothing was written.
+
+</scalar-field>
+
+### trySetU32LE
+
+`setU32LE` that answers `false`, and writes nothing, where `setU32LE`
+panics: for an offset whose four bytes do not all lie in `b`.
+
+```ts
+const trySetU32LE: (b: u8[], off: i32, v: u32) => boolean
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the four at `off` change.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 3]`.
+
+</scalar-field>
+
+<scalar-field name="v" type="u32" required>
+
+The number to store.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` once the bytes are written, or `false` when a byte of the
+  four lies outside `b` and nothing was written.
+
+</scalar-field>
+
+### trySetU64LE
+
+`setU64LE` that answers `false`, and writes nothing, where `setU64LE`
+panics: for an offset whose eight bytes do not all lie in `b`.
+
+```ts
+const trySetU64LE: (b: u8[], off: i32, v: u64) => boolean
+```
+
+<scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`.
+
+</scalar-field>
+
+<scalar-field name="v" type="u64" required>
+
+The number to store.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` once the bytes are written, or `false` when a byte of the
+  eight lies outside `b` and nothing was written.
 
 </scalar-field>

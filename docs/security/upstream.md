@@ -40,7 +40,7 @@ connection reused without a look at what the origin did to it while idle
 
 | File | Functions |
 | --- | --- |
-| `std/net/upstream.ts` | `UpstreamLimits`; `UpstreamResponse`; `Upstream` (`settle`, `fail`, `get`, `ready`, `take`, `release`, `pending`, `openConnections`, `pump`, `dispatch`, `idle`, `usable`, `connect`, `service`, `send`, `receive`, `parse`, `finish`, `end`, `interest`, `close`); `UpstreamConnection`; the helpers `upstreamParser`, `upstreamAppend` |
+| `std/net/upstream.ts` | `UpstreamLimits`; `UpstreamResponse`; `Upstream` (`slot`, `settle`, `fail`, `get`, `ready`, `take`, `release`, `pending`, `openConnections`, `pump`, `dispatch`, `idle`, `usable`, `connect`, `service`, `send`, `receive`, `parse`, `finish`, `end`, `interest`, `close`); `UpstreamConnection`; `UpstreamQueue`; the helpers `upstreamParser`, `upstreamAppend`, `upstreamBytes`, `upstreamSlots`, `upstreamToken` |
 
 The codec's spans mode, added for UPSTREAM-8, is
 [http1-client-codec.md](http1-client-codec.md)'s to review, with the rest of the codec.

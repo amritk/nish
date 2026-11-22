@@ -1,6 +1,9 @@
-// Opt-out (`--allow-panics`): calls into `std/json` and `std/json-tokenizer`
-// reach their panic sites; this file keeps none of its own. Follow-up: make
-// those modules panic-free, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
+// nothing in `std/bytes` is reached. The one site its calls still reach is the
+// `String.fromBytes` slice in `std/json-typed` (`JsonDecoder.text`'s no-escape
+// path, std/json-typed.ts:899), which the compiler records as unproven even
+// under its range guard. Once that slice is proven, build this file without
+// `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's

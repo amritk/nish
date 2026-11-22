@@ -4,6 +4,8 @@ PASS  tlsWriteNewSessionTicket at offset 5, from nonce offset 3 and ticket offse
 PASS  and wrote the same bytes there
 PASS  and left the five bytes before it alone
 PASS  and the two after it
+PASS  tlsWriteNewSessionTicket refuses a 256-byte nonce with -1
+PASS  tlsEncodeNewSessionTicket answers empty for a 65,536-byte ticket
 PASS  tlsResumptionPsk gives RFC 8448 §3's PSK for nonce 0000
 PASS  tlsResumptionPskInto gives it from a window of the nonce
 PASS  tlsPskEarlySecret gives RFC 8448 §4's early secret
@@ -116,4 +118,4 @@ PASS  an unknown mode is passed over
 PASS  and psk_dhe_ke after it still counts
 PASS  the server goes on without the PSK
 PASS  a hello with no PSK at all still parses
-tls psk wire: 118 passed, 0 failed, 0 skipped
+tls psk wire: 120 passed, 0 failed, 0 skipped
