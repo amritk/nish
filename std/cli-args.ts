@@ -84,50 +84,59 @@ const scopeKey = (scope: i32, name: string): string => `${scope}\u0000${name}`
 const isWord = (name: string): boolean =>
   name.length > 0 && name.indexOf(" ") < 0 && name.indexOf("=") < 0 && toI32(name.charCodeAt(0)) !== DASH
 
-/** The smaller of two widths. */
-const minI32 = (a: i32, b: i32): i32 => (a < b ? a : b)
+/** The smaller of two widened edit costs. */
+const minI64 = (a: i64, b: i64): i64 => (a < b ? a : b)
 
 /**
  * The edit distance between `a` and `b` in bytes, a swap of two neighbours
- * counting as one edit (`kyes` is one from `keys`), worked in the three rows
- * `rows` holds, each at least one longer than `b`.
+ * counting as one edit (`kyes` is one from `keys`), worked in three rows the
+ * caller sizes at least one longer than `b`. The rows are passed apart and
+ * rotated, so no row is picked by an index.
  */
-const editDistance = (a: string, b: string, rows: i32[][]): i32 => {
-  const n: i32 = toI32(b.length)
-  if (toI32(rows.length) !== 3) {
-    panic("cli-args: edit distance needs three rows")
+const editDistance = (a: string, b: string, rowA: i32[], rowB: i32[], rowC: i32[]): i32 => {
+  for (let j: i32 = 0; j <= toI32(b.length) && j < toI32(rowA.length); j++) {
+    rowA[j] = j
   }
-  for (let j: i32 = 0; j <= n && j < toI32(rows[0].length); j++) {
-    rows[0][j] = j
-  }
-  for (let i: i32 = 1; i <= toI32(a.length); i++) {
-    const into = rows[i % 3]
-    const above = rows[(i + 2) % 3]
-    const twoUp = rows[(i + 1) % 3]
-    if (!(n >= 0 && n < toI32(into.length) && n < toI32(above.length) && n < toI32(twoUp.length))) {
-      panic("cli-args: edit distance rows too short")
+  let twoUp = rowC
+  let above = rowA
+  let into = rowB
+  // `k` is the row's index less one, so the loop ends on `<` and cannot wrap.
+  for (let k: i32 = 0; k < toI32(a.length); k++) {
+    // `closest` sizes every row one past the longest name, so a row is never
+    // empty and the inner loop's row bounds never stop it before `b` ends.
+    if (toI32(into.length) > 0) {
+      into[0] = k + 1
     }
-    into[0] = i
     for (
       let j: i32 = 1;
-      j <= n && j < toI32(into.length) && j < toI32(above.length) && j < toI32(twoUp.length);
+      j <= toI32(b.length) && j < toI32(into.length) && j < toI32(above.length) && j < toI32(twoUp.length);
       j++
     ) {
-      const cost: i32 = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1
-      let d = minI32(minI32(above[j] + 1, into[j - 1] + 1), above[j - 1] + cost)
+      const cost: i32 = a.charCodeAt(k) === b.charCodeAt(j - 1) ? 0 : 1
+      // Widened: a cell holds at most the longer string's length, so the sum
+      // fits an i64 and narrowing it back to i32 keeps it whole.
+      let d: i64 = minI64(
+        minI64(toI64(above[j]) + toI64(1), toI64(into[j - 1]) + toI64(1)),
+        toI64(above[j - 1]) + toI64(cost)
+      )
       if (
-        i > 1 &&
+        k > 0 &&
         j > 1 &&
-        a.charCodeAt(i - 1) === b.charCodeAt(j - 2) &&
-        a.charCodeAt(i - 2) === b.charCodeAt(j - 1)
+        a.charCodeAt(k) === b.charCodeAt(j - 2) &&
+        a.charCodeAt(k - 1) === b.charCodeAt(j - 1)
       ) {
-        d = minI32(d, twoUp[j - 2] + 1)
+        d = minI64(d, toI64(twoUp[j - 2]) + toI64(1))
       }
-      into[j] = d
+      into[j] = toI32(d)
     }
+    const done = twoUp
+    twoUp = above
+    above = into
+    into = done
   }
-  const last = rows[toI32(a.length) % 3]
-  return n >= 0 && n < toI32(last.length) ? last[n] : n
+  // `above` is the row the last pass wrote, or `rowA` when `a` is empty.
+  const n: i32 = toI32(b.length)
+  return n >= 0 && n < toI32(above.length) ? above[n] : n
 }
 
 /**
@@ -140,11 +149,17 @@ const closest = (typed: string, names: string[]): string => {
   for (let i: i32 = 0; i < toI32(names.length); i++) {
     longest = toI32(names[i].length) > longest ? toI32(names[i].length) : longest
   }
-  const rows: i32[][] = [[], [], []]
-  for (let j: i32 = 0; j <= longest; j++) {
-    rows[0].push(j)
-    rows[1].push(j)
-    rows[2].push(j)
+  const rowA: i32[] = []
+  const rowB: i32[] = []
+  const rowC: i32[] = []
+  for (let j: i32 = 0; j >= 0 && j <= longest; j++) {
+    rowA.push(j)
+    rowB.push(j)
+    rowC.push(j)
+    // A name's length is below i32's top, so `j` stops before it could wrap.
+    if (j >= longest) {
+      break
+    }
   }
   let dashes: i32 = 0
   while (dashes < toI32(typed.length) && toI32(typed.charCodeAt(dashes)) === DASH) {
@@ -154,7 +169,7 @@ const closest = (typed: string, names: string[]): string => {
   let best: i32 = third > 2 ? third : 2
   let at: i32 = -1
   for (let i: i32 = 0; i < toI32(names.length); i++) {
-    const d = editDistance(typed, names[i], rows)
+    const d = editDistance(typed, names[i], rowA, rowB, rowC)
     if (d <= best && (at < 0 || d < best)) {
       best = d
       at = i
@@ -194,7 +209,8 @@ class FlagSpec {
     }
     const space: i32 = toI32(rest.indexOf(" "))
     this.long = space < 0 ? rest.substring(2) : rest.substring(2, space)
-    this.meta = space < 0 ? "" : rest.substring(space + 1)
+    // A space `indexOf` found lies inside `rest`, so `space + 1` cannot wrap.
+    this.meta = space >= 0 && space < toI32(rest.length) ? rest.substring(space + 1) : ""
     if (!isWord(this.long)) {
       panic(
         `cli-args: ${call}: bad flag spec '${spec}': the name is empty or has a space, '=' or leading dash`
@@ -230,6 +246,13 @@ export class Cli {
   version: string
   private description: string
 
+  // The cmd* arrays hold one entry per command, the flag* arrays one per flag
+  // and the arg* arrays one per argument: each declaration pushes to every
+  // array of its kind at once. So a handle inside one lies inside all of its
+  // kind, and the range re-tests marked "parallel arrays" below never fail;
+  // they are written out because the bounds proof does not know the arrays
+  // grow together, and are placed after the last call before the reads, which
+  // the proof forgets a test across.
   private cmdName: string[]
   private cmdParent: i32[]
   /** @internal Used by `ParseResult`. */
@@ -369,13 +392,16 @@ export class Cli {
 
   /** @internal Called by `ParseResult`. The command line that names `handle`: the program, then each command down to it. */
   pathOf(handle: i32): string {
-    return this.cmdPath[this.checkCommand("path", handle)]
+    const h = this.checkCommand("path", handle)
+    // Parallel arrays: always in range.
+    return h >= 0 && h < toI32(this.cmdPath.length) ? this.cmdPath[h] : this.name
   }
 
   /** @internal Called by nothing. Whether `handle` holds commands rather than running: a group, or a root given children. */
   isGroup(handle: i32): boolean {
     const h = this.checkCommand("isGroup", handle)
-    return this.cmdGroup[h]
+    // Parallel arrays: always in range.
+    return h >= 0 && h < toI32(this.cmdGroup.length) && this.cmdGroup[h]
   }
 
   /** A new child of `parent`; `call` names the declaration in a panic. */
@@ -391,6 +417,19 @@ export class Cli {
     if (!isWord(name)) {
       panic(`cli-args: ${call}: '${name}' is not a command name`)
     }
+    // Parallel arrays: never returns.
+    if (
+      !(
+        p >= 0 &&
+        p < toI32(this.cmdGroup.length) &&
+        p < toI32(this.cmdFirstArg.length) &&
+        p < toI32(this.cmdRequired.length) &&
+        p < toI32(this.cmdPath.length)
+      )
+    ) {
+      return NONE
+    }
+    const path = `${this.cmdPath[p]} ${name}`
     if (p !== ROOT && !this.cmdGroup[p]) {
       panic(`cli-args: ${call}: ${this.pathOf(p)} is a command, not a group`)
     }
@@ -400,16 +439,18 @@ export class Cli {
     if (toI32(this.cmdRequired[p].length) > 0) {
       panic(`cli-args: ${call}: ${this.pathOf(p)} has a required flag, so it cannot hold commands`)
     }
+    // Marked before the lookup below, which the proof forgets the test across;
+    // a panic after it leaves no tree to read.
+    this.cmdGroup[p] = true
     const key = scopeKey(p, name)
     if (this.children.has(key)) {
       panic(`cli-args: ${call}: ${this.pathOf(p)} already has a command '${name}'`)
     }
     const handle: i32 = toI32(this.cmdName.length)
     this.children.set(key, handle)
-    this.cmdGroup[p] = true
     this.cmdName.push(name)
     this.cmdParent.push(p)
-    this.cmdPath.push(`${this.cmdPath[p]} ${name}`)
+    this.cmdPath.push(path)
     this.cmdId.push(id)
     this.cmdDesc.push(description)
     this.cmdGroup.push(group)
@@ -490,14 +531,21 @@ export class Cli {
     if (!isWord(name)) {
       panic(`cli-args: ${call}: '${name}' is not a command name`)
     }
-    const key = scopeKey(this.cmdParent[h], name)
+    // Parallel arrays: never returns.
+    if (!(h >= 0 && h < toI32(this.cmdParent.length) && h < toI32(this.cmdAliases.length))) {
+      return
+    }
+    const parent: i32 = this.cmdParent[h]
+    // Listed before the lookup below, which the proof forgets the test across;
+    // a panic after it leaves no tree to read.
+    this.cmdAliases[h] = this.cmdAliases[h].length > 0 ? `${this.cmdAliases[h]}, ${name}` : name
+    const key = scopeKey(parent, name)
     if (this.children.has(key)) {
-      panic(`cli-args: ${call}: ${this.pathOf(this.cmdParent[h])} already has a command '${name}'`)
+      panic(`cli-args: ${call}: ${this.pathOf(parent)} already has a command '${name}'`)
     }
     this.children.set(key, h)
     this.aliasOwner.push(h)
     this.aliasName.push(name)
-    this.cmdAliases[h] = this.cmdAliases[h].length > 0 ? `${this.cmdAliases[h]}, ${name}` : name
   }
 
   /** Whether a flag of `scope` (a command, or `GLOBAL`) answers to `key`, as itself or as a negation. */
@@ -516,7 +564,13 @@ export class Cli {
 
   /** Whether flag `f` answers to `--name`, as itself or, negatable, as its negation. */
   private answersTo(f: i32, name: string): boolean {
-    return this.flagLong[f] === name || (this.flagNegatable[f] && `no-${this.flagLong[f]}` === name)
+    // Parallel arrays: always in range.
+    return (
+      f >= 0 &&
+      f < toI32(this.flagLong.length) &&
+      f < toI32(this.flagNegatable.length) &&
+      (this.flagLong[f] === name || (this.flagNegatable[f] && `no-${this.flagLong[f]}` === name))
+    )
   }
 
   /** A new flag in `scope` from `spec`; `call` names the declaration in a panic. */
@@ -530,18 +584,18 @@ export class Cli {
       panic(`cli-args: ${call}: ${where} already has a flag of that name`)
     }
     if (scope === GLOBAL) {
-      let clash: i32 = -1
-      for (let f: i32 = 0; f < toI32(this.flagLong.length) && clash < 0; f++) {
-        if (
-          this.answersTo(f, s.long) ||
-          (s.negated && this.answersTo(f, `no-${s.long}`)) ||
-          (s.short.length > 0 && this.flagShort[f] === s.short)
-        ) {
-          clash = f
+      let clash = false
+      let owner: i32 = NONE
+      for (let f: i32 = 0; f < toI32(this.flagLong.length) && !clash; f++) {
+        clash = this.answersTo(f, s.long) || (s.negated && this.answersTo(f, `no-${s.long}`))
+        // Parallel arrays: `f` is always in range.
+        if (f < toI32(this.flagShort.length) && f < toI32(this.flagOwner.length)) {
+          clash = clash || (s.short.length > 0 && this.flagShort[f] === s.short)
+          owner = this.flagOwner[f]
         }
       }
-      if (clash >= 0) {
-        panic(`cli-args: ${call}: ${this.pathOf(this.flagOwner[clash])} already has a flag of that name`)
+      if (clash) {
+        panic(`cli-args: ${call}: ${this.pathOf(owner)} already has a flag of that name`)
       }
     } else if (this.scopeHas(GLOBAL, s)) {
       panic(`cli-args: ${call}: a global flag of that name is already declared`)
@@ -616,6 +670,19 @@ export class Cli {
   defaultValue(f: i32, value: string): void {
     const call = `defaultValue(${value})`
     const h = this.checkFlag(call, f)
+    // Parallel arrays: never returns.
+    if (
+      !(
+        h >= 0 &&
+        h < toI32(this.flagValue.length) &&
+        h < toI32(this.flagLong.length) &&
+        h < toI32(this.flagRequired.length) &&
+        h < toI32(this.flagDefault.length) &&
+        h < toI32(this.flagHasDefault.length)
+      )
+    ) {
+      return
+    }
     if (this.flagValue[h] === VALUE_NONE) {
       panic(`cli-args: ${call}: --${this.flagLong[h]} takes no value`)
     }
@@ -635,8 +702,21 @@ export class Cli {
    */
   required(f: i32): void {
     const h = this.checkFlag("required", f)
+    // Parallel arrays: never returns.
+    if (
+      !(
+        h >= 0 &&
+        h < toI32(this.flagOwner.length) &&
+        h < toI32(this.flagLong.length) &&
+        h < toI32(this.flagHasDefault.length) &&
+        h < toI32(this.flagRequired.length)
+      )
+    ) {
+      return
+    }
+    // `GLOBAL` or a command handle, which `flag` checked.
     const owner: i32 = this.flagOwner[h]
-    if (owner !== GLOBAL && this.cmdGroup[owner]) {
+    if (owner >= 0 && owner < toI32(this.cmdGroup.length) && this.cmdGroup[owner]) {
       panic(
         `cli-args: required: ${this.pathOf(owner)} holds commands, so --${this.flagLong[h]} can never be checked`
       )
@@ -648,7 +728,7 @@ export class Cli {
       this.flagRequired[h] = true
       if (owner === GLOBAL) {
         this.globalRequired.push(h)
-      } else {
+      } else if (owner >= 0 && owner < toI32(this.cmdRequired.length)) {
         this.cmdRequired[owner].push(h)
       }
     }
@@ -663,6 +743,17 @@ export class Cli {
    */
   repeatable(f: i32): void {
     const h = this.checkFlag("repeatable", f)
+    // Parallel arrays: never returns.
+    if (
+      !(
+        h >= 0 &&
+        h < toI32(this.flagValue.length) &&
+        h < toI32(this.flagLong.length) &&
+        h < toI32(this.flagRepeatable.length)
+      )
+    ) {
+      return
+    }
     if (this.flagValue[h] === VALUE_NONE) {
       panic(`cli-args: repeatable: --${this.flagLong[h]} takes no value`)
     }
@@ -678,6 +769,19 @@ export class Cli {
    */
   negatable(f: i32): void {
     const h = this.checkFlag("negatable", f)
+    // Parallel arrays: never returns.
+    if (
+      !(
+        h >= 0 &&
+        h < toI32(this.flagLong.length) &&
+        h < toI32(this.flagValue.length) &&
+        h < toI32(this.flagNegated.length) &&
+        h < toI32(this.flagOwner.length) &&
+        h < toI32(this.flagNegatable.length)
+      )
+    ) {
+      return
+    }
     const call = `negatable(--${this.flagLong[h]})`
     if (this.flagValue[h] !== VALUE_NONE || this.flagNegated[h]) {
       panic(`cli-args: ${call}: only a boolean flag declared '--name' can be negated`)
@@ -692,7 +796,12 @@ export class Cli {
       panic(`cli-args: ${call}: --${name} is already declared`)
     }
     this.negations.set(scopeKey(owner, `--${name}`), h)
-    this.flagNegatable[h] = true
+    // Marked last, or `answersTo` above would take `h` for a clash with
+    // itself; tested again because the proof forgets the test across the
+    // calls. Parallel arrays: always true.
+    if (h >= 0 && h < toI32(this.flagNegatable.length)) {
+      this.flagNegatable[h] = true
+    }
   }
 
   /**
@@ -712,6 +821,10 @@ export class Cli {
   argument(cmd: i32, spec: string, description: string): i32 {
     const call = `argument("${spec}")`
     const c = this.checkCommand(call, cmd)
+    // Parallel arrays: never returns.
+    if (!(c >= 0 && c < toI32(this.cmdGroup.length))) {
+      return NONE
+    }
     if (this.cmdGroup[c]) {
       panic(`cli-args: ${call}: ${this.pathOf(c)} holds commands, so it takes no arguments`)
     }
@@ -727,6 +840,19 @@ export class Cli {
     if (!isWord(name)) {
       panic(`cli-args: ${call}: bad argument spec: the name is empty or has a space, '=' or leading dash`)
     }
+    // Parallel arrays: never returns. Tested again here because the proof
+    // forgets the test above across the string calls.
+    if (
+      !(
+        c >= 0 &&
+        c < toI32(this.cmdVariadic.length) &&
+        c < toI32(this.cmdOptionalArg.length) &&
+        c < toI32(this.cmdLastArg.length) &&
+        c < toI32(this.cmdFirstArg.length)
+      )
+    ) {
+      return NONE
+    }
     if (this.cmdVariadic[c]) {
       panic(`cli-args: ${call}: no argument may follow a variadic one`)
     }
@@ -736,9 +862,12 @@ export class Cli {
     const handle: i32 = toI32(this.argName.length)
     const last: i32 = this.cmdLastArg[c]
     let index: i32 = 0
-    if (last >= 0 && last < toI32(this.argNext.length)) {
+    // `argNext` and `argIndex` grow together; `last` is NONE or an argument.
+    if (last >= 0 && last < toI32(this.argNext.length) && last < toI32(this.argIndex.length)) {
       this.argNext[last] = handle
-      index = this.argIndex[last] + 1
+      // An argument's index is below the argument count, an array length,
+      // so one more cannot wrap.
+      index = toI32(toU32(this.argIndex[last]) + 1)
     } else {
       this.cmdFirstArg[c] = handle
     }
@@ -765,7 +894,10 @@ export class Cli {
    */
   epilog(handle: i32, text: string): void {
     const h = this.checkCommand("epilog", handle)
-    this.cmdEpilog[h] = text
+    // Parallel arrays: always true.
+    if (h >= 0 && h < toI32(this.cmdEpilog.length)) {
+      this.cmdEpilog[h] = text
+    }
   }
 
   /**
@@ -780,17 +912,30 @@ export class Cli {
   /** @internal Called by `ParseResult`. How `f` is spelled on the command line: its long name, or `--no-x` for one declared that way. */
   spelling(f: i32): string {
     const h = this.checkFlag("spelling", f)
+    // Parallel arrays: never returns.
+    if (!(h >= 0 && h < toI32(this.flagNegated.length) && h < toI32(this.flagLong.length))) {
+      return ""
+    }
     return this.flagNegated[h] ? `--no-${this.flagLong[h]}` : `--${this.flagLong[h]}`
   }
 
   /** Every long flag `cmd` answers to, for a did-you-mean. */
   private longNames(cmd: i32): string[] {
     const names: string[] = []
-    for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
+    for (
+      let f: i32 = 0;
+      f < toI32(this.flagLong.length) &&
+      f < toI32(this.flagOwner.length) &&
+      f < toI32(this.flagNegatable.length);
+      f++
+    ) {
       if (this.flagOwner[f] === cmd || this.flagOwner[f] === GLOBAL) {
-        names.push(`--${this.flagLong[f]}`)
-        if (this.flagNegatable[f]) {
-          names.push(`--no-${this.flagLong[f]}`)
+        // Read before the pushes, which the proof forgets the bounds across.
+        const long = this.flagLong[f]
+        const negatable = this.flagNegatable[f]
+        names.push(`--${long}`)
+        if (negatable) {
+          names.push(`--no-${long}`)
         }
       }
     }
@@ -804,7 +949,7 @@ export class Cli {
   /** @internal Called by `ParseResult`. The names `cmd`'s children answer to, in declaration order, then their aliases when `withAliases`. */
   childNames(cmd: i32, withAliases: boolean): string[] {
     const names: string[] = []
-    for (let c: i32 = 0; c < toI32(this.cmdName.length); c++) {
+    for (let c: i32 = 0; c < toI32(this.cmdName.length) && c < toI32(this.cmdParent.length); c++) {
       if (this.cmdParent[c] === cmd) {
         names.push(this.cmdName[c])
       }
@@ -848,7 +993,7 @@ export class Cli {
         dashed = true
       } else if (token.length > 1 && toI32(token.charCodeAt(0)) === DASH) {
         i = token.startsWith("--") ? this.longFlag(r, argv, i, token) : this.shortFlags(r, argv, i, token)
-      } else if (this.cmdGroup[r.command] && !r.badCommand) {
+      } else if (this.isGroupAt(r.command) && !r.badCommand) {
         const child = this.children.get(scopeKey(r.command, token)) ?? -1
         if (child >= 0) {
           r.command = child
@@ -864,6 +1009,11 @@ export class Cli {
     }
     r.finishWalk()
     return r
+  }
+
+  /** Whether `cmd`, `ROOT` or a handle from `children` and so in range, holds commands. */
+  private isGroupAt(cmd: i32): boolean {
+    return cmd >= 0 && cmd < toI32(this.cmdGroup.length) && this.cmdGroup[cmd]
   }
 
   /** Records `token` as no command `r`'s group holds, with the nearest one that it does. */
@@ -889,12 +1039,14 @@ export class Cli {
       return next
     }
     const f = this.lookup(this.flags, r.command, name)
-    if (f >= 0) {
+    // A handle from `flags` indexes every flag array, so the bound holds.
+    if (f >= 0 && f < toI32(this.flagValue.length)) {
       if (eq >= 0) {
         if (this.flagValue[f] === VALUE_NONE) {
           r.fail(r.command, `${name} takes no value`)
         } else {
-          r.set(f, token.substring(eq + 1, token.length))
+          // `eq` is an index into `token`, so one more cannot wrap.
+          r.set(f, token.substring(toI32(toU32(eq) + 1), token.length))
         }
         return next
       }
@@ -931,8 +1083,14 @@ export class Cli {
           r.fail(r.command, `unknown flag -${letter}`)
           return next
         }
+        // A handle from `flags` indexes every flag array: never returns.
+        if (!(f < toI32(this.flagValue.length) && f < toI32(this.flagNegated.length))) {
+          return next
+        }
+        const kind: i32 = this.flagValue[f]
+        const negated = this.flagNegated[f]
         const attached = token.substring(k + 1, token.length)
-        if (this.flagValue[f] !== VALUE_NONE) {
+        if (kind !== VALUE_NONE) {
           if (attached.startsWith("=")) {
             r.set(f, attached.substring(1, attached.length))
             return next
@@ -943,7 +1101,7 @@ export class Cli {
           r.fail(r.command, `-${letter} takes no value`)
           return next
         }
-        r.set(f, this.flagNegated[f] ? "false" : "true")
+        r.set(f, negated ? "false" : "true")
       }
     }
     return next
@@ -955,7 +1113,13 @@ export class Cli {
    * answers the index after whatever it took.
    */
   private takeValue(r: ParseResult, argv: string[], next: i32, f: i32, attached: string): i32 {
+    // The callers pass a handle from `flags`, which indexes every flag
+    // array: never returns.
+    if (!(f >= 0 && f < toI32(this.flagValue.length) && f < toI32(this.flagLong.length))) {
+      return next
+    }
     const kind: i32 = this.flagValue[f]
+    const long = this.flagLong[f]
     if (kind === VALUE_NONE) {
       r.set(f, "true")
       return next
@@ -964,18 +1128,21 @@ export class Cli {
       r.set(f, attached)
       return next
     }
-    const has = next >= 0 && next < toI32(argv.length)
     if (kind === VALUE_REQUIRED) {
-      if (!has) {
-        r.fail(r.command, `--${this.flagLong[f]} needs a value`)
+      if (!(next >= 0 && next < toI32(argv.length))) {
+        r.fail(r.command, `--${long} needs a value`)
         return next
       }
       r.set(f, argv[next])
       return next + 1
     }
-    if (has && (argv[next].length === 0 || toI32(argv[next].charCodeAt(0)) !== DASH)) {
-      r.set(f, argv[next])
-      return next + 1
+    if (next >= 0 && next < toI32(argv.length)) {
+      const word = argv[next]
+      if (!(word.length > 0 && toI32(word.charCodeAt(0)) === DASH)) {
+        r.set(f, word)
+        // `next` is below `argv.length`, so one more cannot wrap.
+        return toI32(toU32(next) + 1)
+      }
     }
     r.set(f, "")
     return next
@@ -983,20 +1150,51 @@ export class Cli {
 
   /** A help row's flag column for `f`: `-s, --long`, with `--[no-]x` for a negatable one. */
   private flagLabel(f: i32): string {
+    // `flagRows` passes a flag handle, which indexes every flag array: never
+    // returns.
+    if (
+      !(
+        f >= 0 &&
+        f < toI32(this.flagNegatable.length) &&
+        f < toI32(this.flagLong.length) &&
+        f < toI32(this.flagShort.length)
+      )
+    ) {
+      return ""
+    }
+    const short = this.flagShort[f]
     const long = this.flagNegatable[f] ? `--[no-]${this.flagLong[f]}` : this.spelling(f)
-    return this.flagShort[f].length > 0 ? `-${this.flagShort[f]}, ${long}` : long
+    return short.length > 0 ? `-${short}, ${long}` : long
   }
 
   /** A help row's description for `f`, with what it is: repeatable, its default, required. */
   private flagText(f: i32): string {
+    // `flagRows` passes a flag handle, which indexes every flag array: never
+    // returns.
+    if (
+      !(
+        f >= 0 &&
+        f < toI32(this.flagDesc.length) &&
+        f < toI32(this.flagRepeatable.length) &&
+        f < toI32(this.flagHasDefault.length) &&
+        f < toI32(this.flagDefault.length) &&
+        f < toI32(this.flagRequired.length)
+      )
+    ) {
+      return ""
+    }
+    const repeatable = this.flagRepeatable[f]
+    const hasDefault = this.flagHasDefault[f]
+    const value = this.flagDefault[f]
+    const required = this.flagRequired[f]
     let text = this.flagDesc[f]
-    if (this.flagRepeatable[f]) {
+    if (repeatable) {
       text = `${text} (repeatable)`
     }
-    if (this.flagHasDefault[f]) {
-      text = `${text} (default: ${this.flagDefault[f]})`
+    if (hasDefault) {
+      text = `${text} (default: ${value})`
     }
-    if (this.flagRequired[f]) {
+    if (required) {
       text = `${text} (required)`
     }
     return text
@@ -1004,9 +1202,14 @@ export class Cli {
 
   /** Adds a `section` row to `rows` for every flag `owner` (a command, or `GLOBAL`) declares. */
   private flagRows(rows: HelpRow[], section: string, owner: i32): void {
-    for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
+    for (
+      let f: i32 = 0;
+      f < toI32(this.flagLong.length) && f < toI32(this.flagOwner.length) && f < toI32(this.flagMeta.length);
+      f++
+    ) {
       if (this.flagOwner[f] === owner) {
-        rows.push(new HelpRow(section, this.flagLabel(f), this.flagMeta[f], this.flagText(f)))
+        const meta = this.flagMeta[f]
+        rows.push(new HelpRow(section, this.flagLabel(f), meta, this.flagText(f)))
       }
     }
   }
@@ -1025,12 +1228,36 @@ export class Cli {
     const rows: HelpRow[] = []
     const shape: string[] = []
     const path = this.pathOf(cmd)
-    if (path.length > this.name.length) {
-      shape.push(path.substring(this.name.length + 1, path.length))
+    const program = this.name.length
+    if (path.length > program) {
+      shape.push(path.substring(program + 1, path.length))
     }
+    // `checkCommand` answered a command handle, which indexes every command
+    // array: never returns.
+    if (
+      !(
+        cmd >= 0 &&
+        cmd < toI32(this.cmdGroup.length) &&
+        cmd < toI32(this.cmdFirstArg.length) &&
+        cmd < toI32(this.cmdDesc.length) &&
+        cmd < toI32(this.cmdEpilog.length)
+      )
+    ) {
+      return ""
+    }
+    const description = this.cmdDesc[cmd]
+    const epilog = this.cmdEpilog[cmd]
+    let a: i32 = this.cmdFirstArg[cmd]
     if (this.cmdGroup[cmd]) {
       shape.push("<command>")
-      for (let c: i32 = 0; c < toI32(this.cmdName.length); c++) {
+      for (
+        let c: i32 = 0;
+        c < toI32(this.cmdName.length) &&
+        c < toI32(this.cmdParent.length) &&
+        c < toI32(this.cmdAliases.length) &&
+        c < toI32(this.cmdDesc.length);
+        c++
+      ) {
         if (this.cmdParent[c] === cmd) {
           const aliases = this.cmdAliases[c]
           const label = aliases.length > 0 ? `${this.cmdName[c]}, ${aliases}` : this.cmdName[c]
@@ -1038,13 +1265,21 @@ export class Cli {
         }
       }
     }
-    let a: i32 = this.cmdFirstArg[cmd]
-    while (a >= 0 && a < toI32(this.argName.length)) {
+    while (
+      a >= 0 &&
+      a < toI32(this.argName.length) &&
+      a < toI32(this.argVariadic.length) &&
+      a < toI32(this.argRequired.length) &&
+      a < toI32(this.argDesc.length) &&
+      a < toI32(this.argNext.length)
+    ) {
+      const after = this.argNext[a]
+      const desc = this.argDesc[a]
       const dots = this.argVariadic[a] ? "..." : ""
       const label = this.argRequired[a] ? `<${this.argName[a]}${dots}>` : `[${this.argName[a]}${dots}]`
       shape.push(label)
-      rows.push(new HelpRow("Arguments", label, "", this.argDesc[a]))
-      a = this.argNext[a]
+      rows.push(new HelpRow("Arguments", label, "", desc))
+      a = after
     }
     shape.push("[flags]")
     this.flagRows(rows, "Flags", cmd)
@@ -1053,17 +1288,28 @@ export class Cli {
       rows.push(new HelpRow("Flags", "-v, --version", "", "show the version"))
     }
     this.flagRows(rows, "Global flags", GLOBAL)
-    let widest: i32 = 0
+    // Widths sum in i64, where a few i32 terms cannot wrap.
+    let widest: i64 = toI64(0)
     for (let i: i32 = 0; i < toI32(rows.length); i++) {
       const row = rows[i]
-      const width: i32 = 2 + toI32(row.label.length) + (row.meta.length > 0 ? 1 + toI32(row.meta.length) : 0)
+      let width: i64 = toI64(2) + toI64(toI32(row.label.length))
+      if (row.meta.length > 0) {
+        width = toI64(2) + toI64(toI32(row.label.length)) + toI64(1) + toI64(toI32(row.meta.length))
+      }
       widest = width > widest ? width : widest
     }
+    // `widest` is below `MAX_COLUMN - 2` where it is widened, so the u32 add
+    // cannot wrap.
+    const column: i32 = widest < toI64(MAX_COLUMN - 2) ? toI32(toU32(widest) + 2) : MAX_COLUMN
     const usage = shape.join(" ")
-    const usageColumn: i32 = 8 + toI32(this.name.length) + toI32(usage.length) + 3
-    const menu = new HelpMenu(style, this.name, minI32(widest + 2, MAX_COLUMN), usageColumn)
+    // Two i32 lengths and two constants fit an i64; the help line is far
+    // shorter than 2^31 bytes, so the narrowing keeps the sum.
+    const usageColumn: i32 = toI32(
+      toI64(8) + toI64(toI32(this.name.length)) + toI64(toI32(usage.length)) + toI64(3)
+    )
+    const menu = new HelpMenu(style, this.name, column, usageColumn)
     menu.header(this.version, this.description)
-    menu.usage(usage, cmd === ROOT ? "" : this.cmdDesc[cmd])
+    menu.usage(usage, cmd === ROOT ? "" : description)
     let open = ""
     for (let i: i32 = 0; i < toI32(rows.length); i++) {
       const row = rows[i]
@@ -1073,9 +1319,9 @@ export class Cli {
       }
       menu.row(row.label, row.meta, row.text)
     }
-    if (this.cmdEpilog[cmd].length > 0) {
+    if (epilog.length > 0) {
       menu.line("")
-      menu.line(this.cmdEpilog[cmd])
+      menu.line(epilog)
     }
     return menu.text()
   }
@@ -1191,6 +1437,22 @@ export class ParseResult {
   finishWalk(): void {
     const cli = this.cli
     const cmd = this.command
+    // `command` is `ROOT` or a handle from `children`, which indexes every
+    // command array: never returns.
+    if (
+      !(
+        cmd >= 0 &&
+        cmd < toI32(cli.cmdId.length) &&
+        cmd < toI32(cli.cmdGroup.length) &&
+        cmd < toI32(cli.cmdRequired.length) &&
+        cmd < toI32(cli.cmdFirstArg.length)
+      )
+    ) {
+      return
+    }
+    const group = cli.cmdGroup[cmd]
+    const required = cli.cmdRequired[cmd]
+    let a: i32 = cli.cmdFirstArg[cmd]
     this.id = cli.cmdId[cmd]
     this.path = cli.pathOf(cmd)
     if (this.wantHelp && !(this.helpWord && this.badCommand)) {
@@ -1205,29 +1467,40 @@ export class ParseResult {
       this.hint = ""
       return
     }
-    if (cli.cmdGroup[cmd]) {
+    if (group) {
       this.fail(cmd, `missing command (one of: ${cli.childNames(cmd, false).join(", ")})`)
     }
-    let missing: i32 = this.firstMissing(cli.cmdRequired[cmd])
+    let missing: i32 = this.firstMissing(required)
     if (missing < 0) {
       missing = this.firstMissing(cli.globalRequired)
     }
     if (missing >= 0) {
       this.fail(cmd, `missing required flag ${cli.spelling(missing)}`)
     }
-    let a: i32 = cli.cmdFirstArg[cmd]
     let last: i32 = -1
-    while (a >= 0 && a < toI32(cli.argName.length) && this.message.length === 0) {
+    while (
+      a >= 0 &&
+      a < toI32(cli.argName.length) &&
+      a < toI32(cli.argRequired.length) &&
+      a < toI32(cli.argIndex.length) &&
+      a < toI32(cli.argVariadic.length) &&
+      a < toI32(cli.argNext.length) &&
+      this.message.length === 0
+    ) {
+      const after = cli.argNext[a]
       if (cli.argRequired[a] && cli.argIndex[a] >= toI32(this.positionalValues.length)) {
         const dots = cli.argVariadic[a] ? "..." : ""
         this.fail(cmd, `missing argument <${cli.argName[a]}${dots}>`)
       }
       last = a
-      a = cli.argNext[a]
+      a = after
     }
     let taken: i32 = 0
-    if (last >= 0) {
-      taken = cli.argVariadic[last] ? toI32(this.positionalValues.length) : cli.argIndex[last] + 1
+    // `last` is NONE or an argument the loop read, so in range.
+    if (last >= 0 && last < toI32(cli.argVariadic.length) && last < toI32(cli.argIndex.length)) {
+      // An argument's index is below the argument count, an array length,
+      // so one more cannot wrap.
+      taken = cli.argVariadic[last] ? toI32(this.positionalValues.length) : toI32(toU32(cli.argIndex[last]) + 1)
     }
     if (this.message.length === 0 && taken < toI32(this.positionalValues.length) && taken >= 0) {
       this.fail(cmd, `unexpected argument '${this.positionalValues[taken]}'`)
@@ -1272,14 +1545,21 @@ export class ParseResult {
    */
   flag(f: i32): boolean {
     const h = this.cli.checkFlag("flag", f)
+    // `checkFlag` answered a flag handle, which indexes every flag array:
+    // never returns.
+    if (!(h >= 0 && h < toI32(this.cli.flagValue.length) && h < toI32(this.cli.flagNegated.length))) {
+      return false
+    }
+    const kind: i32 = this.cli.flagValue[h]
+    const negated = this.cli.flagNegated[h]
     const at = this.lastSet(h)
-    if (this.cli.flagValue[h] !== VALUE_NONE) {
+    if (kind !== VALUE_NONE) {
       return at >= 0
     }
     if (at >= 0 && at < toI32(this.setValues.length)) {
       return this.setValues[at] === "true"
     }
-    return this.cli.flagNegated[h]
+    return negated
   }
 
   /**
@@ -1293,11 +1573,17 @@ export class ParseResult {
    */
   value(f: i32): string | null {
     const h = this.cli.checkFlag("value", f)
+    // `checkFlag` answered a flag handle, which indexes every flag array:
+    // never returns.
+    if (!(h >= 0 && h < toI32(this.cli.flagHasDefault.length) && h < toI32(this.cli.flagDefault.length))) {
+      return null
+    }
+    const fallback: string | null = this.cli.flagHasDefault[h] ? this.cli.flagDefault[h] : null
     const at = this.lastSet(h)
     if (at >= 0 && at < toI32(this.setValues.length)) {
       return this.setValues[at]
     }
-    return this.cli.flagHasDefault[h] ? this.cli.flagDefault[h] : null
+    return fallback
   }
 
   /**
@@ -1311,6 +1597,20 @@ export class ParseResult {
   values(f: i32): string[] {
     const h = this.cli.checkFlag("values", f)
     const out: string[] = []
+    // `checkFlag` answered a flag handle, which indexes every flag array:
+    // never returns.
+    if (
+      !(
+        h >= 0 &&
+        h < toI32(this.cli.flagRepeatable.length) &&
+        h < toI32(this.cli.flagHasDefault.length) &&
+        h < toI32(this.cli.flagDefault.length)
+      )
+    ) {
+      return out
+    }
+    const hasDefault = this.cli.flagHasDefault[h]
+    const fallback = this.cli.flagDefault[h]
     if (this.cli.flagRepeatable[h]) {
       for (let i: i32 = 0; i < toI32(this.setFlags.length) && i < toI32(this.setValues.length); i++) {
         if (this.setFlags[i] === h) {
@@ -1323,8 +1623,8 @@ export class ParseResult {
         out.push(this.setValues[at])
       }
     }
-    if (out.length === 0 && this.cli.flagHasDefault[h]) {
-      out.push(this.cli.flagDefault[h])
+    if (out.length === 0 && hasDefault) {
+      out.push(fallback)
     }
     return out
   }
@@ -1341,10 +1641,16 @@ export class ParseResult {
    */
   source(f: i32): i32 {
     const h = this.cli.checkFlag("source", f)
+    // `checkFlag` answered a flag handle, which indexes every flag array:
+    // never returns.
+    if (!(h >= 0 && h < toI32(this.cli.flagHasDefault.length) && h < toI32(this.cli.flagNegated.length))) {
+      return SOURCE_UNSET
+    }
+    const fallback = this.cli.flagHasDefault[h] || this.cli.flagNegated[h]
     if (this.lastSet(h) >= 0) {
       return SOURCE_ARGV
     }
-    return this.cli.flagHasDefault[h] || this.cli.flagNegated[h] ? SOURCE_DEFAULT : SOURCE_UNSET
+    return fallback ? SOURCE_DEFAULT : SOURCE_UNSET
   }
 
   /**
@@ -1358,6 +1664,11 @@ export class ParseResult {
    */
   positional(a: i32): string | null {
     const h = this.cli.checkArgument("positional", a)
+    // `checkArgument` answered an argument handle, which indexes every
+    // argument array: never returns.
+    if (!(h >= 0 && h < toI32(this.cli.argIndex.length) && h < toI32(this.cli.argOwner.length))) {
+      return null
+    }
     const k: i32 = this.cli.argIndex[h]
     if (this.cli.argOwner[h] !== this.command || !(k >= 0 && k < toI32(this.positionalValues.length))) {
       return null
@@ -1377,11 +1688,25 @@ export class ParseResult {
   positionals(a: i32): string[] {
     const h = this.cli.checkArgument("positionals", a)
     const out: string[] = []
+    // `checkArgument` answered an argument handle, which indexes every
+    // argument array: never returns.
+    if (
+      !(
+        h >= 0 &&
+        h < toI32(this.cli.argOwner.length) &&
+        h < toI32(this.cli.argIndex.length) &&
+        h < toI32(this.cli.argVariadic.length)
+      )
+    ) {
+      return out
+    }
     if (this.cli.argOwner[h] !== this.command) {
       return out
     }
     const k: i32 = this.cli.argIndex[h]
-    const end: i32 = this.cli.argVariadic[h] ? toI32(this.positionalValues.length) : k + 1
+    // An argument's index is below the argument count, an array length, so
+    // one more cannot wrap.
+    const end: i32 = this.cli.argVariadic[h] ? toI32(this.positionalValues.length) : toI32(toU32(k) + 1)
     for (let i: i32 = k; i < end && i >= 0 && i < toI32(this.positionalValues.length); i++) {
       out.push(this.positionalValues[i])
     }
