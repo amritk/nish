@@ -451,7 +451,26 @@ export class UrlQuery {
    * @param len How many bytes the query takes.
    */
   reset(bytes: u8[], off: i32, len: i32): void {
-    urlQueryOver(this, bytes, off, urlCheckWindow(bytes, off, len, "UrlQuery"))
+    this.over(bytes, off, urlCheckWindow(bytes, off, len, "UrlQuery"))
+  }
+
+  /**
+   * @internal `reset` on `bytes[off, end)`, for `urlQueryGet`, which builds the window from `bytes.length` and so has nothing to check.
+   * @param bytes The array that holds the query.
+   * @param off Where the query starts in `bytes`, past its `?`.
+   * @param end Where the query ends in `bytes`.
+   */
+  over(bytes: u8[], off: i32, end: i32): void {
+    this.bytes = bytes
+    this.pos = off
+    this.end = end
+    this.count = 0
+    this.failed = 0
+    this.keyStart = off
+    this.keyLength = 0
+    this.valueStart = off
+    this.valueLength = 0
+    this.hasValue = false
   }
 
   /**
@@ -731,20 +750,6 @@ export const urlDecode = (s: string, flags: i32): string | null => {
   return urlDecodeString(bytes, 0, toI32(bytes.length), flags)
 }
 
-/** `UrlQuery.reset` on `bytes[off, end)`, for a caller that built the window from `bytes.length` and so has nothing to check. */
-const urlQueryOver = (query: UrlQuery, bytes: u8[], off: i32, end: i32): void => {
-  query.bytes = bytes
-  query.pos = off
-  query.end = end
-  query.count = 0
-  query.failed = 0
-  query.keyStart = off
-  query.keyLength = 0
-  query.valueStart = off
-  query.valueLength = 0
-  query.hasValue = false
-}
-
 /**
  * The first value for `name` in the query of the request target `target`,
  * form-decoded strictly: `""` for a key written without `=`, as
@@ -772,7 +777,7 @@ export const urlQueryGet = (target: string, name: string): string | null => {
   }
   const query: UrlQuery = new UrlQuery(new UrlQueryLimits())
   // `q < len = bytes.length`, so `[q + 1, len)` lies inside `bytes`.
-  urlQueryOver(query, bytes, q + 1, len)
+  query.over(bytes, q + 1, len)
   if (urlQueryFind(query, name) !== URL_QUERY_PAIR) {
     return null
   }

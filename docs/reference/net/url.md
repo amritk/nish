@@ -10,6 +10,7 @@ import {
   URL_DECODE_ERR_ESCAPE,
   URL_DECODE_ERR_NUL,
   URL_DECODE_ERR_SPACE,
+  URL_DECODE_ERR_WINDOW,
   URL_DECODE_FORM,
   URL_DECODE_LENIENT,
   URL_DEFAULT_MAX_PAIRS,
@@ -23,6 +24,7 @@ import {
   percentDecode,
   percentDecodeErrorAt,
   percentDecodePathSegment,
+  tryPercentDecode,
   urlDecode,
   urlDefaultPort,
   urlIsHostPort,
@@ -73,6 +75,12 @@ The offset in `src` of the byte `percentDecode` with the same arguments fails at
 <scalar-card title="percent​Decode​Path​Segment" icon="phosphor/regular/function" href="#percentdecodepathsegment">
 
 `percentDecode` for one path segment: `+` is literal whatever `flags` say, and `%2F` is a 0x2F byte in the segment.
+
+</scalar-card>
+
+<scalar-card title="try​Percent​Decode" icon="phosphor/regular/function" href="#trypercentdecode">
+
+`percentDecode` that answers `URL_DECODE_ERR_WINDOW`, writing nothing, where `percentDecode` panics: a window outside `src` or an `at` outside `out`.
 
 </scalar-card>
 
@@ -446,6 +454,65 @@ A `URL_DECODE_*` sum; `URL_DECODE_FORM` in it is ignored.
 <scalar-field name="returns" type="i32">
 
 How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` code, as `percentDecode` answers.
+
+</scalar-field>
+
+### tryPercentDecode
+
+`percentDecode` that answers `URL_DECODE_ERR_WINDOW`, writing nothing,
+where `percentDecode` panics: a window outside `src` or an `at` outside
+`out`. A caller a strict module reaches uses this one.
+
+```ts
+const tryPercentDecode: (
+  src: u8[],
+  off: i32,
+  len: i32,
+  out: u8[],
+  at: i32,
+  flags: i32,
+) => i32
+```
+
+<scalar-field name="src" type="u8[]" required>
+
+The array holding the encoded text.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where the encoded text starts in `src`.
+
+</scalar-field>
+
+<scalar-field name="len" type="i32" required>
+
+The encoded text's length in bytes.
+
+</scalar-field>
+
+<scalar-field name="out" type="u8[]" required>
+
+The array the decoded bytes are written into.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+The index in `out` the first decoded byte goes to.
+
+</scalar-field>
+
+<scalar-field name="flags" type="i32" required>
+
+`URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` code, `URL_DECODE_ERR_WINDOW` included.
 
 </scalar-field>
 
@@ -878,6 +945,14 @@ A `%` not followed by two hex digits: `%zz`, or `%4` or `%` at the end of the wi
 `URL_DECODE_ERR_SPACE: i32`
 
 `out` has no room for the next byte; nothing is written at or past `out.length`.
+
+</scalar-card>
+
+<scalar-card title="-4" icon="phosphor/regular/hash">
+
+`URL_DECODE_ERR_WINDOW: i32`
+
+`tryPercentDecode` only: the window lies outside `src`, or `at` outside `out`; nothing is written.
 
 </scalar-card>
 

@@ -7,10 +7,13 @@ Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a reque
 ```ts
 import {
   HTTP1_GZIP_FIELD_BYTES,
+  HTTP_CODING_BAD_WINDOW,
   HTTP_CODING_DEFLATE,
   HTTP_CODING_GZIP,
   HTTP_CODING_IDENTITY,
   HTTP_CODING_NONE,
+  HTTP_COMPRESS_BAD_WINDOW,
+  HTTP_COMPRESS_FAILED,
   HTTP_COMPRESS_NOT_ACCEPTED,
   HTTP_COMPRESS_NO_FEWER_SEGMENTS,
   HTTP_COMPRESS_SENT,
@@ -32,6 +35,8 @@ import {
   httpContentEncoding,
   httpIdentityRefused,
   httpSegments,
+  httpTryAcceptEncoding,
+  httpTryContentEncoding,
 } from "nish/net/http-compress";
 ```
 
@@ -85,6 +90,18 @@ Whether the `Accept-Encoding` value in `buf[start .. end)` refuses the body as i
 <scalar-card title="http​Segments" icon="phosphor/regular/function" href="#httpsegments">
 
 The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
+
+</scalar-card>
+
+<scalar-card title="http​Try​Accept​Encoding" icon="phosphor/regular/function" href="#httptryacceptencoding">
+
+`httpAcceptEncoding` that answers `HTTP_CODING_BAD_WINDOW` where `httpAcceptEncoding` panics: a window outside `buf`.
+
+</scalar-card>
+
+<scalar-card title="http​Try​Content​Encoding" icon="phosphor/regular/function" href="#httptrycontentencoding">
+
+`httpContentEncoding` that answers `HTTP_CODING_BAD_WINDOW` where `httpContentEncoding` panics: a window outside `buf`.
 
 </scalar-card>
 
@@ -366,6 +383,91 @@ how many segments the bytes fill, the last one possibly partial;
 
 </scalar-field>
 
+### httpTryAcceptEncoding
+
+`httpAcceptEncoding` that answers `HTTP_CODING_BAD_WINDOW` where
+`httpAcceptEncoding` panics: a window outside `buf`. A caller a strict
+module reaches uses this one.
+
+```ts
+const httpTryAcceptEncoding: (
+  buf: u8[],
+  start: i32,
+  end: i32,
+  offered: i32,
+) => i32
+```
+
+<scalar-field name="buf" type="u8[]" required>
+
+the buffer holding the field value, such as the request head
+
+</scalar-field>
+
+<scalar-field name="start" type="i32" required>
+
+the index in `buf` of the value's first octet
+
+</scalar-field>
+
+<scalar-field name="end" type="i32" required>
+
+the index just past the value's last octet
+
+</scalar-field>
+
+<scalar-field name="offered" type="i32" required>
+
+which codings the program can produce, `HTTP_OFFER_*` bits
+  or 0 for none
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the `HTTP_CODING_*` to send the body in, `HTTP_CODING_NONE` when
+  nothing offered is acceptable, or `HTTP_CODING_BAD_WINDOW`
+
+</scalar-field>
+
+### httpTryContentEncoding
+
+`httpContentEncoding` that answers `HTTP_CODING_BAD_WINDOW` where
+`httpContentEncoding` panics: a window outside `buf`. A caller a strict
+module reaches uses this one.
+
+```ts
+const httpTryContentEncoding: (
+  buf: u8[],
+  start: i32,
+  end: i32,
+) => i32
+```
+
+<scalar-field name="buf" type="u8[]" required>
+
+the bytes that hold the field value
+
+</scalar-field>
+
+<scalar-field name="start" type="i32" required>
+
+where the value starts in `buf`
+
+</scalar-field>
+
+<scalar-field name="end" type="i32" required>
+
+where the value ends in `buf`, one past its last byte
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the one coding named, `HTTP_CODING_IDENTITY` for none, `HTTP_CODING_NONE`, or `HTTP_CODING_BAD_WINDOW`
+
+</scalar-field>
+
 ## Classes
 
 ### HttpBodyDecoder
@@ -429,6 +531,8 @@ class HttpCompressor
 | `identityFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields and, when `vary` and the last decision `varies`, `Vary: Accept-Encoding`: the fields of a body sent as it is from a resource that is sometimes compressed. |
 | `leastSaving(len: i32): i32` | The bytes a compressed `len`-byte body must save: `minSaving` and `minSavingPercent`, at least 1. |
 | `oneSegment(coding: i32, len: i32, mss: i32): boolean` | `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte body that `compress` would try (its length in `[minLength, maxLength]` and `coding` gzip or deflate) is no longer than one segment of `mss` bytes (as `fewerSegments` reads it). Sent as it is, such a response takes one segment once its head fits beside it, and no compression takes fewer, so `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks the head: when it does not fit, the caller goes on to `compress`, which decides again. Anything else answers false and leaves `decision` alone. |
+| `tryCompress(coding: i32, body: u8[], off: i32, len: i32): i32` | `compress` that answers -1 with `decision` set to `HTTP_COMPRESS_BAD_WINDOW` where `compress` panics: a window outside `body`. A caller a strict module reaches uses this one. |
+| `tryCompressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32` | `compressAnyway` that answers -1 with `decision` set to `HTTP_COMPRESS_BAD_WINDOW` where `compressAnyway` panics: a window outside `body`. A caller a strict module reaches uses this one. |
 | `varies(): boolean` | Whether the last decision depended on the request's `Accept-Encoding`, so the response needs `Vary: Accept-Encoding`: a body sent compressed, or one sent as it is because the client took neither gzip nor deflate. A body the lengths or the saving kept as it is would go out the same to any client. |
 
 ## Limits
@@ -452,6 +556,14 @@ TCP header and 12 of the timestamp option.
 `HTTP1_GZIP_FIELD_BYTES: i32`
 
 The bytes `content-encoding: gzip` adds to an HTTP/1.1 head: name, value, ": " and CRLF.
+
+</scalar-card>
+
+<scalar-card title="-2" icon="phosphor/regular/hash">
+
+`HTTP_CODING_BAD_WINDOW: i32`
+
+`httpTryAcceptEncoding` and `httpTryContentEncoding`: the window lies outside its buffer.
 
 </scalar-card>
 
@@ -484,6 +596,25 @@ No content coding: the body as it is.
 `HTTP_CODING_NONE: i32`
 
 Nothing offered is acceptable, identity included (§12.5.3: 406, or identity anyway).
+
+</scalar-card>
+
+<scalar-card title="7" icon="phosphor/regular/hash">
+
+`HTTP_COMPRESS_BAD_WINDOW: i32`
+
+`tryCompress` and `tryCompressAnyway`: the window lies outside the body, so nothing was compressed.
+
+</scalar-card>
+
+<scalar-card title="6" icon="phosphor/regular/hash">
+
+`HTTP_COMPRESS_FAILED: i32`
+
+The encoder's gzip member could not be written into `output` or reframed as
+zlib, so the body went as it is. `output` holds `compressBound(maxLength)`
+bytes and every member an encoder writes carries its 18 bytes of header and
+trailer, so no body `compress` or `compressAnyway` accepts reaches it.
 
 </scalar-card>
 
