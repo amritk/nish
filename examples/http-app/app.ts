@@ -112,10 +112,11 @@ const writeNote = (w: JsonWriter, id: i32, text: string): void => {
 /**
  * Logs an answer the handler refused for a broken contract — a request
  * answered twice, a status out of range — which this program's own code
- * would have to have made, and answers `req` with a bare 500 instead. The
- * handler leaves a refused request as it was, so the 500 answers it unless
- * it was answered already; that refusal is logged too, and then nothing of
- * `req` is left to answer.
+ * would have to have made, and answers `req` with a bare 500 instead. A
+ * refusal before the head leaves `req` as it was, so the 500 answers it; one
+ * after the head, or of a request answered already, has nothing left to
+ * answer, so the 500 is refused too and that refusal is logged, and then
+ * nothing of `req` is left to answer.
  */
 const logRefusal = (h: HttpHandler, req: HttpRequest, sent: Result<i32, string>): void => {
   if (sent.isOk()) {

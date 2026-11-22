@@ -156,8 +156,11 @@ program as it arrived, with `decodedFrom` `HTTP_CODING_IDENTITY`.
 Misuse — a status outside 200 to 599, a reserved field (`Content-Length`,
 `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`), more body than
 the length said, a second `start` — panics: it is a bug in the program,
-never something a peer can cause. What a peer can cause answers a code the
-program may ignore, so no answer needs its result bound.
+never something a peer can cause. Each answering method has a `try` twin
+(`tryWrite`, `tryEnd`, `trySend`, ...) that answers the same misuse as an
+`Err` instead, for a program built without panics; the class doc says
+what each refusal leaves of the request. What a peer can cause answers a
+code the program may ignore, so no answer needs its result bound.
 
 Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -235,6 +238,22 @@ class HandlerLimits
 The HTTP/1.1 server: a carrier, its readiness loop, a router and a pool of
 requests. One per thread; nothing in it is shared.
 
+A `try` twin refuses a broken contract with an `Err`, and what it leaves
+depends on whether the response's head went out:
+
+- **Refused before the head** — a request not taken or already answered,
+  a status outside 200 to 599, a body window outside its buffer: nothing
+  is sent and `r` is as it was, so a request still owed an answer can be
+  answered again (a bare 500, say).
+- **Abandoned after the head** — a head the carrier refuses (a reserved
+  field, a name or value that is not field text), a body window outside
+  its buffer or more body than the declared length (`tryWrite`), or a body
+  short of it (`tryEnd`): the response cannot be completed, so the
+  connection is closed and `r` is the handler's again. Nothing more is
+  owed for `r`; a further answer for it is refused too.
+
+The plain methods panic with the same message where their twins refuse.
+
 ```ts
 class HttpHandler
 ```
@@ -276,10 +295,10 @@ class HttpHandler
 | `trySendJson(r: HttpRequest, status: i32): Result<i32, string>` | `sendJson`, with a broken contract answered as an `Err` instead of a panic: no value begun with `json`, a request not taken or already answered, or a status outside 200 to 599, leaves `r` as it was. |
 | `tryStart(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): Result<i32, string>` | `start`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, a status outside 200 to 599 or a body length below `HTTP1_CHUNKED` leave `r` as it was; a field the carrier refuses closes the connection and hands `r` back. |
 | `tryWatch(fd: i32, id: i32): Result<boolean, string>` | `watch`, with an id outside the range answered as an `Err` instead of a panic. |
-| `tryWrite(r: HttpRequest, buf: u8[], off: i32, len: i32): Result<i32, string>` | `write`, with a broken contract answered as an `Err` instead of a panic: a response not started, a window outside `buf`, or more bytes than the declared length leaves; `r` is as it was. |
+| `tryWrite(r: HttpRequest, buf: u8[], off: i32, len: i32): Result<i32, string>` | `write`, with a broken contract answered as an `Err` instead of a panic. A response not started leaves `r` as it was. A window outside `buf`, or more bytes than the declared length leaves (whether this check or the carrier finds it), abandons the response: the head is out and the body cannot follow it as declared, so the connection is closed and `r` is the handler's again. The caller answers nothing more for `r`. |
 | `wait(timeoutMs: i32): i32` | One turn of the loop: waits up to `timeoutMs` (-1 for no limit) for a socket to be ready, accepts, reads and writes what is, closes the connections past their timeouts, and answers how many whole requests are waiting for `take`. |
 | `watch(fd: i32, id: i32): void` | Watches `fd` for reading beside the handler's sockets, as `id` (0 to `HANDLER_MAX_WATCHED - 1`): `fired(id)` says whether it was ready in the last `wait`. For a program's own descriptors — `signalFd()` for a graceful stop, a pipe from another thread. |
-| `write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
+| `write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. A response not started, a window outside `buf`, or more bytes than the declared length leaves panics; `tryWrite` answers those instead, closing the connection. |
 
 ### HttpRequest
 

@@ -714,7 +714,9 @@ const serveAnswer = (c: ServeConns, st: ServeState, k: i32, stats: ServeStats): 
     return
   }
   if (typeLength === 0) {
-    c.send(s, gen, status, st.plainNames, st.plainValues, bodies[k], length)
+    if (!c.send(s, gen, status, st.plainNames, st.plainValues, bodies[k], length)) {
+      serveCountFailed(stats)
+    }
     return
   }
   const body: u8[] = bodies[k]
@@ -729,7 +731,9 @@ const serveAnswer = (c: ServeConns, st: ServeState, k: i32, stats: ServeStats): 
     return
   }
   typedValues[last] = typeBytes[type]
-  c.send(s, gen, status, st.typedNames, typedValues, body, length)
+  if (!c.send(s, gen, status, st.typedNames, typedValues, body, length)) {
+    serveCountFailed(stats)
+  }
 }
 
 /** The index in `st.typeBytes` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
@@ -1464,13 +1468,20 @@ class ServeConns {
    * it no more, and its connection lends the parser's head and spans, which
    * the record points at, until `giveBack`. A restart meanwhile takes `head`
    * and `spans` for the next peer and leaves the record its own.
+   *
+   * @returns the record, or null when `s` is no slot or holds no record:
+   *   `take` gives only a slot `begin` routed, so null is this module's own
+   *   fault, and the caller answers it 500
    */
-  lendOut(s: i32, head: u8[], spans: i32[]): HttpRequest {
+  lendOut(s: i32, head: u8[], spans: i32[]): HttpRequest | null {
     const ex: ServeExchange[] = this.ex
     if (s < 0 || s >= toI32(ex.length)) {
-      return this.none
+      return null
     }
     const e: ServeExchange = ex[s]
+    if (!e.holds) {
+      return null
+    }
     const r: HttpRequest = e.rec
     e.holds = false
     e.rec = this.none
@@ -1704,12 +1715,17 @@ class ServeConns {
    * Answers slot `s`'s held exchange at generation `gen`, unless its
    * connection closed: the head, `len` bytes of `body` unless the status has
    * none, the end. What the output cannot take waits in the slot's
-   * `pending` for `H1_WRITE`.
+   * `pending` for `H1_WRITE`. A head or body the carrier refuses (a head
+   * larger than the output, say, from a long `ServeLimits.server`) cannot
+   * be answered any more: the connection is closed, as when the output has
+   * no room for the head.
+   *
+   * @returns false when the carrier refused the answer and the connection was closed
    */
-  send(s: i32, gen: i32, status: i32, names: u8[][], values: u8[][], body: u8[], len: i32): void {
+  send(s: i32, gen: i32, status: i32, names: u8[][], values: u8[][], body: u8[], len: i32): boolean {
     const ex: ServeExchange[] = this.ex
     if (!this.live(s, gen) || s < 0 || s >= toI32(ex.length)) {
-      return
+      return true
     }
     const e: ServeExchange = ex[s]
     const conn: Http1Connection = e.conn
@@ -1719,12 +1735,11 @@ class ServeConns {
       // The output still holds more of the answer before this one than a
       // head can fit behind: ending the connection is the one answer left.
       this.closeSlot(s)
-      return
+      return true
     }
     if (sent !== 0) {
-      panic(
-        `serve: the carrier refused the head (${sent}): a name or value that is not a token or field text`
-      )
+      this.closeSlot(s)
+      return false
     }
     if (len > 0 && !bodiless) {
       const start: i32 = 0
@@ -1732,7 +1747,9 @@ class ServeConns {
       if (taken === H1_AGAIN) {
         taken = 0
       } else if (taken < 0) {
-        panic(`serve: the carrier refused the body (${taken})`)
+        // The head is out: the rest of the answer cannot follow it.
+        this.closeSlot(s)
+        return false
       }
       if (taken < len) {
         const rest: i32 = len - taken
@@ -1745,6 +1762,7 @@ class ServeConns {
     }
     this.finish(e)
     this.driveOn(s, e)
+    return true
   }
 
   /** Writes what the answer still has pending and ends it; the exchange is over once both are done. */
@@ -1962,7 +1980,21 @@ export const serveOn = async (
           stats.answered += 1
           continue
         }
-        st.reqs[k] = c.lendOut(s, st.spareHeads[k], st.spareSpans[k])
+        const lent: HttpRequest | null = c.lendOut(s, st.spareHeads[k], st.spareSpans[k])
+        if (lent === null) {
+          // No record to hand a task: the slot goes back unused, and the
+          // client gets a 500 rather than a task reading a record nobody made.
+          const free: i32[] = st.free
+          if (st.freeCount >= 0 && st.freeCount < toI32(free.length)) {
+            free[st.freeCount] = k
+            st.freeCount += 1
+          }
+          c.problem(s, c.slotGen[s], SERVE_FAILED, c.failed)
+          serveCountFailed(stats)
+          stats.answered += 1
+          continue
+        }
+        st.reqs[k] = lent
         st.slots[k] = s
         st.gens[k] = c.slotGen[s]
         st.busy[k] = true

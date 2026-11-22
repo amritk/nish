@@ -6618,27 +6618,30 @@ function HttpHandler.put(this: HttpHandler, r: HttpRequest, buf: u8[], off: i32,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpHandler.refused
   escaping: len off
-  calls: nish.Http1Connection.write nish.Http1Server.connection nish.HttpHandler.keep nish.HttpHandler.live nish.HttpHandler.refused nish.handlerAdd nish.handlerOutside nish.handlerSub nish_str_concat nish_str_from_i32
-  pointer this: size=296 writesThrough=true captured=false passedTo=nish.HttpHandler.refused#0 nish.HttpHandler.refused#0 nish.HttpHandler.live#0 nish.HttpHandler.refused#0 nish.HttpHandler.refused#0 nish.HttpHandler.keep#0
-  pointer r: size=160 writesThrough=true captured=false passedTo=nish.HttpHandler.live#1 nish.HttpHandler.keep#1
+  calls: nish.Http1Connection.write nish.Http1Server.connection nish.HttpHandler.abandon nish.HttpHandler.keep nish.HttpHandler.live nish.HttpHandler.refused nish.handlerAdd nish.handlerOutside nish.handlerSub nish_str_concat nish_str_from_i32
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.HttpHandler.refused#0 nish.HttpHandler.abandon#0 nish.HttpHandler.refused#0 nish.HttpHandler.live#0 nish.HttpHandler.abandon#0 nish.HttpHandler.refused#0 nish.HttpHandler.abandon#0 nish.HttpHandler.refused#0 nish.HttpHandler.keep#0
+  pointer r: size=160 writesThrough=true captured=false passedTo=nish.HttpHandler.abandon#1 nish.HttpHandler.live#1 nish.HttpHandler.abandon#1 nish.HttpHandler.abandon#1 nish.HttpHandler.keep#1
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.handlerOutside#0 nish.Http1Connection.write#1 nish.HttpHandler.keep#2
   stackSites=0 stackLocals=0
   callee +0:14 HttpHandler.refused -> @nish.HttpHandler.refused
-  callee +2:9 handlerOutside -> @nish.handlerOutside
-  callee +3:14 HttpHandler.refused -> @nish.HttpHandler.refused
-  callee +5:10 HttpHandler.live -> @nish.HttpHandler.live
-  local +8:11 conn: Http1Connection (const)
-  callee +8:35 Http1Server.connection -> @nish.Http1Server.connection
-  local +11:11 owed: i32 (const)
-  callee +11:23 handlerSub -> @nish.handlerSub
-  callee +11:53 handlerSub -> @nish.handlerSub
-  callee +13:14 HttpHandler.refused -> @nish.HttpHandler.refused
-  local +17:9 taken: i32 (let)
-  callee +19:15 Http1Connection.write -> @nish.Http1Connection.write
-  callee +25:16 HttpHandler.refused -> @nish.HttpHandler.refused
-  callee +31:7 HttpHandler.keep -> @nish.HttpHandler.keep
-  callee +31:25 handlerAdd -> @nish.handlerAdd
-  callee +31:49 handlerSub -> @nish.handlerSub
+  callee +4:9 handlerOutside -> @nish.handlerOutside
+  callee +5:7 HttpHandler.abandon -> @nish.HttpHandler.abandon
+  callee +6:14 HttpHandler.refused -> @nish.HttpHandler.refused
+  callee +8:10 HttpHandler.live -> @nish.HttpHandler.live
+  local +11:11 conn: Http1Connection (const)
+  callee +11:35 Http1Server.connection -> @nish.Http1Server.connection
+  local +14:11 owed: i32 (const)
+  callee +14:23 handlerSub -> @nish.handlerSub
+  callee +14:53 handlerSub -> @nish.handlerSub
+  callee +16:7 HttpHandler.abandon -> @nish.HttpHandler.abandon
+  callee +17:14 HttpHandler.refused -> @nish.HttpHandler.refused
+  local +21:9 taken: i32 (let)
+  callee +23:15 Http1Connection.write -> @nish.Http1Connection.write
+  callee +29:9 HttpHandler.abandon -> @nish.HttpHandler.abandon
+  callee +30:16 HttpHandler.refused -> @nish.HttpHandler.refused
+  callee +36:7 HttpHandler.keep -> @nish.HttpHandler.keep
+  callee +36:25 handlerAdd -> @nish.handlerAdd
+  callee +36:49 handlerSub -> @nish.handlerSub
 function HttpHandler.keep(this: HttpHandler, r: HttpRequest, buf: u8[], off: i32, len: i32): void -> @nish.HttpHandler.keep [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -6762,9 +6765,9 @@ function HttpHandler.sendFieldsCore(this: HttpHandler, r: HttpRequest, status: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpHandler.refused
   escaping: len off status
-  calls: nish.HttpHandler.abandon nish.HttpHandler.endCore nish.HttpHandler.put nish.HttpHandler.refused nish.HttpHandler.release nish.HttpHandler.startCore nish.handlerOutside nish_str_concat nish_str_from_i32
-  pointer this: size=296 writesThrough=true captured=false passedTo=nish.HttpHandler.refused#0 nish.HttpHandler.startCore#0 nish.HttpHandler.release#0 nish.HttpHandler.put#0 nish.HttpHandler.abandon#0 nish.HttpHandler.endCore#0
-  pointer r: size=160 writesThrough=true captured=false passedTo=nish.HttpHandler.startCore#1 nish.HttpHandler.release#1 nish.HttpHandler.put#1 nish.HttpHandler.abandon#1 nish.HttpHandler.endCore#1
+  calls: nish.HttpHandler.endCore nish.HttpHandler.put nish.HttpHandler.refused nish.HttpHandler.release nish.HttpHandler.startCore nish.handlerOutside nish_str_concat nish_str_from_i32
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.HttpHandler.refused#0 nish.HttpHandler.startCore#0 nish.HttpHandler.release#0 nish.HttpHandler.put#0 nish.HttpHandler.endCore#0
+  pointer r: size=160 writesThrough=true captured=false passedTo=nish.HttpHandler.startCore#1 nish.HttpHandler.release#1 nish.HttpHandler.put#1 nish.HttpHandler.endCore#1
   pointer names: size=0 writesThrough=true captured=true passedTo=nish.HttpHandler.startCore#3
   pointer values: size=0 writesThrough=true captured=true passedTo=nish.HttpHandler.startCore#4
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.handlerOutside#0 nish.HttpHandler.put#2
@@ -6776,8 +6779,7 @@ function HttpHandler.sendFieldsCore(this: HttpHandler, r: HttpRequest, status: i
   callee +4:26 HttpHandler.startCore -> @nish.HttpHandler.startCore
   callee +6:7 HttpHandler.release -> @nish.HttpHandler.release
   callee +16:11 HttpHandler.put -> @nish.HttpHandler.put
-  callee +17:9 HttpHandler.abandon -> @nish.HttpHandler.abandon
-  callee +21:12 HttpHandler.endCore -> @nish.HttpHandler.endCore
+  callee +20:12 HttpHandler.endCore -> @nish.HttpHandler.endCore
 function HttpHandler.empty(this: HttpHandler, r: HttpRequest, status: i32): i32 -> @nish.HttpHandler.empty [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpHandler.emptyCore

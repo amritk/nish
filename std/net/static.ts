@@ -297,7 +297,10 @@ const staticSpace = (b: i32): boolean => b === 32 || b === 9
 /**
  * Writes `v` (0 or more) in base `radix` (10 or 16, lowercase) at
  * `out[at ..)` and answers the index past it; -1, writing nothing, when `at`
- * is -1 or the digits do not fit, which every caller checks.
+ * is -1 or the digits do not fit, which every caller checks. Every `v` a
+ * caller passes is 0 or more (a size `staticResolve` refused below 0, a
+ * range inside it, an mtime clamped at 0), so each remainder is a digit and
+ * the guard in the loop never skips a byte.
  */
 const staticDigits = (out: u8[], at: i32, v: i64, radix: i64): i32 => {
   // Any radix but 16 is 10.
@@ -701,7 +704,10 @@ export class StaticFiles {
   }
 
   /**
-   * `serve` through `nish/net/handler`'s HTTP/1.1 carrier.
+   * `serve` through `nish/net/handler`'s HTTP/1.1 carrier. Panics where
+   * `HttpHandler.start`, `write` or `end` would, and on a field index the
+   * handler gives no value span for; `tryServeHandler` answers each as an
+   * `Err` instead.
    * @param h the handler `r` came from
    * @param r a request taken and not yet answered
    * @param pathStart where the path starts in `r.head`
@@ -712,7 +718,9 @@ export class StaticFiles {
     const head: boolean = r.methodIs("HEAD")
     const planned = this.staticRequest(r, pathStart, pathEnd)
     if (planned.isErr()) {
-      // `HttpRequest.valueStart`'s contract, as this read it before.
+      // `HttpRequest.valueStart`'s contract, as this read it before: an index
+      // `header` answered always has a span, so this is the handler's fault.
+      // `tryServeHandler` answers it as an `Err` instead.
       panic(planned.error)
     }
     const status: i32 = planned.value
@@ -739,14 +747,18 @@ export class StaticFiles {
       }
     }
     this.staticClose()
-    return sent === HANDLER_SENT ? h.end(r) : sent
+    // `end` also after `HANDLER_DROPPED`: it is what hands `r` back.
+    return h.end(r)
   }
 
   /**
    * `serveHandler` through the handler's `try` calls: a misuse that makes
    * `start`, `write` or `end` panic comes back as the handler's reason
    * instead, with the file closed; so does a field index the handler gives
-   * no value span for, before anything is sent.
+   * no value span for, before anything is sent. An `Err` from before the
+   * head (that field index, a request not taken) leaves `r` owed an answer;
+   * one from after it (`tryWrite` or `tryEnd` refusing the body) has closed
+   * the connection and handed `r` back, as `HttpHandler` describes.
    * @param h the handler `r` came from
    * @param r a request taken and not yet answered
    * @param pathStart where the path starts in `r.head`
@@ -795,9 +807,8 @@ export class StaticFiles {
       }
     }
     this.staticClose()
-    if (sent !== HANDLER_SENT) {
-      return Ok(sent)
-    }
+    // `tryEnd` also after `HANDLER_DROPPED`: it is what hands `r` back, and
+    // for a dropped request it answers `Ok(HANDLER_DROPPED)`.
     const ended: Result<i32, string> = h.tryEnd(r)
     if (ended.isErr()) {
       return Err(ended.error)
@@ -1098,7 +1109,9 @@ export class StaticFiles {
     // `etag` has 48 bytes, and the longest tag, two 16-digit numbers, three
     // quotes and dashes and a coding, is 38.
     // A write that does not fit answers -1 and every later one carries it:
-    // the file then has no ETag (`etagLength` 0), sent or matched.
+    // the file then has no ETag (`etagLength` 0), sent or matched — which
+    // RFC 9110 §8.8.3 allows, an ETag being optional; at 38 bytes of 48 it
+    // does not happen.
     const out: u8[] = this.etag
     let at: i32 = staticPut(out, 0, 34)
     at = staticDigits(out, at, this.size, 16)
@@ -1387,8 +1400,9 @@ export class StaticFiles {
     }
     const scratch: u8[] = new Array<u8>(64)
     if (status === 416) {
-      // A size below 2^31 has 10 digits, which `scratch` holds; -1 would
-      // send the answer without the field.
+      // A size below 2^31 (`STATIC_MAX_FILE`) has 10 digits, which
+      // `scratch` holds; -1 would send the 416 without the field, which
+      // RFC 9110 §15.5.17 only recommends.
       const at: i32 = staticDigits(scratch, 8, this.size, 10)
       copyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
       if (at >= 0) {
@@ -1427,9 +1441,9 @@ export class StaticFiles {
     }
     if (status === 206) {
       copyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
-      // Three numbers below 2^31 and the words around them fit `scratch`'s 64 bytes.
-      // -1 from a write that does not fit would send the answer without
-      // the field; the 38 bytes at most fit.
+      // Three numbers below 2^31 (`STATIC_MAX_FILE`) and the words around
+      // them, 38 bytes at most, fit `scratch`'s 64, so the field is never
+      // dropped: a 206 without it would break RFC 9110 §15.3.7.
       let at: i32 = staticDigits(scratch, 6, this.from, 10)
       at = staticPut(scratch, at, 45)
       at = staticDigits(scratch, at, staticSub64(this.to, 1), 10)
