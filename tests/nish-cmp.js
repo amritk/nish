@@ -1523,6 +1523,44 @@ const PACKAGE_LINK = "A package links a C library or its own C sources"
 /** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
 const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
 const s1PanicFree = byFinding(S1_PANIC_FREE)
+/** The changelog words of WP80 S5, which makes nish/net's handler, serve and static panic-free for http-app. */
+const S5_PANIC_FREE = "handler, serve and static panic-free for http-app"
+/** WP80 S5's programs: one new negative, and three that call the checked forms the seed's std/net does not have. */
+const s5PanicFreeDeclared = () => [
+  ...byFinding(S5_PANIC_FREE)(
+    "a negative new with this change: it links std modules that changed on main after the 0.44.0 seed was cut (handler decodes request bodies through http-compress and zlib, router gains middleware steps, json and bytes prove or drop panic sites) and handler.ts, which this change makes panic-free, so the seed's copies of those modules, and the program's module and header naming their structs, differ; the candidate writes zlib.ll and the reference does not",
+    {
+      "tests/link/net_handler_limits_panic/main.ts": [
+        "bytes.ll",
+        "handler.ll",
+        "http-compress.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "router.ll",
+        "zlib.ll",
+      ],
+    }
+  ),
+  {
+    program: "tests/link/net_handler_open/main.ts",
+    file: "exit",
+    changelog: S5_PANIC_FREE,
+    why: "the program calls openHttpHandler, which the seed's nish/net/handler does not export, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/net_handler_refused/main.ts",
+    file: "exit",
+    changelog: S5_PANIC_FREE,
+    why: "the program calls HttpHandler.trySendJson, which the seed's std/net does not have, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/net_serve_try/main.ts",
+    file: "exit",
+    changelog: S5_PANIC_FREE,
+    why: "the program calls Request.tryParam, which the seed's std/net does not have, so only the candidate compiles it",
+  },
+]
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -10115,6 +10153,7 @@ const stdPanicFree = (why, filesByProgram) =>
   )
 
 const DECLARED = [
+  ...s5PanicFreeDeclared(),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
   ...stdPanicFree(
