@@ -571,10 +571,11 @@ export const tlsHeldCopyIn = (held: u8[], from: u8[]): i32 => {
  * @returns A fresh plain array of the same length, which the caller must wipe.
  */
 export const tlsHeldClone = (held: u8[]): u8[] => {
-  // Built by push: a held secret's length is not one a `u16` bounds.
-  const copy: u8[] = []
-  for (let k: i32 = 0; k < toI32(held.length); k++) {
-    copy.push(held[k])
+  // Sized before a secret byte goes in, so no grow leaves a copied prefix
+  // behind in the arena: `tlsZeros` takes a held secret's `i32` length.
+  const copy: u8[] = tlsZeros(toI32(held.length))
+  for (let k: i32 = 0; k < toI32(copy.length) && k < toI32(held.length); k++) {
+    copy[k] = held[k]
   }
   return copy
 }
