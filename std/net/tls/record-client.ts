@@ -147,6 +147,9 @@ const TLS_MESSAGE_HEADER_SIZE: i32 = 4
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_RECORD_CLIENT_FROM: i32 = 0
 
+/** The alert a negative answer of the record layer stands for: `code` is minus an alert, so the negation never wraps. */
+const tlsClientAlertOf = (code: i32): i32 => toI32(0 - toI64(code))
+
 /**
  * Installs `protection` under `suite` from the traffic secret `held`, from a
  * plain copy that dies with the arena block, zeroed; false, as `install`
@@ -238,6 +241,10 @@ export class TlsRecordClient {
   private pendingHandshakeAt: i32 = 0
   /** How many bytes of the current post-handshake message's header or KeyUpdate are in `postHandshake`. */
   private postHandshakeLength: i32 = 0
+  /** The type of the post-handshake message in `postHandshake`, kept as its first byte arrives. */
+  private postType: i32 = 0
+  /** The 24-bit body length of that message, as much of it as has arrived. */
+  private postBody: i32 = 0
   /** How many body bytes of a NewSessionTicket are still to come, handed to `TlsClient` as they arrive. */
   private ticketLeft: i32 = 0
   private idleRecords: i32 = 0
@@ -460,7 +467,7 @@ export class TlsRecordClient {
       }
       const n: i32 = this.reader.next()
       if (n < 0) {
-        this.fail(-n)
+        this.fail(tlsClientAlertOf(n))
         return
       }
       if (n === 0) {
@@ -483,13 +490,27 @@ export class TlsRecordClient {
   /** Whether a whole record's content fits beside what the caller has not read, moving that to the front when it would then fit. */
   private plainHasRoom(): boolean {
     const capacity: i32 = TLS_RECORD_CLIENT_PLAIN_SIZE
-    if (capacity - (this.plainEnd - this.plainStart) < TLS_MAX_PLAINTEXT) {
+    const start: i32 = this.plainStart
+    const end: i32 = this.plainEnd
+    // Both ends stay inside `plain`'s 2 * 2^14 bytes: the bound refuses only a state no path reaches.
+    if (
+      start < 0 ||
+      start > 32768 ||
+      end < 0 ||
+      end > 32768 ||
+      capacity - (end - start) < TLS_MAX_PLAINTEXT
+    ) {
       return false
     }
-    if (capacity - this.plainEnd < TLS_MAX_PLAINTEXT) {
-      const held: i32 = this.plainEnd - this.plainStart
-      for (let k: i32 = 0; k < held && this.plainStart + k < toI32(this.plain.length); k++) {
-        this.plain[k] = this.plain[this.plainStart + k]
+    if (capacity - end < TLS_MAX_PLAINTEXT) {
+      const held: i32 = end - start
+      const plain: u8[] = this.plain
+      for (let k: i32 = 0; k < held && k < toI32(plain.length); k++) {
+        const from: i32 = start + k
+        if (from >= toI32(plain.length)) {
+          break
+        }
+        plain[k] = plain[from]
       }
       this.plainStart = 0
       this.plainEnd = held
@@ -499,8 +520,13 @@ export class TlsRecordClient {
 
   /** Counts a record that carried nothing for the caller: 0, or `unexpected_message` once there are too many in a row. */
   private idle(): i32 {
-    this.idleRecords = this.idleRecords + 1
-    return this.idleRecords > TLS_RECORD_IDLE_LIMIT ? TLS_ALERT_UNEXPECTED_MESSAGE : 0
+    const seen: i32 = this.idleRecords
+    // The count ends the connection just past `TLS_RECORD_IDLE_LIMIT`, so it never nears 2^30.
+    if (seen > 1073741823) {
+      return TLS_ALERT_UNEXPECTED_MESSAGE
+    }
+    this.idleRecords = seen + 1
+    return seen + 1 > TLS_RECORD_IDLE_LIMIT ? TLS_ALERT_UNEXPECTED_MESSAGE : 0
   }
 
   /**
@@ -510,12 +536,13 @@ export class TlsRecordClient {
    * server's Finished is read, to the handshake before. Answers 0 or the alert.
    */
   private handleRecord(buf: u8[], off: i32, n: i32): i32 {
-    if (toI32(buf[off]) === TLS_CONTENT_CHANGE_CIPHER_SPEC) {
-      return this.handleChangeCipherSpec(buf, off, n - TLS_RECORD_HEADER_SIZE)
+    // A record outside `buf` is `open`'s to refuse.
+    if (off >= 0 && off < toI32(buf.length) && toI32(buf[off]) === TLS_CONTENT_CHANGE_CIPHER_SPEC) {
+      return this.handleChangeCipherSpec(buf, off, n)
     }
     const length: i32 = this.readProtection.open(buf, off, n, this.scratch, TLS_RECORD_CLIENT_FROM)
     if (length < 0) {
-      return -length
+      return tlsClientAlertOf(length)
     }
     if (this.readLevel === TLS_LEVEL_APPLICATION) {
       return this.handleApplicationRecord(length)
@@ -537,10 +564,15 @@ export class TlsRecordClient {
    * The server's compatibility record (§5, §D.4): one byte of 1, in the
    * clear, after its first handshake record and before its Finished, and not
    * between the records of one handshake message. Dropped; anything else is
-   * `unexpected_message`.
+   * `unexpected_message`. The record, header and all, is `buf[off .. off + n)`.
    */
-  private handleChangeCipherSpec(buf: u8[], off: i32, length: i32): i32 {
-    if (length !== 1 || toI32(buf[off + TLS_RECORD_HEADER_SIZE]) !== 1) {
+  private handleChangeCipherSpec(buf: u8[], off: i32, n: i32): i32 {
+    // A record starts inside the reader's buffer of fewer than 2^15 bytes: the bound refuses none it hands over.
+    if (n !== TLS_RECORD_HEADER_SIZE + 1 || off < 0 || off > 1073741823) {
+      return TLS_ALERT_UNEXPECTED_MESSAGE
+    }
+    const at: i32 = off + TLS_RECORD_HEADER_SIZE
+    if (at >= toI32(buf.length) || toI32(buf[at]) !== 1) {
       return TLS_ALERT_UNEXPECTED_MESSAGE
     }
     if (!this.started || this.readLevel === TLS_LEVEL_APPLICATION || this.tls.inputLength > 0) {
@@ -579,10 +611,22 @@ export class TlsRecordClient {
         if (length === 0) {
           return this.idle()
         }
-        for (let k: i32 = 0; k < length && this.plainEnd + k < toI32(this.plain.length); k++) {
-          this.plain[this.plainEnd + k] = this.scratch[k]
+        const end: i32 = this.plainEnd
+        // `plainHasRoom` left a record's room past `end`, and `open` wrote at most 2^14 bytes: the bound
+        // refuses only a state no path reaches.
+        if (end < 0 || end > 32768 || length < 0 || length > 16384) {
+          return TLS_ALERT_INTERNAL_ERROR
         }
-        this.plainEnd = this.plainEnd + length
+        const plain: u8[] = this.plain
+        const scratch: u8[] = this.scratch
+        for (let k: i32 = 0; k < length && k < toI32(scratch.length); k++) {
+          const to: i32 = end + k
+          if (to >= toI32(plain.length)) {
+            break
+          }
+          plain[to] = scratch[k]
+        }
+        this.plainEnd = end + length
         this.idleRecords = 0
         return 0
       }
@@ -604,10 +648,11 @@ export class TlsRecordClient {
    * the connection with nothing more sent and every key wiped.
    */
   private handleAlert(length: i32): i32 {
-    if (length !== 2) {
+    const scratch: u8[] = this.scratch
+    if (length !== 2 || toI32(scratch.length) < 2) {
       return TLS_ALERT_DECODE_ERROR
     }
-    const description: i32 = toI32(this.scratch[1])
+    const description: i32 = toI32(scratch[1])
     if (description === TLS_ALERT_CLOSE_NOTIFY && this.state !== TLS_RECORD_STATE_HANDSHAKE) {
       this.peerClosed = true
       this.wipeRead()
@@ -636,44 +681,69 @@ export class TlsRecordClient {
    * limit.
    */
   private handlePostHandshake(length: i32): i32 {
+    const scratch: u8[] = this.scratch
+    const message: u8[] = this.postHandshake
+    // `open` writes at most 2^14 bytes into `scratch`, and `message` holds a whole KeyUpdate: the bounds
+    // refuse only a state no path reaches.
+    if (length < 0 || length > 16384 || toI32(message.length) < TLS_KEY_UPDATE_SIZE) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     let k: i32 = 0
-    while (k < length) {
-      if (this.ticketLeft > 0) {
+    // `length` is at most 2^14, so the last bound never ends the walk early.
+    while (k >= 0 && k < length && k < toI32(scratch.length) && k < 16384) {
+      const ticketLeft: i32 = this.ticketLeft
+      // A ticket's body length is 24 bits.
+      if (ticketLeft < 0 || ticketLeft > 16777215) {
+        return TLS_ALERT_INTERNAL_ERROR
+      }
+      if (ticketLeft > 0) {
         const left: i32 = length - k
-        const take: i32 = left < this.ticketLeft ? left : this.ticketLeft
-        const alert: i32 = this.tls.receive(TLS_LEVEL_APPLICATION, this.scratch, k, take)
+        let take: i32 = ticketLeft
+        if (left > 0 && left < take) {
+          take = left
+        }
+        const alert: i32 = this.tls.receive(TLS_LEVEL_APPLICATION, scratch, k, take)
         if (alert !== 0) {
           return alert
         }
-        this.ticketLeft = this.ticketLeft - take
+        this.ticketLeft = ticketLeft - take
         k = k + take
         continue
       }
-      if (this.postHandshakeLength === 0) {
+      const have: i32 = this.postHandshakeLength
+      // A message is handled at its fifth byte, so no more than four are ever held before one.
+      if (have < 0 || have > 4) {
+        return TLS_ALERT_INTERNAL_ERROR
+      }
+      const byte: u8 = scratch[k]
+      if (have === 0) {
         const idle: i32 = this.idle()
         if (idle !== 0) {
           return idle
         }
       }
-      if (this.postHandshakeLength < toI32(this.postHandshake.length)) {
-        this.postHandshake[this.postHandshakeLength] = this.scratch[k]
+      if (have < toI32(message.length)) {
+        message[have] = byte
       }
-      this.postHandshakeLength = this.postHandshakeLength + 1
-      const held: i32 = this.postHandshakeLength
-      const type: i32 = toI32(this.postHandshake[0])
+      const held: i32 = have + 1
+      this.postHandshakeLength = held
+      if (held === 1) {
+        this.postType = toI32(byte)
+        this.postBody = 0
+      } else if (held <= TLS_MESSAGE_HEADER_SIZE) {
+        this.postBody = (this.postBody << 8) | toI32(byte)
+      }
+      const type: i32 = this.postType
       if (held === 1 && type !== TLS_HANDSHAKE_KEY_UPDATE && type !== TLS_HANDSHAKE_NEW_SESSION_TICKET) {
         return TLS_ALERT_UNEXPECTED_MESSAGE
       }
       if (held === TLS_MESSAGE_HEADER_SIZE) {
-        const body: i32 =
-          (toI32(this.postHandshake[1]) << 16) |
-          (toI32(this.postHandshake[2]) << 8) |
-          toI32(this.postHandshake[3])
+        const body: i32 = this.postBody
         if (type === TLS_HANDSHAKE_NEW_SESSION_TICKET) {
           // The header goes to `TlsClient` with the body, which it reads whole.
           const alert: i32 = this.tls.receive(
             TLS_LEVEL_APPLICATION,
-            this.postHandshake,
+            message,
             TLS_RECORD_CLIENT_FROM,
             TLS_MESSAGE_HEADER_SIZE
           )
@@ -687,7 +757,7 @@ export class TlsRecordClient {
         }
       }
       if (held === TLS_KEY_UPDATE_SIZE) {
-        const request: i32 = toI32(this.postHandshake[4])
+        const request: i32 = toI32(byte)
         if (request > 1) {
           return TLS_ALERT_ILLEGAL_PARAMETER
         }
@@ -695,10 +765,12 @@ export class TlsRecordClient {
           return TLS_ALERT_UNEXPECTED_MESSAGE
         }
         this.postHandshakeLength = 0
-        if (this.keyUpdates >= TLS_RECORD_MAX_KEY_UPDATES) {
+        const updates: i32 = this.keyUpdates
+        // The count stops at `TLS_RECORD_MAX_KEY_UPDATES`, far below 2^30.
+        if (updates >= TLS_RECORD_MAX_KEY_UPDATES || updates < 0 || updates > 1073741823) {
           return TLS_ALERT_UNEXPECTED_MESSAGE
         }
-        this.keyUpdates = this.keyUpdates + 1
+        this.keyUpdates = updates + 1
         return this.updateReadKeys(request === 1)
       }
       k = k + 1
@@ -761,20 +833,43 @@ export class TlsRecordClient {
   /** Whether `need` more bytes fit in `output`, moving what is unsent to the front first. */
   private outputHasRoom(need: i32): boolean {
     const capacity: i32 = TLS_RECORD_CLIENT_OUTPUT_SIZE
-    if (this.outputEnd + need > capacity && this.outputStart > 0) {
-      const held: i32 = this.outputEnd - this.outputStart
-      for (let k: i32 = 0; k < held && this.outputStart + k < toI32(this.output.length); k++) {
-        this.output[k] = this.output[this.outputStart + k]
-      }
-      this.outputStart = 0
-      this.outputEnd = held
+    const start: i32 = this.outputStart
+    const end: i32 = this.outputEnd
+    // Both ends stay inside `output`'s two records, and no record needs 2^30 bytes: the bounds refuse
+    // only a state no path reaches.
+    if (start < 0 || start > 33290 || end < 0 || end > 33290 || need < 0 || need > 1073741823) {
+      return false
     }
-    return this.outputEnd + need <= capacity
+    if (end + need <= capacity) {
+      return true
+    }
+    if (start === 0) {
+      return false
+    }
+    const held: i32 = end - start
+    const output: u8[] = this.output
+    for (let k: i32 = 0; k < held && k < toI32(output.length); k++) {
+      const from: i32 = start + k
+      if (from >= toI32(output.length)) {
+        break
+      }
+      output[k] = output[from]
+    }
+    this.outputStart = 0
+    this.outputEnd = held
+    return held + need <= capacity
   }
 
-  /** The most content one record may carry under the write protection as it stands (§5.4). */
+  /**
+   * The most content one record may carry under the write protection as it stands (§5.4): 0, which
+   * the callers refuse with `internal_error`, for a `padding` that leaves no room or is negative.
+   */
   private maxChunk(): i32 {
-    return TLS_MAX_PLAINTEXT - this.writePadding()
+    const padding: i32 = this.writePadding()
+    if (padding < 0 || padding > 16384) {
+      return 0
+    }
+    return TLS_MAX_PLAINTEXT - padding
   }
 
   /** The padding the next record carries: `padding` once records are protected, none in the clear. */
@@ -782,34 +877,52 @@ export class TlsRecordClient {
     return this.writeProtection.isProtected() ? this.padding : 0
   }
 
-  /** The room a record of `len` content bytes takes in `output` under the write protection as it stands. */
-  private recordRoom(len: i32): i32 {
+  /**
+   * The room a record takes in `output` past its content under the write protection as it stands: -1
+   * for a `padding` `seal` refuses.
+   */
+  private recordOverhead(): i32 {
     if (!this.writeProtection.isProtected()) {
-      return TLS_RECORD_HEADER_SIZE + len
+      return TLS_RECORD_HEADER_SIZE
     }
-    return TLS_RECORD_HEADER_SIZE + len + 1 + this.writePadding() + TLS_RECORD_TAG_SIZE
+    const padding: i32 = this.padding
+    if (padding < 0 || padding > 16384) {
+      return -1
+    }
+    return TLS_RECORD_HEADER_SIZE + 1 + padding + TLS_RECORD_TAG_SIZE
   }
 
   /**
    * Seals one record of `type` from `data[off .. off + len)` onto `output`
    * under `protection`. False, writing nothing, when it does not fit; a
-   * refusal from `seal` itself fails the connection.
+   * refusal from `seal` itself fails the connection, as does a `len` or
+   * `padding` outside 0 to 2^14, which `seal` refuses.
    */
   private sealWith(protection: TlsRecordProtection, type: i32, data: u8[], off: i32, len: i32): boolean {
     const sealed: boolean = protection.isProtected()
     const padding: i32 = sealed ? this.padding : 0
+    if (len < 0 || len > 16384 || padding < 0 || padding > 16384) {
+      this.fail(TLS_ALERT_INTERNAL_ERROR)
+      return false
+    }
     const room: i32 = sealed
       ? TLS_RECORD_HEADER_SIZE + len + 1 + padding + TLS_RECORD_TAG_SIZE
       : TLS_RECORD_HEADER_SIZE + len
     if (!this.outputHasRoom(room)) {
       return false
     }
-    const n: i32 = protection.seal(type, data, off, len, padding, this.output, this.outputEnd)
+    const end: i32 = this.outputEnd
+    const n: i32 = protection.seal(type, data, off, len, padding, this.output, end)
     if (n < 0) {
-      this.fail(-n)
+      this.fail(tlsClientAlertOf(n))
       return false
     }
-    this.outputEnd = this.outputEnd + n
+    // `seal` writes inside `output`, whose ends `outputHasRoom` keeps below 2^30.
+    if (end < 0 || end > 1073741823 || n > 1073741823) {
+      this.fail(TLS_ALERT_INTERNAL_ERROR)
+      return false
+    }
+    this.outputEnd = end + n
     return true
   }
 
@@ -828,7 +941,6 @@ export class TlsRecordClient {
     }
     const ccs: u8[] = [toU8(1)]
     const one: i32 = 1
-    // `recordRoom` counts the protected size, which is more than the clear record needs.
     if (
       !this.sealWith(this.clearProtection, TLS_CONTENT_CHANGE_CIPHER_SPEC, ccs, TLS_RECORD_CLIENT_FROM, one)
     ) {
@@ -846,13 +958,20 @@ export class TlsRecordClient {
   private sealQueue(queue: u8[], at: i32, length: i32): i32 {
     let next: i32 = at
     const most: i32 = this.maxChunk()
-    if (most < 1 && next < length) {
+    if (next >= length) {
+      return next
+    }
+    // `TlsClient`'s queues are far below 2^30 bytes, and a position in one is never negative.
+    if (most < 1 || most > 16384 || at < 0 || length < 0 || length > 1073741823) {
       this.fail(TLS_ALERT_INTERNAL_ERROR)
       return next
     }
-    while (next < length && this.state !== TLS_RECORD_STATE_FAILED) {
+    while (next >= 0 && next < length && this.state !== TLS_RECORD_STATE_FAILED) {
       const left: i32 = length - next
-      const chunk: i32 = left < most ? left : most
+      let chunk: i32 = most
+      if (left < chunk) {
+        chunk = left
+      }
       if (!this.sealRecord(TLS_CONTENT_HANDSHAKE, queue, next, chunk)) {
         return next
       }
@@ -1015,13 +1134,22 @@ export class TlsRecordClient {
    *   negative count lets nothing go.
    */
   consume(n: i32): void {
-    const held: i32 = this.outputEnd - this.outputStart
+    const start: i32 = this.outputStart
+    const end: i32 = this.outputEnd
+    // Both ends stay inside `output`'s two records: the bound refuses only a state no path reaches.
+    if (start < 0 || start > 33290 || end < 0 || end > 33290) {
+      this.fail(TLS_ALERT_INTERNAL_ERROR)
+      return
+    }
+    const held: i32 = end - start
     let take: i32 = n < held ? n : held
     if (take < 0) {
       take = 0
     }
-    this.outputStart = this.outputStart + take
-    if (this.outputStart === this.outputEnd) {
+    // `take` is 0 .. held, so the sum stays inside `output` and never wraps.
+    const at: i32 = toI32(toI64(start) + toI64(take))
+    this.outputStart = at
+    if (at === end) {
       this.outputStart = 0
       this.outputEnd = 0
     }
@@ -1060,27 +1188,43 @@ export class TlsRecordClient {
       return this.state === TLS_RECORD_STATE_FAILED ? TLS_RECORD_RESET : TLS_RECORD_AGAIN
     }
     let done: i32 = 0
-    while (done < len && this.state === TLS_RECORD_STATE_OPEN) {
+    // `tlsRecordWindowFits` refused a negative `off` or `len`, so `done` never leaves 0 .. len.
+    while (done >= 0 && done < len && len >= 0 && this.state === TLS_RECORD_STATE_OPEN) {
       if (this.writeProtection.sequence >= this.writeProtection.recordLimit && !this.sendKeyUpdate(false)) {
         break
       }
       const most: i32 = this.maxChunk()
-      if (most < 1) {
+      const overhead: i32 = this.recordOverhead()
+      // A record carries at most 2^14 bytes of content and 2^14 + 22 past it.
+      if (most < 1 || most > 16384 || overhead < 0 || overhead > 16406) {
         this.fail(TLS_ALERT_INTERNAL_ERROR)
         break
       }
       const left: i32 = len - done
-      let chunk: i32 = left < most ? left : most
-      this.outputHasRoom(this.recordRoom(chunk))
-      const room: i32 =
-        TLS_RECORD_CLIENT_OUTPUT_SIZE - this.outputEnd - this.recordRoom(TLS_RECORD_CLIENT_FROM)
+      // `most` is at most 2^14, so a longer `left` takes `most`.
+      let chunk: i32 = most
+      if (left < 16384 && left < chunk) {
+        chunk = left
+      }
+      this.outputHasRoom(overhead + chunk)
+      const end: i32 = this.outputEnd
+      // `outputHasRoom` keeps the end inside `output`'s two records.
+      if (end < 0 || end > 33290) {
+        this.fail(TLS_ALERT_INTERNAL_ERROR)
+        break
+      }
+      const room: i32 = TLS_RECORD_CLIENT_OUTPUT_SIZE - end - overhead
       if (room < chunk) {
         chunk = room
       }
-      if (chunk <= 0 || !this.sealRecord(TLS_CONTENT_APPLICATION_DATA, data, off + done, chunk)) {
+      // The window fits in `data`, so neither sum below wraps.
+      if (
+        chunk <= 0 ||
+        !this.sealRecord(TLS_CONTENT_APPLICATION_DATA, data, toI32(toI64(off) + toI64(done)), chunk)
+      ) {
         break
       }
-      done = done + chunk
+      done = toI32(toI64(done) + toI64(chunk))
     }
     if (done === 0 && len > 0) {
       return this.state === TLS_RECORD_STATE_FAILED ? TLS_RECORD_RESET : TLS_RECORD_AGAIN
@@ -1108,14 +1252,30 @@ export class TlsRecordClient {
     if (len === 0) {
       return 0
     }
-    const avail: i32 = this.plainEnd - this.plainStart
+    const start: i32 = this.plainStart
+    const end: i32 = this.plainEnd
+    // Both ends stay inside `plain`'s 2 * 2^14 bytes: the bound refuses only a state no path reaches.
+    if (start < 0 || start > 32768 || end < 0 || end > 32768) {
+      return this.state === TLS_RECORD_STATE_FAILED ? TLS_RECORD_RESET : TLS_RECORD_AGAIN
+    }
+    const avail: i32 = end - start
     if (avail > 0) {
-      const n: i32 = avail < len ? avail : len
-      for (let k: i32 = 0; k < n && off + k < toI32(buf.length); k++) {
-        buf[off + k] = this.plain[this.plainStart + k]
+      let n: i32 = avail
+      if (len < n) {
+        n = len
       }
-      this.plainStart = this.plainStart + n
-      if (this.plainStart === this.plainEnd) {
+      const plain: u8[] = this.plain
+      for (let k: i32 = 0; k < n; k++) {
+        // The window fits in `buf`, so the sum never wraps.
+        const at: i32 = toI32(toI64(off) + toI64(k))
+        const from: i32 = start + k
+        if (at < 0 || at >= toI32(buf.length) || from >= toI32(plain.length)) {
+          break
+        }
+        buf[at] = plain[from]
+      }
+      this.plainStart = start + n
+      if (start + n === end) {
         this.plainStart = 0
         this.plainEnd = 0
       }
