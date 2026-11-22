@@ -8,7 +8,9 @@
 // refusal leaves through the scratch's one wipe. A constant of the right
 // length overwritten so that r or s is zero on every round (R^2 zeroed) is
 // refused once the RFC 6979 rounds run out, not looped on. The same scratch signs before the swap and
-// after it is put right, so each `false` is the refusal it names.
+// after it is put right, so each `false` is the refusal it names. Each line
+// also reads the scratch's K, V and nonce limbs after the call, so the wipe
+// on every exit is checked, not read from the code.
 import { Secret, secret, wipe } from "nish:secret";
 import { P256SignScratch, p256SignSha256Into } from "nish/crypto/p256";
 
@@ -24,7 +26,19 @@ const sign = (name: string, scratch: P256SignScratch): void => {
   for (let i: i32 = 0; i < toI32(sig.length); i++) {
     written = written | toI32(sig[i]);
   }
-  console.log(`${name}: ${ok}, signature ${written === 0 ? "unwritten" : "written"}`);
+  // RFC 6979's K and V and the nonce limbs are zero after every return,
+  // refused or not: each leaves through the scratch's one wipe.
+  let held: u32 = 0;
+  for (const b of scratch.k) {
+    held = held | toU32(b);
+  }
+  for (const b of scratch.v) {
+    held = held | toU32(b);
+  }
+  for (const w of scratch.kM) {
+    held = held | w;
+  }
+  console.log(`${name}: ${ok}, signature ${written === 0 ? "unwritten" : "written"}, k v kM ${held === 0 ? "zero" : "held"}`);
 };
 
 export const main = (): i32 => {
