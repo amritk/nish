@@ -127,8 +127,8 @@ const SERVE_LISTENER: i32 = -1
 const SERVE_WAKE: i32 = -2
 /** The ready bits that mean a socket can be read or has hung up: EPOLLIN | EPOLLHUP's poll mapping. */
 const SERVE_READ_BITS: i32 = 5
-/** Sockets one poll reports at most. */
-const SERVE_EVENTS: i32 = 256
+// A poll reports 256 sockets at most, and `readyFds` holds two slots for each:
+// 512. The turn loop bounds `k` by 256 directly, so the prover sees `k + k` fit.
 /** `accept`'s answer when the backlog is empty. */
 const SERVE_ACCEPT_NONE: i32 = -11
 /** `accept`'s answer when a connection was reset in the backlog: the next one is tried. */
@@ -1111,7 +1111,7 @@ class ServeConns {
     this.owed = serveI32s(slots)
     this.queue = new Array<i32>(16)
     this.queueGen = new Array<i32>(16)
-    // Two per event: `SERVE_EVENTS` of them.
+    // Two per event, for the 256 one poll reports.
     this.readyFds = new Array<i32>(512)
     this.probe = serveI32s(serveParamSlots(router.maxParams))
     const contentType: u8[] = serveBytes("content-type")
@@ -1151,7 +1151,7 @@ class ServeConns {
     this.turnAt = now
     let woken: boolean = false
     const ready: i32[] = this.readyFds
-    // `SERVE_EVENTS` (256) bounds `k`, so `k + k` cannot overflow.
+    // 256 events at most bound `k`, so `k + k` cannot overflow.
     for (let k: i32 = 0; k < n && k < 256; k++) {
       const at: i32 = k + k
       if (at < 0 || at >= toI32(ready.length) - 1) {
