@@ -140,6 +140,8 @@ const HTTP_SERVER_ZERO_DIGIT: i32 = 48
 
 /** The status a body past `maxBody` is answered with. */
 const HTTP_SERVER_TOO_LARGE: i32 = 413
+/** The status a request gets when no request record is free. */
+const HTTP_SERVER_UNAVAILABLE: i32 = 503
 
 // A request's life: free, reading its body, whole but parked behind a full
 // output, queued for `take`, held by the program, streaming its response,
@@ -151,6 +153,14 @@ const HTTP_SERVER_QUEUED: i32 = 3
 const HTTP_SERVER_HELD: i32 = 4
 const HTTP_SERVER_STREAMING: i32 = 5
 const HTTP_SERVER_FLUSHING: i32 = 6
+/** `checkParam`'s `end` for a parameter's start offset (an i32 under `--number-mode f64`). */
+const HTTP_SERVER_PARAM_START: i32 = 0
+/** `checkParam`'s `end` for a parameter's end offset. */
+const HTTP_SERVER_PARAM_END: i32 = 1
+/** `spanAt`'s `part` for a field value's start offset. */
+const HTTP_SERVER_VALUE_START: i32 = 2
+/** `spanAt`'s `part` for a field value's end offset. */
+const HTTP_SERVER_VALUE_END: i32 = 3
 
 // Which carrier a request came in on.
 const HTTP_SERVER_H1: i32 = 1
@@ -443,7 +453,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` of the parameter's first raw byte
    */
   paramStart(k: i32): i32 {
-    return this.checkParam(k, 0)
+    return this.checkParam(k, HTTP_SERVER_PARAM_START)
   }
 
   /**
@@ -452,7 +462,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` just past the parameter's last raw byte
    */
   paramEnd(k: i32): i32 {
-    return this.checkParam(k, 1)
+    return this.checkParam(k, HTTP_SERVER_PARAM_END)
   }
 
   /**
@@ -462,7 +472,12 @@ export class HttpServerRequest {
    * @returns true when the raw parameter bytes are exactly `text`
    */
   paramIs(k: i32, text: string): boolean {
-    return httpServerSpanIs(this.head, this.checkParam(k, 0), this.checkParam(k, 1), text)
+    return httpServerSpanIs(
+      this.head,
+      this.checkParam(k, HTTP_SERVER_PARAM_START),
+      this.checkParam(k, HTTP_SERVER_PARAM_END),
+      text
+    )
   }
 
   /**
@@ -474,7 +489,12 @@ export class HttpServerRequest {
    * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
-    return routerDecode(this.head, this.checkParam(k, 0), this.checkParam(k, 1), out)
+    return routerDecode(
+      this.head,
+      this.checkParam(k, HTTP_SERVER_PARAM_START),
+      this.checkParam(k, HTTP_SERVER_PARAM_END),
+      out
+    )
   }
 
   /**
@@ -483,7 +503,11 @@ export class HttpServerRequest {
    * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
    */
   paramDecimal(k: i32): i32 {
-    return httpServerDecimal(this.head, this.checkParam(k, 0), this.checkParam(k, 1))
+    return httpServerDecimal(
+      this.head,
+      this.checkParam(k, HTTP_SERVER_PARAM_START),
+      this.checkParam(k, HTTP_SERVER_PARAM_END)
+    )
   }
 
   /**
@@ -591,7 +615,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` of the value's first byte, or -1 for an index `header` cannot answer
    */
   valueStart(i: i32): i32 {
-    return this.spanAt(i, 2)
+    return this.spanAt(i, HTTP_SERVER_VALUE_START)
   }
 
   /**
@@ -600,7 +624,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` just past the value's last byte, or -1 for an index `header` cannot answer
    */
   valueEnd(i: i32): i32 {
-    return this.spanAt(i, 3)
+    return this.spanAt(i, HTTP_SERVER_VALUE_END)
   }
 
   /** Entry `part` of field `i`'s four in `spans`, or -1 past the fields the request holds. */
@@ -621,7 +645,15 @@ export class HttpServerRequest {
    */
   headerIs(name: string, value: string): boolean {
     const i: i32 = this.header(name)
-    return i >= 0 && httpServerSpanIs(this.head, this.spanAt(i, 2), this.spanAt(i, 3), value)
+    return (
+      i >= 0 &&
+      httpServerSpanIs(
+        this.head,
+        this.spanAt(i, HTTP_SERVER_VALUE_START),
+        this.spanAt(i, HTTP_SERVER_VALUE_END),
+        value
+      )
+    )
   }
 }
 /** Appends `bytes[start .. end)` to an `Allow` value, after a `, ` if it is not the first. */
@@ -1050,13 +1082,13 @@ export class HttpServer {
       this.requests.push(r)
       this.free.push(r)
     }
-    this.queue = httpServerZeros(toI64(limits.requests), 0)
+    this.queue = httpServerZeros(toI64(limits.requests), toI32(0))
     this.streamRoutes = []
-    this.readyFds = httpServerZeros(toI64(2) * toI64(limits.maxEvents), 0)
+    this.readyFds = httpServerZeros(toI64(2) * toI64(limits.maxEvents), toI32(0))
     this.watchedFired = new Array<boolean>(HANDLER_MAX_WATCHED)
     this.scratch = httpServerZeros(toI64(limits.jsonBytes), toU8(0))
     this.writer = new JsonWriter(this.scratch, HTTP_SERVER_ZERO)
-    this.probe = httpServerZeros(toI64(2) * toI64(router.maxParams) + toI64(2), 0)
+    this.probe = httpServerZeros(toI64(2) * toI64(router.maxParams) + toI64(2), toI32(0))
     this.jsonType = httpFieldBytes("application/json")
     this.problemType = httpFieldBytes("application/problem+json")
     const contentType: u8[] = httpFieldBytes("content-type")
@@ -1246,8 +1278,8 @@ export class HttpServer {
     const was: i32 = this.perConnection2
     const width: i32 = per > was ? per : was
     const size: i64 = toI64(base) * toI64(width) + toI64(slots) * toI64(width)
-    const streams: i32[] = httpServerZeros(size, 0)
-    const reqs: i32[] = httpServerZeros(size, -1)
+    const streams: i32[] = httpServerZeros(size, toI32(0))
+    const reqs: i32[] = httpServerZeros(size, toI32(-1))
     const oldStreams: i32[] = this.h2Streams
     const oldReqs: i32[] = this.h2Reqs
     for (let v: i32 = 0; v < base; v++) {
@@ -1324,10 +1356,10 @@ export class HttpServer {
     this.perConnection3 = per < toI64(1) ? 1 : toI32(per)
     this.h3 = new Http3Server(quic, config, fd, slots, entropy)
     this.h3Fd = fd
-    this.h3Gen = httpServerZeros(toI64(slots), 0)
-    this.h3Count = httpServerZeros(toI64(slots), 0)
+    this.h3Gen = httpServerZeros(toI64(slots), toI32(0))
+    this.h3Count = httpServerZeros(toI64(slots), toI32(0))
     this.h3Streams = httpServerZeros(toI64(slots) * toI64(this.perConnection3), toI64(0))
-    this.h3Reqs = httpServerZeros(toI64(slots) * toI64(this.perConnection3), 0)
+    this.h3Reqs = httpServerZeros(toI64(slots) * toI64(this.perConnection3), toI32(0))
     for (let k: i32 = 0; k < toI32(this.h3Reqs.length); k++) {
       this.h3Reqs[k] = -1
     }
@@ -1820,7 +1852,7 @@ export class HttpServer {
       // the head is answered 503 and the connection ends, and the body
       // events after it find no request and are passed over.
       conn.closeAfter = true
-      conn.respond(503, this.noFields, this.noFields, 0)
+      conn.respond(HTTP_SERVER_UNAVAILABLE, this.noFields, this.noFields, toI32(0))
       return
     }
     const p = conn.parser
@@ -2010,7 +2042,7 @@ export class HttpServer {
     if (toI32(r.head.length) === 0) {
       r.head = httpServerZeros(toI64(this.maxHead), toU8(0))
       r.spans = httpServerCells(toI64(4) * toI64(this.maxFields))
-      r.params = httpServerZeros(toI64(2) * toI64(this.router.maxParams) + toI64(2), 0)
+      r.params = httpServerZeros(toI64(2) * toI64(this.router.maxParams) + toI64(2), toI32(0))
     }
     return r
   }
