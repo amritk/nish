@@ -39275,12 +39275,11 @@ struct PgCarrierQuery (class) size=24 align=8
   field ticket: i32 index=3 offset=16 initialized
   field failed: boolean index=4 offset=20 initialized
   constructor -> @nish.PgCarrierQuery.constructor
-struct PgCarrierExecution (class) size=20 align=4
-  field index: i32 index=0 offset=0 readonly
-  field value: i32 index=1 offset=4 readonly
-  field batcher: i32 index=2 offset=8 initialized
-  field run: i32 index=3 offset=12 initialized
-  field ended: boolean index=4 offset=16 initialized
+struct PgCarrierExecution (class) size=16 align=4
+  field value: i32 index=0 offset=0 readonly
+  field batcher: i32 index=1 offset=4 initialized
+  field run: i32 index=2 offset=8 initialized
+  field ended: boolean index=3 offset=12 initialized
   constructor -> @nish.PgCarrierExecution.constructor
 struct PgCarrierBatch (class) size=16 align=8
   field batcher: PgBatcher index=0 offset=0 readonly
@@ -39364,7 +39363,7 @@ struct PgCarrier (class) size=248 align=8 exported
   method final -> @nish.PgCarrier.final
   method slotAt -> @nish.PgCarrier.slotAt
   method queryAt -> @nish.PgCarrier.queryAt
-  method executionAt -> @nish.PgCarrier.executionAt
+  method executionFor -> @nish.PgCarrier.executionFor
   method batcher -> @nish.PgCarrier.batcher
   method attached -> @nish.PgCarrier.attached
   method take -> @nish.PgCarrier.take
@@ -39383,10 +39382,10 @@ function PgCarrierQuery.constructor(this: PgCarrierQuery, index: i32): void -> @
   escaping: index
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function PgCarrierExecution.constructor(this: PgCarrierExecution, index: i32, value: i32): void -> @nish.PgCarrierExecution.constructor [constructor]
+function PgCarrierExecution.constructor(this: PgCarrierExecution, value: i32): void -> @nish.PgCarrierExecution.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: index value
-  pointer this: size=20 writesThrough=true captured=false
+  escaping: value
+  pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgCarrierBatch.constructor(this: PgCarrierBatch, batcher: PgBatcher): void -> @nish.PgCarrierBatch.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -39699,8 +39698,8 @@ function PgCarrier.route(this: PgCarrier, slot: PgCarrierSlot, event: i32): i32 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: event
-  calls: nish.PgCarrier.dropSocket nish.PgCarrier.executionAt nish.PgCarrier.mapGet nish.PgCarrier.routeBatch nish.PgCarrier.routePlain nish.PgPool.connection
-  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.dropSocket#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.routePlain#0 nish.PgCarrier.executionAt#0 nish.PgCarrier.routeBatch#0
+  calls: nish.PgCarrier.dropSocket nish.PgCarrier.executionFor nish.PgCarrier.mapGet nish.PgCarrier.routeBatch nish.PgCarrier.routePlain nish.PgPool.connection
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.dropSocket#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.routePlain#0 nish.PgCarrier.executionFor#0 nish.PgCarrier.routeBatch#0
   pointer slot: size=48 writesThrough=true captured=false passedTo=nish.PgCarrier.dropSocket#1 nish.PgCarrier.routePlain#1 nish.PgCarrier.routeBatch#1
   stackSites=0 stackLocals=0
   local -2:11 conn: PgConnection (const)
@@ -39714,8 +39713,8 @@ function PgCarrier.route(this: PgCarrier, slot: PgCarrierSlot, event: i32): i32 
   local +14:11 queries: i32 (const)
   callee +17:14 PgCarrier.routePlain -> @nish.PgCarrier.routePlain
   local +19:11 exec: PgCarrierExecution | null (const)
-  callee +20:48 PgCarrier.executionAt -> @nish.PgCarrier.executionAt
-  callee +26:12 PgCarrier.routeBatch -> @nish.PgCarrier.routeBatch
+  callee +19:45 PgCarrier.executionFor -> @nish.PgCarrier.executionFor
+  callee +25:12 PgCarrier.routeBatch -> @nish.PgCarrier.routeBatch
 function PgCarrier.routePlain(this: PgCarrier, slot: PgCarrierSlot, held: PgCarrierQuery, ticket: i32, event: i32, conn: PgConnection): i32 -> @nish.PgCarrier.routePlain [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -39740,7 +39739,7 @@ function PgCarrier.routeBatch(this: PgCarrier, slot: PgCarrierSlot, exec: PgCarr
   calls: nish.PgBatcher.end nish.PgBatcher.fail nish.PgBatcher.row nish.PgCarrier.batcher nish.PgCarrier.freeExecution nish.PgCarrier.mapRemove nish.PgCarrier.startDrain
   pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0 nish.PgCarrier.startDrain#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
   pointer slot: size=48 writesThrough=false captured=false
-  pointer exec: size=20 writesThrough=true captured=true passedTo=nish.PgCarrier.freeExecution#1 nish.PgCarrier.freeExecution#1
+  pointer exec: size=16 writesThrough=true captured=true passedTo=nish.PgCarrier.freeExecution#1 nish.PgCarrier.freeExecution#1
   pointer conn: size=216 writesThrough=false captured=false passedTo=nish.PgBatcher.row#2
   stackSites=0 stackLocals=0
   local -13:11 id: i32 (const)
@@ -39784,8 +39783,8 @@ function PgCarrier.drain(this: PgCarrier): i32 -> @nish.PgCarrier.drain [exporte
 function PgCarrier.dispatch(this: PgCarrier): i32 -> @nish.PgCarrier.dispatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.PgBatcher.fail nish.PgBatcher.take nish.PgBatcher.waiting nish.PgCarrier.announce nish.PgCarrier.batcher nish.PgCarrier.executionAt nish.PgCarrier.freeExecution nish.PgCarrier.mapGet nish.PgCarrier.mapPut nish.PgCarrier.mapRemove nish.PgCarrier.startDrain nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.request nish.PgPool.send nish_array_grow
-  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.mapPut#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.announce#0 nish.PgCarrier.executionAt#0 nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
+  calls: nish.PgBatcher.fail nish.PgBatcher.take nish.PgBatcher.waiting nish.PgCarrier.announce nish.PgCarrier.batcher nish.PgCarrier.executionFor nish.PgCarrier.freeExecution nish.PgCarrier.mapGet nish.PgCarrier.mapPut nish.PgCarrier.mapRemove nish.PgCarrier.startDrain nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.request nish.PgPool.send nish_array_grow
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.PgCarrier.mapPut#0 nish.PgCarrier.mapGet#0 nish.PgCarrier.announce#0 nish.PgCarrier.executionFor#0 nish.PgCarrier.batcher#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.mapRemove#0 nish.PgCarrier.freeExecution#0 nish.PgCarrier.startDrain#0
   stackSites=0 stackLocals=0
   local -10:11 batchers: PgCarrierBatch[] (const)
   local -9:11 eFree: PgCarrierExecution[] (const)
@@ -39808,21 +39807,21 @@ function PgCarrier.dispatch(this: PgCarrier): i32 -> @nish.PgCarrier.dispatch [e
   local +21:11 queries: i32 (const)
   callee +25:7 PgCarrier.announce -> @nish.PgCarrier.announce
   local +28:11 exec: PgCarrierExecution | null (const)
-  callee +29:48 PgCarrier.executionAt -> @nish.PgCarrier.executionAt
-  local +30:11 batch: PgCarrierBatch | null (const)
-  callee +30:58 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  callee +32:7 PgPool.send -> @nish.PgPool.send
-  local +35:11 b: PgBatcher (const)
-  local +37:11 r: i32 (const)
-  callee +37:20 PgBatcher.take -> @nish.PgBatcher.take
-  callee +42:7 PgPool.send -> @nish.PgPool.send
-  callee +44:9 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
-  callee +45:9 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
-  callee +50:10 PgPool.send -> @nish.PgPool.send
-  callee +51:7 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
-  callee +52:7 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
-  callee +53:7 PgBatcher.fail -> @nish.PgBatcher.fail
-  callee +54:7 PgCarrier.startDrain -> @nish.PgCarrier.startDrain
+  callee +28:45 PgCarrier.executionFor -> @nish.PgCarrier.executionFor
+  local +29:11 batch: PgCarrierBatch | null (const)
+  callee +29:58 PgCarrier.batcher -> @nish.PgCarrier.batcher
+  callee +31:7 PgPool.send -> @nish.PgPool.send
+  local +34:11 b: PgBatcher (const)
+  local +36:11 r: i32 (const)
+  callee +36:20 PgBatcher.take -> @nish.PgBatcher.take
+  callee +41:7 PgPool.send -> @nish.PgPool.send
+  callee +43:9 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
+  callee +44:9 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
+  callee +49:10 PgPool.send -> @nish.PgPool.send
+  callee +50:7 PgCarrier.mapRemove -> @nish.PgCarrier.mapRemove
+  callee +51:7 PgCarrier.freeExecution -> @nish.PgCarrier.freeExecution
+  callee +52:7 PgBatcher.fail -> @nish.PgBatcher.fail
+  callee +53:7 PgCarrier.startDrain -> @nish.PgCarrier.startDrain
 function PgCarrier.connectAndFlush(this: PgCarrier, connect: boolean): boolean -> @nish.PgCarrier.connectAndFlush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -39952,12 +39951,13 @@ function PgCarrier.queryAt(this: PgCarrier, q: i32): PgCarrierQuery | null -> @n
   pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 held: PgCarrierQuery[] (const)
-function PgCarrier.executionAt(this: PgCarrier, e: i32): PgCarrierExecution | null -> @nish.PgCarrier.executionAt [exported method]
+function PgCarrier.executionFor(this: PgCarrier, v: i32): PgCarrierExecution | null -> @nish.PgCarrier.executionFor [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: e
   pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 runs: PgCarrierExecution[] (const)
+  local +0:11 queries: i32 (const)
+  local +1:11 runs: PgCarrierExecution[] (const)
+  local +2:11 e: i32 (const)
 function PgCarrier.batcher(this: PgCarrier, id: i32): PgCarrierBatch | null -> @nish.PgCarrier.batcher [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
@@ -39996,7 +39996,7 @@ function PgCarrier.freeExecution(this: PgCarrier, exec: PgCarrierExecution): voi
   escaping: exec
   calls: nish_array_grow
   pointer this: size=248 writesThrough=false captured=false
-  pointer exec: size=20 writesThrough=true captured=true
+  pointer exec: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PgCarrier.mapPut(this: PgCarrier, key: i32, value: i32): void -> @nish.PgCarrier.mapPut [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true

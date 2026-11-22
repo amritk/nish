@@ -172,7 +172,7 @@ import {
 } from "nish:net"
 import { monotonicNanos } from "nish:process"
 import { Secret } from "nish:secret"
-import { copyBytes, getI32BE, getU16BE, tryCopyBytes } from "nish/bytes"
+import { getI32BE, getU16BE, tryCopyBytes } from "nish/bytes"
 import {
   PG_ERR_CLOSED,
   PG_ERR_ENCODING,
@@ -1378,7 +1378,7 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
       // offsets are exact; each is then checked against its arrays.
       const known: i32 = toI32(toU32(best) * toU32(PG_ASYNC_MAX_STATEMENTS) + toU32(statement))
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
-        const seat: i32 = toI32(toU32(best) * toU32(PG_ASYNC_MAX_DEPTH) + toU32(k))
+        const seat: i32 = pgAsyncSeatAt(best, k)
         if (
           seat < 0 ||
           seat >= toI32(pool.seatUsed.length) ||
@@ -1576,16 +1576,23 @@ const pgAsyncLostSeat = (pool: PgAsyncPool, seat: i32): boolean => {
 }
 
 /**
- * Whether seat `seat`'s answer is the next its connection gives and is not
- * lost. A seat that is not in the pool never has its turn.
+ * Whether seat `seat`'s answer is the next its connection gives, lost or
+ * not. A seat that is not in the pool is never served.
  */
-const pgAsyncInTurn = (pool: PgAsyncPool, seat: i32): boolean => {
+const pgAsyncServed = (pool: PgAsyncPool, seat: i32): boolean => {
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
   if (seat < 0 || s < 0 || seat >= toI32(pool.seatSeq.length) || s >= toI32(pool.served.length)) {
     return false
   }
-  return pool.served[s] === pool.seatSeq[seat] && !pgAsyncLostSeat(pool, seat)
+  return pool.served[s] === pool.seatSeq[seat]
 }
+
+/**
+ * Whether seat `seat`'s answer is the next its connection gives and is not
+ * lost. A seat that is not in the pool never has its turn.
+ */
+const pgAsyncInTurn = (pool: PgAsyncPool, seat: i32): boolean =>
+  pgAsyncServed(pool, seat) && !pgAsyncLostSeat(pool, seat)
 
 /** The turn lane seat `seat` waits on: distinct for the seats of any eight slots in a row. */
 const pgAsyncTurnLane = (seat: i32): i32 => seat % PG_ASYNC_LANES
@@ -1796,9 +1803,11 @@ const pgAsyncRoom = (pool: PgAsyncPool, s: i32, input: u8[]): i32 => {
   if (start > 0) {
     // In `u32`: `end` is at or past `start`, so the difference is the bytes kept.
     room = toI32(toU32(end) - toU32(start))
+    if (!tryCopyBytes(input, 0, input, start, room)) {
+      return -1
+    }
     pool.inEnd[s] = room
     pool.inStart[s] = 0
-    copyBytes(input, 0, input, start, room)
   }
   return room < toI32(input.length) ? room : -1
 }
@@ -2174,7 +2183,7 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
   }
   let gaveUp: boolean = false
   let yields: i32 = 0
-  while (!pgAsyncInTurn(pool, seat) && !pgAsyncLostSeat(pool, seat)) {
+  while (!pgAsyncServed(pool, seat) && !pgAsyncLostSeat(pool, seat)) {
     if (cancelled()) {
       gaveUp = true
       break
@@ -2308,7 +2317,9 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
     return pgAsyncLost(new PgAsyncResult(), PG_ERR_TOO_BIG, 0)
   }
   const carried: u8[] = new Array<u8>(toU16(count))
-  copyBytes(carried, 0, input, from, toI32(carried.length))
+  if (!tryCopyBytes(carried, 0, input, from, toI32(carried.length))) {
+    return pgAsyncLost(new PgAsyncResult(), PG_ERR_CLOSED, 0)
+  }
   return await pgAsyncRead(
     fd,
     carried,

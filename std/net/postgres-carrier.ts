@@ -270,14 +270,12 @@ class PgCarrierQuery {
 // whether its run was ended. `value` is what the ticket map holds for it,
 // the query count plus its number, so that it is told apart from a query.
 class PgCarrierExecution {
-  readonly index: i32
   readonly value: i32
   batcher: i32 = -1
   run: i32 = -1
   ended: boolean = false
 
-  constructor(index: i32, value: i32) {
-    this.index = index
+  constructor(value: i32) {
     this.value = value
   }
 }
@@ -468,7 +466,7 @@ export class PgCarrier {
     const runs: PgCarrierExecution[] = []
     const eFree: PgCarrierExecution[] = []
     for (let e: i32 = 0; e < executions; e++) {
-      runs.push(new PgCarrierExecution(e, toI32(toU32(queries) + toU32(e))))
+      runs.push(new PgCarrierExecution(toI32(toU32(queries) + toU32(e))))
     }
     k = toI32(runs.length)
     while (k > 0) {
@@ -1059,8 +1057,7 @@ export class PgCarrier {
       this.conn = conn
       return this.routePlain(slot, held[v], ticket, event, conn)
     }
-    const exec: PgCarrierExecution | null =
-      queries >= 0 && v >= queries && v >= 0 ? this.executionAt(v - queries) : null
+    const exec: PgCarrierExecution | null = this.executionFor(v)
     if (exec === null) {
       // A notice, or the event of a query no longer held.
       return PG_CARRIER_NONE
@@ -1237,8 +1234,7 @@ export class PgCarrier {
       this.announce(held[v])
       return PG_CARRIER_BUILD
     }
-    const exec: PgCarrierExecution | null =
-      queries >= 0 && v >= queries && v >= 0 ? this.executionAt(v - queries) : null
+    const exec: PgCarrierExecution | null = this.executionFor(v)
     const batch: PgCarrierBatch | null = exec !== null ? this.batcher(exec.batcher) : null
     if (exec === null || batch === null) {
       this.pool.send()
@@ -1480,9 +1476,12 @@ export class PgCarrier {
     return q >= 0 && q < toI32(held.length) ? held[q] : null
   }
 
-  // The execution numbered `e`, or null for a number no execution has.
-  private executionAt(e: i32): PgCarrierExecution | null {
+  // The execution whose ticket-map value is `v` (the query count plus its
+  // number), or null for a value no execution has.
+  private executionFor(v: i32): PgCarrierExecution | null {
+    const queries: i32 = toI32(this.held.length)
     const runs: PgCarrierExecution[] = this.executions
+    const e: i32 = queries >= 0 && v >= queries && v >= 0 ? v - queries : -1
     return e >= 0 && e < toI32(runs.length) ? runs[e] : null
   }
 
