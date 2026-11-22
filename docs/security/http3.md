@@ -391,7 +391,7 @@ without the sites the prover discharges:
 | --- | --- | --- | --- |
 | `std/net/http3-frame.ts` | 21 | 1 | `h3CheckWindow`: a window outside the caller's buffer |
 | `std/net/qpack.ts` | 38 | 3 | `qpackCheckWindow`, `qpackPushInteger`'s prefix, `QpackDecoder`'s construction limit |
-| `std/net/http3.ts` | 248 | 5 | `http3CheckCap` and four checks of `Http3Connection`'s configuration |
+| `std/net/http3.ts` | 248 | 4 | `http3CheckCap` and three checks of `Http3Connection`'s configuration |
 | `std/net/http3-server.ts` | 153 | 9 | three checks of `Http3Server`'s configuration; four `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |
 
 Every `panic` left checks an argument the program passes: a window, a cap or a
@@ -418,12 +418,13 @@ for one claiming the largest length a varint holds.
 
 Where a guard cannot fail, a comment says why: the index is below a length
 read on the line before, or the slot is one the connection numbered. Where
-the function has an answer for "nothing to do", the guard returns it. In
-`Http3Connection`'s request and control paths (`requestStep`,
-`requestFrame`, `fieldSection`, `controlStep`), the `again` ring
-(`stepAgain`) and the field copies (`copyOf`), it fails the connection with
-H3_INTERNAL_ERROR instead, so a broken invariant closes the connection
-rather than leaving it open with a stream dropped. `Http3Server` takes a
+the function has an answer for "nothing to do", the guard returns it; most
+of `controlStep`'s guards answer H3_NEED_MORE this way. The guards in
+`requestStep`, `requestFrame`, `fieldSection` (a failed field copy
+included), the `again` ring (`stepAgain`), and `controlStep`'s check of a
+read's length fail the connection with H3_INTERNAL_ERROR instead, so a
+broken invariant there closes the connection rather than leaving it open
+with a stream dropped. `Http3Server` takes a
 slot only after the guards on it pass.
 
 These changes alter what a caller sees:

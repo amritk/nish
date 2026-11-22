@@ -1045,7 +1045,7 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * which builds that pool, the most slots a server takes, on the test configuration
  * and prints the bytes.
  *
- * Measured **17,501,520 bytes** on 2026-10-20 with clang 18 on linux-x64, about 267
+ * Measured **16,437,152 bytes** on 2026-11-22 with clang 18 on linux-x64, about 251
  * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
  * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
  * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
@@ -1054,10 +1054,9 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * `HTTP3_SERVER_SLOT_BYTES` pins. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
  *
- * Moved to **16,437,152 bytes** (+256 on main's 16,436,896) by WP82's panic
- * proofs in the server (`docs/security/http3.md`, "Panic sites"): the
- * constructor builds its per-slot tables to a length the prover can see, and
- * the budget is again the next 256-byte boundary above.
+ * WP82's panic proofs in the server (`docs/security/http3.md`, "Panic sites")
+ * moved it by +256 from main's 16,436,896: the constructor builds its per-slot
+ * tables to a length the prover can see.
  */
 export const HTTP3_SERVER_START_BYTES = 16437248
 
