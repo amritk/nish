@@ -1520,6 +1520,9 @@ const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overlo
 
 const PACKAGE_LINK = "A package links a C library or its own C sources"
 
+/** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
+const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
+const s1PanicFree = byFinding(S1_PANIC_FREE)
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -19524,6 +19527,100 @@ const DECLARED = [
     file: "exit",
     changelog: HASH_MAC_KDF,
     why: "a probe new with this change: it checks the Sha1 hasher's digestInto, which answers a boolean now where the 0.44.0 seed's std returns void, so the seed refuses it (WP83 S1)",
+  })),
+  // WP80 S1: std/cli, std/cli-flags and std/cli-args reach no index,
+  // slice or overflow panic, so every program linking nish/cli moves.
+  ...s1PanicFree(
+    "std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages` in an i32 and clamps its help padding instead of checking it for overflow, so every module and header naming `HelpMenu` moves (WP80 S1)",
+    {
+      "bench/std-cli-args.ts": ["cli.ll", "std-cli-args.h", "std-cli-args.ll"],
+      "tests/link/std_cli/main.ts": ["cli.ll", "main.h", "main.ll"],
+      ...Object.fromEntries(
+        [
+          "std_cli_args",
+          "std_cli_args_exit",
+          "std_cli_args_misuse",
+          "std_cli_args_misuse_default",
+          "std_cli_args_misuse_negatable",
+          "std_cli_args_misuse_negation",
+          "std_cli_args_misuse_required",
+        ].map((name) => [`tests/link/${name}/main.ts`, ["cli.ll", "main.h"]])
+      ),
+    }
+  ),
+  ...s1PanicFree(
+    "std/cli-flags proves its indexes, slices and counts through a new private `FlagTable.kindOf` and guards the parse loop, and std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages`, so cli-flags.ll, cli.ll, the program's module and its header all move (WP80 S1)",
+    Object.fromEntries(
+      [
+        "std_cli_flags",
+        "std_cli_flags_bad_command",
+        "std_cli_flags_bad_command_word",
+        "std_cli_flags_bad_exit_usage",
+        "std_cli_flags_bad_flag_name",
+        "std_cli_flags_bad_missing_value",
+        "std_cli_flags_bad_no_pair",
+        "std_cli_flags_bad_number",
+        "std_cli_flags_bad_unknown_flag",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["cli-flags.ll", "cli.ll", "main.h", "main.ll"]])
+    )
+  ),
+  // Two benchmarks new with WP80 S1: each links std modules that changed on
+  // main after the 0.44.0 seed, so the seed's copies differ.
+  ...s1PanicFree(
+    "a benchmark new with this change: it links std modules that changed on main after the 0.44.0 seed was cut (among them `Router`'s step tables and `HttpCompressor`'s request-body decoding, which imports nish/compress/zlib), so the seed's copies of those modules, and the program's module and header naming their structs, differ",
+    {
+      "bench/std-http1.ts": ["bytes.ll", "http-compress.ll", "std-http1.h", "std-http1.ll", "zlib.ll"],
+      "bench/std-router.ts": ["router.ll", "std-router.h", "std-router.ll"],
+    }
+  ),
+  // WP80 S1: the atomic arrays build their values with a counted push loop
+  // instead of `new Array(length)`, so every program reaching them moves.
+  ...s1PanicFree(
+    "std/threads.ts's `AtomicI32Array` and `AtomicI64Array` constructors push a typed zero `length` times instead of building `new Array(length)`, so threads.ll loses its array-length panic and gains the push loop, and a module declaring either constructor numbers its attribute groups differently",
+    {
+      "bench/par-histogram-atomic.ts": ["par-histogram-atomic.ll", "threads.ll"],
+      "bench/std-threads.ts": ["threads.ll"],
+      "docs/cookbook/thread-atomic-array.ts": ["thread-atomic-array.ll", "threads.ll"],
+      "examples/histogram-atomic.ts": ["threads.ll"],
+      "tests/link/module_private_spawn/main.ts": ["threads.ll"],
+      ...Object.fromEntries(
+        [
+          "atomic_array_negative_index",
+          "atomic_array_negative_length",
+          "atomic_array_out_of_range",
+          "par_atomic_array",
+          "thread_atomic_array",
+        ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll", "threads.ll"]])
+      ),
+    }
+  ),
+  ...s1PanicFree(
+    "a test new with this change: it reads `ParsedFlags` after a flag the table declares late, and std/cli-flags.ts now keeps one `FlagValue` record per flag where the seed's copy kept parallel arrays, so cli-flags.ll, cli.ll, the program's module and its header differ",
+    Object.fromEntries(
+      ["std_cli_flags_bad_late_flag", "std_cli_flags_bad_late_has"].map((name) => [
+        `tests/link/${name}/main.ts`,
+        ["cli-flags.ll", "cli.ll", "main.h", "main.ll"],
+      ])
+    )
+  ),
+  ...s1PanicFree(
+    "a test new with this change: it decodes long arrays through std/json-typed.ts, whose array readers this change proves, against the seed's copies of std/bytes.ts and std/json*.ts, which differ from this tree's",
+    {
+      "tests/link/std_json_typed_long/main.ts": [
+        "bytes.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+      ],
+    }
+  ),
+  ...["examples/api-cli/main.ts", "tests/link/std_cli_args_try/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: S1_PANIC_FREE,
+    why: "the program declares its tree through std/cli-args.ts's new `try` twins and reads values through `CliFlag` and `CliArgument`, which the seed's copy does not export, so the reference refuses it",
   })),
 ]
 
