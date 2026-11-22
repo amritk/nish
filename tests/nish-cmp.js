@@ -15795,6 +15795,10 @@ const DECLARED = [
       "tests/link/tfb_entry/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
     }
   ),
+  ...wp83Pki(
+    "this stage edits crypto_pki_malformed (the name-constraint cases), and in its main module the 0.42.0 seed gives PkiTrustStore's constructor declaration attribute group #0 where the candidate, like main's own compiler, gives #1",
+    { "tests/link/crypto_pki_malformed/main.ts": ["main.ll"] }
+  ),
   ...x509Criticality(
     "X509Certificate gains the critical flag of each extension it decodes, whether the authorityKeyIdentifier is present and names its issuer and serial, and whether a policyConstraints is present and critical, so it is laid out 8 bytes wider (168 to 176) in every module and header that names it; std/crypto/x509.ts also checks authorityInfoAccess's syntax and std/crypto/pki.ts refuses the markings RFC 5280 forbids, so those two modules move further; every other module and header (pki-roots, verify, tls-tcp, fetch, identity, main.h and the rest) moves only from that 168 to 176 layout",
     {
