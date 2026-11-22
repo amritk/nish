@@ -14976,7 +14976,6 @@ import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose
 import exposeWith from "nish:secret" -> generic function exposeWith
 import wipe from "nish:secret" -> generic function wipe
-import SHA512_SIZE from "nish/crypto/sha512" -> const SHA512_SIZE
 import Sha512 from "nish/crypto/sha512" -> struct Sha512
 import f25519Add from "nish/crypto/x25519" -> function @nish.f25519Add
 import f25519Add64 from "nish/crypto/x25519" -> function @nish.f25519Add64
@@ -15001,6 +15000,7 @@ const ED25519_SIGNATURE_SIZE: i32 = 64 [exported]
 const ED25519_FROM: i32 = 0
 const ED25519_HALF: i32 = 32
 const ED25519_ENTRY: i32 = 40
+const ED25519_TABLE: i32 = 320
 struct Ed25519Point (class) size=32 align=8
   field x: i64[] index=0 offset=0
   field y: i64[] index=1 offset=8
@@ -15206,19 +15206,40 @@ function ed25519SetIdentity(out: Ed25519Point): void -> @nish.ed25519SetIdentity
   callee +2:21 f25519Small -> @nish.f25519Small
   callee +3:3 f25519Copy -> @nish.f25519Copy
   callee +3:21 f25519Zero -> @nish.f25519Zero
-function ed25519TableStore(table: i64[], i: i32, q: Ed25519Cached): void -> @nish.ed25519TableStore
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function ed25519Blend(dst: i64[], src: i64[], from: i32, mask: i64): void -> @nish.ed25519Blend
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index
+  escaping: from
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -3:7 k: i32 (let)
+  local -2:7 j: i32 (let)
+function ed25519Put(table: i64[], at: i32, src: i64[]): void -> @nish.ed25519Put
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at
   pointer table: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -3:7 k: i32 (let)
+  local -2:7 j: i32 (let)
+function ed25519TableStore(table: i64[], i: i32, q: Ed25519Cached): void -> @nish.ed25519TableStore
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ed25519Put
+  calls: nish.ed25519Put
+  pointer table: size=0 writesThrough=true captured=false passedTo=nish.ed25519Put#0 nish.ed25519Put#0 nish.ed25519Put#0 nish.ed25519Put#0
   pointer q: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -2:9 at: i32 (const)
-  local -1:12 j: i32 (let)
+  local +0:9 at: i32 (const)
+  callee +1:3 ed25519Put -> @nish.ed25519Put
+  callee +2:3 ed25519Put -> @nish.ed25519Put
+  callee +3:3 ed25519Put -> @nish.ed25519Put
+  callee +4:3 ed25519Put -> @nish.ed25519Put
 function ed25519Table(p: Ed25519Point, s: Ed25519Scratch): i64[] -> @nish.ed25519Table
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Ed25519Cached.constructor
-  calls: nish.Ed25519Cached.constructor nish.ed25519Add nish.ed25519Double nish.ed25519TableStore nish.ed25519ToCached nish_panic
+  calls: nish.Ed25519Cached.constructor nish.ed25519Add nish.ed25519Double nish.ed25519TableStore nish.ed25519ToCached
   pointer p: size=32 writesThrough=false captured=false passedTo=nish.ed25519ToCached#1 nish.ed25519Double#1
   pointer s: size=88 writesThrough=false captured=false passedTo=nish.ed25519ToCached#2 nish.ed25519Double#2 nish.ed25519Add#3 nish.ed25519ToCached#2
   stackSites=1 stackLocals=1
@@ -15248,34 +15269,38 @@ function ed25519Digits(k: u8[]): i64[] -> @nish.ed25519Digits
   callee +12:27 f25519Mul64 -> @nish.f25519Mul64
   callee +14:11 f25519Add64 -> @nish.f25519Add64
 function ed25519Select(out: Ed25519Cached, table: i64[], digit: i64, s: Ed25519Scratch): void -> @nish.ed25519Select
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: nish.f25519Copy nish.f25519Small nish.f25519Sub64 nish.f25519Swap nish.f25519Zero nish_arena_mark nish_arena_release nish_panic_index
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.ed25519Blend nish.f25519Copy nish.f25519Small nish.f25519Sub64 nish.f25519Swap nish.f25519Zero nish_arena_mark nish_arena_release
   pointer out: size=32 writesThrough=false captured=false
-  pointer table: size=0 writesThrough=false captured=false
+  pointer table: size=0 writesThrough=false captured=false passedTo=nish.ed25519Blend#1 nish.ed25519Blend#1 nish.ed25519Blend#1 nish.ed25519Blend#1
   pointer s: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -12:9 sign: i64 (const)
-  local -11:9 magnitude: i64 (const)
-  callee -11:26 f25519Sub64 -> @nish.f25519Sub64
-  callee -10:3 f25519Copy -> @nish.f25519Copy
-  callee -10:23 f25519Small -> @nish.f25519Small
-  callee -9:3 f25519Copy -> @nish.f25519Copy
-  callee -9:23 f25519Small -> @nish.f25519Small
-  callee -8:3 f25519Copy -> @nish.f25519Copy
-  callee -8:23 f25519Zero -> @nish.f25519Zero
-  callee -7:3 f25519Copy -> @nish.f25519Copy
-  callee -7:22 f25519Small -> @nish.f25519Small
-  local -6:12 i: i32 (let)
-  local -3:11 hit: i64 (const)
-  callee -3:22 f25519Sub64 -> @nish.f25519Sub64
-  local -2:11 at: i32 (const)
-  local -1:14 j: i32 (let)
-  callee +6:3 f25519Swap -> @nish.f25519Swap
-  local +7:12 j: i32 (let)
-  callee +8:14 f25519Sub64 -> @nish.f25519Sub64
+  local -18:9 sign: i64 (const)
+  local -17:9 magnitude: i64 (const)
+  callee -17:26 f25519Sub64 -> @nish.f25519Sub64
+  callee -16:3 f25519Copy -> @nish.f25519Copy
+  callee -16:23 f25519Small -> @nish.f25519Small
+  callee -15:3 f25519Copy -> @nish.f25519Copy
+  callee -15:23 f25519Small -> @nish.f25519Small
+  callee -14:3 f25519Copy -> @nish.f25519Copy
+  callee -14:23 f25519Zero -> @nish.f25519Zero
+  callee -13:3 f25519Copy -> @nish.f25519Copy
+  callee -13:22 f25519Small -> @nish.f25519Small
+  local -12:12 i: i32 (let)
+  local -9:11 hit: i64 (const)
+  callee -9:22 f25519Sub64 -> @nish.f25519Sub64
+  local -8:11 at: i32 (const)
+  callee -7:5 ed25519Blend -> @nish.ed25519Blend
+  callee -6:5 ed25519Blend -> @nish.ed25519Blend
+  callee -5:5 ed25519Blend -> @nish.ed25519Blend
+  callee -4:5 ed25519Blend -> @nish.ed25519Blend
+  callee -2:3 f25519Swap -> @nish.f25519Swap
+  local -1:12 j: i32 (let)
+  callee +0:14 f25519Sub64 -> @nish.f25519Sub64
+  callee +2:3 ed25519Blend -> @nish.ed25519Blend
 function ed25519ScalarMult(out: Ed25519Point, k: u8[], p: Ed25519Point, s: Ed25519Scratch): void -> @nish.ed25519ScalarMult
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ed25519Table
   calls: nish.ed25519Add nish.ed25519Digits nish.ed25519Double nish.ed25519Select nish.ed25519SetIdentity nish.ed25519Table nish.wipe$arr.i64
   pointer out: size=32 writesThrough=false captured=false passedTo=nish.ed25519SetIdentity#0 nish.ed25519Double#0 nish.ed25519Double#1 nish.ed25519Double#0 nish.ed25519Double#1 nish.ed25519Double#0 nish.ed25519Double#1 nish.ed25519Double#0 nish.ed25519Double#1 nish.ed25519Add#0 nish.ed25519Add#1
@@ -15374,14 +15399,14 @@ function ed25519Negate(f: i64[]): void -> @nish.ed25519Negate
 function ed25519Decode(bytes: u8[], s: Ed25519Scratch): Ed25519Point | null -> @nish.ed25519Decode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.Ed25519Point.constructor nish.ed25519D nish.ed25519FieldEqual nish.ed25519Negate nish.ed25519Pow22523 nish.ed25519SameBytes nish.ed25519SqrtM1 nish.f25519Add nish.f25519Carry nish.f25519Copy nish.f25519Decode nish.f25519Encode nish.f25519Mul nish.f25519Small nish.f25519Square nish.f25519Sub nish.f25519Zero nish_alloc_struct nish_panic_index
+  calls: nish.Ed25519Point.constructor nish.ed25519D nish.ed25519FieldEqual nish.ed25519Negate nish.ed25519Pow22523 nish.ed25519SameBytes nish.ed25519SqrtM1 nish.f25519Add nish.f25519Carry nish.f25519Copy nish.f25519Decode nish.f25519Encode nish.f25519Mul nish.f25519Small nish.f25519Square nish.f25519Sub nish.f25519Zero nish_alloc_struct
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.f25519Decode#0 nish.ed25519SameBytes#1
   pointer s: size=88 writesThrough=false captured=false
   stackSites=1 stackLocals=0
-  local -3:9 y: i64[] (const)
-  callee -3:20 f25519Decode -> @nish.f25519Decode
-  local -1:9 canonical: u8[] (const)
-  callee -1:27 f25519Encode -> @nish.f25519Encode
+  local -6:9 y: i64[] (const)
+  callee -6:20 f25519Decode -> @nish.f25519Decode
+  local -4:9 canonical: u8[] (const)
+  callee -4:27 f25519Encode -> @nish.f25519Encode
   callee +1:8 ed25519SameBytes -> @nish.ed25519SameBytes
   local +4:9 sign: u8 (const)
   local +5:9 one: i64[] (const)
@@ -15413,13 +15438,13 @@ function ed25519Decode(bytes: u8[], s: Ed25519Scratch): Ed25519Point | null -> @
   callee +31:21 ed25519SqrtM1 -> @nish.ed25519SqrtM1
   local +34:9 xBytes: u8[] (const)
   callee +34:24 f25519Encode -> @nish.f25519Encode
-  callee +36:9 ed25519SameBytes -> @nish.ed25519SameBytes
-  callee +39:5 ed25519Negate -> @nish.ed25519Negate
-  local +41:9 p: Ed25519Point (const)
-  callee +41:13 new Ed25519Point -> @nish.Ed25519Point.constructor
-  callee +42:3 f25519Copy -> @nish.f25519Copy
-  callee +43:3 f25519Copy -> @nish.f25519Copy
-  callee +44:3 f25519Mul -> @nish.f25519Mul
+  callee +39:9 ed25519SameBytes -> @nish.ed25519SameBytes
+  callee +42:5 ed25519Negate -> @nish.ed25519Negate
+  local +44:9 p: Ed25519Point (const)
+  callee +44:13 new Ed25519Point -> @nish.Ed25519Point.constructor
+  callee +45:3 f25519Copy -> @nish.f25519Copy
+  callee +46:3 f25519Copy -> @nish.f25519Copy
+  callee +47:3 f25519Mul -> @nish.f25519Mul
 function ed25519Reduce(out: u8[], x: u8[]): void -> @nish.ed25519Reduce
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -15494,15 +15519,15 @@ function ed25519ScalarCanonical(s: u8[]): boolean -> @nish.ed25519ScalarCanonica
 function ed25519Expand(seed: u8[]): u8[] -> @nish.ed25519Expand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.Sha512.constructor nish.Sha512.digest nish.Sha512.update nish.ed25519WipeHasher nish_panic_index
+  calls: nish.Sha512.constructor nish.Sha512.digest nish.Sha512.update nish.ed25519WipeHasher
   pointer seed: size=0 writesThrough=false captured=false passedTo=nish.Sha512.update#1
   stackSites=1 stackLocals=1
-  local -7:9 hasher: Sha512 (const)
-  callee -7:18 new Sha512 -> @nish.Sha512.constructor
-  callee -6:3 Sha512.update -> @nish.Sha512.update
-  local -5:9 h: u8[] (const)
-  callee -5:19 Sha512.digest -> @nish.Sha512.digest
-  callee -4:3 ed25519WipeHasher -> @nish.ed25519WipeHasher
+  local -8:9 hasher: Sha512 (const)
+  callee -8:18 new Sha512 -> @nish.Sha512.constructor
+  callee -7:3 Sha512.update -> @nish.Sha512.update
+  local -6:9 h: u8[] (const)
+  callee -6:19 Sha512.digest -> @nish.Sha512.digest
+  callee -5:3 ed25519WipeHasher -> @nish.ed25519WipeHasher
 function ed25519Challenge(r: u8[], pub: u8[], msg: u8[]): u8[] -> @nish.ed25519Challenge
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha512.update
