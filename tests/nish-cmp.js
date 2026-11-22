@@ -18496,6 +18496,15 @@ const DECLARED = [
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
   },
+  // WP82 S2: std/net/tls/record.ts checks each seal and open window before
+  // its copy loop and answers a refusal there, in place of indexes that
+  // could panic, so the module every importer writes changes.
+  {
+    program: "bench/std-net-tls-record.ts",
+    file: "record.ll",
+    changelog: "std/net TLS codec and record layer panic-free",
+    why: "std/net/tls/record.ts now checks every seal and open window before its copy loops and refuses outside them, so its code, its strings and its numbering change; the bench is new to the corpus and the 0.44.0 seed's record.ts has none of it",
+  },
 ]
 
 /**
