@@ -706,6 +706,9 @@ const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_INPUT)) {
     return new Array<u8>(HTTP1_FIRST_INPUT)
   }
+  if (old.length === 0 && size === toU32(HTTP1_FIRST_HEAD)) {
+    return new Array<u8>(HTTP1_FIRST_HEAD)
+  }
   const buf: u8[] = []
   const to: i32 = toI32(toU32(from) + live)
   for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to; k += 1) {
@@ -795,27 +798,33 @@ const HTTP1_LINE: i32 = -1
 const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
   const buf: u8[] = p.buf
   const end: i32 = p.end
-  let i: i32 = p.start
-  if (p.scan > p.start) {
+  const from: i32 = p.start
+  if (from < 0 || end < from) {
+    // Never taken: the parser keeps `0 <= start <= end`.
+    return http1Fail(p, 400, "the input window is out of order")
+  }
+  let i: i32 = from
+  if (p.scan > from) {
     i = p.scan
   } else {
     p.lineControl = false
   }
   const stop: i32 = end < toI32(buf.length) ? end : toI32(buf.length)
-  if (i < 0) {
-    i = 0
-  }
-  while (i < stop) {
+  while (i >= 0 && i < stop && i < toI32(buf.length)) {
     // Most bytes are printable: sixteen at a time while a whole vector is,
     // and the vector that is not answers where its first control byte is.
     // The bytes after a control byte, and a tail shorter than a vector, go
     // one at a time.
     let found: boolean = false
-    while (!found && i >= 0 && i <= stop - 16 && i <= toI32(buf.length) - 16) {
+    while (!found && i >= 0 && i <= toI32(buf.length) - 16 && i + 16 <= stop) {
       const v: u8x16 = loadU8x16(buf, i)
-      const bad: i32 = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
+      const bad: u32 = toU32(bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127)))))
       if (bad !== 0) {
-        i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+        // The lowest set lane, 0 to 15: sixteen lanes set at most bit 15.
+        const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+        if (lane >= 0 && lane < 16) {
+          i += lane
+        }
         found = true
       } else {
         i += 16
@@ -827,38 +836,39 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
     if (i < 0 || i >= stop || i >= toI32(buf.length)) {
       break
     }
-    let c: i32 = toI32(buf[i])
-    if (c === 13 && i + 1 < stop && i + 1 < toI32(buf.length) && buf[i + 1] === 10) {
+    const c: i32 = toI32(buf[i])
+    if (c === 13 && i + 1 < stop && i < toI32(buf.length) - 1 && buf[i + 1] === 10) {
       // CRLF, the end of almost every line: its LF is the next byte, so it
       // is taken here rather than by another trip through the scan.
-      i += 1
-      c = 10
-    }
-    if (c === 10) {
-      if (i === p.start || buf[i - 1] !== 13) {
-        return http1Fail(p, 400, "a line ended in a bare LF")
-      }
-      if (i - 1 - p.start > limit) {
+      if (i - from > limit) {
         return http1Fail(p, overStatus, "a line over its limit")
       }
-      p.lineStart = p.start
-      p.lineEnd = i - 1
-      p.start = i + 1
-      p.scan = i + 1
+      p.lineStart = from
+      p.lineEnd = i
+      p.start = i + 2
+      p.scan = i + 2
       return HTTP1_LINE
+    }
+    if (c === 10) {
+      // A CR before it would have ended the line above, or waited at the end
+      // of the bytes for this one.
+      return http1Fail(p, 400, "a line ended in a bare LF")
     }
     if (c === 13 && i + 1 >= stop) {
       // A CR at the end of the bytes so far: whether it ends the line is
       // the next byte's to say, so the next call looks at it again.
       break
     }
-    if (c !== 9 && !(c === 13 && i + 1 < toI32(buf.length) && buf[i + 1] === 10)) {
+    if (c !== 9) {
+      // A control byte, or a CR with no LF after it.
       p.lineControl = true
     }
     i += 1
   }
   p.scan = i
-  if (end - p.start > limit + 1) {
+  // `0 <= from <= end`, checked above, so the u32 difference is the count
+  // held; the limits are small constants.
+  if (toU32(end) - toU32(from) > toU32(limit) + toU32(1)) {
     return http1Fail(p, overStatus, "a line over its limit")
   }
   return HTTP1_NEED_MORE
@@ -923,20 +933,24 @@ const http1LowerName = (head: u8[], k0: i32, stop: i32): i32 => {
   let k: i32 = k0
   while (k >= 0 && k < stop && k <= toI32(head.length) - 16) {
     const v: u8x16 = loadU8x16(head, k)
-    const bad: i32 = http1NonTokenLanes(v)
+    const bad: u32 = toU32(http1NonTokenLanes(v))
     let run: i32 = 16
     if (bad !== 0) {
-      run = toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+      // The lowest set lane, 0 to 15.
+      run = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
     }
-    if (run > stop - k) {
-      run = stop - k
+    // `0 <= k < stop`, so the u32 difference is the bytes left.
+    const left: i32 = toI32(toU32(stop) - toU32(k))
+    if (run > left) {
+      run = left
     }
     const upper: mask8x16 = and(
       lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)),
       lt(lanes, splatU8x16(toU8(run)))
     )
     store(select(upper, or(v, splatU8x16(32)), v), head, k)
-    k += run
+    // `run` is at most the bytes left before `stop`, so the sum fits.
+    k = toI32(toU32(k) + toU32(run))
     if (run < 16) {
       return k
     }
@@ -996,11 +1010,14 @@ export const http1IsOws = (c: i32): boolean => c === 32 || c === 9
  */
 export const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  if (a < 0 || b - a !== n || b > toI32(text.length)) {
+  // `0 <= a <= b`, so the u32 difference is the slice's length.
+  if (a < 0 || b < a || b > toI32(text.length) || toI32(toU32(b) - toU32(a)) !== n) {
     return false
   }
-  for (let k: i32 = 0; k < n; k += 1) {
-    let c: i32 = toI32(text.charCodeAt(a + k))
+  let j: i32 = a
+  for (let k: i32 = 0; k < n && j >= 0 && j < b; k += 1) {
+    let c: i32 = toI32(text.charCodeAt(j))
+    j += 1
     if (c >= 65 && c <= 90) {
       c += 32
     }
@@ -1018,20 +1035,25 @@ export const http1SameWord = (text: string, a: i32, b: i32, word: string): boole
  */
 const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): boolean => {
   const n: i32 = toI32(word.length)
-  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+  // `0 <= a <= b`, so the u32 difference is the slice's length.
+  if (a < 0 || b < a || b > toI32(bytes.length) || toI32(toU32(b) - toU32(a)) !== n) {
     return false
   }
+  // `j` walks `bytes[a .. b)` beside `k`: the lengths are equal.
+  let j: i32 = a
   if (!fold) {
-    for (let k: i32 = 0; k < n; k += 1) {
-      if (toI32(word.charCodeAt(k)) !== toI32(bytes[a + k])) {
+    for (let k: i32 = 0; k < n && j >= 0 && j < toI32(bytes.length); k += 1) {
+      if (toI32(word.charCodeAt(k)) !== toI32(bytes[j])) {
         return false
       }
+      j += 1
     }
     return true
   }
-  for (let k: i32 = 0; k < n; k += 1) {
+  for (let k: i32 = 0; k < n && j >= 0 && j < toI32(bytes.length); k += 1) {
     let c: i32 = toI32(word.charCodeAt(k))
-    let d: i32 = toI32(bytes[a + k])
+    let d: i32 = toI32(bytes[j])
+    j += 1
     if (c >= 65 && c <= 90) {
       c += 32
     }
@@ -1050,27 +1072,28 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
  * `p.headLength`, keeping every byte already there, those `http1Section` has
  * copied past `headLength` for a line not yet whole included: the rare path
  * of `http1HeadAppend` and of the section scan's copy, apart so that the
- * common one stays small enough to inline.
+ * common one stays small enough to inline. It answers false, and grows
+ * nothing, when the head would pass 2^30 bytes: the caller refuses it.
  */
-const http1HeadGrow = (p: Http1Parser, n: i32): void => {
-  const at: i32 = p.headLength
-  let size: i32 = toI32(p.head.length)
-  if (size < HTTP1_FIRST_HEAD) {
-    size = HTTP1_FIRST_HEAD
+const http1HeadGrow = (p: Http1Parser, n: i32): boolean => {
+  const old: u8[] = p.head
+  const capacity: u32 = toU32(old.length)
+  // u32 throughout: each term is at most 2^30 once checked, so no sum wraps.
+  const at: u32 = toU32(p.headLength)
+  const more: u32 = n < 0 ? toU32(0) : toU32(n)
+  const most: u32 = toU32(HTTP1_MOST_INPUT) - toU32(16)
+  if (at > most || more > most - at) {
+    return false
   }
-  while (size - at - 16 < n) {
-    if (size > 1073741823) {
-      panic("Http1Parser: a head of more than 2^31 - 1 bytes")
-    }
+  const want: u32 = at + more + toU32(16)
+  let size: u32 = capacity < toU32(HTTP1_FIRST_HEAD) ? toU32(HTTP1_FIRST_HEAD) : capacity
+  while (size < want) {
     size = size * 2
   }
-  const grown: u8[] = new Array<u8>(size)
-  const old: u8[] = p.head
-  const kept: i32 = toI32(old.length) < size ? toI32(old.length) : size
-  if (kept > 0) {
-    copyBytes(grown, 0, old, 0, kept)
+  if (size !== capacity) {
+    p.head = http1Grown(old, 0, capacity, size)
   }
-  p.head = grown
+  return true
 }
 
 /**
@@ -1085,23 +1108,29 @@ const http1HeadGrow = (p: Http1Parser, n: i32): void => {
  * reads until the section scan overwrites them.
  */
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
-  const n: i32 = to - from
   const at: i32 = p.headLength
+  if (from < 0 || to < from || at < 0) {
+    // Never taken: the line is a window of `buf` and the head's length is a
+    // count.
+    return at
+  }
+  // `0 <= from <= to`, so the u32 difference is the line's length.
+  const n: i32 = toI32(toU32(to) - toU32(from))
   const head: u8[] = p.head
   const buf: u8[] = p.buf
   // A line of up to 32 bytes is one or two vector stores; a longer one, or
   // one that ends within a vector of `buf`'s end, is one `copyBytes`, which
   // outruns a loop of stores at a Cookie or User-Agent line's length.
-  const room: i32 = n <= 16 ? 16 : 32
-  if (n <= 32 && from >= 0 && from <= toI32(buf.length) - room && at <= toI32(head.length) - room) {
+  if (n <= 16 && from <= toI32(buf.length) - 16 && at <= toI32(head.length) - 16) {
     store(loadU8x16(buf, from), head, at)
-    if (n > 16) {
-      store(loadU8x16(buf, from + 16), head, at + 16)
-    }
-  } else if (n > 0 && from >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
-    copyBytes(head, at, buf, from, n)
+  } else if (n <= 32 && from <= toI32(buf.length) - 32 && at <= toI32(head.length) - 32) {
+    store(loadU8x16(buf, from), head, at)
+    store(loadU8x16(buf, from + 16), head, at + 16)
+  } else {
+    tryCopyBytes(head, at, buf, from, n)
   }
-  p.headLength = at + n
+  // Both are at most 2^30, so the u32 sum fits.
+  p.headLength = toI32(toU32(at) + toU32(n))
   return at
 }
 
@@ -1109,9 +1138,15 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
 const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
   if (at >= toI32(p.spans.length)) {
     const old: i32[] = p.spans
-    const grown: i32[] = new Array<i32>(at < HTTP1_FIRST_SPANS ? HTTP1_FIRST_SPANS : 2 * at + 4)
-    for (let k: i32 = 0; k < toI32(old.length) && k < toI32(grown.length); k += 1) {
-      grown[k] = old[k]
+    // Built by `push`, so no length is computed for `new Array`; `at` counts
+    // four spans a field, far below 2^31, so the u32 size does not wrap.
+    const size: u32 = at < HTTP1_FIRST_SPANS ? toU32(HTTP1_FIRST_SPANS) : toU32(at) * toU32(2) + toU32(4)
+    const grown: i32[] = []
+    for (let k: i32 = 0; k < toI32(old.length); k += 1) {
+      grown.push(old[k])
+    }
+    while (toU32(grown.length) < size) {
+      grown.push(0)
     }
     p.spans = grown
   }
@@ -1129,26 +1164,35 @@ const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
  */
 const http1TallyRun = (tally: Http1ListTally, head: u8[], from: i32, to: i32, word: string): void => {
   let start: i32 = from
-  for (let k: i32 = from; k <= to; k += 1) {
-    const c: i32 = k < to && k >= 0 && k < toI32(head.length) ? toI32(head[k]) : 44
-    if (c === 44) {
-      let a: i32 = start
-      let b: i32 = k
-      while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
-        a += 1
-      }
-      while (b > a && b - 1 >= 0 && b - 1 < toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
-        b -= 1
-      }
-      if (b > a) {
-        tally.elements += 1
-        tally.lastMatches = http1HeadIs(head, a, b, word, true)
-        if (tally.lastMatches) {
-          tally.matches += 1
-        }
-      }
-      start = k + 1
+  while (start >= 0 && start <= to && start <= toI32(head.length)) {
+    // The element runs to the next comma, or to the value's end.
+    let end: i32 = start
+    while (end >= 0 && end < to && end < toI32(head.length) && head[end] !== 44) {
+      end += 1
     }
+    let a: i32 = start
+    let b: i32 = end
+    while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
+      a += 1
+    }
+    while (b > a && b > 0 && b <= toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
+      b -= 1
+    }
+    // Each element holds a byte of a head under 2^30 bytes, so the counts
+    // stay below it.
+    const elements: i32 = tally.elements
+    if (b > a && elements < HTTP1_MOST_INPUT) {
+      tally.elements = elements + 1
+      tally.lastMatches = http1HeadIs(head, a, b, word, true)
+      const matches: i32 = tally.matches
+      if (tally.lastMatches && matches < HTTP1_MOST_INPUT) {
+        tally.matches = matches + 1
+      }
+    }
+    if (end < 0 || end >= to || end >= toI32(head.length)) {
+      break
+    }
+    start = end + 1
   }
 }
 
@@ -1162,10 +1206,13 @@ const http1Tally = (p: Http1Parser, name: string, word: string): Http1ListTally 
   tally.matches = 0
   tally.lastMatches = false
   const spans: i32[] = p.spans
-  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
-    if (http1HeadIs(p.head, spans[4 * i], spans[4 * i + 1], name, false)) {
-      http1TallyRun(tally, p.head, spans[4 * i + 2], spans[4 * i + 3], word)
+  const n: i32 = toI32(spans.length)
+  let k: i32 = 0
+  for (let i: i32 = 0; i < p.headerCount && k < n - 3; i += 1) {
+    if (http1HeadIs(p.head, spans[k], spans[k + 1], name, false)) {
+      http1TallyRun(tally, p.head, spans[k + 2], spans[k + 3], word)
     }
+    k += 4
   }
   return tally
 }
@@ -1194,14 +1241,19 @@ const http1HeadIsVector = (
   text: string,
   fold: boolean
 ): boolean => {
-  if (at < 0 || at > toI32(head.length) - 16 || n > 16) {
-    return http1HeadIs(head, at, at + n, text, fold)
+  if (at < 0 || n < 0 || n > 16) {
+    // No word compared here is longer than a vector, so nothing matches.
+    return false
+  }
+  if (at > toI32(head.length) - 16) {
+    // An offset into the head and a length of at most 16: the u32 sum fits.
+    return http1HeadIs(head, at, toI32(toU32(at) + toU32(n)), text, fold)
   }
   let v: u8x16 = loadU8x16(head, at)
   if (fold) {
     v = select(lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)), or(v, splatU8x16(32)), v)
   }
-  const want: i32 = n >= 16 ? 65535 : (1 << n) - 1
+  const want: i32 = n >= 16 ? 65535 : toI32((toU32(1) << toU32(n)) - toU32(1))
   return (bitmask(eq(v, word)) & want) === want
 }
 
@@ -1259,20 +1311,24 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
   const length: i32 = toI32(head.length)
   let found: i32 = 0
   let start: i32 = from
-  while (start >= 0 && start <= to) {
+  while (start >= 0 && start <= to && start <= length) {
     // The element runs to the next comma, or to the value's end.
     let end: i32 = start
     let seeking: boolean = true
-    while (seeking && end < to) {
+    while (seeking && end >= 0 && end < to) {
       if (end <= length - 16) {
-        const commas: i32 = bitmask(eq(loadU8x16(head, end), splatU8x16(44)))
+        const commas: u32 = toU32(bitmask(eq(loadU8x16(head, end), splatU8x16(44))))
         if (commas !== 0) {
-          end += toI32(31) - toI32(Math.clz32(toU32(commas & -commas)))
+          // The lowest set lane, 0 to 15.
+          const lane: i32 = toI32(31) - toI32(Math.clz32(commas & (toU32(0) - commas)))
+          if (lane >= 0 && lane < 16) {
+            end += lane
+          }
           seeking = false
         } else {
           end += 16
         }
-      } else if (end >= 0 && end < toI32(head.length) && head[end] !== 44) {
+      } else if (end < length && head[end] !== 44) {
         end += 1
       } else {
         seeking = false
@@ -1283,19 +1339,23 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
     }
     let a: i32 = start
     let b: i32 = end
-    while (a < b && a >= 0 && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
+    while (a < b && a >= 0 && a < length && http1IsOws(toI32(head[a]))) {
       a += 1
     }
-    while (b > a && b - 1 < length && http1IsOws(toI32(head[b - 1]))) {
+    while (b > a && b > 0 && b <= toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
       b -= 1
     }
-    const n: i32 = b - a
+    // `0 <= a <= b`, so the u32 difference is the element's length.
+    const n: i32 = a >= 0 && b >= a ? toI32(toU32(b) - toU32(a)) : 0
     if (n === 5 && http1HeadIsVector(head, a, n, close, "close", true)) {
       found = found | HTTP1_CONNECTION_CLOSE
     } else if (n === 10 && http1HeadIsVector(head, a, n, keepAlive, "keep-alive", true)) {
       found = found | HTTP1_CONNECTION_KEEP_ALIVE
     } else if (n === 7 && http1HeadIsVector(head, a, n, upgrade, "upgrade", true)) {
       found = found | HTTP1_CONNECTION_UPGRADE
+    }
+    if (end < 0 || end >= to || end >= length) {
+      break
     }
     start = end + 1
   }
@@ -1426,7 +1486,9 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   }
   p.minor = buf[i + 7] === 48 ? 0 : 1
   if (b - a > toI32(p.head.length) - p.headLength - 16) {
-    http1HeadGrow(p, b - a)
+    if (!http1HeadGrow(p, b - a)) {
+      return http1Fail(p, 431, "a head of more than 2^30 bytes")
+    }
   }
   const at: i32 = http1HeadAppend(p, a, b)
   p.methodStart = at
@@ -1536,6 +1598,19 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
 }
 
 /**
+ * Where field `field`'s four spans start in `spans`: `4 * field`, or -1 when
+ * no such field is recorded.
+ */
+const http1FieldBase = (spans: i32[], field: i32): i32 => {
+  if (field < 0 || field > 536870911) {
+    return -1
+  }
+  // `field < 2^29`, so the shifted index is below 2^31.
+  const k: i32 = toI32(toU32(field) << toU32(2))
+  return k < toI32(spans.length) - 3 ? k : -1
+}
+
+/**
  * The header section has ended: decide the framing and the connection's fate
  * (§6.3, §9.3) and answer `HTTP1_HEAD`, or the refusal. It reads the counts
  * the field lines left, and allocates nothing unless `keepText` asks for
@@ -1546,19 +1621,19 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
   const head: u8[] = p.head
   const hosts: i32 = p.hostFields
   const lengths: i32 = p.lengthFields
-  const lengthField: i32 = p.lengthField
+  const lengthAt: i32 = http1FieldBase(spans, p.lengthField)
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return http1Fail(p, 400, "a request without exactly one Host")
   }
   // The one Host must be a host and an optional port (§3.2): a value such as
   // `a@b`, `a/b` or `a, b` is read one way by this program and another by a
   // proxy or a virtual-host table in front of it. An empty Host is allowed.
-  const hostField: i32 = p.hostField
+  const hostAt: i32 = http1FieldBase(spans, p.hostField)
   if (
     hosts === 1 &&
-    hostField >= 0 &&
-    4 * hostField + 3 < toI32(spans.length) &&
-    !urlIsHostPort(head, spans[4 * hostField + 2], spans[4 * hostField + 3])
+    hostAt >= 0 &&
+    hostAt < toI32(spans.length) - 3 &&
+    !urlIsHostPort(head, spans[hostAt + 2], spans[hostAt + 3])
   ) {
     return http1Fail(p, 400, "a Host that is not a host and port")
   }
@@ -1582,13 +1657,8 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     p.chunked = true
   } else if (lengths > 1) {
     return http1Fail(p, 400, "Content-Length given twice")
-  } else if (lengths === 1 && 4 * lengthField + 3 < toI32(spans.length) && lengthField >= 0) {
-    const size: i32 = http1ContentLength(
-      head,
-      spans[4 * lengthField + 2],
-      spans[4 * lengthField + 3],
-      p.maxBody
-    )
+  } else if (lengths === 1 && lengthAt >= 0 && lengthAt < toI32(spans.length) - 3) {
+    const size: i32 = http1ContentLength(head, spans[lengthAt + 2], spans[lengthAt + 3], p.maxBody)
     if (size === -1) {
       return http1Fail(p, 400, "a Content-Length that is not a run of digits")
     }
@@ -1922,7 +1992,9 @@ const http1Section = (p: Http1Parser): i32 => {
           const v: u8x16 = loadU8x16(buf, q)
           if (q < copyEnd) {
             if (q > growAt) {
-              http1HeadGrow(p, q + delta + 16 - p.headLength)
+              if (!http1HeadGrow(p, q + delta + 16 - p.headLength)) {
+                return http1Fail(p, 431, "a head of more than 2^30 bytes")
+              }
               head = p.head
               growAt = toI32(head.length) - 32 - delta
             }
@@ -1943,7 +2015,9 @@ const http1Section = (p: Http1Parser): i32 => {
           const end: i32 = last < copyStop ? last : copyStop
           if (copy && q < end) {
             if (end + delta > toI32(p.head.length) - 16) {
-              http1HeadGrow(p, end + delta - p.headLength)
+              if (!http1HeadGrow(p, end + delta - p.headLength)) {
+                return http1Fail(p, 431, "a head of more than 2^30 bytes")
+              }
             }
             copyBytes(p.head, q + delta, buf, q, end - q)
             head = p.head

@@ -171,14 +171,24 @@ export const httpSegments = (bytes: i32, mss: i32): i32 => {
   if (bytes <= 0) {
     return 0
   }
-  return (bytes - 1) / mss + 1
+  // `mss` is 1 or more, so the quotient is at most `bytes - 1` and the sum
+  // at most `bytes`: unsigned arithmetic gives the same count with no check.
+  // The panic above leaves `size` 1 or more, so the test always holds; it is
+  // what shows the division has a divisor.
+  const size: u32 = toU32(mss)
+  if (size > 0) {
+    return toI32((toU32(bytes) - 1) / size + 1)
+  }
+  return 0
 }
 
 /** The digits of `n` in decimal, `n` 0 or more. */
 const httpDecimalDigits = (n: i32): i32 => {
   let digits: i32 = 1
   let rest: i32 = n
-  while (rest >= 10) {
+  // An `i32` has at most ten digits, so the second test always holds; it is
+  // what shows the count cannot run past them.
+  while (rest >= 10 && digits < 10) {
     rest = rest / 10
     digits += 1
   }
@@ -214,16 +224,20 @@ const httpCodingIs = (buf: u8[], start: i32, end: i32, word: string): boolean =>
   if (end - start !== toI32(word.length)) {
     return false
   }
-  for (let i: i32 = 0; i < end - start && i < toI32(word.length); i += 1) {
-    let c: i32 = toI32(buf[start + i])
+  // `j` walks `buf` and `i` walks `word` side by side. A window outside `buf`
+  // stops the walk short of the word's end, which answers false.
+  let i: i32 = 0
+  for (let j: i32 = start; j >= 0 && j < end && j < toI32(buf.length) && i < toI32(word.length); j += 1) {
+    let c: i32 = toI32(buf[j])
     if (c >= 65 && c <= 90) {
       c += 32
     }
     if (c !== toI32(word.charCodeAt(i))) {
       return false
     }
+    i += 1
   }
-  return true
+  return i === toI32(word.length)
 }
 
 /**
@@ -232,7 +246,7 @@ const httpCodingIs = (buf: u8[], start: i32, end: i32, word: string): boolean =>
  * when it is not one.
  */
 const httpQValue = (buf: u8[], start: i32, end: i32): i32 => {
-  if (start >= end) {
+  if (start >= end || start < 0 || start >= toI32(buf.length)) {
     return -1
   }
   const lead: i32 = toI32(buf[start])
@@ -243,16 +257,19 @@ const httpQValue = (buf: u8[], start: i32, end: i32): i32 => {
   if (start + 1 === end) {
     return q
   }
-  if (buf[start + 1] !== 46 || end - start > 5) {
+  const dot: i32 = start + 1
+  if (dot >= toI32(buf.length) || buf[dot] !== 46 || end - start > 5) {
     return -1
   }
   let scale: i32 = 100
-  for (let i: i32 = start + 2; i < end && i >= 0 && i < toI32(buf.length); i += 1) {
+  for (let i: i32 = dot + 1; i < end && i >= 0 && i < toI32(buf.length); i += 1) {
     const d: i32 = toI32(buf[i]) - 48
     if (d < 0 || d > 9 || (lead === 49 && d !== 0)) {
       return -1
     }
-    q += d * scale
+    // At most three digits follow the point, each 9 or less at a scale of 100
+    // or less, so `q` stays under 1000 and unsigned arithmetic cannot wrap.
+    q = toI32(toU32(q) + toU32(d) * toU32(scale))
     scale = scale / 10
   }
   return q
@@ -403,9 +420,9 @@ export const httpIdentityRefused = (buf: u8[], start: i32, end: i32): boolean =>
 
 /** The bytes of an ASCII string. */
 const httpCompressBytes = (text: string): u8[] => {
-  const out: u8[] = new Array<u8>(toI32(text.length))
-  for (let i: i32 = 0; i < toI32(text.length) && i < toI32(out.length); i += 1) {
-    out[i] = toU8(text.charCodeAt(i))
+  const out: u8[] = []
+  for (let i: i32 = 0; i < toI32(text.length); i += 1) {
+    out.push(toU8(text.charCodeAt(i)))
   }
   return out
 }
@@ -417,13 +434,11 @@ const httpCompressBytes = (text: string): u8[] => {
  * `FLEVEL` of `level` (RFC 1950 §2.2), the DEFLATE stream moved down 8 bytes,
  * and the Adler-32 of `src[off .. off + len)`, the data compressed.
  *
- * @returns the zlib stream's length, `n - HTTP_ZLIB_SHORTER`
+ * @returns the zlib stream's length, `n - HTTP_ZLIB_SHORTER`; -1, which no
+ *   caller sees, when `out[0 .. n)` is too short to be a gzip member
  */
 const httpGzipToZlib = (out: u8[], n: i32, level: i32, src: u8[], off: i32, len: i32): i32 => {
-  if (n < 18 || n > toI32(out.length)) {
-    panic("httpGzipToZlib: not a gzip member inside its buffer")
-  }
-  let flevel: i32 = 3
+  let flevel: u32 = 3
   if (level < 2) {
     flevel = 0
   } else if (level < 6) {
@@ -431,21 +446,32 @@ const httpGzipToZlib = (out: u8[], n: i32, level: i32, src: u8[], off: i32, len:
   } else if (level === 6) {
     flevel = 2
   }
-  const cmf: i32 = 0x78
-  let flg: i32 = flevel << 6
-  flg += (toI32(31) - ((cmf * 256 + flg) % 31)) % 31
-  out[0] = toU8(cmf)
-  out[1] = toU8(flg)
-  const end: i32 = n - HTTP_ZLIB_SHORTER - 4
-  for (let i: i32 = 2; i < end && i >= 0 && i + 8 < toI32(out.length); i += 1) {
-    out[i] = out[i + 8]
+  const cmf: u32 = 0x78
+  const top: u32 = flevel << 6
+  // FCHECK makes `cmf * 256 + flg` a multiple of 31. Every number here is
+  // under 31000, so unsigned arithmetic cannot wrap.
+  const flg: u32 = top + ((toU32(31) - ((cmf * 256 + top) % 31)) % 31)
+  // Both callers pass what an encoder just wrote at the start of `out`: at
+  // least 18 bytes of gzip header and trailer, inside `out`. So the tests
+  // always hold; they are what prove the writes below in bounds, and a miss
+  // would answer -1, which sends the body as it is.
+  if (n >= 18 && n <= toI32(out.length) && toI32(out.length) > 1) {
+    const end: i32 = n - HTTP_ZLIB_SHORTER - 4
+    if (end >= 0 && end + 3 < toI32(out.length)) {
+      out[0] = toU8(cmf)
+      out[1] = toU8(flg)
+      for (let i: i32 = 2; i < end && i >= 0 && i + 8 < toI32(out.length); i += 1) {
+        out[i] = out[i + 8]
+      }
+      const a: u32 = adler32(src, off, len)
+      out[end] = toU8(a >>> 24)
+      out[end + 1] = toU8((a >>> 16) & 255)
+      out[end + 2] = toU8((a >>> 8) & 255)
+      out[end + 3] = toU8(a & 255)
+      return end + 4
+    }
   }
-  const a: u32 = adler32(src, off, len)
-  out[end] = toU8(a >>> 24)
-  out[end + 1] = toU8((a >>> 16) & 255)
-  out[end + 2] = toU8((a >>> 8) & 255)
-  out[end + 3] = toU8(a & 255)
-  return end + 4
+  return -1
 }
 
 /**
@@ -534,7 +560,14 @@ export class HttpCompressor {
     }
     this.gzip = new GzipCompressor(level)
     this.fixed = new GzipFixedCompressor()
-    this.output = new Array<u8>(compressBound(maxLength))
+    // Grown a byte at a time, once: a length the compiler cannot see is not
+    // negative would cost `new Array` a check.
+    const output: u8[] = []
+    const bound: i32 = compressBound(maxLength)
+    while (toI32(output.length) < bound) {
+      output.push(0)
+    }
+    this.output = output
     this.names = []
     this.values = []
     this.contentEncodingName = httpCompressBytes("content-encoding")
@@ -592,7 +625,9 @@ export class HttpCompressor {
       return -1
     }
     // The longest output kept; `output` holds `compressBound(maxLength)`, more.
-    const keep: i32 = len - this.leastSaving(len)
+    // `len` is 0 or more and the saving 1 or more, so the difference is an
+    // `i32` and unsigned arithmetic gives it with no check.
+    const keep: i32 = toI32(toU32(len) - toU32(this.leastSaving(len)))
     let n: i32 = -1
     if (keep > 0) {
       const fixed: boolean =
@@ -601,10 +636,10 @@ export class HttpCompressor {
       // A gzip member `HTTP_ZLIB_SHORTER` bytes over `keep` still makes a deflate body that fits.
       let room: i32 = keep
       if (deflate) {
-        room =
-          keep < toI32(this.output.length) - HTTP_ZLIB_SHORTER
-            ? keep + HTTP_ZLIB_SHORTER
-            : toI32(this.output.length)
+        // Below `size - HTTP_ZLIB_SHORTER`, `keep` plus that many is below
+        // `size`, so the unsigned sum is the `i32` one.
+        const size: i32 = toI32(this.output.length)
+        room = keep < size - HTTP_ZLIB_SHORTER ? toI32(toU32(keep) + toU32(HTTP_ZLIB_SHORTER)) : size
       }
       n = fixed
         ? this.fixed.compress(body, off, len, this.output, toI32(0), room)
@@ -671,6 +706,12 @@ export class HttpCompressor {
     }
     if (deflate) {
       n = httpGzipToZlib(this.output, n, level, body, off, len)
+    }
+    if (n < 0) {
+      // `output` holds `compressBound(maxLength)` bytes, so an encoder always
+      // fits and this never happens; were it to, the body goes out as it is.
+      this.decision = HTTP_COMPRESS_TOO_LARGE
+      return -1
     }
     this.sent(deflate)
     return n
@@ -785,12 +826,18 @@ export class HttpCompressor {
    *   uncompressed
    */
   http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32 {
-    let head: i32 =
-      encodedHead - HTTP1_GZIP_FIELD_BYTES + toI32(this.gzipValue.length) - toI32(this.codingValue.length)
+    // `encodedHead` is a head's length, and every field here a few bytes, so
+    // the answer is an `i32`; unsigned arithmetic wraps on the way and lands
+    // on the same bytes with no check.
+    let head: u32 =
+      toU32(encodedHead) -
+      toU32(HTTP1_GZIP_FIELD_BYTES) +
+      toU32(this.gzipValue.length) -
+      toU32(this.codingValue.length)
     if (this.vary) {
-      head -= toI32(this.varyName.length) + toI32(this.acceptEncodingValue.length) + 4
+      head -= toU32(this.varyName.length) + toU32(this.acceptEncodingValue.length) + 4
     }
-    return head - httpDecimalDigits(encodedLength) + httpDecimalDigits(length)
+    return toI32(head - toU32(httpDecimalDigits(encodedLength)) + toU32(httpDecimalDigits(length)))
   }
 
   /**
@@ -1011,13 +1058,19 @@ export class HttpBodyDecoder {
     }
     const limit: i32 = this.limit
     // A first guess of four times the input, so most bodies decode at once.
-    let size: i32 = len > limit >> 2 ? limit : len * 4
+    // Under the test, `len` is at most a quarter of `limit`, so four times it
+    // is an `i32` and the unsigned product is the same.
+    let size: i32 = len > limit >> 2 ? limit : toI32(toU32(len) * 4)
     if (size < HTTP_DECODE_FIRST) {
       size = limit < HTTP_DECODE_FIRST ? limit : HTTP_DECODE_FIRST
     }
     while (true) {
-      if (toI32(this.output.length) < size) {
-        this.output = new Array<u8>(size)
+      // Grown in place rather than made anew: a length the compiler cannot
+      // see is not negative would cost `new Array` a check. The bytes kept
+      // mean nothing, since each decode writes from the start.
+      const output: u8[] = this.output
+      while (toI32(output.length) < size) {
+        output.push(0)
       }
       const end: i32 =
         coding === HTTP_CODING_GZIP
@@ -1033,7 +1086,9 @@ export class HttpBodyDecoder {
       if (have >= limit) {
         return HTTP_DECODE_TOO_LARGE
       }
-      size = have > limit >> 1 ? limit : have * 2
+      // Under the test, `have` is at most half of `limit`, so twice it is an
+      // `i32` and the unsigned product is the same.
+      size = have > limit >> 1 ? limit : toI32(toU32(have) * 2)
     }
   }
 }

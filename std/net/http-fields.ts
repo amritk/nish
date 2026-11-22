@@ -70,6 +70,8 @@
  * another implementation.
  */
 
+import { tryCopyBytes } from "nish/bytes"
+
 /** A field section that has the shape asked for. */
 export const HTTP_FIELDS_OK: i32 = 0
 
@@ -195,12 +197,15 @@ export const httpFieldValueValid = (value: u8[]): boolean => {
       return false
     }
   }
-  if (n === 0) {
-    return true
+  // `n` is the length, so only an empty value, which has no edges to hold
+  // whitespace, fails the test; it is what proves the two indexes.
+  const lastAt: i32 = n - 1
+  if (lastAt >= 0 && lastAt < toI32(value.length) && toI32(value.length) > 0) {
+    const first: i32 = toI32(value[0])
+    const last: i32 = toI32(value[lastAt])
+    return first !== 32 && first !== 9 && last !== 32 && last !== 9
   }
-  const first: i32 = toI32(value[0])
-  const last: i32 = toI32(value[n - 1])
-  return first !== 32 && first !== 9 && last !== 32 && last !== 9
+  return true
 }
 
 /**
@@ -303,7 +308,7 @@ const httpFieldsSameHost = (bytes: u8[], other: u8[]): boolean => {
 
 /** The pseudo-header bit `name` is, 0 for a regular field, -1 for a name that starts with a colon and is none of them. */
 const httpFieldsPseudoOf = (name: u8[]): i32 => {
-  if (toI32(name.length) === 0 || toI32(name[0]) !== 58) {
+  if (toI32(name.length) < 1 || toI32(name[0]) !== 58) {
     return 0
   }
   if (httpFieldIs(name, ":method")) {
@@ -352,7 +357,8 @@ const httpFieldsStatusOf = (value: u8[]): i32 => {
     if (digit < 0 || digit > 9) {
       return -1
     }
-    code = code * 10 + digit
+    // Three digits are at most 999, so the unsigned sum cannot leave an `i32`.
+    code = toI32(toU32(code) * 10 + toU32(digit))
   }
   return code >= 100 && code <= 599 ? code : -1
 }
@@ -369,7 +375,9 @@ const httpFieldsLengthOf = (value: u8[]): i64 => {
     if (digit < 0 || digit > 9) {
       return toI64(-1)
     }
-    length = length * toI64(10) + toI64(digit)
+    // At most eighteen digits stay below 10^18, so the unsigned sum cannot
+    // leave an `i64`.
+    length = toI64(toU64(length) * toU64(10) + toU64(digit))
   }
   return length
 }
@@ -704,19 +712,27 @@ export const HTTP_DATE_LAST_SECOND: i64 = 253402300799
 /** The day names from Sunday, then the month names from January, three letters each. */
 const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJulAugSepOctNovDec"
 
-/** Writes the three letters at `HTTP_FIELDS_DATE_NAMES[3 * index ..)` at `out[at ..)`. */
-const httpFieldsPutName = (out: u8[], at: i32, index: i32): void => {
-  for (let k: i32 = 0; k < 3; k++) {
-    out[at + k] = toU8(HTTP_FIELDS_DATE_NAMES.charCodeAt(3 * index + k))
+/**
+ * Pushes the three letters at `HTTP_FIELDS_DATE_NAMES[3 * index ..)` onto
+ * `date`. Every weekday and month names a slot inside the table, so the test
+ * always holds; it is what proves the index, and a miss would leave `date`
+ * short, which `httpDateWrite` refuses rather than send.
+ */
+const httpFieldsPushName = (date: u8[], index: u32): void => {
+  const names: string = HTTP_FIELDS_DATE_NAMES
+  const n: i32 = toI32(names.length)
+  for (let k: u32 = 0; k < 3; k++) {
+    const pos: i32 = toI32(index * 3 + k)
+    if (pos >= 0 && pos < n) {
+      date.push(toU8(names.charCodeAt(pos)))
+    }
   }
 }
 
-/** Writes `n`, 0 to 99, as two digits at `out[at ..)`. */
-const httpFieldsPutTwo = (out: u8[], at: i32, n: i32): void => {
-  const tens: i32 = n / 10
-  const ones: i32 = n % 10
-  out[at] = toU8(48 + tens)
-  out[at + 1] = toU8(48 + ones)
+/** Pushes `n`, 0 to 99, as two digits onto `date`. */
+const httpFieldsPushTwo = (date: u8[], n: u32): void => {
+  date.push(toU8(toU32(48) + n / 10))
+  date.push(toU8(toU32(48) + (n % 10)))
 }
 
 /**
@@ -732,8 +748,8 @@ const httpFieldsPutTwo = (out: u8[], at: i32, n: i32): void => {
  * its author donated to the public domain: days are counted from 0000-03-01,
  * so a leap day is the last day of its year and a 400-year era is always
  * 146,097 days long. Every step
- * is `i64` arithmetic on numbers that are not negative, so `--number-mode
- * f64` writes the same bytes.
+ * is `u64` arithmetic on numbers that never wrap, so `--number-mode f64`
+ * writes the same bytes.
  *
  * @param out the buffer to write into; its length is not changed
  * @param at the index in `out` where the date's first letter goes
@@ -750,39 +766,50 @@ export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
   ) {
     return -1
   }
-  const days: i64 = seconds / 86400
-  const inDay: i32 = toI32(seconds - days * 86400)
+  // The test above keeps `seconds` far below 2^63, so every step is `u64`
+  // arithmetic on numbers that neither wrap nor go below 0.
+  const total: u64 = toU64(seconds)
+  const days: u64 = total / 86400
+  const inDay: u32 = toU32(total % 86400)
   // 1970-01-01 was a Thursday, and 0 is Sunday.
-  const weekday: i32 = toI32((days + 4) % 7)
+  const weekday: u32 = toU32((days + 4) % 7)
   // From 0000-03-01 to 1970-01-01 is 719,468 days.
-  const z: i64 = days + 719468
-  const era: i64 = z / 146097
-  const dayOfEra: i64 = z - era * 146097
-  const yearOfEra: i64 = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365
-  const dayOfYear: i64 = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
+  const z: u64 = days + 719468
+  const era: u64 = z / 146097
+  const dayOfEra: u64 = z - era * 146097
+  const yearOfEra: u64 = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365
+  const dayOfYear: u64 = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
   // Months from March, each 30 or 31 days by the 153-day rule.
-  const marchMonth: i64 = (5 * dayOfYear + 2) / 153
-  const day: i32 = toI32(dayOfYear - (153 * marchMonth + 2) / 5 + 1)
-  const month: i32 = toI32(marchMonth < 10 ? marchMonth + 3 : marchMonth - 9)
-  const year: i32 = toI32(yearOfEra + era * 400) + (month <= 2 ? 1 : 0)
-  httpFieldsPutName(out, at, weekday)
-  out[at + 3] = 44
-  out[at + 4] = 32
-  httpFieldsPutTwo(out, at + 5, day)
-  out[at + 7] = 32
-  httpFieldsPutName(out, at + 8, 6 + month)
-  out[at + 11] = 32
-  httpFieldsPutTwo(out, at + 12, year / 100)
-  httpFieldsPutTwo(out, at + 14, year % 100)
-  out[at + 16] = 32
-  httpFieldsPutTwo(out, at + 17, inDay / 3600)
-  out[at + 19] = 58
-  httpFieldsPutTwo(out, at + 20, (inDay / 60) % 60)
-  out[at + 22] = 58
-  httpFieldsPutTwo(out, at + 23, inDay % 60)
-  out[at + 25] = 32
-  out[at + 26] = 71
-  out[at + 27] = 77
-  out[at + 28] = 84
-  return at + HTTP_DATE_SIZE
+  const marchMonth: u64 = (5 * dayOfYear + 2) / 153
+  const day: u32 = toU32(dayOfYear - (153 * marchMonth + 2) / 5 + 1)
+  const month: u32 = toU32(marchMonth < 10 ? marchMonth + 3 : marchMonth - 9)
+  const year: u32 = toU32(yearOfEra + era * 400) + (month <= 2 ? 1 : 0)
+  const date: u8[] = []
+  httpFieldsPushName(date, weekday)
+  date.push(44)
+  date.push(32)
+  httpFieldsPushTwo(date, day)
+  date.push(32)
+  httpFieldsPushName(date, 6 + month)
+  date.push(32)
+  httpFieldsPushTwo(date, year / 100)
+  httpFieldsPushTwo(date, year % 100)
+  date.push(32)
+  httpFieldsPushTwo(date, inDay / 3600)
+  date.push(58)
+  httpFieldsPushTwo(date, (inDay / 60) % 60)
+  date.push(58)
+  httpFieldsPushTwo(date, inDay % 60)
+  date.push(32)
+  date.push(71)
+  date.push(77)
+  date.push(84)
+  // The test at the top made the room, and `date` is always whole, so the
+  // copy always happens; it is a copy that cannot panic, and its refusal is
+  // this function's own.
+  if (!tryCopyBytes(out, at, date, 0, HTTP_DATE_SIZE)) {
+    return -1
+  }
+  // The date fits in `out` from `at`, so the end is at most its length.
+  return toI32(toU32(at) + toU32(HTTP_DATE_SIZE))
 }
