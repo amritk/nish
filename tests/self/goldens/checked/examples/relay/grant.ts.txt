@@ -48,72 +48,84 @@ function grantReject(out: RelayGrant, code: i32, reason: string): i32 -> @grantR
   escaping: code reason
   pointer out: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function grantByte(buf: u8[], at: i32): i32 -> @grantByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function grantRotr(x: u32, n: u32): u32 -> @grantRotr
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function grantCompress(h: u32[], w: u32[], k: u32[]): void -> @grantCompress
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: grantRotr
+  pointer h: size=0 writesThrough=true captured=false
+  pointer w: size=0 writesThrough=true captured=false
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -5:12 t: i32 (let)
+  local -4:11 w2: u32 (const)
+  local -3:11 w15: u32 (const)
+  local -2:11 sigma1: u32 (const)
+  callee -2:25 grantRotr -> @grantRotr
+  callee -2:45 grantRotr -> @grantRotr
+  local -1:11 sigma0: u32 (const)
+  callee -1:25 grantRotr -> @grantRotr
+  callee -1:45 grantRotr -> @grantRotr
+  local +2:7 a: u32 (let)
+  local +3:7 b: u32 (let)
+  local +4:7 c: u32 (let)
+  local +5:7 d: u32 (let)
+  local +6:7 e: u32 (let)
+  local +7:7 f: u32 (let)
+  local +8:7 g: u32 (let)
+  local +9:7 hh: u32 (let)
+  local +10:12 t: i32 (let)
+  local +11:11 t1: u32 (const)
+  callee +12:13 grantRotr -> @grantRotr
+  callee +12:31 grantRotr -> @grantRotr
+  callee +12:50 grantRotr -> @grantRotr
+  local +13:11 t2: u32 (const)
+  callee +13:22 grantRotr -> @grantRotr
+  callee +13:40 grantRotr -> @grantRotr
+  callee +13:59 grantRotr -> @grantRotr
 function grantSha256(data: u8[]): u8[] -> @grantSha256
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: grantRotr nish.quicPacketCopy nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic nish_panic_index nish_panic_overflow
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
-  stackSites=3 stackLocals=3
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: grantCompress nish.wipe$arr.u32 nish.wipe$arr.u8 nish_array_grow
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=4 stackLocals=4
   local +0:9 k: u32[] (const)
   local +10:9 h: u32[] (const)
-  local +14:9 n: i32 (const)
-  local +15:9 size: i32 (const)
-  local +16:9 m: u8[] (const)
-  callee +17:3 quicPacketCopy -> @nish.quicPacketCopy
-  local +19:9 bits: u64 (const)
-  local +20:12 i: i32 (let)
-  local +23:9 w: u32[] (const)
-  local +25:14 at: i32 (let)
-  local +26:16 t: i32 (let)
-  local +27:13 word: u32 (let)
-  local +28:18 j: i32 (let)
-  local +33:16 t: i32 (let)
-  local +34:15 w2: u32 (const)
-  local +35:15 w15: u32 (const)
-  local +36:15 sigma1: u32 (const)
-  callee +36:29 grantRotr -> @grantRotr
-  callee +36:49 grantRotr -> @grantRotr
-  local +37:15 sigma0: u32 (const)
-  callee +37:29 grantRotr -> @grantRotr
-  callee +37:49 grantRotr -> @grantRotr
-  local +40:11 a: u32 (let)
-  local +41:11 b: u32 (let)
-  local +42:11 c: u32 (let)
-  local +43:11 d: u32 (let)
-  local +44:11 e: u32 (let)
-  local +45:11 f: u32 (let)
-  local +46:11 g: u32 (let)
-  local +47:11 hh: u32 (let)
-  local +48:16 t: i32 (let)
-  local +49:15 t1: u32 (const)
-  callee +50:17 grantRotr -> @grantRotr
-  callee +50:35 grantRotr -> @grantRotr
-  callee +50:54 grantRotr -> @grantRotr
-  local +51:15 t2: u32 (const)
-  callee +52:12 grantRotr -> @grantRotr
-  callee +52:30 grantRotr -> @grantRotr
-  callee +52:49 grantRotr -> @grantRotr
-  local +72:9 out: u8[] (const)
-  local +73:12 i: i32 (let)
-  callee +79:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +80:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +81:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  local +14:9 m: u8[] (const)
+  local +15:12 i: i32 (let)
+  local +22:9 bits: u64 (const)
+  local +23:12 i: i32 (let)
+  local +27:9 w: u32[] (const)
+  local +28:7 word: u32 (let)
+  local +29:12 j: i32 (let)
+  local +32:13 slot: i32 (const)
+  callee +37:7 grantCompress -> @grantCompress
+  local +40:9 out: u8[] (const)
+  local +41:12 i: i32 (let)
+  local +42:11 v: u32 (const)
+  callee +48:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +49:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +50:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function grantPadHash(key: u8[], pad: i32, data: u8[]): u8[] -> @grantPadHash
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: grantSha256 nish.quicPacketCopy nish.wipe$arr.u8 nish_panic nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: grantSha256 nish.wipe$arr.u8 nish_array_grow
   pointer key: size=0 writesThrough=false captured=false
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
-  stackSites=0 stackLocals=0
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
   local +0:9 block: u8[] (const)
   local +1:12 k: i32 (let)
-  callee +4:3 quicPacketCopy -> @nish.quicPacketCopy
-  local +5:9 digest: u8[] (const)
-  callee +5:24 grantSha256 -> @grantSha256
-  callee +6:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  local +4:12 k: i32 (let)
+  local +7:9 digest: u8[] (const)
+  callee +7:24 grantSha256 -> @grantSha256
+  callee +8:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function grantHmac(key: u8[], message: u8[]): u8[] -> @grantHmac [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via grantHmac
   calls: grantHmac grantPadHash grantSha256 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=grantSha256#0 grantPadHash#0 grantPadHash#0
@@ -130,20 +142,20 @@ function grantHmac(key: u8[], message: u8[]): u8[] -> @grantHmac [exported]
   callee +6:21 grantPadHash -> @grantPadHash
   callee +7:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function grantTagHolds(key: u8[], signed: u8[]): boolean -> @grantTagHolds$
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via grantHmac
-  calls: grantHmac nish.quicPacketCopy nish.timingSafeEqualAt nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_panic
+  calls: grantHmac nish.timingSafeEqualAt nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_array_grow
   pointer key: size=0 writesThrough=false captured=false passedTo=grantHmac#0
-  pointer signed: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2 nish.timingSafeEqualAt#2
-  stackSites=0 stackLocals=0
+  pointer signed: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqualAt#2
+  stackSites=1 stackLocals=1
   local +0:9 n: i32 (const)
   local +4:9 message: u8[] (const)
-  callee +5:3 quicPacketCopy -> @nish.quicPacketCopy
-  local +6:9 tag: u8[] (const)
-  callee +6:21 grantHmac -> @grantHmac
-  local +7:9 holds: boolean (const)
-  callee +8:42 timingSafeEqualAt -> @nish.timingSafeEqualAt
-  callee +9:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  local +5:12 k: i32 (let)
+  local +8:9 tag: u8[] (const)
+  callee +8:21 grantHmac -> @grantHmac
+  local +9:9 holds: boolean (const)
+  callee +10:42 timingSafeEqualAt -> @nish.timingSafeEqualAt
+  callee +11:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function GrantVerifier.constructor(this: GrantVerifier): void -> @GrantVerifier.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: RelayJson.constructor nish_alloc_struct nish_array_grow nish_str_new
@@ -155,44 +167,54 @@ function GrantVerifier.verify(this: GrantVerifier, buf: u8[], off: i32, len: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: len off
-  calls: RelayJson.find RelayJson.read grantReject nish.base64urlDecode nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds nish.h3CheckWindow nish.quicPacketCopy nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic nish_panic_index nish_panic_overflow
+  calls: RelayJson.find RelayJson.read grantByte grantReject nish.base64urlDecode nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds nish.h3CheckWindow nish.quicPacketCopy nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow
   pointer this: size=16 writesThrough=false captured=false
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicPacketCopy#2
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 grantByte#0 grantByte#0
   pointer secret: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds#0
-  pointer out: size=40 writesThrough=true captured=false passedTo=grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0
-  stackSites=2 stackLocals=2
-  callee -74:5 h3CheckWindow -> @nish.h3CheckWindow
-  local -72:11 a: i64 (const)
-  local -70:11 end: i32 (const)
-  local -69:9 first: i32 (let)
-  local -68:9 second: i32 (let)
-  local -67:14 k: i32 (let)
-  callee -60:18 grantReject -> @grantReject
+  pointer out: size=40 writesThrough=true captured=false passedTo=grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0
+  stackSites=3 stackLocals=3
+  callee -106:5 h3CheckWindow -> @nish.h3CheckWindow
+  local -104:11 a: i64 (const)
+  local -102:11 wide: i64 (const)
+  local -101:11 end: i32 (const)
+  local -100:9 first: i32 (let)
+  local -99:9 second: i32 (let)
+  local -98:14 k: i32 (let)
+  callee -91:18 grantReject -> @grantReject
+  callee -83:7 grantByte -> @grantByte
+  callee -82:7 grantByte -> @grantByte
+  callee -80:14 grantReject -> @grantReject
+  local -76:11 macText: string[] (const)
+  local -75:11 payloadText: string[] (const)
+  local -74:11 signed: u8[] (const)
+  local -73:11 chars: string[] (const)
+  local -72:14 k: i32 (let)
+  local -71:13 b: i32 (const)
+  callee -69:16 grantReject -> @grantReject
+  local -67:13 char: string (const)
+  local -57:11 signature: u8[] | null (const)
+  callee -57:36 base64urlDecode -> @nish.base64urlDecode
   callee -55:14 grantReject -> @grantReject
-  local -52:11 macText: string[] (const)
-  local -51:14 k: i32 (let)
-  local -48:11 payloadText: string[] (const)
-  local -47:14 k: i32 (let)
-  local -44:11 signature: u8[] | null (const)
-  callee -44:36 base64urlDecode -> @nish.base64urlDecode
-  callee -42:14 grantReject -> @grantReject
-  callee -38:14 grantReject -> @grantReject
-  local -36:11 signed: u8[] (const)
-  callee -35:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee -34:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee -33:10 exposeWith<u8[], u8[], boolean, grantTagHolds> -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds
-  callee -32:14 grantReject -> @grantReject
-  local -28:11 payload: u8[] | null (const)
-  callee -28:34 base64urlDecode -> @nish.base64urlDecode
-  local -27:11 json: RelayJson (const)
-  callee -26:30 RelayJson.read -> @RelayJson.read
-  callee -25:14 grantReject -> @grantReject
-  local -23:11 host: i32 (const)
-  callee -23:23 RelayJson.find -> @RelayJson.find
-  local -22:11 port: i32 (const)
-  callee -22:23 RelayJson.find -> @RelayJson.find
-  local -21:11 expires: i32 (const)
-  callee -21:26 RelayJson.find -> @RelayJson.find
+  callee -51:14 grantReject -> @grantReject
+  local -49:11 mac: u8[] (const)
+  local -48:14 k: i32 (let)
+  callee -45:10 exposeWith<u8[], u8[], boolean, grantTagHolds> -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds
+  callee -44:14 grantReject -> @grantReject
+  local -40:11 payload: u8[] | null (const)
+  callee -40:34 base64urlDecode -> @nish.base64urlDecode
+  local -39:11 json: RelayJson (const)
+  callee -38:30 RelayJson.read -> @RelayJson.read
+  callee -37:14 grantReject -> @grantReject
+  local -35:11 host: i32 (const)
+  callee -35:23 RelayJson.find -> @RelayJson.find
+  local -34:11 port: i32 (const)
+  callee -34:23 RelayJson.find -> @RelayJson.find
+  local -33:11 expires: i32 (const)
+  callee -33:26 RelayJson.find -> @RelayJson.find
+  local -31:11 kind: i32[] (const)
+  local -30:11 integer: i64[] (const)
+  local -29:11 valueStart: i32[] (const)
+  local -28:11 valueLength: i32[] (const)
   callee -9:14 grantReject -> @grantReject
   local -7:11 expiresAt: i64 (const)
   callee -5:14 grantReject -> @grantReject
