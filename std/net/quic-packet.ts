@@ -116,7 +116,7 @@ import {
 } from "nish/crypto/aes"
 import { chacha20HeaderMask, chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import { timingSafeEqual } from "nish/crypto/ct"
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import {
   HkdfScratch,
   hkdfExpandLabelHeldInto,
@@ -378,22 +378,35 @@ const quicPacketExpandLabel = (aead: i32, secret: u8[], label: string, length: i
     : hkdfExpandLabelSha256(secret, label, [], length)
 
 /**
+ * A zeroed array of `size` bytes, `size` at least 0. A size that fits a `u16`,
+ * every packet and connection ID, is one allocation whose length needs no
+ * check; a larger one is grown a byte at a time.
+ */
+const quicPacketZeroed = (size: i32): u8[] => {
+  if (size >= 0 && size <= 65535) {
+    return new Array<u8>(toU16(size))
+  }
+  const out: u8[] = []
+  for (let k: i32 = 0; k < size; k += 1) {
+    out.push(toU8(0))
+  }
+  return out
+}
+
+/**
  * The bytes `bytes[from .. to)` as a fresh array of exactly that size, so a
- * packet-sized copy is one allocation rather than a push-grown one; the
- * window is clamped to `bytes`, though every caller has checked it.
+ * packet-sized copy is one allocation rather than a push-grown one. Every
+ * caller has checked the window; one that is not inside `bytes` answers an
+ * empty array.
  */
 const quicPacketSlice = (bytes: u8[], from: i32, to: i32): u8[] => {
-  const length: i32 = toI32(bytes.length)
-  const start: i32 = from < 0 ? 0 : from
-  const stop: i32 = to > length ? length : to
-  const size: i32 = stop > start ? stop - start : 0
-  const out: u8[] = new Array<u8>(size)
-  const outLength: i32 = toI32(out.length)
-  for (let k: i32 = 0; k < outLength; k += 1) {
-    if (start + k < toI32(bytes.length)) {
-      out[k] = bytes[start + k]
-    }
+  if (from < 0 || to < from || to > toI32(bytes.length)) {
+    return []
   }
+  // `from` is 0 or more and `to` at least `from`, so the size is 0 to `to`.
+  const size: i32 = toI32(toI64(to) - toI64(from))
+  const out: u8[] = quicPacketZeroed(size)
+  tryCopyBytes(out, 0, bytes, from, size)
   return out
 }
 
@@ -629,7 +642,7 @@ const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
 
 /**
  * Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the caller has checked both windows.
- * The part of the run outside either window is skipped rather than written, so a wrong window cannot panic.
+ * A run that is not inside both arrays writes nothing, so a wrong window cannot panic.
  *
  * @param buf The buffer to write into; it is not grown.
  * @param at The byte offset in `buf` of the first byte written.
@@ -638,23 +651,7 @@ const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
  * @param length How many bytes to copy.
  */
 export const quicPacketCopy = (buf: u8[], at: i32, bytes: u8[], from: i32, length: i32): void => {
-  let low: i32 = 0
-  if (low < -at) {
-    low = -at
-  }
-  if (low < -from) {
-    low = -from
-  }
-  let high: i32 = length
-  if (high > toI32(buf.length) - at) {
-    high = toI32(buf.length) - at
-  }
-  if (high > toI32(bytes.length) - from) {
-    high = toI32(bytes.length) - from
-  }
-  if (low < high) {
-    copyBytes(buf, at + low, bytes, from + low, high - low)
-  }
+  tryCopyBytes(buf, at, bytes, from, length)
 }
 
 /** Writes one byte at `at` when it is inside `buf`. */
