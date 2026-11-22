@@ -1045,7 +1045,7 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * which builds that pool, the most slots a server takes, on the test configuration
  * and prints the bytes.
  *
- * Measured **16,437,152 bytes** on 2026-11-22 with clang 18 on linux-x64, about 251
+ * Measured **16,435,200 bytes** on 2026-11-22 with clang 18 on linux-x64, about 251
  * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
  * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
  * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
@@ -1055,10 +1055,10 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * measurement, as every ceiling here was set.
  *
  * WP82's panic proofs in the server (`docs/security/http3.md`, "Panic sites")
- * moved it by +256 from main's 16,436,896: the constructor builds its per-slot
+ * moved it by +256 from main's 16,434,944: the constructor builds its per-slot
  * tables to a length the prover can see.
  */
-export const HTTP3_SERVER_START_BYTES = 16437248
+export const HTTP3_SERVER_START_BYTES = 16435456
 
 /**
  * What one `Http3Server` slot's QUIC and HTTP/3 connections and address take from
@@ -1137,12 +1137,12 @@ export const HTTP3_SERVER_START_BYTES = 16437248
  * array fields are stored inline"). Recovery's rings take +240, the streams +96
  * and the connection +32.
  *
- * Moved to **SLOTFIG bytes** (SLOTDELTA) by WP82's panic proofs
+ * Moved to **111,488 bytes** (-120) by WP82's panic proofs
  * (`docs/security/http3.md`, "Panic sites"): an `Http3Connection` keeps one
  * per-request `contentLeft` table where it kept `dataTotal` and
  * `contentLength`.
  */
-export const HTTP3_SERVER_SLOT_BYTES = SLOTVAL
+export const HTTP3_SERVER_SLOT_BYTES = 111488
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

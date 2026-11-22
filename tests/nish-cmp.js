@@ -11159,9 +11159,17 @@ const DECLARED = [
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
   ...http3PanicFree(
-    "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs",
+    "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {
-      "tests/link/net_http3_malformed/main.ts": ["bytes.ll", "http3-frame.ll", "main.ll", "qpack.ll"],
+      "tests/link/net_http3_malformed/main.ts": [
+        "bytes.ll",
+        "ct.ll",
+        "hkdf.ll",
+        "hmac.ll",
+        "http3-frame.ll",
+        "main.ll",
+        "qpack.ll",
+      ],
     }
   ),
   ...http3PanicFree(
