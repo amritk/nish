@@ -666,6 +666,9 @@ const STD_COUNTED = [
   { name: "std-threads", what: "scope spawns into proven slots, and parallelMapInto" },
   { name: "std-json-typed", what: "jsonDecode of a nested document into fresh objects" },
   { name: "std-cli-args", what: "Cli.parse of three command lines over one tree" },
+  { name: "std-http1", what: "Http1Parser requests, written responses and an Http1Connection round trip" },
+  { name: "std-router", what: "Router.match of twelve targets over a table of forty routes" },
+  { name: "std-ring", what: "SpscRing and MpscRing pushes and pops in one process" },
   { name: "std-net-quic-packet", what: "QUIC headers written and parsed, varints and packet numbers" },
   { name: "std-net-tls-record", what: "TLS 1.3 records sealed and opened under AES-128-GCM" },
   { name: "std-net-dns-message", what: "DNS queries built and captured replies parsed" },
@@ -727,7 +730,7 @@ const countInstructions = (valgrind, exe, args, name) => {
 /**
  * `--instructions`: build the eight counted bench/ programs, the four map layout
  * prototypes, the three `Map` measurements, the seven AWFY ports and the
- * crypto families' programs and the three std/ module programs, and run them at the sizes bench/instructions.json
+ * crypto families' programs and the six std/ module programs, and run them at the sizes bench/instructions.json
  * names (each crypto kernel once, at its own size and iterations); count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */
