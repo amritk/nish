@@ -31232,28 +31232,19 @@ function pkiBytesEqual(a: u8[], b: u8[]): boolean -> @nish.pkiBytesEqual
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 i: i32 (let)
-function pkiHexChar(v: i32): string -> @nish.pkiHexChar
+function pkiHexNibble(v: i32): string -> @nish.pkiHexNibble
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
   stackSites=0 stackLocals=0
-function pkiHexRange(bytes: u8[], lo: i32, hi: i32): string -> @nish.pkiHexRange
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: hi lo
-  calls: nish.pkiHexChar nish.pkiHexRange nish_str_concat
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.pkiHexRange#0 nish.pkiHexRange#0
-  stackSites=0 stackLocals=0
-  local +0:11 b: i32 (const)
-  callee +1:15 pkiHexChar -> @nish.pkiHexChar
-  callee +1:36 pkiHexChar -> @nish.pkiHexChar
-  local +4:9 mid: i32 (const)
-  callee +5:13 pkiHexRange -> @nish.pkiHexRange
-  callee +5:43 pkiHexRange -> @nish.pkiHexRange
 function pkiHex(bytes: u8[]): string -> @nish.pkiHex
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.pkiHexRange
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.pkiHexRange#0
-  stackSites=0 stackLocals=0
-  callee +0:41 pkiHexRange -> @nish.pkiHexRange
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.pkiHexNibble nish_alloc_struct nish_array_grow
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 out: string[] (const)
+  local +1:14 b: u8 (const)
+  callee +2:14 pkiHexNibble -> @nish.pkiHexNibble
+  callee +3:14 pkiHexNibble -> @nish.pkiHexNibble
 function pkiLower(c: i32): i32 -> @nish.pkiLower
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
@@ -33427,13 +33418,9 @@ function x509EndsWith(text: string, suffix: string): boolean -> @nish.x509EndsWi
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 m: i32 (const)
-function x509Part(text: string, from: i32, to: i32): string -> @nish.x509Part
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_new
-  stackSites=0 stackLocals=0
 function derToPem(der: u8[], label: string): string -> @nish.derToPem [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64StdPadEncode nish.x509Part nish_alloc_struct nish_array_grow nish_str_concat
+  calls: nish.base64StdPadEncode nish_alloc_struct nish_array_grow nish_str_concat nish_str_new
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.base64StdPadEncode#0
   stackSites=1 stackLocals=1
   local +0:9 body: string (const)
@@ -33442,12 +33429,10 @@ function derToPem(der: u8[], label: string): string -> @nish.derToPem [exported]
   local +2:9 lines: string[] (const)
   local +3:7 at: i32 (let)
   local +6:11 end: i32 (const)
-  callee +7:16 x509Part -> @nish.x509Part
 function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: pem
-  calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509Part nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
+  calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
   local -56:9 out: u8[][] (const)
   local -55:9 n: i32 (const)
@@ -33458,7 +33443,6 @@ function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [
   local -48:9 lineEnd: i32 (let)
   local -43:11 next: i32 (const)
   local -33:11 line: string (const)
-  callee -33:26 x509Part -> @nish.x509Part
   local -31:11 length: i32 (const)
   callee -29:11 x509StartsWith -> @nish.x509StartsWith
   callee -29:50 x509EndsWith -> @nish.x509EndsWith
@@ -33623,7 +33607,7 @@ function x509DerIa5Name(der: u8[], e: X509DerElement): boolean -> @nish.x509DerI
   stackSites=0 stackLocals=0
   local +0:12 k: i32 (let)
   local +3:13 b: i32 (const)
-function x509DerText(der: u8[], e: X509DerElement): string -> @nish.x509DerText
+function x509DerText(der: u8[], e: X509DerElement): string | null -> @nish.x509DerText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_slice nish_str_new
   pointer der: size=0 writesThrough=false captured=false
@@ -33658,17 +33642,18 @@ function x509ReadSubjectAltName(der: u8[], start: i32, end: i32, out: X509Certif
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerReadInto#0 nish.x509GeneralNameKind#0 nish.x509DerSize#0 nish.x509DerText#0 nish.x509DerSlice#0
   pointer out: size=184 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local -14:9 seq: X509DerElement | null (const)
-  callee -14:38 x509DerExpect -> @nish.x509DerExpect
-  local -9:9 name: X509DerElement (const)
-  callee -9:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -8:7 at: i32 (let)
-  callee -6:10 x509DerReadInto -> @nish.x509DerReadInto
-  local -3:11 kind: i32 (const)
-  callee -3:23 x509GeneralNameKind -> @nish.x509GeneralNameKind
-  local -2:11 length: i32 (const)
-  callee -2:25 x509DerSize -> @nish.x509DerSize
-  callee +0:23 x509DerText -> @nish.x509DerText
+  local -18:9 seq: X509DerElement | null (const)
+  callee -18:38 x509DerExpect -> @nish.x509DerExpect
+  local -13:9 name: X509DerElement (const)
+  callee -13:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -12:7 at: i32 (let)
+  callee -10:10 x509DerReadInto -> @nish.x509DerReadInto
+  local -7:11 kind: i32 (const)
+  callee -7:23 x509GeneralNameKind -> @nish.x509GeneralNameKind
+  local -6:11 length: i32 (const)
+  callee -6:25 x509DerSize -> @nish.x509DerSize
+  local -4:13 dns: string | null (const)
+  callee -4:34 x509DerText -> @nish.x509DerText
   callee +2:22 x509DerSlice -> @nish.x509DerSlice
 function x509DerNonNegative(der: u8[], e: X509DerElement): i32 -> @nish.x509DerNonNegative
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -33778,23 +33763,24 @@ function x509ReadSubtrees(der: u8[], e: X509DerElement, into: X509GeneralSubtree
   pointer into: size=0 writesThrough=true captured=false
   pointer out: size=184 writesThrough=true captured=false
   stackSites=4 stackLocals=4
-  local -31:9 tree: X509DerElement (const)
-  callee -31:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -30:9 base: X509DerElement (const)
-  callee -30:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -29:9 minimum: X509DerElement (const)
-  callee -29:19 new X509DerElement -> @nish.X509DerElement.constructor
-  local -28:9 maximum: X509DerElement (const)
-  callee -28:19 new X509DerElement -> @nish.X509DerElement.constructor
-  local -27:7 at: i32 (let)
-  callee -25:10 x509DerExpectInto -> @nish.x509DerExpectInto
-  callee -22:10 x509DerReadInto -> @nish.x509DerReadInto
-  local -19:11 subtree: X509GeneralSubtree (const)
-  callee -19:21 new X509GeneralSubtree -> @nish.X509GeneralSubtree.constructor
-  callee -18:20 x509GeneralNameKind -> @nish.x509GeneralNameKind
-  local -17:11 length: i32 (const)
-  callee -17:25 x509DerSize -> @nish.x509DerSize
-  callee -15:21 x509DerText -> @nish.x509DerText
+  local -35:9 tree: X509DerElement (const)
+  callee -35:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -34:9 base: X509DerElement (const)
+  callee -34:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -33:9 minimum: X509DerElement (const)
+  callee -33:19 new X509DerElement -> @nish.X509DerElement.constructor
+  local -32:9 maximum: X509DerElement (const)
+  callee -32:19 new X509DerElement -> @nish.X509DerElement.constructor
+  local -31:7 at: i32 (let)
+  callee -29:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -26:10 x509DerReadInto -> @nish.x509DerReadInto
+  local -23:11 subtree: X509GeneralSubtree (const)
+  callee -23:21 new X509GeneralSubtree -> @nish.X509GeneralSubtree.constructor
+  callee -22:20 x509GeneralNameKind -> @nish.x509GeneralNameKind
+  local -21:11 length: i32 (const)
+  callee -21:25 x509DerSize -> @nish.x509DerSize
+  local -19:13 dns: string | null (const)
+  callee -19:34 x509DerText -> @nish.x509DerText
   local -9:13 half: i32 (const)
   callee -8:20 x509DerSlice -> @nish.x509DerSlice
   callee -7:22 x509DerSlice -> @nish.x509DerSlice
@@ -34850,31 +34836,22 @@ function pkiRootsSkip(load: PkiRootsLoad): void -> @nish.pkiRootsSkip
   stackSites=0 stackLocals=0
 function pkiRootsLineKind(text: string, from: i32, to: i32): i32 -> @nish.pkiRootsLineKind
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
-  escaping: from text to
-  calls: nish.pkiRootsPart nish_arena_mark nish_arena_release nish_str_at
+  calls: nish_arena_mark nish_arena_release nish_str_at nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 line: string (const)
-  callee +0:24 pkiRootsPart -> @nish.pkiRootsPart
-function pkiRootsPart(text: string, from: i32, to: i32): string -> @nish.pkiRootsPart
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_new
-  stackSites=0 stackLocals=0
-function pkiRootsHexChar(v: i32): string -> @nish.pkiRootsHexChar
+function pkiRootsHexDigit(v: i32): string -> @nish.pkiRootsHexDigit
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
   stackSites=0 stackLocals=0
-function pkiRootsHex(bytes: u8[], lo: i32, hi: i32): string -> @nish.pkiRootsHex
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: hi lo
-  calls: nish.pkiRootsHex nish.pkiRootsHexChar nish_str_concat
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.pkiRootsHex#0 nish.pkiRootsHex#0
-  stackSites=0 stackLocals=0
-  local +0:11 b: i32 (const)
-  callee +1:15 pkiRootsHexChar -> @nish.pkiRootsHexChar
-  callee +1:41 pkiRootsHexChar -> @nish.pkiRootsHexChar
-  local +4:9 mid: i32 (const)
-  callee +5:13 pkiRootsHex -> @nish.pkiRootsHex
-  callee +5:43 pkiRootsHex -> @nish.pkiRootsHex
+function pkiRootsHex(bytes: u8[]): string -> @nish.pkiRootsHex
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.pkiRootsHexDigit nish_alloc_struct nish_array_grow
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 out: string[] (const)
+  local +1:14 b: u8 (const)
+  callee +2:14 pkiRootsHexDigit -> @nish.pkiRootsHexDigit
+  callee +3:14 pkiRootsHexDigit -> @nish.pkiRootsHexDigit
 function pkiRootsKeep(load: PkiRootsLoad, der: u8[]): void -> @nish.pkiRootsKeep
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -34993,13 +34970,11 @@ function pkiLoadRoots(file: string | null, dirs: string[], bundles: string[]): P
   callee +10:5 pkiRootsDir -> @nish.pkiRootsDir
 function pkiRootsSplitDirs(list: string): string[] -> @nish.pkiRootsSplitDirs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: list
-  calls: nish.pkiRootsPart nish_array_grow nish_str_new
+  calls: nish_array_grow nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   local +1:7 start: i32 (let)
   local +2:12 i: i32 (let)
-  callee +5:18 pkiRootsPart -> @nish.pkiRootsPart
   local +10:9 n: i32 (const)
 function pkiLoadRootsFor(certFile: string | null, certDir: string | null, dirs: string[], bundles: string[]): PkiRoots -> @nish.pkiLoadRootsFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
