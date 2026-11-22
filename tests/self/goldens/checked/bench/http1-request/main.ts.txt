@@ -31344,9 +31344,9 @@ function pkiParseIp(host: string): u8[] | null -> @nish.pkiParseIp
   calls: nish.pkiParseIpv4 nish.pkiParseIpv6 nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  callee +2:12 pkiParseIpv6 -> @nish.pkiParseIpv6
-  callee +5:12 pkiParseIpv6 -> @nish.pkiParseIpv6
-  callee +7:10 pkiParseIpv4 -> @nish.pkiParseIpv4
+  callee +7:12 pkiParseIpv6 -> @nish.pkiParseIpv6
+  callee +10:12 pkiParseIpv6 -> @nish.pkiParseIpv6
+  callee +12:10 pkiParseIpv4 -> @nish.pkiParseIpv4
 function pkiDnsMatch(san: string, host: string): boolean -> @nish.pkiDnsMatch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: host san
@@ -31463,7 +31463,7 @@ function pkiDnsWithin(name: string, base: string): boolean -> @nish.pkiDnsWithin
   callee +7:23 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
   callee +10:12 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
   local +16:9 dot: i32 (const)
-  callee +17:88 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
+  callee +21:5 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
 function pkiSubtreeRoot(base: string): string -> @nish.pkiSubtreeRoot
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: base
@@ -32991,8 +32991,8 @@ function x509DerContentsAre(der: u8[], e: X509DerElement, expected: u8[]): boole
   stackSites=0 stackLocals=0
   local +0:9 start: i32 (const)
   local +1:9 end: i32 (const)
-  local +5:7 k: i32 (let)
-  local +6:12 i: i32 (let)
+  local +10:7 k: i32 (let)
+  local +11:12 i: i32 (let)
 function x509DerIntegerMinimal(der: u8[], e: X509DerElement): boolean -> @nish.x509DerIntegerMinimal
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.x509DerOctet nish.x509DerSize
@@ -33338,8 +33338,8 @@ function x509DerTlv(tag: i32, contents: u8[]): u8[] -> @nish.x509DerTlv
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 out: u8[] (const)
-  local +5:11 count: i32 (const)
-  local +18:12 k: i32 (let)
+  local +5:9 count: i32 (let)
+  local +25:12 k: i32 (let)
 function x509DerConcat(parts: u8[][]): u8[] -> @nish.x509DerConcat
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -33449,14 +33449,14 @@ function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [
   escaping: pem
   calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509Part nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local -51:9 out: u8[][] (const)
-  local -50:9 n: i32 (const)
-  local -48:7 inside: string (let)
-  local -47:7 body: string[] (let)
-  local -46:7 shortSeen: boolean (let)
-  local -45:7 lineStart: i32 (let)
-  local -43:9 lineEnd: i32 (let)
-  local -38:11 next: i32 (const)
+  local -56:9 out: u8[][] (const)
+  local -55:9 n: i32 (const)
+  local -53:7 inside: string (let)
+  local -52:7 body: string[] (let)
+  local -51:7 shortSeen: boolean (let)
+  local -50:7 lineStart: i32 (let)
+  local -48:9 lineEnd: i32 (let)
+  local -43:11 next: i32 (const)
   local -33:11 line: string (const)
   callee -33:26 x509Part -> @nish.x509Part
   local -31:11 length: i32 (const)
@@ -33678,11 +33678,11 @@ function x509DerNonNegative(der: u8[], e: X509DerElement): i32 -> @nish.x509DerN
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   callee +0:18 x509DerSize -> @nish.x509DerSize
-  callee +1:38 x509DerIntegerMinimal -> @nish.x509DerIntegerMinimal
-  callee +1:71 x509DerOctet -> @nish.x509DerOctet
-  local +4:7 value: i32 (let)
-  local +5:12 k: i32 (let)
-  callee +6:28 x509DerOctet -> @nish.x509DerOctet
+  callee +3:6 x509DerIntegerMinimal -> @nish.x509DerIntegerMinimal
+  callee +4:5 x509DerOctet -> @nish.x509DerOctet
+  local +9:7 value: i32 (let)
+  local +10:12 k: i32 (let)
+  callee +11:28 x509DerOctet -> @nish.x509DerOctet
 function x509DerIsTrue(der: u8[], e: X509DerElement): boolean -> @nish.x509DerIsTrue
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.x509DerOctet nish.x509DerSize
