@@ -156,7 +156,7 @@ function qcHelloWithoutShare(suites: i32[], params: u8[]): u8[] -> @qcHelloWitho
   callee +7:5 extAlpn -> @extAlpn
   callee +8:5 extQuic -> @extQuic
 function qcCrypto(offset: i64, data: u8[]): u8[] -> @qcCrypto [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: offset
   calls: n32 nish.quicPushCrypto
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.quicPushCrypto#2
