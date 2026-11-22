@@ -1525,6 +1525,8 @@ const PACKAGE_LINK = "A package links a C library or its own C sources"
 /** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
 const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
 const s1PanicFree = byFinding(S1_PANIC_FREE)
+/** The changelog words of WP82 S7: the HTTP/2 frame, connection, h2c and TLS carriers and HPACK answer malformed input without a panic. */
+const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -20259,6 +20261,57 @@ const DECLARED = [
     file: "exit",
     changelog: S1_PANIC_FREE,
     why: "the program declares its tree through std/cli-args.ts's new `try` twins and reads values through `CliFlag` and `CliArgument`, which the seed's copy does not export, so the reference refuses it",
+  })),
+  // WP82 S7: std/net/http2*.ts and hpack.ts answer a malformed frame, block or cursor with an error
+  // code where they panicked, and prove the rest of their index and arithmetic sites.
+  ...[
+    "bench/std-net-http2-frame.ts",
+    "tests/link/net_http2/main.ts",
+    "tests/link/net_http2_bad_config/main.ts",
+    "tests/link/net_http2_bad_idle/main.ts",
+    "tests/link/net_http2_bad_timeout/main.ts",
+    "tests/link/net_http2_errors/main.ts",
+    "tests/link/net_http2_errors_f64/main.ts",
+    "tests/link/net_http2_f64/main.ts",
+    "tests/link/net_http2_frame/main.ts",
+    "tests/link/net_http2_frame_bad_window/main.ts",
+    "tests/link/net_http2_frame_bad_write/main.ts",
+    "tests/link/net_http2_frame_f64/main.ts",
+    "tests/link/net_http2_hpack_bomb/main.ts",
+    "tests/link/net_http2_hpack_bomb_f64/main.ts",
+    "tests/link/net_http2_hpack_table/main.ts",
+    "tests/link/net_http2_hpack_table_f64/main.ts",
+    "tests/link/net_http2_reset/main.ts",
+  ].map((program) => ({
+    program,
+    file: "bytes.ll",
+    changelog: S7_HTTP2_PANIC_FREE,
+    why: "std/net/http2-frame.ts copies a frame's octets with `tryCopyBytes` from nish/bytes, so a program reaching it writes bytes.ll",
+  })),
+  ...[
+    ["bench/std-net-http2-frame.ts", "hpack.ll"],
+    ["bench/std-net-http2-frame.ts", "std-net-http2-frame.ll"],
+    ["tests/link/net_hpack/main.ts", "checks.ll"],
+    ["tests/link/net_hpack_bad_indexing/main.ts", "main.ll"],
+    ["tests/link/net_hpack_bad_window/main.ts", "main.ll"],
+    ["tests/link/net_hpack_f64/main.ts", "checks.ll"],
+    ["tests/link/net_hpack_malformed/main.ts", "hpack.ll"],
+    ["tests/link/net_hpack_malformed/main.ts", "main.ll"],
+    ["tests/link/net_hpack_negative_list_limit/main.ts", "main.ll"],
+    ["tests/link/net_hpack_negative_resize/main.ts", "main.ll"],
+    ["tests/link/net_hpack_negative_settings_limit/main.ts", "main.ll"],
+    ["tests/link/net_hpack_negative_table_size/main.ts", "main.ll"],
+    ["tests/link/net_http3_malformed/main.ts", "hpack.ll"],
+    ["tests/link/net_http2_frame/main.ts", "checks.ll"],
+    ["tests/link/net_http2_frame/main.ts", "net_hpack_checks.ll"],
+    ["tests/link/net_http2_frame_f64/main.ts", "net_hpack_checks.ll"],
+    ["tests/link/net_http2_hpack_table/main.ts", "checks.ll"],
+    ["tests/link/net_http2_hpack_table_f64/main.ts", "checks.ll"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: S7_HTTP2_PANIC_FREE,
+    why: "the HTTP/2 frame and HPACK code returns an error code where it panicked and its proven checks leave the IR, so the module and the callers that inline it move",
   })),
   // WP82 S5: the QUIC engine's recovery rings and stream tables prove or
   // guard every index instead of panicking, so the modules they compile to move.
