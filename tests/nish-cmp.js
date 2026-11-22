@@ -10132,12 +10132,6 @@ const wirePanicFreeDeclared = () => [
     changelog: WIRE_PANIC_FREE,
     why: "httpFieldValueValid and httpFieldsCheckOutgoing lose their panic sites, so their declarations gain `readonly` (and `willreturn`) and take another attribute group",
   })),
-  {
-    program: "tests/link/std_postgres_unix_target/main.ts",
-    file: "main.ll",
-    changelog: WIRE_PANIC_FREE,
-    why: "urlDecode, which pgTargetUrl calls, builds its bytes with `push` in place of a computed-length array, so the fuzz loop calling pgTargetUrl no longer hoists the `pieces` header and its values renumber",
-  },
   ...[
     "tests/link/std_url/main.ts",
     "tests/link/std_url_pairs/main.ts",
