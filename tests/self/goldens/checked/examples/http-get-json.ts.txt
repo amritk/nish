@@ -5613,10 +5613,10 @@ function DnsClient.pump(this: DnsClient, nowNanos: i64): void -> @nish.DnsClient
   callee +0:18 DnsClient.nextOutgoing -> @nish.DnsClient.nextOutgoing
   callee +2:7 dnsClientClose -> @nish.dnsClientClose
   local +5:13 meta: i32[] (const)
-  local +6:13 kind: i32 (const)
-  callee +8:9 dnsClientOpenTcp -> @nish.dnsClientOpenTcp
-  callee +10:9 dnsClientSendUdp -> @nish.dnsClientSendUdp
-  callee +12:11 DnsClient.nextOutgoing -> @nish.DnsClient.nextOutgoing
+  local +7:15 kind: i32 (const)
+  callee +9:11 dnsClientOpenTcp -> @nish.dnsClientOpenTcp
+  callee +11:11 dnsClientSendUdp -> @nish.dnsClientSendUdp
+  callee +14:11 DnsClient.nextOutgoing -> @nish.DnsClient.nextOutgoing
 function DnsClient.nextOutgoing(this: DnsClient): i32 -> @nish.DnsClient.nextOutgoing [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -6267,20 +6267,20 @@ function dnsResolvLine(b: u8[], from: i32, to: i32, config: DnsConfig): void -> 
   callee +34:24 dnsIsBlank -> @nish.dnsIsBlank
 function dnsParseResolvConf(b: u8[], off: i32, len: i32, config: DnsConfig): void -> @nish.dnsParseResolvConf [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
+  sharedWrite: +0:5
   escaping: off
   calls: nish.dnsCommentCut nish.dnsConfigCheckWindow nish.dnsCount nish.dnsFallbackServers nish.dnsResolvLine
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.dnsResolvLine#0 nish.dnsCommentCut#0
   pointer config: size=72 writesThrough=true captured=false passedTo=nish.dnsResolvLine#3
   stackSites=0 stackLocals=0
-  local -5:9 to: i32 (const)
-  callee -3:5 dnsConfigCheckWindow -> @nish.dnsConfigCheckWindow
-  local +8:7 i: i32 (let)
-  local +10:11 start: i32 (const)
-  callee +15:29 dnsCount -> @nish.dnsCount
-  callee +17:7 dnsResolvLine -> @nish.dnsResolvLine
-  callee +17:31 dnsCommentCut -> @nish.dnsCommentCut
-  callee +30:5 dnsFallbackServers -> @nish.dnsFallbackServers
+  local -9:9 to: i32 (const)
+  callee -7:5 dnsConfigCheckWindow -> @nish.dnsConfigCheckWindow
+  local +10:7 i: i32 (let)
+  local +12:11 start: i32 (const)
+  callee +17:29 dnsCount -> @nish.dnsCount
+  callee +19:7 dnsResolvLine -> @nish.dnsResolvLine
+  callee +19:31 dnsCommentCut -> @nish.dnsCommentCut
+  callee +26:5 dnsFallbackServers -> @nish.dnsFallbackServers
 function dnsFallbackServers(servers: u8[]): void -> @nish.dnsFallbackServers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -6509,8 +6509,8 @@ function DnsResolver.start(this: DnsResolver, name: string, port: i32, nowNanos:
   calls: nish.dnsBuildQuery nish.dnsHostsFind nish.dnsResolverCount nish.dnsResolverFinish nish.dnsResolverFinishNow nish.dnsResolverGather nish.dnsResolverIsLocalhost nish.dnsResolverLiteral nish.dnsResolverLoopback nish.dnsResolverNextCandidate nish.dnsResolverZeroTtls nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   pointer this: size=320 writesThrough=false captured=false passedTo=nish.dnsResolverFinishNow#0 nish.dnsResolverFinishNow#0 nish.dnsResolverGather#0 nish.dnsResolverFinishNow#0 nish.dnsResolverNextCandidate#0 nish.dnsResolverFinish#0
   stackSites=0 stackLocals=0
-  local -27:11 lookupState: i32[] (const)
-  local -26:9 l: i32 (let)
+  local -28:11 lookupState: i32[] (const)
+  local -27:9 l: i32 (let)
   local -17:11 a: i32 (const)
   local -16:11 state: i32[] (const)
   local -15:11 answers: u8[][] (const)
