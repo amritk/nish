@@ -4,9 +4,9 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9344,
+  "total": 9342,
   "explicit": {
-    "kept": 355,
+    "kept": 353,
     "toFix": 128
   },
   "modules": {
@@ -379,12 +379,12 @@
     },
     "std/net/postgres-async.ts": {
       "io-exit": 1,
-      "panic": 11,
+      "panic": 10,
       "slice": 14
     },
     "std/net/postgres-carrier.ts": {
       "io-exit": 4,
-      "panic": 13,
+      "panic": 12,
       "slice": 6
     },
     "std/net/postgres.ts": {
@@ -1495,11 +1495,6 @@
     },
     {
       "module": "std/net/postgres-async.ts",
-      "function": "PgAsyncResult.int",
-      "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
-    },
-    {
-      "module": "std/net/postgres-async.ts",
       "function": "PgAsyncResult.isNull",
       "reason": "row and column must be inside the result; the caller knows the shape from rows and columns"
     },
@@ -1555,13 +1550,8 @@
     },
     {
       "module": "std/net/postgres-carrier.ts",
-      "function": "PgCarrier.runInt",
-      "reason": "the batcher id must be one attach answered; a static registration contract the caller controls"
-    },
-    {
-      "module": "std/net/postgres-carrier.ts",
-      "function": "PgCarrier.runText",
-      "reason": "the batcher id must be one attach answered; a static registration contract the caller controls"
+      "function": "PgCarrier.attached",
+      "reason": "the batcher id runInt or runText names must be one attach answered; a static registration contract the caller controls"
     },
     {
       "module": "std/net/postgres-carrier.ts",

@@ -39366,6 +39366,7 @@ struct PgCarrier (class) size=248 align=8 exported
   method queryAt -> @nish.PgCarrier.queryAt
   method executionAt -> @nish.PgCarrier.executionAt
   method batcher -> @nish.PgCarrier.batcher
+  method attached -> @nish.PgCarrier.attached
   method take -> @nish.PgCarrier.take
   method free -> @nish.PgCarrier.free
   method freeExecution -> @nish.PgCarrier.freeExecution
@@ -39460,31 +39461,31 @@ function PgCarrier.runInt(this: PgCarrier, req: HttpRequest | null, batcher: i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgCarrier.take
   escaping: batcher key tag
-  calls: nish.PgBatcher.addInt nish.PgCarrier.batcher nish.PgCarrier.free nish.PgCarrier.take nish_panic
-  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
+  calls: nish.PgBatcher.addInt nish.PgCarrier.attached nish.PgCarrier.free nish.PgCarrier.take
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.attached#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
   pointer req: size=160 writesThrough=true captured=true passedTo=nish.PgCarrier.take#1
   stackSites=0 stackLocals=0
-  local +0:11 batch: PgCarrierBatch | null (const)
-  callee +0:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  local +4:11 held: PgCarrierQuery | null (const)
-  callee +4:41 PgCarrier.take -> @nish.PgCarrier.take
-  callee +8:10 PgBatcher.addInt -> @nish.PgBatcher.addInt
-  callee +9:7 PgCarrier.free -> @nish.PgCarrier.free
+  local +0:11 batch: PgCarrierBatch (const)
+  callee +0:35 PgCarrier.attached -> @nish.PgCarrier.attached
+  local +1:11 held: PgCarrierQuery | null (const)
+  callee +1:41 PgCarrier.take -> @nish.PgCarrier.take
+  callee +5:10 PgBatcher.addInt -> @nish.PgBatcher.addInt
+  callee +6:7 PgCarrier.free -> @nish.PgCarrier.free
 function PgCarrier.runText(this: PgCarrier, req: HttpRequest | null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32): i32 -> @nish.PgCarrier.runText [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgCarrier.take
   escaping: batcher length start tag
-  calls: nish.PgBatcher.addText nish.PgCarrier.batcher nish.PgCarrier.free nish.PgCarrier.take nish_panic
-  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.batcher#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
+  calls: nish.PgBatcher.addText nish.PgCarrier.attached nish.PgCarrier.free nish.PgCarrier.take
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.attached#0 nish.PgCarrier.take#0 nish.PgCarrier.free#0
   pointer req: size=160 writesThrough=true captured=true passedTo=nish.PgCarrier.take#1
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.PgBatcher.addText#1
   stackSites=0 stackLocals=0
-  local +0:11 batch: PgCarrierBatch | null (const)
-  callee +0:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
-  local +4:11 held: PgCarrierQuery | null (const)
-  callee +4:41 PgCarrier.take -> @nish.PgCarrier.take
-  callee +8:10 PgBatcher.addText -> @nish.PgBatcher.addText
-  callee +9:7 PgCarrier.free -> @nish.PgCarrier.free
+  local +0:11 batch: PgCarrierBatch (const)
+  callee +0:35 PgCarrier.attached -> @nish.PgCarrier.attached
+  local +1:11 held: PgCarrierQuery | null (const)
+  callee +1:41 PgCarrier.take -> @nish.PgCarrier.take
+  callee +5:10 PgBatcher.addText -> @nish.PgBatcher.addText
+  callee +6:7 PgCarrier.free -> @nish.PgCarrier.free
 function PgCarrier.request(this: PgCarrier): HttpRequest -> @nish.PgCarrier.request [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=160
   calls: nish.PgCarrier.queryAt nish_panic
@@ -39963,6 +39964,14 @@ function PgCarrier.batcher(this: PgCarrier, id: i32): PgCarrierBatch | null -> @
   pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 batchers: PgCarrierBatch[] (const)
+function PgCarrier.attached(this: PgCarrier, id: i32): PgCarrierBatch -> @nish.PgCarrier.attached [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: id
+  calls: nish.PgCarrier.batcher nish_panic
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.PgCarrier.batcher#0
+  stackSites=0 stackLocals=0
+  local +0:11 batch: PgCarrierBatch | null (const)
+  callee +0:42 PgCarrier.batcher -> @nish.PgCarrier.batcher
 function PgCarrier.take(this: PgCarrier, req: HttpRequest | null, tag: i32): PgCarrierQuery | null -> @nish.PgCarrier.take [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
