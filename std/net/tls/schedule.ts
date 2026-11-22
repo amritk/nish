@@ -868,7 +868,11 @@ const tlsHeldCopy = (held: u8[], from: u8[]): void => {
  */
 const tlsHeldWindow = (caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
   const window: u8[] = []
-  for (let j: i32 = hashOff; j >= 0 && j < toI32(transcriptHash.length) && j - hashOff < hashLength; j++) {
+  for (
+    let j: i32 = hashOff;
+    j >= 0 && j < toI32(transcriptHash.length) && toI32(window.length) < hashLength;
+    j++
+  ) {
     window.push(transcriptHash[j])
   }
   if (toI32(window.length) !== hashLength) {
