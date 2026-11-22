@@ -1883,7 +1883,7 @@ export class HttpServer {
     if (p.headerCount < 0 || used > toI64(toI32(from.length)) || used > toI64(toI32(into.length))) {
       this.free.push(r)
       conn.closeAfter = true
-      conn.respond(431, this.noFields, this.noFields, toI32(0))
+      conn.respond(toI32(431), this.noFields, this.noFields, toI32(0))
       return
     }
     // The length tests below only restate the refusal above for the prover,
