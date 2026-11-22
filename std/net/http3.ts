@@ -357,6 +357,9 @@ const H3_FIELD_CLASSES: i32 = 24
 /** The bytes a slot keeps for a frame header being read or written. */
 const H3_HEAD: i32 = 16
 
+/** The most stream slots a QUIC connection's table has: `QUIC_CONN_MAX_STREAMS` of each of its three kinds. */
+const H3_MAX_SLOTS: i32 = 3072
+
 /**
  * The connection's caps, fixed when it is made. `maxFieldSectionSize` is
  * advertised in SETTINGS and is the largest HEADERS frame read and the
@@ -415,6 +418,13 @@ const http3CheckCap = (what: string, value: i32, low: i32, high: i32): void => {
     panic(`Http3Connection: ${what} of ${value}, outside ${low} to ${high}`)
   }
 }
+
+/**
+ * The millisecond `wait` after `since`. The sum is taken in `f64`, exact for
+ * any clock below 2^53 ms, and saturates at the last millisecond an `i64`
+ * holds: a deadline no clock reaches, where the `i64` sum would overflow.
+ */
+const http3Deadline = (since: i64, wait: i32): i64 => toI64(toF64(since) + toF64(wait))
 
 /** Whether one of `names` is `date` in any ASCII case (RFC 9110 §5.1). */
 const http3NamesHoldDate = (names: u8[][]): boolean => {
@@ -525,9 +535,8 @@ export class Http3Connection {
   /** The frame being read: its type, and what is left of its payload (-1 between frames). */
   private frameType: i64[]
   private frameLeft: i64[]
-  /** DATA bytes received on the request, and its `content-length` or -1. */
-  private dataTotal: i64[]
-  private contentLength: i64[]
+  /** What the request's `content-length` still owes after the DATA received, or -1 without one. */
+  private contentLeft: i64[]
   /** Bytes still owed on the stream: a filler's payload, and the DATA frame's payload the program is writing. */
   private fillLeft: i64[]
   private dataLeft: i64[]
@@ -659,10 +668,17 @@ export class Http3Connection {
     http3CheckCap("maxFieldSectionSize", config.maxFieldSectionSize, 1, buffer / 2 - H3_HEAD)
     // The connection's credit too: every request stream may hold a HEADERS
     // frame not yet whole, and QUIC raises MAX_DATA once half the window is read.
-    const held: i64 = quic.streams.maxBidi * toI64(config.maxFieldSectionSize + H3_HEAD) * toI64(2)
+    // A QUIC connection's table takes at most `QUIC_CONN_MAX_STREAMS` of each
+    // kind (`quicConnConfigFits`), so a table past that was not built by one.
+    const bidi: i64 = quic.streams.maxBidi
+    const count: i32 = toI32(quic.streams.slots.length)
+    if (bidi < 0 || bidi > 1024 || count > H3_MAX_SLOTS) {
+      panic(`Http3Connection: a QUIC stream table of ${count} slots, ${bidi} of them request streams`)
+    }
+    const held: i64 = bidi * toI64(2) * toI64(config.maxFieldSectionSize) + bidi * toI64(2 * H3_HEAD)
     if (quic.streams.windowData < held) {
       panic(
-        `Http3Connection: a connection window of ${quic.streams.windowData}, under the ${held} that ${quic.streams.maxBidi} request streams' field sections need`
+        `Http3Connection: a connection window of ${quic.streams.windowData}, under the ${held} that ${bidi} request streams' field sections need`
       )
     }
     http3CheckCap("bodyChunk", config.bodyChunk, 1, H3_MAX_CHUNK)
@@ -731,23 +747,24 @@ export class Http3Connection {
       this.settingIds.push(H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS)
       this.settingValues.push(toI64(config.webtransportSessions))
     }
-    const n: i32 = toI32(quic.streams.slots.length)
+    // At most `H3_MAX_SLOTS`, checked above, so the `u16` holds it and every table below exactly.
+    const n: u16 = toU16(count)
+    const bytes: u16 = toU16(toI32(n) * H3_HEAD)
     this.slotId = new Array<i64>(n)
     this.frameType = new Array<i64>(n)
     this.frameLeft = new Array<i64>(n)
-    this.dataTotal = new Array<i64>(n)
-    this.contentLength = new Array<i64>(n)
+    this.contentLeft = new Array<i64>(n)
     this.fillLeft = new Array<i64>(n)
     this.dataLeft = new Array<i64>(n)
     this.phase = new Array<i32>(n)
     this.flags = new Array<i32>(n)
     this.headLen = new Array<i32>(n)
-    this.head = new Array<u8>(n * H3_HEAD)
+    this.head = new Array<u8>(bytes)
     this.pendAt = new Array<i32>(n)
     this.pendLen = new Array<i32>(n)
-    this.pend = new Array<u8>(n * H3_HEAD)
-    this.again = new Array<i64>(n > 0 ? n : H3_ONE)
-    this.waiting = new Array<i64>(n > 0 ? n : H3_ONE)
+    this.pend = new Array<u8>(bytes)
+    this.again = new Array<i64>(n > 0 ? n : toU16(H3_ONE))
+    this.waiting = new Array<i64>(n > 0 ? n : toU16(H3_ONE))
     this.restart()
   }
 
@@ -799,7 +816,8 @@ export class Http3Connection {
     this.heads = 0
     this.clockHeads = 0
     this.clockMode = H3_CLOCK_OFF
-    this.generation = this.generation < 2147483647 ? this.generation + 1 : H3_ONE
+    const generation: i32 = this.generation
+    this.generation = generation < 2147483647 ? generation + 1 : H3_ONE
     this.dataStart = 0
     this.dataLength = 0
     this.controlFill = 0
@@ -882,9 +900,9 @@ export class Http3Connection {
     if (mode === H3_CLOCK_BUSY) {
       return -1
     }
-    let due: i64 = this.clockSince + toI64(this.config.idleTimeout)
+    let due: i64 = http3Deadline(this.clockSince, this.config.idleTimeout)
     if (mode === H3_CLOCK_HEAD) {
-      due = http3Min(due, this.headSince + toI64(this.config.headTimeout))
+      due = http3Min(due, http3Deadline(this.headSince, this.config.headTimeout))
     }
     if (now < due) {
       return due
@@ -896,10 +914,12 @@ export class Http3Connection {
   /** Whether a request stream the client opened, counted in `live`, has not yet given its head. */
   private awaitsHead(): boolean {
     const skip: i32 = H3_FLAG_DELIVERED | H3_FLAG_WT
-    for (let k: i32 = 0; k < toI32(this.slotId.length); k++) {
-      const flags: i32 = this.flags[k]
+    const flagsOf: i32[] = this.flags
+    const phases: i32[] = this.phase
+    for (let k: i32 = 0; k < toI32(this.slotId.length) && k < toI32(flagsOf.length) && k < toI32(phases.length); k++) {
+      const flags: i32 = flagsOf[k]
       if (
-        this.phase[k] === H3_PHASE_HEADERS &&
+        phases[k] === H3_PHASE_HEADERS &&
         (flags & H3_FLAG_COUNTED) !== 0 &&
         (flags & skip) === 0 &&
         http3IsRequest(this.slotId[k])
@@ -986,9 +1006,9 @@ export class Http3Connection {
 
   /**
    * Lends this connection its server's pools in place of its own, giving
-   * back to the old pools whatever it holds. Panics unless their buffers are
+   * back to the old pools whatever it holds. Pools whose buffers are not
    * `bodyChunk` and `maxFieldSectionSize` bytes long, as this connection's
-   * reads need.
+   * reads need, are not taken: the connection keeps its own.
    *
    * @param data The pool H3_DATA's buffer is borrowed from from now on; kept, not copied.
    * @param section The pool a HEADERS payload's buffer is borrowed from from now on; kept, not copied.
@@ -996,9 +1016,7 @@ export class Http3Connection {
    */
   share(data: BufferPool, section: BufferPool): void {
     if (data.size !== this.config.bodyChunk || section.size !== this.config.maxFieldSectionSize) {
-      panic(
-        `Http3Connection: pools of ${data.size} and ${section.size} bytes shared with a connection of bodyChunk ${this.config.bodyChunk} and maxFieldSectionSize ${this.config.maxFieldSectionSize}`
-      )
+      return
     }
     this.giveBack()
     this.dataPool = data
@@ -1109,12 +1127,19 @@ export class Http3Connection {
 
   /** The oldest stream on the `again` ring, taken off it. */
   private takeAgain(): i64 {
-    const size: i32 = toI32(this.again.length)
-    const id: i64 = this.again[this.againHead]
-    this.againHead = (this.againHead + 1) % size
-    this.againCount = this.againCount - 1
+    const again: i64[] = this.again
+    const head: i32 = this.againHead
+    const count: i32 = this.againCount
+    // `nextEvent` asks only while the ring holds one, and the head stays on
+    // the ring, so this never returns; H3_NONE is no stream.
+    if (head < 0 || head >= toI32(again.length) || count <= 0) {
+      return H3_NONE
+    }
+    const id: i64 = again[head]
+    this.againHead = head + 1 < toI32(again.length) ? head + 1 : H3_ZERO
+    this.againCount = count - 1
     const k: i32 = this.quic.streams.slotOf(id)
-    if (k >= 0 && k < toI32(this.flags.length) && this.slotId[k] === id) {
+    if (k >= 0 && k < toI32(this.flags.length) && k < toI32(this.slotId.length) && this.slotId[k] === id) {
       this.flags[k] = this.flags[k] & ~H3_FLAG_AGAIN
     }
     return id
@@ -1122,19 +1147,37 @@ export class Http3Connection {
 
   /** Puts stream `id`, slot `k`, on the `again` ring, unless it is there. */
   private stepAgain(k: i32, id: i64): void {
-    const size: i32 = toI32(this.again.length)
-    if ((this.flags[k] & H3_FLAG_AGAIN) !== 0 || this.againCount >= size) {
+    const again: i64[] = this.again
+    const size: i32 = toI32(again.length)
+    const head: i32 = this.againHead
+    const count: i32 = this.againCount
+    // The ring has a place per slot, at most `H3_MAX_SLOTS`; a full ring
+    // cannot happen, as a slot is on it at most once.
+    if (k < 0 || k >= toI32(this.flags.length) || size > 3072 || head < 0 || head >= size || count < 0 || count >= size) {
       return
     }
-    this.again[(this.againHead + this.againCount) % size] = id
-    this.againCount = this.againCount + 1
+    if ((this.flags[k] & H3_FLAG_AGAIN) !== 0) {
+      return
+    }
+    // Both below `size`, so their sum wraps onto the ring at most once.
+    if (head >= 3072 || count >= 3072) {
+      return // never: `size` is at most 3072
+    }
+    const end: i32 = head + count
+    const at: i32 = end < size ? end : end - size
+    if (at < 0 || at >= size) {
+      return // never: see above
+    }
+    again[at] = id
+    this.againCount = count + 1
     this.flags[k] = this.flags[k] | H3_FLAG_AGAIN
   }
 
   /** The next event stream `id` has, or H3_NEED_MORE when it has nothing more to say now. */
   private step(id: i64): i32 {
     const k: i32 = this.quic.streams.slotOf(id)
-    if (k < 0 || k >= toI32(this.slotId.length)) {
+    const phases: i32[] = this.phase
+    if (k < 0 || k >= toI32(this.slotId.length) || k >= toI32(this.flags.length) || k >= toI32(phases.length)) {
       return H3_NEED_MORE
     }
     this.slot = k
@@ -1151,7 +1194,10 @@ export class Http3Connection {
     if (this.slotId[k] !== id) {
       this.open(k, id)
     }
-    const phase: i32 = this.phase[k]
+    if (k >= toI32(phases.length)) {
+      return H3_NEED_MORE // never: `open` leaves the table as it was
+    }
+    const phase: i32 = phases[k]
     if (phase >= H3_PHASE_UNI_TYPE) {
       return this.uniStep(k, id)
     }
@@ -1160,11 +1206,28 @@ export class Http3Connection {
 
   /** The state of a stream the client just opened in slot `k`. */
   private open(k: i32, id: i64): void {
+    // `step` found `k` in the stream table every per-slot array is as long
+    // as (the constructor), so this never returns.
+    if (
+      k < 0 ||
+      k >= toI32(this.slotId.length) ||
+      k >= toI32(this.frameType.length) ||
+      k >= toI32(this.frameLeft.length) ||
+      k >= toI32(this.contentLeft.length) ||
+      k >= toI32(this.fillLeft.length) ||
+      k >= toI32(this.dataLeft.length) ||
+      k >= toI32(this.flags.length) ||
+      k >= toI32(this.headLen.length) ||
+      k >= toI32(this.pendAt.length) ||
+      k >= toI32(this.pendLen.length) ||
+      k >= toI32(this.phase.length)
+    ) {
+      return
+    }
     this.slotId[k] = id
     this.frameType[k] = H3_SKIP_TYPE
     this.frameLeft[k] = -1
-    this.dataTotal[k] = 0
-    this.contentLength[k] = -1
+    this.contentLeft[k] = -1
     this.fillLeft[k] = 0
     this.dataLeft[k] = 0
     this.flags[k] = 0
@@ -1186,13 +1249,17 @@ export class Http3Connection {
       return
     }
     this.flags[k] = H3_FLAG_COUNTED
-    this.live = this.live + 1
+    // Below the table's size, so `h3Count` never saturates it.
+    this.live = h3Count(this.live)
   }
 
   /** §5.2: a request past the GOAWAY this side sent is refused, both ways, unprocessed. */
   private reject(k: i32, id: i64): void {
     this.quic.streamReset(id, H3_REQUEST_REJECTED)
     this.quic.streamStopSending(id, H3_REQUEST_REJECTED)
+    if (k < 0 || k >= toI32(this.flags.length) || k >= toI32(this.phase.length)) {
+      return // never: `k` is the slot `open` checked
+    }
     this.flags[k] = H3_FLAG_SEND_DONE
     this.phase[k] = H3_PHASE_DISCARD
     this.rejected = h3Count(this.rejected)
@@ -1200,7 +1267,11 @@ export class Http3Connection {
 
   /** One of this side's own streams has news: the client may not stop it (§6.2.1, RFC 9204 §4.2). */
   private ownStream(k: i32): i32 {
-    const stream: QuicStream = this.quic.streams.slots[k]
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k < 0 || k >= toI32(slots.length)) {
+      return H3_NEED_MORE // never: `slotOf` gave `k` from this table
+    }
+    const stream: QuicStream = slots[k]
     if (stream.stopCode >= 0) {
       return this.fail(H3_CLOSED_CRITICAL_STREAM)
     }
@@ -1210,14 +1281,22 @@ export class Http3Connection {
   /** Lets a slot's request count as finished once both of its sides are done. */
   private settle(k: i32): void {
     const done: i32 = H3_FLAG_SEND_DONE | H3_FLAG_RECV_DONE | H3_FLAG_COUNTED
-    if ((this.flags[k] & done) === done) {
+    if (k < 0 || k >= toI32(this.flags.length)) {
+      return // never: every caller holds a slot of the table
+    }
+    const live: i32 = this.live
+    // A counted slot is one of `live`, so it is above 0 here.
+    if ((this.flags[k] & done) === done && live > 0) {
       this.flags[k] = this.flags[k] & ~H3_FLAG_COUNTED
-      this.live = this.live - 1
+      this.live = live - 1
     }
   }
 
   /** Marks flags on slot `k` and settles it. */
   private mark(k: i32, bits: i32): void {
+    if (k < 0 || k >= toI32(this.flags.length)) {
+      return // never: every caller holds a slot of the table
+    }
     this.flags[k] = this.flags[k] | bits
     this.settle(k)
   }
@@ -1230,25 +1309,46 @@ export class Http3Connection {
    * that ended the read.
    */
   private readHeader(k: i32, id: i64): i32 {
+    // `k` is a slot of the table, at most `H3_MAX_SLOTS` long, so this never returns.
+    const headLens: i32[] = this.headLen
+    if (k < 0 || k >= toI32(headLens.length) || k >= 3072) {
+      return H3_ZERO
+    }
     const base: i32 = k * H3_HEAD
-    while (this.headLen[k] < H3_HEAD) {
-      const have: i32 = this.headLen[k]
+    let have: i32 = headLens[k]
+    // 16 is `H3_HEAD`, spelled out so the bound reaches the sums below.
+    while (have >= 0 && have < 16) {
       // The type's size from its first byte, then the length's from its.
       let need: i32 = 1
       if (have > 0) {
         const typeSize: i32 = h3VarintLength(this.head, base)
+        // A varint is 1 to 8 bytes, so neither size ever returns here.
+        if (typeSize < 1 || typeSize > 8) {
+          return H3_ZERO
+        }
         need = have < typeSize ? typeSize - have : 1
         if (have > typeSize) {
-          need = typeSize + h3VarintLength(this.head, base + typeSize) - have
+          const lengthSize: i32 = h3VarintLength(this.head, base + typeSize)
+          if (lengthSize < 1 || lengthSize > 8) {
+            return H3_ZERO
+          }
+          need = typeSize + lengthSize - have
         }
       }
       const n: i32 = this.quic.streamRead(id, this.head, base + have, need)
       if (n <= 0) {
         return n
       }
-      this.headLen[k] = have + n
-      if (h3ReadFrameHeader(this.header, this.head, base, this.headLen[k]) > 0) {
-        this.headLen[k] = 0
+      // Never: a read takes at most the bytes asked for, into the table's slot.
+      if (n > need || n > 16 || k >= toI32(headLens.length)) {
+        return H3_ZERO
+      }
+      have = have + n
+      headLens[k] = have
+      if (h3ReadFrameHeader(this.header, this.head, base, have) > 0) {
+        if (k < toI32(headLens.length)) {
+          headLens[k] = 0
+        }
         return 1
       }
     }
@@ -1259,22 +1359,38 @@ export class Http3Connection {
 
   /** The next event of the client's unidirectional stream `id` in slot `k`. */
   private uniStep(k: i32, id: i64): i32 {
+    const phases: i32[] = this.phase
+    const headLens: i32[] = this.headLen
     while (this.state !== H3_STATE_FAILED) {
-      const phase: i32 = this.phase[k]
+      // `step` found `k` in the table, at most `H3_MAX_SLOTS` long, and
+      // nothing resizes it, so this never returns.
+      if (k < 0 || k >= toI32(phases.length) || k >= toI32(headLens.length) || k >= 3072) {
+        return H3_NEED_MORE
+      }
+      const phase: i32 = phases[k]
       if (phase === H3_PHASE_UNI_TYPE) {
         const base: i32 = k * H3_HEAD
-        const n: i32 = this.quic.streamRead(id, this.head, base + this.headLen[k], H3_ONE)
+        const have: i32 = headLens[k]
+        // A type is a varint, read a byte at a time until it is whole: at
+        // most 8 of the slot's 16 (`H3_HEAD`), so this never returns.
+        if (have < 0 || have >= 16) {
+          return H3_NEED_MORE
+        }
+        const n: i32 = this.quic.streamRead(id, this.head, base + have, H3_ONE)
+        if (k >= toI32(phases.length) || k >= toI32(headLens.length)) {
+          return H3_NEED_MORE // never, as above
+        }
         if (n !== 1) {
           // §6.2: a stream may end or be reset before its type; nothing is owed.
           if (n < 0) {
-            this.phase[k] = H3_PHASE_DONE
+            phases[k] = H3_PHASE_DONE
           }
           return H3_NEED_MORE
         }
-        this.headLen[k] = this.headLen[k] + 1
-        const type: i64 = h3ReadVarint(this.head, base, base + this.headLen[k])
-        if (type >= 0) {
-          this.headLen[k] = 0
+        headLens[k] = have + 1
+        const type: i64 = h3ReadVarint(this.head, base, base + have + 1)
+        if (type >= 0 && k < toI32(headLens.length)) {
+          headLens[k] = 0
           const event: i32 = this.typed(k, id, type)
           if (event !== H3_NEED_MORE) {
             return event
@@ -1308,6 +1424,9 @@ export class Http3Connection {
 
   /** The client's unidirectional stream `id` turned out to be of `type` (§6.2). */
   private typed(k: i32, id: i64, type: i64): i32 {
+    if (k < 0 || k >= toI32(this.phase.length) || k >= toI32(this.flags.length)) {
+      return H3_NEED_MORE // never: `uniStep` holds a slot of the table
+    }
     if (type === H3_STREAM_CONTROL) {
       if (this.peerControl >= 0) {
         return this.fail(H3_STREAM_CREATION_ERROR)
@@ -1351,6 +1470,9 @@ export class Http3Connection {
   /** Frames on the client's control stream (§6.2.1, §7.2). */
   private controlStep(k: i32, id: i64): i32 {
     while (this.state !== H3_STATE_FAILED) {
+      if (k < 0 || k >= toI32(this.frameLeft.length) || k >= toI32(this.frameType.length)) {
+        return H3_NEED_MORE // never: `uniStep` holds a slot of the table
+      }
       if (this.frameLeft[k] < 0) {
         const got: i32 = this.readHeader(k, id)
         if (got === 0) {
@@ -1381,27 +1503,39 @@ export class Http3Connection {
         if (whole && length > toI64(H3_CONTROL_FRAME_MAX)) {
           return this.fail(type === H3_FRAME_SETTINGS ? H3_EXCESSIVE_LOAD : H3_FRAME_ERROR)
         }
+        if (k >= toI32(this.frameLeft.length) || k >= toI32(this.frameType.length)) {
+          return H3_NEED_MORE // never: nothing resizes the table
+        }
         this.frameType[k] = whole ? type : H3_SKIP_TYPE
         this.frameLeft[k] = length
         this.controlFill = 0
       }
-      if (this.frameLeft[k] > 0) {
+      const left: i64 = this.frameLeft[k]
+      const fill: i32 = this.controlFill
+      // `controlFill` stays within `control`, H3_CONTROL_FRAME_MAX (1024) bytes long.
+      if (left > 0 && fill >= 0 && fill <= 1024 && fill <= toI32(this.control.length)) {
         const skip: boolean = this.frameType[k] === H3_SKIP_TYPE
-        const room: i32 = skip ? this.config.bodyChunk : toI32(this.control.length) - this.controlFill
-        const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(room)))
-        const n: i32 = skip
-          ? this.readData(id, want)
-          : this.quic.streamRead(id, this.control, this.controlFill, want)
+        const room: i32 = skip ? this.config.bodyChunk : toI32(this.control.length) - fill
+        const want: i32 = toI32(http3Min(left, toI64(room)))
+        const n: i32 = skip ? this.readData(id, want) : this.quic.streamRead(id, this.control, fill, want)
         if (n === 0) {
           return H3_NEED_MORE
         }
         if (n < 0) {
           return this.fail(H3_CLOSED_CRITICAL_STREAM)
         }
-        this.frameLeft[k] = this.frameLeft[k] - toI64(n)
-        if (this.frameType[k] !== H3_SKIP_TYPE) {
-          this.controlFill = this.controlFill + n
+        // Never: a read takes at most the bytes asked for, `room` at most
+        // `control`'s 1024 when it fills that, and nothing resizes the table.
+        if (n > want || n > room || k >= toI32(this.frameLeft.length)) {
+          return H3_ERROR
         }
+        this.frameLeft[k] = left - toI64(n)
+        if (!skip && n <= 1024) {
+          this.controlFill = fill + n
+        }
+      }
+      if (k >= toI32(this.frameLeft.length) || k >= toI32(this.frameType.length)) {
+        return H3_NEED_MORE // never, as above
       }
       if (this.frameLeft[k] === 0) {
         this.frameLeft[k] = -1
@@ -1430,7 +1564,7 @@ export class Http3Connection {
       for (let j: i32 = 0; j < this.waitCount && j < toI32(this.waiting.length); j++) {
         const id: i64 = this.waiting[j]
         const w: i32 = this.quic.streams.slotOf(id)
-        if (w >= 0 && w < toI32(this.flags.length) && this.slotId[w] === id) {
+        if (w >= 0 && w < toI32(this.flags.length) && w < toI32(this.slotId.length) && this.slotId[w] === id) {
           this.flags[w] = this.flags[w] & ~H3_FLAG_WAITING
           this.stepAgain(w, id)
         }
@@ -1470,7 +1604,7 @@ export class Http3Connection {
   /** Reads and drops what is left of stream `id`, slot `k`, to its end or reset. */
   private discard(k: i32, id: i64): i32 {
     const n: i32 = this.drop(id)
-    if (n < 0) {
+    if (n < 0 && k >= 0 && k < toI32(this.phase.length)) {
       this.phase[k] = H3_PHASE_DONE
       this.mark(k, H3_FLAG_RECV_DONE)
     }
@@ -1504,6 +1638,9 @@ export class Http3Connection {
       this.rejected = h3Count(this.rejected)
       return H3_NEED_MORE
     }
+    if (k < 0 || k >= toI32(this.phase.length) || k >= toI32(this.frameLeft.length)) {
+      return H3_NEED_MORE // never: `wtStep` holds a slot of the table
+    }
     this.phase[k] = H3_PHASE_WT_HELD
     this.frameLeft[k] = -1
     this.stream = id
@@ -1518,7 +1655,12 @@ export class Http3Connection {
    * client's STOP_SENDING; and H3_WRITABLE.
    */
   private wtStep(k: i32, id: i64): i32 {
-    const stream: QuicStream = this.quic.streams.slots[k]
+    const slots: QuicStream[] = this.quic.streams.slots
+    // `step` found `k` in the table, at most `H3_MAX_SLOTS` long, so this never returns.
+    if (k < 0 || k >= toI32(slots.length) || k >= toI32(this.flags.length) || k >= toI32(this.phase.length) || k >= 3072) {
+      return H3_NEED_MORE
+    }
+    const stream: QuicStream = slots[k]
     if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_SEND_DONE) === 0) {
       this.mark(k, H3_FLAG_SEND_DONE)
       this.stream = id
@@ -1528,20 +1670,30 @@ export class Http3Connection {
     const phase: i32 = this.phase[k]
     if (phase === H3_PHASE_WT_SESSION) {
       const base: i32 = k * H3_HEAD
-      while (this.headLen[k] < 8) {
-        const n: i32 = this.quic.streamRead(id, this.head, base + this.headLen[k], H3_ONE)
+      const headLens: i32[] = this.headLen
+      const phases: i32[] = this.phase
+      // Never past the table, which nothing resizes; a session ID is a varint, at most 8 bytes.
+      while (k < 3072 && k < toI32(headLens.length) && k < toI32(phases.length)) {
+        const have: i32 = headLens[k]
+        if (have < 0 || have >= 8) {
+          return H3_NEED_MORE
+        }
+        const n: i32 = this.quic.streamRead(id, this.head, base + have, H3_ONE)
         if (n !== 1) {
           // Ended or reset before its session ID: nothing is owed (§6.2).
-          if (n < 0) {
-            this.phase[k] = H3_PHASE_DONE
+          if (n < 0 && k < toI32(phases.length)) {
+            phases[k] = H3_PHASE_DONE
             this.mark(k, H3_FLAG_RECV_DONE)
           }
           return H3_NEED_MORE
         }
-        this.headLen[k] = this.headLen[k] + 1
-        const session: i64 = h3ReadVarint(this.head, base, base + this.headLen[k])
+        if (k >= toI32(headLens.length)) {
+          return H3_NEED_MORE // never, as above
+        }
+        headLens[k] = have + 1
+        const session: i64 = h3ReadVarint(this.head, base, base + have + 1)
         if (session >= 0) {
-          this.headLen[k] = 0
+          headLens[k] = 0
           return this.held(k, id, session)
         }
       }
@@ -1558,7 +1710,9 @@ export class Http3Connection {
           return H3_DATA
         }
         if (n < 0) {
-          this.phase[k] = H3_PHASE_DONE
+          if (k < toI32(this.phase.length)) {
+            this.phase[k] = H3_PHASE_DONE
+          }
           this.mark(k, H3_FLAG_RECV_DONE)
           if (n === QUIC_STREAM_END) {
             this.stream = id
@@ -1586,6 +1740,8 @@ export class Http3Connection {
     if (
       k < 0 ||
       k >= toI32(this.slotId.length) ||
+      k >= toI32(this.flags.length) ||
+      k >= toI32(this.phase.length) ||
       this.slotId[k] !== id ||
       (this.flags[k] & H3_FLAG_WT) === 0
     ) {
@@ -1605,10 +1761,12 @@ export class Http3Connection {
    */
   acceptStream(id: i64): i32 {
     const k: i32 = this.wtSlot(id)
-    if (k < 0 || this.phase[k] !== H3_PHASE_WT_HELD) {
+    const phases: i32[] = this.phase
+    // `wtSlot` answers -1 or a slot of the table, so the length test never refuses.
+    if (k < 0 || k >= toI32(phases.length) || phases[k] !== H3_PHASE_WT_HELD) {
       return H3_CLOSED
     }
-    this.phase[k] = H3_PHASE_WT
+    phases[k] = H3_PHASE_WT
     this.stepAgain(k, id)
     return 0
   }
@@ -1636,9 +1794,13 @@ export class Http3Connection {
 
   /** Asks the client to stop stream `id`, slot `k`, with `code`, and drops what it still sends, unless its side is over or being dropped. */
   private stopReading(k: i32, id: i64, code: i64): void {
-    if (this.phase[k] !== H3_PHASE_DONE && this.phase[k] !== H3_PHASE_DISCARD) {
+    const phases: i32[] = this.phase
+    // Every caller holds a slot of the table, so the length test never skips.
+    if (k >= 0 && k < toI32(phases.length) && phases[k] !== H3_PHASE_DONE && phases[k] !== H3_PHASE_DISCARD) {
       this.quic.streamStopSending(id, code)
-      this.phase[k] = H3_PHASE_DISCARD
+      if (k < toI32(phases.length)) {
+        phases[k] = H3_PHASE_DISCARD
+      }
       this.stepAgain(k, id)
     }
   }
@@ -1668,6 +1830,9 @@ export class Http3Connection {
       return toI64(H3_AGAIN)
     }
     this.open(k, id)
+    if (k >= toI32(this.flags.length) || k >= toI32(this.phase.length)) {
+      return toI64(H3_AGAIN) // never: the table matches `slotId`, and nothing resizes it
+    }
     // A unidirectional stream of this side's has no side for the client to write.
     this.flags[k] = bidirectional ? H3_FLAG_WT : H3_FLAG_WT | H3_FLAG_RECV_DONE
     this.phase[k] = bidirectional ? H3_PHASE_WT : H3_PHASE_DONE
@@ -1704,11 +1869,15 @@ export class Http3Connection {
   writeStream(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
     h3CheckWindow("Http3Connection.writeStream", buf, off, len)
     const k: i32 = this.wtSlot(id)
+    const slots: QuicStream[] = this.quic.streams.slots
     if (
       k < 0 ||
+      k >= toI32(this.flags.length) ||
+      k >= toI32(this.phase.length) ||
+      k >= toI32(slots.length) ||
       (this.flags[k] & H3_FLAG_SEND_DONE) !== 0 ||
       this.phase[k] === H3_PHASE_WT_HELD ||
-      this.quic.streams.slots[k].stopCode >= 0
+      slots[k].stopCode >= 0
     ) {
       return H3_CLOSED
     }
@@ -1770,8 +1939,16 @@ export class Http3Connection {
 
   /** The next event of request stream `id` in slot `k`. */
   private requestStep(k: i32, id: i64): i32 {
-    const stream: QuicStream = this.quic.streams.slots[k]
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k < 0 || k >= toI32(slots.length)) {
+      return H3_ERROR // never: `step` found `k` in the table
+    }
+    const stream: QuicStream = slots[k]
     while (this.state !== H3_STATE_FAILED) {
+      // Never: the table is as long as `slotId`, and nothing resizes it.
+      if (k >= toI32(this.phase.length) || k >= toI32(this.flags.length)) {
+        return H3_ERROR
+      }
       const phase: i32 = this.phase[k]
       if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_SEND_DONE) === 0) {
         // The client stopped the response (QUIC answered with RESET_STREAM, §3.5 of RFC 9000).
@@ -1782,7 +1959,7 @@ export class Http3Connection {
           return charged
         }
         if (told) {
-          if (phase !== H3_PHASE_DONE) {
+          if (phase !== H3_PHASE_DONE && k < toI32(this.phase.length)) {
             this.phase[k] = H3_PHASE_DISCARD
           }
           return this.resetEvent(id, stream.stopCode, true)
@@ -1794,16 +1971,26 @@ export class Http3Connection {
       if (phase === H3_PHASE_DISCARD) {
         return this.discard(k, id)
       }
+      if (
+        k >= toI32(this.flags.length) ||
+        k >= toI32(this.headLen.length) ||
+        k >= toI32(this.frameLeft.length) ||
+        k >= toI32(this.frameType.length)
+      ) {
+        return H3_ERROR // never, as above
+      }
       if (this.webtransport && !this.settingsSeen && phase === H3_PHASE_HEADERS && this.headLen[k] === 0) {
         // draft-02 §3.1: with WebTransport on, a request waits for the client's SETTINGS, which say whether it may be a session.
-        if ((this.flags[k] & H3_FLAG_WAITING) === 0 && this.waitCount < toI32(this.waiting.length)) {
-          this.waiting[this.waitCount] = id
-          this.waitCount = this.waitCount + 1
+        const count: i32 = this.waitCount
+        if ((this.flags[k] & H3_FLAG_WAITING) === 0 && count >= 0 && count < toI32(this.waiting.length)) {
+          this.waiting[count] = id
+          this.waitCount = count + 1
           this.flags[k] = this.flags[k] | H3_FLAG_WAITING
         }
         return H3_NEED_MORE
       }
-      if (this.frameLeft[k] < 0) {
+      const left: i64 = this.frameLeft[k]
+      if (left < 0) {
         const event: i32 = this.requestFrame(k, id)
         if (event === H3_CONTINUE) {
           continue
@@ -1812,7 +1999,7 @@ export class Http3Connection {
           return event
         }
         // The header is not all in yet, unless the stream moved on to another phase.
-        if (this.phase[k] === phase) {
+        if (k < toI32(this.phase.length) && this.phase[k] === phase) {
           return this.writable(k, id)
         }
         continue
@@ -1820,13 +2007,16 @@ export class Http3Connection {
       const type: i64 = this.frameType[k]
       if (type === H3_FRAME_HEADERS) {
         // A field section is decoded whole: wait until all of it is in.
-        if (stream.resetCode < 0 && stream.readable() < this.frameLeft[k]) {
-          if (stream.recvFinal >= 0 && stream.recvRead + this.frameLeft[k] > stream.recvFinal) {
+        if (stream.resetCode < 0 && stream.readable() < left) {
+          const read: i64 = stream.recvRead
+          const final: i64 = stream.recvFinal
+          // The section runs past the stream's final size. `recvRead` is never negative.
+          if (final >= 0 && read >= 0 && left > final - read) {
             return this.fail(H3_FRAME_ERROR)
           }
           return this.writable(k, id)
         }
-        const length: i32 = toI32(this.frameLeft[k])
+        const length: i32 = toI32(left)
         const n: i32 = this.quic.streamRead(id, this.borrowSection(), H3_ZERO, length)
         if (n < 0) {
           this.giveSection(H3_ZERO)
@@ -1836,7 +2026,9 @@ export class Http3Connection {
           this.giveSection(n)
           return this.writable(k, id)
         }
-        this.frameLeft[k] = -1
+        if (k < toI32(this.frameLeft.length)) {
+          this.frameLeft[k] = -1 // always: nothing resizes the table
+        }
         // `fieldSection` copies what it keeps into `fields`: the section is not read after it.
         const event: i32 = this.fieldSection(k, id, length)
         this.giveSection(length)
@@ -1846,7 +2038,7 @@ export class Http3Connection {
         continue
       }
       // DATA, a payload being skipped, or an unknown frame's.
-      const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(this.config.bodyChunk)))
+      const want: i32 = toI32(http3Min(left, toI64(this.config.bodyChunk)))
       const resetCode: i64 = stream.resetCode
       const n: i32 = this.readData(id, want)
       if (n === 0) {
@@ -1855,21 +2047,34 @@ export class Http3Connection {
       if (n < 0) {
         return n === QUIC_STREAM_END ? this.fail(H3_FRAME_ERROR) : this.ended(k, id, n, resetCode)
       }
-      this.frameLeft[k] = this.frameLeft[k] - toI64(n)
+      // Never: nothing resizes the table.
+      if (
+        k >= toI32(this.frameLeft.length) ||
+        k >= toI32(this.contentLeft.length) ||
+        k >= toI32(this.phase.length)
+      ) {
+        return H3_ERROR
+      }
+      const rest: i64 = left - toI64(n)
+      this.frameLeft[k] = rest
       if (type === H3_FRAME_DATA) {
-        if (this.frameLeft[k] === 0) {
+        if (rest === 0) {
           this.frameLeft[k] = -1
         }
-        this.dataTotal[k] = this.dataTotal[k] + toI64(n)
-        if (this.contentLength[k] >= 0 && this.dataTotal[k] > this.contentLength[k]) {
-          return this.streamError(k, id, H3_MESSAGE_ERROR)
+        const owed: i64 = this.contentLeft[k]
+        if (owed >= 0) {
+          if (toI64(n) > owed) {
+            // §4.1.2: the body is longer than its content-length.
+            return this.streamError(k, id, H3_MESSAGE_ERROR)
+          }
+          this.contentLeft[k] = owed - toI64(n)
         }
         this.stream = id
         this.dataStart = 0
         this.dataLength = n
         return H3_DATA
       }
-      if (this.frameLeft[k] === 0) {
+      if (rest === 0) {
         this.frameLeft[k] = -1
         if (this.phase[k] === H3_PHASE_SKIP) {
           return this.answerTooLarge(k, id)
@@ -1886,11 +2091,24 @@ export class Http3Connection {
    * RFC 9114 says so. A stream that ends here ends the request.
    */
   private requestFrame(k: i32, id: i64): i32 {
-    const stream: QuicStream = this.quic.streams.slots[k]
-    const resetCode: i64 = stream.resetCode
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k < 0 || k >= toI32(slots.length)) {
+      return H3_ERROR // never: `requestStep` holds a slot of the table
+    }
+    const resetCode: i64 = slots[k].resetCode
     const got: i32 = this.readHeader(k, id)
     if (got === 0) {
       return H3_NEED_MORE
+    }
+    // Never: the table is as long as `slotId`, and nothing resizes it.
+    if (
+      k >= toI32(this.headLen.length) ||
+      k >= toI32(this.flags.length) ||
+      k >= toI32(this.phase.length) ||
+      k >= toI32(this.frameType.length) ||
+      k >= toI32(this.frameLeft.length)
+    ) {
+      return H3_ERROR
     }
     if (got < 0) {
       if (got === QUIC_STREAM_END && this.headLen[k] > 0) {
@@ -1913,9 +2131,9 @@ export class Http3Connection {
       // Its "length" is the session ID. A stream past this side's GOAWAY counts once it is held, for a session below it.
       this.flags[k] = this.flags[k] | H3_FLAG_WT
       const event: i32 = this.held(k, id, length)
-      if (event === H3_STREAM && (this.flags[k] & H3_FLAG_LATE) !== 0) {
+      if (event === H3_STREAM && k < toI32(this.flags.length) && (this.flags[k] & H3_FLAG_LATE) !== 0) {
         this.flags[k] = (this.flags[k] & ~H3_FLAG_LATE) | H3_FLAG_COUNTED
-        this.live = this.live + 1
+        this.live = h3Count(this.live)
       }
       return event
     }
@@ -1964,6 +2182,9 @@ export class Http3Connection {
     ) {
       return this.fail(H3_FRAME_UNEXPECTED)
     }
+    if (k >= toI32(this.frameType.length) || k >= toI32(this.frameLeft.length)) {
+      return H3_ERROR // never, as above
+    }
     // §9: an unknown frame type is skipped, wherever it comes.
     this.frameType[k] = H3_SKIP_TYPE
     this.frameLeft[k] = length > 0 ? length : -1
@@ -1977,6 +2198,9 @@ export class Http3Connection {
    */
   private fieldSection(k: i32, id: i64, length: i32): i32 {
     const result: i64 = this.decoder.decode(this.section, H3_ZERO, length)
+    if (k < 0 || k >= toI32(this.phase.length)) {
+      return H3_ERROR // never: `requestStep` holds a slot of the table, which nothing resizes
+    }
     const first: boolean = this.phase[k] === H3_PHASE_HEADERS
     if (result === QPACK_SECTION_TOO_LARGE) {
       return first ? this.answerTooLarge(k, id) : this.streamError(k, id, H3_EXCESSIVE_LOAD)
@@ -1989,6 +2213,9 @@ export class Http3Connection {
       if (this.fields.readTrailers(this.nameList, this.valueList) !== HTTP_FIELDS_OK) {
         return this.streamError(k, id, H3_MESSAGE_ERROR)
       }
+      if (k >= toI32(this.phase.length)) {
+        return H3_ERROR // never, as above
+      }
       this.phase[k] = H3_PHASE_TRAILED
       this.stream = id
       return H3_TRAILERS
@@ -1998,10 +2225,14 @@ export class Http3Connection {
     }
     // An extended CONNECT reaches the program like any request, `fields.protocol` set:
     // `nish/net/webtransport` makes a session of one whose protocol is `webtransport`.
-    this.contentLength[k] = this.fields.contentLength
+    if (k >= toI32(this.contentLeft.length) || k >= toI32(this.phase.length) || k >= toI32(this.flags.length)) {
+      return H3_ERROR // never, as above
+    }
+    this.contentLeft[k] = this.fields.contentLength
     this.phase[k] = H3_PHASE_BODY
     this.flags[k] = this.flags[k] | H3_FLAG_DELIVERED
-    this.heads = this.heads < 2147483647 ? this.heads + 1 : H3_ZERO
+    const heads: i32 = this.heads
+    this.heads = heads >= 0 && heads < 2147483647 ? heads + 1 : H3_ZERO
     this.stream = id
     return H3_REQUEST
   }
@@ -2012,52 +2243,86 @@ export class Http3Connection {
     http3EmptyList(this.nameList)
     http3EmptyList(this.valueList)
     this.poolUsed.fill(H3_ZERO)
-    for (let i: i32 = 0; i < d.count; i++) {
-      this.nameList.push(this.copyOf(d, d.nameStart[i], d.nameLength[i]))
-      this.valueList.push(this.copyOf(d, d.valueStart[i], d.valueLength[i]))
+    // The decoder's four arrays hold `count` fields each, so the length tests never end the loop early.
+    for (
+      let i: i32 = 0;
+      i < d.count &&
+      i < toI32(d.nameStart.length) &&
+      i < toI32(d.nameLength.length) &&
+      i < toI32(d.valueStart.length) &&
+      i < toI32(d.valueLength.length);
+      i++
+    ) {
+      const valueStart: i32 = d.valueStart[i]
+      const valueLength: i32 = d.valueLength[i]
+      this.copyOf(this.nameList, d, d.nameStart[i], d.nameLength[i])
+      this.copyOf(this.valueList, d, valueStart, valueLength)
     }
   }
 
   /**
-   * A copy of the decoder's bytes `[start, start + length)`, in an array of
-   * the size class `length` falls in: class `j` holds arrays made with room
-   * for 2^j bytes, for strings shorter than that and at least half as long.
-   * A section takes the arrays of each class in order and the next takes the
-   * same ones again, so a class grows only when one section needs more of its
-   * size than any before it, and the total stays bounded by the field-section
-   * cap (`docs/security/http3.md`, H3-2).
+   * Pushes onto `list` a copy of the decoder's bytes `[start, start + length)`,
+   * in an array of the size class `length` falls in: class `j` holds arrays
+   * made with room for 2^j bytes, for strings shorter than that and at least
+   * half as long. A section takes the arrays of each class in order and the
+   * next takes the same ones again, so a class grows only when one section
+   * needs more of its size than any before it, and the total stays bounded by
+   * the field-section cap (`docs/security/http3.md`, H3-2).
    */
-  private copyOf(d: QpackDecoder, start: i32, length: i32): u8[] {
+  private copyOf(list: u8[][], d: QpackDecoder, start: i32, length: i32): void {
     let j: i32 = 0
-    while (j < H3_FIELD_CLASSES - 1 && 1 << j <= length) {
+    // 23 is H3_FIELD_CLASSES - 1, spelled out so the prover bounds `1 << j`.
+    while (j < 23 && 1 << j <= length) {
       j++
     }
-    const pool: u8[][] = this.pools[j]
-    const used: i32 = this.poolUsed[j]
-    if (used >= toI32(pool.length)) {
-      // Made with room for the class, then emptied below like any reused one.
-      pool.push(new Array<u8>(1 << j))
+    const pools: u8[][][] = this.pools
+    const poolUsed: i32[] = this.poolUsed
+    // Never: both hold H3_FIELD_CLASSES entries, and `used` counts the arrays of its class this
+    // section took, at most one past the class's last.
+    if (j < 0 || j > 23 || j >= toI32(pools.length) || j >= toI32(poolUsed.length)) {
+      return
     }
-    this.poolUsed[j] = used + 1
+    const pool: u8[][] = pools[j]
+    const used: i32 = poolUsed[j]
+    if (used < 0 || used > toI32(pool.length) || used >= 2147483646) {
+      return // never, as above
+    }
+    poolUsed[j] = used + 1
+    if (used === toI32(pool.length)) {
+      // Made with room for the class, then emptied below like any reused one. A `u16` length
+      // needs no check, and holds every class the default 16,384-byte cap reaches; a class past
+      // 2^15, under a larger cap, starts at 2^15 and grows on the pushes below.
+      pool.push(new Array<u8>(toU16(j <= 15 ? 1 << j : 32768)))
+    }
+    if (used >= toI32(pool.length)) {
+      return // never: the push above made it
+    }
     const out: u8[] = pool[used]
     http3Empty(out)
-    const from: i32 = start > 0 ? start : H3_ZERO
-    const end: i32 = start + length < toI32(d.bytes.length) ? start + length : toI32(d.bytes.length)
-    for (let k: i32 = from; k < end; k++) {
-      out.push(d.bytes[k])
+    const bytes: u8[] = d.bytes
+    let at: i32 = start > 0 ? start : H3_ZERO
+    for (let i: i32 = 0; i < length && at >= 0 && at < toI32(bytes.length); i++) {
+      out.push(bytes[at])
+      at = at + 1
     }
-    return out
+    list.push(out)
   }
+
 
   /**
    * The request stream ended, cleanly (`n` is `QUIC_STREAM_END`) or by the
    * client's RESET_STREAM with `resetCode`, at a frame boundary.
    */
   private ended(k: i32, id: i64, n: i32, resetCode: i64): i32 {
-    const phase: i32 = this.phase[k]
-    this.phase[k] = H3_PHASE_DONE
-    this.mark(k, H3_FLAG_RECV_DONE)
+    const phases: i32[] = this.phase
+    if (k < 0 || k >= toI32(phases.length) || k >= toI32(this.flags.length) || k >= toI32(this.contentLeft.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
+    }
+    const phase: i32 = phases[k]
+    phases[k] = H3_PHASE_DONE
     const delivered: boolean = (this.flags[k] & H3_FLAG_DELIVERED) !== 0
+    const owed: i64 = this.contentLeft[k]
+    this.mark(k, H3_FLAG_RECV_DONE)
     if (n === QUIC_STREAM_ERR_RESET) {
       // §4.1.1: a response to a request that will not finish is abandoned too.
       this.abandon(k, id, resetCode === H3_REQUEST_CANCELLED ? H3_REQUEST_CANCELLED : H3_REQUEST_INCOMPLETE)
@@ -2077,7 +2342,7 @@ export class Http3Connection {
       const charged: i32 = this.chargeReset(k)
       return charged !== H3_NEED_MORE ? charged : this.dropped(id)
     }
-    if (this.contentLength[k] >= 0 && this.dataTotal[k] !== this.contentLength[k]) {
+    if (owed > 0) {
       // §4.1.2: the body is shorter than its content-length.
       this.abandon(k, id, H3_MESSAGE_ERROR)
       this.streamErrors = h3Count(this.streamErrors)
@@ -2090,6 +2355,9 @@ export class Http3Connection {
 
   /** Resets this side's half of request stream `id` with `code`, unless it is done already. */
   private abandon(k: i32, id: i64, code: i64): void {
+    if (k < 0 || k >= toI32(this.flags.length)) {
+      return // never: every caller holds a slot of the table
+    }
     if ((this.flags[k] & H3_FLAG_SEND_DONE) === 0) {
       this.quic.streamReset(id, code)
     }
@@ -2098,15 +2366,20 @@ export class Http3Connection {
 
   /** A stream error (§8): the request is reset both ways with `code`, and the program told when it knew the request. */
   private streamError(k: i32, id: i64, code: i64): i32 {
+    const phases: i32[] = this.phase
+    if (k < 0 || k >= toI32(phases.length) || k >= toI32(this.flags.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
+    }
+    phases[k] = H3_PHASE_DISCARD
+    const delivered: boolean = (this.flags[k] & H3_FLAG_DELIVERED) !== 0
     this.streamErrors = h3Count(this.streamErrors)
     this.abandon(k, id, code)
     this.quic.streamStopSending(id, code)
-    this.phase[k] = H3_PHASE_DISCARD
     const charged: i32 = this.chargeReset(k)
     if (charged !== H3_NEED_MORE) {
       return charged
     }
-    if ((this.flags[k] & H3_FLAG_DELIVERED) !== 0) {
+    if (delivered) {
       return this.resetEvent(id, code, false)
     }
     return this.dropped(id)
@@ -2119,19 +2392,32 @@ export class Http3Connection {
    * is spent the connection error H3_EXCESSIVE_LOAD (§10.5).
    */
   private chargeReset(k: i32): i32 {
+    if (k < 0 || k >= toI32(this.flags.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
+    }
     if ((this.flags[k] & H3_FLAG_CHARGED) !== 0) {
       return H3_NEED_MORE
     }
     this.flags[k] = this.flags[k] | H3_FLAG_CHARGED
-    this.resetCredit = this.resetCredit - 1
-    return this.resetCredit < 0 ? this.fail(H3_EXCESSIVE_LOAD) : H3_NEED_MORE
+    // A spent budget fails the connection, so the credit never goes below 0.
+    const credit: i32 = this.resetCredit
+    if (credit <= 0) {
+      return this.fail(H3_EXCESSIVE_LOAD)
+    }
+    this.resetCredit = credit - 1
+    return H3_NEED_MORE
   }
 
   /** This side ended request `k`'s response with a FIN: its send side is done, and a request the program answered earns the reset budget one back. */
   private answered(k: i32): void {
+    if (k < 0 || k >= toI32(this.flags.length)) {
+      return // never: every caller holds a slot of the table
+    }
+    const delivered: boolean = (this.flags[k] & H3_FLAG_DELIVERED) !== 0
     this.mark(k, H3_FLAG_SEND_DONE)
-    if ((this.flags[k] & H3_FLAG_DELIVERED) !== 0 && this.resetCredit < this.config.resetBudget) {
-      this.resetCredit = this.resetCredit + 1
+    const credit: i32 = this.resetCredit
+    if (delivered && credit < this.config.resetBudget && credit < 2147483647) {
+      this.resetCredit = credit + 1
     }
   }
 
@@ -2171,7 +2457,11 @@ export class Http3Connection {
       this.abandon(k, id, H3_EXCESSIVE_LOAD)
     }
     this.quic.streamStopSending(id, H3_NO_ERROR)
-    this.phase[k] = H3_PHASE_DISCARD
+    const phases: i32[] = this.phase
+    if (k < 0 || k >= toI32(phases.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
+    }
+    phases[k] = H3_PHASE_DISCARD
     const charged: i32 = this.chargeReset(k)
     return charged !== H3_NEED_MORE ? charged : this.dropped(id)
   }
@@ -2182,11 +2472,22 @@ export class Http3Connection {
    * H3_WRITABLE. Answers that, or H3_NEED_MORE.
    */
   private writable(k: i32, id: i64): i32 {
-    if ((this.flags[k] & H3_FLAG_BLOCKED) === 0 || (this.flags[k] & H3_FLAG_SEND_DONE) !== 0) {
+    if (k < 0 || k >= toI32(this.flags.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
+    }
+    const flags: i32 = this.flags[k]
+    if ((flags & H3_FLAG_BLOCKED) === 0 || (flags & H3_FLAG_SEND_DONE) !== 0 || !this.drain(k, id)) {
       return H3_NEED_MORE
     }
-    if (!this.drain(k, id) || this.quic.streams.slots[k].room() <= 0) {
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k >= toI32(slots.length) || k >= toI32(this.flags.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
+    }
+    if (slots[k].room() <= 0) {
       return H3_NEED_MORE
+    }
+    if (k >= toI32(this.flags.length)) {
+      return H3_NEED_MORE // never: every caller holds a slot of the table
     }
     this.flags[k] = this.flags[k] & ~H3_FLAG_BLOCKED
     this.stream = id
@@ -2204,11 +2505,15 @@ export class Http3Connection {
     if (k < 0 || k >= toI32(this.slotId.length) || this.slotId[k] !== id) {
       return -1
     }
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k >= toI32(this.flags.length) || k >= toI32(slots.length)) {
+      return -1 // never: slotId, flags and the stream table hold a slot each
+    }
     const flags: i32 = this.flags[k]
     if ((flags & H3_FLAG_DELIVERED) === 0 || (flags & H3_FLAG_SEND_DONE) !== 0) {
       return -1
     }
-    return this.quic.streams.slots[k].stopCode >= 0 ? -1 : k
+    return slots[k].stopCode >= 0 ? -1 : k
   }
 
   /**
@@ -2217,34 +2522,65 @@ export class Http3Connection {
    * them. Answers whether none are owed now.
    */
   private drain(k: i32, id: i64): boolean {
-    const base: i32 = k * H3_HEAD
-    while (this.pendLen[k] > 0) {
-      const n: i32 = this.quic.streamWrite(id, this.pend, base + this.pendAt[k], this.pendLen[k], false)
-      if (n <= 0) {
+    // 3072 is H3_MAX_SLOTS and 16 H3_HEAD, spelled out so the prover bounds `base`.
+    if (k < 0 || k >= 3072) {
+      return false // never: every caller holds a slot of the table
+    }
+    const base: i32 = k * 16
+    while (k < toI32(this.pendLen.length) && k < toI32(this.pendAt.length)) {
+      const owed: i32 = this.pendLen[k]
+      const at: i32 = this.pendAt[k]
+      if (owed <= 0) {
+        break
+      }
+      if (owed > 16 || at < 0 || at > 16) {
+        return false // never: owe queues at most H3_HEAD bytes, and a write takes no more than asked
+      }
+      const n: i32 = this.quic.streamWrite(id, this.pend, base + at, owed, false)
+      if (n <= 0 || n > owed) {
         return false
       }
-      this.pendAt[k] = this.pendAt[k] + n
-      this.pendLen[k] = this.pendLen[k] - n
+      if (k >= toI32(this.pendLen.length) || k >= toI32(this.pendAt.length)) {
+        return false // never: nothing resizes the table
+      }
+      this.pendAt[k] = at + n
+      this.pendLen[k] = owed - n
     }
-    while (this.fillLeft[k] > 0) {
-      const want: i32 = toI32(http3Min(this.fillLeft[k], toI64(toI32(this.zeros.length))))
+    while (k < toI32(this.fillLeft.length)) {
+      const fill: i64 = this.fillLeft[k]
+      if (fill <= 0) {
+        break
+      }
+      const want: i32 = toI32(http3Min(fill, toI64(toI32(this.zeros.length))))
       const n: i32 = this.quic.streamWrite(id, this.zeros, H3_ZERO, want, false)
       if (n <= 0) {
         return false
       }
-      this.fillLeft[k] = this.fillLeft[k] - toI64(n)
+      if (k >= toI32(this.fillLeft.length)) {
+        return false // never: nothing resizes the table
+      }
+      this.fillLeft[k] = fill - toI64(n)
     }
     return true
   }
 
   /** Queues `buf[0 .. n)`, a frame header, as the bytes owed first on slot `k`. */
   private owe(k: i32, buf: u8[], n: i32): void {
-    const base: i32 = k * H3_HEAD
-    for (let j: i32 = 0; j < n && j < H3_HEAD && j < toI32(buf.length); j++) {
-      this.pend[base + j] = buf[j]
+    // 3072 is H3_MAX_SLOTS and 16 H3_HEAD, spelled out so the prover bounds `base`.
+    if (k < 0 || k >= 3072 || k >= toI32(this.pendAt.length) || k >= toI32(this.pendLen.length)) {
+      return // never: every caller holds a slot of the table
+    }
+    const base: i32 = k * 16
+    const pend: u8[] = this.pend
+    for (let j: i32 = 0; j < n && j < 16 && j < toI32(buf.length); j++) {
+      const at: i32 = base + j
+      if (at >= toI32(pend.length)) {
+        break // never: pend holds H3_HEAD bytes a slot
+      }
+      pend[at] = buf[j]
     }
     this.pendAt[k] = 0
-    this.pendLen[k] = n < H3_HEAD ? n : H3_HEAD
+    this.pendLen[k] = n < 16 ? n : 16
   }
 
   /**
@@ -2253,7 +2589,11 @@ export class Http3Connection {
    * so that QUIC names the stream again once acknowledgements free room.
    */
   private arm(k: i32, id: i64): void {
-    const stream: QuicStream = this.quic.streams.slots[k]
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k < 0 || k >= toI32(slots.length)) {
+      return // never: every caller holds a slot of the table
+    }
+    const stream: QuicStream = slots[k]
     const room: i64 = stream.room()
     this.mark(k, H3_FLAG_BLOCKED)
     if (room > 0) {
@@ -2269,9 +2609,16 @@ export class Http3Connection {
         size = 4
       }
       const payload: i64 = room > 1 ? room - toI64(1 + size) : toI64(0)
-      this.scratch[0] = toU8(H3_FILLER_TYPE)
-      const n: i32 = quicVarintPut(this.scratch, H3_ONE, payload, size)
-      this.owe(k, this.scratch, n)
+      const scratch: u8[] = this.scratch
+      if (toI32(scratch.length) < 1) {
+        return // never: the scratch holds 64 bytes
+      }
+      scratch[0] = toU8(H3_FILLER_TYPE)
+      const n: i32 = quicVarintPut(scratch, H3_ONE, payload, size)
+      this.owe(k, scratch, n)
+      if (k >= toI32(this.fillLeft.length)) {
+        return // never: nothing resizes the table
+      }
       this.fillLeft[k] = payload
       if (!this.drain(k, id)) {
         return
@@ -2304,13 +2651,14 @@ export class Http3Connection {
     http3Empty(out)
     this.encoder.beginSection(out)
     let size: i64 = 0
-    if (status > 0) {
-      const ten: i32 = 10
-      this.statusValue[0] = toU8(H3_DIGIT_ZERO + status / (ten * ten))
-      this.statusValue[1] = toU8(H3_DIGIT_ZERO + ((status / ten) % ten))
-      this.statusValue[2] = toU8(H3_DIGIT_ZERO + (status % ten))
+    const digits: u8[] = this.statusValue
+    // Every caller passes 0 for trailers or a status of three digits.
+    if (status > 0 && status < 1000 && toI32(digits.length) >= 3) {
+      digits[0] = toU8(H3_DIGIT_ZERO + status / 100)
+      digits[1] = toU8(H3_DIGIT_ZERO + ((status / 10) % 10))
+      digits[2] = toU8(H3_DIGIT_ZERO + (status % 10))
       const nameLength: i32 = toI32(this.statusName.length)
-      const valueLength: i32 = toI32(this.statusValue.length)
+      const valueLength: i32 = toI32(digits.length)
       this.encoder.encodeField(
         out,
         this.statusName,
@@ -2322,13 +2670,15 @@ export class Http3Connection {
         false,
         true
       )
-      size = toI64(nameLength + valueLength + QPACK_FIELD_OVERHEAD)
+      size = toI64(nameLength) + toI64(valueLength) + toI64(QPACK_FIELD_OVERHEAD)
     }
     if (dated && status >= 200 && toI32(this.date.length) > 0 && !http3NamesHoldDate(names)) {
       const nl: i32 = toI32(this.dateName.length)
       const vl: i32 = toI32(this.date.length)
       this.encoder.encodeField(out, this.dateName, H3_ZERO, nl, this.date, H3_ZERO, vl, false, true)
-      size = size + toI64(nl + vl + QPACK_FIELD_OVERHEAD)
+      if (size >= 0 && size < 1073741824) {
+        size = size + toI64(nl) + toI64(vl) + toI64(QPACK_FIELD_OVERHEAD)
+      }
     }
     const n: i32 = toI32(names.length)
     for (let j: i32 = 0; j < n && j < toI32(names.length) && j < toI32(values.length); j++) {
@@ -2337,11 +2687,18 @@ export class Http3Connection {
       const nl: i32 = toI32(name.length)
       const vl: i32 = toI32(value.length)
       this.encoder.encodeField(out, name, H3_ZERO, nl, value, H3_ZERO, vl, httpFieldSensitive(name), true)
-      size = size + toI64(nl + vl + QPACK_FIELD_OVERHEAD)
+      // The sum stops growing past 2^30 bytes: a section that size is past any stream buffer.
+      if (size >= 0 && size < 1073741824) {
+        size = size + toI64(nl) + toI64(vl) + toI64(QPACK_FIELD_OVERHEAD)
+      }
     }
     const limit: i64 = this.peer.maxFieldSectionSize
-    const length: i64 = toI64(toI32(out.length))
-    const total: i64 = toI64(h3FrameHeaderSize(H3_FRAME_HEADERS, length)) + length
+    const encoded: i32 = toI32(out.length)
+    const head: i32 = h3FrameHeaderSize(H3_FRAME_HEADERS, toI64(encoded))
+    if (head < 0 || head > 16) {
+      return H3_TOO_LARGE // never: a frame header is two varints, 16 bytes at most
+    }
+    const total: i64 = toI64(head) + toI64(encoded)
     if ((limit >= 0 && size > limit) || total > toI64(this.quic.streams.bufferSize)) {
       return H3_TOO_LARGE
     }
@@ -2349,7 +2706,11 @@ export class Http3Connection {
       this.mark(k, H3_FLAG_BLOCKED)
       return H3_AGAIN
     }
-    if (this.quic.streams.slots[k].room() < total) {
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k < 0 || k >= toI32(slots.length)) {
+      return H3_AGAIN // never: every caller holds a slot of the table
+    }
+    if (slots[k].room() < total) {
       this.arm(k, id)
       return H3_AGAIN
     }
@@ -2358,11 +2719,11 @@ export class Http3Connection {
       H3_ZERO,
       toI32(this.scratch.length),
       H3_FRAME_HEADERS,
-      length
+      toI64(encoded)
     )
     this.quic.streamWrite(id, this.scratch, H3_ZERO, hp, false)
-    this.quic.streamWrite(id, out, H3_ZERO, toI32(length), fin)
-    this.flags[k] = this.flags[k] | H3_FLAG_HEADERS_SENT
+    this.quic.streamWrite(id, out, H3_ZERO, encoded, fin)
+    this.mark(k, H3_FLAG_HEADERS_SENT)
     if (fin) {
       this.answered(k)
     }
@@ -2394,6 +2755,9 @@ export class Http3Connection {
     if (k < 0) {
       return H3_CLOSED
     }
+    if (k >= toI32(this.flags.length)) {
+      return H3_CLOSED // never: writeSlot answers a slot of the table
+    }
     if (
       (this.flags[k] & H3_FLAG_HEADERS_SENT) !== 0 ||
       status < 200 ||
@@ -2422,6 +2786,9 @@ export class Http3Connection {
     const k: i32 = this.writeSlot(id)
     if (k < 0) {
       return H3_CLOSED
+    }
+    if (k >= toI32(this.flags.length) || k >= toI32(this.dataLeft.length)) {
+      return H3_CLOSED // never: writeSlot answers a slot of the table
     }
     if (
       (this.flags[k] & H3_FLAG_HEADERS_SENT) === 0 ||
@@ -2462,7 +2829,11 @@ export class Http3Connection {
     if (k < 0) {
       return H3_CLOSED
     }
-    if ((this.flags[k] & H3_FLAG_HEADERS_SENT) === 0 || (endStream && toI64(len) < this.dataLeft[k])) {
+    if (k >= toI32(this.flags.length) || k >= toI32(this.dataLeft.length)) {
+      return H3_CLOSED // never: writeSlot answers a slot of the table
+    }
+    const owing: i64 = this.dataLeft[k]
+    if ((this.flags[k] & H3_FLAG_HEADERS_SENT) === 0 || (endStream && toI64(len) < owing)) {
       return H3_INVALID
     }
     if (!this.drain(k, id)) {
@@ -2470,15 +2841,21 @@ export class Http3Connection {
       return H3_AGAIN
     }
     if (len === 0) {
-      if (endStream && this.dataLeft[k] === 0) {
+      if (endStream && owing === 0) {
         this.quic.streamWrite(id, this.zeros, H3_ZERO, H3_ZERO, true)
         this.answered(k)
       }
       return 0
     }
+    if (len < 0) {
+      return H3_INVALID // never: h3CheckWindow refused a negative length
+    }
     // DATA frame after DATA frame, until every byte is taken or the send buffer is full.
     let total: i32 = 0
-    while (total < len) {
+    while (total >= 0 && total < len) {
+      if (k >= toI32(this.dataLeft.length)) {
+        break // never: nothing resizes the table
+      }
       if (this.dataLeft[k] === 0) {
         const rest: i32 = len - total
         const frame: i64 = toI64(rest < this.config.writeChunk ? rest : this.config.writeChunk)
@@ -2490,20 +2867,42 @@ export class Http3Connection {
           frame
         )
         this.owe(k, this.scratch, n)
+        if (k >= toI32(this.dataLeft.length)) {
+          break // never: nothing resizes the table
+        }
         this.dataLeft[k] = frame
         if (!this.drain(k, id)) {
           this.mark(k, H3_FLAG_BLOCKED)
           break
         }
+        if (k >= toI32(this.dataLeft.length)) {
+          break // never: nothing resizes the table
+        }
       }
-      const take: i32 = toI32(http3Min(toI64(len - total), this.dataLeft[k]))
-      const fin: boolean = endStream && total + take === len && toI64(take) === this.dataLeft[k]
-      const n: i32 = this.quic.streamWrite(id, buf, off + total, take, fin)
+      const want: i32 = len - total
+      const left: i64 = this.dataLeft[k]
+      if (left <= 0) {
+        break // never: a DATA frame was just begun with writeChunk, at least 1, or fewer bytes owed
+      }
+      const take: i32 = left < toI64(want) ? toI32(left) : want
+      const fin: boolean = endStream && take === want && toI64(take) === left
+      const at: i64 = toI64(off) + toI64(total)
+      if (at > 2147483647) {
+        break // never: h3CheckWindow put the window inside `buf`
+      }
+      const n: i32 = this.quic.streamWrite(id, buf, toI32(at), take, fin)
       if (n < 0) {
         return total > 0 ? total : H3_CLOSED
       }
-      this.dataLeft[k] = this.dataLeft[k] - toI64(n)
-      total = total + n
+      if (k >= toI32(this.dataLeft.length)) {
+        break // never: nothing resizes the table
+      }
+      this.dataLeft[k] = left - toI64(n)
+      const next: i64 = toI64(total) + toI64(n)
+      if (next > 2147483647) {
+        break // never: a write takes no more than `take`
+      }
+      total = toI32(next)
       if (n < take) {
         this.mark(k, H3_FLAG_BLOCKED)
         break
@@ -2541,11 +2940,20 @@ export class Http3Connection {
     if (k < 0) {
       return H3_CLOSED
     }
+    if (k >= toI32(this.flags.length) || k >= toI32(this.dataLeft.length)) {
+      return H3_CLOSED // never: writeSlot answers a slot of the table
+    }
     if ((this.flags[k] & H3_FLAG_HEADERS_SENT) === 0 || this.dataLeft[k] > 0) {
       return H3_INVALID
     }
-    const length: i64 = toI64(len)
-    const total: i64 = toI64(h3FrameHeaderSize(H3_FRAME_DATA, length)) + length
+    if (len < 0) {
+      return H3_INVALID // never: h3CheckWindow refused a negative length
+    }
+    const head: i32 = h3FrameHeaderSize(H3_FRAME_DATA, toI64(len))
+    if (head < 0 || head > 16) {
+      return H3_TOO_LARGE // never: a frame header is two varints, 16 bytes at most
+    }
+    const total: i64 = toI64(head) + toI64(len)
     if (total > toI64(this.quic.streams.bufferSize)) {
       return H3_TOO_LARGE
     }
@@ -2553,11 +2961,15 @@ export class Http3Connection {
       this.mark(k, H3_FLAG_BLOCKED)
       return H3_AGAIN
     }
-    if (this.quic.streams.slots[k].room() < total) {
+    const slots: QuicStream[] = this.quic.streams.slots
+    if (k >= toI32(slots.length)) {
+      return H3_CLOSED // never: writeSlot answers a slot of the table
+    }
+    if (slots[k].room() < total) {
       this.arm(k, id)
       return H3_AGAIN
     }
-    const hp: i32 = h3PutFrameHeader(this.scratch, H3_ZERO, toI32(this.scratch.length), H3_FRAME_DATA, length)
+    const hp: i32 = h3PutFrameHeader(this.scratch, H3_ZERO, toI32(this.scratch.length), H3_FRAME_DATA, toI64(len))
     this.quic.streamWrite(id, this.scratch, H3_ZERO, hp, false)
     this.quic.streamWrite(id, buf, off, len, fin)
     if (fin) {
@@ -2583,10 +2995,17 @@ export class Http3Connection {
     if (k < 0) {
       return H3_CLOSED
     }
+    const phases: i32[] = this.phase
+    if (k >= toI32(phases.length)) {
+      return H3_CLOSED // never: writeSlot answers a slot of the table
+    }
+    const done: boolean = phases[k] === H3_PHASE_DONE
+    if (!done) {
+      phases[k] = H3_PHASE_DISCARD
+    }
     this.abandon(k, id, code)
-    if (this.phase[k] !== H3_PHASE_DONE) {
+    if (!done) {
       this.quic.streamStopSending(id, code)
-      this.phase[k] = H3_PHASE_DISCARD
     }
     return 0
   }
@@ -2615,6 +3034,9 @@ export class Http3Connection {
     }
     if (this.slotId[k] !== id) {
       return true
+    }
+    if (k >= toI32(this.phase.length) || k >= toI32(this.flags.length)) {
+      return false // never: slotId, phase and flags hold a slot each
     }
     return this.phase[k] === H3_PHASE_HEADERS && (this.flags[k] & H3_FLAG_WT) === 0
   }
