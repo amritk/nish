@@ -1,0 +1,7 @@
+PASS  a backoff above its cap
+PASS  a negative worker count
+PASS  a tick of 0
+PASS  a negative grace
+PASS  a service worker below -1
+PASS  a port past 65535
+nish/net/prefork tryPreforkWith: 6 passed, 0 failed, 0 skipped

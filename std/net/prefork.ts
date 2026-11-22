@@ -559,6 +559,18 @@ const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
 /** Milliseconds on the monotonic clock. */
 const preforkNowMs = (): i64 => monotonicNanos() / 1000000
 
+// The clock in milliseconds lies within 2^63 / 10^6 of 0, about 9.2 * 10^12,
+// so a sum or difference of two such times, or of one and an i32, is far
+// inside the i64 range. The 64-bit unsigned arithmetic below wraps rather
+// than panics, and on values that never pass the range its result, read
+// back as an i64, is the exact one.
+
+/** `now` plus `ms` milliseconds. */
+const preforkAfter = (now: i64, ms: i32): i64 => toI64(toU64(now) + toU64(toI64(ms)))
+
+/** The milliseconds from `then` to `now`. */
+const preforkSince = (now: i64, then: i64): i64 => toI64(toU64(now) - toU64(then))
+
 /** The signals the supervisor stops its workers with. */
 const PREFORK_SIGTERM: i32 = 15
 const PREFORK_SIGKILL: i32 = 9
@@ -803,7 +815,7 @@ class PreforkSupervisor {
    * a wait that starts at `backoffMs` and doubles up to `backoffCapMs`.
    */
   private backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
-    if (failed || now - slot.at < toI64(this.config.quickExitMs)) {
+    if (failed || preforkSince(now, slot.at) < toI64(this.config.quickExitMs)) {
       const cap: i32 = this.config.backoffCapMs
       if (slot.delay === 0) {
         slot.delay = this.config.backoffMs
@@ -817,7 +829,7 @@ class PreforkSupervisor {
     } else {
       slot.delay = 0
     }
-    slot.at = now + toI64(slot.delay)
+    slot.at = preforkAfter(now, slot.delay)
   }
 
   /**
@@ -886,7 +898,7 @@ class PreforkSupervisor {
   /** Stop the group so it starts again whole: SIGTERM now, SIGKILL after `graceMs`. */
   private cascade(now: i64): void {
     this.cascading = true
-    this.cascadeAt = now + toI64(this.config.graceMs)
+    this.cascadeAt = preforkAfter(now, this.config.graceMs)
     this.signal(PREFORK_SIGTERM)
   }
 
@@ -901,7 +913,7 @@ class PreforkSupervisor {
     }
     const now: i64 = preforkNowMs()
     if (now >= this.cascadeAt) {
-      this.cascadeAt = now + toI64(this.config.graceMs)
+      this.cascadeAt = preforkAfter(now, this.config.graceMs)
       this.signal(PREFORK_SIGKILL)
     }
   }

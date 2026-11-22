@@ -1,14 +1,16 @@
 // Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
-// `std/sync/ring` no longer stops it, but three calls still reach sites in
-// other modules. `getI32LE` and its kin in `std/bytes` reach their index
-// checks (an offset past the array is the caller's contract) and the
-// overflow of `off + i`, which a golden outside this change pins.
-// `createRegion`, `openRegion` and `unlinkRegion` reach the `ffi-nul` check
-// of the region's name, which the prover proves only for a literal.
-// `preforkWith` reaches the panics `preforkSupervise` keeps for a config that
-// breaks its contract. Follow-up: a checked twin of the `std/bytes`
-// accessors, a prover rule for a name already tested for NUL, and a checked
-// `preforkWith`; then build this file without `--allow-panics`.
+// neither `std/sync/ring` nor `preforkSupervise`'s config contract stops it
+// (`tryPreforkWith` answers a bad config as `Err`), but three calls still
+// reach sites in other modules. `getI32LE` and its kin in `std/bytes` reach
+// their index checks and the overflow of `off + i` (bytes.ts:113, 139, 273, 304),
+// whose fix moves the `tests/link/std_bytes` golden and so waits on WP80's
+// follow-up. Two are gaps in the `src/` panic prover, which no package owns
+// yet (#1846, prover-gaps, lists four others): `createRegion`, `openRegion`
+// and `unlinkRegion` reach the `ffi-nul` check of the region's name, proven
+// only for a literal (`foreignStringIsNulFree`); and `tryPreforkWith` reaches
+// `netRead(fd, buf, 0, buf.length)` in its channel drain, whose range the
+// prover does not read from the buffer's own length (as at
+// http1-server.ts's drain). Then build this file without `--allow-panics`.
 // smoke: args --allow-panics
 //
 // Work handed across cores without a socket: `nish/net/prefork` starts five
