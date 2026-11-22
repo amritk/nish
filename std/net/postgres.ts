@@ -4462,13 +4462,17 @@ export class PgBatcher {
    * @internal Used by `PgCarrier.next` in std/net/postgres-carrier.ts.
    */
   shed(): i32 {
-    if (this.count === 0) {
+    const count: i32 = this.count
+    const tags: i32[] = this.qTags
+    const head: i32 = this.head
+    // `head` is a slot of the ring while a request waits; the test states that bound for the prover.
+    if (count <= 0 || head < 0 || head >= toI32(tags.length)) {
       return -1
     }
-    const tag: i32 = this.qTags[this.head]
-    this.head = (this.head + 1) % toI32(this.qTags.length)
-    this.count -= 1
-    if (this.count === 0) {
+    const tag: i32 = tags[head]
+    this.head = head + 1 === toI32(tags.length) ? 0 : head + 1
+    this.count = count - 1
+    if (count === 1) {
       this.storeEnd = 0
     }
     return tag
@@ -4488,12 +4492,13 @@ export class PgBatcher {
       panic("nish/net/postgres: PgBatcher.addInt on a text batcher")
     }
     const q: i32 = this.slotToAdd()
-    if (q < 0) {
+    const ints: i64[] = this.qInts
+    // `slotToAdd` answers a slot of the ring, which `qInts` is on an int8 batcher; the test states that for the prover.
+    if (q < 0 || q >= toI32(ints.length)) {
       return false
     }
-    this.qInts[q] = key
-    this.added(q, tag, pgIntHash(key), pgDecimalLength(key))
-    return true
+    ints[q] = key
+    return this.added(q, tag, pgIntHash(key), pgDecimalLength(key))
   }
 
   /**
@@ -4519,80 +4524,153 @@ export class PgBatcher {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: PgBatcher.addText outside its source")
     }
-    const end: i32 = start + length
+    // Inside `bytes`, by the test above.
+    const end: i32 = toI32(toI64(start) + toI64(length))
     if (!pgIsText(bytes, start, end)) {
       return false
     }
     // The element as `arrayElement` writes it: quoted, `"` and `\` escaped;
     // and FNV-1a, whose unsigned multiply wraps by definition.
-    let size: i64 = toI64(length) + 2
+    let escapes: i32 = 0
     let h: u32 = 2166136261
     for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
       const c: u8 = bytes[i]
-      if (toI32(c) === PG_QUOTE || toI32(c) === PG_BACKSLASH) {
-        size += 1
+      if ((toI32(c) === PG_QUOTE || toI32(c) === PG_BACKSLASH) && escapes < length) {
+        escapes += 1
       }
       h = (h ^ toU32(c)) * 16777619
     }
-    if (size + 2 > toI64(this.maxBytes)) {
+    // With the array's two braces, within `maxBytes`, so the size fits an `i32`.
+    if (toI64(length) + toI64(escapes) + toI64(4) > toI64(this.maxBytes)) {
       return false
     }
+    const size: i32 = toI32(toI64(length) + toI64(escapes) + toI64(2))
     const q: i32 = this.slotToAdd()
     if (q < 0) {
       return false
     }
+    const store: u8[] = this.store
+    const starts: i32[] = this.qStarts
+    const lengths: i32[] = this.qLengths
+    const cap: i32 = toI32(store.length)
     let at: i32 = this.storeEnd
-    if (length > toI32(this.store.length) - at) {
+    // `storeEnd` lies in the store, and `q` is a slot of the ring, which `qStarts` and
+    // `qLengths` are on a text batcher; the test states those bounds for the prover.
+    if (at < 0 || at > cap || q >= toI32(starts.length) || q >= toI32(lengths.length)) {
+      return false
+    }
+    if (length > cap - at) {
       // The waiting keys are moved to the front, the room the taken ones left after them.
       // Refused first when even that would not make room, so a full store is not moved for nothing.
-      const from: i32 = this.count > 0 ? this.qStarts[this.head] : at
-      if (length > toI32(this.store.length) - (at - from)) {
+      const head: i32 = this.head
+      let from: i32 = at
+      if (this.count > 0 && head >= 0 && head < toI32(starts.length)) {
+        from = starts[head]
+      }
+      // The oldest waiting key starts in the store's used part; the test states that for the prover.
+      if (from < 0 || from > at || toI64(length) + toI64(at) - toI64(from) > toI64(cap)) {
         return false
       }
-      copyBytes(this.store, 0, this.store, from, at - from)
+      copyBytes(store, 0, store, from, at - from)
+      let w: i32 = head
       for (let i: i32 = 0; i < this.count; i++) {
-        const w: i32 = (this.head + i) % toI32(this.qStarts.length)
-        this.qStarts[w] -= from
+        // `w` walks the ring from `head`, and each waiting key starts at or after the oldest's.
+        if (w < 0 || w >= toI32(starts.length)) {
+          break
+        }
+        const s: i32 = starts[w]
+        if (s >= from && s >= 0) {
+          starts[w] = s - from
+        }
+        w += 1
+        if (w === toI32(starts.length)) {
+          w = 0
+        }
       }
       at -= from
       this.storeEnd = at
     }
-    copyBytes(this.store, at, bytes, start, length)
-    this.storeEnd = at + length
-    this.qStarts[q] = at
-    this.qLengths[q] = length
-    this.added(q, tag, toI32(h >> 1), toI32(size))
-    return true
+    copyBytes(store, at, bytes, start, length)
+    // `copyBytes` checked that the key fits after `at`.
+    this.storeEnd = toI32(toI64(at) + toI64(length))
+    starts[q] = at
+    lengths[q] = length
+    return this.added(q, tag, toI32(h >> 1), size)
   }
 
   /** The ring slot the next request goes in, or -1 when the queue is full. */
   private slotToAdd(): i32 {
     const size: i32 = toI32(this.qTags.length)
-    return this.count === size ? -1 : (this.head + this.count) % size
+    const head: i32 = this.head
+    const count: i32 = this.count
+    // `head` is a slot of the ring and `count` at most its size; the test states those bounds for the prover.
+    if (count < 0 || count >= size || head < 0 || head >= size) {
+      return -1
+    }
+    // Below twice the ring's size, at most 2^21.
+    const at: i64 = toI64(head) + toI64(count)
+    return toI32(at < toI64(size) ? at : at - toI64(size))
   }
 
-  private added(q: i32, tag: i32, hash: i32, size: i32): void {
-    this.qTags[q] = tag
-    this.qHashes[q] = hash
-    this.qSizes[q] = size
-    this.count += 1
+  /** Records the request `slotToAdd` placed at `q`; false, and nothing recorded, only when `q` is not a slot of the ring. */
+  private added(q: i32, tag: i32, hash: i32, size: i32): boolean {
+    const tags: i32[] = this.qTags
+    const hashes: i32[] = this.qHashes
+    const sizes: i32[] = this.qSizes
+    const count: i32 = this.count
+    // `q` is a free slot of the ring, which all three are; the test states that for the prover.
+    if (
+      q < 0 ||
+      q >= toI32(tags.length) ||
+      q >= toI32(hashes.length) ||
+      q >= toI32(sizes.length) ||
+      count < 0 ||
+      count >= toI32(tags.length)
+    ) {
+      return false
+    }
+    tags[q] = tag
+    hashes[q] = hash
+    sizes[q] = size
+    this.count = count + 1
+    return true
   }
 
   /** Whether the keys of the queued requests `a` and `b` are equal. */
+  // Both are slots of the ring holding waiting keys, which lie in the store; the tests
+  // state those bounds for the prover (false outside them binds the key again, as a long probe does).
   private sameKey(a: i32, b: i32): boolean {
     if (this.keyType === PG_BATCH_INT) {
-      return this.qInts[a] === this.qInts[b]
-    }
-    const n: i32 = this.qLengths[a]
-    if (n !== this.qLengths[b]) {
-      return false
-    }
-    const x: i32 = this.qStarts[a]
-    const y: i32 = this.qStarts[b]
-    for (let i: i32 = 0; i < n; i++) {
-      if (this.store[x + i] !== this.store[y + i]) {
+      const ints: i64[] = this.qInts
+      if (a < 0 || b < 0 || a >= toI32(ints.length) || b >= toI32(ints.length)) {
         return false
       }
+      return ints[a] === ints[b]
+    }
+    const starts: i32[] = this.qStarts
+    const lengths: i32[] = this.qLengths
+    const store: u8[] = this.store
+    if (a < 0 || b < 0 || a >= toI32(starts.length) || b >= toI32(starts.length)) {
+      return false
+    }
+    if (a >= toI32(lengths.length) || b >= toI32(lengths.length)) {
+      return false
+    }
+    const n: i32 = lengths[a]
+    if (n !== lengths[b]) {
+      return false
+    }
+    let x: i32 = starts[a]
+    let y: i32 = starts[b]
+    for (let i: i32 = 0; i < n; i++) {
+      if (x < 0 || y < 0 || x >= toI32(store.length) || y >= toI32(store.length)) {
+        return false
+      }
+      if (store[x] !== store[y]) {
+        return false
+      }
+      x += 1
+      y += 1
     }
     return true
   }
@@ -4620,8 +4698,9 @@ export class PgBatcher {
     }
     const before: i32 = this.count
     const r: i32 = this.take(conn)
-    if (r >= 0) {
-      clock.started(before - this.count, nowUs)
+    const after: i32 = this.count
+    if (r >= 0 && before >= 0 && after >= 0) {
+      clock.started(before - after, nowUs)
     }
     return r
   }
@@ -4641,108 +4720,205 @@ export class PgBatcher {
    *   `next` for this execution's events; or -1.
    */
   take(conn: PgConnection): i32 {
-    if (this.count === 0) {
+    const count: i32 = this.count
+    if (count <= 0) {
       return -1
     }
+    const runs: PgBatchRun[] = this.runs
     let r: i32 = -1
-    for (let i: i32 = 0; i < toI32(this.runs.length); i++) {
-      if (!this.runs[i].open) {
+    for (let i: i32 = 0; i < toI32(runs.length); i++) {
+      if (!runs[i].open) {
         r = i
         break
       }
     }
-    if (r < 0 || !(this.binary ? conn.bindStartBinary(this.name) : conn.bindStart(this.name))) {
+    if (r < 0 || r >= toI32(runs.length)) {
+      return -1
+    }
+    const run: PgBatchRun = runs[r]
+    if (!(this.binary ? conn.bindStartBinary(this.name) : conn.bindStart(this.name))) {
       return -1
     }
     if (!conn.arrayStart()) {
       conn.bindCancel()
       return -1
     }
-    const ring: i32 = toI32(this.qTags.length)
-    this.grow(this.count < this.maxRequests ? this.count : this.maxRequests)
-    const mask: i32 = toI32(this.table.length) - 1
+    const tags: i32[] = this.qTags
+    const hashes: i32[] = this.qHashes
+    const sizes: i32[] = this.qSizes
+    const maxRequests: i32 = this.maxRequests
+    const maxBytes: i32 = this.maxBytes
+    this.grow(count < maxRequests ? count : maxRequests)
+    const table: i32[] = this.table
+    const keySlots: i32[] = this.keySlots
+    const keyEntries: i32[] = this.keyEntries
+    const keyCounts: i32[] = this.keyCounts
+    const takenKeys: i32[] = this.takenKeys
+    // A power of two, at least 2, by `grow`.
+    const mask: i32 = toI32(table.length) - 1
     let keys: i32 = 0
     let taken: i32 = 0
     let bytes: i32 = 2
-    while (taken < this.count && taken < this.maxRequests && taken < toI32(this.takenKeys.length)) {
-      const q: i32 = (this.head + taken) % ring
+    // `q` walks the ring from `head`, one slot per request taken; the tests on it, and on the
+    // key-table entries below, state for the prover the bounds the queue and `grow` keep.
+    let q: i32 = this.head
+    while (taken < count && taken < maxRequests && taken < toI32(takenKeys.length)) {
+      if (q < 0 || q >= toI32(tags.length) || q >= toI32(hashes.length) || q >= toI32(sizes.length)) {
+        break
+      }
       // Probe for the key: a slot holding it, or the empty slot it would take;
       // -1 after `PG_BATCH_PROBES` occupied ones, when the key is bound again,
       // its own ordinal and rows, and left out of the table.
-      let slot: i32 = this.qHashes[q] & mask
+      const hash: i32 = hashes[q]
+      let slot: i32 = hash & mask
       let k: i32 = -1
       let probes: i32 = 0
-      while (this.table[slot] > 0) {
-        const seen: i32 = this.table[slot] - 1
-        const e: i32 = this.keyEntries[seen]
-        if (this.qHashes[e] === this.qHashes[q] && this.sameKey(e, q)) {
+      while (probes < PG_BATCH_PROBES) {
+        if (slot < 0 || slot >= toI32(table.length)) {
+          probes = PG_BATCH_PROBES
+          break
+        }
+        const held: i32 = table[slot]
+        if (held <= 0) {
+          break
+        }
+        const seen: i32 = held - 1
+        if (seen >= toI32(keyEntries.length)) {
+          probes = PG_BATCH_PROBES
+          break
+        }
+        const e: i32 = keyEntries[seen]
+        if (e >= 0 && e < toI32(hashes.length) && hashes[e] === hash && this.sameKey(e, q)) {
           k = seen
           break
         }
         probes += 1
-        if (probes === PG_BATCH_PROBES) {
-          slot = -1
-          break
-        }
         slot = (slot + 1) & mask
       }
+      if (probes >= PG_BATCH_PROBES) {
+        slot = -1
+      }
       if (k < 0) {
-        const cost: i32 = this.qSizes[q] + (keys > 0 ? 1 : 0)
-        if (cost > this.maxBytes - bytes || !this.bindKey(conn, q)) {
+        let comma: i32 = 0
+        if (keys > 0) {
+          comma = 1
+        }
+        const size: i32 = sizes[q]
+        const added: i32 = keys
+        // A key is one of the taken, fewer than `grow`'s arrays hold.
+        if (
+          toI64(size) + toI64(comma) > toI64(maxBytes) - toI64(bytes) ||
+          added < 0 ||
+          added >= toI32(keySlots.length) ||
+          added >= toI32(keyEntries.length) ||
+          added >= toI32(keyCounts.length)
+        ) {
           break
         }
-        bytes += cost
-        k = keys
-        keys += 1
-        if (slot >= 0) {
-          this.table[slot] = keys
+        // Past `keys` until the bind succeeds, so unread if it does not.
+        keySlots[added] = slot
+        keyEntries[added] = q
+        keyCounts[added] = 0
+        if (!this.bindKey(conn, q)) {
+          break
         }
-        this.keySlots[k] = slot
-        this.keyEntries[k] = q
-        this.keyCounts[k] = 0
+        // At most `maxBytes`, by the test above.
+        bytes = toI32(toI64(bytes) + toI64(size) + toI64(comma))
+        k = added
+        keys = added + 1
+        if (slot >= 0 && slot < toI32(table.length)) {
+          table[slot] = keys
+        }
       }
-      this.keyCounts[k] += 1
-      this.takenKeys[taken] = k
+      // A key's count is of the requests taken so far.
+      if (k < 0 || k >= toI32(keyCounts.length)) {
+        break
+      }
+      const kc: i32 = keyCounts[k]
+      if (kc < 0 || kc >= count || taken >= toI32(takenKeys.length)) {
+        break
+      }
+      keyCounts[k] = kc + 1
+      takenKeys[taken] = k
       taken += 1
+      q += 1
+      if (q === toI32(tags.length)) {
+        q = 0
+      }
     }
-    for (let k: i32 = 0; k < keys && k < toI32(this.keySlots.length); k++) {
-      const slot: i32 = this.keySlots[k]
-      if (slot >= 0) {
-        this.table[slot] = 0
+    for (let k: i32 = 0; k < keys && k < toI32(keySlots.length); k++) {
+      const slot: i32 = keySlots[k]
+      if (slot >= 0 && slot < toI32(table.length)) {
+        table[slot] = 0
       }
     }
     if (taken === 0) {
       conn.bindCancel()
       return -1
     }
-    conn.arrayEnd()
-    conn.bindEnd()
     // The requests grouped by key, each key's in the order they were added.
-    const run: PgBatchRun = this.runs[r]
     if (toI32(run.tags.length) < taken) {
-      // Grown together: `first` holds one more than `tags`, which bounds the keys too.
-      run.tags = new Array<i32>(toI32(this.takenKeys.length))
-      run.first = new Array<i32>(toI32(this.takenKeys.length) + 1)
+      // Grown together: `first` holds one more than `tags`, which bounds the keys too;
+      // `takenKeys` holds at most `PG_BATCH_MAX_REQUESTS` (65536).
+      run.tags = new Array<i32>(toI32(takenKeys.length))
+      run.first = new Array<i32>(toI32(toI64(takenKeys.length) + toI64(1)))
       if (!this.sorted) {
-        run.had = new Array<boolean>(toI32(this.takenKeys.length))
+        run.had = new Array<boolean>(toI32(takenKeys.length))
       }
     }
-    run.first[0] = 0
-    for (let k: i32 = 0; k < keys && k < toI32(this.keyCounts.length); k++) {
-      run.first[k + 1] = run.first[k] + this.keyCounts[k]
-      this.keyCounts[k] = run.first[k]
+    const first: i32[] = run.first
+    const runTags: i32[] = run.tags
+    const uses: i32 = run.uses
+    const n: i32 = toI32(runs.length)
+    // `first` outgrows the keys and `tags` the requests, just above; `uses` counts below
+    // `PG_BATCH_USES` (2^20) and there are at most `PG_BATCH_MAX_RUNS` (1024) runs.
+    // The test states those bounds for the prover.
+    if (keys >= toI32(first.length) || toI32(first.length) < 1 || taken > toI32(runTags.length) || uses < 0 || uses >= 1048576 || n > 1024) {
+      conn.bindCancel()
+      return -1
     }
-    for (let i: i32 = 0; i < taken && i < toI32(this.takenKeys.length); i++) {
-      const k: i32 = this.takenKeys[i]
-      run.tags[this.keyCounts[k]] = this.qTags[(this.head + i) % ring]
-      this.keyCounts[k] += 1
+    first[0] = 0
+    let f: i32 = 0
+    for (let k: i32 = 0; k < keys && k < toI32(keyCounts.length); k++) {
+      if (k >= toI32(first.length) - 1) {
+        break
+      }
+      const c: i32 = keyCounts[k]
+      keyCounts[k] = f
+      // The counts sum to `taken`.
+      f = toI32(toI64(f) + toI64(c))
+      first[k + 1] = f
     }
+    let p: i32 = this.head
+    for (let i: i32 = 0; i < taken && i < toI32(takenKeys.length); i++) {
+      // `p` walks the ring as `q` did, and each key's next place lies inside its group.
+      if (p < 0 || p >= toI32(tags.length)) {
+        break
+      }
+      const k: i32 = takenKeys[i]
+      if (k < 0 || k >= toI32(keyCounts.length)) {
+        break
+      }
+      const at: i32 = keyCounts[k]
+      if (at < 0 || at >= toI32(runTags.length)) {
+        break
+      }
+      runTags[at] = tags[p]
+      keyCounts[k] = at + 1
+      p += 1
+      if (p === toI32(tags.length)) {
+        p = 0
+      }
+    }
+    conn.arrayEnd()
+    conn.bindEnd()
     run.reset(keys)
-    run.handle = run.uses * toI32(this.runs.length) + r
-    run.uses = (run.uses + 1) % PG_BATCH_USES
-    this.head = (this.head + taken) % ring
-    this.count -= taken
-    if (this.count === 0) {
+    // Below 2^20 * 1024 + 1024, by the test above.
+    run.handle = toI32(toI64(uses) * toI64(n) + toI64(r))
+    run.uses = uses + 1 === PG_BATCH_USES ? 0 : uses + 1
+    this.head = q
+    this.count = count - taken
+    if (count === taken) {
       this.storeEnd = 0
     }
     return run.handle
@@ -4758,15 +4934,17 @@ export class PgBatcher {
     if (toI32(this.takenKeys.length) >= need) {
       return
     }
+    // `need` is at most `maxRequests`, itself at most `PG_BATCH_MAX_REQUESTS` (65536).
     let size: i32 = PG_BATCH_MIN_GROWTH
-    while (size < need) {
+    while (size > 0 && size < need && size < 65536) {
       size *= 2
     }
     if (size > this.maxRequests) {
       size = this.maxRequests
     }
+    // Twice `size`, rounded up to a power of two: at most 2^17.
     let tableSize: i32 = 2
-    while (tableSize < 2 * size) {
+    while (tableSize > 0 && tableSize / 2 < size && tableSize < 131072) {
       tableSize *= 2
     }
     this.table = new Array<i32>(tableSize)
@@ -4777,20 +4955,37 @@ export class PgBatcher {
   }
 
   /** Writes the queued request `q`'s key as the open array's next element; false when `conn` has no room. */
+  // `q` is a slot of the ring holding a waiting key; the tests state that for the prover.
   private bindKey(conn: PgConnection, q: i32): boolean {
     if (this.keyType === PG_BATCH_INT) {
-      return conn.arrayInt(this.qInts[q])
+      const ints: i64[] = this.qInts
+      if (q < 0 || q >= toI32(ints.length)) {
+        return false
+      }
+      return conn.arrayInt(ints[q])
     }
-    return conn.arrayElement(this.store, this.qStarts[q], this.qLengths[q])
+    const starts: i32[] = this.qStarts
+    const lengths: i32[] = this.qLengths
+    if (q < 0 || q >= toI32(starts.length) || q >= toI32(lengths.length)) {
+      return false
+    }
+    return conn.arrayElement(this.store, starts[q], lengths[q])
   }
 
   /** The run handle `h` names while its execution's events are owed; null once it is spent. Panics on a handle `take` cannot give. */
   private run(h: i32): PgBatchRun | null {
-    const n: i32 = toI32(this.runs.length)
-    if (h < 0 || h >= n * PG_BATCH_USES) {
+    const runs: PgBatchRun[] = this.runs
+    const n: i32 = toI32(runs.length)
+    // `n * PG_BATCH_USES` (2^20) in an `i64`.
+    if (n <= 0 || h < 0 || toI64(h) >= toI64(n) * toI64(1048576)) {
       panic("nish/net/postgres: a PgBatcher run out of range")
     }
-    const run: PgBatchRun = this.runs[h % n]
+    const at: i32 = h % n
+    // In [0, n), as `h` and `n` are positive; the test states that for the prover.
+    if (at < 0 || at >= toI32(runs.length)) {
+      return null
+    }
+    const run: PgBatchRun = runs[at]
     if (run.handle !== h || !run.open) {
       return null
     }
@@ -4801,8 +4996,9 @@ export class PgBatcher {
   private quietRun(h: i32, what: string): PgBatchRun | null {
     const run: PgBatchRun | null = this.run(h)
     if (run === null) {
-      if (this.stray < 2147483647) {
-        this.stray += 1
+      const stray: i32 = this.stray
+      if (stray < 2147483647) {
+        this.stray = stray + 1
       }
       return null
     }
@@ -4835,7 +5031,11 @@ export class PgBatcher {
     if (run.failed) {
       return false
     }
-    const last: i32 = conn.columns - 1
+    const columns: i32 = conn.columns
+    let last: i32 = -1
+    if (columns > 0) {
+      last = columns - 1
+    }
     let ordinal: i64 = 0
     let bad: boolean = last < 0 || conn.isNull(last)
     if (!bad && this.binary) {
@@ -4854,17 +5054,25 @@ export class PgBatcher {
       conn.text.failed = failed
     }
     // Ordinals count from 1 and, sorted, come in order: a row may name the current key again, never one before it.
-    const least: i64 = this.sorted ? toI64(run.cur) + 1 : toI64(1)
-    if (bad || ordinal < least || ordinal > toI64(run.keys)) {
-      if (this.refused < 2147483647) {
-        this.refused += 1
+    let least: i64 = 1
+    if (this.sorted) {
+      const cur: i32 = run.cur
+      least = toI64(cur) + toI64(1)
+    }
+    if (bad || ordinal < least || ordinal < 1 || ordinal > toI64(run.keys)) {
+      const refused: i32 = this.refused
+      if (refused < 2147483647) {
+        this.refused = refused + 1
       }
       run.failed = true
       return false
     }
-    run.target = toI32(ordinal) - 1
-    if (!this.sorted && run.target < toI32(run.had.length)) {
-      run.had[run.target] = true
+    // From 0 to `keys` - 1, by the test above.
+    const target: i32 = toI32(ordinal - 1)
+    run.target = target
+    const had: boolean[] = run.had
+    if (!this.sorted && target >= 0 && target < toI32(had.length)) {
+      had[target] = true
     }
     return true
   }
@@ -4896,14 +5104,28 @@ export class PgBatcher {
     }
   }
 
-  // Names the current key's next unanswered request as `tag`; false when it has none left.
-  private emit(run: PgBatchRun): boolean {
-    const at: i32 = run.first[run.cur] + run.at
-    if (at >= run.first[run.cur + 1]) {
+  // Names key `key`'s next unanswered request as `tag`; false when it has none left.
+  // `key` is one of the run's, `first` holds one more than its keys, and `at` counts the key's
+  // answered requests, inside its group of `tags`: the tests state those bounds for the prover.
+  private emit(run: PgBatchRun, key: i32): boolean {
+    const first: i32[] = run.first
+    const tags: i32[] = run.tags
+    const a: i32 = run.at
+    if (key < 0 || key >= toI32(first.length) - 1 || a < 0) {
       return false
     }
-    run.at += 1
-    this.tag = run.tags[at]
+    const from: i32 = first[key]
+    const to: i32 = first[key + 1]
+    if (from < 0 || to < 0 || to < from || a >= to - from) {
+      return false
+    }
+    // Below `to`, by the test above.
+    const at: i32 = toI32(toI64(from) + toI64(a))
+    if (at < 0 || at >= toI32(tags.length)) {
+      return false
+    }
+    run.at = a + 1
+    this.tag = tags[at]
     return true
   }
 
@@ -4934,20 +5156,22 @@ export class PgBatcher {
     } else if (run.ended) {
       limit = run.keys
     }
-    while (run.cur < limit && run.cur < toI32(run.tags.length)) {
-      if (this.emit(run)) {
+    let cur: i32 = run.cur
+    while (cur < limit && cur < toI32(run.tags.length)) {
+      if (this.emit(run, cur)) {
         if (run.failed) {
           return PG_BATCH_FAILED
         }
         return run.curRows ? PG_BATCH_DONE : PG_BATCH_MISSING
       }
-      run.cur += 1
+      cur += 1
+      run.cur = cur
       run.at = 0
       run.curRows = false
     }
-    if (run.target >= 0 && run.cur < toI32(run.tags.length)) {
+    if (run.target >= 0 && cur < toI32(run.tags.length)) {
       run.curRows = true
-      if (this.emit(run)) {
+      if (this.emit(run, cur)) {
         return PG_BATCH_ROW
       }
       run.target = -1
@@ -4962,11 +5186,8 @@ export class PgBatcher {
   // `next` with `sorted` false: the row's `PG_BATCH_ROW` events at once, and
   // every last event only once the execution is over, `cur` walking the keys.
   private nextUnsorted(run: PgBatchRun): i32 {
-    if (run.target >= 0 && run.target < toI32(run.tags.length)) {
-      const at: i32 = run.first[run.target] + run.at
-      if (at < run.first[run.target + 1]) {
-        run.at += 1
-        this.tag = run.tags[at]
+    if (run.target >= 0) {
+      if (this.emit(run, run.target)) {
         return PG_BATCH_ROW
       }
       run.target = -1
@@ -4975,14 +5196,17 @@ export class PgBatcher {
     if (!run.ended) {
       return PG_BATCH_NONE
     }
-    while (run.cur < run.keys && run.cur < toI32(run.had.length)) {
-      if (this.emit(run)) {
+    const had: boolean[] = run.had
+    let cur: i32 = run.cur
+    while (cur >= 0 && cur < run.keys && cur < toI32(had.length)) {
+      if (this.emit(run, cur)) {
         if (run.failed) {
           return PG_BATCH_FAILED
         }
-        return run.had[run.cur] ? PG_BATCH_DONE : PG_BATCH_MISSING
+        return had[cur] ? PG_BATCH_DONE : PG_BATCH_MISSING
       }
-      run.cur += 1
+      cur += 1
+      run.cur = cur
       run.at = 0
     }
     run.open = false
