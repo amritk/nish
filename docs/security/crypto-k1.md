@@ -358,9 +358,9 @@ finished too. `update` after `digest` still panics. Tests: the
 Kept, because the prover cannot bound an array length wider than 16 bits
 without a change to `src/`:
 
-- the dk array in `pbkdf2HmacSha256Exposed` (`std/crypto/hmac.ts:888`);
-- the output array of `base64urlDecode` (`std/crypto/base64url.ts:193`);
-- the output array of `base64StdPadDecode` (`std/crypto/base64url.ts:440`).
+- the dk array in `pbkdf2HmacSha256Exposed` (`std/crypto/hmac.ts:896`);
+- the output array of `base64urlDecode` (`std/crypto/base64url.ts:182`);
+- the output array of `base64StdPadDecode` (`std/crypto/base64url.ts:443`).
 
 Each length is a `u32` computed from an `i32`, so it cannot be negative or
 past 2^31 − 1 elements. The site is the allocation's own length check.
