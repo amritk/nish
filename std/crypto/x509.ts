@@ -406,7 +406,7 @@ const x509DerRead = (der: u8[], at: i32, limit: i32): X509DerElement | null => {
 const x509DerReadInto = (der: u8[], at: i32, limit: i32, into: X509DerElement): boolean => {
   // `at < der.length - 1` follows from `at <= limit - 2` and `limit <= der.length`;
   // spelled out because the bounds proof does not chain the two.
-  if (at < 0 || limit < 2 || limit > der.length || at > limit - 2 || at >= der.length - 1) {
+  if (at < 0 || limit < 2 || limit > toI32(der.length) || at > limit - 2 || at >= toI32(der.length) - 1) {
     return false
   }
   const tag: i32 = toI32(der[at])
@@ -424,7 +424,7 @@ const x509DerReadInto = (der: u8[], at: i32, limit: i32, into: X509DerElement): 
     // Unsigned: `count <= limit - start`, so the sum cannot wrap.
     const stop: i32 = toI32(toU32(start) + toU32(count))
     // `start < stop <= limit <= der.length`, spelled out for the same reason.
-    if (stop > der.length || start >= der.length) {
+    if (stop > toI32(der.length) || start >= toI32(der.length)) {
       return false
     }
     if (toI32(der[start]) === 0 || (count === 4 && toI32(der[start]) >= 0x80)) {
@@ -483,7 +483,7 @@ const x509DerPeek = (der: u8[], at: i32, limit: i32): i32 => {
 const x509DerSize = (der: u8[], e: X509DerElement): i32 => {
   const start: i32 = e.start
   const end: i32 = e.end
-  if (start < 0 || end < start || end > der.length) {
+  if (start < 0 || end < start || end > toI32(der.length)) {
     return -1
   }
   // Unsigned: `start <= end`, so the difference cannot wrap.
@@ -502,7 +502,7 @@ const x509DerOctet = (der: u8[], e: X509DerElement, k: i32): i32 => {
   }
   // Unsigned: `k < end - start`, so the sum cannot wrap.
   const i: i32 = toI32(toU32(e.start) + toU32(k))
-  if (i < 0 || i >= der.length) {
+  if (i < 0 || i >= toI32(der.length)) {
     return -1
   }
   return toI32(der[i])
@@ -518,7 +518,7 @@ const x509DerSlice = (der: u8[], from: i32, to: i32): u8[] => {
     return out
   }
   for (let i: i32 = from; i < to; i++) {
-    if (i < der.length) {
+    if (i < toI32(der.length)) {
       out.push(der[i])
     }
   }
@@ -545,7 +545,7 @@ const x509BytesEqual = (a: u8[], b: u8[]): boolean => {
 const x509DerContentsAre = (der: u8[], e: X509DerElement, expected: u8[]): boolean => {
   const start: i32 = e.start
   const end: i32 = e.end
-  if (start < 0 || end < start || end > der.length || toU32(end) - toU32(start) !== toU32(expected.length)) {
+  if (start < 0 || end < start || end > toI32(der.length) || toU32(end) - toU32(start) !== toU32(expected.length)) {
     return false
   }
   let k: i32 = 0
@@ -983,14 +983,14 @@ const x509KeyType = (der: u8[], alg: X509DerElement): i32 => {
 }
 
 /**
- * A minimal, non-negative INTEGER pushed onto `out` right-aligned in `width`
- * octets, or `false` when it is negative, not minimal or wider than `width`
+ * A minimal, non-negative INTEGER right-aligned in a fresh array of `width`
+ * octets, or `null` when it is negative, not minimal or wider than `width`
  * octets once a sign octet is set aside.
  */
-const x509DerUnsignedPush = (der: u8[], e: X509DerElement, out: u8[], width: i32): boolean => {
+const x509DerUnsignedPadded = (der: u8[], e: X509DerElement, width: i32): u8[] | null => {
   const size: i32 = x509DerSize(der, e)
   if (size < 1 || width < 0 || !x509DerIntegerMinimal(der, e) || x509DerOctet(der, e, 0) >= 0x80) {
-    return false
+    return null
   }
   let from: i32 = 0
   if (size > 1 && x509DerOctet(der, e, 0) === 0) {
@@ -998,15 +998,16 @@ const x509DerUnsignedPush = (der: u8[], e: X509DerElement, out: u8[], width: i32
   }
   const n: i32 = size - from
   if (n > width) {
-    return false
+    return null
   }
+  const out: u8[] = []
   for (let k: i32 = n; k < width; k++) {
     out.push(0)
   }
   for (let k: i32 = from; k < size; k++) {
     out.push(toU8(x509DerOctet(der, e, k)))
   }
-  return true
+  return out
 }
 
 /**
@@ -1038,11 +1039,12 @@ export const x509DerSignatureRSWidth = (sig: u8[], width: i32): u8[] | null => {
   if (s === null || s.end !== seq.end) {
     return null
   }
-  const out: u8[] = []
-  if (!x509DerUnsignedPush(sig, r, out, width) || !x509DerUnsignedPush(sig, s, out, width)) {
+  const rOctets: u8[] | null = x509DerUnsignedPadded(sig, r, width)
+  const sOctets: u8[] | null = x509DerUnsignedPadded(sig, s, width)
+  if (rOctets === null || sOctets === null) {
     return null
   }
-  return out
+  return x509DerConcat([rOctets, sOctets])
 }
 
 /**
