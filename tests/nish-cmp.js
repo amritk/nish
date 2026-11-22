@@ -18496,6 +18496,19 @@ const DECLARED = [
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
   },
+  // WP80 S4: two probes new with the panic-free HTTP/1 server.
+  {
+    program: "tests/link/std_http1_config_checked/main.ts",
+    file: "exit",
+    changelog: "make the HTTP/1 server panic-free",
+    why: "a probe new with this change: it calls `http1ConfigChecked`, which the 0.44.0 seed's std/net/http1-server.ts lacks, so the seed refuses it (WP80 S4)",
+  },
+  ...["bytes.ll", "http-compress.ll", "main.h", "main.ll", "zlib.ll"].map((file) => ({
+    program: "tests/link/std_http1_encoded_window/main.ts",
+    file,
+    changelog: "make the HTTP/1 server panic-free",
+    why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it), so those modules and the header and IR after them differ (WP80 S4)",
+  })),
 ]
 
 /**
