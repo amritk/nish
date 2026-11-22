@@ -119,7 +119,7 @@ const HKDF_LABEL_PREFIX: string = "tls13 "
  * code says what the RFC says.
  */
 const hkdfSalt = (salt: u8[], hashLen: i32): u8[] =>
-  toI32(salt.length) === 0 ? new Array<u8>(hashLen) : salt
+  toI32(salt.length) === 0 ? new Array<u8>(toU16(hashLen)) : salt
 
 /**
  * Copies `block[0 .. n)` to `out[at .. at + n)`, where `n` is as much of the
@@ -128,12 +128,25 @@ const hkdfSalt = (salt: u8[], hashLen: i32): u8[] =>
 const hkdfAppend = (out: u8[], at: i32, block: u8[]): i32 => {
   const outLength: i32 = toI32(out.length)
   const blockLength: i32 = toI32(block.length)
-  let k: i32 = 0
-  while (k < blockLength && at + k < outLength) {
-    out[at + k] = block[k]
-    k += 1
+  let p: i32 = at
+  for (let k: i32 = 0; k < blockLength && p >= 0 && p < outLength; k += 1) {
+    out[p] = block[k]
+    p += 1
   }
-  return at + k
+  return p
+}
+
+/**
+ * Writes `byte` to `out[at]` and answers `at + 1`. Every caller writes inside
+ * a buffer it sized for the bytes it puts there; the test is the shape that
+ * proves the store, not a check a caller can fail.
+ */
+const hkdfPut = (out: u8[], at: i32, byte: u8): i32 => {
+  if (at >= 0 && at < toI32(out.length)) {
+    out[at] = byte
+    return at + 1
+  }
+  return at
 }
 
 /**
@@ -177,17 +190,21 @@ export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | nul
   ) {
     return null
   }
-  const out: u8[] = new Array<u8>(length)
+  // At most 255 blocks of 48 bytes, so `toU16` keeps every length exactly.
+  const out: u8[] = new Array<u8>(toU16(length))
   const counter: u8[] = new Array<u8>(1)
   const counterLength: i32 = 1
   let previous: u8[] = []
   let at: i32 = 0
-  let i: i32 = 1
+  // At most 255, so the byte below is the counter itself.
+  let i: u32 = 1
   while (at < length) {
     const mac = new HmacSha256(prk)
     mac.update(previous, HKDF_FROM, toI32(previous.length))
     mac.update(info, HKDF_FROM, toI32(info.length))
-    counter[0] = toU8(i)
+    if (toI32(counter.length) >= 1) {
+      counter[0] = toU8(i)
+    }
     mac.update(counter, HKDF_FROM, counterLength)
     const block: u8[] = mac.digest()
     wipe(previous)
@@ -220,17 +237,21 @@ export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | nul
   ) {
     return null
   }
-  const out: u8[] = new Array<u8>(length)
+  // At most 255 blocks of 48 bytes, so `toU16` keeps every length exactly.
+  const out: u8[] = new Array<u8>(toU16(length))
   const counter: u8[] = new Array<u8>(1)
   const counterLength: i32 = 1
   let previous: u8[] = []
   let at: i32 = 0
-  let i: i32 = 1
+  // At most 255, so the byte below is the counter itself.
+  let i: u32 = 1
   while (at < length) {
     const mac = new HmacSha384(prk)
     mac.update(previous, HKDF_FROM, toI32(previous.length))
     mac.update(info, HKDF_FROM, toI32(info.length))
-    counter[0] = toU8(i)
+    if (toI32(counter.length) >= 1) {
+      counter[0] = toU8(i)
+    }
     mac.update(counter, HKDF_FROM, counterLength)
     const block: u8[] = mac.digest()
     wipe(previous)
@@ -411,22 +432,18 @@ const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u
   const full: string = `${HKDF_LABEL_PREFIX}${label}`
   const fullLength: i32 = toI32(full.length)
   const contextLength: i32 = toI32(context.length)
-  const out: u8[] = new Array<u8>(4 + fullLength + contextLength)
-  out[0] = toU8(length >> 8)
-  out[1] = toU8(length & 0xff)
-  out[2] = toU8(fullLength)
-  for (let k: i32 = 0; k < fullLength; k += 1) {
-    // `out` is longer than `3 + fullLength`, but the proof cannot read that
-    // off the sum it was allocated with; this test is what proves the store.
-    // It sits in the body rather than the loop condition, which stays the
-    // plain `k < fullLength` the attribute pass counts as a bounded loop.
-    if (3 + k >= toI32(out.length)) {
-      panic("hkdfLabel: the label overran its buffer")
-    }
-    out[3 + k] = toU8(toI32(full.charCodeAt(k)))
+  // At most 4 + 255 + 255 bytes after the tests above, so the `u32` sum is
+  // exact and `toU16` keeps it.
+  const out: u8[] = new Array<u8>(toU16(toU32(fullLength) + toU32(contextLength) + 4))
+  let p: i32 = hkdfPut(out, 0, toU8(length >> 8))
+  p = hkdfPut(out, p, toU8(length & 0xff))
+  p = hkdfPut(out, p, toU8(fullLength))
+  for (let k: i32 = 0; k < fullLength && p >= 0 && p < toI32(out.length); k += 1) {
+    out[p] = toU8(toI32(full.charCodeAt(k)))
+    p += 1
   }
-  out[3 + fullLength] = toU8(contextLength)
-  hkdfAppend(out, 4 + fullLength, context)
+  p = hkdfPut(out, p, toU8(contextLength))
+  hkdfAppend(out, p, context)
   return out
 }
 
@@ -637,6 +654,15 @@ const hkdfMacUpdate = (s: HkdfScratch, hashLength: i32, data: u8[], off: i32, le
   }
 }
 
+/** Feeds the whole of `data`, at any length, to the scratch's HMAC for `hashLength`. */
+const hkdfMacUpdateAll = (s: HkdfScratch, hashLength: i32, data: u8[]): void => {
+  if (hashLength === SHA384_SIZE) {
+    s.sha384.inner.engine.absorbAll(data)
+  } else {
+    s.sha256.inner.updateAll(data)
+  }
+}
+
 /** Writes the HMAC for `hashLength`'s tag at `out[at]`. */
 const hkdfMacFinish = (s: HkdfScratch, hashLength: i32, out: u8[], at: i32): void => {
   if (hashLength === SHA384_SIZE) {
@@ -650,8 +676,8 @@ const hkdfMacFinish = (s: HkdfScratch, hashLength: i32, out: u8[], at: i32): voi
  * HKDF-Extract (RFC 5869 §2.2) over the hash `hashLength` names, the PRK's
  * HashLen bytes written at `out[at]`. An empty `salt` keys HMAC with no bytes,
  * which HMAC pads to the block with zeros, exactly as the HashLen zeros §2.2
- * asks for would be. An `ikm` longer than 2^31 - 1 bytes panics, as
- * `hmacSha256` does.
+ * asks for would be. The whole `ikm` is hashed, at any length, as
+ * `hmacSha256` hashes its message.
  *
  * @param s The scratch to compute in; what the call leaves in it is wiped.
  * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
@@ -671,11 +697,8 @@ export const hkdfExtractInto = (
 ): void => {
   hkdfCheckHash("hkdfExtractInto", hashLength)
   hkdfCheckOutput("hkdfExtractInto", out, at, hashLength)
-  if (ikm.length > 2147483647) {
-    panic("hkdfExtractInto: input keying material longer than 2^31 - 1 bytes")
-  }
   hkdfMacBegin(s, hashLength, salt, HKDF_FROM, toI32(salt.length))
-  hkdfMacUpdate(s, hashLength, ikm, HKDF_FROM, toI32(ikm.length))
+  hkdfMacUpdateAll(s, hashLength, ikm)
   hkdfMacFinish(s, hashLength, out, at)
   hkdfWipe(s, hashLength)
 }
@@ -696,19 +719,30 @@ const hkdfExpandWindow = (
   length: i32
 ): void => {
   const counterLength: i32 = 1
+  // `p` runs through the window `out[at .. at + length)`; the bounds on it in
+  // the loops only let the prover see what the callers checked. The counter is
+  // a `u32`, which wraps rather than overflows; it never passes 255.
+  let p: i32 = at
   let done: i32 = 0
-  let i: i32 = 1
-  while (done < length) {
+  let i: u32 = 1
+  while (done < length && p >= 0 && p < toI32(out.length)) {
     hkdfMacBegin(s, hashLength, prk, HKDF_FROM, toI32(prk.length))
     if (i > 1) {
       hkdfMacUpdate(s, hashLength, s.previous, HKDF_FROM, hashLength)
     }
     hkdfMacUpdate(s, hashLength, info, HKDF_FROM, infoLen)
-    s.counter[0] = toU8(i)
+    if (toI32(s.counter.length) >= 1) {
+      s.counter[0] = toU8(i)
+    }
     hkdfMacUpdate(s, hashLength, s.counter, HKDF_FROM, counterLength)
     hkdfMacFinish(s, hashLength, s.previous, HKDF_FROM)
-    for (let k: i32 = 0; k < hashLength && done < length && k < toI32(s.previous.length); k += 1) {
-      out[at + done] = s.previous[k]
+    for (
+      let k: i32 = 0;
+      k < hashLength && done < length && p >= 0 && p < toI32(out.length) && k < toI32(s.previous.length);
+      k += 1
+    ) {
+      out[p] = s.previous[k]
+      p += 1
       done += 1
     }
     i += 1
@@ -747,7 +781,7 @@ export const hkdfExpandInto = (
   hkdfCheckHash("hkdfExpandInto", hashLength)
   if (
     length < 0 ||
-    length > HKDF_MAX_BLOCKS * hashLength ||
+    length > (hashLength === SHA384_SIZE ? HKDF_MAX_BLOCKS * SHA384_SIZE : HKDF_MAX_BLOCKS * SHA256_SIZE) ||
     info.length > 2147483647 ||
     toI32(prk.length) < hashLength
   ) {
@@ -800,8 +834,8 @@ export const hkdfExpandLabelInto = (
   if (
     contextOff < 0 ||
     contextLen < 0 ||
-    contextOff > toI32(context.length) - contextLen ||
-    contextLen > 255
+    contextLen > 255 ||
+    contextOff > toI32(context.length) - contextLen
   ) {
     panic("hkdfExpandLabelInto: the context window is outside its array or longer than 255 bytes")
   }
@@ -809,26 +843,32 @@ export const hkdfExpandLabelInto = (
     panic("hkdfExpandLabelInto: a secret shorter than HashLen")
   }
   hkdfCheckOutput("hkdfExpandLabelInto", out, at, length)
-  // The `HkdfLabel` struct, as `hkdfLabel` builds it, into the scratch.
-  const prefixLength: i32 = toI32(HKDF_LABEL_PREFIX.length)
+  // The `HkdfLabel` struct, as `hkdfLabel` builds it, into the scratch, whose
+  // HKDF_LABEL_MAX bytes hold the longest one the tests above let through.
+  const prefix: string = HKDF_LABEL_PREFIX
+  const prefixLength: i32 = toI32(prefix.length)
   const labelLength: i32 = toI32(label.length)
-  const fullLength: i32 = prefixLength + labelLength
   const info: u8[] = s.label
-  info[0] = toU8(length >> 8)
-  info[1] = toU8(length & 0xff)
-  info[2] = toU8(fullLength)
-  for (let k: i32 = 0; k < prefixLength && 3 + k < toI32(info.length); k += 1) {
-    info[3 + k] = toU8(toI32(HKDF_LABEL_PREFIX.charCodeAt(k)))
+  const infoLength: i32 = toI32(info.length)
+  let p: i32 = hkdfPut(info, 0, toU8(length >> 8))
+  p = hkdfPut(info, p, toU8(length & 0xff))
+  p = hkdfPut(info, p, toU8(toU32(prefixLength) + toU32(labelLength)))
+  for (let k: i32 = 0; k < prefixLength && p >= 0 && p < infoLength; k += 1) {
+    info[p] = toU8(toI32(prefix.charCodeAt(k)))
+    p += 1
   }
-  for (let k: i32 = 0; k < labelLength && 3 + prefixLength + k < toI32(info.length); k += 1) {
-    info[3 + prefixLength + k] = toU8(toI32(label.charCodeAt(k)))
+  for (let k: i32 = 0; k < labelLength && p >= 0 && p < infoLength; k += 1) {
+    info[p] = toU8(toI32(label.charCodeAt(k)))
+    p += 1
   }
-  const contextAt: i32 = 3 + fullLength
-  info[contextAt] = toU8(contextLen)
-  for (let k: i32 = 0; k < contextLen && contextAt + 1 + k < toI32(info.length); k += 1) {
-    info[contextAt + 1 + k] = context[contextOff + k]
+  p = hkdfPut(info, p, toU8(contextLen))
+  let q: i32 = contextOff
+  for (let k: i32 = 0; k < contextLen && q >= 0 && q < toI32(context.length) && p >= 0 && p < infoLength; k += 1) {
+    info[p] = context[q]
+    p += 1
+    q += 1
   }
-  hkdfExpandWindow(s, hashLength, prk, info, contextAt + 1 + contextLen, out, at, length)
+  hkdfExpandWindow(s, hashLength, prk, info, p, out, at, length)
 }
 
 // ---- From and into a held `Secret` -----------------------------------------
@@ -868,7 +908,7 @@ const hkdfHeldDerive = (
       : exposeWith(prk, request, hkdfExpandSha384Exposed)
   if (okm === null) {
     panic(
-      `${caller}: a secret shorter than ${hashLength} bytes, or more than ${255 * hashLength} bytes asked`
+      `${caller}: a secret shorter than ${hashLength} bytes, or more than ${toU32(hashLength) * 255} bytes asked`
     )
   }
   return okm
@@ -965,8 +1005,6 @@ export const hkdfExpandLabelHeldInto = (
 ): void => {
   hkdfCheckOutput("hkdfExpandLabelHeldInto", out, at, length)
   const okm: u8[] = hkdfHeldDerive("hkdfExpandLabelHeldInto", hashLength, prk, label, context, length)
-  for (let k: i32 = 0; k < length && k < toI32(okm.length); k++) {
-    out[at + k] = okm[k]
-  }
+  hkdfAppend(out, at, okm)
   wipe(okm)
 }
