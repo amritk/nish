@@ -1350,7 +1350,7 @@ const tlsPutLength = (out: u8[], start: i32, end: i32, width: i32): i32 => {
     return -1
   }
   let n: i32 = end - start
-  if (n >= 1 << (8 * width)) {
+  if (n > 16777215 || (width === 1 && n > 255) || (width === 2 && n > 65535)) {
     return -1
   }
   for (let k: i32 = 1; k <= width; k++) {
