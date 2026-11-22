@@ -190,8 +190,8 @@ Low-Level Date Algorithms"), step for step and with its constants, which
 its author donated to the public domain: days are counted from 0000-03-01,
 so a leap day is the last day of its year and a 400-year era is always
 146,097 days long. Every step
-is `i64` arithmetic on numbers that are not negative, so `--number-mode
-f64` writes the same bytes.
+is `u64` arithmetic on numbers that never wrap, so `--number-mode f64`
+writes the same bytes.
 
 ```ts
 const httpDateWrite: (

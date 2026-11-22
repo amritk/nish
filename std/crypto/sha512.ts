@@ -260,27 +260,15 @@ const sha384Initial = (): u64[] => [
   w64(0x47b5481d, 0xbefa4fa4),
 ]
 
-/** The big-endian 64-bit word at `buf[off]`. */
-const loadWord = (buf: u8[], off: i32): u64 => {
-  let word: u64 = 0
-  for (let i: i32 = 0; i < 8; i++) {
-    word = (word << 8) | toU64(buf[off + i])
-  }
-  return word
-}
-
-/** Writes `word` big-endian into `buf[off]` .. `buf[off + 7]`. */
-const storeWord = (buf: u8[], off: i32, word: u64): void => {
-  for (let i: i32 = 0; i < 8; i++) {
-    buf[off + i] = toU8(word >> toU64((7 - i) * 8))
-  }
-}
-
 /**
  * The state both hashes share: the hash value, the partial block, and the
  * message length in bytes. §5.1.2 appends the length in bits as 128 bits; a
  * byte count in a `u64` shifted left by three fills those 128 bits for any
  * message shorter than 2^64 bytes, which is every message there can be.
+ *
+ * No index in it is checked at run time: each read and write sits under a
+ * loop or block condition that proves it in range, and every caller's
+ * arguments make that condition hold.
  */
 class Sha512Engine {
   state: u64[]
@@ -304,72 +292,86 @@ class Sha512Engine {
   private compress(src: u8[], off: i32): void {
     const w = this.schedule
     const h = this.state
-    const wLen: i32 = toI32(w.length)
-    for (let t: i32 = 0; t < 16 && t < wLen; t++) {
-      w[t] = loadWord(src, off + 8 * t)
+    const n: i32 = toI32(src.length)
+    if (toI32(h.length) >= 8 && toI32(w.length) >= 80) {
+      // Step 1: the sixteen big-endian words of the block (§3.1), then the
+      // rest of the schedule. `p < n - 7` proves each `src[p + k]`.
+      let p: i32 = off
+      for (let t: i32 = 0; t < 16 && p >= 0 && p < n - 7; t++) {
+        w[t] =
+          (toU64(src[p]) << 56) |
+          (toU64(src[p + 1]) << 48) |
+          (toU64(src[p + 2]) << 40) |
+          (toU64(src[p + 3]) << 32) |
+          (toU64(src[p + 4]) << 24) |
+          (toU64(src[p + 5]) << 16) |
+          (toU64(src[p + 6]) << 8) |
+          toU64(src[p + 7])
+        p += 8
+      }
+      for (let t: i32 = 16; t < 80; t++) {
+        // Named offsets rather than `w[t - 2]`, so the bounds prover sees each index.
+        const t2: i32 = t - 2
+        const t7: i32 = t - 7
+        const t15: i32 = t - 15
+        const t16: i32 = t - 16
+        w[t] = smallSigma1(w[t2]) + w[t7] + smallSigma0(w[t15]) + w[t16]
+      }
+      let a = h[0]
+      let b = h[1]
+      let c = h[2]
+      let d = h[3]
+      let e = h[4]
+      let f = h[5]
+      let g = h[6]
+      let hh = h[7]
+      // §6.4.2 step 4, eight rounds per pass. Rather than shift eight words down
+      // each round, the rounds rename them: T1 accumulates in the word that
+      // becomes the new `a`, and the word that becomes the new `e` is `d + T1`,
+      // so after eight rounds every word is back in its own name. Each index is
+      // `u` minus a constant, which the bounds prover can see; `u + 1` it cannot.
+      for (let u: i32 = 7; u < 80; u += 8) {
+        const r0: i32 = u - 7
+        const r1: i32 = u - 6
+        const r2: i32 = u - 5
+        const r3: i32 = u - 4
+        const r4: i32 = u - 3
+        const r5: i32 = u - 2
+        const r6: i32 = u - 1
+        hh = hh + bigSigma1(e) + ((e & f) ^ (~e & g)) + roundConstant(r0) + w[r0]
+        d = d + hh
+        hh = hh + bigSigma0(a) + ((a & b) ^ (a & c) ^ (b & c))
+        g = g + bigSigma1(d) + ((d & e) ^ (~d & f)) + roundConstant(r1) + w[r1]
+        c = c + g
+        g = g + bigSigma0(hh) + ((hh & a) ^ (hh & b) ^ (a & b))
+        f = f + bigSigma1(c) + ((c & d) ^ (~c & e)) + roundConstant(r2) + w[r2]
+        b = b + f
+        f = f + bigSigma0(g) + ((g & hh) ^ (g & a) ^ (hh & a))
+        e = e + bigSigma1(b) + ((b & c) ^ (~b & d)) + roundConstant(r3) + w[r3]
+        a = a + e
+        e = e + bigSigma0(f) + ((f & g) ^ (f & hh) ^ (g & hh))
+        d = d + bigSigma1(a) + ((a & b) ^ (~a & c)) + roundConstant(r4) + w[r4]
+        hh = hh + d
+        d = d + bigSigma0(e) + ((e & f) ^ (e & g) ^ (f & g))
+        c = c + bigSigma1(hh) + ((hh & a) ^ (~hh & b)) + roundConstant(r5) + w[r5]
+        g = g + c
+        c = c + bigSigma0(d) + ((d & e) ^ (d & f) ^ (e & f))
+        b = b + bigSigma1(g) + ((g & hh) ^ (~g & a)) + roundConstant(r6) + w[r6]
+        f = f + b
+        b = b + bigSigma0(c) + ((c & d) ^ (c & e) ^ (d & e))
+        a = a + bigSigma1(f) + ((f & g) ^ (~f & hh)) + roundConstant(u) + w[u]
+        e = e + a
+        a = a + bigSigma0(b) + ((b & c) ^ (b & d) ^ (c & d))
+      }
+      h[0] = h[0] + a
+      h[1] = h[1] + b
+      h[2] = h[2] + c
+      h[3] = h[3] + d
+      h[4] = h[4] + e
+      h[5] = h[5] + f
+      h[6] = h[6] + g
+      h[7] = h[7] + hh
     }
-    for (let t: i32 = 16; t < wLen; t++) {
-      // Named offsets rather than `w[t - 2]`, so the bounds prover sees each index.
-      const t2: i32 = t - 2
-      const t7: i32 = t - 7
-      const t15: i32 = t - 15
-      const t16: i32 = t - 16
-      w[t] = smallSigma1(w[t2]) + w[t7] + smallSigma0(w[t15]) + w[t16]
-    }
-    let a = h[0]
-    let b = h[1]
-    let c = h[2]
-    let d = h[3]
-    let e = h[4]
-    let f = h[5]
-    let g = h[6]
-    let hh = h[7]
-    // §6.4.2 step 4, eight rounds per pass. Rather than shift eight words down
-    // each round, the rounds rename them: T1 accumulates in the word that
-    // becomes the new `a`, and the word that becomes the new `e` is `d + T1`,
-    // so after eight rounds every word is back in its own name. Each index is
-    // `u` minus a constant, which the bounds prover can see; `u + 1` it cannot.
-    for (let u: i32 = 7; u < ROUNDS && u < wLen; u += 8) {
-      const r0: i32 = u - 7
-      const r1: i32 = u - 6
-      const r2: i32 = u - 5
-      const r3: i32 = u - 4
-      const r4: i32 = u - 3
-      const r5: i32 = u - 2
-      const r6: i32 = u - 1
-      hh = hh + bigSigma1(e) + ((e & f) ^ (~e & g)) + roundConstant(r0) + w[r0]
-      d = d + hh
-      hh = hh + bigSigma0(a) + ((a & b) ^ (a & c) ^ (b & c))
-      g = g + bigSigma1(d) + ((d & e) ^ (~d & f)) + roundConstant(r1) + w[r1]
-      c = c + g
-      g = g + bigSigma0(hh) + ((hh & a) ^ (hh & b) ^ (a & b))
-      f = f + bigSigma1(c) + ((c & d) ^ (~c & e)) + roundConstant(r2) + w[r2]
-      b = b + f
-      f = f + bigSigma0(g) + ((g & hh) ^ (g & a) ^ (hh & a))
-      e = e + bigSigma1(b) + ((b & c) ^ (~b & d)) + roundConstant(r3) + w[r3]
-      a = a + e
-      e = e + bigSigma0(f) + ((f & g) ^ (f & hh) ^ (g & hh))
-      d = d + bigSigma1(a) + ((a & b) ^ (~a & c)) + roundConstant(r4) + w[r4]
-      hh = hh + d
-      d = d + bigSigma0(e) + ((e & f) ^ (e & g) ^ (f & g))
-      c = c + bigSigma1(hh) + ((hh & a) ^ (~hh & b)) + roundConstant(r5) + w[r5]
-      g = g + c
-      c = c + bigSigma0(d) + ((d & e) ^ (d & f) ^ (e & f))
-      b = b + bigSigma1(g) + ((g & hh) ^ (~g & a)) + roundConstant(r6) + w[r6]
-      f = f + b
-      b = b + bigSigma0(c) + ((c & d) ^ (c & e) ^ (d & e))
-      a = a + bigSigma1(f) + ((f & g) ^ (~f & hh)) + roundConstant(u) + w[u]
-      e = e + a
-      a = a + bigSigma0(b) + ((b & c) ^ (b & d) ^ (c & d))
-    }
-    h[0] = h[0] + a
-    h[1] = h[1] + b
-    h[2] = h[2] + c
-    h[3] = h[3] + d
-    h[4] = h[4] + e
-    h[5] = h[5] + f
-    h[6] = h[6] + g
-    h[7] = h[7] + hh
   }
 
   /** @internal Called by `Sha512` and `Sha384`, which hold the engine. */
@@ -377,36 +379,81 @@ class Sha512Engine {
     if (this.finished) {
       panic("sha512: update after digest")
     }
-    if (off < 0 || len < 0 || off > toI32(data.length) - len) {
+    const size: i32 = toI32(data.length)
+    if (off < 0 || len < 0 || off > size - len) {
       panic("sha512: the window is outside the buffer")
     }
     this.count = this.count + toU64(len)
-    let at = off
-    let left = len
-    if (this.filled > 0) {
-      const room: i32 = SHA512_BLOCK - this.filled
-      const take: i32 = left < room ? left : room
-      for (let i: i32 = 0; i < take; i++) {
-        this.block[this.filled + i] = data[at + i]
+    const block: u8[] = this.block
+    const room: i32 = toI32(block.length)
+    let at: i32 = off
+    let left: i32 = len
+    let fill: i32 = this.filled
+    // Top up a partly filled block first, so that the loop below only ever
+    // starts at a block boundary. Each loop's condition beyond its count is
+    // what proves its indices in range; the window check above makes it hold.
+    if (fill > 0) {
+      while (left > 0 && fill >= 0 && fill < SHA512_BLOCK && fill < room && at >= 0 && at < size) {
+        block[fill] = data[at]
+        fill += 1
+        at += 1
+        left -= 1
       }
-      this.filled = this.filled + take
-      at = at + take
-      left = left - take
-      if (this.filled < SHA512_BLOCK) {
+      if (fill < SHA512_BLOCK) {
+        this.filled = fill
         return
       }
-      this.compress(this.block, OFFSET_ZERO)
-      this.filled = 0
+      this.compress(block, OFFSET_ZERO)
     }
-    while (left >= SHA512_BLOCK) {
+    while (left >= 128 && at >= 0 && at <= size - 128) {
       this.compress(data, at)
-      at = at + SHA512_BLOCK
-      left = left - SHA512_BLOCK
+      at += 128
+      left -= 128
     }
-    for (let i: i32 = 0; i < left; i++) {
-      this.block[i] = data[at + i]
+    fill = 0
+    while (fill < left && fill < room && at >= 0 && at < size) {
+      block[fill] = data[at]
+      fill += 1
+      at += 1
     }
-    this.filled = left
+    this.filled = fill
+  }
+
+  /**
+   * Absorbs all of `data`. An array of up to 2^31 - 1 bytes goes through
+   * `absorb`. A longer one (possible under `--number-mode f64`, where `toI32`
+   * of its length would saturate and leave a prefix) is walked with a `number`
+   * offset instead, a block at a time through `block`, so it is absorbed
+   * whole. After `finish` it panics, as `absorb` does.
+   *
+   * @internal Called by `sha512`, `sha384` and `nish/crypto/hmac`.
+   */
+  absorbAll(data: u8[]): void {
+    const n: number = data.length
+    if (this.finished || n <= 2147483647) {
+      // A finished engine panics in `absorb` before it reads the window, so
+      // the saturated length of a longer array is never used.
+      this.absorb(data, OFFSET_ZERO, toI32(n))
+      return
+    }
+    this.count += toU64(toI64(n))
+    const block: u8[] = this.block
+    const room: i32 = toI32(block.length)
+    let fill: i32 = this.filled
+    let off: number = 0
+    while (true) {
+      while (fill >= 0 && fill < SHA512_BLOCK && fill < room && off >= 0 && off < n) {
+        block[fill] = data[off]
+        fill += 1
+        off += 1
+      }
+      if (fill < SHA512_BLOCK) {
+        this.filled = fill
+        return
+      }
+      this.compress(block, OFFSET_ZERO)
+      fill = 0
+    }
   }
 
   /**
@@ -416,48 +463,73 @@ class Sha512Engine {
    * @internal Called by `Sha512` and `Sha384`, which hold the engine.
    */
   copyInto(twin: Sha512Engine): void {
-    for (let i: i32 = 0; i < 8; i++) {
-      twin.state[i] = this.state[i]
+    const from: u64[] = this.state
+    const to: u64[] = twin.state
+    for (let i: i32 = 0; i < 8 && i < toI32(from.length) && i < toI32(to.length); i++) {
+      to[i] = from[i]
     }
-    for (let i: i32 = 0; i < this.filled; i++) {
-      twin.block[i] = this.block[i]
+    const fill: i32 = this.filled
+    const src: u8[] = this.block
+    const dst: u8[] = twin.block
+    for (let i: i32 = 0; i < fill && i < toI32(src.length) && i < toI32(dst.length); i++) {
+      dst[i] = src[i]
     }
-    twin.filled = this.filled
+    twin.filled = fill
     twin.count = this.count
     twin.finished = this.finished
   }
 
   /**
-   * Pads (§5.1.2), compresses what is left, and answers the first `size` bytes of H(N) (§6.4.2, §6.5).
+   * Pads (§5.1.2), compresses what is left, and writes the first
+   * `out.length / 8` words of H(N) (§6.4.2, §6.5), at most eight, into `out`.
    *
    * @internal Called by `Sha512` and `Sha384`, which hold the engine.
    */
-  finish(size: i32): u8[] {
+  finish(out: u8[]): void {
     if (this.finished) {
       panic("sha512: digest taken twice")
     }
     this.finished = true
     const block = this.block
-    const blockLen: i32 = toI32(block.length)
-    block[this.filled] = 0x80
-    for (let i: i32 = this.filled + 1; i >= 0 && i < blockLen; i++) {
-      block[i] = 0
+    const room: i32 = toI32(block.length)
+    const fill: i32 = this.filled
+    // The 0x80 that ends the message, then zeros to the end of the block.
+    for (let i: i32 = fill; i >= 0 && i < room; i++) {
+      block[i] = i === fill ? 0x80 : 0
     }
-    if (this.filled >= LENGTH_AT) {
+    if (fill >= LENGTH_AT) {
       this.compress(block, OFFSET_ZERO)
-      for (let i: i32 = 0; i < LENGTH_AT && i < blockLen; i++) {
+      for (let i: i32 = 0; i < LENGTH_AT && i < room; i++) {
         block[i] = 0
       }
     }
-    storeWord(block, LENGTH_AT, this.count >> 61)
-    storeWord(block, LENGTH_AT + 8, this.count << 3)
-    this.compress(block, OFFSET_ZERO)
-    // Both sizes are whole words, so the digest is the first `size / 8` of them.
-    const out = new Array<u8>(size)
-    for (let i: i32 = 0; i < size / 8 && i < 8; i++) {
-      storeWord(out, 8 * i, this.state[i])
+    // The length in bits, big-endian in the last 16 bytes: the top 64 bits are
+    // `count >> 61`, the bottom 64 are `count << 3`.
+    const high: u64 = this.count >> 61
+    const low: u64 = this.count << 3
+    let shift: u64 = 0
+    for (let i: i32 = 127; i >= 120 && i < room; i--) {
+      block[i] = toU8(low >> shift)
+      block[i - 8] = toU8(high >> shift)
+      shift += 8
     }
-    return out
+    this.compress(block, OFFSET_ZERO)
+    // Both sizes are whole words, so the digest is the first `out.length / 8`.
+    const state: u64[] = this.state
+    const size: i32 = toI32(out.length)
+    let p: i32 = 0
+    for (let i: i32 = 0; i < 8 && i < toI32(state.length) && p < size - 7; i++) {
+      const word: u64 = state[i]
+      out[p] = toU8(word >> 56)
+      out[p + 1] = toU8(word >> 48)
+      out[p + 2] = toU8(word >> 40)
+      out[p + 3] = toU8(word >> 32)
+      out[p + 4] = toU8(word >> 24)
+      out[p + 5] = toU8(word >> 16)
+      out[p + 6] = toU8(word >> 8)
+      out[p + 7] = toU8(word)
+      p += 8
+    }
   }
 }
 
@@ -514,7 +586,9 @@ export class Sha512 {
    * @returns A fresh 64-byte digest, which the caller owns.
    */
   digest(): u8[] {
-    return this.engine.finish(SHA512_SIZE)
+    const out: u8[] = new Array<u8>(SHA512_SIZE)
+    this.engine.finish(out)
+    return out
   }
 }
 
@@ -570,40 +644,35 @@ export class Sha384 {
    * @returns A fresh 48-byte digest, which the caller owns.
    */
   digest(): u8[] {
-    return this.engine.finish(SHA384_SIZE)
+    const out: u8[] = new Array<u8>(SHA384_SIZE)
+    this.engine.finish(out)
+    return out
   }
 }
 
 /**
  * The SHA-512 digest of all of `data`, as a fresh 64-byte array. An array
- * longer than 2^31 - 1 bytes panics, for the reason `sha256` gives: a longer
- * length does not survive `toI32` under `--number-mode f64`, and the digest
- * would be of a prefix.
+ * longer than 2^31 - 1 bytes (possible under `--number-mode f64`) is hashed
+ * whole, never cut to a prefix.
  *
  * @param data The whole message; it is read, not changed.
  * @returns A fresh 64-byte digest.
  */
 export const sha512 = (data: u8[]): u8[] => {
-  if (data.length > 2147483647) {
-    panic("sha512: a message longer than 2^31 - 1 bytes")
-  }
   const hasher = new Sha512()
-  hasher.update(data, OFFSET_ZERO, toI32(data.length))
+  hasher.engine.absorbAll(data)
   return hasher.digest()
 }
 
 /**
  * The SHA-384 digest of all of `data`, as a fresh 48-byte array. An array
- * longer than 2^31 - 1 bytes panics, as in `sha512`.
+ * longer than 2^31 - 1 bytes is hashed whole, as in `sha512`.
  *
  * @param data The whole message; it is read, not changed.
  * @returns A fresh 48-byte digest.
  */
 export const sha384 = (data: u8[]): u8[] => {
-  if (data.length > 2147483647) {
-    panic("sha384: a message longer than 2^31 - 1 bytes")
-  }
   const hasher = new Sha384()
-  hasher.update(data, OFFSET_ZERO, toI32(data.length))
+  hasher.engine.absorbAll(data)
   return hasher.digest()
 }

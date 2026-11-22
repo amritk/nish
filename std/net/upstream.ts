@@ -74,7 +74,7 @@
  *
  * Written from RFC 9110 and RFC 9112, not ported from another implementation.
  */
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
 import { DNS_RESOLVE_MAX_ADDRESSES } from "nish/net/dns-resolver"
 import { resolveHost } from "nish/net/dns"
@@ -88,7 +88,12 @@ import {
   HTTP1_NEED_MORE,
   HTTP1_NO_BODY,
 } from "nish/net/http1-codec"
-import { HTTP1_INFORMATIONAL, Http1ResponseParser, http1WriteRequestHead } from "nish/net/http1-client-codec"
+import {
+  HTTP1_E_BODY_LIMIT,
+  HTTP1_INFORMATIONAL,
+  Http1ResponseParser,
+  http1WriteRequestHead,
+} from "nish/net/http1-client-codec"
 import { OutboundPolicy, outboundAddressText, outboundFilter, outboundHostAllowed } from "nish/net/outbound"
 import { Url, urlParse } from "nish/net/url"
 import {
@@ -105,7 +110,7 @@ import { monotonicNanos } from "nish:process"
 
 /** The call was read to its end: `ok`. */
 export const UPSTREAM_E_NONE: i32 = 0
-// 1 to 17 are the codec's own `HTTP1_E_` refusals, passed through as they are.
+// 1 to 18 are the codec's own `HTTP1_E_` refusals, passed through as they are.
 /** The origin is not an `http:` URL with a host and nothing past its authority but `/`. */
 export const UPSTREAM_E_ORIGIN: i32 = 32
 /** The origin's host could not be looked up at start-up. */
@@ -136,6 +141,9 @@ const UPSTREAM_NS_PER_MS: i64 = 1000000
 const UPSTREAM_READ_CHUNK: i32 = 16384
 /** The largest body a call takes, whatever `maxBody` says: doubling the buffer up to it stays in i32's range. */
 const UPSTREAM_MAX_BODY: i64 = 1073741824
+
+/** Room for every address one lookup gives. */
+const UPSTREAM_ADDRESS_ROOM: i32 = DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES
 
 /** A connection with no socket. */
 const UPSTREAM_C_CLOSED: i32 = 0
@@ -207,13 +215,13 @@ export class UpstreamResponse {
   /**
    * An empty call slot; `Upstream` makes its pool of them.
    * @param index The slot's place in the pool.
-   * @param headRoom The most bytes the request head may take.
+   * @param headRoom The most bytes the request head may take; below 1, none.
    * @param placeholder The request the slot names until a call takes it.
    */
   constructor(index: i32, headRoom: i32, placeholder: HttpRequest) {
     this.index = index
     this.req = placeholder
-    this.head = new Array<u8>(headRoom)
+    this.head = upstreamBytes(headRoom)
     this.body = new Array<u8>(0)
   }
 }
@@ -260,9 +268,9 @@ export class Upstream {
   private calls: UpstreamResponse[]
   private free: i32[]
   /** Calls written into their slot and waiting for a connection, oldest first. */
-  private waiting: i32[]
+  private waiting: UpstreamQueue
   /** Calls ended and not yet taken, in the order they ended. */
-  private done: i32[]
+  private done: UpstreamQueue
   /** Why the origin is unusable; empty when it is not. For a log. */
   errorText: string = ""
   /** The handler turn `pump` last read. */
@@ -270,10 +278,6 @@ export class Upstream {
   /** Not `UPSTREAM_E_NONE` when the origin is unusable: every call then fails with it. */
   error: i32 = 0
   private freeCount: i32 = 0
-  private waitingStart: i32 = 0
-  private waitingCount: i32 = 0
-  private doneStart: i32 = 0
-  private doneCount: i32 = 0
 
   /**
    * Parses `origin`, looks its host up once (this blocks for at most
@@ -286,17 +290,17 @@ export class Upstream {
    * @param limits The pool's sizes, watch ids, deadlines and the codec's caps.
    */
   constructor(h: HttpHandler, origin: string, limits: UpstreamLimits) {
-    if (limits.connections < 1 || limits.calls < 1 || limits.maxHead < 1 || limits.timeoutMs < 1) {
+    // Read once into locals: the checks below then still hold after the calls that build the pool.
+    const connections: i32 = limits.connections
+    const slots: i32 = limits.calls
+    const firstId: i32 = limits.firstId
+    if (connections < 1 || slots < 1 || limits.maxHead < 1 || limits.timeoutMs < 1) {
       panic("Upstream: connections, calls, maxHead and timeoutMs must each be at least 1")
     }
-    // Each operand on its own: their sum could pass i32's range.
-    if (
-      limits.firstId < 0 ||
-      limits.connections > HANDLER_MAX_WATCHED ||
-      limits.firstId > HANDLER_MAX_WATCHED - limits.connections
-    ) {
+    // Both are in 0 .. 2^31, so their unsigned sum cannot wrap.
+    if (firstId < 0 || toU32(firstId) + toU32(connections) > toU32(HANDLER_MAX_WATCHED)) {
       panic(
-        `Upstream: watch ids ${limits.firstId} to ${limits.firstId + limits.connections - 1} are outside 0 to ${HANDLER_MAX_WATCHED - 1}`
+        `Upstream: ${connections} watch ids from ${firstId} are not all inside 0 to ${HANDLER_MAX_WATCHED - 1}`
       )
     }
     this.h = h
@@ -305,19 +309,25 @@ export class Upstream {
     this.hostNames = ["host"]
     this.hostValues = [""]
     this.connections = []
-    for (let k: i32 = 0; k < limits.connections; k += 1) {
-      this.connections.push(new UpstreamConnection(limits.firstId + k, upstreamParser(limits)))
+    for (let k: i32 = 0; k < connections; k += 1) {
+      // `firstId + k` is below `firstId + connections`, which the check above holds to HANDLER_MAX_WATCHED.
+      const id: i32 = toI32(toU32(firstId) + toU32(k))
+      this.connections.push(new UpstreamConnection(id, upstreamParser(limits)))
     }
     const placeholder: HttpRequest = new HttpRequest(-1)
     this.calls = []
-    this.free = new Array<i32>(limits.calls)
-    this.waiting = new Array<i32>(limits.calls)
-    this.done = new Array<i32>(limits.calls)
-    for (let k: i32 = 0; k < limits.calls; k += 1) {
-      this.calls.push(new UpstreamResponse(k, limits.maxHead, placeholder))
-      this.free[k] = limits.calls - 1 - k
+    const free: i32[] = upstreamSlots(slots)
+    for (let k: i32 = 0; k < slots && k < toI32(free.length); k += 1) {
+      // `k` is below `slots`, so `slots - 1 - k` is in 0 .. slots - 1 and the unsigned difference cannot wrap.
+      free[k] = toI32(toU32(slots) - 1 - toU32(k))
     }
-    this.freeCount = limits.calls
+    for (let k: i32 = 0; k < slots; k += 1) {
+      this.calls.push(new UpstreamResponse(k, limits.maxHead, placeholder))
+    }
+    this.free = free
+    this.waiting = new UpstreamQueue(upstreamSlots(slots))
+    this.done = new UpstreamQueue(upstreamSlots(slots))
+    this.freeCount = slots
     this.settle(origin)
   }
 
@@ -340,13 +350,13 @@ export class Upstream {
     const host: string = url.host
     const port: i32 = url.port >= 0 ? url.port : 80
     const named: string = host.indexOf(":") >= 0 ? `[${host}]` : host
-    this.hostValues[0] = url.port >= 0 ? `${named}:${port}` : named
+    this.hostValues = [url.port >= 0 ? `${named}:${port}` : named]
     const policy: OutboundPolicy | null = this.limits.outbound
     if (policy !== null && !outboundHostAllowed(policy, host)) {
       this.fail(UPSTREAM_E_BLOCKED, `${host} is not a host the outbound policy allows`)
       return
     }
-    const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+    const addresses: u8[] = new Array<u8>(UPSTREAM_ADDRESS_ROOM)
     const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
     const count: i32 = resolveHost(host, this.limits.lookupMs, port, addresses, ttls)
     if (count <= 0) {
@@ -368,7 +378,10 @@ export class Upstream {
         return
       }
     }
-    copyBytes(this.address, 0, addresses, 0, DNS_ADDRESS_BYTES)
+    // `usable` is at least 1 here, so the first address is filled and the copy does not fail.
+    if (!tryCopyBytes(this.address, 0, addresses, 0, DNS_ADDRESS_BYTES)) {
+      this.fail(UPSTREAM_E_LOOKUP, `${host} gave no address to copy`)
+    }
   }
 
   private fail(code: i32, text: string): void {
@@ -389,24 +402,38 @@ export class Upstream {
    * @returns `UPSTREAM_E_NONE` when the call started, `UPSTREAM_E_FULL` when no slot is free.
    */
   get(req: HttpRequest, path: string): i32 {
-    if (this.freeCount === 0) {
+    const count: i32 = this.freeCount
+    if (count <= 0) {
       return UPSTREAM_E_FULL
     }
-    this.freeCount -= 1
-    const r: UpstreamResponse = this.calls[this.free[this.freeCount]]
+    const top: i32 = count - 1
+    const free: i32[] = this.free
+    // The free list holds `calls` places and `freeCount` never passes it; this only lets the index be proven.
+    if (top >= toI32(free.length)) {
+      return UPSTREAM_E_FULL
+    }
+    const r: UpstreamResponse | null = this.slot(free[top])
+    // The free list holds only places of `calls`, so `r` is never null; the test proves the read.
+    if (r === null) {
+      return UPSTREAM_E_FULL
+    }
+    this.freeCount = top
     r.req = req
     r.ok = false
     r.status = 0
     r.error = UPSTREAM_E_NONE
     r.length = 0
     r.retried = false
-    r.deadline = monotonicNanos() + toI64(this.limits.timeoutMs) * UPSTREAM_NS_PER_MS
+    // The clock counts nanoseconds since boot and the span is under 2^52 ns, so the sum is far inside
+    // i64; added as u64 it is the same two's-complement sum without an overflow check.
+    const span: i64 = toI64(this.limits.timeoutMs) * UPSTREAM_NS_PER_MS
+    r.deadline = toI64(toU64(monotonicNanos()) + toU64(span))
     if (this.error !== UPSTREAM_E_NONE) {
       this.end(r, this.error)
       return UPSTREAM_E_NONE
     }
     // An origin-form target only: an absolute-form one would name another host on this pool's connection.
-    if (path.length === 0 || path.charCodeAt(0) !== 47) {
+    if (path.length <= 0 || path.charCodeAt(0) !== 47) {
       this.end(r, UPSTREAM_E_REQUEST)
       return UPSTREAM_E_NONE
     }
@@ -424,9 +451,7 @@ export class Upstream {
       return UPSTREAM_E_NONE
     }
     r.headLength = n
-    const at: i32 = (this.waitingStart + this.waitingCount) % toI32(this.waiting.length)
-    this.waiting[at] = r.index
-    this.waitingCount += 1
+    this.waiting.push(r.index)
     this.dispatch()
     return UPSTREAM_E_NONE
   }
@@ -437,7 +462,7 @@ export class Upstream {
    */
   ready(): boolean {
     this.pump()
-    return this.doneCount > 0
+    return this.done.count > 0
   }
 
   /**
@@ -445,12 +470,10 @@ export class Upstream {
    * @returns The call, with `ok`, `status` and its body, or `error` saying why it failed.
    */
   take(): UpstreamResponse {
-    if (!this.ready()) {
+    const r: UpstreamResponse | null = this.ready() ? this.slot(this.done.shift()) : null
+    if (r === null) {
       panic("Upstream.take: no call is ready")
     }
-    const r: UpstreamResponse = this.calls[this.done[this.doneStart]]
-    this.doneStart = (this.doneStart + 1) % toI32(this.done.length)
-    this.doneCount -= 1
     r.taken = true
     return r
   }
@@ -465,9 +488,15 @@ export class Upstream {
     if (!r.taken) {
       panic("Upstream.release: the call is not taken, or was released already")
     }
+    const top: i32 = this.freeCount
+    const free: i32[] = this.free
+    // A taken slot is not on the free list, so the list has room for it: this only lets the index be proven.
+    if (top < 0 || top >= toI32(free.length)) {
+      return
+    }
     r.taken = false
-    this.free[this.freeCount] = r.index
-    this.freeCount += 1
+    free[top] = r.index
+    this.freeCount = top + 1
   }
 
   /**
@@ -475,7 +504,8 @@ export class Upstream {
    * @returns The count of slots in use.
    */
   pending(): i32 {
-    return toI32(this.free.length) - this.freeCount
+    // `freeCount` stays in 0 .. free.length, so the unsigned difference cannot wrap.
+    return toI32(toU32(toI32(this.free.length)) - toU32(this.freeCount))
   }
 
   /**
@@ -483,13 +513,14 @@ export class Upstream {
    * @returns The count of open connections.
    */
   openConnections(): i32 {
-    let n: i32 = 0
+    // Counted unsigned: it is at most `connections.length`, so it cannot wrap.
+    let n: u32 = 0
     for (let k: i32 = 0; k < toI32(this.connections.length); k += 1) {
       if (this.connections[k].fd >= 0) {
         n += 1
       }
     }
-    return n
+    return toI32(n)
   }
 
   // ---- The loop ---------------------------------------------------------------
@@ -509,15 +540,20 @@ export class Upstream {
     const now: i64 = monotonicNanos()
     for (let k: i32 = 0; k < toI32(this.connections.length); k += 1) {
       const c: UpstreamConnection = this.connections[k]
-      if (c.call >= 0 && this.calls[c.call].deadline <= now) {
+      const r: UpstreamResponse | null = this.slot(c.call)
+      if (r !== null && r.deadline <= now) {
         this.finish(c, UPSTREAM_E_TIMEOUT)
       }
     }
     // Every call has the same timeout, so the oldest waiting call is the first to expire.
-    while (this.waitingCount > 0 && this.calls[this.waiting[this.waitingStart]].deadline <= now) {
-      const r: UpstreamResponse = this.calls[this.waiting[this.waitingStart]]
-      this.waitingStart = (this.waitingStart + 1) % toI32(this.waiting.length)
-      this.waitingCount -= 1
+    while (this.waiting.count > 0) {
+      const r: UpstreamResponse | null = this.slot(this.waiting.peek())
+      // `waiting` holds only places of `calls` and is not empty here, so `r` is never null;
+      // stopping on null leaves the ring as it is rather than spinning on a place it cannot read.
+      if (r === null || r.deadline > now) {
+        break
+      }
+      this.waiting.shift()
       this.end(r, UPSTREAM_E_TIMEOUT)
     }
     this.dispatch()
@@ -525,15 +561,12 @@ export class Upstream {
 
   /** Puts waiting calls on connections: a kept-alive one first, then a new one. */
   private dispatch(): void {
-    while (this.waitingCount > 0) {
+    while (this.waiting.count > 0) {
       const c: UpstreamConnection | null = this.idle()
       if (c === null) {
         return
       }
-      const index: i32 = this.waiting[this.waitingStart]
-      this.waitingStart = (this.waitingStart + 1) % toI32(this.waiting.length)
-      this.waitingCount -= 1
-      c.call = index
+      c.call = this.waiting.shift()
       c.sent = 0
       c.answered = false
       c.reused = c.state === UPSTREAM_C_IDLE
@@ -587,7 +620,7 @@ export class Upstream {
       this.finish(c, UPSTREAM_E_CONNECT)
       return
     }
-    if (pollAdd(this.h.loop, fd, UPSTREAM_WRITE, -2 - c.id) < 0) {
+    if (pollAdd(this.h.loop, fd, UPSTREAM_WRITE, upstreamToken(c.id)) < 0) {
       netClose(fd)
       this.finish(c, UPSTREAM_E_CONNECT)
       return
@@ -609,7 +642,8 @@ export class Upstream {
       }
       c.state = UPSTREAM_C_BUSY
     }
-    if (c.state === UPSTREAM_C_BUSY && c.call >= 0 && c.sent < this.calls[c.call].headLength) {
+    const r: UpstreamResponse | null = this.slot(c.call)
+    if (c.state === UPSTREAM_C_BUSY && r !== null && c.sent < r.headLength) {
       this.send(c)
       return
     }
@@ -618,9 +652,24 @@ export class Upstream {
 
   /** Writes what the socket takes of the call's head, then waits to read. */
   private send(c: UpstreamConnection): void {
-    const r: UpstreamResponse = this.calls[c.call]
-    while (c.sent < r.headLength) {
-      const n: i32 = netWrite(c.fd, r.head, c.sent, r.headLength - c.sent)
+    const r: UpstreamResponse | null = this.slot(c.call)
+    // `dispatch` sends only a connection it gave a place of `calls`, so `r` is never null.
+    if (r === null) {
+      this.finish(c, UPSTREAM_E_CLOSED)
+      return
+    }
+    const head: u8[] = r.head
+    const end: i32 = r.headLength
+    // `get` wrote `end` bytes into `head` and `sent` only grows to `end`, so this never fires.
+    if (c.sent < 0 || end > toI32(head.length)) {
+      this.finish(c, UPSTREAM_E_REQUEST)
+      return
+    }
+    let sent: i32 = c.sent
+    while (sent < end) {
+      // Unsigned, as `0 <= sent < end` makes the difference fit and the prover cannot relate the two.
+      const left: i32 = toI32(toU32(end) - toU32(sent))
+      const n: i32 = netWrite(c.fd, head, sent, left)
       if (n === UPSTREAM_WOULD_BLOCK) {
         this.interest(c, UPSTREAM_WRITE)
         return
@@ -629,7 +678,9 @@ export class Upstream {
         this.finish(c, UPSTREAM_E_CLOSED)
         return
       }
-      c.sent += n
+      // Unsigned, as `n <= left` keeps the sum at most `end`.
+      sent = toI32(toU32(sent) + toU32(n))
+      c.sent = sent
     }
     this.interest(c, UPSTREAM_READ)
   }
@@ -670,14 +721,22 @@ export class Upstream {
     const p: Http1ResponseParser = c.parser
     while (c.call >= 0) {
       const event: i32 = p.next()
-      const r: UpstreamResponse = this.calls[c.call]
+      const r: UpstreamResponse | null = this.slot(c.call)
       if (event === HTTP1_NEED_MORE) {
+        return
+      }
+      // The loop runs only while `c.call` is a place `dispatch` gave it, so `r` is never null.
+      if (r === null) {
+        this.finish(c, UPSTREAM_E_CLOSED)
         return
       }
       if (event === HTTP1_HEAD) {
         r.status = p.status
       } else if (event === HTTP1_BODY) {
-        upstreamAppend(r, p.body, p.bodyOff, p.bodyLen)
+        if (!upstreamAppend(r, p.body, p.bodyOff, p.bodyLen)) {
+          // The codec caps a body at `maxBody`, at most 1 GiB, so this is a body past the cap.
+          this.finish(c, HTTP1_E_BODY_LIMIT)
+        }
       } else if (event === HTTP1_END) {
         const again: boolean = p.keepAlive() && p.buffered() === 0
         this.finish(c, UPSTREAM_E_NONE)
@@ -708,15 +767,12 @@ export class Upstream {
    * safe to send again. Past its deadline it is not.
    */
   private finish(c: UpstreamConnection, code: i32): void {
-    if (c.call >= 0) {
-      const r: UpstreamResponse = this.calls[c.call]
-      c.call = -1
+    const r: UpstreamResponse | null = this.slot(c.call)
+    c.call = -1
+    if (r !== null) {
       if (code !== UPSTREAM_E_NONE && code !== UPSTREAM_E_TIMEOUT && c.reused && !c.answered && !r.retried) {
         r.retried = true
-        const length: i32 = toI32(this.waiting.length)
-        this.waitingStart = (this.waitingStart + length - 1) % length
-        this.waiting[this.waitingStart] = r.index
-        this.waitingCount += 1
+        this.waiting.unshift(r.index)
       } else {
         this.end(r, code)
       }
@@ -733,15 +789,24 @@ export class Upstream {
     if (!r.ok) {
       r.length = 0
     }
-    const at: i32 = (this.doneStart + this.doneCount) % toI32(this.done.length)
-    this.done[at] = r.index
-    this.doneCount += 1
+    this.done.push(r.index)
+  }
+
+  /**
+   * The call slot at `index`, or null for -1 (no call). Every index the pool
+   * stores is a slot's own, so null for any other value is only the proof's.
+   */
+  private slot(index: i32): UpstreamResponse | null {
+    if (index < 0 || index >= toI32(this.calls.length)) {
+      return null
+    }
+    return this.calls[index]
   }
 
   /** Watches `c` for `events` alone. */
   private interest(c: UpstreamConnection, events: i32): void {
     if (c.events !== events) {
-      pollModify(this.h.loop, c.fd, events, -2 - c.id)
+      pollModify(this.h.loop, c.fd, events, upstreamToken(c.id))
       c.events = events
     }
   }
@@ -775,21 +840,153 @@ const upstreamParser = (limits: UpstreamLimits): Http1ResponseParser => {
 }
 
 /**
+ * `n` zero bytes, none when `n` is below 1. Filled by `push`, so no `i32`
+ * length is computed for `new Array`.
+ */
+const upstreamBytes = (n: i32): u8[] => {
+  const a: u8[] = []
+  for (let i: i32 = 0; i < n; i += 1) {
+    a.push(0)
+  }
+  return a
+}
+
+/** Room for `n` slot indexes, filled the way `upstreamBytes` is. */
+const upstreamSlots = (n: i32): i32[] => {
+  const a: i32[] = []
+  for (let i: i32 = 0; i < n; i += 1) {
+    a.push(0)
+  }
+  return a
+}
+
+/**
+ * The poll token the handler's loop reports for watch id `id`: `-2 - id`.
+ * Watch ids are in 0 .. HANDLER_MAX_WATCHED, so the unsigned difference is
+ * that same small negative number and does not wrap past it.
+ */
+const upstreamToken = (id: i32): i32 => toI32(toU32(-2) - toU32(id))
+
+/**
+ * A ring of call slot indexes, one place per slot. Each slot sits in at most
+ * one ring at a time, so a ring is never full when a slot is put in it.
+ */
+class UpstreamQueue {
+  /** @internal */
+  items: i32[]
+  /** Where the oldest index sits. @internal */
+  start: i32 = 0
+  /** How many indexes the ring holds. @internal */
+  count: i32 = 0
+
+  constructor(items: i32[]) {
+    this.items = items
+  }
+
+  /** The place `offset` past `start`, or -1 when the ring cannot hold it. */
+  at(offset: i32): i32 {
+    const n: i32 = toI32(this.items.length)
+    if (this.start < 0 || this.start >= n || offset < 0 || offset >= n) {
+      return -1
+    }
+    // Both are below `n`, under 2^31, so the unsigned sum cannot wrap, and one lap brings it back under `n`.
+    const sum: u32 = toU32(this.start) + toU32(offset)
+    return toI32(sum < toU32(n) ? sum : sum - toU32(n))
+  }
+
+  /** Puts `index` last. */
+  push(index: i32): void {
+    const count: i32 = this.count
+    if (count < 0 || count >= toI32(this.items.length)) {
+      return
+    }
+    const at: i32 = this.at(count)
+    if (at >= 0 && at < toI32(this.items.length)) {
+      this.items[at] = index
+      this.count = count + 1
+    }
+  }
+
+  /** Puts `index` first. */
+  unshift(index: i32): void {
+    const count: i32 = this.count
+    const n: i32 = toI32(this.items.length)
+    if (count < 0 || count >= n) {
+      return
+    }
+    // One place back is `n - 1` places on, round the ring.
+    const at: i32 = this.at(n - 1)
+    if (at >= 0 && at < toI32(this.items.length)) {
+      this.items[at] = index
+      this.start = at
+      this.count = count + 1
+    }
+  }
+
+  /** The first index, or -1 when the ring is empty. */
+  peek(): i32 {
+    const items: i32[] = this.items
+    const start: i32 = this.start
+    if (this.count <= 0 || start < 0 || start >= toI32(items.length)) {
+      return -1
+    }
+    return items[start]
+  }
+
+  /** Takes the first index out, or -1 when the ring is empty. */
+  shift(): i32 {
+    const count: i32 = this.count
+    const first: i32 = this.peek()
+    if (first >= 0 && count > 0) {
+      // A ring of one place has no place 1 on: its next start is 0 again.
+      const next: i32 = this.at(toI32(1))
+      this.start = next >= 0 ? next : 0
+      this.count = count - 1
+    }
+    return first
+  }
+}
+
+/**
  * Appends `data[off .. off + len)` to `r`'s body, growing its buffer by
  * doubling when it is full: to under twice the body, and at least 1 KiB.
+ * False, with the body as it was, when the body would pass
+ * UPSTREAM_MAX_BODY or the window is outside `data`; the codec caps a body
+ * below that, so neither comes from a response it accepted.
  */
-const upstreamAppend = (r: UpstreamResponse, data: u8[], off: i32, len: i32): void => {
-  const need: i32 = r.length + len
-  if (need > toI32(r.body.length)) {
-    let size: i32 = toI32(r.body.length) < 1024 ? 1024 : toI32(r.body.length)
-    // `need` is at most UPSTREAM_MAX_BODY, 2^30, so `size` doubles to 2^30 at most.
+const upstreamAppend = (r: UpstreamResponse, data: u8[], off: i32, len: i32): boolean => {
+  const length: i32 = r.length
+  if (length < 0 || len < 0) {
+    return false
+  }
+  // Both are in 0 .. 2^31, so the unsigned sum cannot wrap.
+  const need: u32 = toU32(length) + toU32(len)
+  if (toI64(need) > UPSTREAM_MAX_BODY) {
+    return false
+  }
+  if (need > toU32(toI32(r.body.length))) {
+    let size: u32 = toI32(r.body.length) < 1024 ? 1024 : toU32(toI32(r.body.length))
+    // `need` is at most 2^30, so `size` doubles to under 2^31 and the unsigned product cannot wrap.
     while (size < need) {
       size = size * 2
     }
-    const grown: u8[] = new Array<u8>(size)
-    copyBytes(grown, 0, r.body, 0, r.length)
+    const old: u8[] = r.body
+    if (length > toI32(old.length)) {
+      return false
+    }
+    // Built by `push`, so no `i32` length is computed for `new Array`.
+    const grown: u8[] = []
+    for (let i: i32 = 0; i < length && i < toI32(old.length); i += 1) {
+      grown.push(old[i])
+    }
+    while (toU32(grown.length) < size) {
+      grown.push(0)
+    }
     r.body = grown
   }
-  copyBytes(r.body, r.length, data, off, len)
-  r.length = need
+  if (!tryCopyBytes(r.body, length, data, off, len)) {
+    return false
+  }
+  r.length = toI32(need)
+  return true
 }

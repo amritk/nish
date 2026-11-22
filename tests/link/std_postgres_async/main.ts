@@ -19,14 +19,15 @@
 //      connection, reconnecting as the pool empties.
 //   5. More hostile answers (docs/security/postgres.md, PG-28): bytes after a
 //      ReadyForQuery close the connection, and the next query is served on
-//      another; a cell past its frame, a length of -2, bytes after the last
-//      cell, an ErrorResponse field or field list that does not end, and a
-//      row whose column count changes fail PG_ERR_FRAME; a socket that closes
-//      mid-frame fails PG_ERR_CLOSED; a 20,000-byte row (the read buffer
-//      grows past 8192 and moves the rest of a message to its front) and a
-//      frame split across two reads are read whole; rows past
-//      `maxResultBytes` fail PG_ERR_TOO_BIG, the connection still reusable.
-//   6. A bounded wait: with the one live connection held and `claimWaitMs`
+//      another; a cell past its frame, a column count past its cells, a
+//      length of -2, bytes after the last cell, an ErrorResponse field or
+//      field list that does not end, and a row whose column count changes
+//      fail PG_ERR_FRAME; a socket that closes mid-frame fails
+//      PG_ERR_CLOSED; a 20,000-byte row (the read buffer grows past 8192 and
+//      moves the rest of a message to its front) and a frame split across
+//      two reads are read whole; rows past `maxResultBytes` fail
+//      PG_ERR_TOO_BIG, the connection still reusable.
+//   6. A bounded wait: with both live connections held and `claimWaitMs`
 //      at 40, a claim waits once on the pool's wake, which no release rings,
 //      and answers -2.
 //   7. A bounded connect: a listener that takes the connection but never
@@ -179,6 +180,7 @@ export async function main(): Promise<i32> {
     "trail",
     "quick",
     "cellpast",
+    "colpast",
     "negative",
     "slack",
     "unended",
@@ -206,10 +208,12 @@ export async function main(): Promise<i32> {
 
   pool.claimWaitMs = 40
   const held: i32 = await pgAsyncClaim(pool)
+  const other: i32 = await pgAsyncClaim(pool)
   const before: i32 = pool.waits
   const late: i32 = await pgAsyncClaim(pool)
   console.log(`a claim with every connection held: ${late} after ${pool.waits - before} wait`)
   pgAsyncRelease(pool, held, true)
+  pgAsyncRelease(pool, other, true)
   console.log(`statements seen: ${board.seen}`)
   console.log(`connections made: ${pool.connects}`)
   pool.close()

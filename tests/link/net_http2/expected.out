@@ -2,6 +2,8 @@ PASS  the server's preface is its SETTINGS, then a WINDOW_UPDATE raising the con
 PASS  the client's preface and SETTINGS are acknowledged, and are no event
 PASS  its SETTINGS_MAX_FRAME_SIZE is taken
 PASS  its acknowledgement puts the server's own settings in force, and says nothing
+PASS  23 bytes of the preface are waited on, with no frame and no event
+PASS  its 24th byte completes it, and the SETTINGS after it is acknowledged
 PASS  a GET with END_STREAM is a request that has ended
 PASS  its fields are the program's
 PASS  the response head
@@ -134,4 +136,4 @@ PASS  a byte moved puts its idle deadline off
 PASS  and a deadline gone by is now, never earlier
 PASS  timed out idle, it is sent GOAWAY NO_ERROR
 PASS  and once only
-http2 connection: 136 passed, 0 failed, 0 skipped
+http2 connection: 138 passed, 0 failed, 0 skipped

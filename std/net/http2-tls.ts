@@ -158,12 +158,13 @@ export class Http2TlsServer {
     first.pools = this.pools
   }
 
-  /** Makes the next slot's connection, on this pool's buffers and `date`. */
-  private build(): void {
+  /** Makes the next slot's connection, on this pool's buffers and `date`, and answers it. */
+  private build(): Http2Connection {
     const conn: Http2Connection = new Http2Connection(this.config)
     conn.date = this.date.current()
     conn.pools = this.pools
     this.connections.push(conn)
+    return conn
   }
 
   /** Whether `slot` holds a connection and its HTTP/2 side has been made. */
@@ -220,8 +221,15 @@ export class Http2TlsServer {
    */
   connection(slot: i32): Http2Connection {
     this.date.current()
-    const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : H2_TLS_ZERO
-    return this.connections[at]
+    const count: i32 = toI32(this.connections.length)
+    if (slot >= 0 && slot < count) {
+      return this.connections[slot]
+    }
+    // Slot 0's connection, made by the constructor, answers for any other slot, so this builds none.
+    if (toI32(this.connections.length) > 0) {
+      return this.connections[0]
+    }
+    return this.build()
   }
 
   /**
@@ -256,11 +264,13 @@ export class Http2TlsServer {
     }
     // `TlsTcpServer` hands out its lowest slots first, so this makes one
     // connection, unless a program accepted on `tls` itself.
-    while (toI32(this.connections.length) <= slot) {
+    while (toI32(this.connections.length) < slot) {
       this.build()
     }
-    this.connections[slot].restart()
-    this.connections[slot].begin(monotonicNanos())
+    const conn: Http2Connection =
+      slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
+    conn.restart()
+    conn.begin(monotonicNanos())
     return slot
   }
 
@@ -325,6 +335,10 @@ export class Http2TlsServer {
       return H2_ERROR
     }
     this.date.current()
+    // `live` checked the slot against the connections; restated here, after the calls, for the index.
+    if (slot < 0 || slot >= toI32(this.connections.length)) {
+      return H2_ERROR
+    }
     const conn: Http2Connection = this.connections[slot]
     // TLS decrypts straight into the connection's input, so a byte is
     // copied once on its way in.
@@ -374,9 +388,19 @@ export class Http2TlsServer {
     if (this.refused(slot)) {
       return this.tls.shutdown(slot)
     }
+    // `live` checked the slot against the connections; restated here, after the calls, for the index.
+    if (slot < 0 || slot >= toI32(this.connections.length)) {
+      return TLS_RECORD_DONE
+    }
     const conn: Http2Connection = this.connections[slot]
     while (conn.wantsWrite()) {
-      const n: i32 = this.tls.write(slot, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+      const start: i32 = conn.outputStart
+      const end: i32 = conn.outputEnd
+      if (start < 0 || end < start) {
+        break
+      }
+      // `start` is 0 or more and `end` at least `start`, so the unsigned difference is the held byte count.
+      const n: i32 = this.tls.write(slot, conn.output, start, toI32(toU32(end) - toU32(start)))
       if (n <= 0) {
         break
       }
@@ -423,8 +447,14 @@ export class Http2TlsServer {
     const config: Http2Config = this.config
     const shorter: i32 =
       config.settingsTimeout < config.idleTimeout ? config.settingsTimeout : config.idleTimeout
-    let soonest: i64 = now + toI64(shorter) * toI64(1000000)
-    let n: i32 = 0
+    // A timeout is an i32 of milliseconds, so the span is below 2^52 and the unsigned sum with a time of
+    // 0 or more cannot wrap; past the largest i64 it is held there.
+    const span: u64 = toU64(shorter > 0 ? shorter : H2_TLS_ZERO) * toU64(1000000)
+    const latest: u64 = toU64(now > 0 ? now : toI64(H2_TLS_ZERO)) + span
+    const largest: u64 = (toU64(1) << toU64(63)) - toU64(1)
+    let soonest: i64 = toI64(latest > largest ? largest : latest)
+    // At most one per slot, so the unsigned count cannot wrap.
+    let n: u32 = 0
     for (let k: i32 = 0; k < toI32(this.connections.length); k++) {
       if (this.tls.holds(k)) {
         const conn: Http2Connection = this.connections[k]
@@ -432,14 +462,14 @@ export class Http2TlsServer {
           conn.timeOut(now)
           this.flush(k)
           this.close(k)
-          n = n + 1
+          n += 1
         } else if (conn.expiresNoSooner(now) < soonest) {
           soonest = conn.expiresNoSooner(now)
         }
       }
     }
     this.expireAfter = soonest
-    return n
+    return toI32(n)
   }
 
   /**

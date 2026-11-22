@@ -49,7 +49,7 @@
  * in the `h2Holds` family.
  */
 
-import { copyBytes } from "nish/bytes"
+import { copyBytes, tryCopyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import {
   HANDLER_ABSENT,
@@ -140,6 +140,8 @@ const HTTP_SERVER_ZERO_DIGIT: i32 = 48
 
 /** The status a body past `maxBody` is answered with. */
 const HTTP_SERVER_TOO_LARGE: i32 = 413
+/** The status a request gets when no request record is free. */
+const HTTP_SERVER_UNAVAILABLE: i32 = 503
 
 // A request's life: free, reading its body, whole but parked behind a full
 // output, queued for `take`, held by the program, streaming its response,
@@ -151,6 +153,14 @@ const HTTP_SERVER_QUEUED: i32 = 3
 const HTTP_SERVER_HELD: i32 = 4
 const HTTP_SERVER_STREAMING: i32 = 5
 const HTTP_SERVER_FLUSHING: i32 = 6
+/** `checkParam`'s `end` for a parameter's start offset (an i32 under `--number-mode f64`). */
+const HTTP_SERVER_PARAM_START: i32 = 0
+/** `checkParam`'s `end` for a parameter's end offset. */
+const HTTP_SERVER_PARAM_END: i32 = 1
+/** `spanAt`'s `part` for a field value's start offset. */
+const HTTP_SERVER_VALUE_START: i32 = 2
+/** `spanAt`'s `part` for a field value's end offset. */
+const HTTP_SERVER_VALUE_END: i32 = 3
 
 // Which carrier a request came in on.
 const HTTP_SERVER_H1: i32 = 1
@@ -443,8 +453,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` of the parameter's first raw byte
    */
   paramStart(k: i32): i32 {
-    this.checkParam(k)
-    return this.params[2 * k]
+    return this.checkParam(k, HTTP_SERVER_PARAM_START)
   }
 
   /**
@@ -453,8 +462,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` just past the parameter's last raw byte
    */
   paramEnd(k: i32): i32 {
-    this.checkParam(k)
-    return this.params[2 * k + 1]
+    return this.checkParam(k, HTTP_SERVER_PARAM_END)
   }
 
   /**
@@ -464,8 +472,12 @@ export class HttpServerRequest {
    * @returns true when the raw parameter bytes are exactly `text`
    */
   paramIs(k: i32, text: string): boolean {
-    this.checkParam(k)
-    return httpServerSpanIs(this.head, this.params[2 * k], this.params[2 * k + 1], text)
+    return httpServerSpanIs(
+      this.head,
+      this.checkParam(k, HTTP_SERVER_PARAM_START),
+      this.checkParam(k, HTTP_SERVER_PARAM_END),
+      text
+    )
   }
 
   /**
@@ -477,8 +489,12 @@ export class HttpServerRequest {
    * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
-    this.checkParam(k)
-    return routerDecode(this.head, this.params[2 * k], this.params[2 * k + 1], out)
+    return routerDecode(
+      this.head,
+      this.checkParam(k, HTTP_SERVER_PARAM_START),
+      this.checkParam(k, HTTP_SERVER_PARAM_END),
+      out
+    )
   }
 
   /**
@@ -487,14 +503,27 @@ export class HttpServerRequest {
    * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
    */
   paramDecimal(k: i32): i32 {
-    this.checkParam(k)
-    return httpServerDecimal(this.head, this.params[2 * k], this.params[2 * k + 1])
+    return httpServerDecimal(
+      this.head,
+      this.checkParam(k, HTTP_SERVER_PARAM_START),
+      this.checkParam(k, HTTP_SERVER_PARAM_END)
+    )
   }
 
-  private checkParam(k: i32): void {
-    if (k < 0 || k >= this.paramCount) {
+  /**
+   * Parameter `k`'s start (`end` 0) or end (`end` 1) offset in `head`.
+   * Panics on a parameter the route does not have. `params` holds two
+   * entries for each of the router's parameters, so the bound on its length
+   * never refuses a `k` below `paramCount`.
+   */
+  private checkParam(k: i32, end: i32): i32 {
+    const params: i32[] = this.params
+    const wide: i64 = toI64(k) * toI64(2) + toI64(end)
+    const at: i32 = wide < toI64(0) || wide >= toI64(params.length) ? -1 : toI32(wide)
+    if (k < 0 || k >= this.paramCount || at < 0 || at >= toI32(params.length)) {
       panic(`HttpServerRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
     }
+    return params[at]
   }
 
   /**
@@ -531,21 +560,30 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` where the matching `name=value` pair starts, or -1 when none matches
    */
   queryIndex(name: string): i32 {
-    let at: i32 = this.pathEnd + 1
+    const head: u8[] = this.head
+    // Each scan below also stops at the end of `head`, so `end` needs no clamp.
     const end: i32 = this.targetEnd
-    while (at < end) {
+    const from: i32 = this.pathEnd
+    if (from >= end) {
+      return -1
+    }
+    let at: i32 = from < 0 ? 0 : from + 1
+    while (at >= 0 && at < end) {
       let pairEnd: i32 = at
-      while (pairEnd < end && toI32(this.head[pairEnd]) !== 38) {
+      while (pairEnd < end && pairEnd < toI32(head.length) && toI32(head[pairEnd]) !== 38) {
         pairEnd += 1
       }
       let keyEnd: i32 = at
-      while (keyEnd < pairEnd && toI32(this.head[keyEnd]) !== 61) {
+      while (keyEnd < pairEnd && keyEnd < toI32(head.length) && toI32(head[keyEnd]) !== 61) {
         keyEnd += 1
       }
-      if (httpServerFormIs(this.head, at, keyEnd, name)) {
+      if (httpServerFormIs(head, at, keyEnd, name)) {
         this.queryValueStart = keyEnd < pairEnd ? keyEnd + 1 : pairEnd
         this.queryValueEnd = pairEnd
         return at
+      }
+      if (pairEnd >= end) {
+        break
       }
       at = pairEnd + 1
     }
@@ -558,30 +596,44 @@ export class HttpServerRequest {
    * @returns the field's index for `valueStart` and `valueEnd`, or `HANDLER_ABSENT` when no field has the name
    */
   header(name: string): i32 {
-    for (let i: i32 = 0; i < this.headerCount; i++) {
-      if (httpServerSpanIs(this.head, this.spans[4 * i], this.spans[4 * i + 1], name)) {
+    const count: i32 = this.headerCount
+    // `spans` holds four entries per field, so `k` never stops the loop before `count` does.
+    let k: i32 = 0
+    for (let i: i32 = 0; i < count && k >= 0 && k < toI32(this.spans.length) - 3; i++) {
+      if (httpServerSpanIs(this.head, this.spans[k], this.spans[k + 1], name)) {
         return i
       }
+      k += 4
     }
     return HANDLER_ABSENT
   }
 
   /**
-   * Where field `i`'s value starts in `head`.
+   * Where field `i`'s value starts in `head`, or -1 when the request holds no field `i`.
    * @param i a field index, as `header` answered it
-   * @returns the byte offset in `head` of the value's first byte
+   * @returns the byte offset in `head` of the value's first byte, or -1 for an index `header` cannot answer
    */
   valueStart(i: i32): i32 {
-    return this.spans[4 * i + 2]
+    return this.spanAt(i, HTTP_SERVER_VALUE_START)
   }
 
   /**
-   * Where field `i`'s value ends in `head`.
+   * Where field `i`'s value ends in `head`, or -1 when the request holds no field `i`.
    * @param i a field index, as `header` answered it
-   * @returns the byte offset in `head` just past the value's last byte
+   * @returns the byte offset in `head` just past the value's last byte, or -1 for an index `header` cannot answer
    */
   valueEnd(i: i32): i32 {
-    return this.spans[4 * i + 3]
+    return this.spanAt(i, HTTP_SERVER_VALUE_END)
+  }
+
+  /** Entry `part` of field `i`'s four in `spans`, or -1 past the fields the request holds. */
+  private spanAt(i: i32, part: i32): i32 {
+    const wide: i64 = toI64(i) * toI64(4) + toI64(part)
+    const at: i32 = wide < toI64(0) || wide >= toI64(this.spans.length) ? -1 : toI32(wide)
+    if (i < 0 || i >= this.headerCount || at < 0 || at >= toI32(this.spans.length)) {
+      return -1
+    }
+    return this.spans[at]
   }
 
   /**
@@ -592,7 +644,15 @@ export class HttpServerRequest {
    */
   headerIs(name: string, value: string): boolean {
     const i: i32 = this.header(name)
-    return i >= 0 && httpServerSpanIs(this.head, this.spans[4 * i + 2], this.spans[4 * i + 3], value)
+    return (
+      i >= 0 &&
+      httpServerSpanIs(
+        this.head,
+        this.spanAt(i, HTTP_SERVER_VALUE_START),
+        this.spanAt(i, HTTP_SERVER_VALUE_END),
+        value
+      )
+    )
   }
 }
 /** Appends `bytes[start .. end)` to an `Allow` value, after a `, ` if it is not the first. */
@@ -619,34 +679,127 @@ const httpServerPendingSize = (have: i32, need: i64): i32 => {
   return size > toI64(HTTP_SERVER_MAX_BODY) ? HTTP_SERVER_MAX_BODY : toI32(size)
 }
 
+/**
+ * A zeroed array of `n` elements, `zero` each. The first 65535 come from
+ * one `new Array` whose `u16` length needs no runtime check; only a length
+ * past that, which a large `jsonBytes` or `maxHead` gives, pushes the rest.
+ * An `n` at or below 0 gives an empty array; one past `i32` stops there.
+ *
+ * @param n - the element count
+ * @param zero - the value of each element
+ * @returns the array
+ */
+const httpServerZeros = <T>(n: i64, zero: T): T[] => {
+  let want: i32 = 2147483647
+  if (n <= toI64(0)) {
+    want = 0
+  } else if (n < toI64(2147483647)) {
+    want = toI32(n)
+  }
+  const head: i32 = want >= 65535 ? 65535 : want
+  const out: T[] = new Array<T>(toU16(head))
+  for (let k = head; k < want; k++) {
+    out.push(zero)
+  }
+  return out
+}
+
+/**
+ * `n` zeroed cells, clamped to 0 through 65535, in an array no one else holds.
+ *
+ * `spans` takes its array from here rather than from `httpServerZeros`: an
+ * array a plain function returns from `new` is one `HttpServerRequest` can keep
+ * boxed inside the object (`src/inline-arrays.ts`), which saves a header and a
+ * load per field lookup.
+ *
+ * @param n - how many cells
+ * @returns `n` zeros, or 65535 of them past that, or none below 0
+ */
+const httpServerCells = (n: i64): i32[] => new Array<i32>(httpServerU16(n))
+
+/**
+ * `n` clamped to 0 through 65535.
+ *
+ * @param n - the count to clamp
+ * @returns `n` as a `u16`, 0 below 0 and 65535 above it
+ */
+const httpServerU16 = (n: i64): u16 => {
+  if (n <= toI64(0)) {
+    return toU16(0)
+  }
+  if (n >= toI64(65535)) {
+    return toU16(65535)
+  }
+  return toU16(toI32(n))
+}
+
+/**
+ * Cell `col` of row `row` in a table of rows `width` wide, as an index into
+ * its `length` elements, or -1 when that cell lies outside them.
+ *
+ * @param row - the row
+ * @param width - the elements per row
+ * @param col - the column within the row
+ * @param length - the table's element count
+ * @returns the index, or -1
+ */
+const httpServerCell = (row: i32, width: i32, col: i32, length: i32): i32 => {
+  const wide: i64 = toI64(row) * toI64(width) + toI64(col)
+  return wide < toI64(0) || wide >= toI64(length) ? -1 : toI32(wide)
+}
+
+/**
+ * The `monotonicNanos` instant `ns` nanoseconds after `at`. Worked in `u64`,
+ * whose wrapping sum has the bits of the signed one: an instant is centuries
+ * short of 2^63 and every delay a constant or a checked limit, so neither wraps.
+ */
+const httpServerAfter = (at: i64, ns: i64): i64 => toI64(toU64(at) + toU64(ns))
+
+/** `until - now` in nanoseconds, worked in `u64` for the same reason as `httpServerAfter`. */
+const httpServerLeft = (until: i64, now: i64): i64 => toI64(toU64(until) - toU64(now))
+
+/**
+ * Whether more than `ns` nanoseconds lie between the `monotonicNanos`
+ * instants `since` and `now`; a `now` at or before `since` is no time at all.
+ */
+const httpServerPast = (now: i64, since: i64, ns: i64): boolean =>
+  now > since && toU64(now) - toU64(since) > toU64(ns)
+
 /** Whether `bytes[start .. end)` is exactly `text`. */
 const httpServerSpanIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
   const n: i32 = toI32(text.length)
-  if (end - start !== n || start < 0 || end > toI32(bytes.length)) {
+  const size: i32 = toI32(bytes.length)
+  if (start < 0 || end > size || toI64(end) - toI64(start) !== toI64(n)) {
     return false
   }
-  for (let k: i32 = 0; k < n; k++) {
-    if (toI32(bytes[start + k]) !== toI32(text.charCodeAt(k))) {
+  let j: i32 = 0
+  for (let k: i32 = start; k < size && j < n; k++) {
+    if (toI32(bytes[k]) !== toI32(text.charCodeAt(j))) {
       return false
     }
+    j += 1
   }
-  return true
+  return j === n
 }
 
 /** `bytes[start .. end)` as a decimal number that is not negative and fits an `i32`, or -1. */
 const httpServerDecimal = (bytes: u8[], start: i32, end: i32): i32 => {
-  if (start < 0 || end <= start || end - start > 10 || end > toI32(bytes.length)) {
+  if (start < 0 || end <= start || toI64(end) - toI64(start) > toI64(10) || end > toI32(bytes.length)) {
     return -1
   }
-  let n: i64 = 0
+  let n: i32 = 0
   for (let k: i32 = start; k < end && k < toI32(bytes.length); k++) {
     const digit: i32 = toI32(bytes[k]) - 48
-    if (digit < 0 || digit > 9) {
+    if (digit < 0 || digit > 9 || n < 0 || n > 214748364) {
       return -1
     }
-    n = n * toI64(10) + toI64(digit)
+    const next: i64 = toI64(n) * toI64(10) + toI64(digit)
+    if (next > toI64(2147483647)) {
+      return -1
+    }
+    n = toI32(next)
   }
-  return n > toI64(2147483647) ? -1 : toI32(n)
+  return n
 }
 
 /**
@@ -654,6 +807,9 @@ const httpServerDecimal = (bytes: u8[], start: i32, end: i32): i32 => {
  * many bytes it took, packed as `byte | taken << 8`; -1 for a malformed escape.
  */
 const httpServerFormByte = (bytes: u8[], at: i32, end: i32): i32 => {
+  if (at < 0 || at >= toI32(bytes.length)) {
+    return -1 // outside the bytes: nothing there to decode
+  }
   const c: i32 = toI32(bytes[at])
   if (c === 43) {
     return 32 | HTTP_SERVER_TOOK_ONE
@@ -661,12 +817,12 @@ const httpServerFormByte = (bytes: u8[], at: i32, end: i32): i32 => {
   if (c !== 37) {
     return c | HTTP_SERVER_TOOK_ONE
   }
-  if (at + 2 >= end) {
+  if (at >= end - 2 || at >= toI32(bytes.length) - 2) {
     return -1
   }
   const hi: i32 = http1HexValue(toI32(bytes[at + 1]))
   const lo: i32 = http1HexValue(toI32(bytes[at + 2]))
-  if (hi < 0 || lo < 0) {
+  if (hi < 0 || lo < 0 || hi > 15 || lo > 15) {
     return -1
   }
   return (hi * 16 + lo) | HTTP_SERVER_TOOK_THREE
@@ -679,10 +835,16 @@ const httpServerFormIs = (bytes: u8[], start: i32, end: i32, name: string): bool
   let k: i32 = 0
   while (at < end) {
     const packed: i32 = httpServerFormByte(bytes, at, end)
-    if (packed < 0 || k >= n || (packed & 255) !== toI32(name.charCodeAt(k))) {
+    const took: i32 = packed >> 8
+    if (
+      packed < 0 ||
+      k >= n ||
+      (packed & 255) !== toI32(name.charCodeAt(k)) ||
+      toI64(took) > toI64(end) - toI64(at)
+    ) {
       return false
     }
-    at += packed >> 8
+    at = toI32(toI64(at) + toI64(took))
     k += 1
   }
   return k === n
@@ -694,10 +856,14 @@ const httpServerFormIs = (bytes: u8[], start: i32, end: i32, name: string): bool
  * route parameter's does.
  */
 const httpServerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 => {
+  // `queryIndex` found the span in the head, so this does not fire.
+  if (start < 0 || end < start) {
+    return ROUTER_BAD_ESCAPE
+  }
   const length: i32 = percentDecode(
     bytes,
     start,
-    end - start,
+    toI32(toI64(end) - toI64(start)),
     out,
     HTTP_SERVER_ZERO,
     URL_DECODE_FORM | URL_DECODE_ALLOW_NUL
@@ -708,10 +874,58 @@ const httpServerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32
   return length < 0 ? ROUTER_BAD_ESCAPE : length
 }
 
+/** The generation after `gen`: it only has to differ from the last one, so it wraps to 0 past i32. */
+const httpServerNextGen = (gen: i32): i32 => (gen < 2147483647 ? gen + 1 : 0)
+
+/** Entry `at` of the per-slot table `xs`, or -1 outside it. */
+const httpServerAt = (xs: i32[], at: i32): i32 => (at >= 0 && at < toI32(xs.length) ? xs[at] : -1)
+
+/** Adds `by` to entry `at` of the per-slot count `xs` and gives the new count, or -1 outside the table or past i32. */
+const httpServerAdd = (xs: i32[], at: i32, by: i32): i32 => {
+  if (at < 0 || at >= toI32(xs.length)) {
+    return -1
+  }
+  const next: i64 = toI64(xs[at]) + toI64(by)
+  if (next < -2147483648 || next > 2147483647) {
+    return -1
+  }
+  xs[at] = toI32(next)
+  return toI32(next)
+}
+
 /** Panics unless `limits.<name>`, `value`, is within `low` to `high`. */
 const httpServerLimit = (name: string, value: i32, low: i32, high: i32): void => {
   if (value < low || value > high) {
     panic(`HttpServer: limits.${name} ${value} is outside ${low} to ${high}`)
+  }
+}
+
+/**
+ * One HTTP/1.1 slot's bookkeeping beside the carrier's connection in it: the
+ * slot number, its generation, its request, and whether it is open, waits for
+ * a free request or is being driven. `listenHttp1` makes one per carrier slot.
+ */
+class HttpServerH1Slot {
+  /** The carrier's slot number. */
+  slot: i32
+  /** Bumped each time the slot closes, so an answer still owed to the connection before is dropped; it wraps. */
+  gen: i32 = 0
+  /** The request the slot is reading or answering, null for none. */
+  current: HttpServerRequest | null = null
+  /** Whether the carrier's connection in the slot is open. */
+  open: boolean = false
+  /** Whether it stopped reading for want of a free request and waits on `starved`. */
+  starved: boolean = false
+  /**
+   * 0 while no `drive` of it runs, 1 while one does, 2 once a call inside it
+   * (an answer screened while it reads) asked for another pass. The nested
+   * call only marks it, so the depth stays one however many screened
+   * requests one write pipelines.
+   */
+  driving: i32 = 0
+
+  constructor(slot: i32) {
+    this.slot = slot
   }
 }
 
@@ -723,9 +937,9 @@ const httpServerLimit = (name: string, value: i32, low: i32, high: i32): void =>
  */
 export class HttpServer {
   private router: Router
-  /** Every request of the pool, made up front, and the indices of the free ones. */
+  /** Every request of the pool, made up front, and the free ones. */
   private requests: HttpServerRequest[]
-  private free: i32[]
+  private free: HttpServerRequest[]
   /** Whole requests waiting for `take`, a ring of `queue.length` with `queueCount` from `queueStart`. */
   private queue: i32[]
   /** `pollWait`'s output. */
@@ -771,23 +985,13 @@ export class HttpServer {
   /** When `wait` next looks for timeouts. */
   private sweepAt: i64 = 0
 
-  // HTTP/1.1: the carrier, its listener, and per slot its generation, its request (-1 for none) and whether it is open.
+  // HTTP/1.1: the carrier, its listener, and a record per slot.
   private h1: Http1Server | null = null
   /** Per listener (`-100 - token`): when its rest for want of descriptors ends, 0 while it is not resting. */
   private restUntil: i64[]
-  private h1Gen: i32[]
-  private h1Current: i32[]
-  private h1Open: boolean[]
-  /** Slots that stopped reading for want of a free request, `starved`, and whether each is in it. */
-  private starved: i32[]
-  private h1Starved: boolean[]
-  /**
-   * Per slot: 0 while no `drive` of it runs, 1 while one does, 2 once a call
-   * inside it (an answer screened while it reads) asked for another pass.
-   * The nested call only marks it, so the depth stays one however many
-   * screened requests one write pipelines.
-   */
-  private h1Driving: i32[]
+  private h1Slots: HttpServerH1Slot[]
+  /** Slots that stopped reading for want of a free request, in the order they did. */
+  private starved: HttpServerH1Slot[]
 
   /** The response fields `start` hands the carrier, set for each response. */
   private outNames: u8[][]
@@ -890,16 +1094,17 @@ export class HttpServer {
     this.requests = []
     this.free = []
     for (let k: i32 = 0; k < limits.requests; k++) {
-      this.requests.push(new HttpServerRequest(k))
-      this.free.push(limits.requests - 1 - k)
+      const r: HttpServerRequest = new HttpServerRequest(k)
+      this.requests.push(r)
+      this.free.push(r)
     }
-    this.queue = new Array<i32>(limits.requests)
+    this.queue = httpServerZeros(toI64(limits.requests), toI32(0))
     this.streamRoutes = []
-    this.readyFds = new Array<i32>(2 * limits.maxEvents)
+    this.readyFds = httpServerZeros(toI64(2) * toI64(limits.maxEvents), toI32(0))
     this.watchedFired = new Array<boolean>(HANDLER_MAX_WATCHED)
-    this.scratch = new Array<u8>(limits.jsonBytes)
+    this.scratch = httpServerZeros(toI64(limits.jsonBytes), toU8(0))
     this.writer = new JsonWriter(this.scratch, HTTP_SERVER_ZERO)
-    this.probe = new Array<i32>(2 * router.maxParams + 2)
+    this.probe = httpServerZeros(toI64(2) * toI64(router.maxParams) + toI64(2), toI32(0))
     this.jsonType = httpFieldBytes("application/json")
     this.problemType = httpFieldBytes("application/problem+json")
     const contentType: u8[] = httpFieldBytes("content-type")
@@ -918,25 +1123,25 @@ export class HttpServer {
     this.outValuesBy = []
     this.digitBufs = []
     for (let d: i32 = 0; d <= 10; d++) {
-      this.digitBufs.push(new Array<u8>(d))
+      this.digitBufs.push(httpServerZeros(toI64(d), toU8(0)))
     }
     this.altSvcName = httpFieldBytes("alt-svc")
     this.altNames = [this.altSvcName]
-    this.altValues = [this.altSvcName]
+    const altValues: u8[][] = [this.altSvcName]
+    this.altValues = altValues
     if (this.altSvcMaxAge === 0) {
       this.altSvc = httpFieldBytes("clear")
-      this.altValues[0] = httpFieldBytes("clear")
+      const clear: u8[] = httpFieldBytes("clear")
+      if (toI32(altValues.length) > 0) {
+        altValues[0] = clear
+      }
     }
     this.contentLengthName = httpFieldBytes("content-length")
     this.hostName = httpFieldBytes("host")
     this.outNames = []
     this.outValues = []
-    this.h1Gen = []
-    this.h1Current = []
-    this.h1Open = []
+    this.h1Slots = []
     this.starved = []
-    this.h1Starved = []
-    this.h1Driving = []
     this.restUntil = new Array<i64>(4)
     this.h2Clear = []
     this.h2Gen = []
@@ -991,14 +1196,11 @@ export class HttpServer {
     this.h1 = new Http1Server(config, fd, slots)
     this.h1Fd = fd
     this.h1OutputSize = config.outputSize
-    this.h1Gen = new Array<i32>(slots)
-    this.h1Current = new Array<i32>(slots)
-    this.h1Open = new Array<boolean>(slots)
-    this.h1Starved = new Array<boolean>(slots)
-    this.h1Driving = new Array<i32>(slots)
+    const table: HttpServerH1Slot[] = []
     for (let s: i32 = 0; s < slots; s++) {
-      this.h1Current[s] = -1
+      table.push(new HttpServerH1Slot(s))
     }
+    this.h1Slots = table
     pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H1_LISTENER)
   }
 
@@ -1023,9 +1225,11 @@ export class HttpServer {
       panic("HttpServer.listenH2c: an h2c listener is already configured")
     }
     this.checkHttp2("listenH2c", config, slots)
-    this.h2cBase = this.h2Grow(slots, this.perOf(config))
-    for (let v: i32 = this.h2cBase; v < this.h2cBase + slots; v++) {
-      this.h2Clear[v] = true
+    const base: i32 = this.h2Grow(slots, this.perOf(config))
+    this.h2cBase = base
+    const clear: boolean[] = this.h2Clear
+    for (let v: i32 = base; v >= 0 && v < toI32(clear.length) && toI64(v) < toI64(base) + toI64(slots); v++) {
+      clear[v] = true
     }
     this.h2c = new Http2CleartextServer(config, fd, slots, this.prefaceTimeout)
     this.h2cFd = fd
@@ -1089,22 +1293,33 @@ export class HttpServer {
     const base: i32 = toI32(this.h2Open.length)
     const was: i32 = this.perConnection2
     const width: i32 = per > was ? per : was
-    const streams: i32[] = new Array<i32>((base + slots) * width)
-    const reqs: i32[] = new Array<i32>((base + slots) * width)
-    for (let e: i32 = 0; e < toI32(reqs.length); e++) {
-      reqs[e] = -1
-    }
+    const size: i64 = toI64(base) * toI64(width) + toI64(slots) * toI64(width)
+    const streams: i32[] = httpServerZeros(size, toI32(0))
+    const reqs: i32[] = httpServerZeros(size, toI32(-1))
+    const oldStreams: i32[] = this.h2Streams
+    const oldReqs: i32[] = this.h2Reqs
     for (let v: i32 = 0; v < base; v++) {
       for (let i: i32 = 0; i < was; i++) {
-        streams[v * width + i] = this.h2Streams[v * was + i]
-        reqs[v * width + i] = this.h2Reqs[v * was + i]
+        const to: i32 = httpServerCell(v, width, i, toI32(streams.length))
+        const from: i32 = httpServerCell(v, was, i, toI32(oldStreams.length))
+        if (
+          to >= 0 &&
+          to < toI32(streams.length) &&
+          to < toI32(reqs.length) &&
+          from >= 0 &&
+          from < toI32(oldStreams.length) &&
+          from < toI32(oldReqs.length)
+        ) {
+          streams[to] = oldStreams[from]
+          reqs[to] = oldReqs[from]
+        }
       }
     }
-    if (width !== was) {
+    if (width !== was && was > 0) {
       for (let k: i32 = 0; k < toI32(this.requests.length); k++) {
         const r: HttpServerRequest = this.requests[k]
         if (r.kind === HTTP_SERVER_H2 && r.entry >= 0) {
-          r.entry = (r.entry / was) * width + (r.entry % was)
+          r.entry = httpServerCell(r.entry / was, width, r.entry % was, toI32(streams.length))
         }
       }
     }
@@ -1157,10 +1372,10 @@ export class HttpServer {
     this.perConnection3 = per < toI64(1) ? 1 : toI32(per)
     this.h3 = new Http3Server(quic, config, fd, slots, entropy)
     this.h3Fd = fd
-    this.h3Gen = new Array<i32>(slots)
-    this.h3Count = new Array<i32>(slots)
-    this.h3Streams = new Array<i64>(slots * this.perConnection3)
-    this.h3Reqs = new Array<i32>(slots * this.perConnection3)
+    this.h3Gen = httpServerZeros(toI64(slots), toI32(0))
+    this.h3Count = httpServerZeros(toI64(slots), toI32(0))
+    this.h3Streams = httpServerZeros(toI64(slots) * toI64(this.perConnection3), toI64(0))
+    this.h3Reqs = httpServerZeros(toI64(slots) * toI64(this.perConnection3), toI32(0))
     for (let k: i32 = 0; k < toI32(this.h3Reqs.length); k++) {
       this.h3Reqs[k] = -1
     }
@@ -1174,7 +1389,10 @@ export class HttpServer {
   /** Sets the `alt-svc` value every HTTP/1.1 and HTTP/2 over TLS answer carries. */
   private setAltSvc(value: u8[]): void {
     this.altSvc = value
-    this.altValues[0] = value
+    const alt: u8[][] = this.altValues
+    if (toI32(alt.length) > 0) {
+      alt[0] = value
+    }
   }
 
   // ---- The loop -------------------------------------------------------------------
@@ -1200,7 +1418,8 @@ export class HttpServer {
    * @returns true when it was readable in the last turn; false for an id outside the range
    */
   fired(id: i32): boolean {
-    return id >= 0 && id < HANDLER_MAX_WATCHED && this.watchedFired[id]
+    const fired: boolean[] = this.watchedFired
+    return id >= 0 && id < toI32(fired.length) && fired[id]
   }
 
   /**
@@ -1233,8 +1452,10 @@ export class HttpServer {
 
   /** `waitSigned`'s turn, with no key under `wait`, which serves no listener that reads one. */
   private turnWith(timeoutMs: i32, key: Secret<u8[]> | null): i32 {
-    for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
-      this.watchedFired[id] = false
+    const fired: boolean[] = this.watchedFired
+    const watched: i32 = toI32(fired.length)
+    for (let id: i32 = 0; id < watched; id++) {
+      fired[id] = false
     }
     // A starved slot driven here may read a head, so it reads the clock of now.
     this.turnAt = monotonicNanos()
@@ -1257,9 +1478,16 @@ export class HttpServer {
     now = monotonicNanos()
     this.turnAt = now
     this.h3Readable = false
+    const ready: i32[] = this.readyFds
     for (let k: i32 = 0; k < n; k++) {
-      const token: i32 = this.readyFds[2 * k]
-      const events: i32 = this.readyFds[2 * k + 1]
+      // `pollWait` fills at most `slots / 2` pairs.
+      const at: i32 = toI32(toI64(2) * toI64(k))
+      const after: i32 = toI32(toI64(2) * toI64(k) + toI64(1))
+      if (at < 0 || at >= toI32(ready.length) || after < 0 || after >= toI32(ready.length)) {
+        break
+      }
+      const token: i32 = ready[at]
+      const events: i32 = ready[after]
       if (token === HTTP_SERVER_H1_LISTENER) {
         this.acceptHttp1()
       } else if (token === HTTP_SERVER_H2_LISTENER) {
@@ -1269,12 +1497,12 @@ export class HttpServer {
       } else if (token === HTTP_SERVER_H3_SOCKET) {
         this.h3Readable = true
       } else if (token <= -2 && token > HTTP_SERVER_H1_LISTENER) {
-        const id: i32 = -2 - token
-        if (id < HANDLER_MAX_WATCHED) {
-          this.watchedFired[id] = true
+        const id: i32 = toI32(toI64(-2) - toI64(token))
+        if (id >= 0 && id < toI32(fired.length)) {
+          fired[id] = true
         }
       } else if (token >= HTTP_SERVER_H2_BASE) {
-        this.h2Serve(token - HTTP_SERVER_H2_BASE, events, key)
+        this.h2Serve(toI32(toI64(token) - toI64(HTTP_SERVER_H2_BASE)), events, key)
       } else if (token >= 0) {
         this.h1Serve(token, events)
       }
@@ -1288,7 +1516,7 @@ export class HttpServer {
     }
     this.feedStarved()
     if (now >= this.sweepAt) {
-      this.sweepAt = now + HTTP_SERVER_SWEEP
+      this.sweepAt = httpServerAfter(now, HTTP_SERVER_SWEEP)
       this.expireAll(now)
     }
     return this.queueCount
@@ -1304,8 +1532,13 @@ export class HttpServer {
     if (this.connections() === 0) {
       return timeout
     }
-    const left: i64 = this.sweepAt - now
-    const cap: i32 = left <= 0 ? HTTP_SERVER_ZERO : toI32(left / HTTP_SERVER_NANOS_PER_MS) + 1
+    const left: i64 = httpServerLeft(this.sweepAt, now)
+    const ms: i64 = left / HTTP_SERVER_NANOS_PER_MS
+    const whole: i32 = ms >= 0 && ms < 2147483647 ? toI32(ms) : 2147483646
+    let cap: i32 = HTTP_SERVER_ZERO
+    if (left > 0 && whole < 2147483647) {
+      cap = whole + 1
+    }
     return timeout < 0 || cap < timeout ? cap : timeout
   }
 
@@ -1314,12 +1547,17 @@ export class HttpServer {
    * over, and answers `timeout` shortened to wake for that.
    */
   private restListener(fd: i32, token: i32, now: i64, timeout: i32): i32 {
-    const until: i64 = this.restUntil[HTTP_SERVER_H1_LISTENER - token]
+    const rests: i64[] = this.restUntil
+    const at: i32 = this.restAt(token)
+    if (at < 0 || at >= toI32(rests.length)) {
+      return timeout
+    }
+    const until: i64 = rests[at]
     if (until === 0 || fd < 0) {
       return timeout
     }
     if (now >= until) {
-      this.restUntil[HTTP_SERVER_H1_LISTENER - token] = 0
+      rests[at] = 0
       if (!this.draining) {
         pollAdd(this.loop, fd, H1_WANT_READ, token)
       }
@@ -1328,8 +1566,16 @@ export class HttpServer {
     if (this.draining) {
       return timeout
     }
-    const rest: i32 = toI32((until - now) / HTTP_SERVER_NANOS_PER_MS) + 1
+    const wait: i64 = httpServerLeft(until, now) / HTTP_SERVER_NANOS_PER_MS
+    const ms: i32 = wait >= 0 && wait < 2147483647 ? toI32(wait) : 2147483646
+    const rest: i32 = ms < 2147483647 ? ms + 1 : ms
     return timeout < 0 || rest < timeout ? rest : timeout
+  }
+
+  /** Where listener `token`'s deadline sits in `restUntil`, or -1 for a token that names no listener. */
+  private restAt(token: i32): i32 {
+    const at: i64 = toI64(HTTP_SERVER_H1_LISTENER) - toI64(token)
+    return at >= 0 && at < toI64(this.restUntil.length) ? toI32(at) : -1
   }
 
   /**
@@ -1349,23 +1595,24 @@ export class HttpServer {
     this.unlisten(this.h2cFd, HTTP_SERVER_H2C_LISTENER)
     const h1: Http1Server | null = this.h1
     if (h1 !== null) {
-      for (let s: i32 = 0; s < toI32(this.h1Open.length); s++) {
-        if (this.h1Open[s] && h1.holds(s)) {
-          if (this.h1Current[s] === -1 && (h1.resting(s) || !h1.connection(s).wantsWrite())) {
-            this.h1Close(h1, s)
+      for (const s of this.h1Slots) {
+        if (s.open && h1.holds(s.slot)) {
+          if (s.current === null && (h1.resting(s.slot) || !h1.connection(s.slot).wantsWrite())) {
+            this.h1Close(h1, s.slot)
           } else {
-            h1.connection(s).closeAfter = true
+            h1.connection(s.slot).closeAfter = true
           }
         }
       }
     }
     for (let v: i32 = 0; v < toI32(this.h2Open.length); v++) {
       if (this.h2Open[v] && this.h2Holds(v)) {
-        if (this.h2Clear[v] && !this.h2cOf().prefaced(v - this.h2cBase)) {
+        const conn: Http2Connection | null = this.h2Prefaced(v)
+        if (conn === null) {
           // No preface yet, so no connection to say GOAWAY on.
           this.h2Close(v)
         } else {
-          this.h2Conn(v).goaway()
+          conn.goaway()
           this.h2Settle(v)
         }
       }
@@ -1383,7 +1630,9 @@ export class HttpServer {
 
   /** Takes listener `fd` out of the loop, unless it is not there: never configured, or resting. */
   private unlisten(fd: i32, token: i32): void {
-    if (fd >= 0 && this.restUntil[HTTP_SERVER_H1_LISTENER - token] === 0) {
+    const rests: i64[] = this.restUntil
+    const at: i32 = this.restAt(token)
+    if (fd >= 0 && at >= 0 && at < toI32(rests.length) && rests[at] === 0) {
       pollRemove(this.loop, fd)
     }
   }
@@ -1393,24 +1642,17 @@ export class HttpServer {
    * @returns the connections the carriers hold, which falls to 0 after `drain` as they finish
    */
   connections(): i32 {
-    let n: i32 = 0
     const h1: Http1Server | null = this.h1
-    if (h1 !== null) {
-      n += h1.busy()
-    }
     const h2: Http2TlsServer | null = this.h2
-    if (h2 !== null) {
-      n += h2.busy()
-    }
     const h2c: Http2CleartextServer | null = this.h2c
-    if (h2c !== null) {
-      n += h2c.busy()
-    }
     const h3: Http3Server | null = this.h3
-    if (h3 !== null) {
-      n += h3.busy()
-    }
-    return n
+    const one: i32 = h1 !== null ? h1.busy() : 0
+    const two: i32 = h2 !== null ? h2.busy() : 0
+    const clear: i32 = h2c !== null ? h2c.busy() : 0
+    const three: i32 = h3 !== null ? h3.busy() : 0
+    // Each carrier's count is an `i32`; their sum saturates rather than wraps.
+    const n: i64 = toI64(one) + toI64(two) + (toI64(clear) + toI64(three))
+    return n > toI64(2147483647) ? 2147483647 : toI32(n)
   }
 
   // ---- HTTP/1.1 -------------------------------------------------------------------
@@ -1424,9 +1666,17 @@ export class HttpServer {
     let slot: i32 = h1.accept()
     while (slot >= 0 || slot === H1_POOL_FULL || slot === HTTP_SERVER_ACCEPT_ABORTED) {
       if (slot >= 0) {
-        this.h1Open[slot] = true
-        this.h1Current[slot] = -1
-        pollAdd(this.loop, h1.fd(slot), H1_WANT_READ, slot)
+        const s: HttpServerH1Slot | null = this.h1Slot(slot)
+        if (s === null) {
+          // `listenHttp1` makes a record for every carrier slot, so a slot
+          // without one is no connection the server can serve: it is
+          // closed, never left open and unwatched.
+          h1.close(slot)
+        } else {
+          s.open = true
+          s.current = null
+          pollAdd(this.loop, h1.fd(slot), H1_WANT_READ, slot)
+        }
       }
       slot = h1.accept()
     }
@@ -1443,12 +1693,18 @@ export class HttpServer {
     if (h1 === null || !h1.holds(slot)) {
       return
     }
+    const s: HttpServerH1Slot | null = this.h1Slot(slot)
+    if (s === null) {
+      // As in `acceptHttp1`: a carrier slot without a record is closed.
+      h1.close(slot)
+      return
+    }
     if ((events & HTTP_SERVER_READ_BITS) !== 0) {
       h1.readable(slot)
     } else {
       h1.writable(slot)
     }
-    this.drive(h1, slot)
+    this.drive(h1, s)
   }
 
   /**
@@ -1456,37 +1712,46 @@ export class HttpServer {
    * settles it. A head with no free request left waits: the slot stops
    * reading and goes on `starved` until a request is handed back.
    */
-  private drive(h1: Http1Server, slot: i32): void {
-    if (this.h1Driving[slot] !== 0) {
-      this.h1Driving[slot] = 2
+  private drive(h1: Http1Server, s: HttpServerH1Slot): void {
+    if (s.driving !== 0) {
+      s.driving = 2
       return
     }
-    this.h1Driving[slot] = 1
-    this.drivePass(h1, slot)
-    while (this.h1Driving[slot] === 2 && this.h1Open[slot]) {
-      this.h1Driving[slot] = 1
-      this.drivePass(h1, slot)
+    s.driving = 1
+    this.drivePass(h1, s)
+    while (s.driving === 2 && s.open) {
+      s.driving = 1
+      this.drivePass(h1, s)
     }
-    this.h1Driving[slot] = 0
+    s.driving = 0
+  }
+
+  /** `drive` for the slot request `r` was read on; nothing once that slot has no record, as `live` then says too. */
+  private driveOf(h1: Http1Server, r: HttpServerRequest): void {
+    const s: HttpServerH1Slot | null = this.h1Slot(r.slot)
+    if (s !== null) {
+      this.drive(h1, s)
+    }
   }
 
   /** One pass of `drive`: the slot's events until it needs more input, then `settle`. */
-  private drivePass(h1: Http1Server, slot: i32): void {
+  private drivePass(h1: Http1Server, s: HttpServerH1Slot): void {
+    const slot: i32 = s.slot
     const conn: Http1Connection = h1.connection(slot)
     let event: i32 = H1_NEED_MORE
-    if (!this.starve(slot) && !this.unended(slot)) {
+    if (!this.starve(s) && !this.unended(s)) {
       event = h1.next(slot)
       while (event !== H1_NEED_MORE && event !== H1_ERROR) {
         if (event === H1_REQUEST) {
-          this.begin(slot, conn)
+          this.begin(s, conn)
         } else if (event === H1_BODY) {
-          this.gather(slot, conn)
+          this.gather(s, conn)
         } else if (event === H1_END) {
-          this.whole(slot, conn)
+          this.whole(s, conn)
         } else if (event === H1_WRITE) {
-          this.resume(slot, conn)
+          this.resume(s, conn)
         }
-        if (this.starve(slot) || this.unended(slot)) {
+        if (this.starve(s) || this.unended(s)) {
           break
         }
         event = h1.next(slot)
@@ -1495,9 +1760,9 @@ export class HttpServer {
     if (event === H1_ERROR) {
       // The carrier has written its refusal and ends the connection; a
       // request it was reading is nobody's.
-      this.releaseReading(slot)
+      this.releaseReading(s)
     }
-    this.settle(h1, slot, conn)
+    this.settle(h1, s, conn)
   }
 
   /**
@@ -1507,23 +1772,22 @@ export class HttpServer {
    * so the slot is not asked until the program's `end`: until then the
    * response is the program's, and a draining connection stays open for it.
    */
-  private unended(slot: i32): boolean {
-    const at: i32 = this.h1Current[slot]
-    if (at < 0) {
+  private unended(s: HttpServerH1Slot): boolean {
+    const r: HttpServerRequest | null = s.current
+    if (r === null) {
       return false
     }
-    const r: HttpServerRequest = this.requests[at]
     return r.state === HTTP_SERVER_STREAMING && r.pendingEnd === r.pendingStart
   }
 
-  /** Whether `slot` must wait for a free request before it reads a head: it then joins `starved`. */
-  private starve(slot: i32): boolean {
-    if (this.h1Current[slot] !== -1 || toI32(this.free.length) > 0) {
+  /** Whether `s` must wait for a free request before it reads a head: it then joins `starved`. */
+  private starve(s: HttpServerH1Slot): boolean {
+    if (s.current !== null || toI32(this.free.length) > 0) {
       return false
     }
-    if (!this.h1Starved[slot]) {
-      this.h1Starved[slot] = true
-      this.starved.push(slot)
+    if (!s.starved) {
+      s.starved = true
+      this.starved.push(s)
     }
     return true
   }
@@ -1534,68 +1798,99 @@ export class HttpServer {
     if (h1 === null) {
       return
     }
-    while (this.starvedHead < toI32(this.starved.length) && toI32(this.free.length) > 0) {
-      const slot: i32 = this.starved[this.starvedHead]
-      this.starvedHead += 1
-      this.h1Starved[slot] = false
-      if (this.h1Open[slot] && h1.holds(slot)) {
-        this.drive(h1, slot)
+    const starved: HttpServerH1Slot[] = this.starved
+    while (toI32(this.free.length) > 0) {
+      const head: i32 = this.starvedHead
+      if (head < 0 || head >= toI32(starved.length)) {
+        break
+      }
+      const s: HttpServerH1Slot = starved[head]
+      this.starvedHead = head + 1
+      s.starved = false
+      if (s.open && h1.holds(s.slot)) {
+        this.drive(h1, s)
       }
     }
     // Drop the spent slots once they are half the list, so each is moved O(1) times.
     const spent: i32 = this.starvedHead
-    const length: i32 = toI32(this.starved.length)
-    if (spent > 0 && spent * 2 >= length) {
-      for (let k: i32 = spent; k < length; k++) {
-        this.starved[k - spent] = this.starved[k]
+    const length: i32 = toI32(starved.length)
+    if (spent > 0 && spent <= length && spent >= length - spent) {
+      let j: i32 = 0
+      for (let k: i32 = spent; k < toI32(starved.length) && j < toI32(starved.length); k++) {
+        starved[j] = starved[k]
+        j += 1
       }
-      for (let k: i32 = 0; k < spent; k++) {
-        this.starved.pop()
+      for (let k: i32 = 0; k < spent && toI32(starved.length) > 0; k++) {
+        starved.pop()
       }
       this.starvedHead = 0
     }
   }
 
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
-  private settle(h1: Http1Server, slot: i32, conn: Http1Connection): void {
+  private settle(h1: Http1Server, s: HttpServerH1Slot, conn: Http1Connection): void {
+    const slot: i32 = s.slot
     let wants: i32 = h1.flush(slot)
     if ((wants & H1_DONE) !== 0) {
       this.h1Close(h1, slot)
       return
     }
-    if (this.draining && this.h1Current[slot] === -1 && !conn.wantsWrite()) {
+    if (this.draining && s.current === null && !conn.wantsWrite()) {
       this.h1Close(h1, slot)
       return
     }
-    if (this.h1Starved[slot]) {
+    if (s.starved) {
       wants = wants & ~H1_WANT_READ
     }
     if (h1.rearm(slot, wants)) {
       pollModify(this.loop, h1.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot)
     }
-    const at: i32 = this.h1Current[slot]
-    if (at >= 0 && this.requests[at].state === HTTP_SERVER_PARKED && this.roomy(conn)) {
-      this.h1Ready(this.requests[at])
+    const r: HttpServerRequest | null = s.current
+    if (r !== null && r.state === HTTP_SERVER_PARKED && this.roomy(conn)) {
+      this.h1Ready(r)
     }
   }
 
   /** Whether `conn`'s output holds at most half its size unsent, so a response head fits behind it. */
   private roomy(conn: Http1Connection): boolean {
-    return (conn.outputEnd - conn.outputStart) * 2 <= this.h1OutputSize
+    return toI64(conn.outputEnd) - toI64(conn.outputStart) <= toI64(this.h1OutputSize) / toI64(2)
   }
 
   /** A head: a free request, the head copied into it, and its route. */
-  private begin(slot: i32, conn: Http1Connection): void {
+  private begin(s: HttpServerH1Slot, conn: Http1Connection): void {
     if (this.draining) {
       // A head read during the drain is the connection's last.
       conn.closeAfter = true
     }
-    const r: HttpServerRequest = this.requests[this.obtain()]
+    const r: HttpServerRequest | null = this.obtain()
+    if (r === null) {
+      // `drivePass` asked `starve` first, so a request was free; were none,
+      // the head is answered 503 and the connection ends, and the body
+      // events after it find no request and are passed over.
+      conn.closeAfter = true
+      conn.respond(HTTP_SERVER_UNAVAILABLE, this.noFields, this.noFields, toI32(0))
+      return
+    }
     const p = conn.parser
     copyBytes(r.head, HTTP_SERVER_ZERO, p.head, HTTP_SERVER_ZERO, p.headLength)
-    const spanCount: i32 = 4 * p.headerCount
-    for (let k: i32 = 0; k < spanCount; k++) {
-      r.spans[k] = p.spans[k]
+    const from: i32[] = p.spans
+    const into: i32[] = r.spans
+    // Four spans per field. `listenHttp1` refuses a `maxHeaders` past
+    // `maxFields`, the parser stops at `maxHeaders`, and `obtain` made
+    // `into` 4 * `maxFields` long, so every span fits; a head that did not
+    // is refused 431 whole rather than copied in part.
+    const used: i64 = toI64(p.headerCount) * toI64(4)
+    if (p.headerCount < 0 || used > toI64(toI32(from.length)) || used > toI64(toI32(into.length))) {
+      this.free.push(r)
+      conn.closeAfter = true
+      conn.respond(toI32(431), this.noFields, this.noFields, toI32(0))
+      return
+    }
+    // The length tests below only restate the refusal above for the prover,
+    // which keeps no fact from it: they never end the copy early.
+    const n: i32 = toI32(used)
+    for (let k: i32 = 0; k < n && k < toI32(from.length) && k < toI32(into.length); k++) {
+      into[k] = from[k]
     }
     r.headerCount = p.headerCount
     r.methodStart = p.methodStart
@@ -1605,32 +1900,31 @@ export class HttpServer {
     r.kind = HTTP_SERVER_H1
     r.version = 1
     r.secure = false
-    r.slot = slot
-    r.gen = this.h1Gen[slot]
+    r.slot = s.slot
+    r.gen = s.gen
     if (r.methodIs("CONNECT")) {
       // Its 501 ends the connection: the client may already be sending what
       // it meant for a tunnel.
       conn.closeAfter = true
     }
     this.admit(r, false)
-    this.h1Current[slot] = r.index
+    s.current = r
   }
 
   /** Body bytes: appended to the request's body, which the carrier's cap bounds. */
-  private gather(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.h1Current[slot]
-    if (at >= 0) {
-      this.append(this.requests[at], conn.data, conn.dataStart, conn.dataLength)
+  private gather(s: HttpServerH1Slot, conn: Http1Connection): void {
+    const r: HttpServerRequest | null = s.current
+    if (r !== null) {
+      this.append(r, conn.data, conn.dataStart, conn.dataLength)
     }
   }
 
   /** The request is whole: queued for `take`, or parked while the response before it is still mostly unsent. */
-  private whole(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.h1Current[slot]
-    if (at < 0) {
+  private whole(s: HttpServerH1Slot, conn: Http1Connection): void {
+    const r: HttpServerRequest | null = s.current
+    if (r === null) {
       return
     }
-    const r: HttpServerRequest = this.requests[at]
     if (this.roomy(conn)) {
       this.h1Ready(r)
     } else {
@@ -1654,19 +1948,27 @@ export class HttpServer {
     if (r.methodIs("CONNECT")) {
       return 501
     }
-    if (r.targetEnd - r.targetStart === 1 && toI32(r.head[r.targetStart]) === 42 && r.methodIs("OPTIONS")) {
+    const head: u8[] = r.head
+    const target: i32 = r.targetStart
+    const one: boolean = toI64(r.targetEnd) - toI64(target) === toI64(1)
+    if (
+      one &&
+      target >= 0 &&
+      target < toI32(head.length) &&
+      toI32(head[target]) === 42 &&
+      r.methodIs("OPTIONS")
+    ) {
       return 204
     }
     return 0
   }
 
   /** `H1_WRITE`: the carrier has room again for the response under way. */
-  private resume(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.h1Current[slot]
-    if (at < 0) {
+  private resume(s: HttpServerH1Slot, conn: Http1Connection): void {
+    const r: HttpServerRequest | null = s.current
+    if (r === null) {
       return
     }
-    const r: HttpServerRequest = this.requests[at]
     if (r.state !== HTTP_SERVER_STREAMING && r.state !== HTTP_SERVER_FLUSHING) {
       return
     }
@@ -1678,7 +1980,7 @@ export class HttpServer {
 
   /** Hands the carrier as much of `r`'s pending bytes as it takes. */
   private pushH1(r: HttpServerRequest, conn: Http1Connection): void {
-    const left: i32 = r.pendingEnd - r.pendingStart
+    const left: i32 = toI32(toI64(r.pendingEnd) - toI64(r.pendingStart))
     if (left === 0) {
       return
     }
@@ -1698,16 +2000,22 @@ export class HttpServer {
     if (conn.end() === H1_AGAIN) {
       return
     }
-    this.h1Current[r.slot] = -1
+    const s: HttpServerH1Slot | null = this.h1Slot(r.slot)
+    if (s !== null) {
+      const held: HttpServerRequest | null = s.current
+      if (held !== null && held.index === r.index) {
+        s.current = null
+      }
+    }
     this.release(r)
   }
 
-  /** Hands back the request `slot` was reading when the carrier refused it. */
-  private releaseReading(slot: i32): void {
-    const at: i32 = this.h1Current[slot]
-    if (at >= 0 && this.requests[at].state === HTTP_SERVER_READING) {
-      this.h1Current[slot] = -1
-      this.release(this.requests[at])
+  /** Hands back the request `s` was reading when the carrier refused it. */
+  private releaseReading(s: HttpServerH1Slot): void {
+    const r: HttpServerRequest | null = s.current
+    if (r !== null && r.state === HTTP_SERVER_READING) {
+      s.current = null
+      this.release(r)
     }
   }
 
@@ -1718,24 +2026,27 @@ export class HttpServer {
    */
   private h1Close(h1: Http1Server, slot: i32): void {
     h1.close(slot)
-    this.h1Forget(slot)
+    const s: HttpServerH1Slot | null = this.h1Slot(slot)
+    if (s !== null) {
+      this.h1Forget(s)
+    }
   }
 
   /** The bookkeeping of a slot the carrier has closed. */
-  private h1Forget(slot: i32): void {
-    this.h1Open[slot] = false
-    this.h1Gen[slot] = this.h1Gen[slot] + 1
-    const at: i32 = this.h1Current[slot]
-    this.h1Current[slot] = -1
-    if (at >= 0) {
-      this.drop(this.requests[at])
+  private h1Forget(s: HttpServerH1Slot): void {
+    s.open = false
+    s.gen = httpServerNextGen(s.gen)
+    const r: HttpServerRequest | null = s.current
+    s.current = null
+    if (r !== null) {
+      this.drop(r)
     }
   }
 
   /** Every slot the carrier's `expire` closed. */
   private h1Sweep(h1: Http1Server): void {
-    for (let s: i32 = 0; s < toI32(this.h1Open.length); s++) {
-      if (this.h1Open[s] && !h1.holds(s)) {
+    for (const s of this.h1Slots) {
+      if (s.open && !h1.holds(s.slot)) {
         this.h1Forget(s)
       }
     }
@@ -1743,21 +2054,25 @@ export class HttpServer {
 
   // ---- The pool -------------------------------------------------------------------
 
-  /** The index of a free request, its buffers made at their caps on first use; -1 when none is free. */
-  private obtain(): i32 {
-    const count: i32 = toI32(this.free.length)
-    if (count === 0) {
-      return -1
+  /** A free request, its buffers made at their caps on first use; null when none is free. */
+  private obtain(): HttpServerRequest | null {
+    const free: HttpServerRequest[] = this.free
+    const last: i32 = toI32(free.length) - 1
+    if (last < 0) {
+      return null
     }
-    const at: i32 = this.free[count - 1]
-    this.free.pop()
-    const r: HttpServerRequest = this.requests[at]
+    const r: HttpServerRequest = free[last]
+    // `last` proved the index; the prover keeps no length fact past that
+    // read, so the pop is guarded again rather than left a site.
+    if (free.length > 0) {
+      free.pop()
+    }
     if (toI32(r.head.length) === 0) {
-      r.head = new Array<u8>(this.maxHead)
-      r.spans = new Array<i32>(4 * this.maxFields)
-      r.params = new Array<i32>(2 * this.router.maxParams + 2)
+      r.head = httpServerZeros(toI64(this.maxHead), toU8(0))
+      r.spans = httpServerCells(toI64(4) * toI64(this.maxFields))
+      r.params = httpServerZeros(toI64(2) * toI64(this.router.maxParams) + toI64(2), toI32(0))
     }
-    return at
+    return r
   }
 
   /**
@@ -1767,8 +2082,14 @@ export class HttpServer {
    * takes the body in pieces, which never hold more than a stream window.
    */
   private admit(r: HttpServerRequest, mayStream: boolean): void {
+    const head: u8[] = r.head
     let pathEnd: i32 = r.targetStart
-    while (pathEnd < r.targetEnd && toI32(r.head[pathEnd]) !== 63) {
+    while (
+      pathEnd >= 0 &&
+      pathEnd < r.targetEnd &&
+      pathEnd < toI32(head.length) &&
+      toI32(head[pathEnd]) !== 63
+    ) {
       pathEnd += 1
     }
     r.pathEnd = pathEnd
@@ -1810,12 +2131,15 @@ export class HttpServer {
       params
     )
     if (route === ROUTER_METHOD_NOT_ALLOWED && r.quiet) {
-      const get: i32 = this.router.methodIndex("GET")
-      if (get >= 0) {
-        const viaGet: i32 = this.router.match(
-          this.router.methodBytes,
-          this.router.methodStart[get],
-          this.router.methodEnd[get],
+      const router: Router = this.router
+      const get: i32 = router.methodIndex("GET")
+      const starts: i32[] = router.methodStart
+      const ends: i32[] = router.methodEnd
+      if (get >= 0 && get < toI32(starts.length) && get < toI32(ends.length)) {
+        const viaGet: i32 = router.match(
+          router.methodBytes,
+          starts[get],
+          ends[get],
           r.head,
           r.targetStart,
           r.targetEnd,
@@ -1832,7 +2156,9 @@ export class HttpServer {
 
   /** Appends `buf[start .. start + n)` to `r`'s body; the caller has kept it within `maxBody`. */
   private append(r: HttpServerRequest, buf: u8[], start: i32, n: i32): void {
-    const need: i32 = r.bodyLength + n
+    // The caller's `maxBody` check keeps the sum inside an `i32`.
+    const wide: i64 = toI64(r.bodyLength) + toI64(n)
+    const need: i32 = wide > toI64(2147483647) ? 2147483647 : toI32(wide)
     if (toI32(r.body.length) < need) {
       this.growBody(r, need)
     }
@@ -1853,7 +2179,12 @@ export class HttpServer {
     const tier: i32 = this.maxBody < HTTP_SERVER_BODY_TIER ? this.maxBody : HTTP_SERVER_BODY_TIER
     let size: i32 = this.maxBody
     if (need <= tier) {
-      size = have < HTTP_SERVER_BODY_FIRST ? HTTP_SERVER_BODY_FIRST : have * 2
+      // Doubling past i32 is past `tier` too, which the clamp below gives.
+      let doubled: i32 = tier
+      if (have < 1073741824) {
+        doubled = have * 2
+      }
+      size = have < HTTP_SERVER_BODY_FIRST ? HTTP_SERVER_BODY_FIRST : doubled
       if (size < need) {
         size = need
       }
@@ -1877,13 +2208,16 @@ export class HttpServer {
     if (i < 0) {
       return -1
     }
+    const head: u8[] = r.head
+    const end: i32 = r.valueEnd(i)
+    const ten: i64 = toI64(HTTP_SERVER_TEN)
     let n: i32 = 0
-    for (let k: i32 = r.valueStart(i); k < r.valueEnd(i); k++) {
-      const d: i32 = toI32(r.head[k]) - HTTP_SERVER_ZERO_DIGIT
-      if (d < 0 || d > 9 || n > (this.maxBody - d) / HTTP_SERVER_TEN) {
+    for (let k: i32 = r.valueStart(i); k >= 0 && k < end && k < toI32(head.length); k++) {
+      const d: i32 = toI32(head[k]) - HTTP_SERVER_ZERO_DIGIT
+      if (d < 0 || d > 9 || toI64(n) > (toI64(this.maxBody) - toI64(d)) / ten) {
         return -1
       }
-      n = n * HTTP_SERVER_TEN + d
+      n = toI32(toI64(n) * ten + toI64(d))
     }
     return n
   }
@@ -1891,9 +2225,47 @@ export class HttpServer {
   /** Queues `r` for `take`. The ring holds every request, so it never fills. */
   private enqueue(r: HttpServerRequest): void {
     r.state = HTTP_SERVER_QUEUED
-    const size: i32 = toI32(this.queue.length)
-    this.queue[(this.queueStart + this.queueCount) % size] = r.index
-    this.queueCount += 1
+    this.queuePush(r.index)
+  }
+
+  /** Puts request `index` at the back of the ring; nothing when the ring is full, which it never is. */
+  private queuePush(index: i32): void {
+    const queue: i32[] = this.queue
+    const size: i32 = toI32(queue.length)
+    const count: i32 = this.queueCount
+    const start: i32 = this.queueStart
+    if (count < 0 || count >= size || start < 0 || start >= size) {
+      return
+    }
+    // Both are below `size`, so one wrap brings the sum back into the ring.
+    const sum: i64 = toI64(start) + toI64(count)
+    const at: i32 = toI32(sum >= toI64(size) ? sum - toI64(size) : sum)
+    if (at >= 0 && at < toI32(queue.length)) {
+      queue[at] = index
+      this.queueCount = count + 1
+    }
+  }
+
+  /** The request at the front of the ring, or null when it is empty. */
+  private queueFront(): HttpServerRequest | null {
+    const queue: i32[] = this.queue
+    const start: i32 = this.queueStart
+    if (this.queueCount <= 0 || start < 0 || start >= toI32(queue.length)) {
+      return null
+    }
+    return this.requestAt(queue[start])
+  }
+
+  /** Drops the front of the ring. */
+  private queueShift(): void {
+    const start: i32 = this.queueStart
+    const count: i32 = this.queueCount
+    if (count <= 0 || start < 0 || start >= toI32(this.queue.length)) {
+      return
+    }
+    const after: i64 = toI64(start) + toI64(1)
+    this.queueStart = after < toI64(toI32(this.queue.length)) ? toI32(after) : 0
+    this.queueCount = count - 1
   }
 
   /** Hands `r` back to the pool, and frees its HTTP/2 or HTTP/3 stream entry. */
@@ -1907,11 +2279,14 @@ export class HttpServer {
     if (r.streaming && !r.bodyEnded && this.live(r)) {
       // Answered before the body ended: the client may stop sending (RFC 9113 §8.1). With no room for
       // the reset the stream stays held, so the client's window, not this server, bounds what it sends.
-      this.h2Conn(r.slot).reset(toI32(r.stream), H2_NO_ERROR)
+      const conn: Http2Connection | null = this.h2Conn(r.slot)
+      if (conn !== null) {
+        conn.reset(toI32(r.stream), H2_NO_ERROR)
+      }
     }
     this.unlink(r)
     r.state = HTTP_SERVER_FREE
-    this.free.push(r.index)
+    this.free.push(r)
   }
 
   /**
@@ -1925,26 +2300,29 @@ export class HttpServer {
       return
     }
     r.again = true
-    const size: i32 = toI32(this.queue.length)
-    this.queue[(this.queueStart + this.queueCount) % size] = r.index
-    this.queueCount += 1
+    this.queuePush(r.index)
   }
 
   /** Takes `r`'s second place out of the queue, closing the gap so the ring still holds each request at most once. */
   private unqueue(r: HttpServerRequest): void {
     r.again = false
-    const size: i32 = toI32(this.queue.length)
+    const queue: i32[] = this.queue
     let found: boolean = false
-    for (let k: i32 = 0; k < this.queueCount; k++) {
-      const at: i32 = (this.queueStart + k) % size
-      if (found) {
-        this.queue[(at + size - 1) % size] = this.queue[at]
-      } else if (this.queue[at] === r.index) {
+    let before: i32 = -1
+    let at: i32 = this.queueStart
+    for (let k: i32 = 0; k < this.queueCount && at >= 0 && at < toI32(queue.length); k++) {
+      if (found && before >= 0 && before < toI32(queue.length)) {
+        queue[before] = queue[at]
+      } else if (queue[at] === r.index) {
         found = true
       }
+      before = at
+      const after: i64 = toI64(at) + toI64(1)
+      at = after < toI64(toI32(queue.length)) ? toI32(after) : 0
     }
-    if (found) {
-      this.queueCount -= 1
+    const count: i32 = this.queueCount
+    if (found && count > 0) {
+      this.queueCount = count - 1
     }
   }
 
@@ -1965,21 +2343,25 @@ export class HttpServer {
 
   /** `n` of `r`'s pending bytes were taken. */
   private taken(r: HttpServerRequest, n: i32): void {
-    r.pendingStart += n
-    if (r.pendingStart === r.pendingEnd) {
+    // A carrier takes at most what it was offered, so this never passes `pendingEnd`.
+    const next: i64 = toI64(r.pendingStart) + toI64(n)
+    if (next >= toI64(r.pendingEnd)) {
       r.pendingStart = 0
       r.pendingEnd = 0
+    } else {
+      r.pendingStart = toI32(next)
     }
   }
 
   /**
    * Appends bytes to `r`'s pending buffer, grown to
    * `min(2^30, max(needed, 2 × current))`; `write` has refused a remainder
-   * past 2^30.
+   * past 2^30. False, with nothing kept, when the bytes still do not fit
+   * or the window lies outside `buf`: `write` then cuts the response.
    */
-  private keep(r: HttpServerRequest, buf: u8[], off: i32, len: i32): void {
-    const live: i32 = r.pendingEnd - r.pendingStart
-    if (toI32(r.pending.length) - r.pendingEnd < len) {
+  private keep(r: HttpServerRequest, buf: u8[], off: i32, len: i32): boolean {
+    const live: i32 = toI32(toI64(r.pendingEnd) - toI64(r.pendingStart))
+    if (toI64(r.pending.length) - toI64(r.pendingEnd) < toI64(len)) {
       const need: i64 = toI64(live) + toI64(len)
       const target: u8[] =
         toI64(r.pending.length) < need
@@ -1990,8 +2372,12 @@ export class HttpServer {
       r.pendingStart = 0
       r.pendingEnd = live
     }
-    copyBytes(r.pending, r.pendingEnd, buf, off, len)
-    r.pendingEnd += len
+    const end: i64 = toI64(r.pendingEnd) + toI64(len)
+    if (end > toI64(r.pending.length) || !tryCopyBytes(r.pending, r.pendingEnd, buf, off, len)) {
+      return false
+    }
+    r.pendingEnd = toI32(end)
+    return true
   }
 
   // ---- Requests -------------------------------------------------------------------
@@ -2004,23 +2390,32 @@ export class HttpServer {
    * @returns true when `take` will give out a request
    */
   ready(): boolean {
+    return this.next() !== null
+  }
+
+  /** The request `take` gives out next, after handing back the ones queued unseen, or null for none. */
+  private next(): HttpServerRequest | null {
     while (this.queueCount > 0) {
-      const r: HttpServerRequest = this.requests[this.queue[this.queueStart]]
+      const r: HttpServerRequest | null = this.queueFront()
+      if (r === null) {
+        // Not a request: skip it.
+        this.queueShift()
+        continue
+      }
       // A streaming request queued again is the program's, live or not: it learns of a reset by taking it.
       // One whose answer ended since (`end`, `trailers`) is flushing on its own, and stays out of `take`.
       const held: boolean = r.state === HTTP_SERVER_HELD || r.state === HTTP_SERVER_STREAMING
       if ((r.again && held) || (!r.again && this.live(r))) {
-        return true
+        return r
       }
-      this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
-      this.queueCount -= 1
+      this.queueShift()
       if (r.again) {
         r.again = false
       } else {
         this.release(r)
       }
     }
-    return false
+    return null
   }
 
   /**
@@ -2031,12 +2426,11 @@ export class HttpServer {
    * @returns the oldest queued request, the program's until it answers it
    */
   take(): HttpServerRequest {
-    if (!this.ready()) {
+    const r: HttpServerRequest | null = this.next()
+    if (r === null) {
       panic("HttpServer.take: no request is ready")
     }
-    const r: HttpServerRequest = this.requests[this.queue[this.queueStart]]
-    this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
-    this.queueCount -= 1
+    this.queueShift()
     if (r.again) {
       r.again = false
     } else {
@@ -2060,9 +2454,14 @@ export class HttpServer {
     while (toI32(this.streamRoutes.length) <= route) {
       this.streamRoutes.push(false)
     }
-    if (!this.streamRoutes[route]) {
-      this.streamRoutes[route] = true
-      this.streamCount += 1
+    const routes: boolean[] = this.streamRoutes
+    const count: i32 = this.streamCount
+    if (route >= 0 && route < toI32(routes.length) && !routes[route]) {
+      routes[route] = true
+      // One per route, and a router has far fewer than two billion.
+      if (count < 2147483647) {
+        this.streamCount = count + 1
+      }
     }
   }
 
@@ -2085,13 +2484,18 @@ export class HttpServer {
     if (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING) {
       panic("HttpServer.consume: the request is not the program's")
     }
-    if (n < 0 || n > r.bodyLength) {
-      panic(`HttpServer.consume: ${n} bytes is outside the body's ${r.bodyLength}`)
+    const length: i32 = r.bodyLength
+    if (n < 0 || n > length) {
+      panic(`HttpServer.consume: ${n} bytes is outside the body's ${length}`)
     }
-    copyBytes(r.body, HTTP_SERVER_ZERO, r.body, n, r.bodyLength - n)
-    r.bodyLength -= n
+    const left: i32 = toI32(toI64(length) - toI64(n))
+    copyBytes(r.body, HTTP_SERVER_ZERO, r.body, n, left)
+    r.bodyLength = left
     if (r.streaming && n > 0 && this.live(r)) {
-      this.h2Conn(r.slot).consumeBody(toI32(r.stream), n)
+      const conn: Http2Connection | null = this.h2Conn(r.slot)
+      if (conn !== null) {
+        conn.consumeBody(toI32(r.stream), n)
+      }
       this.h2Settle(r.slot)
     }
   }
@@ -2104,7 +2508,7 @@ export class HttpServer {
    */
   pending(r: HttpServerRequest): i32 {
     this.own(r, "pending")
-    return r.pendingEnd - r.pendingStart
+    return toI32(toI64(r.pendingEnd) - toI64(r.pendingStart))
   }
 
   /**
@@ -2138,7 +2542,7 @@ export class HttpServer {
     if (left === 0) {
       return HANDLER_NEXT
     }
-    const low: i32 = left & (0 - left)
+    const low: i32 = toI32(toI64(left) & (toI64(0) - toI64(left)))
     r.stepsLeft = left ^ low
     r.stepsRan = r.stepsRan | low
     return toI32(31) - toI32(Math.clz32(toU32(low)))
@@ -2189,9 +2593,11 @@ export class HttpServer {
     if (at >= HANDLER_MAX_ADDED) {
       panic(`HttpServer.field: more than ${HANDLER_MAX_ADDED} fields added to one answer`)
     }
-    if (at < toI32(r.addedNames.length) && at < toI32(r.addedValues.length)) {
-      r.addedNames[at] = name
-      r.addedValues[at] = value
+    const names: u8[][] = r.addedNames
+    const values: u8[][] = r.addedValues
+    if (at >= 0 && at < toI32(names.length) && at < toI32(values.length)) {
+      names[at] = name
+      values[at] = value
     } else {
       r.addedNames.push(name)
       r.addedValues.push(value)
@@ -2216,7 +2622,8 @@ export class HttpServer {
       return true
     }
     if (r.kind === HTTP_SERVER_H2) {
-      return this.h2Conn(r.slot).inputEnded
+      const conn: Http2Connection | null = this.h2Conn(r.slot)
+      return conn === null || conn.inputEnded
     }
     const h1: Http1Server | null = this.h1
     return r.kind === HTTP_SERVER_H1 && h1 !== null && h1.connection(r.slot).ended()
@@ -2230,17 +2637,30 @@ export class HttpServer {
     }
   }
 
+  /** HTTP/1.1 slot `slot`'s record, or null for a number outside the table `listenHttp1` made one per carrier slot. */
+  private h1Slot(slot: i32): HttpServerH1Slot | null {
+    const slots: HttpServerH1Slot[] = this.h1Slots
+    return slot >= 0 && slot < toI32(slots.length) ? slots[slot] : null
+  }
+
+  /** Request `at` of the pool, or null for -1 or any other number outside it. */
+  private requestAt(at: i32): HttpServerRequest | null {
+    const requests: HttpServerRequest[] = this.requests
+    return at >= 0 && at < toI32(requests.length) ? requests[at] : null
+  }
+
   /** Whether `r`'s connection is the one it was read on, still open, and its stream not reset. */
   private live(r: HttpServerRequest): boolean {
     if (r.kind === HTTP_SERVER_H1) {
       const h1: Http1Server | null = this.h1
-      return h1 !== null && h1.holds(r.slot) && this.h1Gen[r.slot] === r.gen
+      const s: HttpServerH1Slot | null = this.h1Slot(r.slot)
+      return h1 !== null && s !== null && h1.holds(r.slot) && s.gen === r.gen
     }
     if (r.hung) {
       return false
     }
     if (r.kind === HTTP_SERVER_H2) {
-      return this.h2Holds(r.slot) && this.h2Gen[r.slot] === r.gen
+      return this.h2Holds(r.slot) && httpServerAt(this.h2Gen, r.slot) === r.gen
     }
     const h3: Http3Server | null = this.h3
     return h3 !== null && h3.holds(r.slot) && h3.connection(r.slot).generation === r.gen
@@ -2254,17 +2674,18 @@ export class HttpServer {
       return
     }
     if (r.kind === HTTP_SERVER_H2) {
-      if (this.h2Reqs[e] === r.index && this.h2Gen[r.slot] === r.gen) {
-        this.h2Reqs[e] = -1
-        this.h2Count[r.slot] = this.h2Count[r.slot] - 1
-        if (this.h2Count[r.slot] === 0) {
-          this.h2IdleSince[r.slot] = this.turnAt
+      const reqs: i32[] = this.h2Reqs
+      if (e < toI32(reqs.length) && reqs[e] === r.index && httpServerAt(this.h2Gen, r.slot) === r.gen) {
+        reqs[e] = -1
+        if (httpServerAdd(this.h2Count, r.slot, -1) === 0) {
+          this.h2Idle(r.slot, this.turnAt)
         }
       }
     } else if (r.kind === HTTP_SERVER_H3) {
-      if (this.h3Reqs[e] === r.index && this.h3Gen[r.slot] === r.gen) {
-        this.h3Reqs[e] = -1
-        this.h3Count[r.slot] = this.h3Count[r.slot] - 1
+      const reqs: i32[] = this.h3Reqs
+      if (e < toI32(reqs.length) && reqs[e] === r.index && httpServerAt(this.h3Gen, r.slot) === r.gen) {
+        reqs[e] = -1
+        httpServerAdd(this.h3Count, r.slot, -1)
       }
     }
   }
@@ -2316,7 +2737,11 @@ export class HttpServer {
       return HANDLER_DROPPED
     }
     if (r.kind === HTTP_SERVER_H1) {
-      const conn: Http1Connection = this.h1Of().connection(r.slot)
+      const h1: Http1Server | null = this.h1
+      if (h1 === null) {
+        return HANDLER_DROPPED // `live` holds no HTTP/1.1 request without the listener
+      }
+      const conn: Http1Connection = h1.connection(r.slot)
       const sent: i32 = conn.respond(
         status,
         this.outNames,
@@ -2337,16 +2762,22 @@ export class HttpServer {
       return HANDLER_SENT
     }
     const endNow: boolean = r.quiet || bodyLength === 0
-    let sent: i32 = 0
+    let sent: i32 = -1
     if (r.kind === HTTP_SERVER_H2) {
-      sent = this.h2Conn(r.slot).respond(toI32(r.stream), status, this.outNames, this.outValues, endNow)
+      const conn: Http2Connection | null = this.h2Conn(r.slot)
+      if (conn !== null) {
+        sent = conn.respond(toI32(r.stream), status, this.outNames, this.outValues, endNow)
+      }
       if (sent === H2_INVALID) {
         panic(
           "HttpServer.start: the HTTP/2 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text"
         )
       }
     } else {
-      sent = this.h3Of().connection(r.slot).respond(r.stream, status, this.outNames, this.outValues, endNow)
+      const h3: Http3Server | null = this.h3
+      if (h3 !== null) {
+        sent = h3.connection(r.slot).respond(r.stream, status, this.outNames, this.outValues, endNow)
+      }
       if (sent === H3_INVALID) {
         panic(
           "HttpServer.start: the HTTP/3 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text"
@@ -2354,7 +2785,7 @@ export class HttpServer {
       }
     }
     if (sent !== 0) {
-      // Closed under it, out of room, or a head past the peer's limit.
+      // Closed under it, out of room, a head past the peer's limit, or no carrier.
       this.abort(r)
       return HANDLER_DROPPED
     }
@@ -2387,10 +2818,11 @@ export class HttpServer {
       !this.hasField(names, given, this.contentLengthName) &&
       !this.hasField(r.addedNames, r.added, this.contentLengthName)
     const added: i32 = r.added
-    const count: i32 = given + added + (addAlt ? 1 : 0) + (addLength ? 1 : 0)
-    if (count > this.maxResponseFields) {
+    const wide: i64 = toI64(given) + toI64(added) + toI64(addAlt ? 1 : 0) + toI64(addLength ? 1 : 0)
+    if (wide > toI64(this.maxResponseFields)) {
       return false
     }
+    const count: i32 = toI32(wide)
     if (count === given) {
       this.outNames = names
       this.outValues = values
@@ -2407,8 +2839,14 @@ export class HttpServer {
       this.outNamesBy.push(n)
       this.outValuesBy.push(v)
     }
-    const outN: u8[][] = this.outNamesBy[count]
-    const outV: u8[][] = this.outValuesBy[count]
+    const namesBy: u8[][][] = this.outNamesBy
+    const valuesBy: u8[][][] = this.outValuesBy
+    // The loop above made both tables longer than `count`.
+    if (count < 0 || count >= toI32(namesBy.length) || count >= toI32(valuesBy.length)) {
+      return false
+    }
+    const outN: u8[][] = namesBy[count]
+    const outV: u8[][] = valuesBy[count]
     for (let k: i32 = 0; k < given; k++) {
       if (
         k < toI32(outN.length) &&
@@ -2420,27 +2858,30 @@ export class HttpServer {
         outV[k] = values[k]
       }
     }
-    let at: i32 = given
-    for (let k: i32 = 0; k < added; k++) {
-      if (
-        at < toI32(outN.length) &&
-        at < toI32(outV.length) &&
-        k < toI32(r.addedNames.length) &&
-        k < toI32(r.addedValues.length)
-      ) {
-        outN[at] = r.addedNames[k]
-        outV[at] = r.addedValues[k]
+    // Every slot below is under `count`, which fits: it was compared with `maxResponseFields`.
+    const addedNames: u8[][] = r.addedNames
+    const addedValues: u8[][] = r.addedValues
+    for (let k: i32 = 0; k < added && k < toI32(addedNames.length) && k < toI32(addedValues.length); k++) {
+      const slot: i32 = toI32(toI64(given) + toI64(k))
+      if (slot >= 0 && slot < toI32(outN.length) && slot < toI32(outV.length)) {
+        outN[slot] = addedNames[k]
+        outV[slot] = addedValues[k]
       }
-      at += 1
     }
+    let at: i32 = toI32(toI64(given) + toI64(added))
     if (altSvc !== null && addAlt) {
-      outN[at] = this.altSvcName
-      outV[at] = altSvc
-      at += 1
+      if (at >= 0 && at < toI32(outN.length) && at < toI32(outV.length)) {
+        outN[at] = this.altSvcName
+        outV[at] = altSvc
+      }
+      at = toI32(toI64(at) + toI64(1))
     }
     if (addLength) {
-      outN[at] = this.contentLengthName
-      outV[at] = this.digits(bodyLength)
+      const length: u8[] = this.digits(bodyLength)
+      if (at >= 0 && at < toI32(outN.length) && at < toI32(outV.length)) {
+        outN[at] = this.contentLengthName
+        outV[at] = length
+      }
     }
     this.outNames = outN
     this.outValues = outV
@@ -2472,16 +2913,18 @@ export class HttpServer {
   private digits(n: i32): u8[] {
     let count: i32 = 1
     let rest: i32 = n
-    while (rest >= HTTP_SERVER_TEN) {
-      rest = (rest - (rest % HTTP_SERVER_TEN)) / HTTP_SERVER_TEN
+    // An i32 has at most ten digits.
+    while (rest >= 10 && count < 10) {
+      rest = rest / 10
       count += 1
     }
-    const out: u8[] = this.digitBufs[count]
+    // The constructor gives every count from 0 to 10 its buffer.
+    const bufs: u8[][] = this.digitBufs
+    const out: u8[] = count < toI32(bufs.length) ? bufs[count] : new Array<u8>(toU16(count))
     rest = n
     for (let k: i32 = count - 1; k >= 0 && k < toI32(out.length); k--) {
-      const digit: i32 = rest % HTTP_SERVER_TEN
-      out[k] = toU8(HTTP_SERVER_ZERO_DIGIT + digit)
-      rest = (rest - digit) / HTTP_SERVER_TEN
+      out[k] = toU8(toI64(HTTP_SERVER_ZERO_DIGIT) + toI64(rest % 10))
+      rest = rest / 10
     }
     return out
   }
@@ -2493,15 +2936,16 @@ export class HttpServer {
   private abort(r: HttpServerRequest): void {
     r.hung = true
     if (r.kind === HTTP_SERVER_H1) {
-      const h1: Http1Server = this.h1Of()
-      if (this.live(r)) {
+      const h1: Http1Server | null = this.h1
+      if (h1 !== null && this.live(r)) {
         this.h1Close(h1, r.slot)
       }
       return
     }
     if (r.kind === HTTP_SERVER_H2) {
-      if (this.h2Holds(r.slot) && this.h2Gen[r.slot] === r.gen) {
-        if (this.h2Conn(r.slot).reset(toI32(r.stream), H2_INTERNAL_ERROR) === H2_AGAIN) {
+      if (this.h2Holds(r.slot) && httpServerAt(this.h2Gen, r.slot) === r.gen) {
+        const conn: Http2Connection | null = this.h2Conn(r.slot)
+        if (conn === null || conn.reset(toI32(r.stream), H2_INTERNAL_ERROR) === H2_AGAIN) {
           // No room even for the reset: the connection is past saving.
           this.h2Close(r.slot)
           return
@@ -2510,8 +2954,8 @@ export class HttpServer {
       }
       return
     }
-    const h3: Http3Server = this.h3Of()
-    if (h3.holds(r.slot) && h3.connection(r.slot).generation === r.gen) {
+    const h3: Http3Server | null = this.h3
+    if (h3 !== null && h3.holds(r.slot) && h3.connection(r.slot).generation === r.gen) {
       h3.connection(r.slot).reset(r.stream, H3_INTERNAL_ERROR)
       h3.touch(r.slot)
     }
@@ -2548,14 +2992,15 @@ export class HttpServer {
     if (r.quiet || len === 0) {
       return HANDLER_SENT
     }
-    if (toI64(r.pendingEnd - r.pendingStart) + toI64(len) > toI64(HTTP_SERVER_MAX_BODY)) {
+    if (toI64(r.pendingEnd) - toI64(r.pendingStart) + toI64(len) > toI64(HTTP_SERVER_MAX_BODY)) {
       // A remainder past 2^30, the longest array the runtime grows to:
       // nothing of it is written, and the response is cut.
       this.abort(r)
       return HANDLER_DROPPED
     }
+    // Both are at least 0 here, so the difference fits.
     if (r.left >= 0) {
-      r.left -= len
+      r.left = toI32(toI64(r.left) - toI64(len))
     }
     let taken: i32 = 0
     if (r.pendingEnd === r.pendingStart) {
@@ -2565,8 +3010,13 @@ export class HttpServer {
         return HANDLER_DROPPED
       }
     }
-    if (taken < len) {
-      this.keep(r, buf, off + taken, len - taken)
+    // `carry` took at most `len`, and `off + len` is within `buf`.
+    if (
+      taken < len &&
+      !this.keep(r, buf, toI32(toI64(off) + toI64(taken)), toI32(toI64(len) - toI64(taken)))
+    ) {
+      this.abort(r)
+      return HANDLER_DROPPED
     }
     this.nudge(r)
     return HANDLER_SENT
@@ -2578,26 +3028,30 @@ export class HttpServer {
    * when the connection or stream is gone.
    */
   private carry(r: HttpServerRequest, buf: u8[], off: i32, len: i32, last: boolean): i32 {
+    let taken: i32 = -1
     if (r.kind === HTTP_SERVER_H1) {
-      const taken: i32 = this.h1Of().connection(r.slot).write(buf, off, len)
+      // `write` keeps `len` within what the head declared, so the carrier
+      // refuses only a closed connection here.
+      const h1: Http1Server | null = this.h1
+      if (h1 !== null) {
+        taken = h1.connection(r.slot).write(buf, off, len)
+      }
       if (taken === H1_AGAIN) {
         return 0
       }
-      if (taken < 0) {
-        panic(
-          `HttpServer.write: the carrier refused the body (${taken}): more than the length the response declared`
-        )
+    } else if (r.kind === HTTP_SERVER_H2) {
+      const conn: Http2Connection | null = this.h2Conn(r.slot)
+      if (conn !== null) {
+        taken = conn.writeData(toI32(r.stream), buf, off, len, last)
       }
-      return taken
-    }
-    let taken: i32 = 0
-    if (r.kind === HTTP_SERVER_H2) {
-      taken = this.h2Conn(r.slot).writeData(toI32(r.stream), buf, off, len, last)
       if (taken === H2_AGAIN) {
         return 0
       }
     } else {
-      taken = this.h3Of().connection(r.slot).writeData(r.stream, buf, off, len, last)
+      const h3: Http3Server | null = this.h3
+      if (h3 !== null) {
+        taken = h3.connection(r.slot).writeData(r.stream, buf, off, len, last)
+      }
       if (taken === H3_AGAIN) {
         return 0
       }
@@ -2607,17 +3061,18 @@ export class HttpServer {
 
   /** After the program wrote to `r`: what the carrier holds is sent now on HTTP/1.1 and HTTP/2, and by the turn's flush on HTTP/3. */
   private nudge(r: HttpServerRequest): void {
+    const h1: Http1Server | null = this.h1
+    const h3: Http3Server | null = this.h3
     if (r.kind === HTTP_SERVER_H1) {
-      this.drive(this.h1Of(), r.slot)
+      if (h1 !== null) {
+        this.driveOf(h1, r)
+      }
     } else if (r.kind === HTTP_SERVER_H2) {
       if (this.h2Holds(r.slot)) {
         this.h2Settle(r.slot)
       }
-    } else {
-      const h3: Http3Server = this.h3Of()
-      if (h3.holds(r.slot)) {
-        h3.touch(r.slot)
-      }
+    } else if (h3 !== null && h3.holds(r.slot)) {
+      h3.touch(r.slot)
     }
   }
 
@@ -2633,16 +3088,17 @@ export class HttpServer {
     if (r.state !== HTTP_SERVER_STREAMING) {
       panic(`HttpServer.end: the response is not started (state ${r.state})`)
     }
-    if (!this.live(r)) {
+    const h1: Http1Server | null = this.h1
+    if (!this.live(r) || (r.kind === HTTP_SERVER_H1 && h1 === null)) {
       this.release(r)
       return HANDLER_DROPPED
     }
     if (r.left > 0 && !r.quiet) {
       panic(`HttpServer.end: the body is ${r.left} byte(s) short of the length the response declared`)
     }
-    if (r.kind === HTTP_SERVER_H1) {
-      this.finishH1(r, this.h1Of().connection(r.slot))
-      this.drive(this.h1Of(), r.slot)
+    if (r.kind === HTTP_SERVER_H1 && h1 !== null) {
+      this.finishH1(r, h1.connection(r.slot))
+      this.driveOf(h1, r)
       return HANDLER_SENT
     }
     r.state = HTTP_SERVER_FLUSHING
@@ -2729,7 +3185,7 @@ export class HttpServer {
       this.drop(r)
       return
     }
-    const left: i32 = r.pendingEnd - r.pendingStart
+    const left: i32 = toI32(toI64(r.pendingEnd) - toI64(r.pendingStart))
     if (left > 0) {
       // Trailers end the stream themselves, so the body's last DATA frame does not.
       const last: boolean = r.state === HTTP_SERVER_FLUSHING && !r.trailing
@@ -2765,22 +3221,20 @@ export class HttpServer {
    * `carry` cannot say this, since the frame is taken as 0 bytes either way.
    */
   private carryEnd(r: HttpServerRequest): i32 {
-    let done: i32 = 0
+    let done: i32 = -1
     if (r.kind === HTTP_SERVER_H2) {
-      done = this.h2Conn(r.slot).writeData(
-        toI32(r.stream),
-        r.pending,
-        HTTP_SERVER_ZERO,
-        HTTP_SERVER_ZERO,
-        true
-      )
+      const conn: Http2Connection | null = this.h2Conn(r.slot)
+      if (conn !== null) {
+        done = conn.writeData(toI32(r.stream), r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      }
       if (done === H2_AGAIN) {
         return 0
       }
     } else {
-      done = this.h3Of()
-        .connection(r.slot)
-        .writeData(r.stream, r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      const h3: Http3Server | null = this.h3
+      if (h3 !== null) {
+        done = h3.connection(r.slot).writeData(r.stream, r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      }
       if (done === H3_AGAIN) {
         return 0
       }
@@ -2794,7 +3248,11 @@ export class HttpServer {
    * is gone or the section is too large for the output, which resets it.
    */
   private carryTrailers(r: HttpServerRequest): i32 {
-    const done: i32 = this.h2Conn(r.slot).writeTrailers(toI32(r.stream), r.trailerNames, r.trailerValues)
+    const conn: Http2Connection | null = this.h2Conn(r.slot)
+    if (conn === null) {
+      return -1
+    }
+    const done: i32 = conn.writeTrailers(toI32(r.stream), r.trailerNames, r.trailerValues)
     if (done === H2_AGAIN) {
       return 0
     }
@@ -2815,7 +3273,10 @@ export class HttpServer {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection or stream closed first, or the head could not be sent
    */
   send(r: HttpServerRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32 {
-    this.typeValue[0] = contentType
+    const type: u8[][] = this.typeValue
+    if (toI32(type.length) > 0) {
+      type[0] = contentType
+    }
     return this.sendFields(r, status, this.typeName, this.typeValue, body, off, len)
   }
 
@@ -2956,7 +3417,11 @@ export class HttpServer {
   refuse(r: HttpServerRequest): i32 {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
       const length: i32 = this.writeProblem(toI32(405), "Method Not Allowed", "")
-      this.allowValues[1] = this.allowFor(r)
+      const allowed: u8[] = this.allowFor(r)
+      const allow: u8[][] = this.allowValues
+      if (toI32(allow.length) > 1) {
+        allow[1] = allowed
+      }
       return this.sendFields(
         r,
         toI32(405),
@@ -2973,13 +3438,15 @@ export class HttpServer {
   /** The `Allow` value for `r`'s path: each method a route of it takes, and HEAD wherever GET is. Made once for each set of methods. */
   private allowFor(r: HttpServerRequest): u8[] {
     const router: Router = this.router
-    const methods: i32 = toI32(router.methodStart.length)
+    const starts: i32[] = router.methodStart
+    const ends: i32[] = router.methodEnd
+    const methods: i32 = toI32(starts.length)
     let mask: i64 = 0
-    for (let m: i32 = 0; m < methods; m++) {
+    for (let m: i32 = 0; m < methods && m < toI32(starts.length) && m < toI32(ends.length); m++) {
       const route: i32 = router.match(
         router.methodBytes,
-        router.methodStart[m],
-        router.methodEnd[m],
+        starts[m],
+        ends[m],
         r.head,
         r.targetStart,
         r.targetEnd,
@@ -2989,18 +3456,20 @@ export class HttpServer {
         mask = mask | (toI64(1) << toI64(m))
       }
     }
-    for (let k: i32 = 0; k < toI32(this.allowMasks.length); k++) {
-      if (this.allowMasks[k] === mask) {
-        return this.allowBytes[k]
+    const masks: i64[] = this.allowMasks
+    const bytes: u8[][] = this.allowBytes
+    for (let k: i32 = 0; k < toI32(masks.length) && k < toI32(bytes.length); k++) {
+      if (masks[k] === mask) {
+        return bytes[k]
       }
     }
     let get: boolean = false
     let head: boolean = false
     const value: u8[] = []
-    for (let m: i32 = 0; m < methods; m++) {
+    for (let m: i32 = 0; m < methods && m < toI32(starts.length) && m < toI32(ends.length); m++) {
       if ((mask & (toI64(1) << toI64(m))) !== toI64(0)) {
-        const start: i32 = router.methodStart[m]
-        const end: i32 = router.methodEnd[m]
+        const start: i32 = starts[m]
+        const end: i32 = ends[m]
         get = get || httpServerSpanIs(router.methodBytes, start, end, "GET")
         head = head || httpServerSpanIs(router.methodBytes, start, end, "HEAD")
         httpServerAllowAppend(value, router.methodBytes, start, end)
@@ -3015,42 +3484,6 @@ export class HttpServer {
     return value
   }
 
-  /** The HTTP/1.1 carrier, for a request read on it. */
-  private h1Of(): Http1Server {
-    const h1: Http1Server | null = this.h1
-    if (h1 === null) {
-      panic("HttpServer: no HTTP/1.1 listener")
-    }
-    return h1
-  }
-
-  /** The HTTP/2 over TLS carrier, for a slot on it. */
-  private h2Of(): Http2TlsServer {
-    const h2: Http2TlsServer | null = this.h2
-    if (h2 === null) {
-      panic("HttpServer: no HTTP/2 over TLS listener")
-    }
-    return h2
-  }
-
-  /** The h2c carrier, for a slot on it. */
-  private h2cOf(): Http2CleartextServer {
-    const h2c: Http2CleartextServer | null = this.h2c
-    if (h2c === null) {
-      panic("HttpServer: no h2c listener")
-    }
-    return h2c
-  }
-
-  /** The HTTP/3 carrier, for a request read on it. */
-  private h3Of(): Http3Server {
-    const h3: Http3Server | null = this.h3
-    if (h3 === null) {
-      panic("HttpServer: no HTTP/3 listener")
-    }
-    return h3
-  }
-
   // ---- HTTP/2 and HTTP/3 heads ----------------------------------------------------
 
   /**
@@ -3062,22 +3495,28 @@ export class HttpServer {
     if (f.isConnect()) {
       return 501
     }
-    const pathLength: i32 = toI32(f.path.length)
-    if (pathLength === 1 && toI32(f.path[0]) === 42 && httpFieldIs(f.method, "OPTIONS")) {
+    const path: u8[] = f.path
+    const pathLength: i32 = toI32(path.length)
+    if (toI32(path.length) === 1 && toI32(path[0]) === 42 && httpFieldIs(f.method, "OPTIONS")) {
       return 204
     }
     // Counts what `fromFields` lays out: `:authority`, when present, as a
     // `host` field in place of every `host` field the head carries.
     const authority: boolean = toI32(f.authority.length) > 0
+    const names: u8[][] = f.names
+    const values: u8[][] = f.values
     let fields: i32 = authority ? 1 : 0
-    let bytes: i32 = toI32(f.method.length) + pathLength + 4 + toI32(f.authority.length)
-    for (let k: i32 = 0; k < toI32(f.names.length); k++) {
-      if (!authority || !httpFieldIs(f.names[k], "host")) {
+    let bytes: i64 = toI64(f.method.length) + toI64(pathLength) + toI64(4) + toI64(f.authority.length)
+    // Stops counting once either passes i32, which is past every cap.
+    for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length) && bytes < 2147483647; k++) {
+      const counted: boolean = !authority || !httpFieldIs(names[k], "host")
+      if (counted && fields < 2147483647 && bytes < 2147483647) {
         fields += 1
-        bytes += toI32(f.names[k].length) + toI32(f.values[k].length)
+        // `bytes` is under 2^31 here, so it narrows exactly.
+        bytes = toI64(toI32(bytes)) + toI64(names[k].length) + toI64(values[k].length)
       }
     }
-    if (fields > this.maxFields || bytes > this.maxHead) {
+    if (fields > this.maxFields || bytes > toI64(this.maxHead)) {
       return 431
     }
     if (f.contentLength > toI64(this.maxBody)) {
@@ -3089,47 +3528,80 @@ export class HttpServer {
   /**
    * Lays a screened head out in `r` as HTTP/1.1's reads: the method, the
    * path as the target, and the fields, with `:authority` given as `host`
-   * in place of any `host` field.
+   * in place of any `host` field. False when the head or its spans have no
+   * room for it, which `screen`'s 431 past `maxHead` and `maxFields` leaves
+   * for none; the caller then refuses the stream.
    */
-  private fromFields(r: HttpServerRequest, f: HttpFields): void {
+  private fromFields(r: HttpServerRequest, f: HttpFields): boolean {
     this.headAt = 0
     r.methodStart = 0
-    this.put(r, f.method)
+    if (!this.put(r, f.method)) {
+      return false
+    }
     r.methodEnd = this.headAt
     r.targetStart = this.headAt
-    this.put(r, f.path)
+    if (!this.put(r, f.path)) {
+      return false
+    }
     r.targetEnd = this.headAt
     let n: i32 = 0
     const authority: boolean = toI32(f.authority.length) > 0
     if (authority) {
-      this.putField(r, n, this.hostName, f.authority)
+      if (!this.putField(r, n, this.hostName, f.authority)) {
+        return false
+      }
       n += 1
     }
-    for (let k: i32 = 0; k < toI32(f.names.length); k++) {
-      const name: u8[] = f.names[k]
+    const names: u8[][] = f.names
+    const values: u8[][] = f.values
+    for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length) && n < 2147483647; k++) {
+      const name: u8[] = names[k]
       if (!authority || !httpFieldIs(name, "host")) {
-        this.putField(r, n, name, f.values[k])
+        if (!this.putField(r, n, name, values[k])) {
+          return false
+        }
         n += 1
       }
     }
     r.headerCount = n
+    return true
   }
 
-  /** Copies `bytes` into `r`'s head at `headAt`. */
-  private put(r: HttpServerRequest, bytes: u8[]): void {
+  /** Copies `bytes` into `r`'s head at `headAt`; false, with nothing copied, when they do not fit. */
+  private put(r: HttpServerRequest, bytes: u8[]): boolean {
     const n: i32 = toI32(bytes.length)
-    copyBytes(r.head, this.headAt, bytes, HTTP_SERVER_ZERO, n)
-    this.headAt += n
+    const end: i64 = toI64(this.headAt) + toI64(n)
+    if (end > toI64(r.head.length) || !tryCopyBytes(r.head, this.headAt, bytes, HTTP_SERVER_ZERO, n)) {
+      return false
+    }
+    this.headAt = toI32(end)
+    return true
   }
 
-  /** Copies field `n`, `name`: `value`, into `r`'s head and spans. */
-  private putField(r: HttpServerRequest, n: i32, name: u8[], value: u8[]): void {
-    r.spans[4 * n] = this.headAt
-    this.put(r, name)
-    r.spans[4 * n + 1] = this.headAt
-    r.spans[4 * n + 2] = this.headAt
-    this.put(r, value)
-    r.spans[4 * n + 3] = this.headAt
+  /** Copies field `n`, `name`: `value`, into `r`'s head and spans; false when either has no room for it. */
+  private putField(r: HttpServerRequest, n: i32, name: u8[], value: u8[]): boolean {
+    // Four spans per field, and `spans` is far shorter than 2^31, so `4 * n` fits.
+    if (n < 0 || n > 536870911) {
+      return false
+    }
+    const k: i32 = n * 4
+    const spans: i32[] = r.spans
+    if (k > toI32(spans.length) - 4) {
+      return false
+    }
+    const nameStart: i32 = this.headAt
+    if (!this.put(r, name)) {
+      return false
+    }
+    const nameEnd: i32 = this.headAt
+    if (!this.put(r, value)) {
+      return false
+    }
+    spans[k] = nameStart
+    spans[k + 1] = nameEnd
+    spans[k + 2] = nameEnd
+    spans[k + 3] = this.headAt
+    return true
   }
 
   // ---- HTTP/2 ---------------------------------------------------------------------
@@ -3145,7 +3617,11 @@ export class HttpServer {
       crypto.getRandomValues(this.keyBuf)
       const slot: i32 = h2.accept(this.rnd, this.keyBuf)
       if (slot >= 0) {
-        this.h2Opened(this.h2TlsBase + slot, h2.fd(slot))
+        // `h2Grow` gave the listener `[h2TlsBase, h2TlsBase + slots)`; a slot past it is closed.
+        const v: i64 = toI64(this.h2TlsBase) + toI64(slot)
+        if (!this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2.fd(slot))) {
+          h2.close(slot)
+        }
       } else if (slot === HTTP_SERVER_ACCEPT_NONE) {
         return
       } else if (slot !== TLS_TCP_POOL_FULL && slot !== HTTP_SERVER_ACCEPT_ABORTED) {
@@ -3165,7 +3641,11 @@ export class HttpServer {
     let slot: i32 = h2c.accept()
     while (slot >= 0 || slot === H2C_POOL_FULL || slot === HTTP_SERVER_ACCEPT_ABORTED) {
       if (slot >= 0) {
-        this.h2Opened(this.h2cBase + slot, h2c.fd(slot))
+        // `h2Grow` gave the listener `[h2cBase, h2cBase + slots)`; a slot past it is closed.
+        const v: i64 = toI64(this.h2cBase) + toI64(slot)
+        if (!this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2c.fd(slot))) {
+          h2c.close(slot)
+        }
       }
       slot = h2c.accept()
     }
@@ -3181,61 +3661,157 @@ export class HttpServer {
    */
   private rest(fd: i32, token: i32): void {
     pollRemove(this.loop, fd)
-    this.restUntil[HTTP_SERVER_H1_LISTENER - token] = monotonicNanos() + HTTP_SERVER_ACCEPT_REST
+    const until: i64 = httpServerAfter(monotonicNanos(), HTTP_SERVER_ACCEPT_REST)
+    const rests: i64[] = this.restUntil
+    const at: i32 = this.restAt(token)
+    if (at >= 0 && at < toI32(rests.length)) {
+      rests[at] = until
+    }
   }
 
-  /** HTTP/2 slot `v`, just accepted on socket `fd`: an empty stream table, idle, and in the loop. */
-  private h2Opened(v: i32, fd: i32): void {
-    this.h2Open[v] = true
-    this.h2Count[v] = 0
-    this.h2IdleSince[v] = this.turnAt
-    const base: i32 = v * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      this.h2Reqs[e] = -1
+  /** The first entry of HTTP/2 slot `v`'s stream table, or -1 outside the table. */
+  private h2Base(v: i32): i32 {
+    const base: i64 = toI64(v) * toI64(this.perConnection2)
+    return v >= 0 && base >= 0 && base < toI64(toI32(this.h2Reqs.length)) ? toI32(base) : -1
+  }
+
+  /** One past the last entry of HTTP/2 slot `v`'s stream table, or -1 outside the table. */
+  private h2End(v: i32): i32 {
+    const end: i64 = (toI64(v) + toI64(1)) * toI64(this.perConnection2)
+    return v >= 0 && end >= 0 && end <= toI64(toI32(this.h2Reqs.length)) ? toI32(end) : -1
+  }
+
+  /** Marks HTTP/2 slot `v` idle since `since`, or busy for 0; nothing outside the table. */
+  private h2Idle(v: i32, since: i64): void {
+    const idleSince: i64[] = this.h2IdleSince
+    if (v >= 0 && v < toI32(idleSince.length)) {
+      idleSince[v] = since
     }
-    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2_BASE + v)
+  }
+
+  /**
+   * HTTP/2 slot `v`, just accepted on socket `fd`: an empty stream table,
+   * idle, and in the loop. False, with nothing registered, for a slot past
+   * the tables `h2Grow` sized; the caller then closes the connection.
+   */
+  private h2Opened(v: i32, fd: i32): boolean {
+    const open: boolean[] = this.h2Open
+    const count: i32[] = this.h2Count
+    const idleSince: i64[] = this.h2IdleSince
+    // `h2Grow` sizes the three together, and no listener asks for two billion slots.
+    const wide: i64 = toI64(HTTP_SERVER_H2_BASE) + toI64(v)
+    if (
+      v < 0 ||
+      v >= toI32(open.length) ||
+      v >= toI32(count.length) ||
+      v >= toI32(idleSince.length) ||
+      wide > 2147483647
+    ) {
+      return false
+    }
+    const token: i32 = toI32(wide)
+    open[v] = true
+    count[v] = 0
+    idleSince[v] = this.turnAt
+    const reqs: i32[] = this.h2Reqs
+    const end: i32 = this.h2End(v)
+    for (let e: i32 = this.h2Base(v); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      reqs[e] = -1
+    }
+    pollAdd(this.loop, fd, H1_WANT_READ, token)
+    return true
+  }
+
+  /** Whether HTTP/2 slot `v` is on the h2c carrier: false outside the slot table. */
+  private h2IsClear(v: i32): boolean {
+    const clear: boolean[] = this.h2Clear
+    return v >= 0 && v < toI32(clear.length) && clear[v]
+  }
+
+  /** HTTP/2 slot `v`'s number in its own carrier's table, or -1 outside the slot table. */
+  private h2Local(v: i32): i32 {
+    const clear: boolean[] = this.h2Clear
+    if (v < 0 || v >= toI32(clear.length)) {
+      return -1
+    }
+    const base: i32 = clear[v] ? this.h2cBase : this.h2TlsBase
+    return base >= 0 && base <= v ? v - base : -1
   }
 
   /** Whether HTTP/2 slot `v`'s carrier holds a connection there. */
   private h2Holds(v: i32): boolean {
-    if (this.h2Clear[v]) {
+    const at: i32 = this.h2Local(v)
+    if (this.h2IsClear(v)) {
       const h2c: Http2CleartextServer | null = this.h2c
-      return h2c !== null && h2c.holds(v - this.h2cBase)
+      return h2c !== null && h2c.holds(at)
     }
     const h2: Http2TlsServer | null = this.h2
-    return h2 !== null && h2.holds(v - this.h2TlsBase)
+    return h2 !== null && h2.holds(at)
   }
 
-  /** HTTP/2 slot `v`'s connection. */
-  private h2Conn(v: i32): Http2Connection {
-    if (this.h2Clear[v]) {
-      return this.h2cOf().connection(v - this.h2cBase)
+  /** HTTP/2 slot `v`'s connection, or null with no carrier for its kind of slot or outside the table. */
+  private h2Conn(v: i32): Http2Connection | null {
+    const at: i32 = this.h2Local(v)
+    if (at < 0) {
+      return null
     }
-    return this.h2Of().connection(v - this.h2TlsBase)
+    if (this.h2IsClear(v)) {
+      const h2c: Http2CleartextServer | null = this.h2c
+      return h2c === null ? null : h2c.connection(at)
+    }
+    const h2: Http2TlsServer | null = this.h2
+    return h2 === null ? null : h2.connection(at)
   }
 
-  /** HTTP/2 slot `v`'s next event, as its carrier's `next` answers. */
+  /** HTTP/2 slot `v`'s connection once it has its preface (a TLS slot has it at once), or null before. */
+  private h2Prefaced(v: i32): Http2Connection | null {
+    const h2c: Http2CleartextServer | null = this.h2c
+    if (this.h2IsClear(v) && (h2c === null || !h2c.prefaced(this.h2Local(v)))) {
+      return null
+    }
+    return this.h2Conn(v)
+  }
+
+  /** HTTP/2 slot `v`'s next event, as its carrier's `next` answers: `H2_ERROR` with no carrier. */
   private h2Next(v: i32): i32 {
-    if (this.h2Clear[v]) {
-      return this.h2cOf().next(v - this.h2cBase)
+    const at: i32 = this.h2Local(v)
+    if (at < 0) {
+      return H2_ERROR
     }
-    return this.h2Of().next(v - this.h2TlsBase)
+    if (this.h2IsClear(v)) {
+      const h2c: Http2CleartextServer | null = this.h2c
+      return h2c === null ? H2_ERROR : h2c.next(at)
+    }
+    const h2: Http2TlsServer | null = this.h2
+    return h2 === null ? H2_ERROR : h2.next(at)
   }
 
-  /** Sends what HTTP/2 slot `v` holds: its interest, with `TLS_RECORD_DONE` (`H2C_DONE`) once it is over. */
+  /**
+   * Sends what HTTP/2 slot `v` holds: its interest, with `TLS_RECORD_DONE`
+   * (`H2C_DONE`) once it is over, with no carrier, or outside the slot table.
+   */
   private h2Flush(v: i32): i32 {
-    if (this.h2Clear[v]) {
-      return this.h2cOf().flush(v - this.h2cBase)
+    const at: i32 = this.h2Local(v)
+    if (at < 0) {
+      return TLS_RECORD_DONE
     }
-    return this.h2Of().flush(v - this.h2TlsBase)
+    if (this.h2IsClear(v)) {
+      const h2c: Http2CleartextServer | null = this.h2c
+      return h2c === null ? TLS_RECORD_DONE : h2c.flush(at)
+    }
+    const h2: Http2TlsServer | null = this.h2
+    return h2 === null ? TLS_RECORD_DONE : h2.flush(at)
   }
 
-  /** HTTP/2 slot `v`'s socket. */
+  /** HTTP/2 slot `v`'s socket, or -1 with no carrier. */
   private h2FdOf(v: i32): i32 {
-    if (this.h2Clear[v]) {
-      return this.h2cOf().fd(v - this.h2cBase)
+    const at: i32 = this.h2Local(v)
+    if (this.h2IsClear(v)) {
+      const h2c: Http2CleartextServer | null = this.h2c
+      return h2c === null ? -1 : h2c.fd(at)
     }
-    return this.h2Of().fd(v - this.h2TlsBase)
+    const h2: Http2TlsServer | null = this.h2
+    return h2 === null ? -1 : h2.fd(at)
   }
 
   /**
@@ -3252,24 +3828,26 @@ export class HttpServer {
       return
     }
     const read: boolean = (events & HTTP_SERVER_READ_BITS) !== 0
-    if (this.h2Clear[v]) {
-      const h2c: Http2CleartextServer = this.h2cOf()
-      const slot: i32 = v - this.h2cBase
-      if (read) {
-        h2c.readable(slot)
-      } else {
-        h2c.writable(slot)
+    const h2c: Http2CleartextServer | null = this.h2c
+    const h2: Http2TlsServer | null = this.h2
+    if (this.h2IsClear(v)) {
+      if (h2c !== null) {
+        const slot: i32 = toI32(toI64(v) - toI64(this.h2cBase))
+        if (read) {
+          h2c.readable(slot)
+        } else {
+          h2c.writable(slot)
+        }
       }
-    } else if (key !== null) {
-      const h2: Http2TlsServer = this.h2Of()
-      const slot: i32 = v - this.h2TlsBase
+    } else if (key !== null && h2 !== null) {
+      const slot: i32 = toI32(toI64(v) - toI64(this.h2TlsBase))
       let wants: i32 = read ? h2.readable(slot) : h2.writable(slot)
       for (let turn: i32 = 0; turn < 4 && h2.holds(slot) && (wants & TLS_RECORD_SIGN) !== 0; turn++) {
         wants = h2.signP256(slot, key)
       }
     }
-    if (this.h2Holds(v)) {
-      const conn: Http2Connection = this.h2Conn(v)
+    const conn: Http2Connection | null = this.h2Holds(v) ? this.h2Conn(v) : null
+    if (conn !== null) {
       let event: i32 = this.h2Next(v)
       while (event !== H2_NEED_MORE && event !== H2_ERROR) {
         this.h2Event(v, conn, event)
@@ -3292,13 +3870,17 @@ export class HttpServer {
    * stream's other half, so the reset cuts the answer short, by design.
    */
   private h2Ended(slot: i32): void {
-    const conn: Http2Connection = this.h2Conn(slot)
-    const base: i32 = slot * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      const at: i32 = this.h2Reqs[e]
+    const conn: Http2Connection | null = this.h2Conn(slot)
+    if (conn === null) {
+      return
+    }
+    const reqs: i32[] = this.h2Reqs
+    const end: i32 = this.h2End(slot)
+    for (let e: i32 = this.h2Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const at: i32 = reqs[e]
       if (at >= 0) {
-        const r: HttpServerRequest = this.requests[at]
-        if (r.streaming && !r.bodyEnded && !r.hung) {
+        const r: HttpServerRequest | null = this.requestAt(at)
+        if (r !== null && r.streaming && !r.bodyEnded && !r.hung) {
           this.drop(r)
           this.requeue(r)
           conn.reset(toI32(r.stream), H2_CANCEL)
@@ -3320,24 +3902,33 @@ export class HttpServer {
         return
       }
       const e: i32 = this.h2Entry(slot)
-      const at: i32 = e >= 0 ? this.obtain() : -1
-      if (at < 0) {
+      const r: HttpServerRequest | null = e >= 0 ? this.obtain() : null
+      if (r === null) {
         conn.reset(id, H2_REFUSED_STREAM)
         return
       }
-      const r: HttpServerRequest = this.requests[at]
-      this.fromFields(r, f)
+      if (!this.fromFields(r, f)) {
+        // Still free: `admit` has not taken it.
+        this.free.push(r)
+        conn.reset(id, H2_REFUSED_STREAM)
+        return
+      }
       r.kind = HTTP_SERVER_H2
       r.version = 2
-      r.secure = !this.h2Clear[slot]
+      r.secure = !this.h2IsClear(slot)
       r.stream = toI64(id)
       r.slot = slot
-      r.gen = this.h2Gen[slot]
+      r.gen = httpServerAt(this.h2Gen, slot)
       r.entry = e
-      this.h2Streams[e] = id
-      this.h2Reqs[e] = at
-      this.h2Count[slot] = this.h2Count[slot] + 1
-      this.h2IdleSince[slot] = 0
+      const streams: i32[] = this.h2Streams
+      const reqs: i32[] = this.h2Reqs
+      // `h2Entry` found `e` in the table, which `h2Grow` sizes with `h2Streams`.
+      if (e >= 0 && e < toI32(streams.length) && e < toI32(reqs.length)) {
+        streams[e] = id
+        reqs[e] = r.index
+      }
+      httpServerAdd(this.h2Count, slot, 1)
+      this.h2Idle(slot, toI64(0))
       this.admit(r, !conn.endStream)
       const streaming: boolean = !conn.endStream && this.streamsBody(r.route)
       if (long && !streaming) {
@@ -3356,10 +3947,10 @@ export class HttpServer {
       return
     }
     const at: i32 = this.h2Find(slot, id)
-    if (at < 0) {
+    const r: HttpServerRequest | null = this.requestAt(at)
+    if (r === null) {
       return
     }
-    const r: HttpServerRequest = this.requests[at]
     if (r.streaming) {
       this.h2Piece(conn, r, event)
       return
@@ -3368,7 +3959,7 @@ export class HttpServer {
       if (r.state !== HTTP_SERVER_READING) {
         return
       }
-      if (r.bodyLength + conn.dataLength > this.maxBody) {
+      if (toI64(r.bodyLength) + toI64(conn.dataLength) > toI64(this.maxBody)) {
         this.release(r)
         this.h2Direct(slot, conn, id, HTTP_SERVER_TOO_LARGE, conn.endStream)
         return
@@ -3404,11 +3995,18 @@ export class HttpServer {
         r.state === HTTP_SERVER_HELD ||
         r.state === HTTP_SERVER_STREAMING
       ) {
-        const need: i32 = r.bodyLength + n
+        // The stream window keeps the sum inside an `i32`.
+        const wide: i64 = toI64(r.bodyLength) + toI64(n)
+        const need: i32 = wide > toI64(2147483647) ? 2147483647 : toI32(wide)
         if (toI32(r.body.length) < need) {
           const have: i32 = toI32(r.body.length)
-          let size: i32 = have < HTTP_SERVER_BODY_FIRST ? HTTP_SERVER_BODY_FIRST : have * 2
           const cap: i32 = conn.streamWindow()
+          // Doubling past i32 is past `cap` too, which the clamp below gives.
+          let doubled: i32 = cap
+          if (have < 1073741824) {
+            doubled = have * 2
+          }
+          let size: i32 = have < HTTP_SERVER_BODY_FIRST ? HTTP_SERVER_BODY_FIRST : doubled
           if (size > cap) {
             size = cap
           }
@@ -3443,7 +4041,7 @@ export class HttpServer {
    * carries `alt-svc` like every other answer; over h2c it carries none.
    */
   private h2Direct(slot: i32, conn: Http2Connection, id: i32, status: i32, ended: boolean): void {
-    const alt: boolean = this.altSvc !== null && !this.h2Clear[slot]
+    const alt: boolean = this.altSvc !== null && !this.h2IsClear(slot)
     const names: u8[][] = alt ? this.altNames : this.noFields
     const values: u8[][] = alt ? this.altValues : this.noFields
     if (conn.respond(id, status, names, values, true) !== 0) {
@@ -3455,9 +4053,10 @@ export class HttpServer {
 
   /** A free entry of `slot`'s stream table, or -1 when it is full. */
   private h2Entry(slot: i32): i32 {
-    const base: i32 = slot * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      if (this.h2Reqs[e] === -1) {
+    const reqs: i32[] = this.h2Reqs
+    const end: i32 = this.h2End(slot)
+    for (let e: i32 = this.h2Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      if (reqs[e] === -1) {
         return e
       }
     }
@@ -3466,10 +4065,12 @@ export class HttpServer {
 
   /** The request `slot` holds for stream `id`, or -1. */
   private h2Find(slot: i32, id: i32): i32 {
-    const base: i32 = slot * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      if (this.h2Reqs[e] >= 0 && this.h2Streams[e] === id) {
-        return this.h2Reqs[e]
+    const reqs: i32[] = this.h2Reqs
+    const streams: i32[] = this.h2Streams
+    const end: i32 = this.h2End(slot)
+    for (let e: i32 = this.h2Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      if (reqs[e] >= 0 && e < toI32(streams.length) && streams[e] === id) {
+        return reqs[e]
       }
     }
     return -1
@@ -3481,7 +4082,8 @@ export class HttpServer {
    */
   private h2Settle(slot: i32): void {
     if (!this.h2Holds(slot)) {
-      if (this.h2Open[slot]) {
+      const open: boolean[] = this.h2Open
+      if (slot >= 0 && slot < toI32(open.length) && open[slot]) {
         this.h2Forget(slot)
       }
       return
@@ -3492,7 +4094,8 @@ export class HttpServer {
     }
     // A WINDOW_UPDATE `consume` owed while the output was full goes out now:
     // a peer at a closed window sends nothing that would make `next` send it.
-    if (this.h2Holds(slot) && this.h2Conn(slot).settleCredit()) {
+    const conn: Http2Connection | null = this.h2Holds(slot) ? this.h2Conn(slot) : null
+    if (conn !== null && conn.settleCredit()) {
       wants = this.h2Flush(slot)
     }
     if (!this.h2Holds(slot)) {
@@ -3503,21 +4106,21 @@ export class HttpServer {
       this.h2Close(slot)
       return
     }
-    pollModify(
-      this.loop,
-      this.h2FdOf(slot),
-      wants & (H1_WANT_READ | H1_WANT_WRITE),
-      HTTP_SERVER_H2_BASE + slot
-    )
+    // `h2Opened` registered the slot under this token, so it fits.
+    const token: i64 = toI64(HTTP_SERVER_H2_BASE) + toI64(slot)
+    if (token <= 2147483647) {
+      pollModify(this.loop, this.h2FdOf(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), toI32(token))
+    }
   }
 
   /** Pushes every response `slot` is sending: whether any moved a byte or ended. */
   private h2PushAll(slot: i32): boolean {
     let moved: boolean = false
-    const base: i32 = slot * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      const at: i32 = this.h2Reqs[e]
-      if (at >= 0 && this.moves(this.requests[at])) {
+    const reqs: i32[] = this.h2Reqs
+    const end: i32 = this.h2End(slot)
+    for (let e: i32 = this.h2Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const r: HttpServerRequest | null = this.requestAt(reqs[e])
+      if (r !== null && this.moves(r)) {
         moved = true
       }
     }
@@ -3529,17 +4132,22 @@ export class HttpServer {
     if (r.state !== HTTP_SERVER_STREAMING && r.state !== HTTP_SERVER_FLUSHING) {
       return false
     }
-    const before: i32 = r.pendingEnd - r.pendingStart
+    const before: i64 = toI64(r.pendingEnd) - toI64(r.pendingStart)
     this.push(r)
-    return r.state === HTTP_SERVER_FREE || r.pendingEnd - r.pendingStart < before
+    return r.state === HTTP_SERVER_FREE || toI64(r.pendingEnd) - toI64(r.pendingStart) < before
   }
 
   /** Closes `slot` and forgets it. */
   private h2Close(slot: i32): void {
-    if (this.h2Clear[slot]) {
-      this.h2cOf().close(slot - this.h2cBase)
-    } else {
-      this.h2Of().close(slot - this.h2TlsBase)
+    const h2c: Http2CleartextServer | null = this.h2c
+    const h2: Http2TlsServer | null = this.h2
+    const at: i32 = this.h2Local(slot)
+    if (at >= 0 && this.h2IsClear(slot)) {
+      if (h2c !== null) {
+        h2c.close(at)
+      }
+    } else if (at >= 0 && h2 !== null) {
+      h2.close(at)
     }
     this.h2Forget(slot)
   }
@@ -3550,15 +4158,24 @@ export class HttpServer {
    * held go back.
    */
   private h2Forget(slot: i32): void {
-    this.h2Open[slot] = false
-    this.h2Gen[slot] = this.h2Gen[slot] + 1
-    this.h2Count[slot] = 0
-    const base: i32 = slot * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      const at: i32 = this.h2Reqs[e]
-      this.h2Reqs[e] = -1
-      if (at >= 0) {
-        const r: HttpServerRequest = this.requests[at]
+    const open: boolean[] = this.h2Open
+    const gen: i32[] = this.h2Gen
+    const count: i32[] = this.h2Count
+    // `h2Grow` sizes the three together.
+    if (slot < 0 || slot >= toI32(open.length) || slot >= toI32(gen.length) || slot >= toI32(count.length)) {
+      return
+    }
+    open[slot] = false
+    // The generation only has to differ from the last one, so it wraps.
+    const was: i32 = gen[slot]
+    gen[slot] = was < 2147483647 ? was + 1 : 0
+    count[slot] = 0
+    const reqs: i32[] = this.h2Reqs
+    const end: i32 = this.h2End(slot)
+    for (let e: i32 = this.h2Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const r: HttpServerRequest | null = this.requestAt(reqs[e])
+      reqs[e] = -1
+      if (r !== null) {
         r.entry = -1
         this.drop(r)
         if (r.streaming) {
@@ -3615,15 +4232,21 @@ export class HttpServer {
       if (n < 0) {
         return count
       }
-      const segment: i32 = this.h3Meta[0] > 0 ? this.h3Meta[0] : n
+      const meta: i32[] = this.h3Meta
+      const given: i32 = toI32(meta.length) > 0 ? meta[0] : 0
+      const segment: i32 = given > 0 ? given : n
       let at: i32 = 0
-      while (at < n) {
-        const length: i32 = n - at < segment ? n - at : segment
+      while (at >= 0 && at < n) {
+        const left: i32 = n - at
+        const length: i32 = left < segment ? left : segment
         if (this.h3Owned(h3, rx, at, length)) {
           h3.datagram(rx, at, length, this.h3From, ms, key)
         }
-        count += 1
-        at += length
+        if (count < 2147483647) {
+          count += 1
+        }
+        // `length` is at most `n - at`, so `at` stays within `n`.
+        at = toI32(toI64(at) + toI64(length))
       }
     }
     return count
@@ -3631,28 +4254,31 @@ export class HttpServer {
 
   /** Whether a connection of `h3` owns the datagram `buf[at .. at + len)`, by its first packet's Destination Connection ID, read as `Http3Server.datagram` reads it. */
   private h3Owned(h3: Http3Server, buf: u8[], at: i32, len: i32): boolean {
-    if (len < 1) {
+    const end: i64 = toI64(at) + toI64(len)
+    if (len < 1 || at < 0 || at >= toI32(buf.length) || end > toI64(buf.length)) {
       return false
     }
-    let dcidAt: i32 = at + 1
+    let dcidOffset: i32 = 1
     let dcidLength: i32 = QUIC_CONN_CID_LENGTH
     if ((toI32(buf[at]) & 0x80) !== 0) {
-      if (len < 6) {
+      const lengthAt: i32 = toI32(toI64(at) + toI64(5))
+      if (len < 6 || lengthAt < 0 || lengthAt >= toI32(buf.length)) {
         return false
       }
-      dcidLength = toI32(buf[at + 5])
-      dcidAt = at + 6
+      dcidLength = toI32(buf[lengthAt])
+      dcidOffset = 6
     }
-    if (dcidLength > QUIC_MAX_CID_LENGTH || dcidAt + dcidLength > at + len) {
+    if (dcidLength > QUIC_MAX_CID_LENGTH || toI64(dcidOffset) + toI64(dcidLength) > toI64(len)) {
       return false
     }
-    return h3.index.find(buf, dcidAt, dcidLength) >= 0
+    // The ID ends within `at + len`, which fits in `buf`.
+    return h3.index.find(buf, toI32(toI64(at) + toI64(dcidOffset)), dcidLength) >= 0
   }
 
   /** Serves `slot`'s HTTP/3 events, then pushes its responses. */
   private h3Serve(h3: Http3Server, slot: i32): void {
     const conn: Http3Connection = h3.connection(slot)
-    if (this.h3Gen[slot] !== conn.generation) {
+    if (httpServerAt(this.h3Gen, slot) !== conn.generation) {
       this.h3Clear(slot, conn.generation)
     }
     let event: i32 = conn.next()
@@ -3664,11 +4290,12 @@ export class HttpServer {
       this.h3Clear(slot, conn.generation)
       return
     }
-    const base: i32 = slot * this.perConnection3
-    for (let e: i32 = base; e < base + this.perConnection3; e++) {
-      const at: i32 = this.h3Reqs[e]
-      if (at >= 0) {
-        this.moves(this.requests[at])
+    const reqs: i32[] = this.h3Reqs
+    const end: i32 = this.h3End(slot)
+    for (let e: i32 = this.h3Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const r: HttpServerRequest | null = this.requestAt(reqs[e])
+      if (r !== null) {
+        this.moves(r)
       }
     }
   }
@@ -3684,13 +4311,17 @@ export class HttpServer {
         return
       }
       const e: i32 = this.h3Entry(slot)
-      const at: i32 = e >= 0 ? this.obtain() : -1
-      if (at < 0) {
+      const r: HttpServerRequest | null = e >= 0 ? this.obtain() : null
+      if (r === null) {
         conn.reset(id, H3_REQUEST_REJECTED)
         return
       }
-      const r: HttpServerRequest = this.requests[at]
-      this.fromFields(r, f)
+      if (!this.fromFields(r, f)) {
+        // Still free: `admit` has not taken it.
+        this.free.push(r)
+        conn.reset(id, H3_REQUEST_REJECTED)
+        return
+      }
       r.kind = HTTP_SERVER_H3
       r.version = 3
       r.secure = true
@@ -3698,22 +4329,27 @@ export class HttpServer {
       r.slot = slot
       r.gen = conn.generation
       r.entry = e
-      this.h3Streams[e] = id
-      this.h3Reqs[e] = at
-      this.h3Count[slot] = this.h3Count[slot] + 1
+      const streams: i64[] = this.h3Streams
+      const reqs: i32[] = this.h3Reqs
+      // `h3Entry` found `e` in the table, which `listenHttp3` sizes with `h3Streams`.
+      if (e >= 0 && e < toI32(streams.length) && e < toI32(reqs.length)) {
+        streams[e] = id
+        reqs[e] = r.index
+      }
+      httpServerAdd(this.h3Count, slot, 1)
       this.admit(r, false)
       return
     }
     const at: i32 = this.h3Find(slot, id)
-    if (at < 0) {
+    const r: HttpServerRequest | null = this.requestAt(at)
+    if (r === null) {
       return
     }
-    const r: HttpServerRequest = this.requests[at]
     if (event === H3_DATA) {
       if (r.state !== HTTP_SERVER_READING) {
         return
       }
-      if (r.bodyLength + conn.dataLength > this.maxBody) {
+      if (toI64(r.bodyLength) + toI64(conn.dataLength) > toI64(this.maxBody)) {
         this.release(r)
         this.h3Direct(conn, id, HTTP_SERVER_TOO_LARGE)
         return
@@ -3744,11 +4380,24 @@ export class HttpServer {
     }
   }
 
+  /** The first entry of HTTP/3 slot `v`'s stream table, or -1 outside the table. */
+  private h3Base(v: i32): i32 {
+    const base: i64 = toI64(v) * toI64(this.perConnection3)
+    return v >= 0 && base >= 0 && base < toI64(toI32(this.h3Reqs.length)) ? toI32(base) : -1
+  }
+
+  /** One past the last entry of HTTP/3 slot `v`'s stream table, or -1 outside the table. */
+  private h3End(v: i32): i32 {
+    const end: i64 = (toI64(v) + toI64(1)) * toI64(this.perConnection3)
+    return v >= 0 && end >= 0 && end <= toI64(toI32(this.h3Reqs.length)) ? toI32(end) : -1
+  }
+
   /** A free entry of `slot`'s stream table, or -1 when it is full. */
   private h3Entry(slot: i32): i32 {
-    const base: i32 = slot * this.perConnection3
-    for (let e: i32 = base; e < base + this.perConnection3; e++) {
-      if (this.h3Reqs[e] === -1) {
+    const reqs: i32[] = this.h3Reqs
+    const end: i32 = this.h3End(slot)
+    for (let e: i32 = this.h3Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      if (reqs[e] === -1) {
         return e
       }
     }
@@ -3757,10 +4406,12 @@ export class HttpServer {
 
   /** The request `slot` holds for stream `id`, or -1. */
   private h3Find(slot: i32, id: i64): i32 {
-    const base: i32 = slot * this.perConnection3
-    for (let e: i32 = base; e < base + this.perConnection3; e++) {
-      if (this.h3Reqs[e] >= 0 && this.h3Streams[e] === id) {
-        return this.h3Reqs[e]
+    const reqs: i32[] = this.h3Reqs
+    const end: i32 = this.h3End(slot)
+    const streams: i64[] = this.h3Streams
+    for (let e: i32 = this.h3Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      if (reqs[e] >= 0 && e < toI32(streams.length) && streams[e] === id) {
+        return reqs[e]
       }
     }
     return -1
@@ -3771,18 +4422,23 @@ export class HttpServer {
    * generation `gen`: the requests only the server held go back.
    */
   private h3Clear(slot: i32, gen: i32): void {
-    const base: i32 = slot * this.perConnection3
-    for (let e: i32 = base; e < base + this.perConnection3; e++) {
-      const at: i32 = this.h3Reqs[e]
-      this.h3Reqs[e] = -1
-      if (at >= 0) {
-        const r: HttpServerRequest = this.requests[at]
+    const reqs: i32[] = this.h3Reqs
+    const end: i32 = this.h3End(slot)
+    for (let e: i32 = this.h3Base(slot); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const r: HttpServerRequest | null = this.requestAt(reqs[e])
+      reqs[e] = -1
+      if (r !== null) {
         r.entry = -1
         this.drop(r)
       }
     }
-    this.h3Count[slot] = 0
-    this.h3Gen[slot] = gen
+    const count: i32[] = this.h3Count
+    const gens: i32[] = this.h3Gen
+    // `listenHttp3` sizes the two together.
+    if (slot >= 0 && slot < toI32(count.length) && slot < toI32(gens.length)) {
+      count[slot] = 0
+      gens[slot] = gen
+    }
   }
 
   // ---- Timeouts -------------------------------------------------------------------
@@ -3796,10 +4452,10 @@ export class HttpServer {
   private expireAll(now: i64): void {
     const h1: Http1Server | null = this.h1
     if (h1 !== null) {
-      for (let s: i32 = 0; s < toI32(this.h1Current.length); s++) {
-        const at: i32 = this.h1Current[s]
-        if (at >= 0 && this.late(this.requests[at], now) && h1.holds(s)) {
-          this.h1Close(h1, s)
+      for (const s of this.h1Slots) {
+        const r: HttpServerRequest | null = s.current
+        if (r !== null && this.late(r, now) && h1.holds(s.slot)) {
+          this.h1Close(h1, s.slot)
         }
       }
     }
@@ -3826,7 +4482,7 @@ export class HttpServer {
 
   /** Whether `r` is still reading its body past `bodyTimeout`. */
   private late(r: HttpServerRequest, now: i64): boolean {
-    return r.state === HTTP_SERVER_READING && now - r.since > this.bodyTimeout
+    return r.state === HTTP_SERVER_READING && httpServerPast(now, r.since, this.bodyTimeout)
   }
 
   /** `expireAll` for HTTP/2 slot `s`. */
@@ -3835,18 +4491,20 @@ export class HttpServer {
       this.h2Forget(s)
       return
     }
-    if (this.h2Clear[s] && !this.h2cOf().prefaced(s - this.h2cBase)) {
+    const conn: Http2Connection | null = this.h2Prefaced(s)
+    if (conn === null) {
       // `prefaceTimeout` holds it till then; `idleTimeout` runs from the preface.
-      this.h2IdleSince[s] = now
+      this.h2Idle(s, now)
       return
     }
-    const conn: Http2Connection = this.h2Conn(s)
-    const base: i32 = s * this.perConnection2
-    for (let e: i32 = base; e < base + this.perConnection2; e++) {
-      const at: i32 = this.h2Reqs[e]
-      if (at >= 0 && this.late(this.requests[at], now)) {
-        const sent: i32 = conn.reset(this.h2Streams[e], H2_CANCEL)
-        this.release(this.requests[at])
+    const streams: i32[] = this.h2Streams
+    const reqs: i32[] = this.h2Reqs
+    const end: i32 = this.h2End(s)
+    for (let e: i32 = this.h2Base(s); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const r: HttpServerRequest | null = this.requestAt(reqs[e])
+      if (r !== null && this.late(r, now) && e < toI32(streams.length)) {
+        const sent: i32 = conn.reset(streams[e], H2_CANCEL)
+        this.release(r)
         if (sent === H2_AGAIN) {
           // No room to send the reset: end the connection, as `abort` does.
           this.h2Close(s)
@@ -3854,7 +4512,9 @@ export class HttpServer {
         }
       }
     }
-    if (this.h2Count[s] === 0 && this.h2IdleSince[s] > 0 && now - this.h2IdleSince[s] > this.idleTimeout) {
+    const idleSince: i64[] = this.h2IdleSince
+    const since: i64 = s >= 0 && s < toI32(idleSince.length) ? idleSince[s] : 0
+    if (httpServerAt(this.h2Count, s) === 0 && since > 0 && httpServerPast(now, since, this.idleTimeout)) {
       this.h2Close(s)
       return
     }
@@ -3863,17 +4523,19 @@ export class HttpServer {
 
   /** `expireAll` for HTTP/3 slot `s`. */
   private h3Expire(h3: Http3Server, s: i32, now: i64): void {
-    if (!h3.holds(s) || h3.connection(s).generation !== this.h3Gen[s]) {
-      this.h3Clear(s, h3.holds(s) ? h3.connection(s).generation : this.h3Gen[s])
+    if (!h3.holds(s) || h3.connection(s).generation !== httpServerAt(this.h3Gen, s)) {
+      this.h3Clear(s, h3.holds(s) ? h3.connection(s).generation : httpServerAt(this.h3Gen, s))
       return
     }
     const conn: Http3Connection = h3.connection(s)
-    const base: i32 = s * this.perConnection3
-    for (let e: i32 = base; e < base + this.perConnection3; e++) {
-      const at: i32 = this.h3Reqs[e]
-      if (at >= 0 && this.late(this.requests[at], now)) {
-        conn.reset(this.h3Streams[e], H3_REQUEST_CANCELLED)
-        this.release(this.requests[at])
+    const streams: i64[] = this.h3Streams
+    const reqs: i32[] = this.h3Reqs
+    const end: i32 = this.h3End(s)
+    for (let e: i32 = this.h3Base(s); e >= 0 && e < end && e < toI32(reqs.length); e++) {
+      const r: HttpServerRequest | null = this.requestAt(reqs[e])
+      if (r !== null && this.late(r, now) && e < toI32(streams.length)) {
+        conn.reset(streams[e], H3_REQUEST_CANCELLED)
+        this.release(r)
         h3.touch(s)
       }
     }
