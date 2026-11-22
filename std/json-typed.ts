@@ -460,6 +460,22 @@ const JSON_TYPED_ERASED: string =
   "nish/json-typed: jsonDecode, jsonDecodeUnion and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
 
 /**
+ * `n` zeroed bytes, `n` at least `0`. A length that fits a `u16`, a number's
+ * and nearly every string's, is one allocation whose length needs no check;
+ * a longer one is grown a byte at a time.
+ */
+const jsonTypedZeroBytes = (n: i32): u8[] => {
+  if (n >= 0 && n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const bytes: u8[] = []
+  for (let k: i32 = 0; k < n; k += 1) {
+    bytes.push(toU8(0))
+  }
+  return bytes
+}
+
+/**
  * A JSON number kept as the text it was written in, so that no digit is lost:
  * an integer wider than a `u64` and a fraction with more digits than an `f64`
  * holds are decoded and encoded again byte for byte. A field of this class is
@@ -567,7 +583,7 @@ export class JsonNumber {
    */
   setText(text: string): boolean {
     const n: i32 = toI32(text.length)
-    const bytes: u8[] = new Array<u8>(n)
+    const bytes: u8[] = jsonTypedZeroBytes(n)
     for (let k: i32 = 0; k < n && k < toI32(bytes.length); k += 1) {
       let c: i32 = toI32(text.charCodeAt(k))
       // A number is ASCII; anything wider fails the check below as `~` does.
@@ -803,11 +819,27 @@ export class JsonDecoder {
   keyByte(at: i32): i32 {
     const tok: JsonTokenizer = this.tok
     const n: i32 = tok.stringLength()
-    if (n !== tok.tokEnd - tok.tokStart - 2 || at < 0 || at >= n) {
+    const start: i32 = tok.tokStart
+    const src: u8[] = tok.src
+    // The width between the quotes is in `i64`, where it cannot wrap. The
+    // opening quote is a byte of `src`, so the `+ 1` fits, and a byte `at`
+    // past it is in `src` only when `at` is below the bytes left; then the
+    // `u32` sum of two non-negative `i32`s is exact and below the length.
+    if (
+      toI64(n) !== toI64(tok.tokEnd) - toI64(start) - toI64(2) ||
+      at < 0 ||
+      at >= n ||
+      start < 0 ||
+      start >= toI32(src.length)
+    ) {
       return -1
     }
-    const src: u8[] = tok.src
-    const i: i32 = tok.tokStart + 1 + at
+    const from: i32 = start + 1
+    const left: i32 = toI32(src.length) - from
+    if (at >= left) {
+      return -1
+    }
+    const i: i32 = toI32(toU32(from) + toU32(at))
     if (i < 0 || i >= toI32(src.length)) {
       return -1
     }
@@ -825,8 +857,9 @@ export class JsonDecoder {
    * @returns `true` when the key is counted; `false` with `JSON_DECODE_MAP_LIMIT`.
    */
   mapRoom(): boolean {
-    if (this.mapKeys < this.maxMapKeys) {
-      this.mapKeys += 1
+    const keys: i32 = this.mapKeys
+    if (keys < this.maxMapKeys) {
+      this.mapKeys = keys + 1
       return true
     }
     this.fail(JSON_DECODE_MAP_LIMIT, this.tok.tokStart)
@@ -855,14 +888,19 @@ export class JsonDecoder {
     if (n < 0) {
       return ""
     }
-    if (n === tok.tokEnd - tok.tokStart - 2) {
+    const start: i32 = tok.tokStart
+    const end: i32 = tok.tokEnd
+    // In `i64`, where the width between the quotes cannot wrap. A string
+    // token starts at a byte of the input and spans `n + 2` bytes, so the
+    // other tests always hold; they prove both quotes' moves fit.
+    if (toI64(n) === toI64(end) - toI64(start) - toI64(2) && start >= 0 && start < end && end > 0) {
       // No escape, so the bytes between the quotes are the string's, copied
       // once by `String.fromBytes`.
-      return String.fromBytes(tok.src, tok.tokStart + 1, tok.tokEnd - 1)
+      return String.fromBytes(tok.src, start + 1, end - 1)
     }
     // The unescaped bytes are a temporary: a caller that keeps only the string
     // it answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
-    const bytes: u8[] = new Array<u8>(n)
+    const bytes: u8[] = jsonTypedZeroBytes(n)
     const at: i32 = 0
     tok.stringInto(bytes, at)
     return String.fromBytes(bytes, 0, n)
@@ -966,9 +1004,10 @@ export class JsonDecoder {
     }
     this.unionStart = -1
     // Held at `i32`'s largest value, where raised limits could carry a sum
-    // past it: nothing an input holds may panic.
-    const span: i32 = this.tok.tokEnd - start
-    this.unionReread = span > 2147483647 - this.unionReread ? 2147483647 : this.unionReread + span
+    // past it: nothing an input holds may panic. The sum of three `i32`s
+    // cannot wrap an `i64`, and below the cap it is the `i32` it was.
+    const total: i64 = toI64(this.unionReread) + toI64(this.tok.tokEnd) - toI64(start)
+    this.unionReread = total > toI64(2147483647) ? 2147483647 : toI32(total)
     this.tok.rewindObject(start)
     return false
   }
@@ -1220,7 +1259,11 @@ export class JsonDecoder {
       } else {
         bytes.push(b)
       }
-      copied += 1
+      // Byte `copied` now holds `b`, so `copied` is below the length and
+      // this always counts it; the test is what proves the `+ 1` fits.
+      if (copied < toI32(bytes.length)) {
+        copied += 1
+      }
     }
     n.count = copied
   }
@@ -1307,7 +1350,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1339,7 +1386,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1371,7 +1422,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1403,7 +1458,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1435,7 +1494,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1467,7 +1530,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1505,7 +1572,11 @@ export class JsonDecoder {
       } else {
         xs.push(v)
       }
-      n += 1
+      // Slot `n` now holds `v`, so `n` is below the length and this always
+      // counts it; the test is what proves the `+ 1` fits.
+      if (n < toI32(xs.length)) {
+        n += 1
+      }
     }
     while (toI32(xs.length) > n && xs.length > 0) {
       xs.pop()
@@ -1742,7 +1813,8 @@ export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
       break
     }
   }
-  w.raw(digits, first, toI32(digits.length) - first)
+  // `first` is a slot of the 20, so the `i64` difference is 1 to 20.
+  w.raw(digits, first, toI32(toI64(digits.length) - toI64(first)))
 }
 
 /**
