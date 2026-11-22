@@ -456,9 +456,12 @@ export class FlagTable {
         const flag = eq < 0 ? arg : arg.substring(0, eq)
         let at = this.indexOf(flag.substring(2))
         let negated = false
-        if (at < 0 && flag.startsWith("--no-") && this.kindOf(flag.substring(5)) === FLAG_BOOLEAN) {
-          at = this.indexOf(flag.substring(5))
-          negated = true
+        if (at < 0 && flag.startsWith("--no-")) {
+          const base = this.indexOf(flag.substring(5))
+          if (base >= 0 && base < toI32(this.flags.length) && this.flags[base].kind === FLAG_BOOLEAN) {
+            at = base
+            negated = true
+          }
         }
         // `indexOf` answers `-1` or an index of `flags`, and `got` was sized
         // to `flags` above, so the bounds tests only restate that.
