@@ -77,6 +77,12 @@ cites in `tests/run.js`, recomputes every figure from its source (the budget
 constant, the script's printed output, the recorded run), and states in its
 body how many it checked.
 
+**A bound a record lists names the check that fails without it.** A new
+row in `docs/security/*.md` that states a limit (a cap, a freed buffer, a
+growth bound) cites the `tests/run.js` check or `tests/link` case that fails
+when the limit is removed; a bound read only from the code goes under the
+record's open findings as untested, not in its bounds table.
+
 **A bench side is the code it names.** A side called an existing copy calls
 the shipped function itself, with its callers' argument types and input
 shapes, and the native kernel where one replaces it; a loop the bench wrote

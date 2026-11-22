@@ -78,6 +78,7 @@ import {
   DNS_RESOLVE_MAX_ADDRESSES,
   DNS_RESOLVE_PENDING,
   DNS_RESOLVE_TIMEOUT,
+  DNS_RESOLVER_MAX_LOOKUPS,
   DNS_SEND_TCP,
   DnsResolver,
 } from "nish/net/dns-resolver"
@@ -174,7 +175,8 @@ export class DnsClient {
   /**
    * A client for `resolver` whose sockets join the loop `loop` under tokens
    * from `tokenBase`. Every buffer the client uses is made here, one TCP
-   * output buffer per query among them. Panics when `tokenBase` is negative.
+   * output buffer per query among them. Panics when `tokenBase` is negative,
+   * or when `resolver.maxLookups` was written outside 1 to `DNS_RESOLVER_MAX_LOOKUPS`.
    *
    * @param resolver The core the client drives; the client owns it from now on, so go through
    *   the client's `start`, `result` and `cancel` rather than the resolver's.
@@ -186,21 +188,29 @@ export class DnsClient {
     if (tokenBase < 0) {
       panic(`DnsClient: a token base of ${tokenBase} is negative`)
     }
-    const n: i32 = resolver.maxLookups * 2
+    // `DnsResolver`'s constructor holds `maxLookups` to this range; only a
+    // write to the field leaves it, and the resolver's own arrays are then the
+    // wrong size too. Inside it the `u16` count of slots, at most 128, is exact.
+    const lookups: i32 = resolver.maxLookups
+    if (lookups < 1 || lookups > DNS_RESOLVER_MAX_LOOKUPS) {
+      panic(`DnsClient: ${lookups} lookups is outside 1 to ${DNS_RESOLVER_MAX_LOOKUPS}`)
+    }
+    const slots: u16 = toU16(lookups) * 2
+    const n: i32 = toI32(slots)
     this.resolver = resolver
     this.loop = loop
     this.tokenBase = tokenBase
-    this.fds = new Array<i32>(n)
+    this.fds = new Array<i32>(slots)
     this.fds.fill(-1)
-    this.fdState = new Array<i32>(n)
+    this.fdState = new Array<i32>(slots)
     this.outputs = []
     let q: i32 = 0
     while (q < n) {
       this.outputs.push(new Array<u8>(DNS_OUTGOING_MAX_BYTES))
       q += 1
     }
-    this.outputLength = new Array<i32>(n)
-    this.outputSent = new Array<i32>(n)
+    this.outputLength = new Array<i32>(slots)
+    this.outputSent = new Array<i32>(slots)
     this.out = new Array<u8>(DNS_OUTGOING_MAX_BYTES)
     this.to = new Array<u8>(DNS_ADDRESS_BYTES)
     this.meta = new Array<i32>(2)
@@ -217,7 +227,9 @@ export class DnsClient {
    * @returns The width of the client's token range.
    */
   tokens(): i32 {
-    return this.resolver.maxLookups * 2
+    // The constructor made one socket slot per query, so this is
+    // `maxLookups * 2` without the multiply.
+    return toI32(this.fds.length)
   }
 
   /**
@@ -228,7 +240,9 @@ export class DnsClient {
    * @returns True when `token` lies in `tokenBase` to `tokenBase + tokens() - 1`.
    */
   owns(token: i32): boolean {
-    return token >= this.tokenBase && token - this.tokenBase < this.tokens()
+    // In i64, where the difference of two i32s cannot overflow.
+    const q: i64 = toI64(token) - toI64(this.tokenBase)
+    return q >= 0 && q < toI64(this.tokens())
   }
 
   /**
@@ -308,15 +322,20 @@ export class DnsClient {
    * @param nowNanos The caller's monotonic clock now, in nanoseconds.
    */
   ready(token: i32, events: i32, nowNanos: i64): void {
-    if (!this.owns(token)) {
+    // `owns`, inline, so the slot it finds is the one indexed below. The
+    // per-query arrays are all made `tokens()` long.
+    const fds: i32[] = this.fds
+    const fdState: i32[] = this.fdState
+    const slot: i64 = toI64(token) - toI64(this.tokenBase)
+    const q: i32 = slot >= 0 && slot < toI64(fds.length) ? toI32(slot) : -1
+    if (q < 0 || q >= toI32(fds.length) || q >= toI32(fdState.length)) {
       panic(`DnsClient.ready: the token ${token} is not the client's`)
     }
-    const q: i32 = token - this.tokenBase
-    const fd: i32 = this.fds[q]
+    const fd: i32 = fds[q]
     if (fd < 0) {
       return
     }
-    const state: i32 = this.fdState[q]
+    const state: i32 = fdState[q]
     if (state === DNS_FD_UDP) {
       dnsClientReadDatagrams(this, q, fd, nowNanos)
     } else if (state === DNS_FD_TCP_WRITE) {
@@ -356,7 +375,10 @@ export class DnsClient {
     }
     let wait: i64 = 0
     if (deadline > nowNanos) {
-      wait = (deadline - nowNanos + 999999) / 1000000
+      // The gap is above 0 and below 2^64, so `u64` holds it exactly where an
+      // `i64` difference could overflow; rounded up, it is below 2^45 ms.
+      const gap: u64 = toU64(deadline) - toU64(nowNanos)
+      wait = toI64((gap - 1) / 1000000 + 1)
     }
     if (ownMs >= 0 && toI64(ownMs) < wait) {
       return ownMs
@@ -372,11 +394,16 @@ export class DnsClient {
     let q: i32 = this.nextOutgoing()
     while (q >= 0 && q < toI32(this.fds.length)) {
       dnsClientClose(this, q)
-      const kind: i32 = this.meta[0]
-      if (kind === DNS_SEND_TCP) {
-        dnsClientOpenTcp(this, q, nowNanos)
-      } else if (kind !== DNS_CLOSE) {
-        dnsClientSendUdp(this, q, nowNanos)
+      // `meta` is made two long and the core has just written it; a shorter
+      // one, never seen, would leave only the close done.
+      const meta: i32[] = this.meta
+      if (meta.length > 0) {
+        const kind: i32 = meta[0]
+        if (kind === DNS_SEND_TCP) {
+          dnsClientOpenTcp(this, q, nowNanos)
+        } else if (kind !== DNS_CLOSE) {
+          dnsClientSendUdp(this, q, nowNanos)
+        }
       }
       q = this.nextOutgoing()
     }
@@ -392,7 +419,11 @@ export class DnsClient {
       crypto.getRandomValues(this.idBytes)
       this.idFresh = true
     }
-    const id: i32 = (toI32(this.idBytes[0]) << 8) | toI32(this.idBytes[1])
+    const idBytes: u8[] = this.idBytes
+    if (idBytes.length < 2) {
+      return -1 // never taken: the constructor makes `idBytes` two long and nothing replaces it
+    }
+    const id: i32 = (toI32(idBytes[0]) << 8) | toI32(idBytes[1])
     const q: i32 = this.resolver.nextOutgoing(this.out, this.to, this.meta, id)
     if (q >= 0 && this.meta.length > 0 && this.meta[0] !== DNS_CLOSE) {
       this.idFresh = false
@@ -401,13 +432,22 @@ export class DnsClient {
   }
 }
 
-/** Closes query `q`'s socket, if it has one. */
+/**
+ * Closes query `q`'s socket, if it has one. Every `q` here is one `pump`
+ * bounded by `fds`, and the per-query arrays are all one length, so the
+ * range test is never taken.
+ */
 const dnsClientClose = (c: DnsClient, q: i32): void => {
-  const fd: i32 = c.fds[q]
+  const fds: i32[] = c.fds
+  const fdState: i32[] = c.fdState
+  if (q < 0 || q >= toI32(fds.length) || q >= toI32(fdState.length)) {
+    return
+  }
+  const fd: i32 = fds[q]
   if (fd >= 0) {
     netClose(fd)
-    c.fds[q] = -1
-    c.fdState[q] = DNS_FD_NONE
+    fds[q] = -1
+    fdState[q] = DNS_FD_NONE
   }
 }
 
@@ -433,6 +473,37 @@ const dnsClientIsV4 = (to: u8[]): boolean => {
 /** `n` plus one, held at the i32 maximum, so a counter never overflows. */
 const dnsClientCount = (n: i32): i32 => (n < 2147483647 ? n + 1 : n)
 
+/**
+ * Records `fd` as query `q`'s socket in `state`, or answers false for a `q`
+ * outside the per-query arrays, which `pump` never passes.
+ */
+const dnsClientTake = (c: DnsClient, q: i32, fd: i32, state: i32): boolean => {
+  const fds: i32[] = c.fds
+  const fdState: i32[] = c.fdState
+  if (q < 0 || q >= toI32(fds.length) || q >= toI32(fdState.length)) {
+    return false
+  }
+  fds[q] = fd
+  fdState[q] = state
+  return true
+}
+
+/**
+ * Watches `fd` on the client's loop for `events` under query `q`'s token,
+ * adding it or, with `modify`, changing its events. False when that fails,
+ * as for a token past the i32 maximum, which a `tokenBase` too near it gives.
+ */
+const dnsClientWatch = (c: DnsClient, q: i32, fd: i32, events: i32, modify: boolean): boolean => {
+  const token: i64 = toI64(c.tokenBase) + toI64(q)
+  if (token > 2147483647) {
+    return false
+  }
+  if (modify) {
+    return pollModify(c.loop, fd, events, toI32(token)) === 0
+  }
+  return pollAdd(c.loop, fd, events, toI32(token)) === 0
+}
+
 /** Sends `c.out` to `c.to` from a new socket on a port the kernel picks, watched for reading. */
 const dnsClientSendUdp = (c: DnsClient, q: i32, nowNanos: i64): void => {
   const fd: i32 = udpBind(dnsClientIsV4(c.to) ? "0.0.0.0" : "::", 0, 0)
@@ -441,12 +512,20 @@ const dnsClientSendUdp = (c: DnsClient, q: i32, nowNanos: i64): void => {
     return
   }
   c.socketsOpened = dnsClientCount(c.socketsOpened)
-  c.fds[q] = fd
-  c.fdState[q] = DNS_FD_UDP
-  const length: i32 = c.meta[1]
+  if (!dnsClientTake(c, q, fd, DNS_FD_UDP)) {
+    netClose(fd)
+    return
+  }
+  // The core writes `meta[1]` with every send; a `meta` too short for it, or
+  // a length outside `out`, never seen, fails the try as a short send would.
+  const meta: i32[] = c.meta
+  const out: u8[] = c.out
+  const length: i32 = meta.length > 1 ? meta[1] : -1
   if (
-    udpSendTo(fd, c.out, 0, length, c.to, 0, 0) !== length ||
-    pollAdd(c.loop, fd, 1, c.tokenBase + q) !== 0
+    length < 0 ||
+    length > toI32(out.length) ||
+    udpSendTo(fd, out, 0, length, c.to, 0, 0) !== length ||
+    !dnsClientWatch(c, q, fd, 1, false)
   ) {
     dnsClientFail(c, q, nowNanos)
   }
@@ -460,18 +539,33 @@ const dnsClientOpenTcp = (c: DnsClient, q: i32, nowNanos: i64): void => {
     return
   }
   c.socketsOpened = dnsClientCount(c.socketsOpened)
-  c.fds[q] = fd
-  c.fdState[q] = DNS_FD_TCP_WRITE
-  const length: i32 = c.meta[1]
-  const output: u8[] = c.outputs[q]
+  if (!dnsClientTake(c, q, fd, DNS_FD_TCP_WRITE)) {
+    netClose(fd)
+    return
+  }
+  const outputs: u8[][] = c.outputs
+  const outputLength: i32[] = c.outputLength
+  const outputSent: i32[] = c.outputSent
+  if (q >= toI32(outputs.length) || q >= toI32(outputLength.length) || q >= toI32(outputSent.length)) {
+    dnsClientFail(c, q, nowNanos) // never taken: every per-query array is `tokens()` long
+    return
+  }
+  const meta: i32[] = c.meta
+  if (meta.length < 2) {
+    dnsClientFail(c, q, nowNanos) // never taken, as in `dnsClientSendUdp`
+    return
+  }
+  const length: i32 = meta[1]
+  const out: u8[] = c.out
+  const output: u8[] = outputs[q]
   let i: i32 = 0
-  while (i < length && i < toI32(output.length) && i < toI32(c.out.length)) {
-    output[i] = c.out[i]
+  while (i < length && i < toI32(output.length) && i < toI32(out.length)) {
+    output[i] = out[i]
     i += 1
   }
-  c.outputLength[q] = length
-  c.outputSent[q] = 0
-  if (pollAdd(c.loop, fd, 2, c.tokenBase + q) !== 0) {
+  outputLength[q] = length
+  outputSent[q] = 0
+  if (!dnsClientWatch(c, q, fd, 2, false)) {
     dnsClientFail(c, q, nowNanos)
   }
 }
@@ -482,7 +576,12 @@ const dnsClientOpenTcp = (c: DnsClient, q: i32, nowNanos: i64): void => {
  */
 const dnsClientReadDatagrams = (c: DnsClient, q: i32, fd: i32, nowNanos: i64): void => {
   let read: i32 = 0
-  while (c.fds[q] === fd && read < DNS_CLIENT_MAX_DATAGRAMS) {
+  while (read < DNS_CLIENT_MAX_DATAGRAMS) {
+    // Read again each time: the core may end the try, or another open its socket.
+    const fds: i32[] = c.fds
+    if (q < 0 || q >= toI32(fds.length) || fds[q] !== fd) {
+      return
+    }
     const n: i32 = udpRecvFrom(fd, c.buf, 0, DNS_UDP_MAX_REPLY, c.from, c.recvMeta)
     if (n < 0) {
       return
@@ -499,23 +598,55 @@ const dnsClientReadDatagrams = (c: DnsClient, q: i32, fd: i32, nowNanos: i64): v
  * is written, the socket watched for reading instead.
  */
 const dnsClientWrite = (c: DnsClient, q: i32, fd: i32, nowNanos: i64): void => {
-  if (c.outputSent[q] === 0 && connectResult(fd) !== 0) {
+  const first: i32[] = c.outputSent
+  if (q < 0 || q >= toI32(first.length)) {
+    return // never taken: `ready` bounds `q` by the per-query arrays
+  }
+  if (first[q] === 0 && connectResult(fd) !== 0) {
     dnsClientFail(c, q, nowNanos)
     return
   }
-  while (c.outputSent[q] < c.outputLength[q]) {
-    const n: i32 = netWrite(fd, c.outputs[q], c.outputSent[q], c.outputLength[q] - c.outputSent[q])
-    if (n === -11) {
-      return
+  while (true) {
+    // Each call below may change what the fields hold, so each turn reads
+    // them again.
+    const outputs: u8[][] = c.outputs
+    const outputLength: i32[] = c.outputLength
+    const outputSent: i32[] = c.outputSent
+    if (q >= toI32(outputs.length) || q >= toI32(outputLength.length) || q >= toI32(outputSent.length)) {
+      return // never taken, as above
     }
-    if (n <= 0) {
+    const output: u8[] = outputs[q]
+    const length: i32 = outputLength[q]
+    const sent: i32 = outputSent[q]
+    if (sent >= length) {
+      break
+    }
+    // `dnsClientOpenTcp` keeps a length the core wrote, at most
+    // `DNS_OUTGOING_MAX_BYTES`, the size of `output`; one outside it, never
+    // seen, fails the try as a failed write does.
+    if (sent < 0 || length < 0 || length > toI32(output.length)) {
       dnsClientFail(c, q, nowNanos)
       return
     }
-    c.outputSent[q] = c.outputSent[q] + n
+    const n: i32 = netWrite(fd, output, sent, length - sent)
+    if (n === -11) {
+      return
+    }
+    // A write never takes more than it is given; in i64 the sum cannot overflow.
+    const next: i64 = toI64(sent) + toI64(n)
+    if (n <= 0 || next > toI64(length)) {
+      dnsClientFail(c, q, nowNanos)
+      return
+    }
+    if (q < toI32(outputSent.length)) {
+      outputSent[q] = toI32(next)
+    }
   }
-  c.fdState[q] = DNS_FD_TCP_READ
-  if (pollModify(c.loop, fd, 1, c.tokenBase + q) !== 0) {
+  const fdState: i32[] = c.fdState
+  if (q < toI32(fdState.length)) {
+    fdState[q] = DNS_FD_TCP_READ
+  }
+  if (!dnsClientWatch(c, q, fd, 1, true)) {
     dnsClientFail(c, q, nowNanos)
   }
 }
@@ -527,7 +658,15 @@ const dnsClientWrite = (c: DnsClient, q: i32, fd: i32, nowNanos: i64): void => {
  * the reading, though the next one may open its socket on the same fd.
  */
 const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, nowNanos: i64): void => {
-  while (c.fds[q] === fd && c.fdState[q] === DNS_FD_TCP_READ) {
+  while (true) {
+    const fds: i32[] = c.fds
+    const fdState: i32[] = c.fdState
+    if (q < 0 || q >= toI32(fds.length) || q >= toI32(fdState.length)) {
+      return // never taken: `ready` bounds `q` by the per-query arrays
+    }
+    if (fds[q] !== fd || fdState[q] !== DNS_FD_TCP_READ) {
+      return
+    }
     const n: i32 = netRead(fd, c.buf, 0, DNS_UDP_MAX_REPLY)
     if (n === -11 && !hungUp) {
       return
@@ -640,7 +779,10 @@ export const dnsLookupWith = (
   }
   const client: DnsClient = new DnsClient(new DnsResolver(config, hosts, 1), loop, 0)
   const begun: i64 = monotonicNanos()
-  const end: i64 = begun + toI64(timeoutMs) * 1000000
+  // The budget and the time spent are kept apart, where `begun` plus the
+  // budget could overflow: `now >= end` is `spent >= budget`. The clock only
+  // moves on, so `spent` is its true value, which `u64` holds exactly.
+  const budget: i64 = toI64(timeoutMs) * 1000000
   const lookup: i32 = client.start(name, port, begun)
   if (lookup < 0) {
     netClose(loop)
@@ -650,7 +792,8 @@ export const dnsLookupWith = (
   let status: i32 = client.result(lookup, out, ttls)
   while (status === DNS_RESOLVE_PENDING) {
     const now: i64 = monotonicNanos()
-    if (now >= end) {
+    const spent: i64 = toI64(toU64(now) - toU64(begun))
+    if (spent >= budget) {
       if (client.settle(lookup, now)) {
         status = client.result(lookup, out, ttls)
       } else {
@@ -659,7 +802,9 @@ export const dnsLookupWith = (
       }
       break
     }
-    const own: i32 = toI32((end - now + 999999) / 1000000)
+    // `end - now`, above 0 here, in milliseconds rounded up.
+    const left: u64 = toU64(budget) - toU64(spent)
+    const own: i32 = toI32(toI64((left - 1) / 1000000 + 1))
     const count: i32 = pollWait(loop, ready, client.timeoutMs(now, own))
     if (count < 0) {
       // A signal answers 0, so a negative count is the loop failing: waiting again would spin.
@@ -668,10 +813,18 @@ export const dnsLookupWith = (
       break
     }
     const after: i64 = monotonicNanos()
+    // `ready` holds four pairs, so `k < 4` is the old `2 * k + 1 < ready.length`.
     let k: i32 = 0
-    while (k < count && 2 * k + 1 < toI32(ready.length)) {
-      if (client.owns(ready[2 * k])) {
-        client.ready(ready[2 * k], ready[2 * k + 1], after)
+    while (k < count && k < 4) {
+      const at: i32 = 2 * k
+      const next: i32 = at + 1
+      if (at >= toI32(ready.length) || next >= toI32(ready.length)) {
+        break
+      }
+      const token: i32 = ready[at]
+      const events: i32 = ready[next]
+      if (client.owns(token)) {
+        client.ready(token, events, after)
       }
       k += 1
     }

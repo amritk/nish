@@ -320,8 +320,10 @@ The table to fill; it is emptied first, so one can be reused.
 
 Reads the resolv.conf `b[off, off + len)` into `config`, which starts over
 from the defaults, and gives it 127.0.0.1 and ::1 on port 53 when no
-nameserver line held an address. It allocates nothing, and nothing in the
-bytes makes it panic or fail: what it cannot use is ignored or counted.
+nameserver line held an address. It allocates nothing, unless it finds
+`config.servers` replaced with an array shorter than `DNS_MAX_SERVERS`
+addresses, when it first gives `config` a new full table. Nothing in the bytes
+makes it panic or fail: what it cannot use is ignored or counted.
 
 ```ts
 const dnsParseResolvConf: (
