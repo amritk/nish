@@ -207,10 +207,10 @@ export const tlsEmptyHash = (hashLength: i32): u8[] => {
 
 /**
  * HashLen zero bytes in a fresh array: 48 for SHA-384 and 32 for any other
- * value, as `tlsEmptyHash` reads a hash length. A literal length is one an
+ * value, as `tlsEmptyHash` reads a hash length. A `u16` length is one an
  * allocation never refuses.
  */
-const tlsHashZeros = (hashLength: i32): u8[] => (hashLength === 48 ? new Array<u8>(48) : new Array<u8>(32))
+const tlsHashZeros = (hashLength: i32): u8[] => new Array<u8>(toU16(hashLength === 48 ? 48 : 32))
 
 /**
  * Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes
@@ -949,15 +949,11 @@ export const tlsHandshakeSecretHeld = (
   dst: Secret<u8[]>
 ): void => {
   tlsHeldCheck("tlsHandshakeSecretHeld", hashLength, dst)
-  const derived: Secret<u8[]> = secret(tlsHashZeros(hashLength))
-  tlsDeriveSecretHeld(
-    hashLength,
-    earlySecret,
-    "derived",
-    tlsEmptyHash(hashLength),
-    TLS_SCHEDULE_FROM,
-    derived
-  )
+  // Sized by the empty hash, not by a second test of `hashLength`, which `-O2`
+  // would thread into a copy of the derivation (and its wipes) for each size.
+  const empty: u8[] = tlsEmptyHash(hashLength)
+  const derived: Secret<u8[]> = secret(new Array<u8>(toU16(empty.length)))
+  tlsDeriveSecretHeld(hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, derived)
   tlsExtractHeld(hashLength, derived, ecdhe, dst)
   wipe(derived)
 }
