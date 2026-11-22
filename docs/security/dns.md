@@ -399,7 +399,8 @@ or 16, and the resolver's and client's counters saturate instead of
 overflowing. No public signature changed.
 
 The overflow left is the query's deadline in `dnsResolverSend`,
-`nowNanos + timeout * 1000000000` in `i64`: it needs a clock within
+`nowNanos + toI64(r.config.timeout) * toI64(1000000000)` in `i64`: it
+needs a clock within
 `timeout` seconds of `i64`'s maximum, about 292 years of nanoseconds, and a
 wrapping deadline would change what `fail`, `tick` and `nextDeadlineNanos`
 report.
