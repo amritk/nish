@@ -1,7 +1,8 @@
 // Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
-// every site its calls still reach is in `std/json-typed` (`JsonDecoder`'s
-// `keyByte`, `text` and `stringArray`), which WP80's S1 removes; nothing in
-// `std/bytes` is reached. Once S1 lands, build this file without
+// nothing in `std/bytes` is reached. The one site its calls still reach is the
+// `String.fromBytes` slice in `std/json-typed` (`JsonDecoder.text`'s no-escape
+// path, std/json-typed.ts:899), which the compiler records as unproven even
+// under its range guard. Once that slice is proven, build this file without
 // `--allow-panics`.
 // smoke: args --allow-panics
 //
