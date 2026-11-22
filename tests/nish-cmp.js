@@ -10111,7 +10111,25 @@ const stdPanicFree = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
   )
 
+/** The changelog words of WP80 S3, which proves or drops the panic sites of the HTTP/1 wire layer. */
+const WIRE_PANIC_FREE = "make the HTTP/1 wire layer panic-free"
+const wirePanicFreeDeclared = () => [
+  ...["tests/link/net_http_fields/main.ts", "tests/link/net_http_fields_f64/main.ts"].map((program) => ({
+    program,
+    file: "checks.ll",
+    changelog: WIRE_PANIC_FREE,
+    why: "httpFieldValueValid and httpFieldsCheckOutgoing lose their panic sites, so their declarations gain `readonly` (and `willreturn`) and take another attribute group",
+  })),
+  {
+    program: "tests/link/std_postgres_unix_target/main.ts",
+    file: "main.ll",
+    changelog: WIRE_PANIC_FREE,
+    why: "urlDecode, which pgTargetUrl calls, builds its bytes with `push` in place of a computed-length array, so the fuzz loop calling pgTargetUrl no longer hoists the `pieces` header and its values renumber",
+  },
+]
+
 const DECLARED = [
+  ...wirePanicFreeDeclared(),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
   ...stdPanicFree(
