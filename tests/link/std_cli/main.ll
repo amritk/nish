@@ -1,4 +1,4 @@
-%struct.HelpMenu = type { %struct.Style*, i8*, i32, i32, %struct.nish_array*, i32 }
+%struct.HelpMenu = type { %struct.Style*, i8*, i32, i32, %struct.nish_array*, i1 }
 %struct.Style = type { i1, i1, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8* }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
