@@ -2292,7 +2292,8 @@ export class Http3Connection {
       // Made with room for the class, then emptied below like any reused one. A `u16` length
       // needs no check, and holds every class the default 16,384-byte cap reaches; a class past
       // 2^15, under a larger cap, starts at 2^15 and grows on the pushes below.
-      pool.push(new Array<u8>(toU16(j <= 15 ? 1 << j : 32768)))
+      const room: i32 = j <= 15 ? 1 << j : 32768
+      pool.push(new Array<u8>(toU16(room)))
     }
     if (used >= toI32(pool.length)) {
       return // never: the push above made it
