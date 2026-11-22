@@ -1,8 +1,9 @@
-// Opt-out (`--allow-panics`): calls into `std/json`, `std/net/fetch` and
-// `std/net/tls/record-client` reach their panic sites, and the
-// `String.fromBytes` slice of the body keeps a range check the checker cannot
-// yet discharge. Follow-up: make those modules panic-free and teach the prover
-// that slice's bound, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): `FetchSyncClient.fetch` and `close` reach an
+// overflow site in `std/net/tls/record-client`, and `HttpBodyReader.readAll`
+// reaches the range check of the `netRead` builtin in `std/net/fetch`, which
+// the checker cannot yet discharge. Follow-up: make the record layer
+// panic-free and teach the prover the `netRead` bound, then build this file
+// without `--allow-panics`.
 //
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when

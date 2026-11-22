@@ -427,7 +427,7 @@ export class HttpBodyReader {
     // Built by `push`, so no length is computed for `new Array`.
     const out: u8[] = []
     const chunk: u8[] = new Array<u8>(HTTP_CLIENT_READ_BYTES)
-    let n: i32 = this.read(chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+    let n: i32 = this.client.readBody(this.generation, chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
     while (n > 0) {
       // In i64, where two i32 values cannot wrap.
       if (toI64(n) > toI64(limit) - toI64(out.length)) {
@@ -437,7 +437,7 @@ export class HttpBodyReader {
       for (let i: i32 = 0; i < n && i < toI32(chunk.length); i += 1) {
         out.push(chunk[i])
       }
-      n = this.read(chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+      n = this.client.readBody(this.generation, chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
     }
     if (n < 0) {
       return null
