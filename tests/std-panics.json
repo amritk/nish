@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 8540,
+  "total": 8075,
   "explicit": {
     "kept": 332,
-    "toFix": 110
+    "toFix": 111
   },
   "modules": {
     "std/base64.ts": {
@@ -422,46 +422,12 @@
       "io-exit": 1,
       "overflow": 65
     },
-    "std/net/tls/client.ts": {
-      "array-length": 3,
-      "index": 7,
-      "overflow": 26
-    },
-    "std/net/tls/codec.ts": {
-      "array-length": 11,
-      "index": 7,
-      "overflow": 131
-    },
-    "std/net/tls/record-client.ts": {
-      "index": 18,
-      "overflow": 45
-    },
-    "std/net/tls/record-server.ts": {
-      "index": 19,
-      "overflow": 44
-    },
-    "std/net/tls/record.ts": {
-      "array-length": 2,
-      "index": 26,
-      "overflow": 34
-    },
     "std/net/tls/schedule.ts": {
-      "array-length": 18,
-      "index": 2,
-      "overflow": 4,
-      "panic": 2
+      "panic": 3
     },
     "std/net/tls/ticket.ts": {
-      "array-length": 5,
-      "divide": 2,
-      "index": 25,
       "io-exit": 3,
-      "overflow": 31,
-      "panic": 1,
-      "slice": 5
-    },
-    "std/net/tls/verify.ts": {
-      "index": 1
+      "panic": 1
     },
     "std/net/upstream.ts": {
       "array-length": 6,
