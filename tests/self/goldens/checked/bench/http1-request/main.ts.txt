@@ -21254,8 +21254,8 @@ function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @n
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.ghashBlocksInto#4
   stackSites=0 stackLocals=0
   local +0:9 h: u64[] (const)
-  callee +1:99 aesKeyUsable -> @nish.aesKeyUsable
-  callee +4:3 ghashBlocksInto -> @nish.ghashBlocksInto
+  callee +6:6 aesKeyUsable -> @nish.aesKeyUsable
+  callee +10:3 ghashBlocksInto -> @nish.ghashBlocksInto
 function ghashLengths(y: u64[], key: AesKey, aadLength: i32, textLength: i32): void -> @nish.ghashLengths
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -32380,7 +32380,7 @@ function ed25519PublicKeyExposed(seed: u8[]): u8[] | null -> @nish.ed25519Public
 function ed25519Sign(seed: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.ed25519Sign [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.23.nish.ed25519SignExposed
-  calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.23.nish.ed25519SignExposed nish_panic
+  calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.23.nish.ed25519SignExposed
   pointer seed: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.23.nish.ed25519SignExposed#0
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.23.nish.ed25519SignExposed#1
   stackSites=0 stackLocals=0
@@ -32427,7 +32427,7 @@ function ed25519SignExposed(seed: u8[], msg: u8[]): u8[] | null -> @nish.ed25519
 function ed25519Verify(pub: u8[], msg: u8[], sig: u8[]): boolean -> @nish.ed25519Verify [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Ed25519Scratch.constructor
-  calls: nish.Ed25519Point.constructor nish.Ed25519Scratch.constructor nish.ed25519Add nish.ed25519BaseMult nish.ed25519Challenge nish.ed25519Decode nish.ed25519Encode nish.ed25519Negate nish.ed25519SameBytes nish.ed25519ScalarCanonical nish.ed25519ScalarMult nish.ed25519ToCached nish_panic
+  calls: nish.Ed25519Point.constructor nish.Ed25519Scratch.constructor nish.ed25519Add nish.ed25519BaseMult nish.ed25519Challenge nish.ed25519Decode nish.ed25519Encode nish.ed25519Negate nish.ed25519SameBytes nish.ed25519ScalarCanonical nish.ed25519ScalarMult nish.ed25519ToCached
   pointer pub: size=0 writesThrough=false captured=false passedTo=nish.ed25519Decode#0 nish.ed25519Challenge#1
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.ed25519Challenge#2
   pointer sig: size=0 writesThrough=false captured=false

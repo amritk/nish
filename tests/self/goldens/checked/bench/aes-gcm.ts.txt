@@ -599,8 +599,8 @@ function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @n
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.ghashBlocksInto#4
   stackSites=0 stackLocals=0
   local +0:9 h: u64[] (const)
-  callee +1:99 aesKeyUsable -> @nish.aesKeyUsable
-  callee +4:3 ghashBlocksInto -> @nish.ghashBlocksInto
+  callee +6:6 aesKeyUsable -> @nish.aesKeyUsable
+  callee +10:3 ghashBlocksInto -> @nish.ghashBlocksInto
 function ghashLengths(y: u64[], key: AesKey, aadLength: i32, textLength: i32): void -> @nish.ghashLengths
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

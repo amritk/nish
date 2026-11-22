@@ -813,17 +813,17 @@ const ed25519PublicKeyExposed = (seed: u8[]): u8[] | null => {
  * 64 bytes. Signing is deterministic: the same seed and message always give
  * the same signature. Answers `null` unless `seed` is `ED25519_SEED_SIZE`
  * bytes. The public key is derived from the seed again on every call. A
- * message longer than 2^31 - 1 bytes panics, as in `sha512`: its length does
+ * message longer than 2^31 - 1 bytes also answers `null`: its length does
  * not survive `toI32`, and the signature would be of a prefix.
  *
  * @param seed The private key, 32 bytes.
  * @param msg The whole message signed.
  * @returns The 64-byte signature `R || S`, or `null` for a seed of the wrong
- *   length.
+ *   length or a message longer than 2^31 - 1 bytes.
  */
 export const ed25519Sign = (seed: Secret<u8[]>, msg: u8[]): u8[] | null => {
   if (msg.length > 2147483647) {
-    panic("ed25519Sign: a message longer than 2^31 - 1 bytes")
+    return null
   }
   return exposeWith(seed, msg, ed25519SignExposed)
 }
@@ -879,8 +879,8 @@ const ed25519SignExposed = (seed: u8[], msg: u8[]): u8[] | null => {
  * `pub` (RFC 8032 §5.1.7): [S]B = R + [k]A with k = SHA-512(R || A || M)
  * mod L, checked as the encoding of [S]B + [k](-A) against R's bytes.
  * Answers `false` for a key or signature of the wrong length, an S of L or
- * more, and a key that does not decode. A message longer than 2^31 - 1
- * bytes panics, as in `ed25519Sign`: a check of a prefix would accept the
+ * more, and a key that does not decode, and for a message longer than
+ * 2^31 - 1 bytes, which `ed25519Sign` refuses too: a check of a prefix would accept the
  * signature for any longer message that shares it. Every value here is
  * public, so the answer may be reached by branches.
  *
@@ -891,7 +891,7 @@ const ed25519SignExposed = (seed: u8[], msg: u8[]): u8[] | null => {
  */
 export const ed25519Verify = (pub: u8[], msg: u8[], sig: u8[]): boolean => {
   if (msg.length > 2147483647) {
-    panic("ed25519Verify: a message longer than 2^31 - 1 bytes")
+    return false
   }
   if (toI32(pub.length) !== 32 || toI32(sig.length) !== 64) {
     return false

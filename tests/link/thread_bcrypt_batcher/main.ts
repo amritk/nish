@@ -96,6 +96,13 @@ export const main = (): i32 => {
   console.log(`bad salt: pending ${b.pending()}, wait ${b.waitNanos(T(4000))}`);
   print("run at 4000", b.run(T(4000)));
 
+  // The ticket after 2^31 - 1 wraps to 0 instead of overflowing.
+  b.next = 0x7fffffff;
+  const last: i32 = b.hash(abc, short, T(4500));
+  const wrapped: i32 = b.hash(abc, short, T(4500));
+  console.log(`tickets past 2^31 - 1: ${last} ${wrapped}`);
+  b.run(T(4500));
+
   // The single calls agree.
   const damaged = bcryptVerify(abc, DAMAGED);
   console.log(`single damaged: ${damaged.isErr() ? damaged.error : "ok"}`);

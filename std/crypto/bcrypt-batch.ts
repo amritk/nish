@@ -425,7 +425,8 @@ const bcryptBatchShareRun = (share: BcryptBatchShare): string => {
     out.push("")
   }
   // `bcryptBatcher` refuses a width outside 1 to 6, so this keeps it as given.
-  const width: i32 = share.width < 1 ? 1 : share.width > 6 ? 6 : share.width
+  const least: i32 = share.width < 1 ? 1 : share.width
+  const width: i32 = least > 6 ? 6 : least
   const verifies: i32[] = bcryptBatchOfKind(share, BCRYPT_BATCH_VERIFY)
   const hashes: i32[] = bcryptBatchOfKind(share, BCRYPT_BATCH_HASH)
   if (width > 0) {
@@ -507,7 +508,7 @@ export class BcryptBatcher {
   private cores: i32
   private cost: i32
   private head: i32
-  /** The next ticket. */
+  /** The next ticket; after 2^31 - 1 it wraps to 0. */
   private next: i32
 
   /**
@@ -556,7 +557,7 @@ export class BcryptBatcher {
    */
   verify(password: Secret<u8[]>, hash: string, now: i64): i32 {
     const ticket: i32 = this.next
-    this.next = this.next + 1
+    this.next = ticket < 0x7fffffff ? ticket + 1 : 0
     this.enqueue(password, BCRYPT_BATCH_VERIFY, hash, new Array<u8>(16), ticket, now)
     return ticket
   }
@@ -576,7 +577,7 @@ export class BcryptBatcher {
    */
   hash(password: Secret<u8[]>, salt: u8[], now: i64): i32 {
     const ticket: i32 = this.next
-    this.next = this.next + 1
+    this.next = ticket < 0x7fffffff ? ticket + 1 : 0
     if (toI32(salt.length) !== 16) {
       this.early.push(new BcryptAnswer(ticket, false, "", "bcrypt: the salt is not 16 bytes"))
       return ticket

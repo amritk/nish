@@ -575,7 +575,12 @@ const aesLoad32 = (data: u8[], at: i32): u32 => {
   // The last byte first: every caller's `at` is non-negative, so its checked
   // read proves the other three.
   const b3: u32 = toU32(data[at + 3])
-  return (toU32(data[at]) << toU32(24)) | (toU32(data[at + 1]) << toU32(16)) | (toU32(data[at + 2]) << toU32(8)) | b3
+  return (
+    (toU32(data[at]) << toU32(24)) |
+    (toU32(data[at + 1]) << toU32(16)) |
+    (toU32(data[at + 2]) << toU32(8)) |
+    b3
+  )
 }
 
 /** `w` big-endian into `out[at .. at + 4)`; the caller has checked the window. */
@@ -1013,7 +1018,13 @@ const ghashBlocksInto = (y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], l
  */
 const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
   const h: u64[] = key.h
-  if (toI32(h.length) < 2 || toI32(y.length) < 2 || length < 0 || length > toI32(data.length) || !aesKeyUsable(key)) {
+  if (
+    toI32(h.length) < 2 ||
+    toI32(y.length) < 2 ||
+    length < 0 ||
+    length > toI32(data.length) ||
+    !aesKeyUsable(key)
+  ) {
     return
   }
   ghashBlocksInto(y, h[0], h[1], key.roundKeys, data, length)

@@ -26,6 +26,7 @@ run at 3000: 2
 bad salt: pending 1, wait 0
 run at 4000: 1
   9: Err bcrypt: the salt is not 16 bytes
+tickets past 2^31 - 1: 2147483647 0
 single damaged: bcrypt: a hash is 60 characters
 single hashes: $2b$04$/uaF/uaF/uaF/uaF/uaF/ubQVo9xGVjE0e7D.cFX.0sCjNDJ6OmMW $2b$04$......................ini1L2hXWkegMV822DC6vks..mWmZHK
 pending 0, wait -1

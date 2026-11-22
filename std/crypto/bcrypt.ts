@@ -965,11 +965,10 @@ const bcryptBytesOf = (given: u8[], hash: string): void => {
 
 /** The most lanes a batch runs. */
 const BCRYPT_BATCH_LANES: i32 = 6
-/** Where the six expanded keys of 18 start in the batch state, after the six Blowfish states. */
-const BCRYPT_BATCH_KEYS: i32 = 6252
-/** Where the six safety words start, after the keys. */
-const BCRYPT_BATCH_SAFETY: i32 = 6360
-/** Words in the batch state: six Blowfish states, six expanded keys of 18 and six safety words. */
+/**
+ * Words in the batch state: six Blowfish states of 1042, six expanded keys of
+ * 18 from word 6252, and six safety words from word 6360.
+ */
 const BCRYPT_BATCH_WORDS: i32 = 6366
 
 /**
@@ -1652,7 +1651,11 @@ const bcryptXorKeyN = (st: u32[], width: i32): void => {
   for (let k: i32 = 0; k < width && k < 6; k++) {
     let p: i32 = k * 1042
     let kept: i32 = k * 18 + 6252
-    for (let i: i32 = 0; i < 18 && p >= 0 && p < toI32(st.length) && kept >= 0 && kept < toI32(st.length); i++) {
+    for (
+      let i: i32 = 0;
+      i < 18 && p >= 0 && p < toI32(st.length) && kept >= 0 && kept < toI32(st.length);
+      i++
+    ) {
       st[p] ^= st[kept]
       p += 1
       kept += 1
