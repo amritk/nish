@@ -10120,12 +10120,16 @@ const stdPanicFree = (why, filesByProgram) =>
 // from a nish-cmp run against the 0.44.0 seed with those files undeclared.
 const HASH_MAC_KDF = "hashes, MACs and key derivation"
 /** Why each module of WP83 S1 writes different IR. */
-const HASH_MAC_KDF_WHY = Object.fromEntries(
-  ["base64url", "hkdf", "hmac", "scram", "sha1", "sha256", "sha512"].map((name) => [
+const HASH_MAC_KDF_WHY = Object.fromEntries([
+  ...["base64url", "hkdf", "hmac", "scram", "sha1", "sha256", "sha512"].map((name) => [
     `${name}.ll`,
     `std/crypto/${name}.ts proves or drops its panic sites, so the ${name}.ll module a program reaching it writes changes`,
-  ])
-)
+  ]),
+  ...["record", "std-net-tls-record"].map((name) => [
+    `${name}.ll`,
+    `std/crypto/sha512.ts's engine absorbs a long array whole and finishes into a caller's array, so the ${name}.ll module declares its new signatures`,
+  ]),
+])
 /** The programs whose module of each WP83 S1 file moves, grouped by the files they reach. */
 const HASH_MAC_KDF_MOVES = [
   {
@@ -10658,6 +10662,14 @@ const HASH_MAC_KDF_MOVES = [
   {
     files: ["hmac.ll", "scram.ll", "sha256.ll", "sha512.ll"],
     movedPrograms: ["tests/link/std_scram/main.ts"],
+  },
+  {
+    files: ["hkdf.ll", "hmac.ll"],
+    movedPrograms: ["bench/std-net-quic-packet.ts"],
+  },
+  {
+    files: ["hkdf.ll", "hmac.ll", "record.ll", "std-net-tls-record.ll"],
+    movedPrograms: ["bench/std-net-tls-record.ts"],
   },
 ]
 const hashMacKdfDeclared = () =>
