@@ -6,7 +6,7 @@
 // 56 the shortest that needs a second, 63 and 64 put the padding in a block of
 // its own, and 65, 119, 120 and 128 do the same one block further on.
 import { Suite } from "nish/testing";
-import { SHA1_BLOCK, SHA1_SIZE, sha1 } from "nish/crypto/sha1";
+import { SHA1_BLOCK, SHA1_SIZE, Sha1, sha1 } from "nish/crypto/sha1";
 
 const HEX_DIGITS: string = "0123456789abcdef";
 
@@ -101,5 +101,42 @@ export const sha1Checks = (): i32 => {
   first[0] = 0;
   t.eqStr("each digest is a fresh array", hexOf(second), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
   t.eqI32("a digest is SHA1_SIZE bytes long", toI32(second.length), SHA1_SIZE);
+
+  // --- `Sha1.digestInto`: a window of one buffer into a window of another ----
+  // Every offset is an `i32` local, so the checks read the same under
+  // `--number-mode f64`, where a bare literal is an `f64`.
+  const zero: i32 = 0;
+  const one: i32 = 1;
+  const four: i32 = 4;
+  const minusOne: i32 = -1;
+  const from: i32 = 3;
+  const span: i32 = 65;
+  const at: i32 = 5;
+  const source: u8[] = pattern(200);
+  const window: u8[] = [];
+  for (let i: i32 = from; i < from + span; i += 1) {
+    window.push(source[i]);
+  }
+  const hasher: Sha1 = new Sha1();
+  const into: u8[] = new Array<u8>(30);
+  t.eqBool("digestInto answers true for ranges inside both buffers", hasher.digestInto(source, from, span, into, at), true);
+  const written: u8[] = [];
+  for (let i: i32 = at; i < at + SHA1_SIZE; i += 1) {
+    written.push(into[i]);
+  }
+  t.eqStr("digestInto writes the window's digest at its offset", hexOf(written), hexOf(sha1(window)));
+  t.eqI32("digestInto leaves the byte before its offset", toI32(into[at - 1]), zero);
+  t.eqI32("digestInto leaves the byte after its digest", toI32(into[at + SHA1_SIZE]), zero);
+  const untouched: u8[] = new Array<u8>(SHA1_SIZE);
+  const late: i32 = 150;
+  const tooLong: i32 = 51;
+  t.eqBool("a message past the end of its buffer answers false", hasher.digestInto(source, late, tooLong, untouched, zero), false);
+  t.eqBool("a negative start answers false", hasher.digestInto(source, minusOne, four, untouched, zero), false);
+  t.eqBool("a negative length answers false", hasher.digestInto(source, zero, minusOne, untouched, zero), false);
+  t.eqBool("a digest past the end of its buffer answers false", hasher.digestInto(source, zero, four, untouched, one), false);
+  t.eqBool("a negative digest offset answers false", hasher.digestInto(source, zero, four, untouched, minusOne), false);
+  t.eqStr("a refused range writes nothing", hexOf(untouched), "0000000000000000000000000000000000000000");
+  t.eqBool("the hasher still digests after a refusal", hasher.digestInto(source, from, span, untouched, zero), true);
+  t.eqStr("and gets the same digest", hexOf(untouched), hexOf(sha1(window)));
   return t.done();
 };

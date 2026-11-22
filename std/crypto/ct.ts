@@ -81,14 +81,16 @@ export const timingSafeEqualAt = (a: u8[], aOff: i32, b: u8[], bOff: i32, len: i
   if (aOff < 0 || bOff < 0 || len < 0 || aOff > aLen - len || bOff > bLen - len) {
     return false
   }
-  // The offsets are summed in `u32`, which wraps by definition, rather than
-  // as checked `i32` sums: the test above already put every `off + k` inside
-  // its array, so neither can wrap, and a check would only add a branch.
-  const aAt: u32 = toU32(aOff)
-  const bAt: u32 = toU32(bOff)
+  // Two running positions, one per window, rather than `off + k`: the loop
+  // condition proves each read in range, and it is the test above that makes
+  // the loop run all `len` rounds, so the timing still depends on `len` alone.
+  let p: i32 = aOff
+  let q: i32 = bOff
   let diff: i32 = 0
-  for (let k: i32 = 0; k < len; k++) {
-    diff = diff | toI32(a[aAt + toU32(k)] ^ b[bAt + toU32(k)])
+  for (let k: i32 = 0; k < len && p >= 0 && p < aLen && q >= 0 && q < bLen; k++) {
+    diff = diff | toI32(a[p] ^ b[q])
+    p += 1
+    q += 1
   }
   return diff === 0
 }

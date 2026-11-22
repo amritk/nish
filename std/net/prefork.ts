@@ -290,10 +290,11 @@ export const preforkWorkerCount = (requested: i32, env: string | null): i32 => {
  *   process not started by one)
  */
 export const preforkIndex = (args: string[]): i32 => {
-  if (args.length < 2) {
+  const n: i32 = toI32(args.length)
+  if (n < 2) {
     return -1
   }
-  const last: string = args[args.length - 1]
+  const last: string = args[n - 1]
   if (!last.startsWith(PREFORK_WORKER_FLAG)) {
     return -1
   }
@@ -310,34 +311,44 @@ export const preforkIndex = (args: string[]): i32 => {
  *   supervisor appended, so a worker reads the same ones the supervisor did
  */
 export const preforkArgs = (args: string[]): string[] => {
-  let keep: i32 = toI32(args.length)
+  // Unsigned: the count only falls while a flag is found below it, so it
+  // never passes 0, and a wrapped `keep - 1` would only fail the range test.
+  const n: u32 = toU32(args.length)
+  let keep: u32 = n
   if (preforkIndex(args) >= 0) {
-    keep = keep - 1
-    if (keep > 1 && args[keep - 1].startsWith(PREFORK_CHANNELS_FLAG)) {
+    keep = n - 1
+    if (preforkArgIs(args, keep - 1, PREFORK_CHANNELS_FLAG)) {
       keep = keep - 1
     }
-    if (keep > 1 && args[keep - 1].startsWith(PREFORK_LISTENER_FLAG)) {
+    if (preforkArgIs(args, keep - 1, PREFORK_LISTENER_FLAG)) {
       keep = keep - 1
     }
-    if (keep > 1 && args[keep - 1].startsWith(PREFORK_UDP_FLAG)) {
+    if (preforkArgIs(args, keep - 1, PREFORK_UDP_FLAG)) {
       keep = keep - 1
     }
   }
   const out: string[] = []
-  for (let i: i32 = 0; i < toI32(args.length); i++) {
-    if (i < keep) {
-      out.push(args[i])
-    }
+  for (let i: u32 = 0; i < keep && i < toU32(args.length); i++) {
+    out.push(args[i])
   }
   return out
 }
 
+/**
+ * Whether `args[at]` is a flag the supervisor appended, starting with
+ * `flag`. Index 0 is the program, which is never one, so it answers `false`
+ * there as for an index outside `args`.
+ */
+const preforkArgIs = (args: string[], at: u32, flag: string): boolean =>
+  at > 0 && at < toU32(args.length) && args[at].startsWith(flag)
+
 /** Field `at` of the channels flag in a worker's `args`, or -1. */
 const preforkChannel = (args: string[], at: i32): i32 => {
-  if (preforkIndex(args) < 0 || args.length < 3) {
+  const n: i32 = toI32(args.length)
+  if (preforkIndex(args) < 0 || n < 3) {
     return -1
   }
-  const flag: string = args[args.length - 2]
+  const flag: string = args[n - 2]
   if (!flag.startsWith(PREFORK_CHANNELS_FLAG)) {
     return -1
   }
@@ -347,9 +358,9 @@ const preforkChannel = (args: string[], at: i32): i32 => {
     if (comma < 0) {
       return -1
     }
-    rest = rest.substring(comma + 1)
+    rest = rest.substring(toI64(comma) + 1)
   }
-  const comma: i32 = toI32(rest.indexOf(","))
+  const comma = rest.indexOf(",")
   const field: string = comma < 0 ? rest : rest.substring(0, comma)
   return preforkDigits(field) ? parseInt(field) : -1
 }
@@ -393,8 +404,11 @@ export const preforkListener = (args: string[]): i32 => {
   if (preforkIndex(args) < 0) {
     return -1
   }
-  for (let back: i32 = 2; back <= 3 && back < toI32(args.length); back++) {
-    const flag: string = args[toI32(args.length) - back]
+  // From the second-last argument back to the fourth-last, stopping before
+  // the program at 0; unsigned, so a short list wraps `at` out of range.
+  const n: u32 = toU32(args.length)
+  for (let at: u32 = n - 2; at + 3 >= n && at > 0 && at < toU32(args.length); at--) {
+    const flag: string = args[at]
     if (flag.startsWith(PREFORK_LISTENER_FLAG)) {
       const digits: string = flag.substring(PREFORK_LISTENER_FLAG.length)
       return preforkDigits(digits) ? parseInt(digits) : -1
@@ -414,13 +428,18 @@ const preforkUdpField = (args: string[], at: i32): i32 => {
   if (preforkIndex(args) < 0) {
     return -1
   }
-  for (let back: i32 = 2; back <= 4 && back < toI32(args.length); back++) {
-    const flag: string = args[toI32(args.length) - back]
+  // As in `preforkListener`, one argument further back.
+  const n: u32 = toU32(args.length)
+  for (let i: u32 = n - 2; i + 4 >= n && i > 0 && i < toU32(args.length); i--) {
+    const flag: string = args[i]
     if (flag.startsWith(PREFORK_UDP_FLAG)) {
       const value: string = flag.substring(PREFORK_UDP_FLAG.length)
       const comma: i32 = toI32(value.indexOf(","))
-      const fd: string = comma < 0 ? "" : value.slice(0, comma)
-      const size: string = comma < 0 ? "" : value.slice(comma + 1)
+      if (comma < 0 || comma > toI32(value.length)) {
+        return -1
+      }
+      const fd: string = value.substring(0, comma)
+      const size: string = value.substring(toI64(comma) + 1)
       if (!preforkDigits(fd) || !preforkDigits(size)) {
         return -1
       }
@@ -540,6 +559,18 @@ const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
 /** Milliseconds on the monotonic clock. */
 const preforkNowMs = (): i64 => monotonicNanos() / 1000000
 
+// The clock in milliseconds lies within 2^63 / 10^6 of 0, about 9.2 * 10^12,
+// so a sum or difference of two such times, or of one and an i32, is far
+// inside the i64 range. The 64-bit unsigned arithmetic below wraps rather
+// than panics, and on values that never pass the range its result, read
+// back as an i64, is the exact one.
+
+/** `now` plus `ms` milliseconds. */
+const preforkAfter = (now: i64, ms: i32): i64 => toI64(toU64(now) + toU64(toI64(ms)))
+
+/** The milliseconds from `then` to `now`. */
+const preforkSince = (now: i64, then: i64): i64 => toI64(toU64(now) - toU64(then))
+
 /** The signals the supervisor stops its workers with. */
 const PREFORK_SIGTERM: i32 = 15
 const PREFORK_SIGKILL: i32 = 9
@@ -609,7 +640,7 @@ class PreforkSupervisor {
    * @internal Read by `preforkSupervise` to see when, with `restart` off,
    *   every worker has exited.
    */
-  running: i32 = 0
+  running: u32 = 0
   /** The readiness loop each supervisor channel is added to. */
   private loop: i32
   /** `config.serviceWorker`: with it at 0 or above, the workers are one group. */
@@ -646,7 +677,16 @@ class PreforkSupervisor {
     this.listeners = []
     this.args = preforkArgs(args)
     const self: string | null = platform === "linux" ? realpathSync("/proc/self/exe") : null
-    this.program = self !== null ? self : this.args[0]
+    // With no arguments there is no program to name, and `spawn` refuses the
+    // empty one, so the first start fails as `PREFORK_SPAWN_FAILED`.
+    const own: string[] = this.args
+    let program: string = ""
+    if (self !== null) {
+      program = self
+    } else if (own.length > 0) {
+      program = own[0]
+    }
+    this.program = program
     this.slots = []
     // No end yet; typed so an f64 build still pushes an i32.
     const none: i32 = -1
@@ -662,15 +702,44 @@ class PreforkSupervisor {
    * `pairs`; false when a socketpair, the loop or the spawn refused it.
    */
   private start(index: i32): boolean {
+    // Every caller passes a slot's index, and the per-worker arrays are made
+    // one entry per slot, so this refuses nothing; it is what lets the
+    // prover see each lookup below is in range.
+    const slots: PreforkSlot[] = this.slots
+    const toService: i32[] = this.toService
+    const udp: i32[] = this.udp
+    const listeners: i32[] = this.listeners
+    if (index < 0 || index >= toI32(slots.length) || index >= toI32(toService.length)) {
+      return false
+    }
+    if (
+      (udp.length > 0 && index >= toI32(udp.length)) ||
+      (listeners.length > 0 && index >= toI32(listeners.length))
+    ) {
+      return false
+    }
+    // Read before any call, while the test above still covers each index.
+    // The UDP and listener descriptors are lists of none or one, so an empty
+    // array passes nothing on rather than a stand-in descriptor.
+    const slot: PreforkSlot = slots[index]
+    const serviceEnd: i32 = toService[index]
+    const udpFd: i32[] = []
+    if (index < toI32(udp.length)) {
+      udpFd.push(udp[index])
+    }
+    const listenerFd: i32[] = []
+    if (index < toI32(listeners.length)) {
+      listenerFd.push(listeners[index])
+    }
     const fds: i32[] = []
     let own: i32 = -1
     if (this.config.supervisorChannels) {
       const pair: i32[] = [-1, -1]
-      if (unixSocketPair(this.config.channelKind, pair) !== 0) {
+      if (unixSocketPair(this.config.channelKind, pair) !== 0 || pair.length < 2) {
         return false
       }
       // On the loop before the worker starts, so a refusal is a failed start.
-      if (pollAdd(this.loop, pair[0], 1, index + 1) < 0) {
+      if (pollAdd(this.loop, pair[0], 1, toI32(toI64(index) + 1)) < 0) {
         netClose(pair[0])
         netClose(pair[1])
         return false
@@ -681,16 +750,16 @@ class PreforkSupervisor {
     // Entry i of `fds` is the child's descriptor 3 + i.
     const fields: string[] = [own >= 0 ? "3" : "-1"]
     if (this.service >= 0 && index !== this.service) {
-      fds.push(this.toService[index])
-      fields.push(`${2 + fds.length}`)
+      fds.push(serviceEnd)
+      fields.push(`${toU32(fds.length) + 2}`)
     } else if (this.service >= 0) {
       fields.push("-1")
-      for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
+      for (let i: i32 = 0; i < toI32(this.fromWorkers.length); i++) {
         if (i === index) {
           fields.push("-1")
         } else {
           fds.push(this.fromWorkers[i])
-          fields.push(`${2 + fds.length}`)
+          fields.push(`${toU32(fds.length) + 2}`)
         }
       }
     }
@@ -699,20 +768,20 @@ class PreforkSupervisor {
       argv.push(this.args[i])
     }
     const channels: boolean = fds.length > 0
-    if (this.udp.length > 0) {
-      fds.push(this.udp[index])
-      argv.push(`${PREFORK_UDP_FLAG}${2 + fds.length},${this.udp.length}`)
+    for (const fd of udpFd) {
+      fds.push(fd)
+      argv.push(`${PREFORK_UDP_FLAG}${toU32(fds.length) + 2},${udp.length}`)
     }
-    if (this.listeners.length > 0) {
-      fds.push(this.listeners[index])
-      argv.push(`${PREFORK_LISTENER_FLAG}${2 + fds.length}`)
+    for (const fd of listenerFd) {
+      fds.push(fd)
+      argv.push(`${PREFORK_LISTENER_FLAG}${toU32(fds.length) + 2}`)
     }
     if (channels) {
       argv.push(`${PREFORK_CHANNELS_FLAG}${fields.join(",")}`)
     }
     argv.push(`${PREFORK_WORKER_FLAG}${index}`)
     const pid: i32 = fds.length > 0 ? spawnWithFds(argv, fds) : spawn(argv)
-    if (own >= 0) {
+    if (own >= 0 && fds.length > 0) {
       netClose(fds[0])
     }
     if (pid <= 0) {
@@ -721,7 +790,6 @@ class PreforkSupervisor {
       }
       return false
     }
-    const slot: PreforkSlot = this.slots[index]
     if (own >= 0) {
       slot.channel = own
     }
@@ -747,18 +815,21 @@ class PreforkSupervisor {
    * a wait that starts at `backoffMs` and doubles up to `backoffCapMs`.
    */
   private backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
-    if (failed || now - slot.at < toI64(this.config.quickExitMs)) {
+    if (failed || preforkSince(now, slot.at) < toI64(this.config.quickExitMs)) {
       const cap: i32 = this.config.backoffCapMs
       if (slot.delay === 0) {
         slot.delay = this.config.backoffMs
       } else {
         // Compared before doubling, so a cap near the i32 limit cannot overflow.
-        slot.delay = slot.delay > cap / 2 ? cap : slot.delay * 2
+        // In 64 bits, which the prover can see holds any doubled i32; the
+        // test above keeps the result within `cap`.
+        const delay: i32 = slot.delay
+        slot.delay = delay > cap / 2 ? cap : toI32(toI64(delay) * 2)
       }
     } else {
       slot.delay = 0
     }
-    slot.at = now + toI64(slot.delay)
+    slot.at = preforkAfter(now, slot.delay)
   }
 
   /**
@@ -773,14 +844,21 @@ class PreforkSupervisor {
   reap(stopping: boolean): boolean {
     while (this.running > 0) {
       const done: i32[] = waitPid(-1, 1)
-      if (done[0] === -4) {
+      // `waitPid` answers two entries; an answer with none is a failure.
+      let pid: i32 = 0
+      if (done.length > 0) {
+        pid = done[0]
+      } else {
+        return false
+      }
+      if (pid === -4) {
         continue
       }
-      if (done[0] <= 0) {
-        return done[0] === 0
+      if (pid <= 0) {
+        return pid === 0
       }
-      const index: i32 = this.find(done[0])
-      if (index < 0) {
+      const index: i32 = this.find(pid)
+      if (index < 0 || index >= toI32(this.slots.length)) {
         continue
       }
       const slot: PreforkSlot = this.slots[index]
@@ -820,7 +898,7 @@ class PreforkSupervisor {
   /** Stop the group so it starts again whole: SIGTERM now, SIGKILL after `graceMs`. */
   private cascade(now: i64): void {
     this.cascading = true
-    this.cascadeAt = now + toI64(this.config.graceMs)
+    this.cascadeAt = preforkAfter(now, this.config.graceMs)
     this.signal(PREFORK_SIGTERM)
   }
 
@@ -835,21 +913,34 @@ class PreforkSupervisor {
     }
     const now: i64 = preforkNowMs()
     if (now >= this.cascadeAt) {
-      this.cascadeAt = now + toI64(this.config.graceMs)
+      this.cascadeAt = preforkAfter(now, this.config.graceMs)
       this.signal(PREFORK_SIGKILL)
     }
   }
 
   /** A pair from each worker to the service worker; false when one failed. */
   private pairs(): boolean {
+    // Made afresh by push, one entry per slot: a failure leaves the ends made
+    // so far in place for `closePairs`, and `start` refuses a worker past them.
+    const toService: i32[] = []
+    const fromWorkers: i32[] = []
+    this.toService = toService
+    this.fromWorkers = fromWorkers
+    // No end; typed so an f64 build still pushes an i32.
+    const none: i32 = -1
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
-      if (i !== this.service) {
+      if (i === this.service) {
+        toService.push(none)
+        fromWorkers.push(none)
+      } else {
         const pair: i32[] = [-1, -1]
-        if (unixSocketPair(this.config.channelKind, pair) !== 0) {
+        if (unixSocketPair(this.config.channelKind, pair) !== 0 || pair.length < 2) {
           return false
         }
-        this.toService[i] = pair[0]
-        this.fromWorkers[i] = pair[1]
+        const toEnd: i32 = pair[0]
+        const fromEnd: i32 = pair[1]
+        toService.push(toEnd)
+        fromWorkers.push(fromEnd)
       }
     }
     return true
@@ -857,11 +948,13 @@ class PreforkSupervisor {
 
   /** Close every end `pairs` made: the workers hold their copies now. */
   private closePairs(): void {
-    for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
+    for (let i: i32 = 0; i < toI32(this.toService.length); i++) {
       if (this.toService[i] >= 0) {
         netClose(this.toService[i])
         this.toService[i] = -1
       }
+    }
+    for (let i: i32 = 0; i < toI32(this.fromWorkers.length); i++) {
       if (this.fromWorkers[i] >= 0) {
         netClose(this.fromWorkers[i])
         this.fromWorkers[i] = -1
@@ -906,7 +999,9 @@ class PreforkSupervisor {
       return false
     }
     console.error(`nish/net/prefork: cannot restart the workers at worker ${failed}`)
-    this.backoff(this.slots[failed], now, true)
+    if (failed < toI32(this.slots.length)) {
+      this.backoff(this.slots[failed], now, true)
+    }
     this.cascade(now)
     return true
   }
@@ -1100,6 +1195,166 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
 }
 
 /**
+ * `preforkWith` for a caller built without `--allow-panics`: a config that
+ * breaks `preforkSupervise`'s contract is answered as `Err`, naming the field
+ * and the limit it passed, before any worker starts, rather than a panic.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @param config the supervisor's settings, checked in the supervisor and
+ *   each worker alike as `preforkWith` checks them
+ * @returns `Ok` with what `preforkWith` answers (a worker's index, or the
+ *   supervisor's `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or
+ *   `PREFORK_SPAWN_FAILED`), or `Err` with why the config was refused
+ */
+export const tryPreforkWith = (args: string[], config: PreforkConfig): Result<i32, string> => {
+  const buf: u8[] = new Array<u8>(512)
+  return preforkRun(args, config, buf, preforkDiscard)
+}
+
+/**
+ * `preforkSupervise`, answering a config that breaks its contract as `Err`
+ * with the reason, before any worker starts, where `preforkSupervise` panics.
+ */
+const preforkRun = <S>(
+  args: string[],
+  config: PreforkConfig,
+  state: S,
+  onChannel: (state: S, index: i32, fd: i32, events: i32) => void
+): Result<i32, string> => {
+  const invalid: string = preforkInvalid(config)
+  if (invalid !== "") {
+    return Err(invalid)
+  }
+  const pin: boolean = config.pin && platform === "linux"
+  const index: i32 = preforkIndex(args)
+  if (index >= 0) {
+    const pinned: i32 = pin ? setCpuAffinity(index) : 0
+    if (pinned < 0) {
+      console.error(`nish/net/prefork: worker ${index} runs unpinned (${pinned})`)
+    }
+    return Ok(index)
+  }
+  let count: i32 = preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
+  if (config.listenUdp && count > PREFORK_UDP_MAX) {
+    return Err(`listenUdp with ${count} workers, above ${PREFORK_UDP_MAX}`)
+  }
+  // A held listener is one more descriptor for every worker, the service one
+  // too, and a held UDP socket one more again.
+  let fdMax: i32 = 64
+  if (config.listenPort >= 0 && config.listenUdp) {
+    fdMax = 62
+  } else if (config.listenPort >= 0 || config.listenUdp) {
+    fdMax = 63
+  }
+  if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
+    return Err(`serviceWorker not below ${count} workers, or above ${fdMax} workers`)
+  }
+  const cpus: i32 = pin ? availableParallelism() : 0
+  if (pin && count > cpus) {
+    return Err(`pin with ${count} workers on ${cpus} CPUs`)
+  }
+  if (config.pin && !pin) {
+    console.error("nish/net/prefork: pinning needs Linux; the workers run unpinned")
+  }
+  const signals: i32 = signalFd()
+  const loop: i32 = pollCreate()
+  if (signals < 0 || loop < 0 || pollAdd(loop, signals, 1, 0) < 0) {
+    // `signals` is the process's one signal pipe, which every later
+    // `signalFd()` answers, so only the loop is closed.
+    console.error("nish/net/prefork: cannot listen for SIGTERM")
+    if (loop >= 0) {
+      netClose(loop)
+    }
+    return Ok(PREFORK_SPAWN_FAILED)
+  }
+  // The UDP group first: a refused steering runs one worker, so it decides
+  // the count everything after it is made for.
+  const udp: i32[] = config.listenUdp ? preforkBindUdp(config, count) : []
+  if (config.listenUdp && udp.length === 0) {
+    netClose(loop)
+    return Ok(PREFORK_SPAWN_FAILED)
+  }
+  if (config.listenUdp) {
+    count = toI32(udp.length)
+  }
+  // The one-worker fallback has no slot for a service worker past worker 0.
+  if (config.serviceWorker >= count) {
+    console.error(`nish/net/prefork: serviceWorker ${config.serviceWorker} with one worker, steering refused`)
+    for (let i: i32 = 0; i < toI32(udp.length); i++) {
+      netClose(udp[i])
+    }
+    netClose(loop)
+    return Ok(PREFORK_SPAWN_FAILED)
+  }
+  const supervisor = new PreforkSupervisor(config, args, count, loop, udp)
+  if (config.listenPort >= 0 && !supervisor.listen(pin)) {
+    netClose(loop)
+    return Ok(PREFORK_SPAWN_FAILED)
+  }
+  // Token 0 is the signal pipe, token i + 1 worker i's channel.
+  // Pushed, not sized, so the length is never a product the prover must check.
+  const ready: i32[] = []
+  ready.push(0)
+  ready.push(0)
+  for (let i: i32 = 0; i < count; i++) {
+    ready.push(0)
+    ready.push(0)
+  }
+  let result: i32 = PREFORK_STOPPED
+  if (!supervisor.restart(true)) {
+    console.error(`nish/net/prefork: cannot start ${supervisor.program}`)
+    result = PREFORK_SPAWN_FAILED
+  } else {
+    let running = true
+    while (running) {
+      const n: i32 = pollWait(loop, ready, config.tickMs)
+      for (let k: i32 = 0; k < n; k++) {
+        // Pair k is token and events; `pollWait` answers no more pairs than
+        // `ready` holds, so the test only lets the prover see it.
+        const at: u32 = toU32(k) * 2
+        const next: u32 = at + 1
+        if (at >= toU32(ready.length)) {
+          break
+        }
+        const token: i32 = ready[at]
+        if (next >= toU32(ready.length)) {
+          break
+        }
+        const events: i32 = ready[next]
+        if (token === 0) {
+          readSignal(signals)
+          running = false
+        } else if (token > 0 && token <= toI32(supervisor.slots.length)) {
+          // Worker i's channel carries token i + 1; a token past the slots is
+          // none of the supervisor's, so it is skipped.
+          const worker: i32 = token - 1
+          const slot: PreforkSlot = supervisor.slots[worker]
+          if (slot.channel >= 0) {
+            onChannel(state, worker, slot.channel, events)
+            if ((events & 4) !== 0) {
+              supervisor.closeChannel(slot)
+            }
+          }
+        }
+      }
+      if (running) {
+        supervisor.reap(false)
+        if (!config.restart && supervisor.running === 0) {
+          result = PREFORK_WORKERS_EXITED
+          running = false
+        }
+        supervisor.escalate()
+        supervisor.restart(false)
+      }
+    }
+  }
+  supervisor.stop(loop, signals, ready)
+  supervisor.closeListeners()
+  netClose(loop)
+  return Ok(result)
+}
+
+/**
  * `preforkWith`, calling `onChannel(state, index, fd, events)` in the
  * supervisor whenever worker `index`'s supervisor channel `fd` is readable or
  * hung up: `events` is `pollWait`'s, 1 readable and 4 added on a hang-up or
@@ -1133,110 +1388,11 @@ export const preforkSupervise = <S>(
   state: S,
   onChannel: (state: S, index: i32, fd: i32, events: i32) => void
 ): i32 => {
-  const invalid: string = preforkInvalid(config)
-  if (invalid !== "") {
-    panic(`nish/net/prefork: ${invalid}`)
+  const ran = preforkRun(args, config, state, onChannel)
+  if (ran.isErr()) {
+    panic(`nish/net/prefork: ${ran.error}`)
   }
-  const pin: boolean = config.pin && platform === "linux"
-  const index: i32 = preforkIndex(args)
-  if (index >= 0) {
-    const pinned: i32 = pin ? setCpuAffinity(index) : 0
-    if (pinned < 0) {
-      console.error(`nish/net/prefork: worker ${index} runs unpinned (${pinned})`)
-    }
-    return index
-  }
-  let count: i32 = preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
-  if (config.listenUdp && count > PREFORK_UDP_MAX) {
-    panic(`nish/net/prefork: listenUdp with ${count} workers, above ${PREFORK_UDP_MAX}`)
-  }
-  // A held listener is one more descriptor for every worker, the service one
-  // too, and a held UDP socket one more again.
-  const fdMax: i32 = toI32(config.listenPort >= 0 ? 63 : 64) - toI32(config.listenUdp ? 1 : 0)
-  if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
-    panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above ${fdMax} workers`)
-  }
-  const cpus: i32 = pin ? availableParallelism() : 0
-  if (pin && count > cpus) {
-    panic(`nish/net/prefork: pin with ${count} workers on ${cpus} CPUs`)
-  }
-  if (config.pin && !pin) {
-    console.error("nish/net/prefork: pinning needs Linux; the workers run unpinned")
-  }
-  const signals: i32 = signalFd()
-  const loop: i32 = pollCreate()
-  if (signals < 0 || loop < 0 || pollAdd(loop, signals, 1, 0) < 0) {
-    // `signals` is the process's one signal pipe, which every later
-    // `signalFd()` answers, so only the loop is closed.
-    console.error("nish/net/prefork: cannot listen for SIGTERM")
-    if (loop >= 0) {
-      netClose(loop)
-    }
-    return PREFORK_SPAWN_FAILED
-  }
-  // The UDP group first: a refused steering runs one worker, so it decides
-  // the count everything after it is made for.
-  const udp: i32[] = config.listenUdp ? preforkBindUdp(config, count) : []
-  if (config.listenUdp && udp.length === 0) {
-    netClose(loop)
-    return PREFORK_SPAWN_FAILED
-  }
-  if (config.listenUdp) {
-    count = toI32(udp.length)
-  }
-  // The one-worker fallback has no slot for a service worker past worker 0.
-  if (config.serviceWorker >= count) {
-    console.error(`nish/net/prefork: serviceWorker ${config.serviceWorker} with one worker, steering refused`)
-    for (let i: i32 = 0; i < toI32(udp.length); i++) {
-      netClose(udp[i])
-    }
-    netClose(loop)
-    return PREFORK_SPAWN_FAILED
-  }
-  const supervisor = new PreforkSupervisor(config, args, count, loop, udp)
-  if (config.listenPort >= 0 && !supervisor.listen(pin)) {
-    netClose(loop)
-    return PREFORK_SPAWN_FAILED
-  }
-  // Token 0 is the signal pipe, token i + 1 worker i's channel.
-  const ready: i32[] = new Array<i32>(2 * count + 2)
-  let result: i32 = PREFORK_STOPPED
-  if (!supervisor.restart(true)) {
-    console.error(`nish/net/prefork: cannot start ${supervisor.program}`)
-    result = PREFORK_SPAWN_FAILED
-  } else {
-    let running = true
-    while (running) {
-      const n: i32 = pollWait(loop, ready, config.tickMs)
-      for (let k: i32 = 0; k < n; k++) {
-        const token: i32 = ready[2 * k]
-        const events: i32 = ready[2 * k + 1]
-        if (token === 0) {
-          readSignal(signals)
-          running = false
-        } else if (supervisor.slots[token - 1].channel >= 0) {
-          const slot: PreforkSlot = supervisor.slots[token - 1]
-          onChannel(state, token - 1, slot.channel, events)
-          if ((events & 4) !== 0) {
-            supervisor.closeChannel(slot)
-          }
-        }
-      }
-      if (running) {
-        supervisor.reap(false)
-        if (!config.restart && supervisor.running === 0) {
-          result = PREFORK_WORKERS_EXITED
-          running = false
-        }
-        supervisor.escalate()
-        supervisor.restart(false)
-      }
-    }
-  }
-  supervisor.stop(loop, signals, ready)
-  supervisor.closeListeners()
-  netClose(loop)
-  return result
+  return ran.value
 }
 
 /**

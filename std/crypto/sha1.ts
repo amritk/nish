@@ -35,22 +35,21 @@ export const SHA1_BLOCK: i32 = 64
 /** ROTL^n(x) of FIPS 180-4 §3.2: a left rotation of a 32-bit word, `0 < n < 32`. */
 const sha1Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
 
-/** The big-endian word at `buf[at .. at + 4)`, as FIPS 180-4 §3.1 orders bytes in a word. */
-const sha1LoadWord = (buf: u8[], at: i32): u32 =>
-  (toU32(buf[at]) << 24) | (toU32(buf[at + 1]) << 16) | (toU32(buf[at + 2]) << 8) | toU32(buf[at + 3])
-
 /**
  * Folds the 64-byte block at `src[at .. at + 64)` into `h`: FIPS 180-4
  * §6.1.2, steps 1 to 4. `w` is the 80-word schedule, held by the `Sha1`
- * hasher rather than allocated once per block.
+ * hasher rather than allocated once per block. Every caller passes a block
+ * inside `src` and the hasher's own `h` and `w`; the conditions below are the
+ * shapes that prove each index in range, not checks a caller can fail.
  */
 const sha1Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
-  // Written as the condition the body runs under, the shape that proves the
-  // plain `w[t]` and `h[i]` indices in range (as `sha256Compress` does).
-  if (toI32(h.length) >= 5 && toI32(w.length) >= 80 && at >= 0 && at <= toI32(src.length) - SHA1_BLOCK) {
+  if (toI32(h.length) >= 5 && toI32(w.length) >= 80) {
     // Step 1: the message schedule, big-endian words (§3.1), then (6.1.2).
-    for (let t: i32 = 0; t < 16; t += 1) {
-      w[t] = sha1LoadWord(src, at + 4 * t)
+    const n: i32 = toI32(src.length)
+    let p: i32 = at
+    for (let t: i32 = 0; t < 16 && p >= 0 && p < n - 3; t += 1) {
+      w[t] = (toU32(src[p]) << 24) | (toU32(src[p + 1]) << 16) | (toU32(src[p + 2]) << 8) | toU32(src[p + 3])
+      p += 4
     }
     for (let t: i32 = 16; t < 80; t += 1) {
       w[t] = sha1Rotl(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1)
@@ -91,8 +90,56 @@ const sha1Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
     h[2] += c
     h[3] += d
     h[4] += e
-  } else {
-    panic("sha1: a block outside its buffer")
+  }
+}
+
+/** Sets `h` to H^(0) of FIPS 180-4 §5.3.1. */
+const sha1Begin = (h: u32[]): void => {
+  if (toI32(h.length) >= 5) {
+    h[0] = 0x67452301
+    h[1] = 0xefcdab89
+    h[2] = 0x98badcfe
+    h[3] = 0x10325476
+    h[4] = 0xc3d2e1f0
+  }
+}
+
+/**
+ * Finishes a digest whose last `tail` bytes (`0 <= tail < 64`) the caller has
+ * copied to `last[0 .. tail)`: pads them (FIPS 180-4 §5.1.1) with the message
+ * length of `bits` bits, folds the one or two padded blocks into `h`, and
+ * writes the digest to `out[at .. at + 20)`, which the caller has checked.
+ */
+const sha1Finish = (h: u32[], w: u32[], last: u8[], tail: i32, bits: u64, out: u8[], at: i32): void => {
+  let lastLength: i32 = 64
+  if (tail >= 56) {
+    lastLength = 128
+  }
+  const room: i32 = toI32(last.length)
+  // The 0x80 that ends the message, then zeros, then the length big-endian.
+  let z: i32 = tail
+  while (z >= 0 && z < lastLength && z < room) {
+    last[z] = z === tail ? 0x80 : 0
+    z += 1
+  }
+  let k: i32 = lastLength - 8
+  let shift: u64 = 56
+  for (let i: i32 = 0; i < 8 && k >= 0 && k < room; i += 1) {
+    last[k] = toU8(bits >>> shift)
+    shift -= 8
+    k += 1
+  }
+  for (let off: i32 = 0; off < lastLength; off += 64) {
+    sha1Compress(h, w, last, off)
+  }
+  let p: i32 = at
+  for (let i: i32 = 0; i < 5 && i < toI32(h.length) && p >= 0 && p < toI32(out.length) - 3; i += 1) {
+    const word: u32 = h[i]
+    out[p] = toU8(word >>> 24)
+    out[p + 1] = toU8(word >>> 16)
+    out[p + 2] = toU8(word >>> 8)
+    out[p + 3] = toU8(word)
+    p += 4
   }
 }
 
@@ -117,92 +164,87 @@ export class Sha1 {
   constructor() {
     this.h = new Array<u32>(5)
     this.w = new Array<u32>(80)
-    this.last = new Array<u8>(2 * SHA1_BLOCK)
+    this.last = new Array<u8>(128)
   }
 
   /**
    * Writes the SHA-1 digest of `data[start .. start + length)` into
    * `out[at .. at + 20)`, allocating nothing. A range outside `data` or `out`
-   * panics, as does a message longer than 2^31 - 1 bytes.
+   * writes nothing and answers `false`.
    *
    * @param data The buffer holding the message; it is read, not changed.
    * @param start Where in `data` the message starts.
    * @param length How many bytes of `data` the message is.
    * @param out The buffer the 20-byte digest is written into.
    * @param at Where in `out` the digest starts.
+   * @returns `true` once the digest is written; `false`, with `out` untouched, when either range lies outside its buffer.
    */
-  digestInto(data: u8[], start: i32, length: i32, out: u8[], at: i32): void {
-    if (data.length > 2147483647 || out.length > 2147483647) {
-      panic("sha1: a buffer longer than 2^31 - 1 bytes")
-    }
+  digestInto(data: u8[], start: i32, length: i32, out: u8[], at: i32): boolean {
+    // `toI32` of a length past 2^31 - 1 (under `--number-mode f64`) saturates,
+    // which only narrows the ranges accepted here: an `i32` range ends below it.
     if (start < 0 || length < 0 || start > toI32(data.length) - length) {
-      panic("sha1: a message outside its buffer")
+      return false
     }
     if (at < 0 || at > toI32(out.length) - SHA1_SIZE) {
-      panic("sha1: a digest outside its buffer")
+      return false
     }
     const h: u32[] = this.h
     const w: u32[] = this.w
     const last: u8[] = this.last
-    if (toI32(h.length) < 5) {
-      panic("sha1: a hasher without its state")
-    }
-    // H^(0) of FIPS 180-4 §5.3.1.
-    h[0] = 0x67452301
-    h[1] = 0xefcdab89
-    h[2] = 0x98badcfe
-    h[3] = 0x10325476
-    h[4] = 0xc3d2e1f0
+    sha1Begin(h)
     // Whole blocks straight from `data`, then the tail and its padding (§5.1.1)
     // in one or two blocks of `last`.
-    const whole: i32 = length - (length % SHA1_BLOCK)
-    for (let off: i32 = 0; off < whole; off += SHA1_BLOCK) {
-      sha1Compress(h, w, data, start + off)
+    const size: i32 = toI32(data.length)
+    let off: i32 = start
+    let left: i32 = length
+    while (left >= 64 && off >= 0 && off <= size - 64) {
+      sha1Compress(h, w, data, off)
+      off += 64
+      left -= 64
     }
-    const tail: i32 = length - whole
-    const lastLength: i32 = tail < SHA1_BLOCK - 8 ? SHA1_BLOCK : 2 * SHA1_BLOCK
+    let k: i32 = 0
     const room: i32 = toI32(last.length)
-    if (lastLength > room) {
-      panic("sha1: a hasher without its state")
+    while (k < left && k < room && off >= 0 && off < size) {
+      last[k] = data[off]
+      k += 1
+      off += 1
     }
-    for (let k: i32 = 0; k < lastLength && k < room; k += 1) {
-      last[k] = k < tail ? data[start + whole + k] : 0
-    }
-    last[tail] = 0x80
-    const bits: u64 = toU64(toI64(length)) << 3
-    for (let i: i32 = 0; i < 8; i += 1) {
-      last[lastLength - 1 - i] = toU8(bits >>> toU64(8 * i))
-    }
-    for (let off: i32 = 0; off < lastLength; off += SHA1_BLOCK) {
-      sha1Compress(h, w, last, off)
-    }
-    for (let i: i32 = 0; i < 5; i += 1) {
-      const word: u32 = h[i]
-      out[at + 4 * i] = toU8(word >>> 24)
-      out[at + 4 * i + 1] = toU8(word >>> 16)
-      out[at + 4 * i + 2] = toU8(word >>> 8)
-      out[at + 4 * i + 3] = toU8(word)
-    }
+    sha1Finish(h, w, last, k, toU64(toI64(length)) << 3, out, at)
+    return true
   }
 }
 
 /**
- * The SHA-1 digest of all of `data`, as a fresh 20-byte array: `Sha1`'s
- * `digestInto` over the whole of it, with a hasher of its own.
+ * The SHA-1 digest of all of `data`, as a fresh 20-byte array.
  *
- * An array longer than 2^31 - 1 bytes panics, for the reason `sha256` gives:
- * under `--number-mode f64`, `toI32` of a longer length saturates, and the
- * answer would be the digest of a prefix.
+ * It walks `data` with a `number` offset and copies each block into the
+ * hasher's own buffer, so an array longer than 2^31 - 1 bytes (possible under
+ * `--number-mode f64`) is hashed whole, never cut to a prefix.
  *
  * @param data The whole message; it is read, not changed.
  * @returns A fresh 20-byte digest.
  */
 export const sha1 = (data: u8[]): u8[] => {
-  if (data.length > 2147483647) {
-    panic("sha1: a message longer than 2^31 - 1 bytes")
-  }
   const out: u8[] = new Array<u8>(SHA1_SIZE)
-  const zero: i32 = 0
-  new Sha1().digestInto(data, zero, toI32(data.length), out, zero)
-  return out
+  const hasher: Sha1 = new Sha1()
+  const h: u32[] = hasher.h
+  const w: u32[] = hasher.w
+  const last: u8[] = hasher.last
+  const room: i32 = toI32(last.length)
+  sha1Begin(h)
+  const n: number = data.length
+  let off: number = 0
+  while (true) {
+    let k: i32 = 0
+    while (k < SHA1_BLOCK && k < room && off >= 0 && off < n) {
+      last[k] = data[off]
+      k += 1
+      off += 1
+    }
+    if (k < SHA1_BLOCK) {
+      sha1Finish(h, w, last, k, toU64(toI64(n)) << 3, out, 0)
+      return out
+    }
+    sha1Compress(h, w, last, 0)
+  }
 }

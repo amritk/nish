@@ -532,7 +532,9 @@ numbers: `workers`, `backoffMs`, `backoffCapMs`, `quickExitMs` (what counts as
 dying young), `graceMs` and `tickMs` (how often the supervisor looks for a
 restart that is due). A negative number, a `tickMs` or `backoffMs` of zero,
 or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
-the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
+the field; `tryPreforkWith(process.argv, config)` answers the same config as
+an `Err` with that reason instead, before any worker starts, and otherwise
+`Ok` with what `preforkWith` would. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
 By default the workers are not pinned to cores. Each one binds the port with
