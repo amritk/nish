@@ -3448,7 +3448,7 @@ your array. `percentDecode` and `percentDecodePathSegment` decode one window
 into a buffer you own and answer how many bytes they wrote. An iterator is made
 once and `reset` for each request.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; slices with bounds it does not test; calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; slices with bounds it does not test; calls `std/net/url.ts` code that calls `panic` on a window outside its array -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {
@@ -3593,8 +3593,7 @@ written, so `http://a.com./` (a trailing dot) and `http://[0::1]/` are
 different origins from `http://a.com/` and `http://[::1]/`: an equal string is
 the same origin, and a split errs toward "different".
 
-<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
 

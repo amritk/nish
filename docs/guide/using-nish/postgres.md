@@ -403,7 +403,7 @@ nothing. When `failure` is `PG_TARGET_OK`, a `unix` target is
 `netAddress(addr, target.host, target.port)` and `tcpConnect(addr)`. Either
 way the connection is the same `PgConnection`.
 
-<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/url.ts` code that calls `panic` on a window outside its array -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { PG_TARGET_OK, pgTargetUrl } from "nish/net/postgres";
