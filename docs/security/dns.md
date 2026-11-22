@@ -28,7 +28,8 @@ nothing`). The one allocation is the exported `dnsParseAddress`'s, sixteen
 bytes a call, as its documentation says; the file parsers do not call it.
 
 Only the program's own mistakes — a window outside its array, a port or ID that
-is not 16 bits, a query `dnsBuildQuery` did not write — panic. Four properties
+is not 16 bits, a query `dnsBuildQuery` did not write, a table or buffer it did
+not size — panic ([Panic sites](#panic-sites)). Four properties
 are recorded as accepted (DNS-1 to DNS-4); none is counted. The panics are not
 yet pinned by a fixture of their own ([Not pinned](#not-pinned)). The resolver
 stage closes DNS-1's follow-up and fixed one Medium finding of its own, DNS-5.
@@ -39,9 +40,9 @@ The fallback-and-timeout stage fixed two Low findings, DNS-6 and DNS-7.
 | File | Functions |
 | --- | --- |
 | `std/net/dns-message.ts` | `dnsBuildQuery`, `dnsParseReply`; `DnsReply`; the helpers `dnsCheckLength`, `dnsLower`, `dnsReadName`, `dnsSameName`, `dnsCopyName`, `dnsKeepAddress` |
-| `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `settle`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone` |
-| `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `settle`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`, `dnsLoadSystem`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream` |
-| `std/net/dns-config.ts` | `dnsParseAddress`, `dnsParseResolvConf`, `dnsParseHosts`, `dnsHostsFind`; `DnsConfig`, `DnsHosts`; the helpers `dnsConfigCheckWindow`, `dnsIsBlank`, `dnsHexValue`, `dnsParseIpv4`, `dnsParseIpv6`, `dnsIsIpv4`, `dnsLineEnd`, `dnsCommentCut`, `dnsWordEnd`, `dnsWordIs`, `dnsOption`, `dnsAddSearch`, `dnsResolvLine`, `dnsAddHostName`, `dnsHostsLine`, `dnsHostNameIs` |
+| `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `settle`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone`, `dnsResolverCount`, `dnsResolverFirstPending`, `dnsResolverServerAddress`, `dnsResolverSameServer`, `dnsResolverZeroTtls`, `dnsResolverSetResult` |
+| `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `settle`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`, `dnsLoadSystem`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream`, `dnsClientCount`, `dnsClientTake`, `dnsClientWatch` |
+| `std/net/dns-config.ts` | `dnsParseAddress`, `dnsParseResolvConf`, `dnsParseHosts`, `dnsHostsFind`; `DnsConfig`, `DnsHosts`; the helpers `dnsConfigCheckWindow`, `dnsIsBlank`, `dnsHexValue`, `dnsParseIpv4`, `dnsParseIpv6`, `dnsParseAddressVia`, `dnsCommentCut`, `dnsWordIs`, `dnsOption`, `dnsAddSearch`, `dnsResolvLine`, `dnsAddHostName`, `dnsHostsLine`, `dnsHostNameIs`, `dnsFallbackServers`, `dnsCount` |
 
 Out of scope: `nish:net`'s sockets and readiness loop, which have their own
 record; DNSSEC, which a stub resolver that trusts its recursive server
@@ -373,6 +374,72 @@ and one that calls `resolveHost` `fs.read` and `clock` as well
 (`link/std_dns_caps: --emit-capabilities matches expected.caps.json byte for
 byte`).
 
+## Panic sites
+
+WP82 took the four files off the panic ratchet's to-fix list. A site is one
+place the compiler would insert a panic (`build/nish --emit-panics`): an index,
+an arithmetic overflow, a `slice`, an explicit `panic`. Counted without the
+sites the prover discharges:
+
+| File | Before | After | What is left |
+| --- | --- | --- | --- |
+| `std/net/dns-message.ts` | 80 | 4 | the four explicit panics on the caller's arguments |
+| `std/net/dns.ts` | 55 | 9 | four explicit panics; `crypto.getRandomValues`'s exit; four windows the socket builtins check at run time |
+| `std/net/dns-resolver.ts` | 232 | 12 | eleven explicit panics; one overflow |
+| `std/net/dns-config.ts` | 117 | 21 | explicit panics on the caller's arguments |
+
+Each index the prover could not discharge got a guard on the line before it,
+written with literal bounds (a comment names the constant), since the prover
+learns nothing from a named constant. Where the guard can fail, a malformed
+reply or file takes the path that already existed for it: a negative
+`DNS_ERR_*` code, a line skipped and counted, an address dropped. Where it
+cannot, it returns the answer the code already gave (`BUSY`, `-1`,
+`PENDING`, `false`). `dnsKeepAddress` drops an address whose length is not 4
+or 16, and the resolver's and client's counters saturate instead of
+overflowing. No public signature changed.
+
+The overflow left is the query's deadline in `dnsResolverSend`,
+`nowNanos + toI64(r.config.timeout) * toI64(1000000000)` in `i64`: it
+needs a clock within
+`timeout` seconds of `i64`'s maximum, about 292 years of nanoseconds, and a
+wrapping deadline would change what `fail`, `tick` and `nextDeadlineNanos`
+report.
+
+Explicit panics go from 14 to 21 in `dns-config.ts` and from 3 to 4 in
+`dns.ts`, 17 to 25 across the two; `dns-message.ts` and `dns-resolver.ts`
+keep theirs. Eleven are new, ten in `dns-config.ts` and one in `dns.ts`, and
+three are gone, each new one a guard on an argument only the caller can
+get wrong, which no byte of a reply or a file reaches:
+
+- `dnsParseIpv4: out has no room for four bytes from at`, and
+  `dnsParseIpv6: out is shorter than 16 bytes` at its two writes: the address
+  parsers' output window, which every caller in these modules sizes first.
+- `dnsParseAddress: the window is outside the array`: `dnsParseAddressVia`'s
+  input window.
+- `dnsHostsFind: hosts is not a table dnsParseHosts filled`, at four reads,
+  and `dnsHostsFind: out has no room for max addresses`, at two writes: a
+  `DnsHosts` whose counts do not fit its own arrays, which only a write to
+  its fields gives, and an `out` shorter than the caller said.
+- `DnsClient: … lookups is outside 1 to 64`: a resolver whose `maxLookups`
+  was written after construction, from which the client sizes its per-query
+  arrays.
+
+The three gone are `dnsLineEnd: the window is outside the array` and
+`dnsWordEnd: the window is outside the array`, with the helpers folded into
+their callers, and `dnsFallbackServers`', below.
+
+The `dnsFallbackServers` panic is gone because its cause is fixed.
+`dnsParseResolvConf` with no nameserver line writes
+127.0.0.1 and ::1 into `config.servers`, and panicked
+(`dnsFallbackServers: servers has no room for two addresses`) when the
+caller had replaced that array with one too short for two addresses. It now
+gives such a `config` a full table of `DNS_MAX_SERVERS` addresses before it
+reads a line, so a nameserver line, which writes into the same array, keeps
+its address too. Before:
+`tests/link/net_dns_fallback_short` exited 1 with that message; after, it
+prints both loopback servers on port 53. No byte of a file reached it, so it
+is not a finding.
+
 ## Not pinned
 
 The panics — `dnsBuildQuery: the id … is not 16 bits`,
@@ -387,8 +454,12 @@ len is outside buf, or from is shorter than 18 bytes`,
 `DnsResolver.receiveStream: len is outside buf`, `DnsResolver.…: … is not a
 query`, `DnsResolver.result` and `cancel` for a lookup not in progress or an
 `out` with no room, `DnsClient: a token base of … is negative`,
-`DnsClient.ready: the token … is not the client's` and `resolveHost: out or
-ttls has no room for DNS_RESOLVE_MAX_ADDRESSES` — are each a guard on the caller's arguments, reached by no byte of a
+`DnsClient: … lookups is outside 1 to 64`,
+`DnsClient.ready: the token … is not the client's`, `resolveHost: out or
+ttls has no room for DNS_RESOLVE_MAX_ADDRESSES`, the address parsers'
+`dnsParseIpv4: out has no room for four bytes from at`, `dnsParseIpv6: out is
+shorter than 16 bytes` and `dnsParseAddress: parsed is shorter than 16 bytes`,
+and `dnsHostsFind: hosts is not a table dnsParseHosts filled` — are each a guard on the caller's arguments, reached by no byte of a
 reply or a file.
 
 A panic exits the program, so each needs a fixture of its own

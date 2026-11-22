@@ -37288,6 +37288,7 @@ import Secret from "nish:secret" -> generic class Secret
 const HTTP_SERVER_TEN: i32 = 10
 const HTTP_SERVER_ZERO_DIGIT: i32 = 48
 const HTTP_SERVER_TOO_LARGE: i32 = 413
+const HTTP_SERVER_UNAVAILABLE: i32 = 503
 const HTTP_SERVER_FREE: i32 = 0
 const HTTP_SERVER_READING: i32 = 1
 const HTTP_SERVER_PARKED: i32 = 2
@@ -37295,6 +37296,10 @@ const HTTP_SERVER_QUEUED: i32 = 3
 const HTTP_SERVER_HELD: i32 = 4
 const HTTP_SERVER_STREAMING: i32 = 5
 const HTTP_SERVER_FLUSHING: i32 = 6
+const HTTP_SERVER_PARAM_START: i32 = 0
+const HTTP_SERVER_PARAM_END: i32 = 1
+const HTTP_SERVER_VALUE_START: i32 = 2
+const HTTP_SERVER_VALUE_END: i32 = 3
 const HTTP_SERVER_H1: i32 = 1
 const HTTP_SERVER_H2: i32 = 2
 const HTTP_SERVER_H3: i32 = 3
@@ -37670,8 +37675,8 @@ function HttpServerRequest.paramIs(this: HttpServerRequest, k: i32, text: string
   pointer this: size=200 writesThrough=false captured=false passedTo=nish.HttpServerRequest.checkParam#0 nish.HttpServerRequest.checkParam#0
   stackSites=0 stackLocals=0
   callee +0:12 httpServerSpanIs -> @nish.httpServerSpanIs
-  callee +0:40 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
-  callee +0:63 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
+  callee +2:7 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
+  callee +3:7 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
 function HttpServerRequest.param(this: HttpServerRequest, k: i32, out: u8[]): i32 -> @nish.HttpServerRequest.param [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.routerDecode
@@ -37681,8 +37686,8 @@ function HttpServerRequest.param(this: HttpServerRequest, k: i32, out: u8[]): i3
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.routerDecode#3
   stackSites=0 stackLocals=0
   callee +0:12 routerDecode -> @nish.routerDecode
-  callee +0:36 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
-  callee +0:59 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
+  callee +2:7 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
+  callee +3:7 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
 function HttpServerRequest.paramDecimal(this: HttpServerRequest, k: i32): i32 -> @nish.HttpServerRequest.paramDecimal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -37690,8 +37695,8 @@ function HttpServerRequest.paramDecimal(this: HttpServerRequest, k: i32): i32 ->
   pointer this: size=200 writesThrough=false captured=false passedTo=nish.HttpServerRequest.checkParam#0 nish.HttpServerRequest.checkParam#0
   stackSites=0 stackLocals=0
   callee +0:12 httpServerDecimal -> @nish.httpServerDecimal
-  callee +0:41 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
-  callee +0:64 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
+  callee +2:7 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
+  callee +3:7 HttpServerRequest.checkParam -> @nish.HttpServerRequest.checkParam
 function HttpServerRequest.checkParam(this: HttpServerRequest, k: i32, end: i32): i32 -> @nish.HttpServerRequest.checkParam [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
@@ -37772,9 +37777,9 @@ function HttpServerRequest.headerIs(this: HttpServerRequest, name: string, value
   stackSites=0 stackLocals=0
   local +0:11 i: i32 (const)
   callee +0:20 HttpServerRequest.header -> @nish.HttpServerRequest.header
-  callee +1:22 httpServerSpanIs -> @nish.httpServerSpanIs
-  callee +1:50 HttpServerRequest.spanAt -> @nish.HttpServerRequest.spanAt
-  callee +1:69 HttpServerRequest.spanAt -> @nish.HttpServerRequest.spanAt
+  callee +3:7 httpServerSpanIs -> @nish.httpServerSpanIs
+  callee +5:9 HttpServerRequest.spanAt -> @nish.HttpServerRequest.spanAt
+  callee +6:9 HttpServerRequest.spanAt -> @nish.HttpServerRequest.spanAt
 function httpServerAllowAppend(value: u8[], bytes: u8[], start: i32, end: i32): void -> @nish.httpServerAllowAppend
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
