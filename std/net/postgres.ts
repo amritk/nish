@@ -462,8 +462,10 @@ export class PgError {
 
 /** A fresh copy of `bytes`; the password holder keeps one. */
 const pgCopyBytes = (bytes: u8[]): u8[] => {
-  const copy: u8[] = new Array<u8>(toI32(bytes.length))
-  copy.set(bytes, 0)
+  const copy: u8[] = []
+  for (const b of bytes) {
+    copy.push(b)
+  }
   return copy
 }
 
@@ -550,13 +552,14 @@ const pgBytesOf = (text: string): u8[] => {
 /** How many bytes `value` takes in decimal, its sign included. */
 const pgDecimalLength = (value: i64): i32 => {
   // Counted on the negative side, where the most negative i64 fits, two digits a step.
-  let n: i32 = value < 0 ? 2 : 1
+  // A `u32` count wraps rather than checks; it never passes 20.
+  let n: u32 = value < 0 ? 2 : 1
   let v: i64 = value < 0 ? value : -value
   while (v <= -100) {
     v = v / 100
     n += 2
   }
-  return v <= -10 ? n + 1 : n
+  return toI32(v <= -10 ? n + 1 : n)
 }
 
 /**
@@ -564,12 +567,13 @@ const pgDecimalLength = (value: i64): i32 => {
  * `pgDecimalLength(value)`, and answers `at + n`. The digits go once, into
  * their places, from the last, two a step from the magnitude as a `u64`
  * (which holds the most negative i64's, and whose `/` and `%` are never
- * checked). Panics unless the window is inside `out`; each step's guard
- * restates it in the shape that proves its two stores.
+ * checked). Answers -1, and writes nothing, unless the window is inside
+ * `out`; each step's guard restates it in the shape that proves its two
+ * stores.
  */
 const pgPutDecimal = (out: u8[], at: i32, value: i64, n: i32): i32 => {
   if (!(at >= 0 && at < 2147483620 && n >= 1 && n <= 20 && at + n <= toI32(out.length))) {
-    panic("nish/net/postgres: a decimal outside its room")
+    return -1
   }
   const first: i32 = value < 0 ? at + 1 : at
   let m: u64 = value < 0 ? toU64(0) - toU64(value) : toU64(value)
@@ -664,25 +668,29 @@ const pgIsText = (b: u8[], from: i32, end: i32): boolean => {
     if (more > end - i - 1) {
       return false
     }
-    for (let j: i32 = 1; j <= more && i + j < toI32(b.length); j++) {
-      const d: i32 = toI32(b[i + j])
+    // `k` walks the continuation bytes, `i + 1` to `i + more`.
+    let k: i32 = i + 1
+    while (k < toI32(b.length) && k - i <= more) {
+      const d: i32 = toI32(b[k])
       if (d < low || d > high) {
         return false
       }
       low = 0x80
       high = 0xbf
+      k++
     }
-    i += more + 1
+    i = k
   }
   return true
 }
 
-/** The first `byte` in `b[from, end)`, or `end`. */
+/**
+ * The first `byte` in `b[from, end)`, or `end` when there is none; past
+ * `b`'s end nothing is found, so a window outside it reads as one without
+ * the byte, which every caller refuses as a malformed message.
+ */
 const pgFind = (b: u8[], from: i32, end: i32, byte: i32): i32 => {
-  if (from < 0 || end > toI32(b.length)) {
-    panic("nish/net/postgres: pgFind outside the buffer")
-  }
-  for (let i: i32 = from; i < end; i++) {
+  for (let i: i32 = from; i >= 0 && i < end && i < toI32(b.length); i++) {
     if (toI32(b[i]) === byte) {
       return i
     }
@@ -696,10 +704,13 @@ const pgBytesAre = (b: u8[], start: i32, length: i32, text: string): boolean => 
   if (length !== n || start < 0 || start > toI32(b.length) - n) {
     return false
   }
+  // `k` walks `b` from `start`, which the guard keeps `n` bytes from the end.
+  let k: i32 = start
   for (let i: i32 = 0; i < n; i++) {
-    if (toI32(b[start + i]) !== toI32(text.charCodeAt(i))) {
+    if (k >= toI32(b.length) || toI32(b[k]) !== toI32(text.charCodeAt(i))) {
       return false
     }
+    k++
   }
   return true
 }
@@ -2644,7 +2655,11 @@ export class PgConnection {
   private putDecimal(value: i64): void {
     const n: i32 = pgDecimalLength(value)
     this.reserve(this.outEnd + n)
-    this.outEnd = pgPutDecimal(this.out, this.outEnd, value, n)
+    // `reserve` made the room, so the window is inside `out` and the answer is not -1.
+    const end: i32 = pgPutDecimal(this.out, this.outEnd, value, n)
+    if (end >= 0) {
+      this.outEnd = end
+    }
   }
 
   /**
