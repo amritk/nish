@@ -313,8 +313,11 @@ export const quicEncodeTransportParametersInto = (p: QuicTransportParameters, ou
 const quicParamsCopyInto = (to: u8[], data: u8[], from: i32, length: i32): void => {
   quicParamsEmpty(to)
   for (let k: i32 = 0; k < length; k += 1) {
-    if (from + k >= 0 && from + k < toI32(data.length)) {
-      to.push(data[from + k])
+    // `from` and `k` are both i32, so their sum fits an i64; a byte outside `data` is not copied.
+    const j: i64 = toI64(from) + toI64(k)
+    const i: i32 = j >= 0 && j < 2147483648 ? toI32(j) : -1
+    if (i >= 0 && i < toI32(data.length)) {
+      to.push(data[i])
     }
   }
 }
@@ -332,7 +335,8 @@ const quicParamsRefuse = (p: QuicTransportParameters, id: i64): QuicTransportPar
  * holds, otherwise.
  */
 const quicParamsVarintValue = (bytes: u8[], at: i32, length: i32): i64 => {
-  const value: i64 = quicVarintRead(bytes, at, at + length)
+  // The caller's value window lies inside `bytes`, so its end fits an i32.
+  const value: i64 = quicVarintRead(bytes, at, toI32(toI64(at) + toI64(length)))
   if (value < 0 || quicVarintLength(bytes, at) !== length) {
     return -1
   }
@@ -504,18 +508,20 @@ export const quicParseTransportParametersInto = (
     if (id < 0) {
       return quicParamsRefuse(p, -1)
     }
-    at = at + quicVarintLength(bytes, at)
+    // The varint just read ends inside `end`, so the advance fits an i32.
+    at = toI32(toI64(at) + toI64(quicVarintLength(bytes, at)))
     const length: i64 = quicVarintRead(bytes, at, end)
     if (length < 0) {
       return quicParamsRefuse(p, id)
     }
-    at = at + quicVarintLength(bytes, at)
-    if (length > toI64(end - at)) {
+    at = toI32(toI64(at) + toI64(quicVarintLength(bytes, at)))
+    if (length > toI64(end) - toI64(at)) {
       return quicParamsRefuse(p, id)
     }
     const valueAt: i32 = at
     const valueLength: i32 = toI32(length)
-    at = at + valueLength
+    // `length` fits in what is left before `end`, so the advance fits an i32.
+    at = toI32(toI64(at) + toI64(valueLength))
     if (id === toI64(QUIC_TP_MAX_DATAGRAM_FRAME_SIZE)) {
       const value: i64 = quicParamsVarintValue(bytes, valueAt, valueLength)
       if (seenDatagram || value < 0) {

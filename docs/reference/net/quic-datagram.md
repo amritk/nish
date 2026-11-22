@@ -52,7 +52,7 @@ class QuicDatagramQueue
 
 | Member | |
 | --- | --- |
-| `new QuicDatagramQueue(entries: i32, entrySize: i32)` | Makes an empty ring, allocating all of its storage now: `entries * entrySize` bytes of payload and a 4-byte length per entry. |
+| `new QuicDatagramQueue(entries: i32, entrySize: i32)` | Makes an empty ring, allocating all of its storage now: `entries * entrySize` bytes of payload and a 4-byte length per entry. A negative size, or a product past 2^31 - 1 bytes, makes a ring of no entries, which refuses every `push`. |
 | `count: i32` | How many datagrams wait in the ring, from 0 to its entry count. |
 | `data: u8[]` | Entry `k`'s bytes are `data[k * entrySize ..]`, `lengths[k]` of them. |
 | `dropped: i32` | Datagrams refused for want of room or for their size, which the peer's side counts as dropped. |
