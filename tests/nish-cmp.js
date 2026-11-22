@@ -10111,7 +10111,17 @@ const stdPanicFree = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
   )
 
+// WP83 S2: std/crypto's ciphers, curves, signatures and password hashing
+// prove or refuse their panic sites under this PR's subject.
+const STD_CIPHER_PANIC_FREE = "ciphers, curves, signatures and password hashing"
+
 const DECLARED = [
+  {
+    program: "tests/link/thread_bcrypt_batcher/main.ts",
+    file: "main.ll",
+    changelog: STD_CIPHER_PANIC_FREE,
+    why: "the test now drives BcryptBatcher's ticket past 2^31 - 1, and the seed numbers the attribute group of BcryptBatchKey.constructor's declaration differently from the candidate",
+  },
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
   ...stdPanicFree(
