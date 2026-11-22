@@ -395,10 +395,10 @@ Where the tag starts in `tag`.
 
 The HMAC-SHA-256 of all of `data` under `key`, as a fresh 32-byte array.
 
-`data` longer than 2^31 - 1 bytes panics, as `sha256` does and for its
-reason: under `--number-mode f64` the tag would be of a prefix, and a tag
-that verifies every message sharing that prefix is a forgery. A key that
-long panics in the constructor for the same reason.
+`data` longer than 2^31 - 1 bytes (possible under `--number-mode f64`) is
+MACed whole, as `sha256` hashes it, never cut to a prefix: a tag that
+verified every message sharing a prefix would be a forgery. A key that long
+is hashed whole in the constructor for the same reason.
 
 ```ts
 const hmacSha256: (key: u8[], data: u8[]) => u8[]
@@ -494,7 +494,7 @@ The tag to check, as received.
 ### hmacSha384
 
 The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array.
-`data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+`data` longer than 2^31 - 1 bytes is MACed whole, as in `hmacSha256`.
 
 ```ts
 const hmacSha384: (key: u8[], data: u8[]) => u8[]
@@ -587,7 +587,7 @@ The tag to check, as received.
 ### hmacSha512
 
 The HMAC-SHA-512 of all of `data` under `key`, as a fresh 64-byte array.
-`data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+`data` longer than 2^31 - 1 bytes is MACed whole, as in `hmacSha256`.
 
 ```ts
 const hmacSha512: (key: u8[], data: u8[]) => u8[]

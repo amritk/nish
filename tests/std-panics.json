@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9835,
+  "total": 9639,
   "explicit": {
-    "kept": 343,
-    "toFix": 131
+    "kept": 342,
+    "toFix": 116
   },
   "modules": {
     "std/base64.ts": {
@@ -67,8 +67,6 @@
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
-      "index": 8,
-      "overflow": 21,
       "panic": 7
     },
     "std/crypto/bcrypt-batch.ts": {
@@ -90,25 +88,17 @@
       "index": 61,
       "overflow": 22
     },
-    "std/crypto/ct.ts": {
-      "index": 2
-    },
     "std/crypto/ed25519.ts": {
       "array-length": 1,
       "index": 19,
       "panic": 2
     },
     "std/crypto/hkdf.ts": {
-      "array-length": 4,
-      "index": 18,
-      "overflow": 22,
-      "panic": 16
+      "panic": 14
     },
     "std/crypto/hmac.ts": {
-      "array-length": 4,
-      "index": 11,
-      "overflow": 22,
-      "panic": 14
+      "array-length": 1,
+      "panic": 10
     },
     "std/crypto/jwt.ts": {
       "array-length": 7,
@@ -143,20 +133,11 @@
       "index": 23,
       "overflow": 32
     },
-    "std/crypto/scram.ts": {
-      "panic": 1
-    },
     "std/crypto/sha256.ts": {
-      "index": 5,
-      "overflow": 14,
-      "panic": 9,
-      "range": 15
+      "panic": 2
     },
     "std/crypto/sha512.ts": {
-      "array-length": 1,
-      "index": 20,
-      "overflow": 14,
-      "panic": 5
+      "panic": 3
     },
     "std/crypto/x25519.ts": {
       "overflow": 4
