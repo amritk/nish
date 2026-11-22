@@ -30,7 +30,7 @@ is refused by default until the standard library is made panic-free, and the
 division by `toI64(1000)` builds under the default once its divisor is a
 local that a guard such as `if (d > 0)` tests:
 
-<!-- allow-panics: divides by a value it does not test; calls `std/crypto/jwt.ts`, `std/net/oidc.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: divides by a value it does not test; calls `std/crypto/jwt.ts`, `std/net/oidc.ts`, `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {
@@ -228,7 +228,7 @@ key set you already hold, for a test or for a set you fetch yourself.
 A provider running on your own machine over plain http (Keycloak in a
 container, say) is refused unless you allow it:
 
-<!-- allow-panics: calls `std/net/oidc.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { OidcMetadata, OidcOptions, oidcDiscover } from "nish/net/oidc";
