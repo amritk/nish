@@ -107,7 +107,7 @@ struct HelpMenu (class) size=40 align=8 exported
   field column: i32 index=2 offset=16
   field usageColumn: i32 index=3 offset=20
   field lines: string[] index=4 offset=24
-  field usages: i32 index=5 offset=32
+  field hasUsage: boolean index=5 offset=32
   constructor -> @HelpMenu.constructor
   method header -> @HelpMenu.header
   method title -> @HelpMenu.title
@@ -528,11 +528,11 @@ function spaces(count: i32): string -> @spaces
   stackSites=1 stackLocals=1
   local +0:9 out: string[] (const)
   local +1:12 i: i32 (let)
-function padTo(width: i32, column: i32): string -> @padTo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow spaces
+function padTo(fixed: i32, first: i32, second: i32, column: i32): string -> @padTo
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: spaces
   stackSites=0 stackLocals=0
-  callee +0:52 spaces -> @spaces
+  callee +0:3 spaces -> @spaces
 function HelpMenu.constructor(this: HelpMenu, style: Style, program: string, column: i32, usageColumn: i32): void -> @HelpMenu.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: column program style usageColumn
@@ -566,20 +566,20 @@ function HelpMenu.line(this: HelpMenu, text: string): void -> @HelpMenu.line [ex
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function HelpMenu.usage(this: HelpMenu, shape: string, description: string): void -> @HelpMenu.usage [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: description shape
-  calls: Style.dim Style.flag Style.heading Style.name nish_array_grow nish_panic_overflow nish_str_concat padTo spaces
+  calls: Style.dim Style.flag Style.heading Style.name nish_array_grow nish_str_concat padTo spaces
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -4:11 style: Style (const)
-  local -3:11 lead: string (const)
-  callee -3:41 Style.heading -> @Style.heading
-  callee -3:70 spaces -> @spaces
-  local -2:11 width: i32 (const)
+  local -5:11 style: Style (const)
+  local -4:11 lead: string (const)
+  callee -4:34 spaces -> @spaces
+  callee -4:49 Style.heading -> @Style.heading
+  local -2:11 pad: string (const)
+  callee -2:17 padTo -> @padTo
   local -1:11 text: string (const)
-  callee -1:46 padTo -> @padTo
-  callee -1:79 Style.dim -> @Style.dim
+  callee -1:52 Style.dim -> @Style.dim
   callee +0:31 Style.name -> @Style.name
   callee +0:59 Style.flag -> @Style.flag
 function HelpMenu.section(this: HelpMenu, title: string): void -> @HelpMenu.section [exported method]
@@ -591,19 +591,19 @@ function HelpMenu.section(this: HelpMenu, title: string): void -> @HelpMenu.sect
   stackSites=0 stackLocals=0
   callee +1:21 Style.heading -> @Style.heading
 function HelpMenu.row(this: HelpMenu, flag: string, meta: string, description: string): void -> @HelpMenu.row [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: description flag meta
-  calls: Style.dim Style.flag Style.meta nish_array_grow nish_panic_overflow nish_str_concat padTo
+  calls: Style.dim Style.flag Style.meta nish_array_grow nish_str_concat padTo
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -3:11 style: Style (const)
-  local -2:11 width: i32 (const)
+  local -4:11 style: Style (const)
+  local -2:11 pad: string (const)
+  callee -2:17 padTo -> @padTo
   local -1:11 placeholder: string (const)
   callee -1:47 Style.meta -> @Style.meta
   callee +1:12 Style.flag -> @Style.flag
-  callee +1:45 padTo -> @padTo
-  callee +1:73 Style.dim -> @Style.dim
+  callee +1:51 Style.dim -> @Style.dim
 function HelpMenu.note(this: HelpMenu, text: string): void -> @HelpMenu.note [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

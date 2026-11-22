@@ -482,25 +482,25 @@ function round(mode: string, high: i32, first: u32): u32[] -> @round$
   local +12:13 s: ThreadScope (const)
   callee +12:17 scope -> @nish.scope
   local +13:16 t: i32 (let)
-  callee +14:9 ThreadScope.spawn<LockedShard, i32, binLocked> -> @nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked
-  callee +14:28 new LockedShard -> @LockedShard.constructor
-  local +17:11 g: MutexGuard<Hist> (const)
-  callee +17:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
-  local +18:14 b: i32 (let)
-  local +22:11 bins: AtomicI32Array (const)
-  callee +22:18 new AtomicI32Array -> @nish.AtomicI32Array.constructor
-  local +23:11 binned: i32[] (const)
-  local +24:11 perValue: boolean (const)
-  local +26:13 s: ThreadScope (const)
-  callee +26:17 scope -> @nish.scope
-  local +27:16 t: i32 (let)
-  local +28:15 seed: i32 (const)
-  callee +30:11 ThreadScope.spawn<Shard, i32, binPerValue> -> @nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue
-  callee +30:32 new Shard -> @Shard.constructor
-  callee +32:11 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
-  callee +32:29 new Shard -> @Shard.constructor
-  local +36:14 b: i32 (let)
-  callee +37:22 AtomicI32Array.load -> @nish.AtomicI32Array.load
+  local +14:15 shard: LockedShard (const)
+  callee +14:23 new LockedShard -> @LockedShard.constructor
+  callee +19:11 ThreadScope.spawn<LockedShard, i32, binLocked> -> @nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked
+  local +23:11 g: MutexGuard<Hist> (const)
+  callee +23:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
+  local +24:14 b: i32 (let)
+  local +28:11 bins: AtomicI32Array (const)
+  callee +28:18 new AtomicI32Array -> @nish.AtomicI32Array.constructor
+  local +29:11 binned: i32[] (const)
+  local +30:11 perValue: boolean (const)
+  local +32:13 s: ThreadScope (const)
+  callee +32:17 scope -> @nish.scope
+  local +33:16 t: i32 (let)
+  local +34:15 shard: Shard (const)
+  callee +34:23 new Shard -> @Shard.constructor
+  callee +38:13 ThreadScope.spawn<Shard, i32, binPerValue> -> @nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue
+  callee +40:13 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
+  local +45:14 b: i32 (let)
+  callee +46:22 AtomicI32Array.load -> @nish.AtomicI32Array.load
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via round$
