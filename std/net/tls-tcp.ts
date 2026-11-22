@@ -342,13 +342,14 @@ export class TlsTcpServer {
    * @returns The number of slots with an open descriptor, lingering ones included; 0 to `size()`.
    */
   busy(): i32 {
-    let n: i32 = 0
+    // Counted unsigned: the count is at most `fds.length`, so it cannot wrap.
+    let n: u32 = 0
     for (const fd of this.fds) {
       if (fd >= 0) {
-        n = n + 1
+        n = n + toU32(1)
       }
     }
-    return n
+    return toI32(n)
   }
 
   /**
@@ -369,7 +370,73 @@ export class TlsTcpServer {
    *   holds none.
    */
   fd(slot: i32): i32 {
-    return this.holds(slot) ? this.fds[slot] : -1
+    const fds: i32[] = this.fds
+    return slot >= 0 && slot < toI32(fds.length) && fds[slot] >= 0 ? fds[slot] : -1
+  }
+
+  /**
+   * The connection of `slot` while it holds one, or `null` for a free or
+   * unknown slot. Every slot below the high-water mark has a connection, so
+   * for a held slot this is never `null`; the guard is here, beside the
+   * index, so the bounds proof sees it.
+   */
+  private live(slot: i32): TlsRecordServer | null {
+    const fds: i32[] = this.fds
+    const conns: TlsRecordServer[] = this.connections
+    if (slot < 0 || slot >= toI32(fds.length) || slot >= toI32(conns.length) || fds[slot] < 0) {
+      return null
+    }
+    return conns[slot]
+  }
+
+  /**
+   * `slot`'s linger (`lingered`). `lingered` grows with `fds`, so a slot
+   * past it was never used; it reads as `TLS_TCP_LINGERED`, done, which is
+   * what every caller answers for a slot it does not hold.
+   */
+  private lingerOf(slot: i32): i32 {
+    const lingered: i32[] = this.lingered
+    return slot >= 0 && slot < toI32(lingered.length) ? lingered[slot] : TLS_TCP_LINGERED
+  }
+
+  /** Sets `slot`'s linger; a slot past `lingered`, never used, has none to set. */
+  private setLinger(slot: i32, linger: i32): void {
+    const lingered: i32[] = this.lingered
+    if (slot >= 0 && slot < toI32(lingered.length)) {
+      lingered[slot] = linger
+    }
+  }
+
+  /** Records activity on `slot` at `now`; a slot past `lastActive`, never used, has no clock. */
+  private touch(slot: i32, now: i64): void {
+    const lastActive: i64[] = this.lastActive
+    if (slot >= 0 && slot < toI32(lastActive.length)) {
+      lastActive[slot] = now
+    }
+  }
+
+  /**
+   * Sets `slot`'s descriptor, a live linger and its last activity together,
+   * for `accept` and `close`. Answers false, changing nothing, for a slot
+   * past the per-slot arrays, which grow together in `accept` and so cover
+   * every slot it answers.
+   */
+  private mark(slot: i32, fd: i32, now: i64): boolean {
+    const fds: i32[] = this.fds
+    const lingered: i32[] = this.lingered
+    const lastActive: i64[] = this.lastActive
+    if (
+      slot < 0 ||
+      slot >= toI32(fds.length) ||
+      slot >= toI32(lingered.length) ||
+      slot >= toI32(lastActive.length)
+    ) {
+      return false
+    }
+    fds[slot] = fd
+    lingered[slot] = TLS_TCP_LIVE
+    lastActive[slot] = now
+    return true
   }
 
   /**
@@ -429,9 +496,11 @@ export class TlsTcpServer {
     // first accepts take slots 0, 1, 2 ... and a pool that never fills never
     // builds its last slots.
     let slot: i32 = TLS_TCP_POOL_FULL
-    if (this.free.length > 0) {
-      slot = this.free[this.free.length - 1]
-      this.free.pop()
+    const free: i32[] = this.free
+    const freeCount: i32 = toI32(free.length)
+    if (freeCount > 0 && free.length > 0) {
+      slot = free[freeCount - 1]
+      free.pop()
     } else if (toI32(this.fds.length) < this.slots) {
       slot = toI32(this.fds.length)
       this.fds.push(TLS_TCP_FREE)
@@ -444,10 +513,18 @@ export class TlsTcpServer {
     }
     const conn: TlsRecordServer =
       slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
-    this.fds[slot] = fd
-    this.lingered[slot] = TLS_TCP_LIVE
-    this.lastActive[slot] = monotonicNanos()
-    const random: u8[] = this.randoms[slot]
+    // `build` pushed this slot's random if it was new, so the guard never
+    // fails; it sits here, after the call, so the bounds proof sees it.
+    const randoms: u8[][] = this.randoms
+    if (slot >= toI32(randoms.length)) {
+      netClose(fd)
+      return TLS_TCP_POOL_FULL
+    }
+    const random: u8[] = randoms[slot]
+    if (!this.mark(slot, fd, monotonicNanos())) {
+      netClose(fd)
+      return TLS_TCP_POOL_FULL
+    }
     for (
       let k: i32 = 0;
       k < TLS_TCP_KEY_SIZE && k < toI32(random.length) && k < toI32(serverRandom.length);
@@ -472,15 +549,15 @@ export class TlsTcpServer {
    * @returns The slot's interest: `TLS_RECORD_*` bits saying what to wait for next.
    */
   readable(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_DONE
     }
-    if (this.lingered[slot] !== TLS_TCP_LIVE) {
+    if (this.lingerOf(slot) !== TLS_TCP_LIVE) {
       return this.drain(slot)
     }
-    this.lastActive[slot] = monotonicNanos()
-    const fd: i32 = this.fds[slot]
-    const conn: TlsRecordServer = this.connections[slot]
+    this.touch(slot, monotonicNanos())
+    const fd: i32 = this.fd(slot)
     while (true) {
       const room: i32 = conn.space()
       const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
@@ -513,8 +590,8 @@ export class TlsTcpServer {
     }
     // What a lingering slot drains is not activity, so `idleTimeout` bounds
     // how long a client that never hangs up can hold it.
-    if (this.lingered[slot] === TLS_TCP_LIVE) {
-      this.lastActive[slot] = monotonicNanos()
+    if (this.lingerOf(slot) === TLS_TCP_LIVE) {
+      this.touch(slot, monotonicNanos())
     }
     return this.flush(slot)
   }
@@ -533,7 +610,7 @@ export class TlsTcpServer {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
     }
-    if (this.lingered[slot] !== TLS_TCP_LIVE) {
+    if (this.lingerOf(slot) !== TLS_TCP_LIVE) {
       return this.lingerInterest(slot)
     }
     const wants: i32 = this.send(slot)
@@ -544,10 +621,13 @@ export class TlsTcpServer {
 
   /** Writes `slot`'s output until the socket would block or it is all sent; answers the connection's `interest`. */
   private send(slot: i32): i32 {
-    const fd: i32 = this.fds[slot]
-    const conn: TlsRecordServer = this.connections[slot]
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
+      return TLS_RECORD_DONE
+    }
+    const fd: i32 = this.fd(slot)
     while (conn.outputEnd > conn.outputStart) {
-      const n: i32 = netWrite(fd, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+      const n: i32 = netWrite(fd, conn.output, conn.outputStart, tlsTcpPending(conn.outputStart, conn.outputEnd))
       if (n <= 0) {
         if (n !== TLS_RECORD_AGAIN) {
           conn.abort()
@@ -567,17 +647,18 @@ export class TlsTcpServer {
    * (`drain`). Any other is done.
    */
   private linger(slot: i32): i32 {
-    const conn: TlsRecordServer = this.connections[slot]
+    const conn: TlsRecordServer | null = this.live(slot)
     if (
+      conn === null ||
       conn.state !== TLS_RECORD_STATE_CLOSED ||
       conn.peerClosed ||
       conn.ended ||
-      netShutdown(this.fds[slot], TLS_TCP_SHUT_WRITE) < 0
+      netShutdown(this.fd(slot), TLS_TCP_SHUT_WRITE) < 0
     ) {
-      this.lingered[slot] = TLS_TCP_LINGERED
+      this.setLinger(slot, TLS_TCP_LINGERED)
       return TLS_RECORD_DONE
     }
-    this.lingered[slot] = 0
+    this.setLinger(slot, 0)
     conn.wipeKeys()
     conn.release()
     return this.drain(slot)
@@ -590,14 +671,20 @@ export class TlsTcpServer {
    * (`TLS_RECORD_DONE`).
    */
   private drain(slot: i32): i32 {
-    while (this.lingered[slot] >= 0) {
-      const n: i32 = netRead(this.fds[slot], this.scratch, TLS_TCP_FROM, toI32(this.scratch.length))
+    const fd: i32 = this.fd(slot)
+    let seen: i32 = this.lingerOf(slot)
+    while (seen >= 0) {
+      const n: i32 = netRead(fd, this.scratch, TLS_TCP_FROM, toI32(this.scratch.length))
       if (n === TLS_RECORD_AGAIN) {
+        this.setLinger(slot, seen)
         return TLS_RECORD_WANT_READ
       }
-      this.lingered[slot] =
-        n > 0 && this.lingered[slot] + n <= TLS_TCP_LINGER_LIMIT ? this.lingered[slot] + n : TLS_TCP_LINGERED
+      // Summed unsigned: `seen` is not negative in the loop and `n` is a
+      // positive count, so the sum is below 2^32 and cannot wrap.
+      const sum: u32 = n > 0 ? toU32(seen) + toU32(n) : toU32(0)
+      seen = n > 0 && sum <= toU32(TLS_TCP_LINGER_LIMIT) ? toI32(sum) : TLS_TCP_LINGERED
     }
+    this.setLinger(slot, seen)
     return TLS_RECORD_DONE
   }
 
@@ -610,12 +697,12 @@ export class TlsTcpServer {
    * @returns True while the slot holds a connection that is draining its client before `close`.
    */
   lingering(slot: i32): boolean {
-    return this.holds(slot) && this.lingered[slot] >= 0
+    return this.holds(slot) && this.lingerOf(slot) >= 0
   }
 
   /** A lingering `slot`'s interest: to be read, or `TLS_RECORD_DONE` once its linger is over. */
   private lingerInterest(slot: i32): i32 {
-    return this.lingered[slot] >= 0 ? TLS_RECORD_WANT_READ : TLS_RECORD_DONE
+    return this.lingerOf(slot) >= 0 ? TLS_RECORD_WANT_READ : TLS_RECORD_DONE
   }
 
   /**
@@ -625,12 +712,11 @@ export class TlsTcpServer {
    * @returns The slot's `TLS_RECORD_*` interest bits; the low two are the events for `pollModify`.
    */
   interest(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_DONE
     }
-    return this.lingered[slot] !== TLS_TCP_LIVE
-      ? this.lingerInterest(slot)
-      : this.connections[slot].interest()
+    return this.lingerOf(slot) !== TLS_TCP_LIVE ? this.lingerInterest(slot) : conn.interest()
   }
 
   /**
@@ -641,7 +727,8 @@ export class TlsTcpServer {
    *   waiting for a signature.
    */
   signatureInput(slot: i32): u8[] | null {
-    return this.holds(slot) ? this.connections[slot].signatureInput() : null
+    const conn: TlsRecordServer | null = this.live(slot)
+    return conn !== null ? conn.signatureInput() : null
   }
 
   /**
@@ -653,10 +740,11 @@ export class TlsTcpServer {
    * @returns The slot's interest after sending; `TLS_RECORD_DONE` for a free slot.
    */
   sign(slot: i32, signature: u8[]): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_DONE
     }
-    this.connections[slot].sign(signature)
+    conn.sign(signature)
     return this.flush(slot)
   }
 
@@ -677,8 +765,12 @@ export class TlsTcpServer {
       return this.interest(slot)
     }
     const signature: u8[] | null = this.signer.sign(key, input)
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
+      return TLS_RECORD_DONE
+    }
     if (signature === null) {
-      this.connections[slot].fail(TLS_ALERT_INTERNAL_ERROR)
+      conn.fail(TLS_ALERT_INTERNAL_ERROR)
       return this.flush(slot)
     }
     return this.sign(slot, signature)
@@ -723,10 +815,11 @@ export class TlsTcpServer {
     strikes: TlsTicketStrikes,
     now: i64
   ): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_DONE
     }
-    this.connections[slot].resume(current, currentInfo, previous, previousInfo, strikes, now)
+    conn.resume(current, currentInfo, previous, previousInfo, strikes, now)
     return this.flush(slot)
   }
 
@@ -742,10 +835,11 @@ export class TlsTcpServer {
    * @returns The slot's interest after sending; `TLS_RECORD_DONE` for a free slot.
    */
   issue(slot: i32, key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_DONE
     }
-    this.connections[slot].issue(key, info, now)
+    conn.issue(key, info, now)
     return this.flush(slot)
   }
 
@@ -764,10 +858,11 @@ export class TlsTcpServer {
    * @returns The bytes copied, or 0, -11 or -104 as above; `TLS_RECORD_INVALID` (-22) for a free slot.
    */
   read(slot: i32, buf: u8[], off: i32, len: i32): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_INVALID
     }
-    const n: i32 = this.connections[slot].read(buf, off, len)
+    const n: i32 = conn.read(buf, off, len)
     this.flush(slot)
     return n
   }
@@ -786,10 +881,11 @@ export class TlsTcpServer {
    *   `TLS_RECORD_INVALID` (-22) for a free slot.
    */
   write(slot: i32, data: u8[], off: i32, len: i32): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_INVALID
     }
-    const n: i32 = this.connections[slot].write(data, off, len)
+    const n: i32 = conn.write(data, off, len)
     this.flush(slot)
     return n
   }
@@ -804,10 +900,11 @@ export class TlsTcpServer {
    *   `TlsRecordServer.keyUpdate` says; `TLS_RECORD_INVALID` (-22) for a free slot.
    */
   keyUpdate(slot: i32, requestPeer: boolean): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_INVALID
     }
-    const r: i32 = this.connections[slot].keyUpdate(requestPeer)
+    const r: i32 = conn.keyUpdate(requestPeer)
     this.flush(slot)
     return r
   }
@@ -825,10 +922,11 @@ export class TlsTcpServer {
    *   wait for.
    */
   shutdown(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return TLS_RECORD_DONE
     }
-    this.connections[slot].close()
+    conn.close()
     return this.flush(slot)
   }
 
@@ -843,19 +941,17 @@ export class TlsTcpServer {
    * @param slot The slot to free; a free or unknown slot is left alone.
    */
   close(slot: i32): void {
-    if (!this.holds(slot)) {
+    const conn: TlsRecordServer | null = this.live(slot)
+    if (conn === null) {
       return
     }
-    const conn: TlsRecordServer = this.connections[slot]
-    if (this.lingered[slot] === TLS_TCP_LIVE) {
+    if (this.lingerOf(slot) === TLS_TCP_LIVE) {
       conn.close()
       this.send(slot)
     }
-    netClose(this.fds[slot])
-    this.fds[slot] = TLS_TCP_FREE
-    this.lingered[slot] = TLS_TCP_LIVE
+    netClose(this.fd(slot))
+    this.mark(slot, TLS_TCP_FREE, toI64(0))
     this.free.push(slot)
-    this.lastActive[slot] = toI64(0)
     conn.wipeKeys()
     // Whatever the last flush could not send is dropped with its buffer.
     conn.release()
@@ -871,7 +967,8 @@ export class TlsTcpServer {
    * already taken for a slot this closes would otherwise be read as the next
    * connection's, once `accept` reuses the slot. It is an idle limit, not a
    * handshake deadline: a client that sends a byte inside every
-   * `idleTimeout` keeps its slot.
+   * `idleTimeout` keeps its slot. A `now` before a slot's last activity
+   * does not idle it.
    *
    * @param now The time now, in `monotonicNanos()`, which each slot's last activity is judged against.
    * @returns How many slots this call closed; 0 while `idleTimeout` is 0 or less.
@@ -881,14 +978,31 @@ export class TlsTcpServer {
       return 0
     }
     const limit: i64 = toI64(this.idleTimeout) * TLS_TCP_NANOS_PER_MS
-    let n: i32 = 0
+    // Counted unsigned: at most one per slot, so it cannot wrap.
+    let n: u32 = 0
     for (let k: i32 = 0; k < toI32(this.fds.length); k++) {
-      if (this.holds(k) && now - this.lastActive[k] > limit) {
+      if (this.idle(k, now, limit)) {
         this.close(k)
-        n = n + 1
+        n = n + toU32(1)
       }
     }
-    return n
+    return toI32(n)
+  }
+
+  /**
+   * Whether `slot` holds a connection whose last activity is more than
+   * `limit` nanoseconds before `now`. The gap is taken unsigned once `now`
+   * is past the last activity, where it is exact, so a `now` from far
+   * outside the clock's range cannot overflow it.
+   */
+  private idle(slot: i32, now: i64, limit: i64): boolean {
+    const fds: i32[] = this.fds
+    const lastActive: i64[] = this.lastActive
+    if (slot < 0 || slot >= toI32(fds.length) || slot >= toI32(lastActive.length) || fds[slot] < 0) {
+      return false
+    }
+    const last: i64 = lastActive[slot]
+    return now > last && toU64(now) - toU64(last) > toU64(limit)
   }
 }
 
@@ -1108,7 +1222,7 @@ export class TlsTcpClient {
     }
     const conn: TlsRecordClient = this.conn
     while (conn.outputEnd > conn.outputStart) {
-      const n: i32 = netWrite(this.socket, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+      const n: i32 = netWrite(this.socket, conn.output, conn.outputStart, tlsTcpPending(conn.outputStart, conn.outputEnd))
       if (n <= 0) {
         if (n !== TLS_RECORD_AGAIN) {
           conn.abort()
@@ -1214,9 +1328,12 @@ export class TlsTcpClient {
     let result: i32 = 0
     while (true) {
       if (done < len) {
-        const n: i32 = this.write(data, off + done, len - done)
+        // Wrapping sums, exact while they fit: `done` runs from 0 up to `len`,
+        // so the rest is exact, and an `off + done` past `i32` comes out
+        // negative, a window `write` refuses with -22 rather than a panic.
+        const n: i32 = this.write(data, toI32(toU32(off) + toU32(done)), toI32(toU32(len) - toU32(done)))
         if (n >= 0) {
-          done = done + n
+          done = toI32(toU32(done) + toU32(n))
         } else if (n !== TLS_RECORD_AGAIN) {
           result = n
           break
@@ -1289,15 +1406,19 @@ export class TlsTcpClient {
     }
     pollModify(loop, this.socket, wants & TLS_TCP_POLL_EVENTS, TLS_TCP_TOKEN)
     const ready: i32[] = new Array<i32>(2)
-    const count: i32 = pollWait(
-      loop,
-      ready,
-      toI32((end - now + TLS_TCP_NANOS_PER_MS - 1) / TLS_TCP_NANOS_PER_MS)
-    )
+    // The wait rounded up to whole milliseconds, taken unsigned: `end` is
+    // past `now`, so the gap is exact, and dividing first cannot overflow.
+    // The divisor is the literal of `TLS_TCP_NANOS_PER_MS`, which the
+    // divide proof needs to see.
+    const wait: u64 = toU64(end) - toU64(now)
+    const ms: u64 = wait / toU64(1000000) + (wait % toU64(1000000) !== toU64(0) ? toU64(1) : toU64(0))
+    const count: i32 = pollWait(loop, ready, toI32(ms))
     if (count < 0) {
       return count
     }
-    if (count > 0) {
+    // `ready` is the two entries made above; the length is checked again
+    // because `pollWait` wrote it.
+    if (count > 0 && toI32(ready.length) > 1) {
       if ((ready[1] & TLS_TCP_READ_EVENTS) !== 0) {
         this.readable()
       } else {
@@ -1373,8 +1494,20 @@ export class TlsTcpClient {
   }
 }
 
-/** The monotonic clock `timeoutMs` milliseconds from now. */
-const tlsTcpDeadline = (timeoutMs: i32): i64 => monotonicNanos() + toI64(timeoutMs) * TLS_TCP_NANOS_PER_MS
+/**
+ * The monotonic clock `timeoutMs` milliseconds from now. Added wrapping:
+ * the clock counts up from boot, far below 2^62, and an `i32` of
+ * milliseconds is below 2^52 nanoseconds either way, so the sum is exact.
+ */
+const tlsTcpDeadline = (timeoutMs: i32): i64 =>
+  toI64(toU64(monotonicNanos()) + toU64(toI64(timeoutMs) * TLS_TCP_NANOS_PER_MS))
+
+/**
+ * How many output bytes wait between `start` and `end`, for a loop that runs
+ * while `end > start`. Taken unsigned: a record layer's output start is never
+ * negative, so the gap is exact and cannot overflow.
+ */
+const tlsTcpPending = (start: i32, end: i32): i32 => toI32(toU32(end) - toU32(start))
 
 /**
  * Opens a TLS 1.3 connection to the server at `addr` (`nish:net`'s 18-byte
