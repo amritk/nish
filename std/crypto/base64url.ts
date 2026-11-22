@@ -95,6 +95,19 @@ const base64urlSextetOf = (c: i32): i32 => {
 }
 
 /**
+ * Writes `byte` to `out[at]` and answers `at + 1`. Every caller writes inside
+ * an array it sized or checked for the text or bytes it puts there; the test
+ * is the shape that proves the store, not a check a caller can fail.
+ */
+const base64Put = (out: u8[], at: i32, byte: u8): i32 => {
+  if (at >= 0 && at < toI32(out.length)) {
+    out[at] = byte
+    return at + 1
+  }
+  return at
+}
+
+/**
  * `data` as unpadded base64url: four characters per three bytes, and two or
  * three for a short final group.
  *
@@ -164,49 +177,57 @@ export const base64urlDecode = (text: string): u8[] | null => {
     return null
   }
   // Three bytes per full group of four, and one fewer than the characters in a
-  // short final group; `n * 3 / 4` would overflow for a text over 700 MB.
-  const out: u8[] = new Array<u8>((n >> 2) * 3 + (tail === 0 ? 0 : tail - 1))
-  const outLen: i32 = toI32(out.length)
+  // short final group; `n * 3 / 4` would overflow for a text over 700 MB. The
+  // sum is a `u32`, exact for any `n` here.
+  const out: u8[] = new Array<u8>(toU32(n >> 2) * 3 + (tail === 0 ? 0 : toU32(tail) - 1))
   // All ones once any character is outside the alphabet (a sextet of `-1`
   // shifted right by 31), and non-zero once the text ends on a bit that
   // encodes no byte.
   let bad: i32 = 0
   // Four characters make one 24-bit word and three bytes, so a full group has
   // no count of waiting bits to test, and its four sextets are independent.
+  // `full` is where the short final group starts, `n` less its tail.
+  //
+  // Each read is written out here rather than in a helper: a function that
+  // hands its `string` parameter to another is taken to keep it, and then a
+  // caller decoding a string it built inside `using a = arena()` is refused.
+  // The test on each position is the shape that proves the read, and depends
+  // on the position alone; positions are `u32`s so that `k + 3` wraps rather
+  // than overflows.
+  const full: u32 = toU32(n & ~3)
   let j: i32 = 0
-  for (let k: i32 = 0; k + 3 < n; k += 4) {
-    const s0: i32 = base64urlSextetOf(toI32(text.charCodeAt(k)))
-    const s1: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 1)))
-    const s2: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 2)))
-    const s3: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 3)))
+  for (let k: u32 = 0; k < full; k += 4) {
+    const i0: i32 = toI32(k)
+    const i1: i32 = toI32(k + 1)
+    const i2: i32 = toI32(k + 2)
+    const i3: i32 = toI32(k + 3)
+    const s0: i32 = i0 >= 0 && i0 < n ? base64urlSextetOf(toI32(text.charCodeAt(i0))) : -1
+    const s1: i32 = i1 >= 0 && i1 < n ? base64urlSextetOf(toI32(text.charCodeAt(i1))) : -1
+    const s2: i32 = i2 >= 0 && i2 < n ? base64urlSextetOf(toI32(text.charCodeAt(i2))) : -1
+    const s3: i32 = i3 >= 0 && i3 < n ? base64urlSextetOf(toI32(text.charCodeAt(i3))) : -1
     bad = bad | ((s0 | s1 | s2 | s3) >> 31)
     const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6) | (s3 & 63)
-    // Always true — `out` was sized from the same length — but written out so
-    // that the three stores keep no bounds check.
-    if (j >= 0 && j + 2 < outLen) {
-      out[j] = toU8(word >> 16)
-      out[j + 1] = toU8((word >> 8) & 255)
-      out[j + 2] = toU8(word & 255)
-    }
-    j += 3
+    j = base64Put(out, j, toU8(word >> 16))
+    j = base64Put(out, j, toU8((word >> 8) & 255))
+    j = base64Put(out, j, toU8(word & 255))
   }
   // A short final group of two or three characters: one or two bytes, and the
   // four or two bits left over belong to no byte, so they must be zero for `AA`
   // to be the only spelling of a zero byte and `AB` refused (RFC 4648 §3.5).
   if (tail !== 0) {
-    const k: i32 = n - tail
-    const s0: i32 = base64urlSextetOf(toI32(text.charCodeAt(k)))
-    const s1: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 1)))
+    const i0: i32 = toI32(full)
+    const i1: i32 = toI32(full + 1)
+    const i2: i32 = toI32(full + 2)
+    const s0: i32 = i0 >= 0 && i0 < n ? base64urlSextetOf(toI32(text.charCodeAt(i0))) : -1
+    const s1: i32 = i1 >= 0 && i1 < n ? base64urlSextetOf(toI32(text.charCodeAt(i1))) : -1
     // A third character only when the tail has one; a two-character tail reads
     // its place as `A`, the zero sextet, which adds no bits.
-    const s2: i32 = tail === 3 ? base64urlSextetOf(toI32(text.charCodeAt(k + 2))) : 0
+    const s2: i32 = tail === 3 && i2 >= 0 && i2 < n ? base64urlSextetOf(toI32(text.charCodeAt(i2))) : 0
     bad = bad | ((s0 | s1 | s2) >> 31)
     const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6)
-    if (j >= 0 && j < outLen) {
-      out[j] = toU8(word >> 16)
-    }
-    if (tail === 3 && j + 1 >= 0 && j + 1 < outLen) {
-      out[j + 1] = toU8((word >> 8) & 255)
+    j = base64Put(out, j, toU8(word >> 16))
+    if (tail === 3) {
+      base64Put(out, j, toU8((word >> 8) & 255))
     }
     // The bits under the last byte written: sixteen of the word when one byte
     // was, eight when two were.
@@ -306,33 +327,34 @@ export const base64StdPadEncodeInto = (data: u8[], start: i32, length: i32, out:
   if (start < 0 || length < 0 || start > toI32(data.length) - length || length > 1610612733) {
     panic("base64StdPadEncodeInto: bytes outside their buffer")
   }
-  const end: i32 = at + ((length + 2) / 3) * 4
-  if (at < 0 || at > toI32(out.length) || end > toI32(out.length)) {
+  // The text's length, and the room after `at`, as `u32`s: exact, since
+  // `length` is at most 1610612733 and `at` at most `out.length`.
+  const textLength: u32 = ((toU32(length) + 2) / 3) * 4
+  if (at < 0 || at > toI32(out.length) || textLength > toU32(toI32(out.length)) - toU32(at)) {
     panic("base64StdPadEncodeInto: text that does not fit its buffer")
   }
+  const end: i32 = toI32(toU32(at) + textLength)
+  // `k` runs through `data[start .. start + length)` and `j` through the text;
+  // the bounds on them only let the prover see what the tests above checked.
   let j: i32 = at
+  let k: i32 = start
   let acc: i32 = 0
   let bits: u32 = 0
-  for (let k: i32 = start; k < start + length; k++) {
-    if (k >= 0 && k < toI32(data.length)) {
-      acc = ((acc << 8) | toI32(data[k])) & 0xfff
-    }
+  for (let n: i32 = 0; n < length && k >= 0 && k < toI32(data.length); n++) {
+    acc = ((acc << 8) | toI32(data[k])) & 0xfff
+    k += 1
     bits += 8
     while (bits >= 6) {
       bits -= 6
-      if (j >= 0 && j < toI32(out.length)) {
-        out[j] = toU8(base64StdPadCharOf((acc >> toI32(bits)) & 63))
-      }
-      j++
+      j = base64Put(out, j, toU8(base64StdPadCharOf((acc >> toI32(bits)) & 63)))
     }
   }
   if (bits > 0) {
-    out[j] = toU8(base64StdPadCharOf((acc << toI32(6 - bits)) & 63))
-    j++
+    j = base64Put(out, j, toU8(base64StdPadCharOf((acc << toI32(6 - bits)) & 63)))
   }
-  while (j < end) {
+  while (j >= 0 && j < end && j < toI32(out.length)) {
     out[j] = 61
-    j++
+    j += 1
   }
   return end
 }
@@ -360,16 +382,22 @@ export const base64StdPadDecodedLength = (text: u8[], start: i32, length: i32): 
   if ((length & 3) !== 0) {
     return -1
   }
-  let pad: i32 = 0
-  if (length > 0 && toI32(text[start + length - 1]) === 61) {
-    pad = toI32(text[start + length - 2]) === 61 ? 2 : 1
+  // The text's last character, a `u32` sum that is exact once the range is
+  // inside `text`; a length that is a multiple of four and not 0 is at least 4,
+  // so the character before it is in the range too.
+  const last: i32 = toI32(toU32(start) + toU32(length) - 1)
+  let pad: u32 = 0
+  if (length > 0 && last >= 1 && last < toI32(text.length) && toI32(text[last]) === 61) {
+    pad = toI32(text[last - 1]) === 61 ? 2 : 1
   }
-  const chars: i32 = length - pad
+  const chars: i32 = toI32(toU32(length) - pad)
   let bad: i32 = 0
   let acc: i32 = 0
-  let bits: i32 = 0
-  for (let k: i32 = 0; k < chars; k++) {
-    const v: i32 = base64StdPadSextetOf(toI32(text[start + k]))
+  let bits: u32 = 0
+  let p: i32 = start
+  for (let k: i32 = 0; k < chars && p >= 0 && p < toI32(text.length); k++) {
+    const v: i32 = base64StdPadSextetOf(toI32(text[p]))
+    p += 1
     bad = bad | (v >> 31)
     acc = ((acc << 6) | (v & 63)) & 0xfff
     bits += 6
@@ -377,11 +405,11 @@ export const base64StdPadDecodedLength = (text: u8[], start: i32, length: i32): 
       bits -= 8
     }
   }
-  bad = bad | (acc & ((1 << bits) - 1))
+  bad = bad | (acc & toI32((toU32(1) << bits) - 1))
   if (bad !== 0) {
     return -1
   }
-  return (length >> 2) * 3 - pad
+  return toI32(toU32(length >> 2) * 3 - pad)
 }
 
 /**
@@ -406,16 +434,16 @@ export const base64StdPadDecode = (text: string): u8[] | null => {
   if ((n & 3) !== 0) {
     return null
   }
-  let pad: i32 = 0
-  if (n > 0 && toI32(text.charCodeAt(n - 1)) === 61) {
+  // A length that is a multiple of four and not 0 is at least 4.
+  let pad: u32 = 0
+  if (n >= 4 && toI32(text.charCodeAt(n - 1)) === 61) {
     pad = toI32(text.charCodeAt(n - 2)) === 61 ? 2 : 1
   }
-  const chars: i32 = n - pad
-  const out: u8[] = new Array<u8>((n >> 2) * 3 - pad)
-  const outLen: i32 = toI32(out.length)
+  const chars: i32 = toI32(toU32(n) - pad)
+  const out: u8[] = new Array<u8>(toU32(n >> 2) * 3 - pad)
   let bad: i32 = 0
   let acc: i32 = 0
-  let bits: i32 = 0
+  let bits: u32 = 0
   let j: i32 = 0
   // The padding is past `chars` and is not data; which positions those are is
   // a fact about the length. A `=` before them is outside the alphabet.
@@ -426,15 +454,10 @@ export const base64StdPadDecode = (text: string): u8[] | null => {
     bits += 6
     if (bits >= 8) {
       bits -= 8
-      // Always true — `out` was sized from the same length — and written so
-      // the store keeps no bounds check.
-      if (j >= 0 && j < outLen) {
-        out[j] = toU8((acc >> bits) & 255)
-      }
-      j++
+      j = base64Put(out, j, toU8((acc >> toI32(bits)) & 255))
     }
   }
-  bad = bad | (acc & ((1 << bits) - 1))
+  bad = bad | (acc & toI32((toU32(1) << bits) - 1))
   if (bad !== 0) {
     return null
   }

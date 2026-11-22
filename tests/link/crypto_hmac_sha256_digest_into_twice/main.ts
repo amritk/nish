@@ -1,7 +1,8 @@
-// A second `HmacSha256.digestInto` would pad an already padded inner hash and
-// write a tag of nothing the caller sent. It panics in the inner `Sha256`
-// instead ("Sha256: digest called twice", on stderr): exit 1, and stdout stops
-// at the line printed after the first one. expected.stderr pins
+// A second `HmacSha256.digestInto` would feed the outer hash a second inner
+// digest and write a tag of nothing the caller sent. It panics in the outer
+// `Sha256` instead, which the first call finished ("Sha256: update after
+// digest", on stderr): exit 1, and stdout stops at the line printed after the
+// first one. expected.stderr pins
 // the message, so another guard firing fails the test.
 import { HmacSha256 } from "nish/crypto/hmac";
 
