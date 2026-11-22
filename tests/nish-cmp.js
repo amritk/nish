@@ -1221,6 +1221,8 @@ const WP83_S3_WHY = {
     "the test's own scratchChecks declaration follows p256SignSha256Into, whose message array is no longer marked readonly now that it reaches p256ShaCompress, so one array parameter loses readonly",
   "main.ll":
     "the test declares p256SignSha256Into, whose message array is no longer marked readonly now that it reaches p256ShaCompress, so the declaration loses readonly and its attribute group renumbers",
+  "tls.ll":
+    "the tls module declares p256SignSha256Into and P256SignScratch's constructor, and p256SignSha256Into's message array is no longer marked readonly now that it reaches p256ShaCompress, so the declarations lose readonly and their attribute groups renumber",
 }
 
 const HMAC_DIGEST_INTO = "HmacSha256.digest allocates only the tag, and digestInto allocates nothing"
@@ -10942,6 +10944,7 @@ const DECLARED = [
     "bench/p256.ts": ["std_crypto_p256.ll"],
     "bench/quic-goodput.ts": ["p256.ll"],
     "bench/sha256-block/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "bench/std-http1.ts": ["p384.ll", "tls.ll"],
     "bench/techempower/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "examples/file-server.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "examples/http-get-json.ts": ["p256.ll", "p384.ll", "rsa.ll"],
