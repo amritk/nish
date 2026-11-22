@@ -18508,6 +18508,24 @@ const DECLARED = [
     changelog: "std/net TLS codec and record layer panic-free",
     why: "std/net/tls/record.ts now checks every seal and open window before its copy loops and refuses outside them, so its code, its strings and its numbering change; the bench is new to the corpus and the 0.44.0 seed's record.ts has none of it",
   },
+  {
+    program: "bench/std-http1.ts",
+    file: "record.ll",
+    changelog: "std/net TLS codec and record layer panic-free",
+    why: "std/net/tls/record.ts now checks every seal and open window before its copy loops and refuses outside them, so its code, its strings and its numbering change",
+  },
+  {
+    program: "bench/std-http1.ts",
+    file: "client.ll",
+    changelog: "std/net TLS codec and record layer panic-free",
+    why: 'std/net/tls/client.ts now refuses a short or overlong window up front in place of indexes that could panic, so its "array length out of range" string goes and its code and numbering change',
+  },
+  {
+    program: "bench/std-http1.ts",
+    file: "tls.ll",
+    changelog: "std/net TLS codec and record layer panic-free",
+    why: "the std/net/tls/ helpers std/net/tls.ts declares no longer panic, so their declarations take another attribute group and the module's attribute numbering moves",
+  },
   // WP80 S1: std/cli, std/cli-flags and std/cli-args reach no index,
   // slice or overflow panic, so every program linking nish/cli moves.
   ...s1PanicFree(
