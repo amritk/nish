@@ -18430,6 +18430,27 @@ const DECLARED = [
     why: "a new instruction bench driving std/json-typed.ts: the reference compiles it against the seed's std/bytes.ts, std/json*.ts and std/json-typed.ts, which differ from this tree's, so every module it reaches and its own header and IR differ",
   })),
   {
+    program: "bench/pg-codec.ts",
+    file: "bytes.ll",
+    changelog: "postgres-carrier and postgres-async panic-free",
+    why: "a new instruction bench driving std/net/postgres.ts's encode and decode: the reference compiles it against the seed's std/bytes.ts, which differs from this tree's",
+  },
+  ...[
+    "bytes.ll",
+    "handler.ll",
+    "http-compress.ll",
+    "json.ll",
+    "pg-carrier.h",
+    "pg-carrier.ll",
+    "router.ll",
+    "zlib.ll",
+  ].map((file) => ({
+    program: "bench/pg-carrier.ts",
+    file,
+    changelog: "postgres-carrier and postgres-async panic-free",
+    why: "a new instruction bench driving std/net/postgres-carrier.ts: the reference compiles it against the seed's std/bytes.ts, std/json.ts and std/net/ server modules, which differ from this tree's, and the seed's std/ has no zlib module, so the modules it reaches and its own header and IR differ",
+  })),
+  {
     program: "tests/link/spawn_slot_proven/main.ts",
     file: "exit",
     changelog: "caller-proven spawn slots",
