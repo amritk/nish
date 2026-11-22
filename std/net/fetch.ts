@@ -3147,10 +3147,7 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
     netClose(fd)
     last = result
   }
-  conn.fault.fail(
-    HTTP_E_REFUSED,
-    `could not connect to ${host} port ${port} (errno ${-toI64(last)})`
-  )
+  conn.fault.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-toI64(last)})`)
   return -1
 }
 

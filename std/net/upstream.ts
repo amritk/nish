@@ -934,7 +934,7 @@ class UpstreamQueue {
     const first: i32 = this.peek()
     if (first >= 0 && count > 0) {
       // A ring of one place has no place 1 on: its next start is 0 again.
-      const next: i32 = this.at(1)
+      const next: i32 = this.at(toI32(1))
       this.start = next >= 0 ? next : 0
       this.count = count - 1
     }

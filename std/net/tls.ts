@@ -268,7 +268,9 @@ const tlsConfigFits = (config: TlsServerConfig): boolean => {
   // length (4), and `record_size_limit` (6), beside what the caller passes
   // through. Two lengths and 272 cannot overflow an i64.
   const extensions: i64 =
-    toI64(272) + toI64(toI32(config.extraExtensions.length)) + toI64(toI32(config.quicTransportParameters.length))
+    toI64(272) +
+    toI64(toI32(config.extraExtensions.length)) +
+    toI64(toI32(config.quicTransportParameters.length))
   for (const protocol of config.alpn) {
     const n: i32 = toI32(protocol.length)
     if (n < 1 || n > 255) {
@@ -351,7 +353,13 @@ const tlsDerIntegerLength = (rs: u8[], at: i32): u8 => {
 const tlsDerIntegerInto = (out: u8[], to: i32, rs: u8[], at: i32, length: i32): i32 => {
   // The second test is implied by the first; it is the shape the bounds
   // proof reads for the two header bytes.
-  if (length < 1 || length > 33 || to < 0 || to > toI32(out.length) - 2 - length || to > toI32(out.length) - 3) {
+  if (
+    length < 1 ||
+    length > 33 ||
+    to < 0 ||
+    to > toI32(out.length) - 2 - length ||
+    to > toI32(out.length) - 3
+  ) {
     return -1
   }
   if (at < 0 || at > toI32(rs.length) - 32) {
@@ -365,11 +373,7 @@ const tlsDerIntegerInto = (out: u8[], to: i32, rs: u8[], at: i32, length: i32): 
   // 33-byte body), which the loop tests again.
   let j: i32 = to + 2
   let from: i32 = at + (32 - length)
-  for (
-    let k: i32 = 0;
-    k < length && j >= 0 && j < toI32(out.length) && from < toI32(rs.length);
-    k++
-  ) {
+  for (let k: i32 = 0; k < length && j >= 0 && j < toI32(out.length) && from < toI32(rs.length); k++) {
     out[j] = from >= at && from >= 0 ? rs[from] : toU8(0)
     j++
     from++
@@ -394,7 +398,13 @@ const tlsEcdsaDerInto = (der: u8[], rs: u8[]): void => {
   der[0] = toU8(0x30)
   der[1] = toU8(toI32(der.length) - 2)
   const r: i32 = toI32(tlsDerIntegerLength(rs, TLS_FROM))
-  tlsDerIntegerInto(der, tlsDerIntegerInto(der, 2, rs, TLS_FROM, r), rs, 32, toI32(tlsDerIntegerLength(rs, 32)))
+  tlsDerIntegerInto(
+    der,
+    tlsDerIntegerInto(der, 2, rs, TLS_FROM, r),
+    rs,
+    32,
+    toI32(tlsDerIntegerLength(rs, 32))
+  )
 }
 
 /**
@@ -1279,7 +1289,9 @@ export class TlsServer {
     this.issuing = new TlsTicketState()
     this.ticketScratch = tlsZeros(tlsServerTicketCapacity(this.issuing))
     // A few hundred bytes and a constant: the u32 sum cannot wrap.
-    this.outputApplication = tlsZeros(toI32(toU32(toI32(this.ticketScratch.length)) + toU32(TLS_SERVER_TICKET_OVERHEAD)))
+    this.outputApplication = tlsZeros(
+      toI32(toU32(toI32(this.ticketScratch.length)) + toU32(TLS_SERVER_TICKET_OVERHEAD))
+    )
     this.ticketNonce = new Array<u8>(1)
     this.ageAddBytes = new Array<u8>(4)
     this.restart(serverRandom, ephemeralPrivate)
@@ -1462,7 +1474,11 @@ export class TlsServer {
       size = toI32(toU32(size) * toU32(2))
     }
     const grown: u8[] = tlsZeros(size > most ? most : size)
-    for (let k: i32 = 0; k < this.inputLength && k < toI32(grown.length) && k < toI32(this.input.length); k++) {
+    for (
+      let k: i32 = 0;
+      k < this.inputLength && k < toI32(grown.length) && k < toI32(this.input.length);
+      k++
+    ) {
       grown[k] = this.input[k]
     }
     this.input = grown
@@ -1829,8 +1845,8 @@ export class TlsServer {
       while (parameters.length > 0) {
         parameters.pop()
       }
-      // `j` steps beside `k` through the parameters' bytes in `data`.
-      let j: i32 = hello.quicAt
+      // `j`, done with the name, now steps beside `k` through the parameters' bytes in `data`.
+      j = hello.quicAt
       for (let k: i32 = 0; k < hello.quicLength && j >= 0 && j < toI32(data.length); k++) {
         parameters.push(data[j])
         j++
@@ -2374,15 +2390,7 @@ export class TlsServer {
     const body: i32 = toI32(toU32(at) + toU32(4))
     this.transcript.hashInto(this.hashes, TLS_FROM)
     const serverHandshake: u8[] = expose(pool.serverHandshake, tlsHeldClone)
-    tlsFinishedVerifyDataInto(
-      this.kdf,
-      h,
-      serverHandshake,
-      this.hashes,
-      TLS_FROM,
-      this.outputHandshake,
-      body
-    )
+    tlsFinishedVerifyDataInto(this.kdf, h, serverHandshake, this.hashes, TLS_FROM, this.outputHandshake, body)
     secureZero(serverHandshake)
     const finishedEnd: i32 = tlsWriteFinished(this.outputHandshake, at, this.outputHandshake, body, h)
     this.sent(TLS_LEVEL_HANDSHAKE, at, finishedEnd)

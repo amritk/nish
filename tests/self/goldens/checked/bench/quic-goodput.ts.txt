@@ -11379,8 +11379,8 @@ function tlsConfigFits(config: TlsServerConfig): boolean -> @nish.tlsConfigFits
   local +1:14 der: u8[] (const)
   local +2:11 n: u64 (const)
   local +12:9 extensions: i64 (const)
-  local +14:14 protocol: string (const)
-  local +15:11 n: i32 (const)
+  local +16:14 protocol: string (const)
+  local +17:11 n: i32 (const)
 function tlsExtensionsHave(extensions: u8[], type: i32): boolean -> @nish.tlsExtensionsHave
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer extensions: size=0 writesThrough=false captured=false
@@ -11412,7 +11412,7 @@ function tlsDerIntegerInto(out: u8[], to: i32, rs: u8[], at: i32, length: i32): 
   stackSites=0 stackLocals=0
   local +6:7 j: i32 (let)
   local +7:7 from: i32 (let)
-  local +9:9 k: i32 (let)
+  local +8:12 k: i32 (let)
 function tlsEcdsaDerLength(rs: u8[]): u8 -> @nish.tlsEcdsaDerLength
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsDerIntegerLength
@@ -11430,8 +11430,8 @@ function tlsEcdsaDerInto(der: u8[], rs: u8[]): void -> @nish.tlsEcdsaDerInto
   local +2:9 r: i32 (const)
   callee +2:24 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
   callee +3:3 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
-  callee +3:26 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
-  callee +3:84 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  callee +5:5 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
+  callee +8:11 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
 function tlsEcdsaDerSignature(rs: u8[]): u8[] | null -> @nish.tlsEcdsaDerSignature [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsEcdsaDerInto nish.tlsEcdsaDerLength
@@ -11744,7 +11744,7 @@ function TlsServer.constructor(this: TlsServer, config: TlsServerConfig, serverR
   callee +23:26 tlsZeros -> @nish.tlsZeros
   callee +23:35 tlsServerTicketCapacity -> @nish.tlsServerTicketCapacity
   callee +25:30 tlsZeros -> @nish.tlsZeros
-  callee +28:5 TlsServer.restart -> @nish.TlsServer.restart
+  callee +30:5 TlsServer.restart -> @nish.TlsServer.restart
 function TlsServer.restart(this: TlsServer, serverRandom: u8[], ephemeralPrivate: u8[]): void -> @nish.TlsServer.restart [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -11835,12 +11835,12 @@ function TlsServer.reserveInput(this: TlsServer, need: i32): void -> @nish.TlsSe
   calls: nish.tlsZeros
   pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -12:11 capacity: i32 (const)
-  local -8:11 most: i32 (const)
-  local -7:9 size: i32 (let)
-  local -2:11 grown: u8[] (const)
-  callee -2:25 tlsZeros -> @nish.tlsZeros
-  local -1:14 k: i32 (let)
+  local -16:11 capacity: i32 (const)
+  local -12:11 most: i32 (const)
+  local -11:9 size: i32 (let)
+  local -6:11 grown: u8[] (const)
+  callee -6:25 tlsZeros -> @nish.tlsZeros
+  local -4:11 k: i32 (let)
 function TlsServer.reserveOutput(this: TlsServer, level: i32, need: i32): void -> @nish.TlsServer.reserveOutput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -11974,7 +11974,6 @@ function TlsServer.handleClientHello(this: TlsServer, length: i32): i32 -> @nish
   local +135:9 j: i32 (let)
   local +136:14 k: i32 (let)
   local +143:13 parameters: u8[] (const)
-  local +148:11 j: i32 (let)
   local +149:16 k: i32 (let)
   callee +160:12 TlsServer.answerHello -> @nish.TlsServer.answerHello
 function TlsServer.answerHello(this: TlsServer, index: i32): i32 -> @nish.TlsServer.answerHello [exported method]
@@ -12283,14 +12282,14 @@ function TlsServer.writeServerFinished(this: TlsServer, pool: TlsSecretPool): vo
   pointer this: size=296 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0
   pointer pool: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -16:11 h: i32 (const)
-  local -15:11 _scope: i64 (const)
-  local -14:11 at: i32 (const)
-  local -12:11 body: i32 (const)
-  callee -11:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  local -10:11 serverHandshake: u8[] (const)
-  callee -10:35 expose<u8[], u8[], tlsHeldClone> -> @nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone
-  callee -9:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
+  local -8:11 h: i32 (const)
+  local -7:11 _scope: i64 (const)
+  local -6:11 at: i32 (const)
+  local -4:11 body: i32 (const)
+  callee -3:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  local -2:11 serverHandshake: u8[] (const)
+  callee -2:35 expose<u8[], u8[], tlsHeldClone> -> @nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone
+  callee -1:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
   local +1:11 finishedEnd: i32 (const)
   callee +1:30 tlsWriteFinished -> @nish.tlsWriteFinished
   callee +2:5 TlsServer.sent -> @nish.TlsServer.sent

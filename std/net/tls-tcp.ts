@@ -627,7 +627,12 @@ export class TlsTcpServer {
     }
     const fd: i32 = this.fd(slot)
     while (conn.outputEnd > conn.outputStart) {
-      const n: i32 = netWrite(fd, conn.output, conn.outputStart, tlsTcpPending(conn.outputStart, conn.outputEnd))
+      const n: i32 = netWrite(
+        fd,
+        conn.output,
+        conn.outputStart,
+        tlsTcpPending(conn.outputStart, conn.outputEnd)
+      )
       if (n <= 0) {
         if (n !== TLS_RECORD_AGAIN) {
           conn.abort()
@@ -1222,7 +1227,12 @@ export class TlsTcpClient {
     }
     const conn: TlsRecordClient = this.conn
     while (conn.outputEnd > conn.outputStart) {
-      const n: i32 = netWrite(this.socket, conn.output, conn.outputStart, tlsTcpPending(conn.outputStart, conn.outputEnd))
+      const n: i32 = netWrite(
+        this.socket,
+        conn.output,
+        conn.outputStart,
+        tlsTcpPending(conn.outputStart, conn.outputEnd)
+      )
       if (n <= 0) {
         if (n !== TLS_RECORD_AGAIN) {
           conn.abort()
