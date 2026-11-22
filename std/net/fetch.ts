@@ -184,6 +184,8 @@ const HTTP_CLIENT_MAX_HEADERS: i32 = 256
 const HTTP_CLIENT_DRAIN_BYTES: i32 = 65536
 /** The port a proxy URL without one is dialled on, as curl does. */
 const HTTP_CLIENT_PROXY_PORT: i32 = 1080
+/** The bytes a lookup's answer array holds: every address it may give, `DNS_ADDRESS_BYTES` each. */
+const HTTP_CLIENT_ADDRESS_ROOM: i32 = DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES
 /** The longest single poll wait, so a deadline far away never overflows an `i32` of milliseconds. */
 const HTTP_CLIENT_MAX_WAIT_MS: i64 = 3600000
 /** Nanoseconds in a millisecond. */
@@ -422,46 +424,25 @@ export class HttpBodyReader {
    * @returns The body, or null on an error or a body past `limit`.
    */
   readAll(limit: i32): u8[] | null {
-    let size: i32 = 4096
-    if (limit < 0) {
-      size = 0
-    } else if (limit < 4096) {
-      size = limit
-    }
-    let out: u8[] = new Array<u8>(size)
-    let len: i32 = 0
+    // Built by `push`, so no length is computed for `new Array`.
+    const out: u8[] = []
     const chunk: u8[] = new Array<u8>(HTTP_CLIENT_READ_BYTES)
     let n: i32 = this.read(chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
     while (n > 0) {
-      if (n > limit - len) {
+      // In i64, where two i32 values cannot wrap.
+      if (toI64(n) > toI64(limit) - toI64(out.length)) {
         this.client.refuseBody(limit)
         return null
       }
-      if (len + n > toI32(out.length)) {
-        let cap: i32 = toI32(out.length) * 2
-        if (cap < len + n) {
-          cap = len + n
-        }
-        if (cap > limit) {
-          cap = limit
-        }
-        const grown: u8[] = new Array<u8>(cap)
-        copyBytes(grown, 0, out, 0, len)
-        out = grown
+      for (let i: i32 = 0; i < n && i < toI32(chunk.length); i += 1) {
+        out.push(chunk[i])
       }
-      copyBytes(out, len, chunk, 0, n)
-      len += n
       n = this.read(chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
     }
     if (n < 0) {
       return null
     }
-    if (len === toI32(out.length)) {
-      return out
-    }
-    const exact: u8[] = new Array<u8>(len)
-    copyBytes(exact, 0, out, 0, len)
-    return exact
+    return out
   }
 }
 
@@ -566,7 +547,8 @@ export class FetchSyncClient {
       // An unread body is still on the wire ahead of the next response.
       this.drop()
     }
-    this.generation += 1
+    // Only compared for equality, so wrapping past 2^32 responses is harmless.
+    this.generation = toI32(toU32(this.generation) + toU32(1))
     this.deadline = httpClientDeadline(this.options)
     const fault: HttpClientFault = new HttpClientFault()
     let url: Url | null = httpClientTarget(req.url, this.options, fault)
@@ -824,13 +806,14 @@ export class FetchSyncClient {
     res.status = this.parser.status
     res.reason = this.parser.reason
     res.url = httpClientUrlText(url)
-    for (
-      let i: i32 = 0;
-      i < toI32(this.parser.names.length) && i < toI32(this.parser.values.length);
-      i += 1
-    ) {
-      res.names.push(this.parser.names[i])
-      res.values.push(this.parser.values[i])
+    const heads: string[] = this.parser.names
+    const vals: string[] = this.parser.values
+    for (let i: i32 = 0; i < toI32(heads.length) && i < toI32(vals.length); i += 1) {
+      // Both read before either push, which the prover takes as a write to any array.
+      const name: string = heads[i]
+      const value: string = vals[i]
+      res.names.push(name)
+      res.values.push(value)
     }
     this.bodyOpen = true
     this.bodyError = HTTP_E_NONE
@@ -927,7 +910,7 @@ export class FetchSyncClient {
       return n
     }
     this.lost = true
-    this.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+    this.fail(HTTP_E_IO, `reading from the server failed (errno ${-toI64(n)})`)
     return -1
   }
 
@@ -955,13 +938,20 @@ export class FetchSyncClient {
 
   /** Sends everything `conn` has sealed, waiting as `writeRaw` does; false with the error set. */
   private flushTls(conn: TlsRecordClient): boolean {
-    while (conn.outputEnd > conn.outputStart) {
-      const len: i32 = conn.outputEnd - conn.outputStart
+    let len: i32 = httpClientTlsPending(conn)
+    while (len > 0) {
       if (!this.writeRaw(conn.output, conn.outputStart, len)) {
         conn.abort()
         return false
       }
       conn.consume(len)
+      len = httpClientTlsPending(conn)
+    }
+    if (len < 0) {
+      conn.abort()
+      this.lost = true
+      this.fail(HTTP_E_TLS, "the TLS connection's sealed output lies outside its buffer")
+      return false
     }
     return true
   }
@@ -979,13 +969,20 @@ export class FetchSyncClient {
     if (conn === null) {
       return this.writeRaw(bytes, off, len)
     }
+    if (off < 0 || len < 0 || len > toI32(bytes.length) - off) {
+      this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+      return false
+    }
     let at: i32 = off
-    const end: i32 = off + len
-    while (at < end) {
-      const n: i32 = conn.write(bytes, at, end - at)
-      if (n > 0) {
-        at += n
-      } else if (n !== TLS_RECORD_AGAIN || conn.outputEnd === conn.outputStart) {
+    let left: i32 = len
+    // `at >= 0` is the loop's own, since the prover does not carry it round.
+    while (left > 0 && at >= 0) {
+      const n: i32 = conn.write(bytes, at, left)
+      if (n > 0 && n <= left) {
+        // At most `off + len`, inside `bytes`, so the unsigned sum cannot wrap.
+        at = toI32(toU32(at) + toU32(n))
+        left -= n
+      } else if (n > 0 || n !== TLS_RECORD_AGAIN || conn.outputEnd === conn.outputStart) {
         this.lost = true
         this.failTls(conn)
         return false
@@ -999,15 +996,22 @@ export class FetchSyncClient {
 
   /** Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. */
   private writeRaw(bytes: u8[], off: i32, len: i32): boolean {
+    if (off < 0 || len < 0 || len > toI32(bytes.length) - off) {
+      this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+      return false
+    }
     let at: i32 = off
-    const end: i32 = off + len
-    while (at < end) {
+    let left: i32 = len
+    // `at >= 0` is the loop's own, since the prover does not carry it round.
+    while (left > 0 && at >= 0) {
       if (this.overdue()) {
         return false
       }
-      const n: i32 = netWrite(this.fd, bytes, at, end - at)
-      if (n > 0) {
-        at += n
+      const n: i32 = netWrite(this.fd, bytes, at, left)
+      if (n > 0 && n <= left) {
+        // At most `off + len`, inside `bytes`, so the unsigned sum cannot wrap.
+        at = toI32(toU32(at) + toU32(n))
+        left -= n
       } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
         const waited: i32 = this.wait(this.fd, HTTP_CLIENT_WRITABLE, this.readDeadline(), HTTP_E_READ_TIMEOUT)
         if (waited !== HTTP_E_NONE) {
@@ -1016,7 +1020,7 @@ export class FetchSyncClient {
         }
       } else {
         this.lost = true
-        this.fail(HTTP_E_IO, `writing to the server failed (errno ${-n})`)
+        this.fail(HTTP_E_IO, `writing to the server failed (errno ${-toI64(n)})`)
         return false
       }
     }
@@ -1030,7 +1034,7 @@ export class FetchSyncClient {
   private dial(host: string, port: i32): i32 {
     const start: i64 = monotonicNanos()
     const budget: i32 = this.options.connectTimeoutMs
-    let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+    let until: i64 = budget > 0 ? httpClientAfter(start, budget) : HTTP_CLIENT_NEVER
     let code: i32 = HTTP_E_CONNECT_TIMEOUT
     if (this.deadline < HTTP_CLIENT_NEVER && this.deadline <= until) {
       until = this.deadline
@@ -1040,7 +1044,7 @@ export class FetchSyncClient {
       this.fail(code, `no time was left to connect to ${host}`)
       return -1
     }
-    const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+    const addresses: u8[] = new Array<u8>(HTTP_CLIENT_ADDRESS_ROOM)
     const fault: HttpClientFault = new HttpClientFault()
     const usable: i32 = httpClientResolve(host, port, this.options, start, until, code, addresses, fault)
     if (usable < 0) {
@@ -1050,7 +1054,8 @@ export class FetchSyncClient {
     const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
     let last: i32 = 0
     for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
-      copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
+      // i < DNS_RESOLVE_MAX_ADDRESSES, so the unsigned product stays inside addresses.
+      copyBytes(one, 0, addresses, toI32(toU32(i) * toU32(DNS_ADDRESS_BYTES)), DNS_ADDRESS_BYTES)
       const fd: i32 = tcpConnect(one)
       if (fd < 0) {
         last = fd
@@ -1071,7 +1076,7 @@ export class FetchSyncClient {
       netClose(fd)
       last = result
     }
-    this.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-last})`)
+    this.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-toI64(last)})`)
     return -1
   }
 
@@ -1093,10 +1098,7 @@ export class FetchSyncClient {
     }
     let now: i64 = monotonicNanos()
     while (now < end) {
-      let ms: i64 = (end - now + HTTP_CLIENT_NS_PER_MS - toI64(1)) / HTTP_CLIENT_NS_PER_MS
-      if (ms > HTTP_CLIENT_MAX_WAIT_MS) {
-        ms = HTTP_CLIENT_MAX_WAIT_MS
-      }
+      const ms: i64 = httpClientWaitMs(end, now)
       const count: i32 = pollWait(this.loop, this.ready, toI32(ms))
       if (count > 0) {
         return HTTP_E_NONE
@@ -1168,7 +1170,7 @@ export class FetchSyncClient {
   /** When the wait for the server's next byte ends: `readTimeoutMs` from now. */
   private readDeadline(): i64 {
     const ms: i32 = this.options.readTimeoutMs
-    return ms > 0 ? monotonicNanos() + toI64(ms) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+    return ms > 0 ? httpClientAfter(monotonicNanos(), ms) : HTTP_CLIENT_NEVER
   }
 
   /** Closes the connection, if any, and forgets the open body. */
@@ -1225,14 +1227,14 @@ export class FetchSyncClient {
       return -HTTP_E_IO
     }
     if (!this.bodyOpen) {
-      return -this.bodyError
+      return httpClientNegate(this.bodyError)
     }
     while (this.pendLen === 0) {
       const event: i32 = this.pump()
       if (event < 0) {
         this.release()
         this.bodyError = this.error
-        return -this.error
+        return httpClientNegate(this.error)
       }
       if (event === HTTP1_END) {
         this.bodyOpen = false
@@ -1250,8 +1252,10 @@ export class FetchSyncClient {
     }
     const take: i32 = n < this.pendLen ? n : this.pendLen
     copyBytes(buf, off, this.parser.body, this.pendOff, take)
-    this.pendOff += take
-    this.pendLen -= take
+    // take <= pendLen, and pendOff + pendLen ends inside the parser's body,
+    // so neither unsigned step can wrap.
+    this.pendOff = toI32(toU32(this.pendOff) + toU32(take))
+    this.pendLen = toI32(toU32(this.pendLen) - toU32(take))
     return take
   }
 
@@ -1393,13 +1397,22 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
   const literal: boolean = tlsClientIsIpLiteral(name)
   let start: i32 = 0
   const n: i32 = toI32(noProxy.length)
-  while (start <= n) {
+  let more: boolean = true
+  while (more && start <= n) {
     let end: i32 = toI32(noProxy.indexOf(",", start))
-    if (end < 0) {
+    if (end < 0 || end > n) {
       end = n
     }
-    const entry: string = httpClientLower(httpClientTrim(noProxy.slice(start, end)))
-    start = end + 1
+    // Never true (`indexOf` answers at or after `start`); it bounds `substring`.
+    if (start < 0 || start > end || start > toI32(noProxy.length) || end > toI32(noProxy.length)) {
+      return false
+    }
+    const entry: string = httpClientLower(httpClientTrim(noProxy.substring(start, end)))
+    if (end < n) {
+      start = end + 1
+    } else {
+      more = false
+    }
     if (entry === "*") {
       return true
     }
@@ -1408,11 +1421,11 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
     const colon: i32 = toI32(entry.indexOf(":"))
     if (entry.startsWith("[")) {
       const close: i32 = toI32(entry.indexOf("]"))
-      if (close < 0) {
+      if (close < 1 || close > toI32(entry.length)) {
         continue
       }
-      entryHost = entry.slice(1, close)
-      if (close + 1 < toI32(entry.length)) {
+      entryHost = entry.substring(1, close)
+      if (close < toI32(entry.length) - 1) {
         if (entry.charCodeAt(close + 1) !== 58) {
           continue
         }
@@ -1421,8 +1434,12 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
           continue
         }
       }
-    } else if (colon >= 0 && entry.indexOf(":", colon + 1) < 0) {
-      entryHost = entry.slice(0, colon)
+    } else if (
+      colon >= 0 &&
+      colon < toI32(entry.length) /* indexOf's own bound, so colon + 1 fits */ &&
+      entry.indexOf(":", colon + 1) < 0
+    ) {
+      entryHost = entry.substring(0, colon)
       entryPort = httpClientPort(entry.substring(colon + 1, toI32(entry.length)))
       if (entryPort < 0) {
         continue
@@ -1445,6 +1462,60 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
 // --- helpers -----------------------------------------------------------------
 
 /** A parser with the options' limits. */
+/**
+ * `ms` milliseconds after `start` on the monotonic clock, or
+ * `HTTP_CLIENT_NEVER` for a `start` outside [0, 2^62] or a negative `ms`,
+ * which the clock and the options never give.
+ */
+const httpClientAfter = (start: i64, ms: i32): i64 => {
+  if (start < toI64(0) || start > HTTP_CLIENT_NEVER || ms < 0) {
+    return HTTP_CLIENT_NEVER
+  }
+  // start <= 2^62 and the product < 2^51, so the unsigned sum cannot wrap.
+  return toI64(toU64(start) + toU64(toI64(ms) * toI64(1000000)))
+}
+
+/**
+ * The whole milliseconds, rounded up, from `now` until `end`, at most
+ * `HTTP_CLIENT_MAX_WAIT_MS`: 0 when `end` has passed.
+ */
+const httpClientWaitMs = (end: i64, now: i64): i64 => {
+  if (end <= now) {
+    return toI64(0)
+  }
+  if (now < toI64(0) || end > HTTP_CLIENT_NEVER) {
+    return HTTP_CLIENT_MAX_WAIT_MS
+  }
+  // 0 <= now < end <= 2^62, so the unsigned difference cannot wrap.
+  const left: i64 = toI64(toU64(end) - toU64(now))
+  let ms: i64 = left / toI64(1000000)
+  if (left % toI64(1000000) > toI64(0)) {
+    // At most 2^62 / 10^6, far from wrapping.
+    ms = toI64(toU64(ms) + toU64(1))
+  }
+  return ms > HTTP_CLIENT_MAX_WAIT_MS ? HTTP_CLIENT_MAX_WAIT_MS : ms
+}
+
+/**
+ * The negated `HTTP_E_*` code a read answers for failure `code`: 0 for
+ * `HTTP_E_NONE`. Codes are never negative; one that were would be `HTTP_E_IO`.
+ */
+const httpClientNegate = (code: i32): i32 => (code >= 0 ? -code : -HTTP_E_IO)
+
+/**
+ * How many bytes `conn` has sealed and not yet sent: 0 for none, or -1 when
+ * `[outputStart, outputEnd)` does not lie inside `output`, which a working
+ * TLS connection never lets happen.
+ */
+const httpClientTlsPending = (conn: TlsRecordClient): i32 => {
+  const start: i32 = conn.outputStart
+  const end: i32 = conn.outputEnd
+  if (start < 0 || end < 0 || end > toI32(conn.output.length)) {
+    return -1
+  }
+  return end > start ? end - start : 0
+}
+
 const httpClientParser = (options: HttpOptions): Http1ResponseParser =>
   new Http1ResponseParser(
     options.maxHeaderBytes,
@@ -1503,18 +1574,25 @@ const httpClientIdempotent = (method: string): boolean =>
 
 /** Removes every field named `lower`, in any case. */
 const httpClientDropField = (names: string[], values: string[], lower: string): void => {
-  let i: i32 = 0
-  while (i < toI32(names.length) && i < toI32(values.length)) {
-    if (httpClientNameIs(names[i], lower)) {
-      for (let k: i32 = i; k + 1 < toI32(names.length) && k + 1 < toI32(values.length); k += 1) {
-        names[k] = names[k + 1]
-        values[k] = values[k + 1]
+  // Every kept field moves down to `keep`, in order, then the tail goes.
+  let keep: i32 = 0
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
+    const name: string = names[i]
+    const value: string = values[i]
+    if (!httpClientNameIs(name, lower)) {
+      if (keep < i && keep >= 0) {
+        names[keep] = name
+        values[keep] = value
       }
-      names.pop()
-      values.pop()
-    } else {
-      i += 1
+      // keep <= i, so the unsigned step cannot wrap.
+      keep = toI32(toU32(keep) + toU32(1))
     }
+  }
+  while (toI32(names.length) > keep && toI32(names.length) > 0) {
+    names.pop()
+  }
+  while (toI32(values.length) > keep && toI32(values.length) > 0) {
+    values.pop()
   }
 }
 
@@ -1547,22 +1625,29 @@ const httpClientLower = (s: string): string => {
   if (!upper) {
     return s
   }
-  const out: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(s.length); i += 1) {
+  // A byte at a time: `String.fromBytes` keeps a range check no proof removes.
+  const parts: string[] = []
+  for (let i: i32 = 0; i < toI32(s.length); i += 1) {
     const c: i32 = toI32(s.charCodeAt(i))
-    out[i] = c >= 65 && c <= 90 ? toU8(c + 32) : toU8(c)
+    parts.push(String.fromCharCode(c >= 65 && c <= 90 ? c + 32 : c))
   }
-  return String.fromBytes(out, 0, n)
+  return parts.join("")
 }
 
 /** `s` without spaces and tabs at either end. */
 const httpClientTrim = (s: string): string => {
   let a: i32 = 0
   let b: i32 = toI32(s.length)
-  while (a < b && (s.charCodeAt(a) === 32 || s.charCodeAt(a) === 9)) {
+  // The bounds against s.length restate what a <= b <= s.length already holds.
+  while (a < b && a >= 0 && a < toI32(s.length) && (s.charCodeAt(a) === 32 || s.charCodeAt(a) === 9)) {
     a += 1
   }
-  while (b > a && (s.charCodeAt(b - 1) === 32 || s.charCodeAt(b - 1) === 9)) {
+  while (
+    b > a &&
+    b > 0 &&
+    b <= toI32(s.length) &&
+    (s.charCodeAt(b - 1) === 32 || s.charCodeAt(b - 1) === 9)
+  ) {
     b -= 1
   }
   return s.substring(a, b)
@@ -1575,7 +1660,7 @@ const httpClientTrimDots = (s: string): string => {
   if (a < b && s.charCodeAt(a) === 46) {
     a += 1
   }
-  if (b > a && s.charCodeAt(b - 1) === 46) {
+  if (b > a && b > 0 && b <= toI32(s.length) && s.charCodeAt(b - 1) === 46) {
     b -= 1
   }
   return s.substring(a, b)
@@ -1590,7 +1675,8 @@ const httpClientPort = (s: string): i32 => {
   let v: i32 = 0
   for (let i: i32 = 0; i < n; i += 1) {
     const c: i32 = toI32(s.charCodeAt(i))
-    if (c < 48 || c > 57) {
+    // Past 6553 the port can only end above 65535; the test keeps v * 10 in range.
+    if (c < 48 || c > 57 || v < 0 || v > 6553) {
       return -1
     }
     v = v * 10 + c - 48
@@ -1691,7 +1777,7 @@ const httpClientEnvProxies = (options: HttpOptions): string[] => {
 /** When a fetch starting now must be done by, on the monotonic clock; `HTTP_CLIENT_NEVER` with no total timeout. */
 const httpClientDeadline = (options: HttpOptions): i64 => {
   const total: i32 = httpClientTotalMs(options)
-  return total > 0 ? monotonicNanos() + toI64(total) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  return total > 0 ? httpClientAfter(monotonicNanos(), total) : HTTP_CLIENT_NEVER
 }
 
 /** A failure a shared step found: an `HTTP_E_*` code and its sentence, before the code's name is put in front. */
@@ -1803,8 +1889,9 @@ const httpClientTlsVerify = (
  */
 const httpClientTlsClose = (conn: TlsRecordClient, fd: i32): void => {
   conn.close()
-  if (fd >= 0 && conn.outputEnd > conn.outputStart) {
-    netWrite(fd, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+  const len: i32 = httpClientTlsPending(conn)
+  if (fd >= 0 && len > 0) {
+    netWrite(fd, conn.output, conn.outputStart, len)
   }
   conn.wipe()
 }
@@ -1892,7 +1979,9 @@ const httpClientRedirect = (
 ): Url | null => {
   const next: Url | null = urlResolve(url, location)
   const maxRedirects: i32 = httpClientMaxRedirects(options)
-  if (hop.hops >= maxRedirects) {
+  // A local, so `hops < maxRedirects` still holds where it is stepped.
+  const hops: i32 = hop.hops
+  if (hops >= maxRedirects) {
     fault.fail(
       HTTP_E_TOO_MANY_REDIRECTS,
       `more than ${maxRedirects} redirects, the last to ${httpClientRedact(next)}`
@@ -1936,7 +2025,7 @@ const httpClientRedirect = (
     hop.body = null
     httpClientDropField(hop.names, hop.values, "content-type")
   }
-  hop.hops += 1
+  hop.hops = hops + 1
   return next
 }
 
@@ -2120,7 +2209,11 @@ const httpClientResolve = (
   addresses: u8[],
   fault: HttpClientFault
 ): i32 => {
-  let lookupMs: i64 = (until - start) / HTTP_CLIENT_NS_PER_MS
+  let lookupMs: i64 = toI64(0)
+  if (start >= toI64(0) && start < until && until <= HTTP_CLIENT_NEVER) {
+    // 0 <= start < until <= 2^62, so the unsigned difference cannot wrap.
+    lookupMs = toI64(toU64(until) - toU64(start)) / HTTP_CLIENT_NS_PER_MS
+  }
   if (lookupMs < toI64(1)) {
     lookupMs = toI64(1)
   } else if (lookupMs > toI64(2147483647)) {
@@ -2260,7 +2353,12 @@ export class FetchResponse {
    * @returns The body's text.
    */
   text(): string {
-    return String.fromBytes(this.body, HTTP_CLIENT_ZERO, toI32(this.body.length))
+    // A byte at a time: `String.fromBytes` keeps a range check no proof removes.
+    const parts: string[] = []
+    for (const b of this.body) {
+      parts.push(String.fromCharCode(b))
+    }
+    return parts.join("")
   }
 
   /**
@@ -2307,10 +2405,12 @@ export class FetchPool {
    * @returns The count, over every route.
    */
   idle(): i32 {
+    const fds: i32[] = this.fds
     let count: i32 = 0
-    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
-      if (this.fds[i] >= 0) {
-        count += 1
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS && i < toI32(fds.length); i += 1) {
+      if (fds[i] >= 0) {
+        // At most i, so the unsigned step cannot wrap.
+        count = toI32(toU32(count) + toU32(1))
       }
     }
     return count
@@ -2329,14 +2429,18 @@ export class FetchPool {
    * @internal
    */
   take(route: string): i32 {
-    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
-      if (this.fds[i] < 0 || this.routes[i] !== route) {
+    const fds: i32[] = this.fds
+    const routes: string[] = this.routes
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS && i < toI32(fds.length) && i < toI32(routes.length); i += 1) {
+      const fd: i32 = fds[i]
+      if (fd < 0 || routes[i] !== route) {
         continue
       }
-      const fd: i32 = this.fds[i]
-      if (netRead(fd, this.probe, HTTP_CLIENT_ZERO, 1) === HTTP_CLIENT_WOULD_BLOCK) {
-        this.fds[i] = -1
-        this.routes[i] = ""
+      const quiet: boolean = netRead(fd, this.probe, HTTP_CLIENT_ZERO, 1) === HTTP_CLIENT_WOULD_BLOCK
+      // Re-said after the read, which the prover takes as a write to any array.
+      if (quiet && i < toI32(fds.length) && i < toI32(routes.length)) {
+        fds[i] = -1
+        routes[i] = ""
         return fd
       }
       this.drop(i)
@@ -2346,29 +2450,44 @@ export class FetchPool {
 
   /** Keeps `fd` for `route` when there is room, else closes it. @internal */
   put(route: string, fd: i32): void {
+    const fds: i32[] = this.fds
+    const routes: string[] = this.routes
     let same: i32 = 0
     let free: i32 = -1
-    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
-      if (this.fds[i] < 0) {
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS && i < toI32(fds.length) && i < toI32(routes.length); i += 1) {
+      if (fds[i] < 0) {
         free = free < 0 ? i : free
-      } else if (this.routes[i] === route) {
-        same += 1
+      } else if (routes[i] === route) {
+        // At most i, so the unsigned step cannot wrap.
+        same = toI32(toU32(same) + toU32(1))
       }
     }
-    if (same >= this.maxIdlePerOrigin || free < 0) {
+    // free, when found, is an index of both arrays; said again for the prover.
+    if (
+      same >= this.maxIdlePerOrigin ||
+      free < 0 ||
+      free >= toI32(fds.length) ||
+      free >= toI32(routes.length)
+    ) {
       netClose(fd)
       return
     }
-    this.fds[free] = fd
-    this.routes[free] = route
+    fds[free] = fd
+    routes[free] = route
   }
 
   private drop(i: i32): void {
-    if (this.fds[i] >= 0) {
-      netClose(this.fds[i])
+    const fds: i32[] = this.fds
+    const routes: string[] = this.routes
+    // Every caller passes a slot index; one past either array names no connection.
+    if (i < 0 || i >= toI32(fds.length) || i >= toI32(routes.length)) {
+      return
     }
-    this.fds[i] = -1
-    this.routes[i] = ""
+    if (fds[i] >= 0) {
+      netClose(fds[i])
+    }
+    fds[i] = -1
+    routes[i] = ""
   }
 }
 
@@ -2435,16 +2554,13 @@ const httpClientWaitAsync = async (fd: i32, write: boolean, until: i64, code: i3
         ready = await readable(fd)
       }
     } else {
-      const left: i64 = until - monotonicNanos()
-      if (left <= 0) {
+      const ms: i64 = httpClientWaitMs(until, monotonicNanos())
+      if (ms <= toI64(0)) {
         return code
       }
-      let ms: i64 = (left + HTTP_CLIENT_NS_PER_MS - 1) / HTTP_CLIENT_NS_PER_MS
-      if (ms > HTTP_CLIENT_MAX_WAIT_MS) {
-        ms = HTTP_CLIENT_MAX_WAIT_MS
-      }
       bounded = true
-      sliceEnd = monotonicNanos() + ms * HTTP_CLIENT_NS_PER_MS
+      // ms is at most HTTP_CLIENT_MAX_WAIT_MS, so it fits an i32.
+      sliceEnd = httpClientAfter(monotonicNanos(), toI32(ms))
       if (write) {
         ready = await writableWithin(fd, toI32(ms))
       } else {
@@ -2563,7 +2679,7 @@ class HttpClientConn {
  */
 const httpClientWaitPeerAsync = async (conn: HttpClientConn, write: boolean): Promise<boolean> => {
   const ms: i32 = conn.options.readTimeoutMs
-  let until: i64 = ms > 0 ? monotonicNanos() + toI64(ms) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  let until: i64 = ms > 0 ? httpClientAfter(monotonicNanos(), ms) : HTTP_CLIENT_NEVER
   let code: i32 = HTTP_E_READ_TIMEOUT
   if (conn.deadline < until) {
     until = conn.deadline
@@ -2603,7 +2719,7 @@ const httpClientReadRawAsync = async (conn: HttpClientConn, want: i32): Promise<
   }
   if (n < 0) {
     conn.lost = true
-    conn.fault.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+    conn.fault.fail(HTTP_E_IO, `reading from the server failed (errno ${-toI64(n)})`)
     return -1
   }
   return n
@@ -2616,15 +2732,22 @@ const httpClientWriteRawAsync = async (
   off: i32,
   len: i32
 ): Promise<boolean> => {
+  if (off < 0 || len < 0 || len > toI32(bytes.length) - off) {
+    conn.fault.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+    return false
+  }
   let at: i32 = off
-  const end: i32 = off + len
-  while (at < end) {
+  let left: i32 = len
+  // `at >= 0` is the loop's own, since the prover does not carry it round.
+  while (left > 0 && at >= 0) {
     if (conn.overdue()) {
       return false
     }
-    const n: i32 = netWrite(conn.fd, bytes, at, end - at)
-    if (n > 0) {
-      at += n
+    const n: i32 = netWrite(conn.fd, bytes, at, left)
+    if (n > 0 && n <= left) {
+      // At most `off + len`, inside `bytes`, so the unsigned sum cannot wrap.
+      at = toI32(toU32(at) + toU32(n))
+      left -= n
     } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
       const ready = await httpClientWaitPeerAsync(conn, true)
       if (!ready) {
@@ -2632,7 +2755,7 @@ const httpClientWriteRawAsync = async (
       }
     } else {
       conn.lost = true
-      conn.fault.fail(HTTP_E_IO, `writing to the server failed (errno ${-n})`)
+      conn.fault.fail(HTTP_E_IO, `writing to the server failed (errno ${-toI64(n)})`)
       return false
     }
   }
@@ -2663,14 +2786,21 @@ const httpClientReceiveTlsAsync = async (conn: HttpClientConn, tls: TlsRecordCli
 
 /** Sends everything `tls` has sealed, parking the task while the socket is full; false with the fault set. */
 const httpClientFlushTlsAsync = async (conn: HttpClientConn, tls: TlsRecordClient): Promise<boolean> => {
-  while (tls.outputEnd > tls.outputStart) {
-    const len: i32 = tls.outputEnd - tls.outputStart
+  let len: i32 = httpClientTlsPending(tls)
+  while (len > 0) {
     const wrote = await httpClientWriteRawAsync(conn, tls.output, tls.outputStart, len)
     if (!wrote) {
       tls.abort()
       return false
     }
     tls.consume(len)
+    len = httpClientTlsPending(tls)
+  }
+  if (len < 0) {
+    tls.abort()
+    conn.lost = true
+    conn.fault.fail(HTTP_E_TLS, "the TLS connection's sealed output lies outside its buffer")
+    return false
   }
   return true
 }
@@ -2827,12 +2957,15 @@ const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<
     return wrote
   }
   let at: i32 = 0
-  const end: i32 = toI32(bytes.length)
-  while (at < end) {
-    const n: i32 = tls.write(bytes, at, end - at)
-    if (n > 0) {
-      at += n
-    } else if (n !== TLS_RECORD_AGAIN || tls.outputEnd === tls.outputStart) {
+  let left: i32 = toI32(bytes.length)
+  // `at >= 0` is the loop's own, since the prover does not carry it round.
+  while (left > 0 && at >= 0) {
+    const n: i32 = tls.write(bytes, at, left)
+    if (n > 0 && n <= left) {
+      // At most `bytes.length`, so the unsigned sum cannot wrap.
+      at = toI32(toU32(at) + toU32(n))
+      left -= n
+    } else if (n > 0 || n !== TLS_RECORD_AGAIN || tls.outputEnd === tls.outputStart) {
       conn.lost = true
       httpClientTlsFault(tls, conn.fault)
       return false
@@ -2871,16 +3004,18 @@ const httpClientLookupAsync = async (
   ttls: i32[]
 ): Promise<i32> => {
   let high: i32 = 0
-  const name: u8[] = new Array<u8>(host.length)
+  // Built by `push`, so no length is computed for `new Array`.
+  const name: u8[] = []
   for (let i: i32 = 0; i < toI32(host.length); i += 1) {
     const c: i32 = toI32(host.charCodeAt(i))
     high = high | c
-    if (i < toI32(name.length)) {
-      name[i] = toU8(c & 0x7f)
-    }
+    name.push(toU8(c & 0x7f))
   }
   if (high <= 127 && dnsParseAddress(name, 0, toI32(name.length), addresses, 0, port)) {
-    ttls[0] = 0
+    // Every caller's ttls has DNS_RESOLVE_MAX_ADDRESSES slots.
+    if (toI32(ttls.length) > 0) {
+      ttls[0] = 0
+    }
     return 1
   }
   const hosts: DnsHosts = new DnsHosts()
@@ -2913,7 +3048,7 @@ const httpClientLookupAsync = async (
     }
     let own: i32 = slice
     if (until < HTTP_CLIENT_NEVER) {
-      const left: i64 = (until - now + HTTP_CLIENT_NS_PER_MS - toI64(1)) / HTTP_CLIENT_NS_PER_MS
+      const left: i64 = httpClientWaitMs(until, now)
       if (left < toI64(own)) {
         own = toI32(left)
       }
@@ -2934,14 +3069,24 @@ const httpClientLookupAsync = async (
       status = HTTP_CLIENT_LOOKUP_WAIT
       break
     }
-    for (let k: i32 = 0; k < count && 2 * k + 1 < toI32(ready.length); k += 1) {
-      if (client.owns(ready[2 * k])) {
-        client.ready(ready[2 * k], ready[2 * k + 1], after)
+    // ready holds 4 pairs; the literal bound keeps 2 * k + 1 from wrapping.
+    for (let k: i32 = 0; k < count && k < 4; k += 1) {
+      const at: i32 = 2 * k
+      // Said in the body, after the calls the prover takes as a write to any array.
+      if (at < 0 || at + 1 >= toI32(ready.length)) {
+        break
+      }
+      const fd: i32 = ready[at]
+      const events: i32 = ready[at + 1]
+      if (client.owns(fd)) {
+        client.ready(fd, events, after)
       }
     }
     client.tick(after)
     status = client.result(lookup, addresses, ttls)
-    slice = slice * 2 < HTTP_CLIENT_DNS_SLICE_MS ? slice * 2 : HTTP_CLIENT_DNS_SLICE_MS
+    // slice stays within 1 to HTTP_CLIENT_DNS_SLICE_MS, so doubling it cannot wrap.
+    const twice: i32 = toI32(toU32(slice) * toU32(2))
+    slice = twice < HTTP_CLIENT_DNS_SLICE_MS ? twice : HTTP_CLIENT_DNS_SLICE_MS
   }
   netClose(loop)
   return status
@@ -2955,7 +3100,7 @@ const httpClientLookupAsync = async (
 const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32): Promise<i32> => {
   const start: i64 = monotonicNanos()
   const budget: i32 = conn.options.connectTimeoutMs
-  let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  let until: i64 = budget > 0 ? httpClientAfter(start, budget) : HTTP_CLIENT_NEVER
   let code: i32 = HTTP_E_CONNECT_TIMEOUT
   if (conn.deadline < HTTP_CLIENT_NEVER && conn.deadline <= until) {
     until = conn.deadline
@@ -2965,7 +3110,7 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
     conn.fault.fail(code, httpClientWaitText(code, conn.options, `no time was left to connect to ${host}`))
     return -1
   }
-  const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+  const addresses: u8[] = new Array<u8>(HTTP_CLIENT_ADDRESS_ROOM)
   const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
   const count = await httpClientLookupAsync(host, port, conn.options.dns, until, addresses, ttls)
   const usable: i32 = httpClientAnswers(host, count, conn.options, until, code, addresses, conn.fault)
@@ -2975,7 +3120,8 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
   const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
   let last: i32 = 0
   for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
-    copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
+    // i < DNS_RESOLVE_MAX_ADDRESSES, so the unsigned product stays inside addresses.
+    copyBytes(one, 0, addresses, toI32(toU32(i) * toU32(DNS_ADDRESS_BYTES)), DNS_ADDRESS_BYTES)
     const fd: i32 = tcpConnect(one)
     if (fd < 0) {
       last = fd
@@ -3001,7 +3147,10 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
     netClose(fd)
     last = result
   }
-  conn.fault.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-last})`)
+  conn.fault.fail(
+    HTTP_E_REFUSED,
+    `could not connect to ${host} port ${port} (errno ${-toI64(last)})`
+  )
   return -1
 }
 
@@ -3121,7 +3270,7 @@ const httpClientSendAsync = async (conn: HttpClientConn, url: Url, hop: HttpClie
  * passed `limit` (the connection is then not reusable), -1 with the fault set.
  */
 const httpClientBodyAsync = async (conn: HttpClientConn, res: FetchResponse, limit: i64): Promise<i32> => {
-  let buf: u8[] = new Array<u8>(0)
+  const buf: u8[] = new Array<u8>(0)
   let len: i32 = 0
   let event: i32 = await httpClientPumpAsync(conn)
   while (event !== HTTP1_END) {
@@ -3142,30 +3291,19 @@ const httpClientBodyAsync = async (conn: HttpClientConn, res: FetchResponse, lim
         )
         return -1
       }
-      if (need > toI64(buf.length)) {
-        let room: i64 = toI64(buf.length) * toI64(2)
-        if (room < need) {
-          room = need
-        }
-        if (room > HTTP_CLIENT_ASYNC_BODY_MAX) {
-          room = HTTP_CLIENT_ASYNC_BODY_MAX
-        }
-        const grown: u8[] = new Array<u8>(toI32(room))
-        copyBytes(grown, 0, buf, 0, len)
-        buf = grown
+      // need <= HTTP_CLIENT_ASYNC_BODY_MAX, the largest i32, so it narrows exactly.
+      const want: i32 = toI32(need)
+      // Grown by push, whose own doubling keeps it linear, so no i32 length goes to new Array;
+      // buf then holds exactly the body's bytes and needs no trimming copy at the end.
+      while (toI32(buf.length) < want) {
+        buf.push(0)
       }
       copyBytes(buf, len, conn.parser.body, conn.parser.bodyOff, take)
-      len += take
+      len = want
     }
     event = await httpClientPumpAsync(conn)
   }
-  if (len === toI32(buf.length)) {
-    res.body = buf
-  } else {
-    const exact: u8[] = new Array<u8>(len)
-    copyBytes(exact, 0, buf, 0, len)
-    res.body = exact
-  }
+  res.body = buf
   return 1
 }
 
@@ -3192,13 +3330,14 @@ const httpClientExchangeAsync = async (
       res.status = conn.parser.status
       res.reason = conn.parser.reason
       res.url = httpClientUrlText(url)
-      for (
-        let i: i32 = 0;
-        i < toI32(conn.parser.names.length) && i < toI32(conn.parser.values.length);
-        i += 1
-      ) {
-        res.names.push(conn.parser.names[i])
-        res.values.push(conn.parser.values[i])
+      const heads: string[] = conn.parser.names
+      const vals: string[] = conn.parser.values
+      for (let i: i32 = 0; i < toI32(heads.length) && i < toI32(vals.length); i += 1) {
+        // Both read before either push, which the prover takes as a write to any array.
+        const name: string = heads[i]
+        const value: string = vals[i]
+        res.names.push(name)
+        res.values.push(value)
       }
       // A redirect's own body is read only far enough to keep its connection.
       const hopping: boolean =
