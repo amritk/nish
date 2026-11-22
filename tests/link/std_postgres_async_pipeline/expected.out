@@ -94,3 +94,6 @@ held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 eight seats freed together: 8 seated, over at most 5 loop turns
+before its turn: ok=false failure=9 socket=0 rows=0 reusable=false first=
+ahead of it: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 0

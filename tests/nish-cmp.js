@@ -10155,6 +10155,8 @@ const HASH_MAC_KDF_CT_PROGRAMS = [
   "bench/jwt-verify/main.ts",
   "bench/p256.ts",
   "bench/pg-batch-clock.ts",
+  "bench/pg-carrier.ts",
+  "bench/pg-codec.ts",
   "bench/pg-decode/main.ts",
   "bench/quic-goodput.ts",
   "bench/sha256-block/main.ts",
@@ -11123,6 +11125,14 @@ const HASH_MAC_KDF_MOVES = [
     files: ["client.ll", "hkdf.ll", "hmac.ll", "record.ll", "tls.ll"],
     movedPrograms: ["bench/std-http1.ts"],
   },
+  {
+    files: ["client.ll", "hkdf.ll", "hmac.ll", "record.ll", "scram.ll", "tls.ll"],
+    movedPrograms: ["bench/pg-carrier.ts"],
+  },
+  {
+    files: ["hmac.ll", "scram.ll"],
+    movedPrograms: ["bench/pg-codec.ts"],
+  },
   { files: ["ct.ll"], movedPrograms: HASH_MAC_KDF_CT_PROGRAMS },
 ]
 const hashMacKdfDeclared = () =>
@@ -11331,6 +11341,7 @@ const DECLARED = [
     {
       "bench/http-app-carrier.ts": ["buffer-pool.ll"],
       "bench/http1-request/main.ts": ["buffer-pool.ll"],
+      "bench/pg-carrier.ts": ["buffer-pool.ll"],
       "bench/http1-server.ts": ["buffer-pool.ll"],
       "bench/quic-goodput.ts": ["buffer-pool.ll", "quic-stream.ll"],
       "bench/std-http1.ts": ["buffer-pool.ll", "record.ll"],
@@ -19778,6 +19789,39 @@ const DECLARED = [
     file,
     changelog: "panic ratchet",
     why: "a new instruction bench driving std/json-typed.ts: the reference compiles it against the seed's std/bytes.ts, std/json*.ts and std/json-typed.ts, which differ from this tree's, so every module it reaches and its own header and IR differ",
+  })),
+  {
+    program: "bench/pg-codec.ts",
+    file: "bytes.ll",
+    changelog: "postgres-carrier and postgres-async panic-free",
+    why: "a new instruction bench driving std/net/postgres.ts's encode and decode: the reference compiles it against the seed's std/bytes.ts, which differs from this tree's",
+  },
+  ...[
+    "bytes.ll",
+    "handler.ll",
+    "http-compress.ll",
+    "json.ll",
+    "pg-carrier.h",
+    "pg-carrier.ll",
+    "router.ll",
+    "zlib.ll",
+  ].map((file) => ({
+    program: "bench/pg-carrier.ts",
+    file,
+    changelog: "postgres-carrier and postgres-async panic-free",
+    why: "a new instruction bench driving std/net/postgres-carrier.ts: the reference compiles it against the seed's std/bytes.ts, std/json.ts and std/net/ server modules, which differ from this tree's, and the seed's std/ has no zlib module, so the modules it reaches and its own header and IR differ",
+  })),
+  ...[
+    "tests/link/std_postgres_async/main.ts",
+    "tests/link/std_postgres_async_depth_panic/main.ts",
+    "tests/link/std_postgres_async_pipeline/main.ts",
+    "tests/link/std_postgres_async_seat_statement_panic/main.ts",
+    "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "postgres-carrier and postgres-async panic-free",
+    why: "the program calls std/net/postgres-async.ts, whose sites are now proved or bounded by small helpers: `PgAsyncPool.live` is declared readonly, so the attribute groups renumber, and the frames the program's async functions keep change size",
   })),
   {
     program: "tests/link/spawn_slot_proven/main.ts",

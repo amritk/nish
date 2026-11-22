@@ -678,6 +678,11 @@ const STD_COUNTED = [
   { name: "std-net-tls-record", what: "TLS 1.3 records sealed and opened under AES-128-GCM" },
   { name: "std-net-dns-message", what: "DNS queries built and captured replies parsed" },
   { name: "std-net-http2-frame", what: "HTTP/2 frames parsed and their HPACK header blocks decoded" },
+  {
+    name: "pg-codec",
+    what: "PgConnection Bind/Execute build and binary/text DataRow decode on canned bytes",
+  },
+  { name: "pg-carrier", what: "PgCarrier plain and batched queries against a loopback stand-in server" },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */

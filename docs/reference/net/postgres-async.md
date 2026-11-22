@@ -345,8 +345,9 @@ The pool the ticket came from; a cap out of its range panics.
 
 <scalar-field name="ticket" type="i32" required>
 
-The ticket `pgAsyncTurn` used; any other panics, as does a
-  ticket whose turn has not come.
+The ticket `pgAsyncTurn` used; any other panics. One whose
+  turn has not come, or whose connection failed at or before it, fails the
+  answer without reading, with `PG_ERR_CLOSED` and `reusable` false.
 
 </scalar-field>
 
@@ -559,7 +560,7 @@ One statement, `$1`, `$2`, ... naming the parameters; a NUL in
 <scalar-field name="params" type="PgAsyncParams" required>
 
 The parameters, as many as the statement names; a NUL in
-  a text one fails the query the same way.
+  a text one, a Bind past 2^30 bytes, or unequal `values` and `nulls` fails it the same way.
 
 </scalar-field>
 
@@ -780,11 +781,11 @@ class PgAsyncPool
 | `readonly claimed: u8[]` | Each slot's state: 0 free, 1 claimed by a ticket. |
 | `readonly claims: i32[]` | Each slot's claim count, the high part of its current ticket. |
 | `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. |
-| `connects: i32` | How many connections `pgAsyncConnect` made, in all. |
+| `connects: i32` | How many connections `pgAsyncConnect` made, in all, held at 2^31 - 1 rather than wrapping. |
 | `connectWaitMs: i32` | The most milliseconds `pgAsyncConnect` gives one connection to connect and finish its startup before it closes it and moves on; 0 or less waits for as long as the server takes. |
 | `depth: i32` | The most statements `pgAsyncSeat` puts in flight on one connection at once, 1 to `PG_ASYNC_MAX_DEPTH`. |
 | `readonly doomAt: i32[]` | Per slot: the first sequence number that is not served because the connection was lost, or -1. |
-| `dropped: i32` | How many connections were closed rather than given back: by `pgAsyncRelease`, or once a lost pipeline emptied. |
+| `dropped: i32` | How many connections were closed rather than given back: by `pgAsyncRelease`, or once a lost pipeline emptied. It is held at 2^31 - 1 rather than wrapping. |
 | `readonly fds: i32[]` | Each slot's socket, or -1 while it is not connected. |
 | `readonly inAnswer: i32[]` | Per slot: where the answer in turn ends in `inputs`, past its ReadyForQuery, or -1 while it is not there whole. |
 | `readonly inEnd: i32[]` | Per slot: where the unserved bytes in `inputs` end. |
@@ -812,9 +813,9 @@ class PgAsyncPool
 | `readonly size: i32` | The number of connection slots, fixed at construction. |
 | `readonly skipping: u8[]` | Per slot: 1 while a task reads past an abandoned seat's answer. |
 | `readonly statements: u8[][]` | Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. |
-| `turnWaits: i32` | How many times `pgAsyncTurn` waited for the answers seated ahead of its own. |
+| `turnWaits: i32` | How many times `pgAsyncTurn` waited for the answers seated ahead of its own, held at 2^31 - 1 rather than wrapping. |
 | `readonly waiters: i32[]` | Per wake: the tasks waiting on it. |
-| `waits: i32` | How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. |
+| `waits: i32` | How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room, held at 2^31 - 1 rather than wrapping. |
 | `readonly wakeBytes: u8[]` | The bytes a wake is rung with and read back into, so neither allocates. |
 | `readonly wakePair: i32[]` | Where `pgAsyncPark` opens a wake's socket pair, so it does not allocate. |
 | `readonly wakePending: u8[]` | Per wake: 1 while a byte is written and not yet read. |
@@ -848,7 +849,7 @@ class PgAsyncResult
 | `socketError: i32` | When the socket failed: its negative errno, 0 when the server closed cleanly, `PG_ASYNC_CANCELLED` when the task was cancelled. |
 | `tag: string` | The command tag, e.g. `SELECT 2` or `UPDATE 1`; `""` for an empty query. |
 | `readonly values: string[]` | Every kept cell's text, row by row; `""` for a NULL. |
-| `int(row: i32, column: i32, fallback: i32): i32` | A cell read as a decimal `i32`, or `fallback` when it is NULL or not one. |
+| `int(row: i32, column: i32, fallback: i32): i32` | A cell read as a decimal `i32`, or `fallback` when it is NULL or not one; panics on a row or column out of range. |
 | `isNull(row: i32, column: i32): boolean` | Whether a cell is NULL; panics on a row or column out of range. |
 | `ok(): boolean` | Whether the query worked. |
 | `text(row: i32, column: i32): string` | A cell's text, `""` for a NULL; panics on a row or column out of range. |
@@ -903,8 +904,8 @@ query cut off by it fails with `PG_ERR_CLOSED` and this as its
 `PG_ASYNC_UNSENT: i32`
 
 `pgAsyncSend`'s answer for a statement it did not send because a parameter
-holds a NUL; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
-connection is reused.
+holds a NUL, its Bind would pass 2^30 bytes, or its `values` and `nulls`
+differ in length; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the connection is reused.
 
 </scalar-card>
 
