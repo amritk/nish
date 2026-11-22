@@ -185,9 +185,11 @@ byte 0x5c, repeated a block long. The key is absorbed into both hashers in
 the constructor, so a `HmacSha256` is a keyed inner hash waiting for the
 message and a keyed outer hash waiting for the inner digest.
 
-Like the hashers underneath, a `digest` ends the computation: a later
-`update` or a second `digest` panics in the hasher it reaches, and so does
-a window outside its buffer. The only branch on the key is on its length,
+A `digest` ends the computation: a later `update` or a second `digest`
+panics, and so does a window outside its buffer. For SHA-384 and SHA-512
+the inner hasher panics. For SHA-256 the inner `Sha256` answers a second
+digest with the digest of its wiped, all-zero state, so the panic comes
+from the outer hasher's `update`, before anything is written. The only branch on the key is on its length,
 which HMAC does not keep secret; a received tag is compared with
 `timingSafeEqual`, never `===`.
 
@@ -800,7 +802,7 @@ class HmacSha256
 | `innerDigest: u8[]` | Where `digestInto` puts the inner digest on its way into `outer`, so that it allocates nothing; zero except during that call, which wipes it. |
 | `outer: Sha256` | H(K XOR opad, …), fed the key block in the constructor and the inner digest last. |
 | `digest(): u8[]` | Ends the computation and wipes both hashers and the inner digest. The tag is the one allocation. |
-| `digestInto(out: u8[], at: i32): void` | Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and wipes both hashers and the inner digest, with nothing allocated. A window outside `out` panics before anything is written; so does a second `digest` or `digestInto`, in the inner hasher. |
+| `digestInto(out: u8[], at: i32): void` | Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and wipes both hashers and the inner digest, with nothing allocated. A window outside `out` panics before anything is written; so does a second `digest` or `digestInto`, in the outer hasher's `update`. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. |
 
 ### HmacSha256Scratch

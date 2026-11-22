@@ -19,9 +19,11 @@
  *     mac.update(record, off, len);
  *     const tag2: u8[] = mac.digest();
  *
- * Like the hashers underneath, a `digest` ends the computation: a later
- * `update` or a second `digest` panics in the hasher it reaches, and so does
- * a window outside its buffer. The only branch on the key is on its length,
+ * A `digest` ends the computation: a later `update` or a second `digest`
+ * panics, and so does a window outside its buffer. For SHA-384 and SHA-512
+ * the inner hasher panics. For SHA-256 the inner `Sha256` answers a second
+ * digest with the digest of its wiped, all-zero state, so the panic comes
+ * from the outer hasher's `update`, before anything is written. The only branch on the key is on its length,
  * which HMAC does not keep secret; a received tag is compared with
  * `timingSafeEqual`, never `===`.
  *
@@ -286,7 +288,7 @@ export class HmacSha256 {
    * Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and
    * wipes both hashers and the inner digest, with nothing allocated. A window
    * outside `out` panics before anything is written; so does a second
-   * `digest` or `digestInto`, in the inner hasher.
+   * `digest` or `digestInto`, in the outer hasher's `update`.
    *
    * @param out The caller's array the tag is written into.
    * @param at Where the 32 tag bytes start in `out`.

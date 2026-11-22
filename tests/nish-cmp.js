@@ -19070,15 +19070,6 @@ const DECLARED = [
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
   },
-  // WP83 S1: std/crypto/ct.ts proves its windows in range instead of
-  // index-checking them, so the module every importer of nish/crypto/ct
-  // writes loses its index panics, and the declaration's attribute group in
-  // a program that calls timingSafeEqualAt is renumbered.
-  {
-    file: "ct.ll",
-    changelog: HASH_MAC_KDF,
-    why: "std/crypto/ct.ts's timingSafeEqual and timingSafeEqualAt read under guards the prover discharges, so the module every importer of nish/crypto/ct writes drops its nish_panic_index calls and renumbers its values; no corpus program's own module is named ct",
-  },
   ...[
     "tests/link/crypto_ct/main.ts",
     "tests/link/crypto_ct_k1_copies/main.ts",
