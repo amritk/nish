@@ -1521,6 +1521,9 @@ const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overlo
 const PACKAGE_LINK = "A package links a C library or its own C sources"
 
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
+/** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
+const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
+const s1PanicFree = byFinding(S1_PANIC_FREE)
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
 /**
@@ -18482,7 +18485,52 @@ const DECLARED = [
     file: "main.h",
     changelog: "Accept-Encoding: deflate",
     why: "`HttpCompressor` gains `deflateValue`, `codingValue` and `level` after `gzipValue`, so the struct the header declares grows and its later fields move",
-  },
+  }, // WP80 S1: std/cli, std/cli-flags and std/cli-args reach no index,
+  // slice or overflow panic, so every program linking nish/cli moves.
+  ...s1PanicFree(
+    "std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages` in an i32 and clamps its help padding instead of checking it for overflow, so every module and header naming `HelpMenu` moves (WP80 S1)",
+    {
+      "bench/std-cli-args.ts": ["cli.ll", "std-cli-args.h", "std-cli-args.ll"],
+      "examples/api-cli/main.ts": ["cli.ll", "main.h"],
+      "tests/link/std_cli/main.ts": ["cli.ll", "main.h", "main.ll"],
+      ...Object.fromEntries(
+        [
+          "std_cli_args",
+          "std_cli_args_exit",
+          "std_cli_args_misuse",
+          "std_cli_args_misuse_default",
+          "std_cli_args_misuse_negatable",
+          "std_cli_args_misuse_negation",
+          "std_cli_args_misuse_required",
+        ].map((name) => [`tests/link/${name}/main.ts`, ["cli.ll", "main.h"]])
+      ),
+    }
+  ),
+  ...s1PanicFree(
+    "std/cli-flags proves its indexes, slices and counts through a new private `FlagTable.kindOf` and guards the parse loop, and std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages`, so cli-flags.ll, cli.ll, the program's module and its header all move (WP80 S1)",
+    Object.fromEntries(
+      [
+        "std_cli_flags",
+        "std_cli_flags_bad_command",
+        "std_cli_flags_bad_command_word",
+        "std_cli_flags_bad_exit_usage",
+        "std_cli_flags_bad_flag_name",
+        "std_cli_flags_bad_missing_value",
+        "std_cli_flags_bad_no_pair",
+        "std_cli_flags_bad_number",
+        "std_cli_flags_bad_unknown_flag",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["cli-flags.ll", "cli.ll", "main.h", "main.ll"]])
+    )
+  ),
+  // Two benchmarks new with WP80 S1: each links std modules that changed on
+  // main after the 0.44.0 seed, so the seed's copies differ.
+  ...s1PanicFree(
+    "a benchmark new with this change: it links std modules that changed on main after the 0.44.0 seed was cut (among them `Router`'s step tables and `HttpCompressor`'s request-body decoding, which imports nish/compress/zlib), so the seed's copies of those modules, and the program's module and header naming their structs, differ",
+    {
+      "bench/std-http1.ts": ["bytes.ll", "http-compress.ll", "std-http1.h", "std-http1.ll", "zlib.ll"],
+      "bench/std-router.ts": ["router.ll", "std-router.h", "std-router.ll"],
+    }
+  ),
 ]
 
 /**
