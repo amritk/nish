@@ -10304,6 +10304,7 @@ const DECLARED = [
       "bench/http1-request/main.ts": ["buffer-pool.ll"],
       "bench/http1-server.ts": ["buffer-pool.ll"],
       "bench/quic-goodput.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "bench/std-net-tls-record.ts": ["buffer-pool.ll", "record.ll"],
       "bench/techempower/main.ts": ["buffer-pool.ll"],
       "examples/file-server.ts": ["buffer-pool.ll"],
       "examples/http-get-json.ts": ["buffer-pool.ll"],
