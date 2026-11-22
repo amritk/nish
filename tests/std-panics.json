@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 6019,
+  "total": 5567,
   "explicit": {
     "kept": 340,
-    "toFix": 95
+    "toFix": 92
   },
   "modules": {
     "std/base64.ts": {
@@ -227,14 +227,7 @@
       "pop": 6
     },
     "std/net/http-compress.ts": {
-      "array-length": 3,
-      "index": 9,
-      "overflow": 15,
-      "panic": 10
-    },
-    "std/net/http-fields.ts": {
-      "index": 17,
-      "overflow": 28
+      "panic": 9
     },
     "std/net/http-server.ts": {
       "array-length": 22,
@@ -250,10 +243,7 @@
       "panic": 1
     },
     "std/net/http1-codec.ts": {
-      "array-length": 6,
-      "index": 63,
-      "overflow": 224,
-      "panic": 5
+      "panic": 3
     },
     "std/net/http1-server.ts": {
       "array-length": 6,
@@ -377,10 +367,8 @@
     },
     "std/net/url.ts": {
       "array-length": 3,
-      "index": 24,
-      "overflow": 57,
       "panic": 2,
-      "slice": 10
+      "slice": 7
     },
     "std/net/websocket.ts": {
       "array-length": 8,
@@ -1619,8 +1607,8 @@
     },
     {
       "module": "std/net/url.ts",
-      "function": "urlDecodeRun",
-      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content"
+      "function": "urlDecodeChecked",
+      "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content. tryPercentDecode answers URL_DECODE_ERR_WINDOW instead"
     },
     {
       "module": "std/net/websocket.ts",

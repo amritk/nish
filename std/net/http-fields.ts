@@ -717,7 +717,9 @@ const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJ
  * so `at + k` is inside `out`, the u32 sum does not wrap and the test always
  * holds. The test is what proves the index; nothing is allocated, and a byte
  * it skipped would show in the `httpDateWrite` round trips `tests/run.js`
- * pins byte for byte (`tests/link/net_http_date`).
+ * pins byte for byte (`tests/link/net_http_date`). The skip is unreachable by
+ * that room check in `httpDateWrite`, which the prover does not carry across
+ * the call, so the test stays.
  */
 const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
   const pos: i32 = toI32(toU32(at) + toU32(k))

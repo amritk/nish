@@ -4036,8 +4036,8 @@ import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompress
 import ZlibDecompressor from "nish/compress/zlib" -> struct ZlibDecompressor
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 87:10 wrappingAdd from "nish:unsafe"
-unsafe call 703:26 wrappingAdd (node 2435)
-unsafe call 787:24 wrappingAdd (node 2779)
+unsafe call 704:26 wrappingAdd (node 2435)
+unsafe call 788:24 wrappingAdd (node 2779)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]
@@ -4239,14 +4239,14 @@ function HttpCompressor.constructor(this: HttpCompressor, level: i32, minLength:
   stackSites=0 stackLocals=0
   callee +0:17 new GzipCompressor -> @nish.GzipCompressor.constructor
   callee +1:18 new GzipFixedCompressor -> @nish.GzipFixedCompressor.constructor
-  local +4:11 output: u8[] (const)
-  local +5:11 bound: i32 (const)
-  callee +5:24 compressBound -> @nish.compressBound
-  callee +12:32 httpCompressBytes -> @nish.httpCompressBytes
-  callee +13:22 httpCompressBytes -> @nish.httpCompressBytes
-  callee +14:25 httpCompressBytes -> @nish.httpCompressBytes
-  callee +17:21 httpCompressBytes -> @nish.httpCompressBytes
-  callee +18:32 httpCompressBytes -> @nish.httpCompressBytes
+  local +5:11 output: u8[] (const)
+  local +6:11 bound: i32 (const)
+  callee +6:24 compressBound -> @nish.compressBound
+  callee +13:32 httpCompressBytes -> @nish.httpCompressBytes
+  callee +14:22 httpCompressBytes -> @nish.httpCompressBytes
+  callee +15:25 httpCompressBytes -> @nish.httpCompressBytes
+  callee +18:21 httpCompressBytes -> @nish.httpCompressBytes
+  callee +19:32 httpCompressBytes -> @nish.httpCompressBytes
 function HttpCompressor.compress(this: HttpCompressor, coding: i32, body: u8[], off: i32, len: i32): i32 -> @nish.HttpCompressor.compress [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpCompressor.tryCompress
@@ -4437,8 +4437,8 @@ function HttpBodyDecoder.tryDecode(this: HttpBodyDecoder, coding: i32, src: u8[]
   pointer this: size=32 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.GzipDecompressor.decompress#1 nish.ZlibDecompressor.decompress#1
   stackSites=0 stackLocals=0
-  local -14:11 limit: i32 (const)
-  local -10:9 size: i32 (let)
+  local -16:11 limit: i32 (const)
+  local -12:9 size: i32 (let)
   local -2:13 output: u8[] (const)
   local +2:13 end: i32 (const)
   callee +4:13 GzipDecompressor.decompress -> @nish.GzipDecompressor.decompress

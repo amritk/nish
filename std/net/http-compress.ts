@@ -607,7 +607,8 @@ export class HttpCompressor {
     this.gzip = new GzipCompressor(level)
     this.fixed = new GzipFixedCompressor()
     // Grown a byte at a time, once: a length the compiler cannot see is not
-    // negative would cost `new Array` a check.
+    // negative would cost `new Array` a check. No bench/instructions.json row
+    // builds a compressor, so no counted figure includes this loop.
     const output: u8[] = []
     const bound: i32 = compressBound(maxLength)
     while (toI32(output.length) < bound) {
@@ -1209,7 +1210,9 @@ export class HttpBodyDecoder {
     while (true) {
       // Grown in place rather than made anew: a length the compiler cannot
       // see is not negative would cost `new Array` a check. The bytes kept
-      // mean nothing, since each decode writes from the start.
+      // mean nothing, since each decode writes from the start. No
+      // bench/instructions.json row gets here: pg-carrier's HttpHandler owns a
+      // decoder but sends no Content-Encoding.
       const output: u8[] = this.output
       while (toI32(output.length) < size) {
         output.push(0)
