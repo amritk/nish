@@ -182,7 +182,7 @@ const shmNameOk = (name: string): boolean => {
     return false
   }
   for (let i: i32 = 0; i < n; i++) {
-    const c: i32 = name.charCodeAt(i)
+    const c: i32 = toI32(name.charCodeAt(i))
     const ok =
       (c >= 65 && c <= 90) ||
       (c >= 97 && c <= 122) ||
