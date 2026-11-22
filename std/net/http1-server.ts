@@ -427,10 +427,59 @@ const http1ServerKept = (kept: u8[], at: i32, limit: i32, bytes: u8[], after: i3
   return same ? past : -1
 }
 
-/** Panics unless `value` is in `low .. high`: a cap no connection could work with is the program's mistake. */
-const http1ServerCheckCap = (name: string, value: i32, low: i32, high: i32): void => {
-  if (value < low || value > high) {
-    panic(`Http1Config.${name}: ${value} is outside ${low} to ${high}`)
+/** Why `value` is outside `low .. high` as the cap `name`, or "" when it is inside. */
+const http1ServerCapFault = (name: string, value: i32, low: i32, high: i32): string =>
+  value < low || value > high ? `Http1Config.${name}: ${value} is outside ${low} to ${high}` : ""
+
+/**
+ * The first cap of `config` outside what a connection can work with, as the
+ * message `Http1Connection`'s constructor panics with, or "" when every cap
+ * is inside.
+ */
+const http1ServerConfigFault = (config: Http1Config): string => {
+  const big: i32 = 1073741824
+  const one: i32 = 1
+  const smallest: i32 = 64
+  const output: i32 = 1024
+  const caps: string[] = [
+    http1ServerCapFault("maxTarget", config.maxTarget, one, big),
+    http1ServerCapFault("maxHeaderBytes", config.maxHeaderBytes, smallest, big),
+    http1ServerCapFault("maxHeaders", config.maxHeaders, one, big),
+    http1ServerCapFault("maxBody", config.maxBody, H1_ZERO, big),
+    http1ServerCapFault("chunkSize", config.chunkSize, one, big),
+    http1ServerCapFault("outputSize", config.outputSize, output, big),
+    http1ServerCapFault("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER),
+    http1ServerCapFault("idleTimeout", config.idleTimeout, one, big),
+    http1ServerCapFault("headTimeout", config.headTimeout, one, big),
+    http1ServerCapFault("lingerTimeout", config.lingerTimeout, one, big),
+    http1ServerCapFault("lingerBytes", config.lingerBytes, H1_ZERO, big),
+    // The buffers the peer's bytes fill grow by doubling and stop at 2^30
+    // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
+    // buffer could need more is refused here rather than reached by a peer:
+    // the head holds the request line and the header section together, and
+    // the input never holds more than the larger of the two lines or a chunk.
+    // Each is at most 2^30 here, so the sum wraps only at 2^31, to a
+    // negative the check refuses as it would the sum itself.
+    http1ServerCapFault(
+      "maxTarget + maxHeaderBytes",
+      toI32(toI64(config.maxTarget) + toI64(config.maxHeaderBytes)),
+      one,
+      big - H1_LINE_OVERHEAD
+    ),
+  ]
+  for (const fault of caps) {
+    if (fault.length > 0) {
+      return fault
+    }
+  }
+  return ""
+}
+
+/** Panics unless every cap of `config` is one a connection can work with: a cap outside is the program's mistake. */
+const http1ServerCheckCap = (config: Http1Config): void => {
+  const fault: string = http1ServerConfigFault(config)
+  if (fault.length > 0) {
+    panic(fault)
   }
 }
 
@@ -691,6 +740,20 @@ export class Http1Config {
    * slot's buffers across the rest, about 1.9 KB more an idle connection.
    */
   idleInput: boolean = true
+}
+
+/**
+ * `config` when every cap is one a connection can work with, the twin of the
+ * check `Http1Connection`'s constructor panics on: a program reading its
+ * caps from a file or flags checks them here, and refuses the bad one with
+ * the message the constructor would panic with, rather than panicking.
+ *
+ * @param config the caps to check, returned as they are when they pass
+ * @returns `config`, or the first cap outside its range, named with the range it must lie in
+ */
+export const http1ConfigChecked = (config: Http1Config): Result<Http1Config, string> => {
+  const fault: string = http1ServerConfigFault(config)
+  return fault.length > 0 ? Err(fault) : Ok(config)
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */
@@ -1027,40 +1090,14 @@ export class Http1Connection {
   private spareSpans: i32[]
 
   /**
-   * A connection under `config`. A cap outside what the connection can work with panics.
+   * A connection under `config`. A cap outside what the connection can work with panics;
+   * `http1ConfigChecked` refuses the same caps as a `Result`.
    *
    * @param config the caps the connection is held to, read now and kept
    * @param date the `Date` its responses carry, shared with other connections; null makes it one of its own
    */
   constructor(config: Http1Config, date: HttpDate | null = null) {
-    const big: i32 = 1073741824
-    const one: i32 = 1
-    const smallest: i32 = 64
-    const output: i32 = 1024
-    http1ServerCheckCap("maxTarget", config.maxTarget, one, big)
-    http1ServerCheckCap("maxHeaderBytes", config.maxHeaderBytes, smallest, big)
-    http1ServerCheckCap("maxHeaders", config.maxHeaders, one, big)
-    http1ServerCheckCap("maxBody", config.maxBody, H1_ZERO, big)
-    http1ServerCheckCap("chunkSize", config.chunkSize, one, big)
-    http1ServerCheckCap("outputSize", config.outputSize, output, big)
-    http1ServerCheckCap("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER)
-    http1ServerCheckCap("idleTimeout", config.idleTimeout, one, big)
-    http1ServerCheckCap("headTimeout", config.headTimeout, one, big)
-    http1ServerCheckCap("lingerTimeout", config.lingerTimeout, one, big)
-    http1ServerCheckCap("lingerBytes", config.lingerBytes, H1_ZERO, big)
-    // The buffers the peer's bytes fill grow by doubling and stop at 2^30
-    // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
-    // buffer could need more is refused here rather than reached by a peer:
-    // the head holds the request line and the header section together, and
-    // the input never holds more than the larger of the two lines or a chunk.
-    // Each is at most 2^30 here, so the sum wraps only at 2^31, to a
-    // negative the check refuses as it would the sum itself.
-    http1ServerCheckCap(
-      "maxTarget + maxHeaderBytes",
-      toI32(toI64(config.maxTarget) + toI64(config.maxHeaderBytes)),
-      one,
-      big - H1_LINE_OVERHEAD
-    )
+    http1ServerCheckCap(config)
     this.config = config
     // The parser is made first: the arena places each block after the last,
     // so its front fields sit on the lines just behind the connection's own.
@@ -2230,7 +2267,8 @@ export class Http1Connection {
    * `H1_INVALID` for a response larger than the output could ever hold or one
    * `respond` refuses, `H1_CLOSED` with no request to answer (or, never for a
    * body the room was checked for, when `write` takes less than all of it, which
-   * aborts the connection); 0 once it is queued. A window outside `body` panics.
+   * aborts the connection); 0 once it is queued. A window outside `body` is
+   * `H1_INVALID` too, before anything is queued.
    *
    * @param status the HTTP status code to send, as `respond` takes it
    * @param names the program's field names, without `Content-Encoding` (or `Vary` under `enc.vary`)
@@ -2252,7 +2290,9 @@ export class Http1Connection {
     enc: HttpCompressor,
     coding: i32
   ): i32 {
-    http1ServerCheckWindow("Http1Connection.respondEncoded", body, off, len)
+    if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(body.length)) {
+      return H1_INVALID
+    }
     if (!this.answerable()) {
       return H1_CLOSED
     }

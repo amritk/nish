@@ -443,8 +443,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` of the parameter's first raw byte
    */
   paramStart(k: i32): i32 {
-    this.checkParam(k)
-    return this.params[2 * k]
+    return this.checkParam(k, 0)
   }
 
   /**
@@ -453,8 +452,7 @@ export class HttpServerRequest {
    * @returns the byte offset in `head` just past the parameter's last raw byte
    */
   paramEnd(k: i32): i32 {
-    this.checkParam(k)
-    return this.params[2 * k + 1]
+    return this.checkParam(k, 1)
   }
 
   /**
@@ -464,8 +462,7 @@ export class HttpServerRequest {
    * @returns true when the raw parameter bytes are exactly `text`
    */
   paramIs(k: i32, text: string): boolean {
-    this.checkParam(k)
-    return httpServerSpanIs(this.head, this.params[2 * k], this.params[2 * k + 1], text)
+    return httpServerSpanIs(this.head, this.checkParam(k, 0), this.checkParam(k, 1), text)
   }
 
   /**
@@ -477,8 +474,7 @@ export class HttpServerRequest {
    * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
-    this.checkParam(k)
-    return routerDecode(this.head, this.params[2 * k], this.params[2 * k + 1], out)
+    return routerDecode(this.head, this.checkParam(k, 0), this.checkParam(k, 1), out)
   }
 
   /**
@@ -487,14 +483,23 @@ export class HttpServerRequest {
    * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
    */
   paramDecimal(k: i32): i32 {
-    this.checkParam(k)
-    return httpServerDecimal(this.head, this.params[2 * k], this.params[2 * k + 1])
+    return httpServerDecimal(this.head, this.checkParam(k, 0), this.checkParam(k, 1))
   }
 
-  private checkParam(k: i32): void {
-    if (k < 0 || k >= this.paramCount) {
+  /**
+   * Parameter `k`'s start (`end` 0) or end (`end` 1) offset in `head`.
+   * Panics on a parameter the route does not have. `params` holds two
+   * entries for each of the router's parameters, so the bound on its length
+   * never refuses a `k` below `paramCount`.
+   */
+  private checkParam(k: i32, end: i32): i32 {
+    const params: i32[] = this.params
+    const wide: i64 = toI64(k) * toI64(2) + toI64(end)
+    const at: i32 = wide < toI64(0) || wide >= toI64(params.length) ? -1 : toI32(wide)
+    if (k < 0 || k >= this.paramCount || at < 0 || at >= toI32(params.length)) {
       panic(`HttpServerRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
     }
+    return params[at]
   }
 
   /**
@@ -583,21 +588,32 @@ export class HttpServerRequest {
   }
 
   /**
-   * Where field `i`'s value starts in `head`.
+   * Where field `i`'s value starts in `head`, or -1 when the request holds no field `i`.
    * @param i a field index, as `header` answered it
-   * @returns the byte offset in `head` of the value's first byte
+   * @returns the byte offset in `head` of the value's first byte, or -1 for an index `header` cannot answer
    */
   valueStart(i: i32): i32 {
-    return this.spans[4 * i + 2]
+    return this.spanAt(i, 2)
   }
 
   /**
-   * Where field `i`'s value ends in `head`.
+   * Where field `i`'s value ends in `head`, or -1 when the request holds no field `i`.
    * @param i a field index, as `header` answered it
-   * @returns the byte offset in `head` just past the value's last byte
+   * @returns the byte offset in `head` just past the value's last byte, or -1 for an index `header` cannot answer
    */
   valueEnd(i: i32): i32 {
-    return this.spans[4 * i + 3]
+    return this.spanAt(i, 3)
+  }
+
+  /** Entry `part` of field `i`'s four in `spans`, or -1 past the fields the request holds. */
+  private spanAt(i: i32, part: i32): i32 {
+    const spans: i32[] = this.spans
+    const wide: i64 = toI64(i) * toI64(4) + toI64(part)
+    const at: i32 = wide < toI64(0) || wide >= toI64(spans.length) ? -1 : toI32(wide)
+    if (i < 0 || i >= this.headerCount || at < 0 || at >= toI32(spans.length)) {
+      return -1
+    }
+    return spans[at]
   }
 
   /**
@@ -644,6 +660,46 @@ const httpServerPendingSize = (have: i32, need: i64): i32 => {
   const doubled: i64 = toI64(have) * toI64(2)
   const size: i64 = need > doubled ? need : doubled
   return size > toI64(HTTP_SERVER_MAX_BODY) ? HTTP_SERVER_MAX_BODY : toI32(size)
+}
+
+/**
+ * A zeroed array of `n` elements, `zero` each. The first 65535 come from
+ * one `new Array` whose `u16` length needs no runtime check; only a length
+ * past that, which a large `jsonBytes` or `maxHead` gives, pushes the rest.
+ * An `n` at or below 0 gives an empty array; one past `i32` stops there.
+ *
+ * @param n - the element count
+ * @param zero - the value of each element
+ * @returns the array
+ */
+const httpServerZeros = <T>(n: i64, zero: T): T[] => {
+  let want: i32 = 2147483647
+  if (n <= toI64(0)) {
+    want = 0
+  } else if (n < toI64(2147483647)) {
+    want = toI32(n)
+  }
+  const head: i32 = want >= 65535 ? 65535 : want
+  const out: T[] = new Array<T>(toU16(head))
+  for (let k = head; k < want; k++) {
+    out.push(zero)
+  }
+  return out
+}
+
+/**
+ * Cell `col` of row `row` in a table of rows `width` wide, as an index into
+ * its `length` elements, or -1 when that cell lies outside them.
+ *
+ * @param row - the row
+ * @param width - the elements per row
+ * @param col - the column within the row
+ * @param length - the table's element count
+ * @returns the index, or -1
+ */
+const httpServerCell = (row: i32, width: i32, col: i32, length: i32): i32 => {
+  const wide: i64 = toI64(row) * toI64(width) + toI64(col)
+  return wide < toI64(0) || wide >= toI64(length) ? -1 : toI32(wide)
 }
 
 /** Whether `bytes[start .. end)` is exactly `text`. */
@@ -964,13 +1020,13 @@ export class HttpServer {
       this.requests.push(new HttpServerRequest(k))
       this.free.push(toI32(toI64(limits.requests) - toI64(1) - toI64(k)))
     }
-    this.queue = new Array<i32>(limits.requests)
+    this.queue = httpServerZeros(toI64(limits.requests), 0)
     this.streamRoutes = []
-    this.readyFds = new Array<i32>(2 * limits.maxEvents)
+    this.readyFds = httpServerZeros(toI64(2) * toI64(limits.maxEvents), 0)
     this.watchedFired = new Array<boolean>(HANDLER_MAX_WATCHED)
-    this.scratch = new Array<u8>(limits.jsonBytes)
+    this.scratch = httpServerZeros(toI64(limits.jsonBytes), toU8(0))
     this.writer = new JsonWriter(this.scratch, HTTP_SERVER_ZERO)
-    this.probe = new Array<i32>(2 * router.maxParams + 2)
+    this.probe = httpServerZeros(toI64(2) * toI64(router.maxParams) + toI64(2), 0)
     this.jsonType = httpFieldBytes("application/json")
     this.problemType = httpFieldBytes("application/problem+json")
     const contentType: u8[] = httpFieldBytes("content-type")
@@ -989,7 +1045,7 @@ export class HttpServer {
     this.outValuesBy = []
     this.digitBufs = []
     for (let d: i32 = 0; d <= 10; d++) {
-      this.digitBufs.push(new Array<u8>(d))
+      this.digitBufs.push(httpServerZeros(toI64(d), toU8(0)))
     }
     this.altSvcName = httpFieldBytes("alt-svc")
     this.altNames = [this.altSvcName]
@@ -1066,12 +1122,12 @@ export class HttpServer {
     this.h1 = new Http1Server(config, fd, slots)
     this.h1Fd = fd
     this.h1OutputSize = config.outputSize
-    this.h1Gen = new Array<i32>(slots)
-    const current: i32[] = new Array<i32>(slots)
+    this.h1Gen = httpServerZeros(toI64(slots), 0)
+    const current: i32[] = httpServerZeros(toI64(slots), 0)
     this.h1Current = current
-    this.h1Open = new Array<boolean>(slots)
-    this.h1Starved = new Array<boolean>(slots)
-    this.h1Driving = new Array<i32>(slots)
+    this.h1Open = httpServerZeros(toI64(slots), false)
+    this.h1Starved = httpServerZeros(toI64(slots), false)
+    this.h1Driving = httpServerZeros(toI64(slots), 0)
     for (let s: i32 = 0; s < toI32(current.length); s++) {
       current[s] = -1
     }
@@ -1167,22 +1223,33 @@ export class HttpServer {
     const base: i32 = toI32(this.h2Open.length)
     const was: i32 = this.perConnection2
     const width: i32 = per > was ? per : was
-    const streams: i32[] = new Array<i32>((base + slots) * width)
-    const reqs: i32[] = new Array<i32>((base + slots) * width)
-    for (let e: i32 = 0; e < toI32(reqs.length); e++) {
-      reqs[e] = -1
-    }
+    const size: i64 = toI64(base) * toI64(width) + toI64(slots) * toI64(width)
+    const streams: i32[] = httpServerZeros(size, 0)
+    const reqs: i32[] = httpServerZeros(size, -1)
+    const oldStreams: i32[] = this.h2Streams
+    const oldReqs: i32[] = this.h2Reqs
     for (let v: i32 = 0; v < base; v++) {
       for (let i: i32 = 0; i < was; i++) {
-        streams[v * width + i] = this.h2Streams[v * was + i]
-        reqs[v * width + i] = this.h2Reqs[v * was + i]
+        const to: i32 = httpServerCell(v, width, i, toI32(streams.length))
+        const from: i32 = httpServerCell(v, was, i, toI32(oldStreams.length))
+        if (
+          to >= 0 &&
+          to < toI32(streams.length) &&
+          to < toI32(reqs.length) &&
+          from >= 0 &&
+          from < toI32(oldStreams.length) &&
+          from < toI32(oldReqs.length)
+        ) {
+          streams[to] = oldStreams[from]
+          reqs[to] = oldReqs[from]
+        }
       }
     }
-    if (width !== was) {
+    if (width !== was && was > 0) {
       for (let k: i32 = 0; k < toI32(this.requests.length); k++) {
         const r: HttpServerRequest = this.requests[k]
         if (r.kind === HTTP_SERVER_H2 && r.entry >= 0) {
-          r.entry = (r.entry / was) * width + (r.entry % was)
+          r.entry = httpServerCell(r.entry / was, width, r.entry % was, toI32(streams.length))
         }
       }
     }
@@ -1235,10 +1302,10 @@ export class HttpServer {
     this.perConnection3 = per < toI64(1) ? 1 : toI32(per)
     this.h3 = new Http3Server(quic, config, fd, slots, entropy)
     this.h3Fd = fd
-    this.h3Gen = new Array<i32>(slots)
-    this.h3Count = new Array<i32>(slots)
-    this.h3Streams = new Array<i64>(slots * this.perConnection3)
-    this.h3Reqs = new Array<i32>(slots * this.perConnection3)
+    this.h3Gen = httpServerZeros(toI64(slots), 0)
+    this.h3Count = httpServerZeros(toI64(slots), 0)
+    this.h3Streams = httpServerZeros(toI64(slots) * toI64(this.perConnection3), toI64(0))
+    this.h3Reqs = httpServerZeros(toI64(slots) * toI64(this.perConnection3), 0)
     for (let k: i32 = 0; k < toI32(this.h3Reqs.length); k++) {
       this.h3Reqs[k] = -1
     }
@@ -1505,24 +1572,17 @@ export class HttpServer {
    * @returns the connections the carriers hold, which falls to 0 after `drain` as they finish
    */
   connections(): i32 {
-    let n: i32 = 0
     const h1: Http1Server | null = this.h1
-    if (h1 !== null) {
-      n += h1.busy()
-    }
     const h2: Http2TlsServer | null = this.h2
-    if (h2 !== null) {
-      n += h2.busy()
-    }
     const h2c: Http2CleartextServer | null = this.h2c
-    if (h2c !== null) {
-      n += h2c.busy()
-    }
     const h3: Http3Server | null = this.h3
-    if (h3 !== null) {
-      n += h3.busy()
-    }
-    return n
+    const one: i32 = h1 !== null ? h1.busy() : 0
+    const two: i32 = h2 !== null ? h2.busy() : 0
+    const clear: i32 = h2c !== null ? h2c.busy() : 0
+    const three: i32 = h3 !== null ? h3.busy() : 0
+    // Each carrier's count is an `i32`; their sum saturates rather than wraps.
+    const n: i64 = toI64(one) + toI64(two) + (toI64(clear) + toI64(three))
+    return n > toI64(2147483647) ? 2147483647 : toI32(n)
   }
 
   // ---- HTTP/1.1 -------------------------------------------------------------------
@@ -1921,9 +1981,9 @@ export class HttpServer {
     const r: HttpServerRequest = requests[at]
     free.pop()
     if (toI32(r.head.length) === 0) {
-      r.head = new Array<u8>(this.maxHead)
-      r.spans = new Array<i32>(4 * this.maxFields)
-      r.params = new Array<i32>(2 * this.router.maxParams + 2)
+      r.head = httpServerZeros(toI64(this.maxHead), toU8(0))
+      r.spans = httpServerZeros(toI64(4) * toI64(this.maxFields), 0)
+      r.params = httpServerZeros(toI64(2) * toI64(this.router.maxParams) + toI64(2), 0)
     }
     return at
   }
@@ -2009,7 +2069,9 @@ export class HttpServer {
 
   /** Appends `buf[start .. start + n)` to `r`'s body; the caller has kept it within `maxBody`. */
   private append(r: HttpServerRequest, buf: u8[], start: i32, n: i32): void {
-    const need: i32 = r.bodyLength + n
+    // The caller's `maxBody` check keeps the sum inside an `i32`.
+    const wide: i64 = toI64(r.bodyLength) + toI64(n)
+    const need: i32 = wide > toI64(2147483647) ? 2147483647 : toI32(wide)
     if (toI32(r.body.length) < need) {
       this.growBody(r, need)
     }
@@ -2795,7 +2857,9 @@ export class HttpServer {
       rest = rest / 10
       count += 1
     }
-    const out: u8[] = this.digitBufs[count]
+    // The constructor gives every count from 0 to 10 its buffer.
+    const bufs: u8[][] = this.digitBufs
+    const out: u8[] = count < toI32(bufs.length) ? bufs[count] : new Array<u8>(toU16(count))
     rest = n
     for (let k: i32 = count - 1; k >= 0 && k < toI32(out.length); k--) {
       out[k] = toU8(toI64(HTTP_SERVER_ZERO_DIGIT) + toI64(rest % 10))
@@ -3829,7 +3893,9 @@ export class HttpServer {
         r.state === HTTP_SERVER_HELD ||
         r.state === HTTP_SERVER_STREAMING
       ) {
-        const need: i32 = r.bodyLength + n
+        // The stream window keeps the sum inside an `i32`.
+        const wide: i64 = toI64(r.bodyLength) + toI64(n)
+        const need: i32 = wide > toI64(2147483647) ? 2147483647 : toI32(wide)
         if (toI32(r.body.length) < need) {
           const have: i32 = toI32(r.body.length)
           const cap: i32 = conn.streamWindow()
