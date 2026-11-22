@@ -4562,6 +4562,9 @@ const p256ShaInto = (
  * its digest put where the outer hash of `K XOR opad || inner` reads it. `out`
  * may be `key` or `message`, which are read first. Every work array the key
  * reached — `block`, `h`, `w` and `tail` — is wiped before it returns (ECC-2).
+ * Answers `false`, writing nothing, for a key, message or block outside those
+ * bounds, which no caller passes; the signer stops on it rather than go on
+ * with a `K` or `V` this call did not compute.
  */
 const p256HmacInto = (
   out: u8[],
@@ -4573,14 +4576,14 @@ const p256HmacInto = (
   w: u32[],
   tail: u8[],
   block: u8[]
-): void => {
+): boolean => {
   const blockLength: i32 = toI32(block.length)
   const keyLength: i32 = toI32(key.length)
   const messageLength: i32 = toI32(message.length)
   // Both callers pass a 32-byte key, a message of at most P256_NONCE_MESSAGE
   // (97) bytes and the scratch's 64 + 97 byte block, so this always holds.
   if (len < 0 || len > 97 || blockLength < 64 + len || keyLength > 64 || len > messageLength) {
-    return
+    return false
   }
   for (let i: i32 = 0; i < 64 && i < blockLength; i++) {
     block[i] = i < keyLength ? key[i] ^ 0x36 : 0x36
@@ -4601,6 +4604,7 @@ const p256HmacInto = (
   wipe(h)
   wipe(w)
   wipe(tail)
+  return true
 }
 
 /** `out[0 .. n) = from[0 .. n)`. */
@@ -4775,15 +4779,16 @@ export class P256SignScratch {
   }
 }
 
-/** `out = HMAC_K(message[0 .. len))` with the scratch's `K` and work arrays. */
-const p256SignMac = (sc: P256SignScratch, out: u8[], message: u8[], len: i32): void =>
+/** `out = HMAC_K(message[0 .. len))` with the scratch's `K` and work arrays; `false` as `p256HmacInto` answers it. */
+const p256SignMac = (sc: P256SignScratch, out: u8[], message: u8[], len: i32): boolean =>
   p256HmacInto(out, sc.k, message, len, sc.kt, sc.hash, sc.schedule, sc.tail, sc.block)
 
 /**
  * HMAC_K(V || sep || x || h1) for RFC 6979 §3.2 steps d and f, on the plain
  * key `x`, for `exposeWith` to run: `V || sep` is the scratch's `message`,
  * which is only read, as the rest of the scratch is; the message and the
- * hashing's work arrays are fresh and wiped, and the new `K` is the answer.
+ * hashing's work arrays are fresh and wiped, and the new `K` is the answer,
+ * or an empty array when `p256HmacInto` refuses its arrays.
  */
 const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
   const message: u8[] = new Array<u8>(97)
@@ -4798,7 +4803,7 @@ const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
     }
   }
   const key: u8[] = new Array<u8>(SHA256_SIZE)
-  p256HmacInto(
+  const made: boolean = p256HmacInto(
     key,
     sc.k,
     message,
@@ -4810,6 +4815,10 @@ const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
     new Array<u8>(161)
   )
   wipe(message)
+  if (!made) {
+    // A refusal wrote nothing, so `key` still holds its zeros.
+    return new Array<u8>(0)
+  }
   return key
 }
 
@@ -4842,12 +4851,19 @@ const p256NonceSeparated = (sc: P256SignScratch, sep: u8): void => {
   }
 }
 
-/** Steps d and f: `K` replaced by what the exposed step answers, which is wiped once copied. */
-const p256SignNonceKey = (sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): void => {
+/**
+ * Steps d and f: `K` replaced by what the exposed step answers, which is wiped
+ * once copied; `false`, `K` untouched, when that step answered no key.
+ */
+const p256SignNonceKey = (sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): boolean => {
   p256NonceSeparated(sc, sep)
   const next: u8[] = exposeWith(priv, sc, p256NonceKeyExposed)
-  p256CopyBytes(sc.k, next, SHA256_SIZE)
+  const made: boolean = toI32(next.length) === SHA256_SIZE
+  if (made) {
+    p256CopyBytes(sc.k, next, SHA256_SIZE)
+  }
   wipe(next)
+  return made
 }
 
 /** Zero every secret the scratch held: `K`, `V`, `k^-1`, the nonce point and its scratch (ECC-2). */
@@ -4879,7 +4895,9 @@ const p256WipeSignScratch = (sc: P256SignScratch): void => {
  * @param len The message's length in bytes.
  * @param out The array the signature is written into.
  * @param at Where the 64 bytes start in `out`.
- * @returns `true` once the signature is written, `false` for a refused key.
+ * @returns `true` once the signature is written, `false` for a refused key
+ *   (or for a scratch whose arrays an HMAC step refuses, which
+ *   `new P256SignScratch()` never builds).
  */
 export const p256SignSha256Into = (
   sc: P256SignScratch,
@@ -4912,13 +4930,18 @@ export const p256SignSha256Into = (
     sc.v[i] = 1
     sc.k[i] = 0
   }
-  p256SignNonceKey(sc, priv, 0) // step d
-  p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step e
-  p256SignNonceKey(sc, priv, 1) // step f
-  p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step g
-  while (true) {
-    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step h.2
-    if (p256ScalarInRange(sc.v)) {
+  // Each HMAC step answers `false` only for arrays the scratch never holds;
+  // the signer then stops rather than derive a nonce from stale state. Every
+  // way out passes the one wipe below.
+  let ok: boolean =
+    p256SignNonceKey(sc, priv, 0) && // step d
+    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) && // step e
+    p256SignNonceKey(sc, priv, 1) && // step f
+    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step g
+  let signed: boolean = false
+  while (ok && !signed) {
+    ok = p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step h.2
+    if (ok && p256ScalarInRange(sc.v)) {
       p256BaseMultWith(sc.point, sc.v, sc.points, sc.table)
       p256AffineX(sc.x, sc.point)
       p256ReduceOnce(sc.r, sc.x, sc.n)
@@ -4930,13 +4953,15 @@ export const p256SignSha256Into = (
         p256LimbsToBytes(out, at, sc.r)
         // The window was checked: at + 64 fits in `out`, an i32.
         p256LimbsToBytes(out, toI32(toI64(at) + 32), s)
-        p256WipeSignScratch(sc)
-        return true
+        signed = true
       }
     }
-    // step h.3: K = HMAC_K(V || 0x00), then V = HMAC_K(V).
-    p256NonceSeparated(sc, 0)
-    p256SignMac(sc, sc.k, sc.message, SHA256_SIZE + 1)
-    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE)
+    if (ok && !signed) {
+      // step h.3: K = HMAC_K(V || 0x00), then V = HMAC_K(V).
+      p256NonceSeparated(sc, 0)
+      ok = p256SignMac(sc, sc.k, sc.message, SHA256_SIZE + 1) && p256SignMac(sc, sc.v, sc.v, SHA256_SIZE)
+    }
   }
+  p256WipeSignScratch(sc)
+  return signed
 }
