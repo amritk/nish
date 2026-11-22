@@ -357,9 +357,6 @@ const H3_FIELD_CLASSES: i32 = 24
 /** The bytes a slot keeps for a frame header being read or written. */
 const H3_HEAD: i32 = 16
 
-/** The most stream slots a QUIC connection's table has: `QUIC_CONN_MAX_STREAMS` of each of its three kinds. */
-const H3_MAX_SLOTS: i32 = 3072
-
 /**
  * The connection's caps, fixed when it is made. `maxFieldSectionSize` is
  * advertised in SETTINGS and is the largest HEADERS frame read and the
@@ -745,8 +742,8 @@ export class Http3Connection {
       this.settingValues.push(toI64(config.webtransportSessions))
     }
     // `QuicStreams` builds one slot per stream its three limits allow, each
-    // checked above to be at most 1,024, so the table holds at most
-    // `H3_MAX_SLOTS` and the `u16` holds it and every table below exactly.
+    // checked above to be at most 1,024, so the table holds at most 3,072
+    // and the `u16` holds it and every table below exactly.
     const n: u16 = toU16(quic.streams.slots.length)
     const bytes: u16 = toU16(toI32(n) * H3_HEAD)
     this.slotId = new Array<i64>(n)
@@ -1154,7 +1151,7 @@ export class Http3Connection {
     const size: i32 = toI32(again.length)
     const head: i32 = this.againHead
     const count: i32 = this.againCount
-    // The ring has a place per slot, at most `H3_MAX_SLOTS`; a full ring
+    // The ring has a place per slot, at most 3,072; a full ring
     // cannot happen, as a slot is on it at most once.
     if (
       k < 0 ||
@@ -1328,7 +1325,7 @@ export class Http3Connection {
    * that ended the read.
    */
   private readHeader(k: i32, id: i64): i32 {
-    // `k` is a slot of the table, at most `H3_MAX_SLOTS` long, so this never returns.
+    // `k` is a slot of the table, at most 3,072 long, so this never returns.
     const headLens: i32[] = this.headLen
     if (k < 0 || k >= toI32(headLens.length) || k >= 3072) {
       return H3_ZERO
@@ -1381,7 +1378,7 @@ export class Http3Connection {
     const phases: i32[] = this.phase
     const headLens: i32[] = this.headLen
     while (this.state !== H3_STATE_FAILED) {
-      // `step` found `k` in the table, at most `H3_MAX_SLOTS` long, and
+      // `step` found `k` in the table, at most 3,072 long, and
       // nothing resizes it, so this never returns.
       if (k < 0 || k >= toI32(phases.length) || k >= toI32(headLens.length) || k >= 3072) {
         return H3_NEED_MORE
@@ -1680,7 +1677,7 @@ export class Http3Connection {
    */
   private wtStep(k: i32, id: i64): i32 {
     const slots: QuicStream[] = this.quic.streams.slots
-    // `step` found `k` in the table, at most `H3_MAX_SLOTS` long, so this never returns.
+    // `step` found `k` in the table, at most 3,072 long, so this never returns.
     if (
       k < 0 ||
       k >= toI32(slots.length) ||
@@ -2575,7 +2572,7 @@ export class Http3Connection {
    * them. Answers whether none are owed now.
    */
   private drain(k: i32, id: i64): boolean {
-    // 3072 is H3_MAX_SLOTS and 16 H3_HEAD, spelled out so the prover bounds `base`.
+    // 3072 is the most slots and 16 H3_HEAD, spelled out so the prover bounds `base`.
     if (k < 0 || k >= 3072) {
       return false // never: every caller holds a slot of the table
     }
@@ -2619,7 +2616,7 @@ export class Http3Connection {
 
   /** Queues `buf[0 .. n)`, a frame header, as the bytes owed first on slot `k`. */
   private owe(k: i32, buf: u8[], n: i32): void {
-    // 3072 is H3_MAX_SLOTS and 16 H3_HEAD, spelled out so the prover bounds `base`.
+    // 3072 is the most slots and 16 H3_HEAD, spelled out so the prover bounds `base`.
     if (k < 0 || k >= 3072 || k >= toI32(this.pendAt.length) || k >= toI32(this.pendLen.length)) {
       return // never: every caller holds a slot of the table
     }
