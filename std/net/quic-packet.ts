@@ -599,7 +599,7 @@ export const quicPacketNumberLength = (fullPn: i64, largestAcked: i64): i32 => {
   // receiver's window is centred on what it expects, so the encoding has to
   // span twice that: `unacked <= 2^(8n - 1)` for n bytes.
   // Both are -1 to 2^62 - 1 and `fullPn` is the larger, so the difference
-  // is 1 to 2^62 and the `u64` subtraction, -1 included, is exact.
+  // is 1 to 2^62; for -1 the `u64` subtraction wraps to `fullPn + 1`, as wanted.
   const unacked: u64 = toU64(fullPn) - toU64(largestAcked)
   for (let n: i32 = 1; n <= 4; n += 1) {
     const half: u64 = toU64(1) << toU64(n * 8 - 1)
