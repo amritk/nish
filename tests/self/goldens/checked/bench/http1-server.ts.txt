@@ -37454,14 +37454,14 @@ function ed25519SetIdentity(out: Ed25519Point): void -> @nish.ed25519SetIdentity
   callee +3:3 f25519Copy -> @nish.f25519Copy
   callee +3:21 f25519Zero -> @nish.f25519Zero
 function ed25519Blend(dst: i64[], src: i64[], from: i32, mask: i64): void -> @nish.ed25519Blend
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: from
   pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -3:7 k: i32 (let)
-  local -2:7 j: i32 (let)
+  local -2:12 j: i32 (let)
 function ed25519Put(table: i64[], at: i32, src: i64[]): void -> @nish.ed25519Put
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
