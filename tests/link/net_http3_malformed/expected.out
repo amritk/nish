@@ -3,7 +3,8 @@ settings cut inside an identifier: 262
 goaway with a trailing byte: -1
 header cut inside its length: 0
 header of length 2^62 - 1: 9 bytes, length 4611686018427387903
-section with a dynamic reference: 512
+section requiring inserts never made: 512
+section with a dynamic reference: 512, reason 5
 section past the static table: 512
 section with a value past its end: 512
 insert into a zero-capacity table: 513

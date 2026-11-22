@@ -653,7 +653,8 @@ export class Http3Connection {
    * HEADERS frame of `maxFieldSectionSize` fit half a stream's buffer, and
    * one on every request stream fit half the connection's window, and let
    * the client open the three unidirectional streams it needs and this side
-   * open its own three (§6.2). A cap out of range panics.
+   * open its own three (§6.2). Each QUIC stream limit is at most 1,024. A cap
+   * out of range panics.
    *
    * @param config The caps; kept, not copied, so it must not change after this call.
    * @param quic The server QUIC connection to run on, kept for this connection's life. Its stream caps
@@ -668,17 +669,13 @@ export class Http3Connection {
     http3CheckCap("maxFieldSectionSize", config.maxFieldSectionSize, 1, buffer / 2 - H3_HEAD)
     // The connection's credit too: every request stream may hold a HEADERS
     // frame not yet whole, and QUIC raises MAX_DATA once half the window is read.
-    // A QUIC connection's table takes at most `QUIC_CONN_MAX_STREAMS` of each
-    // kind (`quicConnConfigFits`), so a table past that was not built by one.
+    // The window must hold `bidi` times `each`; dividing tests that with no product to overflow.
     const bidi: i64 = quic.streams.maxBidi
-    const count: i32 = toI32(quic.streams.slots.length)
-    if (bidi < 0 || bidi > 1024 || count > H3_MAX_SLOTS) {
-      panic(`Http3Connection: a QUIC stream table of ${count} slots, ${bidi} of them request streams`)
-    }
-    const held: i64 = bidi * toI64(2) * toI64(config.maxFieldSectionSize) + bidi * toI64(2) * toI64(H3_HEAD)
-    if (quic.streams.windowData < held) {
+    http3CheckCap("the QUIC bidirectional stream limit", toI32(bidi), 0, 1024)
+    const each: i64 = toI64(2) * toI64(config.maxFieldSectionSize) + toI64(2) * toI64(H3_HEAD)
+    if (bidi > 0 && quic.streams.windowData / bidi < each) {
       panic(
-        `Http3Connection: a connection window of ${quic.streams.windowData}, under the ${held} that ${bidi} request streams' field sections need`
+        `Http3Connection: a connection window of ${quic.streams.windowData}, under ${each} bytes for each of ${bidi} request streams' field sections`
       )
     }
     http3CheckCap("bodyChunk", config.bodyChunk, 1, H3_MAX_CHUNK)
@@ -747,8 +744,10 @@ export class Http3Connection {
       this.settingIds.push(H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS)
       this.settingValues.push(toI64(config.webtransportSessions))
     }
-    // At most `H3_MAX_SLOTS`, checked above, so the `u16` holds it and every table below exactly.
-    const n: u16 = toU16(count)
+    // `QuicStreams` builds one slot per stream its three limits allow, each
+    // checked above to be at most 1,024, so the table holds at most
+    // `H3_MAX_SLOTS` and the `u16` holds it and every table below exactly.
+    const n: u16 = toU16(quic.streams.slots.length)
     const bytes: u16 = toU16(toI32(n) * H3_HEAD)
     this.slotId = new Array<i64>(n)
     this.frameType = new Array<i64>(n)
@@ -1166,6 +1165,7 @@ export class Http3Connection {
       count < 0 ||
       count >= size
     ) {
+      this.fail(H3_INTERNAL_ERROR) // never, as above; a dropped re-step would strand the stream
       return
     }
     if ((this.flags[k] & H3_FLAG_AGAIN) !== 0) {
@@ -1173,12 +1173,14 @@ export class Http3Connection {
     }
     // Both below `size`, so their sum wraps onto the ring at most once.
     if (head >= 3072 || count >= 3072) {
-      return // never: `size` is at most 3072
+      this.fail(H3_INTERNAL_ERROR) // never: `size` is at most 3072
+      return
     }
     const end: i32 = head + count
     const at: i32 = end < size ? end : end - size
     if (at < 0 || at >= size) {
-      return // never: see above
+      this.fail(H3_INTERNAL_ERROR) // never: see above
+      return
     }
     again[at] = id
     this.againCount = count + 1
@@ -1544,7 +1546,7 @@ export class Http3Connection {
         // Never: a read takes at most the bytes asked for, `room` at most
         // `control`'s 1024 when it fills that, and nothing resizes the table.
         if (n > want || n > room || k >= toI32(this.frameLeft.length)) {
-          return H3_ERROR
+          return this.fail(H3_INTERNAL_ERROR)
         }
         this.frameLeft[k] = left - toI64(n)
         if (!skip && n <= 1024) {
@@ -1969,13 +1971,13 @@ export class Http3Connection {
   private requestStep(k: i32, id: i64): i32 {
     const slots: QuicStream[] = this.quic.streams.slots
     if (k < 0 || k >= toI32(slots.length)) {
-      return H3_ERROR // never: `step` found `k` in the table
+      return this.fail(H3_INTERNAL_ERROR) // never: `step` found `k` in the table
     }
     const stream: QuicStream = slots[k]
     while (this.state !== H3_STATE_FAILED) {
       // Never: the table is as long as `slotId`, and nothing resizes it.
       if (k >= toI32(this.phase.length) || k >= toI32(this.flags.length)) {
-        return H3_ERROR
+        return this.fail(H3_INTERNAL_ERROR)
       }
       const phase: i32 = this.phase[k]
       if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_SEND_DONE) === 0) {
@@ -2005,7 +2007,7 @@ export class Http3Connection {
         k >= toI32(this.frameLeft.length) ||
         k >= toI32(this.frameType.length)
       ) {
-        return H3_ERROR // never, as above
+        return this.fail(H3_INTERNAL_ERROR) // never, as above
       }
       if (this.webtransport && !this.settingsSeen && phase === H3_PHASE_HEADERS && this.headLen[k] === 0) {
         // draft-02 §3.1: with WebTransport on, a request waits for the client's SETTINGS, which say whether it may be a session.
@@ -2081,7 +2083,7 @@ export class Http3Connection {
         k >= toI32(this.contentLeft.length) ||
         k >= toI32(this.phase.length)
       ) {
-        return H3_ERROR
+        return this.fail(H3_INTERNAL_ERROR)
       }
       const rest: i64 = left - toI64(n)
       this.frameLeft[k] = rest
@@ -2121,7 +2123,7 @@ export class Http3Connection {
   private requestFrame(k: i32, id: i64): i32 {
     const slots: QuicStream[] = this.quic.streams.slots
     if (k < 0 || k >= toI32(slots.length)) {
-      return H3_ERROR // never: `requestStep` holds a slot of the table
+      return this.fail(H3_INTERNAL_ERROR) // never: `requestStep` holds a slot of the table
     }
     const resetCode: i64 = slots[k].resetCode
     const got: i32 = this.readHeader(k, id)
@@ -2136,7 +2138,7 @@ export class Http3Connection {
       k >= toI32(this.frameType.length) ||
       k >= toI32(this.frameLeft.length)
     ) {
-      return H3_ERROR
+      return this.fail(H3_INTERNAL_ERROR)
     }
     if (got < 0) {
       if (got === QUIC_STREAM_END && this.headLen[k] > 0) {
@@ -2211,7 +2213,7 @@ export class Http3Connection {
       return this.fail(H3_FRAME_UNEXPECTED)
     }
     if (k >= toI32(this.frameType.length) || k >= toI32(this.frameLeft.length)) {
-      return H3_ERROR // never, as above
+      return this.fail(H3_INTERNAL_ERROR) // never, as above
     }
     // §9: an unknown frame type is skipped, wherever it comes.
     this.frameType[k] = H3_SKIP_TYPE
@@ -2227,7 +2229,7 @@ export class Http3Connection {
   private fieldSection(k: i32, id: i64, length: i32): i32 {
     const result: i64 = this.decoder.decode(this.section, H3_ZERO, length)
     if (k < 0 || k >= toI32(this.phase.length)) {
-      return H3_ERROR // never: `requestStep` holds a slot of the table, which nothing resizes
+      return this.fail(H3_INTERNAL_ERROR) // never: `requestStep` holds a slot of the table, which nothing resizes
     }
     const first: boolean = this.phase[k] === H3_PHASE_HEADERS
     if (result === QPACK_SECTION_TOO_LARGE) {
@@ -2236,13 +2238,15 @@ export class Http3Connection {
     if (result !== QPACK_OK) {
       return this.fail(result)
     }
-    this.copyFields()
+    if (!this.copyFields()) {
+      return this.fail(H3_INTERNAL_ERROR) // never: see `copyOf`
+    }
     if (!first) {
       if (this.fields.readTrailers(this.nameList, this.valueList) !== HTTP_FIELDS_OK) {
         return this.streamError(k, id, H3_MESSAGE_ERROR)
       }
       if (k >= toI32(this.phase.length)) {
-        return H3_ERROR // never, as above
+        return this.fail(H3_INTERNAL_ERROR) // never, as above
       }
       this.phase[k] = H3_PHASE_TRAILED
       this.stream = id
@@ -2258,7 +2262,7 @@ export class Http3Connection {
       k >= toI32(this.phase.length) ||
       k >= toI32(this.flags.length)
     ) {
-      return H3_ERROR // never, as above
+      return this.fail(H3_INTERNAL_ERROR) // never, as above
     }
     this.contentLeft[k] = this.fields.contentLength
     this.phase[k] = H3_PHASE_BODY
@@ -2269,8 +2273,11 @@ export class Http3Connection {
     return H3_REQUEST
   }
 
-  /** Copies the decoder's fields into the connection's own arrays and the lists `fields` reads. */
-  private copyFields(): void {
+  /**
+   * Copies the decoder's fields into the connection's own arrays and the lists `fields` reads.
+   * False, both lists emptied, if a copy could not be made (never: see `copyOf`).
+   */
+  private copyFields(): boolean {
     const d: QpackDecoder = this.decoder
     http3EmptyList(this.nameList)
     http3EmptyList(this.valueList)
@@ -2287,9 +2294,16 @@ export class Http3Connection {
     ) {
       const valueStart: i32 = d.valueStart[i]
       const valueLength: i32 = d.valueLength[i]
-      this.copyOf(this.nameList, d, d.nameStart[i], d.nameLength[i])
-      this.copyOf(this.valueList, d, valueStart, valueLength)
+      if (
+        !this.copyOf(this.nameList, d, d.nameStart[i], d.nameLength[i]) ||
+        !this.copyOf(this.valueList, d, valueStart, valueLength)
+      ) {
+        http3EmptyList(this.nameList)
+        http3EmptyList(this.valueList)
+        return false
+      }
     }
+    return true
   }
 
   /**
@@ -2299,9 +2313,10 @@ export class Http3Connection {
    * half as long. A section takes the arrays of each class in order and the
    * next takes the same ones again, so a class grows only when one section
    * needs more of its size than any before it, and the total stays bounded by
-   * the field-section cap (`docs/security/http3.md`, H3-2).
+   * the field-section cap (`docs/security/http3.md`, H3-2). False, pushing nothing, where a
+   * guard below found the pools not as built (never).
    */
-  private copyOf(list: u8[][], d: QpackDecoder, start: i32, length: i32): void {
+  private copyOf(list: u8[][], d: QpackDecoder, start: i32, length: i32): boolean {
     let j: i32 = 0
     // 23 is H3_FIELD_CLASSES - 1, spelled out so the prover bounds `1 << j`.
     while (j < 23 && 1 << j <= length) {
@@ -2312,12 +2327,12 @@ export class Http3Connection {
     // Never: both hold H3_FIELD_CLASSES entries, and `used` counts the arrays of its class this
     // section took, at most one past the class's last.
     if (j < 0 || j > 23 || j >= toI32(pools.length) || j >= toI32(poolUsed.length)) {
-      return
+      return false
     }
     const pool: u8[][] = pools[j]
     const used: i32 = poolUsed[j]
     if (used < 0 || used > toI32(pool.length) || used >= 2147483646) {
-      return // never, as above
+      return false // never, as above
     }
     poolUsed[j] = used + 1
     if (used === toI32(pool.length)) {
@@ -2328,7 +2343,7 @@ export class Http3Connection {
       pool.push(new Array<u8>(toU16(room)))
     }
     if (used >= toI32(pool.length)) {
-      return // never: the push above made it
+      return false // never: the push above made it
     }
     const out: u8[] = pool[used]
     http3Empty(out)
@@ -2339,6 +2354,7 @@ export class Http3Connection {
       at = at + 1
     }
     list.push(out)
+    return true
   }
 
   /**

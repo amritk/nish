@@ -658,7 +658,8 @@ const qpackReadInteger = (d: QpackDecoder, src: u8[], max: i32): i64 => {
       return QPACK_INTEGER_TRUNCATED
     }
     rest = rest | (toI64(b & 127) << toI64(shift))
-    // A ninth group sets the sign bit, which is past the limit too.
+    // Never taken: the ninth group, at shift 56, ends at bit 62, so `rest` stays positive, and
+    // `spare` below refuses whatever passes the limit. The test tells the prover the sign.
     if (rest < 0) {
       return QPACK_INTEGER_OVERFLOW
     }
@@ -1259,12 +1260,13 @@ export class QpackEncoder {
         const shift: i32 = this.pendingShift
         const id: i64 = this.pendingId
         // `spare` is how far the ID may still grow before it passes `QPACK_MAX_INTEGER`; the
-        // ID read so far never does, so a negative one, like a ninth continuation, is refused.
+        // ID read so far never does, so a negative one is refused, and so is a tenth group.
         const spare: i64 = id < 0 ? -1 : QPACK_MAX_INTEGER - id
         if (shift > 56 || spare < 0) {
           return this.refuse(QPACK_REASON_INTEGER)
         }
-        // A group shifted into the sign bit is past the limit too.
+        // At most shift 56, a group ends at bit 62, so `grown` is never negative; the test
+        // tells the prover the sign.
         const grown: i64 = toI64(b & 127) << toI64(shift)
         const room: i64 = grown < 0 ? -1 : spare - grown
         if (room < 0) {

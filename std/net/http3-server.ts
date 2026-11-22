@@ -203,7 +203,7 @@ const H3_SERVER_BUSY: i32 = 1
 
 /**
  * The bucket of `time` on the wheel: 2048 is `H3_SERVER_WHEEL`, written out
- * so the divisor is a literal. Negative for a negative time not a multiple of it.
+ * so the prover knows the divisor. Negative for a negative time not a multiple of it.
  */
 const http3ServerBucket = (time: i64): i32 => toI32(time % toI64(2048))
 
@@ -245,7 +245,7 @@ const http3ServerZeroTimes = (count: i32): i64[] => {
  * @returns The wait, or -1 for an `offset` out of range.
  */
 const http3ServerWait = (from: i64, offset: i32, now: i64): i32 => {
-  if (offset < 0 || offset > 2047) {
+  if (offset < 0 || offset >= H3_SERVER_WHEEL) {
     // Never taken: `next` passes an offset below `H3_SERVER_WHEEL`.
     return -1
   }
@@ -604,14 +604,14 @@ export class Http3Wheel {
     const cursor: i64 = this.cursor
     let b: i32 = -1
     if (cursor < 0) {
-      // A cursor before the clock's zero: its horizon is below 2047, so the sum cannot overflow.
-      const horizon: i64 = cursor + toI64(2047)
+      // A cursor before the clock's zero: its horizon is below the wheel, so the sum cannot overflow.
+      const horizon: i64 = cursor + toI64(H3_SERVER_WHEEL - 1)
       b = http3ServerBucket(due > horizon ? horizon : due)
-    } else if (due - cursor > 2047) {
-      // Past the horizon, `cursor + 2047`, whose bucket is the one before the
+    } else if (due - cursor >= toI64(H3_SERVER_WHEEL)) {
+      // Past the horizon, `cursor + H3_SERVER_WHEEL - 1`, whose bucket is the one before the
       // cursor's; found from that bucket, since the sum can overflow.
       const at: i32 = http3ServerBucket(cursor)
-      b = at > 0 ? at - 1 : 2047
+      b = at > 0 ? at - 1 : H3_SERVER_WHEEL - 1
     } else {
       b = http3ServerBucket(due < cursor ? cursor : due)
     }
@@ -669,7 +669,8 @@ export class Http3Wheel {
       // Below 0 only for a time before the clock's zero, which has no bucket; never above 2047.
       return -1
     }
-    // The milliseconds past `from` searched, to `H3_SERVER_WHEEL`.
+    // The milliseconds past `from` searched, to `H3_SERVER_WHEEL`. 2048 and 2047 are it and its
+    // mask, written out so the prover bounds the sums below.
     let offset: i32 = 0
     while (offset < 2048) {
       if (from < 0 && offset > 0) {
@@ -865,7 +866,7 @@ export class Http3Server {
     const bidi: i64 = quicConfig.maxStreamsBidi
     const uni: i64 = quicConfig.maxStreamsUni
     const local: i64 = quicConfig.localStreams
-    // `QUIC_CONN_MAX_STREAMS`, written out so each count's bound is known to the sum below.
+    // `QUIC_CONN_MAX_STREAMS`, written out so the prover knows each count's bound in the sum below.
     const most: i64 = 1024
     if (
       streamData >= 1 &&
@@ -1199,20 +1200,25 @@ export class Http3Server {
     // A slot released before is taken first, then the next never used, so the
     // first accepts take slots 0, 1, 2 ... and a pool that never fills never
     // builds its last slots.
+    // The slot is chosen, checked, and only then taken, so a check that fails leaves it where it was.
     let slot: i32 = 0
     const free: i32[] = this.free
     const freed: i32 = this.freeCount
     const used: i32 = this.used
+    // `freeCount` and `used` once the slot is taken.
+    let freeAfter: i32 = freed
+    let usedAfter: i32 = used
     if (freed > 0) {
       // Never taken: `release` pushes at most one entry per slot onto `free`, `size` long.
       if (freed > toI32(free.length)) {
         return
       }
-      this.freeCount = freed - 1
       slot = free[freed - 1]
+      freeAfter = freed - 1
     } else if (used < this.slots) {
+      // Builds the slot if it is not yet; building it again on a later call is a no-op.
       slot = this.slotAt(used)
-      this.used = used + 1
+      usedAfter = used + 1
     } else {
       return
     }
@@ -1234,6 +1240,8 @@ export class Http3Server {
     ) {
       return
     }
+    this.freeCount = freeAfter
+    this.used = usedAfter
     const quic: QuicConnection = quics[slot]
     const conn: Http3Connection = conns[slot]
     const to: u8[] = addresses[slot]
@@ -1320,11 +1328,11 @@ export class Http3Server {
     } else if (now >= 0) {
       // Always taken: `now` is at least `refilled`, which is not negative here.
       const elapsed: i64 = now - refilled
-      // 100 is `H3_SERVER_ANSWER_INTERVAL`, written out so the divisor is a literal.
-      const earned: i64 = elapsed / toI64(100)
-      // The second term never decides: an interval earned is 100 elapsed.
+      const earned: i64 = elapsed / H3_SERVER_ANSWER_INTERVAL
+      // The second term never decides: an interval earned is `H3_SERVER_ANSWER_INTERVAL` elapsed.
       if (earned > 0 && elapsed > 0) {
-        // The budget is 0 to `H3_SERVER_ANSWER_BURST`, 16, so 16 intervals or more always fill it.
+        // The budget is 0 to `H3_SERVER_ANSWER_BURST`, 16, so 16 intervals or more always fill it;
+        // written out so the prover bounds the sum below.
         const gain: i32 = earned < 16 ? toI32(earned) : 16
         if (gain < 16 && gain >= 0 && budget >= 0 && budget < 16) {
           const sum: i32 = budget + gain
@@ -1334,10 +1342,10 @@ export class Http3Server {
         }
         // `refilled + earned * H3_SERVER_ANSWER_INTERVAL`: the part of an interval left over counts
         // toward the next answer.
-        const rest: i32 = toI32(elapsed % 100)
-        // Always taken: `elapsed` is positive, so its remainder is 0 to 99.
-        if (rest >= 0 && rest < 100) {
-          refilled = now - toI64(rest)
+        const rest: i64 = elapsed % H3_SERVER_ANSWER_INTERVAL
+        // Always taken: `elapsed` is positive, so its remainder is under the interval.
+        if (rest >= 0 && rest < H3_SERVER_ANSWER_INTERVAL) {
+          refilled = now - rest
         }
       }
     }
@@ -1711,7 +1719,8 @@ export class Http3Server {
     }
     // Late by more than a turn: every bucket is run once, from a turn ago, so a
     // slot filed again lands after `now` and not behind the cursor. 2048 is
-    // `H3_SERVER_WHEEL`, compared on each side of zero so no difference overflows.
+    // `H3_SERVER_WHEEL`, written out so the prover bounds the sums, and compared
+    // on each side of zero so no difference overflows.
     if (now >= 0) {
       if (now - 2048 >= cursor) {
         cursor = now - 2047

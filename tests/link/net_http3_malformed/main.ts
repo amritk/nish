@@ -2,7 +2,8 @@
 // the protocol closes the connection with, never a panic (WP82 S6). Each input
 // below once reached an index, slice or overflow site in
 // `std/net/http3-frame.ts` or `std/net/qpack.ts`; now every one is answered
-// as a value and the program exits 0. (`--deny-panics` would still refuse the
+// as a value (a protocol code, -1 for a GOAWAY payload, 0 for a header not
+// yet whole, or the header's size) and the program exits 0. (`--deny-panics` would still refuse the
 // calls: they reach the kept panic on a window outside its buffer.)
 import {
   Http3FrameHeader,
@@ -48,11 +49,18 @@ const huge: u8[] = bytes([0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
 const size: i32 = h3ReadFrameHeader(h, huge, 0, toI32(huge.length))
 console.log(`header of length 2^62 - 1: ${size} bytes, length ${h.length}`)
 
-// A field section naming a dynamic entry the empty table does not hold:
-// QPACK_DECOMPRESSION_FAILED (0x200, 512).
-const dynamic: u8[] = bytes([0x02, 0x00, 0x80])
-const first: i64 = new QpackDecoder(4096).decode(dynamic, 0, toI32(dynamic.length))
-console.log(`section with a dynamic reference: ${first}`)
+// A field section whose Required Insert Count the empty table cannot reach:
+// QPACK_DECOMPRESSION_FAILED (0x200, 512), refused on its prefix.
+const required: u8[] = bytes([0x02, 0x00, 0x80])
+const first: i64 = new QpackDecoder(4096).decode(required, 0, toI32(required.length))
+console.log(`section requiring inserts never made: ${first}`)
+
+// A field section of Required Insert Count 0 naming a dynamic entry:
+// QPACK_DECOMPRESSION_FAILED, for QPACK_REASON_DYNAMIC (5).
+const dynamicDecoder: QpackDecoder = new QpackDecoder(4096)
+const dynamic: u8[] = bytes([0x00, 0x00, 0x80])
+const refused: i64 = dynamicDecoder.decode(dynamic, 0, toI32(dynamic.length))
+console.log(`section with a dynamic reference: ${refused}, reason ${dynamicDecoder.reason}`)
 
 // An indexed field line past the static table's last entry (98).
 const pastStatic: u8[] = bytes([0x00, 0x00, 0xff, 0x25])
