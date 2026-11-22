@@ -666,8 +666,10 @@ const dnsResolvLine = (b: u8[], from: i32, to: i32, config: DnsConfig): void => 
 /**
  * Reads the resolv.conf `b[off, off + len)` into `config`, which starts over
  * from the defaults, and gives it 127.0.0.1 and ::1 on port 53 when no
- * nameserver line held an address. It allocates nothing, and nothing in the
- * bytes makes it panic or fail: what it cannot use is ignored or counted.
+ * nameserver line held an address. It allocates nothing, unless that
+ * fallback finds `config.servers` replaced with an array too short for two
+ * addresses, when it gives `config` a new full table. Nothing in the bytes
+ * makes it panic or fail: what it cannot use is ignored or counted.
  *
  * @param b The file's bytes, read by the caller.
  * @param off Where the file starts in `b`.
