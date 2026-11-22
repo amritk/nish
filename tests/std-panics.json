@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9401,
+  "total": 9428,
   "explicit": {
-    "kept": 344,
-    "toFix": 138
+    "kept": 352,
+    "toFix": 137
   },
   "modules": {
     "std/base64.ts": {
@@ -221,30 +221,18 @@
       "panic": 6
     },
     "std/net/dns-config.ts": {
-      "array-length": 2,
-      "index": 36,
-      "overflow": 65,
-      "panic": 14
+      "panic": 21
     },
     "std/net/dns-message.ts": {
-      "array-length": 1,
-      "index": 26,
-      "overflow": 49,
       "panic": 4
     },
     "std/net/dns-resolver.ts": {
-      "array-length": 23,
-      "divide": 2,
-      "index": 139,
-      "overflow": 57,
+      "overflow": 1,
       "panic": 11
     },
     "std/net/dns.ts": {
-      "array-length": 4,
-      "index": 27,
       "io-exit": 1,
-      "overflow": 16,
-      "panic": 3,
+      "panic": 4,
       "slice": 4
     },
     "std/net/fetch.ts": {
@@ -982,11 +970,6 @@
     },
     {
       "module": "std/net/dns-config.ts",
-      "function": "dnsLineEnd",
-      "reason": "the window must lie inside b; the caller derives it from the file length, not from file content"
-    },
-    {
-      "module": "std/net/dns-config.ts",
       "function": "dnsOption",
       "reason": "the window must lie inside b; option values are clamped rather than rejected, so file content cannot panic it"
     },
@@ -1004,11 +987,6 @@
       "module": "std/net/dns-config.ts",
       "function": "dnsParseIpv6",
       "reason": "the window must lie inside b; a malformed address in the text returns false, only a bad window panics"
-    },
-    {
-      "module": "std/net/dns-config.ts",
-      "function": "dnsWordEnd",
-      "reason": "the window must lie inside b; the caller derives it from the file length, not from file content"
     },
     {
       "module": "std/net/dns-message.ts",

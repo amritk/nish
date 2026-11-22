@@ -312,7 +312,7 @@ class DnsClient
 
 | Member | |
 | --- | --- |
-| `new DnsClient(resolver: DnsResolver, loop: i32, tokenBase: i32)` | A client for `resolver` whose sockets join the loop `loop` under tokens from `tokenBase`. Every buffer the client uses is made here, one TCP output buffer per query among them. Panics when `tokenBase` is negative. |
+| `new DnsClient(resolver: DnsResolver, loop: i32, tokenBase: i32)` | A client for `resolver` whose sockets join the loop `loop` under tokens from `tokenBase`. Every buffer the client uses is made here, one TCP output buffer per query among them. Panics when `tokenBase` is negative, or when `resolver.maxLookups` was written outside 1 to `DNS_RESOLVER_MAX_LOOKUPS`. |
 | `resolver: DnsResolver` | The core; `start`, `result` and `cancel` go through the client so its sockets follow. |
 | `socketFailures: i32` | Sockets that could not be opened, written or connected, each a failed try. |
 | `socketsOpened: i32` | Sockets opened, UDP and TCP, one per try. |
