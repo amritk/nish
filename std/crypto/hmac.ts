@@ -697,7 +697,11 @@ export class HmacSha256Scratch {
     secureZero(innerDigest)
     const tag: u8[] = this.outer.digest()
     let p: i32 = at
-    for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(tag.length) && p >= 0 && p < toI32(out.length); i += 1) {
+    for (
+      let i: i32 = 0;
+      i < SHA256_SIZE && i < toI32(tag.length) && p >= 0 && p < toI32(out.length);
+      i += 1
+    ) {
       out[p] = tag[i]
       p += 1
     }
@@ -814,7 +818,11 @@ export class HmacSha384Scratch {
     secureZero(innerDigest)
     const tag: u8[] = this.outer.digest()
     let p: i32 = at
-    for (let i: i32 = 0; i < SHA384_SIZE && i < toI32(tag.length) && p >= 0 && p < toI32(out.length); i += 1) {
+    for (
+      let i: i32 = 0;
+      i < SHA384_SIZE && i < toI32(tag.length) && p >= 0 && p < toI32(out.length);
+      i += 1
+    ) {
       out[p] = tag[i]
       p += 1
     }
@@ -914,7 +922,11 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
       }
     }
     // T_i fills the next 32 bytes of DK, or what is left of it.
-    for (let j: i32 = 0; j < SHA256_SIZE && j < toI32(t.length) && done >= 0 && done < toI32(dk.length); j += 1) {
+    for (
+      let j: i32 = 0;
+      j < SHA256_SIZE && j < toI32(t.length) && done >= 0 && done < toI32(dk.length);
+      j += 1
+    ) {
       dk[done] = t[j]
       done += 1
     }
@@ -1031,7 +1043,11 @@ const hmacMidstates = (key: u8[], hash: i32): u64[] => {
     const to: u32[] = outer.state
     const size: i32 = toI32(out.length)
     let j: i32 = HMAC_WORDS
-    for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(from.length) && i < toI32(to.length) && i < size && j >= 0 && j < size; i += 1) {
+    for (
+      let i: i32 = 0;
+      i < HMAC_WORDS && i < toI32(from.length) && i < toI32(to.length) && i < size && j >= 0 && j < size;
+      i += 1
+    ) {
       out[i] = toU64(from[i])
       out[j] = toU64(to[i])
       j += 1
@@ -1060,7 +1076,11 @@ const hmacMidstates = (key: u8[], hash: i32): u64[] => {
 const hmacMidstates512 = (out: u64[], inner: u64[], outer: u64[]): void => {
   const size: i32 = toI32(out.length)
   let j: i32 = HMAC_WORDS
-  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(inner.length) && i < toI32(outer.length) && i < size && j >= 0 && j < size; i += 1) {
+  for (
+    let i: i32 = 0;
+    i < HMAC_WORDS && i < toI32(inner.length) && i < toI32(outer.length) && i < size && j >= 0 && j < size;
+    i += 1
+  ) {
     out[i] = inner[i]
     out[j] = outer[i]
     j += 1

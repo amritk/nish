@@ -106,22 +106,86 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
   if (toI32(h.length) >= 8 && toI32(w.length) >= 64 && at >= 0 && at <= 2147483583) {
     const base: integer<0, 2147483583> = at
     if (base < n - 63) {
-      w[0] = toU32(src[base + 3]) | (toU32(src[base + 2]) << 8) | (toU32(src[base + 1]) << 16) | (toU32(src[base]) << 24)
-      w[1] = toU32(src[base + 7]) | (toU32(src[base + 6]) << 8) | (toU32(src[base + 5]) << 16) | (toU32(src[base + 4]) << 24)
-      w[2] = toU32(src[base + 11]) | (toU32(src[base + 10]) << 8) | (toU32(src[base + 9]) << 16) | (toU32(src[base + 8]) << 24)
-      w[3] = toU32(src[base + 15]) | (toU32(src[base + 14]) << 8) | (toU32(src[base + 13]) << 16) | (toU32(src[base + 12]) << 24)
-      w[4] = toU32(src[base + 19]) | (toU32(src[base + 18]) << 8) | (toU32(src[base + 17]) << 16) | (toU32(src[base + 16]) << 24)
-      w[5] = toU32(src[base + 23]) | (toU32(src[base + 22]) << 8) | (toU32(src[base + 21]) << 16) | (toU32(src[base + 20]) << 24)
-      w[6] = toU32(src[base + 27]) | (toU32(src[base + 26]) << 8) | (toU32(src[base + 25]) << 16) | (toU32(src[base + 24]) << 24)
-      w[7] = toU32(src[base + 31]) | (toU32(src[base + 30]) << 8) | (toU32(src[base + 29]) << 16) | (toU32(src[base + 28]) << 24)
-      w[8] = toU32(src[base + 35]) | (toU32(src[base + 34]) << 8) | (toU32(src[base + 33]) << 16) | (toU32(src[base + 32]) << 24)
-      w[9] = toU32(src[base + 39]) | (toU32(src[base + 38]) << 8) | (toU32(src[base + 37]) << 16) | (toU32(src[base + 36]) << 24)
-      w[10] = toU32(src[base + 43]) | (toU32(src[base + 42]) << 8) | (toU32(src[base + 41]) << 16) | (toU32(src[base + 40]) << 24)
-      w[11] = toU32(src[base + 47]) | (toU32(src[base + 46]) << 8) | (toU32(src[base + 45]) << 16) | (toU32(src[base + 44]) << 24)
-      w[12] = toU32(src[base + 51]) | (toU32(src[base + 50]) << 8) | (toU32(src[base + 49]) << 16) | (toU32(src[base + 48]) << 24)
-      w[13] = toU32(src[base + 55]) | (toU32(src[base + 54]) << 8) | (toU32(src[base + 53]) << 16) | (toU32(src[base + 52]) << 24)
-      w[14] = toU32(src[base + 59]) | (toU32(src[base + 58]) << 8) | (toU32(src[base + 57]) << 16) | (toU32(src[base + 56]) << 24)
-      w[15] = toU32(src[base + 63]) | (toU32(src[base + 62]) << 8) | (toU32(src[base + 61]) << 16) | (toU32(src[base + 60]) << 24)
+      w[0] =
+        toU32(src[base + 3]) |
+        (toU32(src[base + 2]) << 8) |
+        (toU32(src[base + 1]) << 16) |
+        (toU32(src[base]) << 24)
+      w[1] =
+        toU32(src[base + 7]) |
+        (toU32(src[base + 6]) << 8) |
+        (toU32(src[base + 5]) << 16) |
+        (toU32(src[base + 4]) << 24)
+      w[2] =
+        toU32(src[base + 11]) |
+        (toU32(src[base + 10]) << 8) |
+        (toU32(src[base + 9]) << 16) |
+        (toU32(src[base + 8]) << 24)
+      w[3] =
+        toU32(src[base + 15]) |
+        (toU32(src[base + 14]) << 8) |
+        (toU32(src[base + 13]) << 16) |
+        (toU32(src[base + 12]) << 24)
+      w[4] =
+        toU32(src[base + 19]) |
+        (toU32(src[base + 18]) << 8) |
+        (toU32(src[base + 17]) << 16) |
+        (toU32(src[base + 16]) << 24)
+      w[5] =
+        toU32(src[base + 23]) |
+        (toU32(src[base + 22]) << 8) |
+        (toU32(src[base + 21]) << 16) |
+        (toU32(src[base + 20]) << 24)
+      w[6] =
+        toU32(src[base + 27]) |
+        (toU32(src[base + 26]) << 8) |
+        (toU32(src[base + 25]) << 16) |
+        (toU32(src[base + 24]) << 24)
+      w[7] =
+        toU32(src[base + 31]) |
+        (toU32(src[base + 30]) << 8) |
+        (toU32(src[base + 29]) << 16) |
+        (toU32(src[base + 28]) << 24)
+      w[8] =
+        toU32(src[base + 35]) |
+        (toU32(src[base + 34]) << 8) |
+        (toU32(src[base + 33]) << 16) |
+        (toU32(src[base + 32]) << 24)
+      w[9] =
+        toU32(src[base + 39]) |
+        (toU32(src[base + 38]) << 8) |
+        (toU32(src[base + 37]) << 16) |
+        (toU32(src[base + 36]) << 24)
+      w[10] =
+        toU32(src[base + 43]) |
+        (toU32(src[base + 42]) << 8) |
+        (toU32(src[base + 41]) << 16) |
+        (toU32(src[base + 40]) << 24)
+      w[11] =
+        toU32(src[base + 47]) |
+        (toU32(src[base + 46]) << 8) |
+        (toU32(src[base + 45]) << 16) |
+        (toU32(src[base + 44]) << 24)
+      w[12] =
+        toU32(src[base + 51]) |
+        (toU32(src[base + 50]) << 8) |
+        (toU32(src[base + 49]) << 16) |
+        (toU32(src[base + 48]) << 24)
+      w[13] =
+        toU32(src[base + 55]) |
+        (toU32(src[base + 54]) << 8) |
+        (toU32(src[base + 53]) << 16) |
+        (toU32(src[base + 52]) << 24)
+      w[14] =
+        toU32(src[base + 59]) |
+        (toU32(src[base + 58]) << 8) |
+        (toU32(src[base + 57]) << 16) |
+        (toU32(src[base + 56]) << 24)
+      w[15] =
+        toU32(src[base + 63]) |
+        (toU32(src[base + 62]) << 8) |
+        (toU32(src[base + 61]) << 16) |
+        (toU32(src[base + 60]) << 24)
       // Step 2: the working variables start from the previous hash value.
       let a: u32 = h[0]
       let b: u32 = h[1]

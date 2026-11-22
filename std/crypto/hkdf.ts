@@ -863,7 +863,11 @@ export const hkdfExpandLabelInto = (
   }
   p = hkdfPut(info, p, toU8(contextLen))
   let q: i32 = contextOff
-  for (let k: i32 = 0; k < contextLen && q >= 0 && q < toI32(context.length) && p >= 0 && p < infoLength; k += 1) {
+  for (
+    let k: i32 = 0;
+    k < contextLen && q >= 0 && q < toI32(context.length) && p >= 0 && p < infoLength;
+    k += 1
+  ) {
     info[p] = context[q]
     p += 1
     q += 1
