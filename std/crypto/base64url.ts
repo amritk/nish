@@ -108,17 +108,6 @@ const base64Put = (out: u8[], at: i32, byte: u8): i32 => {
 }
 
 /**
- * The sextet of `text`'s character at `k`, as `base64urlSextetOf` reads it,
- * or -1 past the text's end. Every caller reads inside the text; the test is
- * the shape that proves the read, and depends on the position alone. `k` is a
- * `u32` so that a caller's `k + 3` wraps rather than overflows.
- */
-const base64urlSextetAt = (text: string, k: u32): i32 => {
-  const i: i32 = toI32(k)
-  return i >= 0 && i < toI32(text.length) ? base64urlSextetOf(toI32(text.charCodeAt(i))) : -1
-}
-
-/**
  * `data` as unpadded base64url: four characters per three bytes, and two or
  * three for a short final group.
  *
@@ -198,13 +187,24 @@ export const base64urlDecode = (text: string): u8[] | null => {
   // Four characters make one 24-bit word and three bytes, so a full group has
   // no count of waiting bits to test, and its four sextets are independent.
   // `full` is where the short final group starts, `n` less its tail.
+  //
+  // Each read is written out here rather than in a helper: a function that
+  // hands its `string` parameter to another is taken to keep it, and then a
+  // caller decoding a string it built inside `using a = arena()` is refused.
+  // The test on each position is the shape that proves the read, and depends
+  // on the position alone; positions are `u32`s so that `k + 3` wraps rather
+  // than overflows.
   const full: u32 = toU32(n & ~3)
   let j: i32 = 0
   for (let k: u32 = 0; k < full; k += 4) {
-    const s0: i32 = base64urlSextetAt(text, k)
-    const s1: i32 = base64urlSextetAt(text, k + 1)
-    const s2: i32 = base64urlSextetAt(text, k + 2)
-    const s3: i32 = base64urlSextetAt(text, k + 3)
+    const i0: i32 = toI32(k)
+    const i1: i32 = toI32(k + 1)
+    const i2: i32 = toI32(k + 2)
+    const i3: i32 = toI32(k + 3)
+    const s0: i32 = i0 >= 0 && i0 < n ? base64urlSextetOf(toI32(text.charCodeAt(i0))) : -1
+    const s1: i32 = i1 >= 0 && i1 < n ? base64urlSextetOf(toI32(text.charCodeAt(i1))) : -1
+    const s2: i32 = i2 >= 0 && i2 < n ? base64urlSextetOf(toI32(text.charCodeAt(i2))) : -1
+    const s3: i32 = i3 >= 0 && i3 < n ? base64urlSextetOf(toI32(text.charCodeAt(i3))) : -1
     bad = bad | ((s0 | s1 | s2 | s3) >> 31)
     const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6) | (s3 & 63)
     j = base64Put(out, j, toU8(word >> 16))
@@ -215,11 +215,14 @@ export const base64urlDecode = (text: string): u8[] | null => {
   // four or two bits left over belong to no byte, so they must be zero for `AA`
   // to be the only spelling of a zero byte and `AB` refused (RFC 4648 §3.5).
   if (tail !== 0) {
-    const s0: i32 = base64urlSextetAt(text, full)
-    const s1: i32 = base64urlSextetAt(text, full + 1)
+    const i0: i32 = toI32(full)
+    const i1: i32 = toI32(full + 1)
+    const i2: i32 = toI32(full + 2)
+    const s0: i32 = i0 >= 0 && i0 < n ? base64urlSextetOf(toI32(text.charCodeAt(i0))) : -1
+    const s1: i32 = i1 >= 0 && i1 < n ? base64urlSextetOf(toI32(text.charCodeAt(i1))) : -1
     // A third character only when the tail has one; a two-character tail reads
     // its place as `A`, the zero sextet, which adds no bits.
-    const s2: i32 = tail === 3 ? base64urlSextetAt(text, full + 2) : 0
+    const s2: i32 = tail === 3 && i2 >= 0 && i2 < n ? base64urlSextetOf(toI32(text.charCodeAt(i2))) : 0
     bad = bad | ((s0 | s1 | s2) >> 31)
     const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6)
     j = base64Put(out, j, toU8(word >> 16))
