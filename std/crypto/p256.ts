@@ -4128,9 +4128,6 @@ const p256SignExposed = (priv: u8[], digest: u8[]): u8[] | null => {
   return p256SignScalar(priv, z)
 }
 
-/** The width of `p256Verify`'s window: its digits are odd, in [-15, 15]. */
-const P256_WNAF_WIDTH: i32 = 5
-
 /** The bits of a scalar `p256Wnaf` reads; its form has one more digit, for the last carry. */
 const P256_WNAF_BITS: i32 = 256
 
@@ -4149,8 +4146,8 @@ const p256Wnaf = (out: i32[], k: u8[]): void => {
   if (toI32(out.length) <= P256_WNAF_BITS || toI32(k.length) < 32) {
     return
   }
-  // 256 and 5 are P256_WNAF_BITS and P256_WNAF_WIDTH, written out so the
-  // prover sees the bounds of `bit`, `now` and `word`.
+  // 256 is P256_WNAF_BITS and 5 the window's width (its digits are odd, in
+  // [-15, 15]), written out so the prover sees the bounds of `bit`, `now` and `word`.
   let carry: i32 = 0
   let bit: i32 = 0
   while (bit >= 0 && bit < 256) {

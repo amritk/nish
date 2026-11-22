@@ -5699,8 +5699,8 @@ const p384FieldInvert = (out: u32[], a: u32[]): void => {
 const p384ScalarInvert = (out: u32[], a: u32[]): void => {
   // n - 2: `p384Order` with its low limb lowered by 2.
   const e: u32[] = [
-    0xccc52971, 0xecec196a, 0x48b0a77a, 0x581a0db2, 0xf4372ddf, 0xc7634d81, 0xffffffff, 0xffffffff, 0xffffffff,
-    0xffffffff, 0xffffffff, 0xffffffff,
+    0xccc52971, 0xecec196a, 0x48b0a77a, 0x581a0db2, 0xf4372ddf, 0xc7634d81, 0xffffffff, 0xffffffff,
+    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
   ]
   const acc: u32[] = p384Limbs()
   p384FiatScalarSetOne(acc)

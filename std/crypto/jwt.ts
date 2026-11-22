@@ -1526,7 +1526,12 @@ export class JwtVerifier {
       return JWT_ERR_SIGNATURE
     }
     const claims: u8[] = this.claims
-    const claimsLen: i32 = jwtDecode(src, toI32(toI64(d1) + toI64(1)), toI32(toI64(d2) - toI64(d1) - toI64(1)), claims)
+    const claimsLen: i32 = jwtDecode(
+      src,
+      toI32(toI64(d1) + toI64(1)),
+      toI32(toI64(d2) - toI64(d1) - toI64(1)),
+      claims
+    )
     if (claimsLen < 0) {
       return JWT_ERR_FORMAT
     }

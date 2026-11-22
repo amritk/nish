@@ -211,7 +211,7 @@ const rsaBitLength = (v: u8[]): i32 => {
   const top: i32 = toI32(v[0])
   let topBits: i32 = 0
   for (let b: i32 = 0; b < 8; b++) {
-    if ((top >> b) !== 0) {
+    if (top >> b !== 0) {
       topBits = b + 1
     }
   }
