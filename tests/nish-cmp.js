@@ -18491,7 +18491,7 @@ const DECLARED = [
     "tests/link/net_quic_frame/main.ts",
     "tests/link/net_quic_frame_f64/main.ts",
     "tests/link/net_quic_packet/main.ts",
-    "tests/link/net_quic_packet_f64/main.ts"
+    "tests/link/net_quic_packet_f64/main.ts",
   ].map((program) => ({
     program,
     file: "checks.ll",
@@ -18504,26 +18504,22 @@ const DECLARED = [
     "tests/link/net_quic_frame/main.ts",
     "tests/link/net_quic_frame_f64/main.ts",
     "tests/link/net_quic_packet/main.ts",
-    "tests/link/net_quic_packet_f64/main.ts"
+    "tests/link/net_quic_packet_f64/main.ts",
   ].map((program) => ({
     program,
     file: "inplace.ll",
     changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
-  ...[
-    "tests/link/net_quic_conn_parts/main.ts",
-    "tests/link/net_quic_conn_parts_f64/main.ts"
-  ].map((program) => ({
-    program,
-    file: "net_quic_frame_checks.ll",
-    changelog: "the std/net QUIC wire layer panic-free",
-    why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
-  })),
-  ...[
-    "tests/link/net_quic_ecn/main.ts",
-    "tests/link/net_quic_ecn_f64/main.ts"
-  ].map((program) => ({
+  ...["tests/link/net_quic_conn_parts/main.ts", "tests/link/net_quic_conn_parts_f64/main.ts"].map(
+    (program) => ({
+      program,
+      file: "net_quic_frame_checks.ll",
+      changelog: "the std/net QUIC wire layer panic-free",
+      why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
+    })
+  ),
+  ...["tests/link/net_quic_ecn/main.ts", "tests/link/net_quic_ecn_f64/main.ts"].map((program) => ({
     program,
     file: "quic-conn-ack.ll",
     changelog: "the std/net QUIC wire layer panic-free",
@@ -18572,17 +18568,14 @@ const DECLARED = [
     "tests/link/net_quic_recovery_f64/main.ts",
     "tests/link/net_quic_worker/main.ts",
     "tests/link/net_webtransport_bad_idle/main.ts",
-    "tests/link/net_webtransport_bad_rate/main.ts"
+    "tests/link/net_webtransport_bad_rate/main.ts",
   ].map((program) => ({
     program,
     file: "quic-datagram.ll",
     changelog: "the std/net QUIC wire layer panic-free",
     why: "the module itself: its queue and frame helpers now guard every index and size, so their bodies, and the attributes of the functions that can no longer panic, change (WP82 S4)",
   })),
-  ...[
-    "tests/link/net_quic_ecn/main.ts",
-    "tests/link/net_quic_ecn_f64/main.ts"
-  ].map((program) => ({
+  ...["tests/link/net_quic_ecn/main.ts", "tests/link/net_quic_ecn_f64/main.ts"].map((program) => ({
     program,
     file: "quic-frame.ll",
     changelog: "the std/net QUIC wire layer panic-free",
@@ -18623,17 +18616,14 @@ const DECLARED = [
     "tests/link/net_http_server_wait_tls/main.ts",
     "tests/link/net_http_server_write_long/main.ts",
     "tests/link/net_http_server_write_unstarted/main.ts",
-    "tests/link/net_http_server_write_window/main.ts"
+    "tests/link/net_http_server_write_window/main.ts",
   ].map((program) => ({
     program,
     file: "quic-stream.ll",
     changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the `quic-frame.ts` writers move, because those writers no longer panic (WP82 S4)",
   })),
-  ...[
-    "tests/link/net_quic_packet/main.ts",
-    "tests/link/net_quic_packet_f64/main.ts"
-  ].map((program) => ({
+  ...["tests/link/net_quic_packet/main.ts", "tests/link/net_quic_packet_f64/main.ts"].map((program) => ({
     program,
     file: "refusals.ll",
     changelog: "the std/net QUIC wire layer panic-free",
