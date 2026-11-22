@@ -120,39 +120,30 @@ const pkiRootsSkip = (load: PkiRootsLoad): void => {
  * so it is released when this returns rather than kept by the caller's loop.
  */
 const pkiRootsLineKind = (text: string, from: i32, to: i32): i32 => {
-  const line: string = pkiRootsPart(text, from, to)
+  const line: string = text.substring(from, to)
   if (line.startsWith("-----BEGIN ") && line.endsWith("-----") && line.length > 16) {
     return 1
   }
   return line.startsWith("-----END ") ? 2 : 0
 }
 
-/**
- * `text.substring(from, to)` where the range is checked to lie in `text`, so
- * the bounds proof holds without JavaScript's clamp; `""` outside it, which
- * no caller reaches (each passes `0 <= from <= to <= text.length`).
- */
-const pkiRootsPart = (text: string, from: i32, to: i32): string =>
-  from >= 0 && from <= to && to <= toI32(text.length) ? text.substring(from, to) : ""
-
-/** The lower-case hex digit of `v`, 0 to 15. */
-const pkiRootsHexChar = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
+/** The lower-case hex digit of `v`, 0 to 15, as a one-character string. */
+const pkiRootsHexDigit = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
 
 /**
- * `bytes[lo .. hi)` in lower-case hex, joined in halves so the copying stays
- * `n log n`; `""` for an empty or outside range. The key a DER is kept once by.
+ * `bytes` in lower-case hex, the key a DER is kept once by. Linear: a for-of reads each octet,
+ * with no index left to prove, and pushes its two one-character digits, and
+ * one `join` copies the `2n` digits out, so `n` octets cost about `2n`
+ * allocations and `O(n)` time. Not `String.fromBytes`, whose range check no
+ * proof removes yet.
  */
-const pkiRootsHex = (bytes: u8[], lo: i32, hi: i32): string => {
-  if (lo < 0 || lo >= toI32(bytes.length) || hi > toI32(bytes.length) || lo >= hi) {
-    return ""
+const pkiRootsHex = (bytes: u8[]): string => {
+  const out: string[] = []
+  for (const b of bytes) {
+    out.push(pkiRootsHexDigit(toI32(b) >> 4))
+    out.push(pkiRootsHexDigit(toI32(b) & 15))
   }
-  if (lo + 1 === hi) {
-    const b: i32 = toI32(bytes[lo])
-    return `${pkiRootsHexChar(b >> 4)}${pkiRootsHexChar(b & 15)}`
-  }
-  // Unsigned: both ends are at most bytes.length, so the sum cannot wrap.
-  const mid: i32 = toI32((toU32(lo) + toU32(hi)) / 2)
-  return `${pkiRootsHex(bytes, lo, mid)}${pkiRootsHex(bytes, mid, hi)}`
+  return out.join("")
 }
 
 /** Keeps `der` as a root when it parses, is new, and the cap has room; counts it skipped otherwise. */
@@ -162,7 +153,7 @@ const pkiRootsKeep = (load: PkiRootsLoad, der: u8[]): void => {
     pkiRootsSkip(load)
     return
   }
-  const key: string = pkiRootsHex(der, 0, toI32(der.length))
+  const key: string = pkiRootsHex(der)
   if (load.seen.has(key)) {
     return
   }
@@ -177,11 +168,10 @@ const pkiRootsKeep = (load: PkiRootsLoad, der: u8[]): void => {
 /**
  * One PEM block, `text[from .. to)` whole from its BEGIN line through its END
  * line. A block labelled other than CERTIFICATE gives `pemToDer` no DER, so it
- * is skipped too. The caller's range is always in the text; it is checked
- * again here so the bounds proof holds without JavaScript's clamp.
+ * is skipped too.
  */
 const pkiRootsBlock = (load: PkiRootsLoad, text: string, from: i32, to: i32): void => {
-  const block: string = from >= 0 && from <= to && to <= toI32(text.length) ? text.substring(from, to) : ""
+  const block: string = text.substring(from, to)
   const ders: u8[][] | null = pemToDer(block, "CERTIFICATE")
   if (ders === null) {
     pkiRootsSkip(load)
@@ -365,7 +355,7 @@ const pkiRootsSplitDirs = (list: string): string[] => {
   for (let i: i32 = 0; i < toI32(list.length); i = i + 1) {
     if (toI32(list.charCodeAt(i)) === 58) {
       if (i > start) {
-        out.push(pkiRootsPart(list, start, i))
+        out.push(list.substring(start, i))
       }
       start = i + 1
     }

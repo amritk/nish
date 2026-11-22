@@ -25,5 +25,11 @@ PASS  the host 2001:0db8:0:0:0:0:0:1 is accepted
 PASS  the host a.example.org is accepted
 PASS  the host EXAMPLE.COM is accepted
 PASS  the host example.com. is accepted
-PASS  each of 22 malformed or unnamed hosts is refused as a host-name mismatch
-pki malformed: 28 passed, 0 failed, 0 skipped
+PASS  each of 28 malformed or unnamed hosts is refused as a host-name mismatch
+PASS  the name-constrained chain is accepted
+PASS  the name constraint: its dNSName one octet past its subtree
+PASS  the name constraint: its dNSName empty, the name's octets left over
+PASS  the name constraint: its subtree ending inside its dNSName
+PASS  the name constraint: a [0] base for its dNSName
+PASS  the name constraint: a SET for its subtree
+pki malformed: 34 passed, 0 failed, 0 skipped

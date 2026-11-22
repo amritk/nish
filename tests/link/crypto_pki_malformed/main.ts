@@ -4,12 +4,15 @@
 // runs past its buffer, and with a tag that is not a SEQUENCE. Each comes back
 // from `x509ParseCertificate` as `null`, and a chain holding it comes back
 // from `pkiVerifyServer` as PKI_ERR_MALFORMED, whichever position it holds.
+// So does an intermediate whose dNSName name constraint is malformed, which
+// must never be read as an empty base that permits every name.
 // The process reaching its summary is the proof that none of them panicked.
 import { Suite } from "nish/testing"
 import { PKI_ERR_HOSTNAME, PKI_ERR_MALFORMED, PKI_OK, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki"
 import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509"
 import { fromHex } from "../crypto_x25519/hex"
 import { INT, LEAF, NOW_MS, ROOT } from "../crypto_pki/fixtures"
+import { NC_INT, NC_LEAF, NC_NOW_MS, NC_ROOT, NC_SUBTREE_AT } from "./nc"
 
 const parsed = (der: u8[]): X509Certificate => {
   const c: X509Certificate | null = x509ParseCertificate(der)
@@ -54,6 +57,23 @@ const refused = (s: Suite, store: PkiTrustStore, name: string, bad: u8[], leaf: 
 }
 
 /** Every cut of `der` short of its whole length; the name of the first that is not refused, or "". */
+/**
+ * Passes `the name constraint: <what>` when the parser refuses `badInt`, the
+ * name-constrained intermediate with one subtree octet edited, and the chain
+ * through it answers PKI_ERR_MALFORMED.
+ */
+const ncRefused = (s: Suite, store: PkiTrustStore, leaf: u8[], what: string, badInt: u8[]): void => {
+  const name: string = `the name constraint: ${what}`
+  const code: i32 = pkiVerifyServer([leaf, badInt], "foo.example.com", NC_NOW_MS, store).code
+  if (x509ParseCertificate(badInt) !== null) {
+    s.fail(name, "the parser accepted it")
+  } else if (code !== PKI_ERR_MALFORMED) {
+    s.fail(name, pkiReason(code))
+  } else {
+    s.pass(name)
+  }
+}
+
 const everyCut = (store: PkiTrustStore, der: u8[], leaf: u8[], int: u8[], asLeaf: boolean): string => {
   for (let n: i32 = 0; n < toI32(der.length); n++) {
     const bad: u8[] = cut(der, n)
@@ -124,6 +144,7 @@ export const main = (): i32 => {
   const unmatched: string[] = [
     "", ".", "*.", "*.example.org", "a..example.org", "a.b.example.org", "example.com..",
     "256.1.1.1", "192.0.2.01", "192.0.2", "192.0.2.1.5", "1.2.3.4294967297",
+    "192.000.002.001", "0192.0.2.1", "192.0.2.001", "192.0.02.1", "0300.0.2.1", "0xc0.0.2.1",
     "1:2:3:4:5:6:7:8:9", "2001:db8::1::", "2001:db8:::1", "12345::1", "[::]", "::",
     "::ffff:1.2.3.4", "2001:db8::g", ":2001:db8::1", "2001:db8::1:"
   ]
@@ -139,5 +160,25 @@ export const main = (): i32 => {
   } else {
     s.fail("each malformed or unnamed host is refused as a host-name mismatch", wrong)
   }
+
+  // The intermediate's nameConstraints hold one permitted GeneralSubtree,
+  // `30 0d 82 0b example.com` at NC_SUBTREE_AT. Each edit leaves the DER's
+  // outer lengths whole and breaks only that subtree, so the parser refuses
+  // the intermediate and path validation answers PKI_ERR_MALFORMED, never
+  // PKI_OK through a constraint read as permitting everything.
+  const ncStore: PkiTrustStore = pkiTrustStore([parsed(fromHex(NC_ROOT))])
+  const ncLeaf: u8[] = fromHex(NC_LEAF)
+  const ncInt: u8[] = fromHex(NC_INT)
+  const ncOk: i32 = pkiVerifyServer([ncLeaf, ncInt], "foo.example.com", NC_NOW_MS, ncStore).code
+  if (ncOk === PKI_OK) {
+    s.pass("the name-constrained chain is accepted")
+  } else {
+    s.fail("the name-constrained chain is accepted", pkiReason(ncOk))
+  }
+  ncRefused(s, ncStore, ncLeaf, "its dNSName one octet past its subtree", edit(ncInt, NC_SUBTREE_AT + 3, 0x0c))
+  ncRefused(s, ncStore, ncLeaf, "its dNSName empty, the name's octets left over", edit(ncInt, NC_SUBTREE_AT + 3, 0x00))
+  ncRefused(s, ncStore, ncLeaf, "its subtree ending inside its dNSName", edit(ncInt, NC_SUBTREE_AT + 1, 0x0c))
+  ncRefused(s, ncStore, ncLeaf, "a [0] base for its dNSName", edit(ncInt, NC_SUBTREE_AT + 2, 0x80))
+  ncRefused(s, ncStore, ncLeaf, "a SET for its subtree", edit(ncInt, NC_SUBTREE_AT, 0x31))
   return s.done()
 }

@@ -40,8 +40,8 @@ Accepted and not counted:
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiDistrustSpki`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiIsDistrusted`, `pkiNote`, `pkiLeafCode`, `pkiLeafProfileCode`, `pkiSubscriberKeyCode`, `pkiSerialSound`, `pkiSanDnsSound`, `pkiIssuerCode`, `pkiKeyIdsCode`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiRsaKeyCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiBytesEqual` |
-| `std/crypto/pki-roots.ts` | `pkiLoadSystemRoots`, `pkiLoadRootsFor`, `pkiLoadRoots`, `pkiSystemBundles`, `pkiRootsDirEntry`, `PkiRoots`; `PkiRootsLoad`, `pkiRootsKeep`, `pkiRootsBlock`, `pkiRootsSplit`, `pkiRootsRegular`, `pkiRootsFile`, `pkiRootsDir`, `pkiRootsSplitDirs`, `pkiRootsIsDigit`, `pkiRootsIsHex` |
+| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiDistrustSpki`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiIsDistrusted`, `pkiNote`, `pkiLeafCode`, `pkiLeafProfileCode`, `pkiSubscriberKeyCode`, `pkiSerialSound`, `pkiSanDnsSound`, `pkiIssuerCode`, `pkiKeyIdsCode`, `pkiCriticalitySound`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiIpMappedPrefix`, `pkiIpV4Within`, `pkiIpExcludedBy`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiRsaKeyCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiHexNibble`, `pkiBytesEqual` |
+| `std/crypto/pki-roots.ts` | `pkiLoadSystemRoots`, `pkiLoadRootsFor`, `pkiLoadRoots`, `pkiSystemBundles`, `pkiRootsDirEntry`, `PkiRoots`; `PkiRootsLoad`, `pkiRootsKeep`, `pkiRootsBlock`, `pkiRootsSplit`, `pkiRootsRegular`, `pkiRootsFile`, `pkiRootsDir`, `pkiRootsSplitDirs`, `pkiRootsIsDigit`, `pkiRootsIsHex`, `pkiRootsSkip`, `pkiRootsLineKind`, `pkiRootsHex`, `pkiRootsHexDigit` |
 
 Out of scope:
 
@@ -674,8 +674,22 @@ reaching its summary shows none of them panicked. Its checks are
 is refused past its bound before it is incremented (the name-check and
 chain-byte budgets are summed in 64 bits), and the hex that keys the trust
 store's maps, a subject or issuer Name's DER or a key's hash, is built without
-`String.fromBytes`. The host-name lines of `crypto_pki_malformed` reach the
-rewritten IPv4, IPv6 and DNS readers with an otherwise valid chain.
+`String.fromBytes`. `pkiHex` (and `pkiRootsHex`, which keys the roots a load
+has kept) reads each octet with a for-of, so no index is left to prove, pushes
+its two one-character digits and copies them out with one `join`: `n` octets
+cost about `2n` one-character strings and `O(n)` time, linear like the
+`String.fromBytes` copy it replaced. The host-name lines of `crypto_pki_malformed` reach the
+rewritten IPv4, IPv6 and DNS readers with an otherwise valid chain, near
+misses included (`192.000.002.001`, `0192.0.2.1`, `192.0.02.1`, `0300.0.2.1`,
+`0xc0.0.2.1`), each refused as a mismatch. Its name-constraint lines take a
+chain whose intermediate permits `example.com` (x509-limbo's
+`webpki::nc::nc-permits-dns-san-pattern`), check that it verifies, then break
+that one GeneralSubtree five ways with the outer lengths left whole (a dNSName
+one octet past its subtree, an empty dNSName with its octets left over, a
+subtree ending inside its dNSName, a `[0]` base, a SET for the subtree): each
+is `null` from `x509ParseCertificate` and `PKI_ERR_MALFORMED` from
+`pkiVerifyServer`, never `PKI_OK` through a constraint read as permitting every
+name.
 `tests/std-panics.json` lists the module with no sites, so a new one fails the
 `std-panics` section.
 

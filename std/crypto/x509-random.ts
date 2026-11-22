@@ -54,12 +54,14 @@ export const x509DrawP256Key = (): Secret<u8[]> => {
  * @returns The 20 serial octets, big-endian, in a fresh array.
  */
 export const x509DrawSerial = (): u8[] => {
-  const serial: u8[] = new Array<u8>(X509_MAX_SERIAL)
-  crypto.getRandomValues(serial)
-  // `getRandomValues` fills the array in place and never resizes it, but a
-  // call forgets the length the bounds proof knew, so it is said again here.
-  if (serial.length > 0) {
-    serial[0] = (serial[0] & toU8(0x3f)) | toU8(0x40)
+  const drawn: u8[] = new Array<u8>(X509_MAX_SERIAL)
+  crypto.getRandomValues(drawn)
+  // Copied rather than indexed: a call forgets the length the bounds proof
+  // knew, and a for-of reads each drawn octet without an index to prove, so
+  // every octet of the serial is one the CSPRNG drew.
+  const serial: u8[] = []
+  for (const b of drawn) {
+    serial.push(serial.length === 0 ? (b & toU8(0x3f)) | toU8(0x40) : b)
   }
   return serial
 }

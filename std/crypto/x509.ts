@@ -1267,14 +1267,6 @@ const x509EndsWith = (text: string, suffix: string): boolean => {
 }
 
 /**
- * `text.substring(from, to)` where the range is checked to lie in `text`, so
- * the bounds proof holds without JavaScript's clamp; `""` outside it, which
- * neither caller reaches (each passes `0 <= from <= to <= text.length`).
- */
-const x509Part = (text: string, from: i32, to: i32): string =>
-  from >= 0 && from <= to && to <= toI32(text.length) ? text.substring(from, to) : ""
-
-/**
  * `der` as a PEM block (RFC 7468 §2): `-----BEGIN label-----`, the base64 of
  * the DER in lines of 64 characters, and `-----END label-----`, each line
  * ending in a line feed.
@@ -1291,7 +1283,7 @@ export const derToPem = (der: u8[], label: string): string => {
   while (at < n) {
     // `n` is a length, so `n - 64` cannot wrap, and `at + 64` is then below `n`.
     const end: i32 = at < n - 64 ? at + 64 : n
-    lines.push(x509Part(body, at, end))
+    lines.push(body.substring(at, end))
     at = end
   }
   lines.push(`-----END ${label}-----`)
@@ -1336,7 +1328,7 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
     ) {
       lineEnd--
     }
-    const line: string = x509Part(pem, lineStart, lineEnd)
+    const line: string = pem.substring(lineStart, lineEnd)
     lineStart = next
     const length: i32 = toI32(line.length)
     if (inside === "") {
@@ -1670,14 +1662,19 @@ const x509DerIa5Name = (der: u8[], e: X509DerElement): boolean => {
   return true
 }
 
-/** `der[e.start .. e.end)` as a string, one character per octet, as `x509Bytes` reads one back. */
-const x509DerText = (der: u8[], e: X509DerElement): string => {
+/**
+ * `der[e.start .. e.end)` as a string, one character per octet, as `x509Bytes`
+ * reads one back, or `null` when the range is not in `der`, which the caller
+ * refuses as malformed. Never `""` for a bad range: an empty dNSName base in a
+ * name constraint permits every name, so an invented `""` would fail open.
+ */
+const x509DerText = (der: u8[], e: X509DerElement): string | null => {
   const start: i32 = e.start
   const end: i32 = e.end
   // Always in the DER for an element `x509DerRead` gave, said again so the
   // copy cannot panic: no proof removes `String.fromBytes`'s own range check yet.
   if (start < 0 || end < start || end > toI32(der.length)) {
-    return ""
+    return null
   }
   return String.fromBytes(der, start, end)
 }
@@ -1746,7 +1743,11 @@ const x509ReadSubjectAltName = (der: u8[], start: i32, end: i32, out: X509Certif
     const kind: i32 = x509GeneralNameKind(der, name)
     const length: i32 = x509DerSize(der, name)
     if (kind === X509_GN_DNS && length > 0) {
-      out.sanDns.push(x509DerText(der, name))
+      const dns: string | null = x509DerText(der, name)
+      if (dns === null) {
+        return false
+      }
+      out.sanDns.push(dns)
     } else if (kind === X509_GN_IP && (length === 4 || length === 16)) {
       out.sanIp.push(x509DerSlice(der, name.start, name.end))
     } else if (kind === X509_GN_DIR || kind === X509_GN_OTHER) {
@@ -1946,7 +1947,11 @@ const x509ReadSubtrees = (
     subtree.kind = x509GeneralNameKind(der, base)
     const length: i32 = x509DerSize(der, base)
     if (subtree.kind === X509_GN_DNS) {
-      subtree.dns = x509DerText(der, base)
+      const dns: string | null = x509DerText(der, base)
+      if (dns === null) {
+        return false
+      }
+      subtree.dns = dns
     } else if (subtree.kind === X509_GN_IP) {
       if (length !== 8 && length !== 32) {
         return false

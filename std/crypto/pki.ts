@@ -256,28 +256,24 @@ const pkiBytesEqual = (a: u8[], b: u8[]): boolean => {
   return true
 }
 
-/** The lower-case hex digit of `v`, 0 to 15. */
-const pkiHexChar = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
+/** The lower-case hex digit of `v`, 0 to 15, as a one-character string. */
+const pkiHexNibble = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
 
 /**
- * `bytes[lo .. hi)` in lower-case hex, joined in halves so the copying stays
- * `n log n`; `""` for an empty or outside range.
+ * `bytes` in lower-case hex, a `Map` key. Linear: a for-of reads each octet,
+ * with no index left to prove, and pushes its two one-character digits, and
+ * one `join` copies the `2n` digits out, so `n` octets cost about `2n`
+ * allocations and `O(n)` time. Not `String.fromBytes`, whose range check no
+ * proof removes yet.
  */
-const pkiHexRange = (bytes: u8[], lo: i32, hi: i32): string => {
-  if (lo < 0 || lo >= toI32(bytes.length) || hi > toI32(bytes.length) || lo >= hi) {
-    return ""
+const pkiHex = (bytes: u8[]): string => {
+  const out: string[] = []
+  for (const b of bytes) {
+    out.push(pkiHexNibble(toI32(b) >> 4))
+    out.push(pkiHexNibble(toI32(b) & 15))
   }
-  if (lo + 1 === hi) {
-    const b: i32 = toI32(bytes[lo])
-    return `${pkiHexChar(b >> 4)}${pkiHexChar(b & 15)}`
-  }
-  // Unsigned: both ends are at most bytes.length, so the sum cannot wrap.
-  const mid: i32 = toI32((toU32(lo) + toU32(hi)) / 2)
-  return `${pkiHexRange(bytes, lo, mid)}${pkiHexRange(bytes, mid, hi)}`
+  return out.join("")
 }
-
-/** `bytes` in lower-case hex, a `Map` key. */
-const pkiHex = (bytes: u8[]): string => pkiHexRange(bytes, 0, toI32(bytes.length))
 
 const pkiLower = (c: i32): i32 => (c >= 65 && c <= 90 ? c + 32 : c)
 
