@@ -734,7 +734,7 @@ function ParseResult.finishWalk(this: ParseResult): void -> @nish.ParseResult.fi
   local +36:15 dots: string (const)
   callee +37:9 ParseResult.fail -> @nish.ParseResult.fail
   local +42:9 taken: i32 (let)
-  callee +50:7 ParseResult.fail -> @nish.ParseResult.fail
+  callee +52:7 ParseResult.fail -> @nish.ParseResult.fail
 function ParseResult.firstMissing(this: ParseResult, required: i32[]): i32 -> @nish.ParseResult.firstMissing [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.ParseResult.lastSet
@@ -1446,8 +1446,8 @@ function HelpMenu.row(this: HelpMenu, flag: string, meta: string, description: s
   callee -2:17 padTo -> @nish.padTo
   local -1:11 placeholder: string (const)
   callee -1:47 Style.meta -> @nish.Style.meta
-  callee +1:12 Style.flag -> @nish.Style.flag
-  callee +1:51 Style.dim -> @nish.Style.dim
+  callee +0:26 Style.flag -> @nish.Style.flag
+  callee +0:65 Style.dim -> @nish.Style.dim
 function HelpMenu.note(this: HelpMenu, text: string): void -> @nish.HelpMenu.note [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

@@ -1027,9 +1027,7 @@ export class HelpMenu {
     // The indent is two columns, and a placeholder is one more for its space.
     const pad = padTo(meta.length > 0 ? 3 : 2, toI32(flag.length), toI32(meta.length), this.column)
     const placeholder = meta.length > 0 ? ` ${style.meta(meta)}` : ""
-    this.lines.push(
-      `  ${style.flag(flag)}${placeholder}${pad}${style.dim(description)}`
-    )
+    this.lines.push(`  ${style.flag(flag)}${placeholder}${pad}${style.dim(description)}`)
   }
 
   /**

@@ -602,8 +602,8 @@ function HelpMenu.row(this: HelpMenu, flag: string, meta: string, description: s
   callee -2:17 padTo -> @padTo
   local -1:11 placeholder: string (const)
   callee -1:47 Style.meta -> @Style.meta
-  callee +1:12 Style.flag -> @Style.flag
-  callee +1:51 Style.dim -> @Style.dim
+  callee +0:26 Style.flag -> @Style.flag
+  callee +0:65 Style.dim -> @Style.dim
 function HelpMenu.note(this: HelpMenu, text: string): void -> @HelpMenu.note [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

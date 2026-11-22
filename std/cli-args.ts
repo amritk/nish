@@ -1500,7 +1500,9 @@ export class ParseResult {
     if (last >= 0 && last < toI32(cli.argVariadic.length) && last < toI32(cli.argIndex.length)) {
       // An argument's index is below the argument count, an array length,
       // so one more cannot wrap.
-      taken = cli.argVariadic[last] ? toI32(this.positionalValues.length) : toI32(toU32(cli.argIndex[last]) + 1)
+      taken = cli.argVariadic[last]
+        ? toI32(this.positionalValues.length)
+        : toI32(toU32(cli.argIndex[last]) + 1)
     }
     if (this.message.length === 0 && taken < toI32(this.positionalValues.length) && taken >= 0) {
       this.fail(cmd, `unexpected argument '${this.positionalValues[taken]}'`)
