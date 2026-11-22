@@ -312,11 +312,14 @@ const http1ServerSameByByte = (kept: readonly u8[], at: i32, bytes: readonly u8[
  */
 const http1ServerSame8 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
   const n: i32 = toI32(bytes.length)
-  // Widened: the range check below holds `e` to `kept` whatever `at` is.
-  const e: i32 = toI32(toI64(at) + toI64(n) - toI64(8))
+  // Both under 2^30, which every kept buffer is, so `at + n` cannot wrap.
+  if (!(at >= 0 && at < 1073741824 && n >= 8 && n < 1073741824)) {
+    return http1ServerSameByByte(kept, at, bytes)
+  }
+  const e: i32 = at + n - 8
   const f: i32 = n - 8
   if (
-    !(at >= 0 && at < 2147483640 && at + 8 <= toI32(kept.length)) ||
+    !(at + 8 <= toI32(kept.length)) ||
     !(e >= 0 && e < 2147483640 && e + 8 <= toI32(kept.length)) ||
     !(toI32(bytes.length) >= 8 && f >= 0 && f < 2147483640 && f + 8 <= toI32(bytes.length))
   ) {
@@ -378,6 +381,34 @@ const http1ServerSame4 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): b
 }
 
 /**
+ * Whether `kept[at ..)` starts with `bytes`, sixteen or more bytes long:
+ * sixteen at a time, with a last load that overlaps the one before. False
+ * when `bytes` would run past `kept`. Its own function so that
+ * `http1ServerKept`, which most field names reach through the shorter loads,
+ * stays small enough to inline them.
+ */
+const http1ServerSame16 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  const n: i32 = toI32(bytes.length)
+  const m: i32 = toI32(kept.length)
+  let k: i32 = 0
+  let j: i32 = at
+  while (k < n - 16) {
+    if (j < 0 || j > m - 16 || any(ne(loadU8x16(kept, j), loadU8x16(bytes, k)))) {
+      return false
+    }
+    k += 16
+    j += 16
+  }
+  // Widened: `at + n` is only inside `kept` once the checks below hold.
+  const tail: i32 = toI32(toI64(at) + toI64(n) - toI64(16))
+  const last: i32 = n - 16
+  if (tail < 0 || tail > toI32(kept.length) - 16 || last < 0 || last > toI32(bytes.length) - 16) {
+    return false
+  }
+  return !any(ne(loadU8x16(kept, tail), loadU8x16(bytes, last)))
+}
+
+/**
  * Where `kept[at ..)` holds `bytes` and then the byte `after`: the offset one
  * past the byte that follows `after` (the space of `: `, the LF of CR LF), or
  * -1 when it does not, or when `after` would be at or past `limit`. Sixteen
@@ -399,25 +430,10 @@ const http1ServerKept = (kept: u8[], at: i32, limit: i32, bytes: u8[], after: i3
   if (end < 0 || end >= m || toI32(kept[end]) !== after) {
     return -1
   }
-  if (n >= 16) {
-    let k: i32 = 0
-    let j: i32 = at
-    while (k < n - 16) {
-      if (j < 0 || j > m - 16 || any(ne(loadU8x16(kept, j), loadU8x16(bytes, k)))) {
-        return -1
-      }
-      k += 16
-      j += 16
-    }
-    const tail: i32 = end - 16
-    const last: i32 = n - 16
-    if (tail < 0 || tail > m - 16 || last < 0 || last > n - 16) {
-      return -1
-    }
-    return any(ne(loadU8x16(kept, tail), loadU8x16(bytes, last))) ? -1 : past
-  }
   let same: boolean = false
-  if (n >= 8) {
+  if (n >= 16) {
+    same = http1ServerSame16(kept, at, bytes)
+  } else if (n >= 8) {
     same = http1ServerSame8(kept, at, bytes)
   } else if (n >= 4) {
     same = http1ServerSame4(kept, at, bytes)
