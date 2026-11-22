@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 9220,
+  "total": 8911,
   "explicit": {
-    "kept": 333,
-    "toFix": 135
+    "kept": 338,
+    "toFix": 124
   },
   "modules": {
     "std/base64.ts": {
@@ -242,13 +242,7 @@
       "panic": 9
     },
     "std/net/handler.ts": {
-      "array-length": 14,
-      "divide": 4,
-      "index": 80,
-      "overflow": 70,
-      "panic": 19,
-      "pop": 1,
-      "slice": 1
+      "panic": 13
     },
     "std/net/hpack.ts": {
       "array-length": 1,
@@ -464,10 +458,6 @@
       "slice": 8
     },
     "std/net/static.ts": {
-      "array-length": 8,
-      "divide": 5,
-      "index": 49,
-      "overflow": 71,
       "slice": 4
     },
     "std/net/tls-tcp.ts": {
@@ -1134,8 +1124,8 @@
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpHandler.end",
-      "reason": "end requires a started response and the full declared body length written; a caller sequencing contract"
+      "function": "HttpHandler.constructor",
+      "reason": "limits below the documented minimums or a failed pollCreate; openHttpHandler answers both as Err, and the doc points there"
     },
     {
       "module": "std/net/handler.ts",
@@ -1144,8 +1134,8 @@
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpHandler.sendJson",
-      "reason": "sendJson requires a value begun with json() first; a caller sequencing contract"
+      "function": "HttpHandler.kept",
+      "reason": "an answer out of sequence (not taken, already answered, no json() begun, a status outside 200 to 599, end before the declared body); each answer's try twin gives the same message as Err"
     },
     {
       "module": "std/net/handler.ts",
@@ -1155,12 +1145,37 @@
     {
       "module": "std/net/handler.ts",
       "function": "HttpHandler.watch",
-      "reason": "id must be 0 to HANDLER_MAX_WATCHED - 1; a static choice of the program"
+      "reason": "id must be 0 to HANDLER_MAX_WATCHED - 1; a static choice of the program; tryWatch answers Err instead"
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpRequest.checkParam",
-      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it"
+      "function": "HttpRequest.param",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpRequest.paramDecimal",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpRequest.paramEnd",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpRequest.paramIs",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpRequest.paramStart",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "handlerFormDecode",
+      "reason": "the query value span must lie inside the head; queryIndex sets it there, so only a caller that wrote queryValueStart or queryValueEnd reaches it"
     },
     {
       "module": "std/net/hpack.ts",

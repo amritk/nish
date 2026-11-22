@@ -1,0 +1,1 @@
+HttpHandler: slots 0, jsonBytes 65536, maxEvents 256 and bodyTimeout 30000 need at least 1, 256, 1 and 1

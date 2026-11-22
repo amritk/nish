@@ -28,7 +28,7 @@
 // with its `Allow`). Without a port it prints how to run it and exits 2.
 // smoke: args --allow-panics
 // smoke: exit 2
-import { HttpHandler, HandlerLimits } from "nish/net/handler"
+import { HttpHandler, HandlerLimits, openHttpHandler } from "nish/net/handler"
 import { Router } from "nish/net/router"
 import { netClose, tcpListen } from "nish:net"
 import { monotonicNanos, readSignal, signalFd } from "nish:process"
@@ -65,8 +65,21 @@ export const main = (): i32 => {
     return 1
   }
   const router: Router = appRoutes()
-  const h = new HttpHandler(new HandlerLimits(), listener, router)
-  h.watch(signals, SIGNALS)
+  const opened: Result<HttpHandler, string> = openHttpHandler(new HandlerLimits(), listener, router)
+  if (opened.isErr()) {
+    console.error(`http-app: ${opened.error}`)
+    netClose(signals)
+    netClose(listener)
+    return 1
+  }
+  const h: HttpHandler = opened.value
+  const watched: Result<boolean, string> = h.tryWatch(signals, SIGNALS)
+  if (watched.isErr()) {
+    console.error(`http-app: ${watched.error}`)
+    netClose(signals)
+    netClose(listener)
+    return 1
+  }
   const app = new App(h, config)
   console.log(`http-app: listening on port ${config.port}`)
 
