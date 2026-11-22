@@ -25,6 +25,18 @@ import { getenv } from "nish:process"
 /** The most of a body this reads; a larger one is refused rather than held. */
 const MAX_BODY: i32 = 4194304
 
+/**
+ * The string of `bytes`, a byte at a time: `String.fromBytes` keeps a range
+ * check that no proof removes, and `fromCharCode` makes exactly one byte.
+ */
+const bytesText = (bytes: u8[]): string => {
+  const parts: string[] = []
+  for (const b of bytes) {
+    parts.push(String.fromCharCode(b))
+  }
+  return parts.join("")
+}
+
 export const main = (): i32 => {
   const args = process.argv
   if (args.length < 2) {
@@ -58,7 +70,7 @@ export const main = (): i32 => {
     return 1
   }
   client.close()
-  const text: string = String.fromBytes(body, 0, toI32(body.length))
+  const text: string = bytesText(body)
   if (res.status < 200 || res.status > 299) {
     console.error(`${res.status} ${res.reason} from ${res.url}`)
     console.error(text)
