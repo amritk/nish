@@ -436,6 +436,8 @@ const aesShiftPlane = (x: u64): u64 =>
 
 /** ShiftRows (FIPS 197 §5.1.2) on the whole state. */
 const aesShiftRows = (q: u64[]): void => {
+  // The last plane first: its checked read proves the other seven.
+  const p7: u64 = q[7]
   q[0] = aesShiftPlane(q[0])
   q[1] = aesShiftPlane(q[1])
   q[2] = aesShiftPlane(q[2])
@@ -443,7 +445,7 @@ const aesShiftRows = (q: u64[]): void => {
   q[4] = aesShiftPlane(q[4])
   q[5] = aesShiftPlane(q[5])
   q[6] = aesShiftPlane(q[6])
-  q[7] = aesShiftPlane(q[7])
+  q[7] = aesShiftPlane(p7)
 }
 
 /** Each byte replaced by the byte one row down its column (row 3 by row 0): nibbles turned by one. */
@@ -462,6 +464,8 @@ const aesRowAfterNext = (x: u64): u64 =>
  * for the reduction by x^8 + x^4 + x^3 + x + 1.
  */
 const aesMixColumns = (q: u64[]): void => {
+  // The last plane first: its checked read proves the other seven.
+  const n7: u64 = aesNextRow(q[7])
   const n0: u64 = aesNextRow(q[0])
   const n1: u64 = aesNextRow(q[1])
   const n2: u64 = aesNextRow(q[2])
@@ -469,7 +473,6 @@ const aesMixColumns = (q: u64[]): void => {
   const n4: u64 = aesNextRow(q[4])
   const n5: u64 = aesNextRow(q[5])
   const n6: u64 = aesNextRow(q[6])
-  const n7: u64 = aesNextRow(q[7])
   const t0: u64 = q[0] ^ n0
   const t1: u64 = q[1] ^ n1
   const t2: u64 = q[2] ^ n2
@@ -490,15 +493,19 @@ const aesMixColumns = (q: u64[]): void => {
 
 /** AddRoundKey (FIPS 197 §5.1.4): the eight words of `rk` from `at` into the state. */
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
-  const p: u32 = toU32(at)
-  q[0] = q[0] ^ rk[p]
-  q[1] = q[1] ^ rk[p + 1]
-  q[2] = q[2] ^ rk[p + 2]
-  q[3] = q[3] ^ rk[p + 3]
-  q[4] = q[4] ^ rk[p + 4]
-  q[5] = q[5] ^ rk[p + 5]
-  q[6] = q[6] ^ rk[p + 6]
-  q[7] = q[7] ^ rk[p + 7]
+  // The first and last key words and the last plane first: their checked
+  // reads prove every other index below.
+  const k0: u64 = rk[at]
+  const k7: u64 = rk[at + 7]
+  const q7: u64 = q[7]
+  q[0] = q[0] ^ k0
+  q[1] = q[1] ^ rk[at + 1]
+  q[2] = q[2] ^ rk[at + 2]
+  q[3] = q[3] ^ rk[at + 3]
+  q[4] = q[4] ^ rk[at + 4]
+  q[5] = q[5] ^ rk[at + 5]
+  q[6] = q[6] ^ rk[at + 6]
+  q[7] = q7 ^ k7
 }
 
 /**
@@ -564,18 +571,20 @@ const aesSubWord = (w: u32, q: u64[]): u32 => {
 }
 
 /** Four bytes of `data` from `at` as a big-endian word; the caller has checked the window. */
-const aesLoad32 = (data: u8[], at: i32): u32 =>
-  (toU32(data[at]) << toU32(24)) |
-  (toU32(data[at + 1]) << toU32(16)) |
-  (toU32(data[at + 2]) << toU32(8)) |
-  toU32(data[at + 3])
+const aesLoad32 = (data: u8[], at: i32): u32 => {
+  // The last byte first: every caller's `at` is non-negative, so its checked
+  // read proves the other three.
+  const b3: u32 = toU32(data[at + 3])
+  return (toU32(data[at]) << toU32(24)) | (toU32(data[at + 1]) << toU32(16)) | (toU32(data[at + 2]) << toU32(8)) | b3
+}
 
 /** `w` big-endian into `out[at .. at + 4)`; the caller has checked the window. */
 const aesStore32 = (out: u8[], at: i32, w: u32): void => {
+  // The first and last bytes first: their checked stores prove the two between.
   out[at] = toU8(w >> toU32(24))
+  out[at + 3] = toU8(w)
   out[at + 1] = toU8(w >> toU32(16))
   out[at + 2] = toU8(w >> toU32(8))
-  out[at + 3] = toU8(w)
 }
 
 /**
@@ -590,35 +599,49 @@ const aesStore32 = (out: u8[], at: i32, w: u32): void => {
  * with a runtime kernel, which writes its own layout into the same words.
  */
 const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
-  const nk: i32 = rounds - 6
-  const total: i32 = (rounds + 1) * 4
-  const w: u32[] = new Array<u32>(total)
+  // The caller's contract, tested so the sizes below are literals the
+  // bounds prover can see: Nk words of key, 4 * (rounds + 1) words in all.
+  if (rounds !== 10 && rounds !== 14) {
+    return
+  }
+  const aes128: boolean = rounds === 10
+  const nk: integer<4, 8> = aes128 ? 4 : 8
+  const total: integer<44, 60> = aes128 ? 44 : 60
+  const lastRound: integer<10, 14> = aes128 ? 10 : 14
+  // Sized for AES-256; AES-128 uses the first 44 words.
+  const w: u32[] = new Array<u32>(60)
   const q: u64[] = new Array<u64>(8)
   const keyLength: i32 = toI32(key.length)
-  const wLength: i32 = toI32(w.length)
+  // The key's own Nk words.
+  for (let i: i32 = 0; i < nk; i++) {
+    const at: i32 = 4 * i
+    if (at + 3 < keyLength) {
+      w[i] = aesLoad32(key, at)
+    }
+  }
+  // Each later word. `prev` is w[i - 1], carried so its index needs no proof,
+  // and Nk is 4 or 8, a power of two, so i mod Nk is `i & (nk - 1)` for the
+  // non-negative `i` here and the loop does not divide.
   // Rcon[i/Nk] = x^(i/Nk - 1) in GF(2^8), doubled once per Nk words.
   let rcon: u32 = 1
-  for (let i: i32 = 0; i < wLength; i++) {
-    if (i < nk) {
-      const at: i32 = 4 * i
-      if (at >= 0 && at + 3 < keyLength) {
-        w[i] = aesLoad32(key, at)
-      }
-    } else {
-      let temp: u32 = w[i - 1]
-      if (i % nk === 0) {
-        temp = aesSubWord((temp << toU32(8)) | (temp >> toU32(24)), q) ^ (rcon << toU32(24))
-        rcon = ((rcon << toU32(1)) ^ (toU32(0x1b) & (toU32(0) - (rcon >> toU32(7))))) & toU32(0xff)
-      } else if (nk > 6 && i % nk === 4) {
-        temp = aesSubWord(temp, q)
-      }
-      w[i] = w[i - nk] ^ temp
+  let prev: u32 = w[nk - 1]
+  for (let i: i32 = nk; i < total; i++) {
+    const pos: i32 = i & (nk - 1)
+    let temp: u32 = prev
+    if (pos === 0) {
+      temp = aesSubWord((temp << toU32(8)) | (temp >> toU32(24)), q) ^ (rcon << toU32(24))
+      rcon = ((rcon << toU32(1)) ^ (toU32(0x1b) & (toU32(0) - (rcon >> toU32(7))))) & toU32(0xff)
+    } else if (nk > 6 && pos === 4) {
+      temp = aesSubWord(temp, q)
     }
+    const word: u32 = w[i - nk] ^ temp
+    w[i] = word
+    prev = word
   }
   // Each round key, written into all four blocks of a batch and packed.
   const buf: u8[] = new Array<u8>(AES_BATCH)
   const rkLength: i32 = toI32(rk.length)
-  for (let round: i32 = 0; round <= rounds; round++) {
+  for (let round: i32 = 0; round <= lastRound; round++) {
     for (let k: i32 = 0; k < 4; k++) {
       for (let j: i32 = 0; j < 4; j++) {
         aesStore32(buf, 16 * k + 4 * j, w[4 * round + j])
@@ -685,7 +708,7 @@ const aesCopyPrefix = (dst: u8[], src: u8[], count: i32): void => {
  */
 const aesKeyUsable = (key: AesKey): boolean => {
   const rounds: i32 = key.rounds
-  const words: i32 = (rounds + 1) * 8
+  const words: i32 = rounds === 10 ? 88 : 120
   return (
     (rounds === 10 || rounds === 14) && toI32(key.roundKeys.length) === words && toI32(key.h.length) === 2
   )
@@ -740,7 +763,10 @@ export const aesKey = (key: u8[]): AesKey | null => {
     return null
   }
   const rounds: i32 = length === 16 ? 10 : 14
-  const expanded: AesKey = new AesKey(rounds, new Array<u64>((rounds + 1) * 8))
+  // Literal sizes: 88 words for AES-128's eleven round keys, 120 for
+  // AES-256's fifteen, eight words a round key.
+  const roundKeys: u64[] = length === 16 ? new Array<u64>(88) : new Array<u64>(120)
+  const expanded: AesKey = new AesKey(rounds, roundKeys)
   if (!aesKeyInto(key, expanded)) {
     return null
   }
@@ -785,15 +811,17 @@ export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   const rounds: i32 = length === 16 ? 10 : 14
   const roundKeys: u64[] = out.roundKeys
   const hash: u64[] = out.h
-  if (toI32(roundKeys.length) !== (rounds + 1) * 8 || toI32(hash.length) !== 2) {
+  const words: i32 = length === 16 ? 88 : 120
+  if (toI32(roundKeys.length) !== words || toI32(hash.length) !== 2) {
     return false
   }
   aesScheduleInto(key, rounds, roundKeys)
   out.rounds = rounds
   const h: u8[] = new Array<u8>(AES_BLOCK)
   aesEncryptOne(out, new Array<u8>(AES_BLOCK), h)
-  hash[0] = aesLoad64(h, 0, 8)
+  // The second word first: its checked store proves the first.
   hash[1] = aesLoad64(h, 8, 16)
+  hash[0] = aesLoad64(h, 0, 8)
   wipe(h)
   return true
 }
@@ -896,8 +924,9 @@ const ghashMul32 = (x: u64, y: u64): u64 => {
 export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
   const low32: u64 = (toU64(1) << toU64(32)) - toU64(1)
   const thirtyTwo: u64 = toU64(32)
-  const a1: u64 = y[0]
+  // The second word first: its checked read proves the first.
   const a0: u64 = y[1]
+  const a1: u64 = y[0]
   const a2: u64 = a1 ^ a0
   const b2: u64 = hHi ^ hLo
 
@@ -960,12 +989,14 @@ export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
  * compiler may replace that call with a runtime kernel.
  */
 const ghashBlocksInto = (y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], length: i32): void => {
-  if (toI32(y.length) < 2) {
+  if (toI32(y.length) < 2 || length < 0) {
     return
   }
   // Counted in blocks rather than stepped by 16, so no offset is ever formed
   // past `length`: an AAD or IV within 16 bytes of 2^31 would overflow `at + 16`.
-  const blocks: i32 = (length >> 4) + ((length & 15) !== 0 ? 1 : 0)
+  // The partial block's 1 is `((length & 15) + 15) >> 4`, in shifts and
+  // masks the bounds prover follows.
+  const blocks: i32 = (length >> 4) + (((length & 15) + 15) >> 4)
   for (let block: i32 = 0; block < blocks; block++) {
     const at: i32 = block * 16
     y[0] = y[0] ^ aesLoad64(data, at, length)
@@ -981,17 +1012,22 @@ const ghashBlocksInto = (y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], l
  * caller passes one.
  */
 const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
-  if (toI32(y.length) < 2 || length < 0 || length > toI32(data.length) || !aesKeyUsable(key)) {
+  const h: u64[] = key.h
+  if (toI32(h.length) < 2 || toI32(y.length) < 2 || length < 0 || length > toI32(data.length) || !aesKeyUsable(key)) {
     return
   }
-  ghashBlocksInto(y, key.h[0], key.h[1], key.roundKeys, data, length)
+  ghashBlocksInto(y, h[0], h[1], key.roundKeys, data, length)
 }
 
 /** The last GHASH block: the AAD's and the ciphertext's lengths in bits, 64 bits each. */
 const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): void => {
+  const h: u64[] = key.h
+  if (toI32(h.length) < 2) {
+    return
+  }
   y[0] = y[0] ^ (toU64(aadLength) << toU64(3))
   y[1] = y[1] ^ (toU64(textLength) << toU64(3))
-  ghashMultiply(y, key.h[0], key.h[1])
+  ghashMultiply(y, h[0], h[1])
 }
 
 /**
@@ -1002,10 +1038,11 @@ const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): v
  */
 const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
   const length: i32 = toI32(iv.length)
-  const j0: u8[] = new Array<u8>(AES_BLOCK)
+  const j0: u8[] = new Array<u8>(16)
   if (length === 12) {
-    aesCopyPrefix(j0, iv, 12)
+    // The counter byte first, while the length is still known to be 16.
     j0[15] = 1
+    aesCopyPrefix(j0, iv, 12)
     return j0
   }
   const y: u64[] = new Array<u64>(2)
@@ -1026,8 +1063,11 @@ const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
  * bound is stated where the counter is, rather than left to the width of an
  * array length.
  */
-const aesGcmLengthFits = (length: i32): boolean =>
-  (toI64(length) + toI64(15)) >> toI64(4) <= (toI64(1) << toI64(32)) - toI64(2)
+const aesGcmLengthFits = (length: i32): boolean => {
+  // (2^32 - 2) blocks of 16 bytes: at most that many blocks is at most this many bytes.
+  const most: i64 = 0xfffffffe0
+  return toI64(length) <= most
+}
 
 /**
  * The GCTR seam (SP 800-38D §6.5) from inc32(J0): `dst[i] = src[i] ⊕
@@ -1048,13 +1088,14 @@ const aesCtrInto = (rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], leng
     return
   }
   const counter: u32 = aesLoad32(j0, 12)
-  const buf: u8[] = new Array<u8>(AES_BATCH)
+  const buf: u8[] = new Array<u8>(64)
   const q: u64[] = new Array<u64>(8)
   const srcLength: i32 = toI32(src.length)
   const dstLength: i32 = toI32(dst.length)
   const bufLength: i32 = toI32(buf.length)
   // Counted in batches, like `ghashUpdate`'s blocks, so `base` never passes `length`.
-  const batches: i32 = (length >> 6) + ((length & 63) !== 0 ? 1 : 0)
+  // The partial batch's 1 is `((length & 63) + 63) >> 6`, as there.
+  const batches: i32 = (length >> 6) + (((length & 63) + 63) >> 6)
   for (let batch: i32 = 0; batch < batches; batch++) {
     const base: i32 = batch * AES_BATCH
     for (let k: i32 = 0; k < 4; k++) {
@@ -1113,8 +1154,9 @@ const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textL
   ghashLengths(y, key, aadLength, textLength)
   const mask: u8[] = new Array<u8>(AES_BLOCK)
   aesEncryptOne(key, j0, mask)
-  y[0] = y[0] ^ aesLoad64(mask, 0, 16)
+  // The second word first: its checked read proves the first.
   y[1] = y[1] ^ aesLoad64(mask, 8, 16)
+  y[0] = y[0] ^ aesLoad64(mask, 0, 16)
   wipe(mask)
 }
 
@@ -1152,8 +1194,7 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   const length: i32 = toI32(plaintext.length)
   // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
   // is still an array length.
-  const longest: i32 = 0x7fffffef
-  if (!aesKeyUsable(key) || toI32(iv.length) === 0 || length > longest || !aesGcmLengthFits(length)) {
+  if (length > 0x7fffffef || !aesKeyUsable(key) || toI32(iv.length) === 0 || !aesGcmLengthFits(length)) {
     return null
   }
   const j0: u8[] = aesGcmJ0(key, iv)
@@ -1161,8 +1202,10 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   aesGcmCtr(key, j0, plaintext, out, length)
   const tag: u64[] = new Array<u64>(2)
   aesGcmTag(tag, key, j0, aad, out, length)
+  // The second word first: its checked read proves the first.
+  const tagLo: u64 = tag[1]
   aesStore64(out, length, tag[0])
-  aesStore64(out, length + 8, tag[1])
+  aesStore64(out, length + 8, tagLo)
   wipe(j0)
   return out
 }
@@ -1184,9 +1227,16 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
  */
 export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null => {
   const total: i32 = toI32(sealed.length)
-  if (!aesKeyUsable(key) || toI32(iv.length) === 0 || total < AES_GCM_TAG_SIZE) {
+  const h: u64[] = key.h
+  if (toI32(h.length) !== 2 || !aesKeyUsable(key) || toI32(iv.length) === 0 || total < AES_GCM_TAG_SIZE) {
     return null
   }
+  // Under H = 0 GHASH is zero for every input, so the tag E(K, J0) would
+  // authenticate any ciphertext and AAD. Only a key built or edited by hand
+  // has it (for one from `aesKey` the chance is 2^-128), and such a key opens
+  // nothing. H is secret, so this is folded into the mask below, not branched
+  // on; it is read here, where the length test above still proves both words.
+  const hashKeySet: u64 = ~ctEq(h[0] | h[1], toU64(0))
   // `total` is an array length and at least a tag, so neither this nor the
   // tag's second word at `length + 8` can leave the range of an `i32`.
   const length: i32 = total - AES_GCM_TAG_SIZE
@@ -1196,17 +1246,14 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   const j0: u8[] = aesGcmJ0(key, iv)
   const tag: u64[] = new Array<u64>(2)
   aesGcmTag(tag, key, j0, aad, sealed, length)
+  // The second word first: its checked read proves the first.
+  const tagLo: u64 = tag[1]
   const same: u64 = aesGcmTagMask(
     tag[0],
-    tag[1],
+    tagLo,
     aesLoad64(sealed, length, total),
     aesLoad64(sealed, length + 8, total)
   )
-  // Under H = 0 GHASH is zero for every input, so the tag E(K, J0) would
-  // authenticate any ciphertext and AAD. Only a key built or edited by hand
-  // has it (for one from `aesKey` the chance is 2^-128), and such a key opens
-  // nothing. H is secret, so this is folded into the mask, not branched on.
-  const hashKeySet: u64 = ~ctEq(key.h[0] | key.h[1], toU64(0))
   wipe(tag)
   let out: u8[] | null = null
   if ((same & hashKeySet) !== toU64(0)) {
