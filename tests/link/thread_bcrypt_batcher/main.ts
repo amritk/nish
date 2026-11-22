@@ -101,7 +101,7 @@ export const main = (): i32 => {
   const last: i32 = b.hash(abc, short, T(4500));
   const wrapped: i32 = b.hash(abc, short, T(4500));
   console.log(`tickets past 2^31 - 1: ${last} ${wrapped}`);
-  b.run(T(4500));
+  print("run at 4500", b.run(T(4500)));
 
   // The single calls agree.
   const damaged = bcryptVerify(abc, DAMAGED);

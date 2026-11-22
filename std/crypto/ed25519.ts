@@ -361,8 +361,9 @@ const ed25519SetIdentity = (out: Ed25519Point): void => {
 /**
  * `dst[j] ^= mask & (dst[j] ^ src[from + j])` for the ten limbs `j`: `src`'s
  * limbs from `from` where `mask` is all ones, `dst` kept where it is zero.
- * The lengths are tested once, before the walk, which every caller here
- * passes; the test reads only public lengths and `from`, never `mask`.
+ * `from` and `dst`'s length are tested once, before the walk, and `src`'s
+ * length on each limb; every caller here passes all three. The tests read
+ * only public lengths and `from`, never `mask`.
  */
 const ed25519Blend = (dst: i64[], src: i64[], from: i32, mask: i64): void => {
   if (from < 0 || toI32(dst.length) < 10) {

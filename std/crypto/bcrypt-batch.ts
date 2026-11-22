@@ -508,7 +508,10 @@ export class BcryptBatcher {
   private cores: i32
   private cost: i32
   private head: i32
-  /** The next ticket; after 2^31 - 1 it wraps to 0. */
+  /**
+   * The next ticket; after 2^31 - 1 it wraps to 0. Two requests share a
+   * ticket only if one is still queued after 2^31 others are made.
+   */
   private next: i32
 
   /**
@@ -553,7 +556,9 @@ export class BcryptBatcher {
    * @param hash The stored hash; its cost sets the work, so it must be one you
    *   stored.
    * @param now The time of the call, from `monotonicNanos()`.
-   * @returns The ticket its `BcryptAnswer` will carry.
+   * @returns The ticket its `BcryptAnswer` will carry: tickets count up from
+   *   0 and wrap to 0 after 2^31 - 1, so a later request can carry a smaller
+   *   one.
    */
   verify(password: Secret<u8[]>, hash: string, now: i64): i32 {
     const ticket: i32 = this.next
@@ -573,7 +578,9 @@ export class BcryptBatcher {
    *   is bad, and the caller still owns and wipes it.
    * @param salt 16 fresh random bytes; read, not kept.
    * @param now The time of the call, from `monotonicNanos()`.
-   * @returns The ticket its `BcryptAnswer` will carry.
+   * @returns The ticket its `BcryptAnswer` will carry: tickets count up from
+   *   0 and wrap to 0 after 2^31 - 1, so a later request can carry a smaller
+   *   one.
    */
   hash(password: Secret<u8[]>, salt: u8[], now: i64): i32 {
     const ticket: i32 = this.next
