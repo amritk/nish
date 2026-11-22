@@ -2113,36 +2113,109 @@ const p256Copy = (out: u32[], a: u32[]): void => {
 
 /**
  * The plain limbs of the 32 big-endian bytes `bytes[at .. at + 32)`, limb 0
- * the least significant. Its index sites are kept: every caller passes a
- * window inside its array (a 32-byte scalar, or a 65-byte point at 1 and 33),
- * which the prover cannot relate to `at`, so a window outside `bytes` stops
- * the program rather than leaving `out` as it was.
+ * the least significant. Every caller passes a window inside its array (a
+ * 32-byte scalar, or a 65-byte point at 1 and 33) and an 8-limb `out`; one
+ * outside stops the program, checked once before any byte is read.
  */
 const p256LimbsFromBytes = (out: u32[], bytes: u8[], at: i32): void => {
-  for (let i: i32 = 0; i < 8; i++) {
-    let limb: u32 = 0
-    for (let b: i32 = 0; b < 4; b++) {
-      const j: i32 = at + 28 - 4 * i + b
-      limb = (limb << 8) | toU32(bytes[j])
-    }
-    out[i] = limb
+  if (toI32(out.length) < 8 || at < 0 || at > toI32(bytes.length) - 32) {
+    panic("p256LimbsFromBytes: the 32-byte window is outside its array")
   }
+  // Unrolled so each index is the checked `at` plus a constant, which the
+  // bounds prover discharges from the one check above.
+  out[0] =
+    (toU32(bytes[at + 28]) << 24) |
+    (toU32(bytes[at + 29]) << 16) |
+    (toU32(bytes[at + 30]) << 8) |
+    toU32(bytes[at + 31])
+  out[1] =
+    (toU32(bytes[at + 24]) << 24) |
+    (toU32(bytes[at + 25]) << 16) |
+    (toU32(bytes[at + 26]) << 8) |
+    toU32(bytes[at + 27])
+  out[2] =
+    (toU32(bytes[at + 20]) << 24) |
+    (toU32(bytes[at + 21]) << 16) |
+    (toU32(bytes[at + 22]) << 8) |
+    toU32(bytes[at + 23])
+  out[3] =
+    (toU32(bytes[at + 16]) << 24) |
+    (toU32(bytes[at + 17]) << 16) |
+    (toU32(bytes[at + 18]) << 8) |
+    toU32(bytes[at + 19])
+  out[4] =
+    (toU32(bytes[at + 12]) << 24) |
+    (toU32(bytes[at + 13]) << 16) |
+    (toU32(bytes[at + 14]) << 8) |
+    toU32(bytes[at + 15])
+  out[5] =
+    (toU32(bytes[at + 8]) << 24) |
+    (toU32(bytes[at + 9]) << 16) |
+    (toU32(bytes[at + 10]) << 8) |
+    toU32(bytes[at + 11])
+  out[6] =
+    (toU32(bytes[at + 4]) << 24) |
+    (toU32(bytes[at + 5]) << 16) |
+    (toU32(bytes[at + 6]) << 8) |
+    toU32(bytes[at + 7])
+  out[7] =
+    (toU32(bytes[at]) << 24) |
+    (toU32(bytes[at + 1]) << 16) |
+    (toU32(bytes[at + 2]) << 8) |
+    toU32(bytes[at + 3])
 }
 
 /**
- * The plain limbs `a` as 32 big-endian bytes at `out[at .. at + 32)`. Its index
- * sites are kept, for the reason `p256LimbsFromBytes` gives.
+ * The plain limbs `a` as 32 big-endian bytes at `out[at .. at + 32)`. Every
+ * caller passes an 8-limb `a` and a window inside `out`; one outside stops
+ * the program, checked once before any byte is written.
  */
 const p256LimbsToBytes = (out: u8[], at: i32, a: u32[]): void => {
-  for (let i: i32 = 0; i < 8; i++) {
-    const limb: u32 = a[i]
-    for (let b: i32 = 0; b < 4; b++) {
-      // In i64, since one caller's `at` is a variable the prover cannot bound.
-      const back: i32 = 4 * i + b
-      const j: i32 = toI32(toI64(at) + toI64(31 - back))
-      out[j] = toU8(limb >> toU32(8 * b))
-    }
+  if (toI32(a.length) < 8 || at < 0 || at > toI32(out.length) - 32) {
+    panic("p256LimbsToBytes: the 32-byte window is outside its array")
   }
+  // Unrolled so each index is the checked `at` plus a constant, which the
+  // bounds prover discharges from the one check above.
+  const a0: u32 = a[0]
+  out[at + 28] = toU8(a0 >> 24)
+  out[at + 29] = toU8(a0 >> 16)
+  out[at + 30] = toU8(a0 >> 8)
+  out[at + 31] = toU8(a0)
+  const a1: u32 = a[1]
+  out[at + 24] = toU8(a1 >> 24)
+  out[at + 25] = toU8(a1 >> 16)
+  out[at + 26] = toU8(a1 >> 8)
+  out[at + 27] = toU8(a1)
+  const a2: u32 = a[2]
+  out[at + 20] = toU8(a2 >> 24)
+  out[at + 21] = toU8(a2 >> 16)
+  out[at + 22] = toU8(a2 >> 8)
+  out[at + 23] = toU8(a2)
+  const a3: u32 = a[3]
+  out[at + 16] = toU8(a3 >> 24)
+  out[at + 17] = toU8(a3 >> 16)
+  out[at + 18] = toU8(a3 >> 8)
+  out[at + 19] = toU8(a3)
+  const a4: u32 = a[4]
+  out[at + 12] = toU8(a4 >> 24)
+  out[at + 13] = toU8(a4 >> 16)
+  out[at + 14] = toU8(a4 >> 8)
+  out[at + 15] = toU8(a4)
+  const a5: u32 = a[5]
+  out[at + 8] = toU8(a5 >> 24)
+  out[at + 9] = toU8(a5 >> 16)
+  out[at + 10] = toU8(a5 >> 8)
+  out[at + 11] = toU8(a5)
+  const a6: u32 = a[6]
+  out[at + 4] = toU8(a6 >> 24)
+  out[at + 5] = toU8(a6 >> 16)
+  out[at + 6] = toU8(a6 >> 8)
+  out[at + 7] = toU8(a6)
+  const a7: u32 = a[7]
+  out[at] = toU8(a7 >> 24)
+  out[at + 1] = toU8(a7 >> 16)
+  out[at + 2] = toU8(a7 >> 8)
+  out[at + 3] = toU8(a7)
 }
 
 /**
@@ -4518,7 +4591,10 @@ const p256ShaInto = (data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32
     toI32(kt.length) !== 64 ||
     toI32(h.length) !== 8 ||
     toI32(w.length) !== 64 ||
-    toI32(tail.length) !== 128
+    toI32(tail.length) !== 128 ||
+    off < 0 ||
+    len < 0 ||
+    toI64(off) + toI64(len) > toI64(data.length)
   ) {
     return false
   }
@@ -4543,11 +4619,17 @@ const p256ShaInto = (data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32
   for (let i: i32 = 0; i < 128; i++) {
     tail[i] = 0
   }
-  // The part block starts at off + len - rest, inside `data` with the window.
-  let k: i32 = toI32(toI64(off) + toI64(len) - toI64(rest))
-  for (let i: i32 = 0; i < rest; i++) {
-    tail[i] = data[k]
+  // The part block is data[off + len - rest .. off + len), inside `data` by
+  // the window check above, so the loop's bounds on `k` never end it early.
+  let copied: i32 = 0
+  const dataLength: i32 = toI32(data.length)
+  for (
+    let k: i32 = toI32(toI64(off) + toI64(len) - toI64(rest));
+    k >= 0 && k < dataLength && copied < rest;
     k++
+  ) {
+    tail[copied] = data[k]
+    copied++
   }
   tail[rest] = 0x80
   // One padded block, or two when the 8-byte length no longer fits (rest >= 56).
@@ -4624,7 +4706,7 @@ const p256HmacInto = (
     const k: i32 = 64 + i
     block[k] = message[i]
   }
-  p256ShaInto(block, P256_FROM, 64 + len, kt, h, w, tail)
+  const inner: boolean = p256ShaInto(block, P256_FROM, 64 + len, kt, h, w, tail)
   // The inner digest follows the padded key, where the outer hash reads it.
   for (let i: i32 = 0; i < 8; i++) {
     const word: u32 = h[i]
@@ -4643,13 +4725,15 @@ const p256HmacInto = (
   }
   // The outer message: the 64-byte padded key, then the 32-byte inner digest.
   const outerLength: i32 = 96
-  p256ShaInto(block, P256_FROM, outerLength, kt, h, w, tail)
-  p256DigestInto(out, h)
+  const outer: boolean = p256ShaInto(block, P256_FROM, outerLength, kt, h, w, tail)
+  const done: boolean = p256DigestInto(out, h)
   wipe(block)
   wipe(h)
   wipe(w)
   wipe(tail)
-  return true
+  // Each hash's window lies inside the 161-byte block, so neither refuses here;
+  // the answer still carries their refusals rather than drop them.
+  return inner && outer && done
 }
 
 /** Every byte of `out` set to `value`. */
