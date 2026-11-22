@@ -952,9 +952,16 @@ const jsonShortEscape = (code: i32): i32 => {
   return 0
 }
 
-/** One lower-case hex digit, as `JSON.stringify` writes the last two of a `\u00xx`. */
-const jsonHexByte = (nibble: i32): i32 =>
-  nibble < JSON_DECIMAL_BASE ? JSON_DIGIT_ZERO + nibble : JSON_LOWER_A + nibble - JSON_DECIMAL_BASE
+/**
+ * One lower-case hex digit, as `JSON.stringify` writes the last two of a
+ * `\u00xx`: the digit of `nibble`'s low four bits, which every caller's
+ * `code >> 4` or `code & 15` already is, and whose range lets the compiler
+ * prove the sum.
+ */
+const jsonHexByte = (nibble: i32): i32 => {
+  const digit = nibble & 15
+  return digit < JSON_DECIMAL_BASE ? JSON_DIGIT_ZERO + digit : JSON_LOWER_A + digit - JSON_DECIMAL_BASE
+}
 
 /** Whether byte `code` of a string goes inside the quotes as itself: JSON escapes only `"`, `\` and the bytes below a space. */
 const jsonIsPlainByte = (code: i32): boolean =>
