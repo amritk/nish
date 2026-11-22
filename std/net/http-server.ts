@@ -49,7 +49,7 @@
  * in the `h2Holds` family.
  */
 
-import { copyBytes } from "nish/bytes"
+import { copyBytes, tryCopyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import {
   HANDLER_ABSENT,
@@ -826,6 +826,9 @@ const httpServerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32
   return length < 0 ? ROUTER_BAD_ESCAPE : length
 }
 
+/** The generation after `gen`: it only has to differ from the last one, so it wraps to 0 past i32. */
+const httpServerNextGen = (gen: i32): i32 => (gen < 2147483647 ? gen + 1 : 0)
+
 /** Entry `at` of the per-slot table `xs`, or -1 outside it. */
 const httpServerAt = (xs: i32[], at: i32): i32 => (at >= 0 && at < toI32(xs.length) ? xs[at] : -1)
 
@@ -850,6 +853,35 @@ const httpServerLimit = (name: string, value: i32, low: i32, high: i32): void =>
 }
 
 /**
+ * One HTTP/1.1 slot's bookkeeping beside the carrier's connection in it: the
+ * slot number, its generation, its request, and whether it is open, waits for
+ * a free request or is being driven. `listenHttp1` makes one per carrier slot.
+ */
+class HttpServerH1Slot {
+  /** The carrier's slot number. */
+  slot: i32
+  /** Bumped each time the slot closes, so an answer still owed to the connection before is dropped; it wraps. */
+  gen: i32 = 0
+  /** The request the slot is reading or answering, null for none. */
+  current: HttpServerRequest | null = null
+  /** Whether the carrier's connection in the slot is open. */
+  open: boolean = false
+  /** Whether it stopped reading for want of a free request and waits on `starved`. */
+  starved: boolean = false
+  /**
+   * 0 while no `drive` of it runs, 1 while one does, 2 once a call inside it
+   * (an answer screened while it reads) asked for another pass. The nested
+   * call only marks it, so the depth stays one however many screened
+   * requests one write pipelines.
+   */
+  driving: i32 = 0
+
+  constructor(slot: i32) {
+    this.slot = slot
+  }
+}
+
+/**
  * One handler for HTTP/1.1, HTTP/2 over TLS and HTTP/3: configure up to one
  * listener of each kind, then loop on `waitSigned` (or `wait`), `ready` and
  * `take`, answering each request with `send`, `json` and `sendJson`,
@@ -857,9 +889,9 @@ const httpServerLimit = (name: string, value: i32, low: i32, high: i32): void =>
  */
 export class HttpServer {
   private router: Router
-  /** Every request of the pool, made up front, and the indices of the free ones. */
+  /** Every request of the pool, made up front, and the free ones. */
   private requests: HttpServerRequest[]
-  private free: i32[]
+  private free: HttpServerRequest[]
   /** Whole requests waiting for `take`, a ring of `queue.length` with `queueCount` from `queueStart`. */
   private queue: i32[]
   /** `pollWait`'s output. */
@@ -905,23 +937,13 @@ export class HttpServer {
   /** When `wait` next looks for timeouts. */
   private sweepAt: i64 = 0
 
-  // HTTP/1.1: the carrier, its listener, and per slot its generation, its request (-1 for none) and whether it is open.
+  // HTTP/1.1: the carrier, its listener, and a record per slot.
   private h1: Http1Server | null = null
   /** Per listener (`-100 - token`): when its rest for want of descriptors ends, 0 while it is not resting. */
   private restUntil: i64[]
-  private h1Gen: i32[]
-  private h1Current: i32[]
-  private h1Open: boolean[]
-  /** Slots that stopped reading for want of a free request, `starved`, and whether each is in it. */
-  private starved: i32[]
-  private h1Starved: boolean[]
-  /**
-   * Per slot: 0 while no `drive` of it runs, 1 while one does, 2 once a call
-   * inside it (an answer screened while it reads) asked for another pass.
-   * The nested call only marks it, so the depth stays one however many
-   * screened requests one write pipelines.
-   */
-  private h1Driving: i32[]
+  private h1Slots: HttpServerH1Slot[]
+  /** Slots that stopped reading for want of a free request, in the order they did. */
+  private starved: HttpServerH1Slot[]
 
   /** The response fields `start` hands the carrier, set for each response. */
   private outNames: u8[][]
@@ -1024,8 +1046,9 @@ export class HttpServer {
     this.requests = []
     this.free = []
     for (let k: i32 = 0; k < limits.requests; k++) {
-      this.requests.push(new HttpServerRequest(k))
-      this.free.push(toI32(toI64(limits.requests) - toI64(1) - toI64(k)))
+      const r: HttpServerRequest = new HttpServerRequest(k)
+      this.requests.push(r)
+      this.free.push(r)
     }
     this.queue = httpServerZeros(toI64(limits.requests), 0)
     this.streamRoutes = []
@@ -1069,12 +1092,8 @@ export class HttpServer {
     this.hostName = httpFieldBytes("host")
     this.outNames = []
     this.outValues = []
-    this.h1Gen = []
-    this.h1Current = []
-    this.h1Open = []
+    this.h1Slots = []
     this.starved = []
-    this.h1Starved = []
-    this.h1Driving = []
     this.restUntil = new Array<i64>(4)
     this.h2Clear = []
     this.h2Gen = []
@@ -1129,15 +1148,11 @@ export class HttpServer {
     this.h1 = new Http1Server(config, fd, slots)
     this.h1Fd = fd
     this.h1OutputSize = config.outputSize
-    this.h1Gen = httpServerZeros(toI64(slots), 0)
-    const current: i32[] = httpServerZeros(toI64(slots), 0)
-    this.h1Current = current
-    this.h1Open = httpServerZeros(toI64(slots), false)
-    this.h1Starved = httpServerZeros(toI64(slots), false)
-    this.h1Driving = httpServerZeros(toI64(slots), 0)
-    for (let s: i32 = 0; s < toI32(current.length); s++) {
-      current[s] = -1
+    const table: HttpServerH1Slot[] = []
+    for (let s: i32 = 0; s < slots; s++) {
+      table.push(new HttpServerH1Slot(s))
     }
+    this.h1Slots = table
     pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H1_LISTENER)
   }
 
@@ -1532,12 +1547,12 @@ export class HttpServer {
     this.unlisten(this.h2cFd, HTTP_SERVER_H2C_LISTENER)
     const h1: Http1Server | null = this.h1
     if (h1 !== null) {
-      for (let s: i32 = 0; s < toI32(this.h1Open.length); s++) {
-        if (this.h1IsOpen(s) && h1.holds(s)) {
-          if (this.h1Reading(s) === -1 && (h1.resting(s) || !h1.connection(s).wantsWrite())) {
-            this.h1Close(h1, s)
+      for (const s of this.h1Slots) {
+        if (s.open && h1.holds(s.slot)) {
+          if (s.current === null && (h1.resting(s.slot) || !h1.connection(s.slot).wantsWrite())) {
+            this.h1Close(h1, s.slot)
           } else {
-            h1.connection(s).closeAfter = true
+            h1.connection(s.slot).closeAfter = true
           }
         }
       }
@@ -1600,14 +1615,20 @@ export class HttpServer {
     if (h1 === null || this.draining) {
       return
     }
-    const open: boolean[] = this.h1Open
     let slot: i32 = h1.accept()
     while (slot >= 0 || slot === H1_POOL_FULL || slot === HTTP_SERVER_ACCEPT_ABORTED) {
-      // The carrier and `h1Open` are sized together by `listenHttp1`.
-      if (slot >= 0 && slot < toI32(open.length)) {
-        open[slot] = true
-        this.h1Set(slot, toI32(-1))
-        pollAdd(this.loop, h1.fd(slot), H1_WANT_READ, slot)
+      if (slot >= 0) {
+        const s: HttpServerH1Slot | null = this.h1Slot(slot)
+        if (s === null) {
+          // `listenHttp1` makes a record for every carrier slot, so a slot
+          // without one is no connection the server can serve: it is
+          // closed, never left open and unwatched.
+          h1.close(slot)
+        } else {
+          s.open = true
+          s.current = null
+          pollAdd(this.loop, h1.fd(slot), H1_WANT_READ, slot)
+        }
       }
       slot = h1.accept()
     }
@@ -1624,12 +1645,18 @@ export class HttpServer {
     if (h1 === null || !h1.holds(slot)) {
       return
     }
+    const s: HttpServerH1Slot | null = this.h1Slot(slot)
+    if (s === null) {
+      // As in `acceptHttp1`: a carrier slot without a record is closed.
+      h1.close(slot)
+      return
+    }
     if ((events & HTTP_SERVER_READ_BITS) !== 0) {
       h1.readable(slot)
     } else {
       h1.writable(slot)
     }
-    this.drive(h1, slot)
+    this.drive(h1, s)
   }
 
   /**
@@ -1637,44 +1664,46 @@ export class HttpServer {
    * settles it. A head with no free request left waits: the slot stops
    * reading and goes on `starved` until a request is handed back.
    */
-  private drive(h1: Http1Server, slot: i32): void {
-    const driving: i32[] = this.h1Driving
-    // `listenHttp1` sizes `h1Driving` to the carrier's slots.
-    if (slot < 0 || slot >= toI32(driving.length)) {
+  private drive(h1: Http1Server, s: HttpServerH1Slot): void {
+    if (s.driving !== 0) {
+      s.driving = 2
       return
     }
-    if (driving[slot] !== 0) {
-      driving[slot] = 2
-      return
+    s.driving = 1
+    this.drivePass(h1, s)
+    while (s.driving === 2 && s.open) {
+      s.driving = 1
+      this.drivePass(h1, s)
     }
-    driving[slot] = 1
-    this.drivePass(h1, slot)
-    while (slot < toI32(driving.length) && driving[slot] === 2 && this.h1IsOpen(slot)) {
-      driving[slot] = 1
-      this.drivePass(h1, slot)
-    }
-    if (slot < toI32(driving.length)) {
-      driving[slot] = 0
+    s.driving = 0
+  }
+
+  /** `drive` for the slot request `r` was read on; nothing once that slot has no record, as `live` then says too. */
+  private driveOf(h1: Http1Server, r: HttpServerRequest): void {
+    const s: HttpServerH1Slot | null = this.h1Slot(r.slot)
+    if (s !== null) {
+      this.drive(h1, s)
     }
   }
 
   /** One pass of `drive`: the slot's events until it needs more input, then `settle`. */
-  private drivePass(h1: Http1Server, slot: i32): void {
+  private drivePass(h1: Http1Server, s: HttpServerH1Slot): void {
+    const slot: i32 = s.slot
     const conn: Http1Connection = h1.connection(slot)
     let event: i32 = H1_NEED_MORE
-    if (!this.starve(slot) && !this.unended(slot)) {
+    if (!this.starve(s) && !this.unended(s)) {
       event = h1.next(slot)
       while (event !== H1_NEED_MORE && event !== H1_ERROR) {
         if (event === H1_REQUEST) {
-          this.begin(slot, conn)
+          this.begin(s, conn)
         } else if (event === H1_BODY) {
-          this.gather(slot, conn)
+          this.gather(s, conn)
         } else if (event === H1_END) {
-          this.whole(slot, conn)
+          this.whole(s, conn)
         } else if (event === H1_WRITE) {
-          this.resume(slot, conn)
+          this.resume(s, conn)
         }
-        if (this.starve(slot) || this.unended(slot)) {
+        if (this.starve(s) || this.unended(s)) {
           break
         }
         event = h1.next(slot)
@@ -1683,9 +1712,9 @@ export class HttpServer {
     if (event === H1_ERROR) {
       // The carrier has written its refusal and ends the connection; a
       // request it was reading is nobody's.
-      this.releaseReading(slot)
+      this.releaseReading(s)
     }
-    this.settle(h1, slot, conn)
+    this.settle(h1, s, conn)
   }
 
   /**
@@ -1695,23 +1724,22 @@ export class HttpServer {
    * so the slot is not asked until the program's `end`: until then the
    * response is the program's, and a draining connection stays open for it.
    */
-  private unended(slot: i32): boolean {
-    const at: i32 = this.h1Reading(slot)
-    const r: HttpServerRequest | null = this.requestAt(at)
+  private unended(s: HttpServerH1Slot): boolean {
+    const r: HttpServerRequest | null = s.current
     if (r === null) {
       return false
     }
     return r.state === HTTP_SERVER_STREAMING && r.pendingEnd === r.pendingStart
   }
 
-  /** Whether `slot` must wait for a free request before it reads a head: it then joins `starved`. */
-  private starve(slot: i32): boolean {
-    if (this.h1Reading(slot) !== -1 || toI32(this.free.length) > 0) {
+  /** Whether `s` must wait for a free request before it reads a head: it then joins `starved`. */
+  private starve(s: HttpServerH1Slot): boolean {
+    if (s.current !== null || toI32(this.free.length) > 0) {
       return false
     }
-    if (!this.h1IsStarved(slot)) {
-      this.h1Starve(slot, true)
-      this.starved.push(slot)
+    if (!s.starved) {
+      s.starved = true
+      this.starved.push(s)
     }
     return true
   }
@@ -1722,17 +1750,17 @@ export class HttpServer {
     if (h1 === null) {
       return
     }
-    const starved: i32[] = this.starved
+    const starved: HttpServerH1Slot[] = this.starved
     while (toI32(this.free.length) > 0) {
       const head: i32 = this.starvedHead
       if (head < 0 || head >= toI32(starved.length)) {
         break
       }
-      const slot: i32 = starved[head]
+      const s: HttpServerH1Slot = starved[head]
       this.starvedHead = head + 1
-      this.h1Starve(slot, false)
-      if (this.h1IsOpen(slot) && h1.holds(slot)) {
-        this.drive(h1, slot)
+      s.starved = false
+      if (s.open && h1.holds(s.slot)) {
+        this.drive(h1, s)
       }
     }
     // Drop the spent slots once they are half the list, so each is moved O(1) times.
@@ -1752,23 +1780,24 @@ export class HttpServer {
   }
 
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
-  private settle(h1: Http1Server, slot: i32, conn: Http1Connection): void {
+  private settle(h1: Http1Server, s: HttpServerH1Slot, conn: Http1Connection): void {
+    const slot: i32 = s.slot
     let wants: i32 = h1.flush(slot)
     if ((wants & H1_DONE) !== 0) {
       this.h1Close(h1, slot)
       return
     }
-    if (this.draining && this.h1Reading(slot) === -1 && !conn.wantsWrite()) {
+    if (this.draining && s.current === null && !conn.wantsWrite()) {
       this.h1Close(h1, slot)
       return
     }
-    if (this.h1IsStarved(slot)) {
+    if (s.starved) {
       wants = wants & ~H1_WANT_READ
     }
     if (h1.rearm(slot, wants)) {
       pollModify(this.loop, h1.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot)
     }
-    const r: HttpServerRequest | null = this.requestAt(this.h1Reading(slot))
+    const r: HttpServerRequest | null = s.current
     if (r !== null && r.state === HTTP_SERVER_PARKED && this.roomy(conn)) {
       this.h1Ready(r)
     }
@@ -1780,19 +1809,18 @@ export class HttpServer {
   }
 
   /** A head: a free request, the head copied into it, and its route. */
-  private begin(slot: i32, conn: Http1Connection): void {
+  private begin(s: HttpServerH1Slot, conn: Http1Connection): void {
     if (this.draining) {
       // A head read during the drain is the connection's last.
       conn.closeAfter = true
     }
-    const gens: i32[] = this.h1Gen
-    // `drivePass` asked `starve` first, so a request is free, and the carrier's slots are `h1Gen`'s.
-    if (slot < 0 || slot >= toI32(gens.length)) {
-      return
-    }
-    const gen: i32 = gens[slot]
-    const r: HttpServerRequest | null = this.requestAt(this.obtain())
+    const r: HttpServerRequest | null = this.obtain()
     if (r === null) {
+      // `drivePass` asked `starve` first, so a request was free; were none,
+      // the head is answered 503 and the connection ends, and the body
+      // events after it find no request and are passed over.
+      conn.closeAfter = true
+      conn.respond(503, this.noFields, this.noFields, 0)
       return
     }
     const p = conn.parser
@@ -1812,30 +1840,28 @@ export class HttpServer {
     r.kind = HTTP_SERVER_H1
     r.version = 1
     r.secure = false
-    r.slot = slot
-    r.gen = gen
+    r.slot = s.slot
+    r.gen = s.gen
     if (r.methodIs("CONNECT")) {
       // Its 501 ends the connection: the client may already be sending what
       // it meant for a tunnel.
       conn.closeAfter = true
     }
     this.admit(r, false)
-    this.h1Set(slot, r.index)
+    s.current = r
   }
 
   /** Body bytes: appended to the request's body, which the carrier's cap bounds. */
-  private gather(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.h1Reading(slot)
-    const r: HttpServerRequest | null = this.requestAt(at)
+  private gather(s: HttpServerH1Slot, conn: Http1Connection): void {
+    const r: HttpServerRequest | null = s.current
     if (r !== null) {
       this.append(r, conn.data, conn.dataStart, conn.dataLength)
     }
   }
 
   /** The request is whole: queued for `take`, or parked while the response before it is still mostly unsent. */
-  private whole(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.h1Reading(slot)
-    const r: HttpServerRequest | null = this.requestAt(at)
+  private whole(s: HttpServerH1Slot, conn: Http1Connection): void {
+    const r: HttpServerRequest | null = s.current
     if (r === null) {
       return
     }
@@ -1878,9 +1904,8 @@ export class HttpServer {
   }
 
   /** `H1_WRITE`: the carrier has room again for the response under way. */
-  private resume(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.h1Reading(slot)
-    const r: HttpServerRequest | null = this.requestAt(at)
+  private resume(s: HttpServerH1Slot, conn: Http1Connection): void {
+    const r: HttpServerRequest | null = s.current
     if (r === null) {
       return
     }
@@ -1915,15 +1940,21 @@ export class HttpServer {
     if (conn.end() === H1_AGAIN) {
       return
     }
-    this.h1Set(r.slot, toI32(-1))
+    const s: HttpServerH1Slot | null = this.h1Slot(r.slot)
+    if (s !== null) {
+      const held: HttpServerRequest | null = s.current
+      if (held !== null && held.index === r.index) {
+        s.current = null
+      }
+    }
     this.release(r)
   }
 
-  /** Hands back the request `slot` was reading when the carrier refused it. */
-  private releaseReading(slot: i32): void {
-    const r: HttpServerRequest | null = this.requestAt(this.h1Reading(slot))
+  /** Hands back the request `s` was reading when the carrier refused it. */
+  private releaseReading(s: HttpServerH1Slot): void {
+    const r: HttpServerRequest | null = s.current
     if (r !== null && r.state === HTTP_SERVER_READING) {
-      this.h1Set(slot, toI32(-1))
+      s.current = null
       this.release(r)
     }
   }
@@ -1935,23 +1966,18 @@ export class HttpServer {
    */
   private h1Close(h1: Http1Server, slot: i32): void {
     h1.close(slot)
-    this.h1Forget(slot)
+    const s: HttpServerH1Slot | null = this.h1Slot(slot)
+    if (s !== null) {
+      this.h1Forget(s)
+    }
   }
 
   /** The bookkeeping of a slot the carrier has closed. */
-  private h1Forget(slot: i32): void {
-    const open: boolean[] = this.h1Open
-    const gen: i32[] = this.h1Gen
-    // `listenHttp1` sizes the two together.
-    if (slot < 0 || slot >= toI32(open.length) || slot >= toI32(gen.length)) {
-      return
-    }
-    open[slot] = false
-    // The generation only has to differ from the last one, so it wraps.
-    const was: i32 = gen[slot]
-    gen[slot] = was < 2147483647 ? was + 1 : 0
-    const r: HttpServerRequest | null = this.requestAt(this.h1Reading(slot))
-    this.h1Set(slot, toI32(-1))
+  private h1Forget(s: HttpServerH1Slot): void {
+    s.open = false
+    s.gen = httpServerNextGen(s.gen)
+    const r: HttpServerRequest | null = s.current
+    s.current = null
     if (r !== null) {
       this.drop(r)
     }
@@ -1959,9 +1985,8 @@ export class HttpServer {
 
   /** Every slot the carrier's `expire` closed. */
   private h1Sweep(h1: Http1Server): void {
-    const open: boolean[] = this.h1Open
-    for (let s: i32 = 0; s < toI32(open.length); s++) {
-      if (open[s] && !h1.holds(s)) {
+    for (const s of this.h1Slots) {
+      if (s.open && !h1.holds(s.slot)) {
         this.h1Forget(s)
       }
     }
@@ -1969,28 +1994,25 @@ export class HttpServer {
 
   // ---- The pool -------------------------------------------------------------------
 
-  /** The index of a free request, its buffers made at their caps on first use; -1 when none is free. */
-  private obtain(): i32 {
-    const free: i32[] = this.free
-    const requests: HttpServerRequest[] = this.requests
-    const last: i64 = toI64(free.length) - toI64(1)
-    const top: i32 = last >= 0 ? toI32(last) : -1
-    if (toI32(free.length) <= 0 || top < 0 || top >= toI32(free.length)) {
-      return -1
+  /** A free request, its buffers made at their caps on first use; null when none is free. */
+  private obtain(): HttpServerRequest | null {
+    const free: HttpServerRequest[] = this.free
+    const last: i32 = toI32(free.length) - 1
+    if (last < 0) {
+      return null
     }
-    const at: i32 = free[top]
-    // The free list holds only indexes `requests` has.
-    if (at < 0 || at >= toI32(requests.length)) {
-      return -1
+    const r: HttpServerRequest = free[last]
+    // `last` proved the index; the prover keeps no length fact past that
+    // read, so the pop is guarded again rather than left a site.
+    if (free.length > 0) {
+      free.pop()
     }
-    const r: HttpServerRequest = requests[at]
-    free.pop()
     if (toI32(r.head.length) === 0) {
       r.head = httpServerZeros(toI64(this.maxHead), toU8(0))
       r.spans = httpServerCells(toI64(4) * toI64(this.maxFields))
       r.params = httpServerZeros(toI64(2) * toI64(this.router.maxParams) + toI64(2), 0)
     }
-    return at
+    return r
   }
 
   /**
@@ -2204,7 +2226,7 @@ export class HttpServer {
     }
     this.unlink(r)
     r.state = HTTP_SERVER_FREE
-    this.free.push(r.index)
+    this.free.push(r)
   }
 
   /**
@@ -2274,9 +2296,10 @@ export class HttpServer {
   /**
    * Appends bytes to `r`'s pending buffer, grown to
    * `min(2^30, max(needed, 2 × current))`; `write` has refused a remainder
-   * past 2^30.
+   * past 2^30. False, with nothing kept, when the bytes still do not fit
+   * or the window lies outside `buf`: `write` then cuts the response.
    */
-  private keep(r: HttpServerRequest, buf: u8[], off: i32, len: i32): void {
+  private keep(r: HttpServerRequest, buf: u8[], off: i32, len: i32): boolean {
     const live: i32 = toI32(toI64(r.pendingEnd) - toI64(r.pendingStart))
     if (toI64(r.pending.length) - toI64(r.pendingEnd) < toI64(len)) {
       const need: i64 = toI64(live) + toI64(len)
@@ -2289,12 +2312,12 @@ export class HttpServer {
       r.pendingStart = 0
       r.pendingEnd = live
     }
-    copyBytes(r.pending, r.pendingEnd, buf, off, len)
-    // `copyBytes` has checked the copy ends within `pending`.
     const end: i64 = toI64(r.pendingEnd) + toI64(len)
-    if (end <= toI64(r.pending.length)) {
-      r.pendingEnd = toI32(end)
+    if (end > toI64(r.pending.length) || !tryCopyBytes(r.pending, r.pendingEnd, buf, off, len)) {
+      return false
     }
+    r.pendingEnd = toI32(end)
+    return true
   }
 
   // ---- Requests -------------------------------------------------------------------
@@ -2554,38 +2577,10 @@ export class HttpServer {
     }
   }
 
-  /** The request HTTP/1.1 slot `slot` is reading or answering, or -1 for none or outside the table. */
-  private h1Reading(slot: i32): i32 {
-    const current: i32[] = this.h1Current
-    return slot >= 0 && slot < toI32(current.length) ? current[slot] : -1
-  }
-
-  /** Records request `at` as HTTP/1.1 slot `slot`'s own, -1 for none; nothing outside the table. */
-  private h1Set(slot: i32, at: i32): void {
-    const current: i32[] = this.h1Current
-    if (slot >= 0 && slot < toI32(current.length)) {
-      current[slot] = at
-    }
-  }
-
-  /** Whether HTTP/1.1 slot `slot` is open: false outside the table. */
-  private h1IsOpen(slot: i32): boolean {
-    const open: boolean[] = this.h1Open
-    return slot >= 0 && slot < toI32(open.length) && open[slot]
-  }
-
-  /** Whether HTTP/1.1 slot `slot` waits on `starved`: false outside the table. */
-  private h1IsStarved(slot: i32): boolean {
-    const starved: boolean[] = this.h1Starved
-    return slot >= 0 && slot < toI32(starved.length) && starved[slot]
-  }
-
-  /** Marks HTTP/1.1 slot `slot` as waiting on `starved` or not; nothing outside the table. */
-  private h1Starve(slot: i32, on: boolean): void {
-    const starved: boolean[] = this.h1Starved
-    if (slot >= 0 && slot < toI32(starved.length)) {
-      starved[slot] = on
-    }
+  /** HTTP/1.1 slot `slot`'s record, or null for a number outside the table `listenHttp1` made one per carrier slot. */
+  private h1Slot(slot: i32): HttpServerH1Slot | null {
+    const slots: HttpServerH1Slot[] = this.h1Slots
+    return slot >= 0 && slot < toI32(slots.length) ? slots[slot] : null
   }
 
   /** Request `at` of the pool, or null for -1 or any other number outside it. */
@@ -2598,7 +2593,8 @@ export class HttpServer {
   private live(r: HttpServerRequest): boolean {
     if (r.kind === HTTP_SERVER_H1) {
       const h1: Http1Server | null = this.h1
-      return h1 !== null && h1.holds(r.slot) && httpServerAt(this.h1Gen, r.slot) === r.gen
+      const s: HttpServerH1Slot | null = this.h1Slot(r.slot)
+      return h1 !== null && s !== null && h1.holds(r.slot) && s.gen === r.gen
     }
     if (r.hung) {
       return false
@@ -2955,8 +2951,12 @@ export class HttpServer {
       }
     }
     // `carry` took at most `len`, and `off + len` is within `buf`.
-    if (taken < len) {
-      this.keep(r, buf, toI32(toI64(off) + toI64(taken)), toI32(toI64(len) - toI64(taken)))
+    if (
+      taken < len &&
+      !this.keep(r, buf, toI32(toI64(off) + toI64(taken)), toI32(toI64(len) - toI64(taken)))
+    ) {
+      this.abort(r)
+      return HANDLER_DROPPED
     }
     this.nudge(r)
     return HANDLER_SENT
@@ -3005,7 +3005,7 @@ export class HttpServer {
     const h3: Http3Server | null = this.h3
     if (r.kind === HTTP_SERVER_H1) {
       if (h1 !== null) {
-        this.drive(h1, r.slot)
+        this.driveOf(h1, r)
       }
     } else if (r.kind === HTTP_SERVER_H2) {
       if (this.h2Holds(r.slot)) {
@@ -3038,7 +3038,7 @@ export class HttpServer {
     }
     if (r.kind === HTTP_SERVER_H1 && h1 !== null) {
       this.finishH1(r, h1.connection(r.slot))
-      this.drive(h1, r.slot)
+      this.driveOf(h1, r)
       return HANDLER_SENT
     }
     r.state = HTTP_SERVER_FLUSHING
@@ -3468,20 +3468,28 @@ export class HttpServer {
   /**
    * Lays a screened head out in `r` as HTTP/1.1's reads: the method, the
    * path as the target, and the fields, with `:authority` given as `host`
-   * in place of any `host` field.
+   * in place of any `host` field. False when the head or its spans have no
+   * room for it, which `screen`'s 431 past `maxHead` and `maxFields` leaves
+   * for none; the caller then refuses the stream.
    */
-  private fromFields(r: HttpServerRequest, f: HttpFields): void {
+  private fromFields(r: HttpServerRequest, f: HttpFields): boolean {
     this.headAt = 0
     r.methodStart = 0
-    this.put(r, f.method)
+    if (!this.put(r, f.method)) {
+      return false
+    }
     r.methodEnd = this.headAt
     r.targetStart = this.headAt
-    this.put(r, f.path)
+    if (!this.put(r, f.path)) {
+      return false
+    }
     r.targetEnd = this.headAt
     let n: i32 = 0
     const authority: boolean = toI32(f.authority.length) > 0
     if (authority) {
-      this.putField(r, n, this.hostName, f.authority)
+      if (!this.putField(r, n, this.hostName, f.authority)) {
+        return false
+      }
       n += 1
     }
     const names: u8[][] = f.names
@@ -3489,39 +3497,47 @@ export class HttpServer {
     for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length) && n < 2147483647; k++) {
       const name: u8[] = names[k]
       if (!authority || !httpFieldIs(name, "host")) {
-        this.putField(r, n, name, values[k])
+        if (!this.putField(r, n, name, values[k])) {
+          return false
+        }
         n += 1
       }
     }
     r.headerCount = n
+    return true
   }
 
-  /** Copies `bytes` into `r`'s head at `headAt`. */
-  private put(r: HttpServerRequest, bytes: u8[]): void {
+  /** Copies `bytes` into `r`'s head at `headAt`; false, with nothing copied, when they do not fit. */
+  private put(r: HttpServerRequest, bytes: u8[]): boolean {
     const n: i32 = toI32(bytes.length)
-    copyBytes(r.head, this.headAt, bytes, HTTP_SERVER_ZERO, n)
-    // `copyBytes` has checked the copy ends within the head.
     const end: i64 = toI64(this.headAt) + toI64(n)
-    if (end <= toI64(r.head.length)) {
-      this.headAt = toI32(end)
+    if (end > toI64(r.head.length) || !tryCopyBytes(r.head, this.headAt, bytes, HTTP_SERVER_ZERO, n)) {
+      return false
     }
+    this.headAt = toI32(end)
+    return true
   }
 
-  /** Copies field `n`, `name`: `value`, into `r`'s head and spans. */
-  private putField(r: HttpServerRequest, n: i32, name: u8[], value: u8[]): void {
-    const nameStart: i32 = this.headAt
-    this.put(r, name)
-    const nameEnd: i32 = this.headAt
-    this.put(r, value)
-    // `listenHttp2Tls` and `listenH2c` size `spans` for every field a carrier passes.
+  /** Copies field `n`, `name`: `value`, into `r`'s head and spans; false when either has no room for it. */
+  private putField(r: HttpServerRequest, n: i32, name: u8[], value: u8[]): boolean {
     const at: i64 = toI64(4) * toI64(n)
-    if (at >= toI64(0) && at + toI64(3) < toI64(r.spans.length)) {
-      const k: i32 = toI32(at)
-      r.spans[k] = nameStart
-      r.spans[k + 1] = nameEnd
-      r.spans[k + 2] = nameEnd
-      r.spans[k + 3] = this.headAt
+    if (at < toI64(0) || at + toI64(3) >= toI64(r.spans.length)) {
+      return false
     }
+    const nameStart: i32 = this.headAt
+    if (!this.put(r, name)) {
+      return false
+    }
+    const nameEnd: i32 = this.headAt
+    if (!this.put(r, value)) {
+      return false
+    }
+    const k: i32 = toI32(at)
+    r.spans[k] = nameStart
+    r.spans[k + 1] = nameEnd
+    r.spans[k + 2] = nameEnd
+    r.spans[k + 3] = this.headAt
+    return true
   }
 
   // ---- HTTP/2 ---------------------------------------------------------------------
@@ -3537,9 +3553,11 @@ export class HttpServer {
       crypto.getRandomValues(this.keyBuf)
       const slot: i32 = h2.accept(this.rnd, this.keyBuf)
       if (slot >= 0) {
-        // `h2Grow` gave the listener `[h2TlsBase, h2TlsBase + slots)`; `h2Opened` drops a slot past it.
+        // `h2Grow` gave the listener `[h2TlsBase, h2TlsBase + slots)`; a slot past it is closed.
         const v: i64 = toI64(this.h2TlsBase) + toI64(slot)
-        this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2.fd(slot))
+        if (!this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2.fd(slot))) {
+          h2.close(slot)
+        }
       } else if (slot === HTTP_SERVER_ACCEPT_NONE) {
         return
       } else if (slot !== TLS_TCP_POOL_FULL && slot !== HTTP_SERVER_ACCEPT_ABORTED) {
@@ -3559,9 +3577,11 @@ export class HttpServer {
     let slot: i32 = h2c.accept()
     while (slot >= 0 || slot === H2C_POOL_FULL || slot === HTTP_SERVER_ACCEPT_ABORTED) {
       if (slot >= 0) {
-        // `h2Grow` gave the listener `[h2cBase, h2cBase + slots)`; `h2Opened` drops a slot past it.
+        // `h2Grow` gave the listener `[h2cBase, h2cBase + slots)`; a slot past it is closed.
         const v: i64 = toI64(this.h2cBase) + toI64(slot)
-        this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2c.fd(slot))
+        if (!this.h2Opened(v <= 2147483647 ? toI32(v) : toI32(-1), h2c.fd(slot))) {
+          h2c.close(slot)
+        }
       }
       slot = h2c.accept()
     }
@@ -3605,8 +3625,12 @@ export class HttpServer {
     }
   }
 
-  /** HTTP/2 slot `v`, just accepted on socket `fd`: an empty stream table, idle, and in the loop. */
-  private h2Opened(v: i32, fd: i32): void {
+  /**
+   * HTTP/2 slot `v`, just accepted on socket `fd`: an empty stream table,
+   * idle, and in the loop. False, with nothing registered, for a slot past
+   * the tables `h2Grow` sized; the caller then closes the connection.
+   */
+  private h2Opened(v: i32, fd: i32): boolean {
     const open: boolean[] = this.h2Open
     const count: i32[] = this.h2Count
     const idleSince: i64[] = this.h2IdleSince
@@ -3619,7 +3643,7 @@ export class HttpServer {
       v >= toI32(idleSince.length) ||
       wide > 2147483647
     ) {
-      return
+      return false
     }
     const token: i32 = toI32(wide)
     open[v] = true
@@ -3631,6 +3655,7 @@ export class HttpServer {
       reqs[e] = -1
     }
     pollAdd(this.loop, fd, H1_WANT_READ, token)
+    return true
   }
 
   /** Whether HTTP/2 slot `v` is on the h2c carrier: false outside the slot table. */
@@ -3813,13 +3838,17 @@ export class HttpServer {
         return
       }
       const e: i32 = this.h2Entry(slot)
-      const at: i32 = e >= 0 ? this.obtain() : -1
-      const r: HttpServerRequest | null = this.requestAt(at)
+      const r: HttpServerRequest | null = e >= 0 ? this.obtain() : null
       if (r === null) {
         conn.reset(id, H2_REFUSED_STREAM)
         return
       }
-      this.fromFields(r, f)
+      if (!this.fromFields(r, f)) {
+        // Still free: `admit` has not taken it.
+        this.free.push(r)
+        conn.reset(id, H2_REFUSED_STREAM)
+        return
+      }
       r.kind = HTTP_SERVER_H2
       r.version = 2
       r.secure = !this.h2IsClear(slot)
@@ -3832,7 +3861,7 @@ export class HttpServer {
       // `h2Entry` found `e` in the table, which `h2Grow` sizes with `h2Streams`.
       if (e >= 0 && e < toI32(streams.length) && e < toI32(reqs.length)) {
         streams[e] = id
-        reqs[e] = at
+        reqs[e] = r.index
       }
       httpServerAdd(this.h2Count, slot, 1)
       this.h2Idle(slot, toI64(0))
@@ -4218,13 +4247,17 @@ export class HttpServer {
         return
       }
       const e: i32 = this.h3Entry(slot)
-      const at: i32 = e >= 0 ? this.obtain() : -1
-      const r: HttpServerRequest | null = this.requestAt(at)
+      const r: HttpServerRequest | null = e >= 0 ? this.obtain() : null
       if (r === null) {
         conn.reset(id, H3_REQUEST_REJECTED)
         return
       }
-      this.fromFields(r, f)
+      if (!this.fromFields(r, f)) {
+        // Still free: `admit` has not taken it.
+        this.free.push(r)
+        conn.reset(id, H3_REQUEST_REJECTED)
+        return
+      }
       r.kind = HTTP_SERVER_H3
       r.version = 3
       r.secure = true
@@ -4237,7 +4270,7 @@ export class HttpServer {
       // `h3Entry` found `e` in the table, which `listenHttp3` sizes with `h3Streams`.
       if (e >= 0 && e < toI32(streams.length) && e < toI32(reqs.length)) {
         streams[e] = id
-        reqs[e] = at
+        reqs[e] = r.index
       }
       httpServerAdd(this.h3Count, slot, 1)
       this.admit(r, false)
@@ -4355,10 +4388,10 @@ export class HttpServer {
   private expireAll(now: i64): void {
     const h1: Http1Server | null = this.h1
     if (h1 !== null) {
-      for (let s: i32 = 0; s < toI32(this.h1Current.length); s++) {
-        const r: HttpServerRequest | null = this.requestAt(this.h1Current[s])
-        if (r !== null && this.late(r, now) && h1.holds(s)) {
-          this.h1Close(h1, s)
+      for (const s of this.h1Slots) {
+        const r: HttpServerRequest | null = s.current
+        if (r !== null && this.late(r, now) && h1.holds(s.slot)) {
+          this.h1Close(h1, s.slot)
         }
       }
     }

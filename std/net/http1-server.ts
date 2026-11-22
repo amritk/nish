@@ -2114,8 +2114,17 @@ export class Http1Connection {
     ) {
       return this.write(buf, off, len)
     }
-    const pending: i32 = http1ServerSub(this.outputEnd, this.outputStart)
-    const n: i32 = netWrite2(this.fd, this.output, this.outputStart, pending, buf, off, len)
+    const start: i32 = this.outputStart
+    const end: i32 = this.outputEnd
+    // `0 <= start <= end <= output.length` holds for every queued window; one
+    // that broke it would make `netWrite2` panic, so it ends the connection.
+    // `buf`'s window is checked above.
+    if (start < 0 || start > end || end > toI32(this.output.length)) {
+      this.abort()
+      return H1_CLOSED
+    }
+    const pending: i32 = http1ServerSub(end, start)
+    const n: i32 = netWrite2(this.fd, this.output, start, pending, buf, off, len)
     if (n < 0 && n !== H1_AGAIN) {
       this.abort()
       return H1_CLOSED
@@ -3182,7 +3191,12 @@ export class Http1Server {
   private drain(conn: Http1Connection): i32 {
     const fd: i32 = conn.fd
     while (true) {
-      const n: i32 = netRead(fd, this.scratch, H1_ZERO, toI32(this.scratch.length))
+      const size: i32 = toI32(this.scratch.length)
+      // `0 <= 0 <= size <= scratch.length`: a scratch with no room drains nothing.
+      if (size <= 0) {
+        return H1_DONE
+      }
+      const n: i32 = netRead(fd, this.scratch, H1_ZERO, size)
       if (n === H1_AGAIN) {
         return H1_WANT_READ
       }
@@ -3230,12 +3244,15 @@ export class Http1Server {
     const fd: i32 = conn.fd
     const pending: i32 = http1ServerSub(conn.outputEnd, conn.outputStart)
     while (conn.wantsWrite()) {
-      const n: i32 = netWrite(
-        fd,
-        conn.output,
-        conn.outputStart,
-        http1ServerSub(conn.outputEnd, conn.outputStart)
-      )
+      const start: i32 = conn.outputStart
+      const end: i32 = conn.outputEnd
+      // `0 <= start <= end <= output.length` holds for every queued window;
+      // one that broke it would make `netWrite` panic, so it ends the connection.
+      if (start < 0 || start > end || end > toI32(conn.output.length)) {
+        conn.abort()
+        break
+      }
+      const n: i32 = netWrite(fd, conn.output, start, http1ServerSub(end, start))
       if (n <= 0) {
         if (n !== H1_AGAIN) {
           conn.abort()
