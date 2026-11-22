@@ -4432,7 +4432,13 @@ const p256Word = (b0: u8, b1: u8, b2: u8, b3: u8): u32 =>
  * round constants `kt` (§4.2.2, 64 words), all the caller's.
  */
 const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): void => {
-  if (toI32(h.length) < 8 || toI32(w.length) < 64 || toI32(kt.length) < 64 || at < 0 || at > toI32(src.length) - 64) {
+  if (
+    toI32(h.length) < 8 ||
+    toI32(w.length) < 64 ||
+    toI32(kt.length) < 64 ||
+    at < 0 ||
+    at > toI32(src.length) - 64
+  ) {
     return
   }
   // Each offset is `at` plus a constant below 64, inside the block the check
@@ -4508,7 +4514,12 @@ const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): voi
  * hold.
  */
 const p256ShaInto = (data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[]): boolean => {
-  if (toI32(kt.length) !== 64 || toI32(h.length) !== 8 || toI32(w.length) !== 64 || toI32(tail.length) !== 128) {
+  if (
+    toI32(kt.length) !== 64 ||
+    toI32(h.length) !== 8 ||
+    toI32(w.length) !== 64 ||
+    toI32(tail.length) !== 128
+  ) {
     return false
   }
   p256SetLimbs(
