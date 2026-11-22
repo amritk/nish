@@ -1125,7 +1125,7 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * datagram ring takes 32 bytes more, the packet header 32 and the
  * connection-ID retire list 16.
  *
- * Moved to **SLOTFIG bytes** (+SLOTDELTA) when the QUIC engine stopped reaching a
+ * Moved to **111,608 bytes** (+368) when the QUIC engine stopped reaching a
  * panic site (#2142): methods of recovery's sent-packet rings, the stream table
  * and the connection now read array fields into a local to guard an index, and a
  * field taken as a value is no longer stored inline, so its array keeps the
@@ -1133,7 +1133,7 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * array fields are stored inline"). Recovery's rings take +240, the streams +96
  * and the connection +32.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111240
+export const HTTP3_SERVER_SLOT_BYTES = 111608
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
