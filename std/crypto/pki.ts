@@ -256,28 +256,46 @@ const pkiBytesEqual = (a: u8[], b: u8[]): boolean => {
   return true
 }
 
-const pkiHexDigits: string = "0123456789abcdef"
+/** The lower-case hex digit of `v`, 0 to 15. */
+const pkiHexChar = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
+
+/**
+ * `bytes[lo .. hi)` in lower-case hex, joined in halves so the copying stays
+ * `n log n`; `""` for an empty or outside range.
+ */
+const pkiHexRange = (bytes: u8[], lo: i32, hi: i32): string => {
+  if (lo < 0 || lo >= toI32(bytes.length) || hi > toI32(bytes.length) || lo >= hi) {
+    return ""
+  }
+  if (lo + 1 === hi) {
+    const b: i32 = toI32(bytes[lo])
+    return `${pkiHexChar(b >> 4)}${pkiHexChar(b & 15)}`
+  }
+  // Unsigned: both ends are at most bytes.length, so the sum cannot wrap.
+  const mid: i32 = toI32((toU32(lo) + toU32(hi)) / 2)
+  return `${pkiHexRange(bytes, lo, mid)}${pkiHexRange(bytes, mid, hi)}`
+}
 
 /** `bytes` in lower-case hex, a `Map` key. */
-const pkiHex = (bytes: u8[]): string => {
-  const out: u8[] = new Array<u8>(2 * toI32(bytes.length))
-  for (let i: i32 = 0; i < toI32(bytes.length) && 2 * i + 1 < toI32(out.length); i++) {
-    const b: i32 = toI32(bytes[i])
-    out[2 * i] = toU8(toI32(pkiHexDigits.charCodeAt(b >> 4)))
-    out[2 * i + 1] = toU8(toI32(pkiHexDigits.charCodeAt(b & 15)))
-  }
-  return String.fromBytes(out, 0, toI32(out.length))
-}
+const pkiHex = (bytes: u8[]): string => pkiHexRange(bytes, 0, toI32(bytes.length))
 
 const pkiLower = (c: i32): i32 => (c >= 65 && c <= 90 ? c + 32 : c)
 
 /** Whether `a[aAt ..]` and `b[bAt ..]` agree for `n` bytes, ASCII case folded; both ranges must lie inside. */
 const pkiFoldEqualAt = (a: string, aAt: i32, b: string, bAt: i32, n: i32): boolean => {
-  if (aAt < 0 || bAt < 0 || n < 0 || aAt + n > toI32(a.length) || bAt + n > toI32(b.length)) {
+  if (aAt < 0 || bAt < 0 || n < 0 || n > toI32(a.length) - aAt || n > toI32(b.length) - bAt) {
     return false
   }
   for (let i: i32 = 0; i < n; i++) {
-    if (pkiLower(toI32(a.charCodeAt(aAt + i))) !== pkiLower(toI32(b.charCodeAt(bAt + i)))) {
+    // Unsigned: aAt + i < a.length and bAt + i < b.length, so neither wraps.
+    const x: i32 = toI32(toU32(aAt) + toU32(i))
+    const y: i32 = toI32(toU32(bAt) + toU32(i))
+    // Restates the range checked above for the index proof, which does not
+    // carry it through the sum.
+    if (x < 0 || y < 0 || x >= toI32(a.length) || y >= toI32(b.length)) {
+      return false
+    }
+    if (pkiLower(toI32(a.charCodeAt(x))) !== pkiLower(toI32(b.charCodeAt(y)))) {
       return false
     }
   }
@@ -285,8 +303,10 @@ const pkiFoldEqualAt = (a: string, aAt: i32, b: string, bAt: i32, n: i32): boole
 }
 
 /** `s` without one trailing dot. */
-const pkiStripDot = (s: string): string =>
-  s.length > 0 && toI32(s.charCodeAt(toI32(s.length) - 1)) === 46 ? s.slice(0, toI32(s.length) - 1) : s
+const pkiStripDot = (s: string): string => {
+  const n: i32 = toI32(s.length)
+  return n >= 1 && toI32(s.charCodeAt(n - 1)) === 46 ? s.substring(0, n - 1) : s
+}
 
 /**
  * Whether `s` is a DNS name a hostname can be: one to 253 bytes of labels of
@@ -314,10 +334,10 @@ const pkiValidDns = (s: string): boolean => {
       c === 45 ||
       c === 95
     ) {
-      label++
-      if (label > 63) {
+      if (label >= 63) {
         return false
       }
+      label++
     } else {
       return false
     }
@@ -329,7 +349,8 @@ const pkiLabelCount = (s: string): i32 => {
   let count: i32 = 1
   for (let i: i32 = 0; i < toI32(s.length); i++) {
     if (toI32(s.charCodeAt(i)) === 46) {
-      count++
+      // Unsigned: count is at most i + 1, below s.length, so it cannot wrap.
+      count = toI32(toU32(count) + 1)
     }
   }
   return count
@@ -361,7 +382,8 @@ const pkiParseIpv4 = (s: string, start: i32, end: i32): u8[] | null => {
   let part: i32 = 0
   let value: i32 = 0
   let digits: i32 = 0
-  for (let i: i32 = start; i <= end; i++) {
+  let i: i32 = start
+  while (i <= end) {
     const c: i32 = i < end ? toI32(s.charCodeAt(i)) : 46
     if (c === 46) {
       if (digits === 0 || part > 3) {
@@ -373,15 +395,22 @@ const pkiParseIpv4 = (s: string, start: i32, end: i32): u8[] | null => {
       digits = 0
     } else {
       const d: i32 = pkiDigit(c)
-      if (d < 0 || (digits > 0 && value === 0)) {
+      // A fourth digit, or one after 26 or more, passes 255; a leading zero
+      // is refused.
+      if (d < 0 || digits >= 3 || value > 25 || (digits > 0 && value === 0)) {
         return null
       }
-      value = value * 10 + d
+      // Unsigned: value is at most 25 and d a digit, so the sum cannot wrap.
+      value = toI32(toU32(value) * 10 + toU32(d))
       digits++
       if (value > 255) {
         return null
       }
     }
+    if (i >= end) {
+      break
+    }
+    i++
   }
   return part === 4 ? out : null
 }
@@ -412,10 +441,10 @@ const pkiParseIpv6 = (s: string): u8[] | null => {
         value = 0
         digits = 0
       }
-      colons++
-      if (colons > 2 || (colons === 2 && gap >= 0)) {
+      if (colons >= 2 || (colons === 1 && gap >= 0)) {
         return null
       }
+      colons++
       if (colons === 2) {
         gap = toI32(words.length)
       }
@@ -431,7 +460,7 @@ const pkiParseIpv6 = (s: string): u8[] | null => {
         group = i
       }
       colons = 0
-      value = value * 16 + d
+      value = (value << 4) | d
       digits++
     }
   }
@@ -440,8 +469,15 @@ const pkiParseIpv6 = (s: string): u8[] | null => {
     if (quad === null || toI32(words.length) > 6) {
       return null
     }
-    words.push((toI32(quad[0]) << 8) | toI32(quad[1]))
-    words.push((toI32(quad[2]) << 8) | toI32(quad[3]))
+    // pkiParseIpv4 returns four octets or null; restated for the index proof.
+    const q: u8[] = quad
+    if (toI32(q.length) < 4) {
+      return null
+    }
+    const high: i32 = (toI32(q[0]) << 8) | toI32(q[1])
+    const low: i32 = (toI32(q[2]) << 8) | toI32(q[3])
+    words.push(high)
+    words.push(low)
   } else if (digits > 0) {
     if (toI32(words.length) >= 8) {
       return null
@@ -454,13 +490,27 @@ const pkiParseIpv6 = (s: string): u8[] | null => {
   if ((gap < 0 && count !== 8) || (gap >= 0 && count > 7)) {
     return null
   }
-  const out: u8[] = new Array<u8>(16)
-  for (let w: i32 = 0; w < count; w++) {
-    const at: i32 = gap >= 0 && w >= gap ? w + 8 - count : w
-    if (at >= 0 && 2 * at + 1 < 16) {
-      out[2 * at] = toU8(words[w] >> 8)
-      out[2 * at + 1] = toU8(words[w] & 255)
+  // The eight groups: the words, with the `::` gap filled by the zero groups
+  // that bring them to eight.
+  const groups: i32[] = []
+  for (let w: i32 = 0; w < toI32(words.length); w++) {
+    const word: i32 = words[w]
+    if (w === gap) {
+      for (let z: i32 = count; z < 8; z++) {
+        groups.push(0)
+      }
     }
+    groups.push(word)
+  }
+  if (gap === count) {
+    for (let z: i32 = count; z < 8; z++) {
+      groups.push(0)
+    }
+  }
+  const out: u8[] = []
+  for (const g of groups) {
+    out.push(toU8(g >> 8))
+    out.push(toU8(g & 255))
   }
   return out
 }
@@ -472,8 +522,8 @@ const pkiParseIpv6 = (s: string): u8[] | null => {
  */
 const pkiParseIp = (host: string): u8[] | null => {
   const n: i32 = toI32(host.length)
-  if (n >= 2 && toI32(host.charCodeAt(0)) === 91 && toI32(host.charCodeAt(n - 1)) === 93) {
-    return pkiParseIpv6(host.slice(1, n - 1))
+  if (n >= 2 && toI32(host.length) >= 2 && toI32(host.charCodeAt(0)) === 91 && toI32(host.charCodeAt(n - 1)) === 93) {
+    return pkiParseIpv6(host.substring(1, n - 1))
   }
   if (host.indexOf(":") >= 0) {
     return pkiParseIpv6(host)
@@ -494,16 +544,18 @@ const pkiParseIp = (host: string): u8[] | null => {
 const pkiDnsMatch = (san: string, host: string): boolean => {
   const name: string = pkiStripDot(san)
   const n: i32 = toI32(name.length)
-  if (n >= 2 && toI32(name.charCodeAt(0)) === 42 && toI32(name.charCodeAt(1)) === 46) {
-    const rest: string = name.slice(2, n)
+  if (toI32(name.length) >= 2 && toI32(name.charCodeAt(0)) === 42 && toI32(name.charCodeAt(1)) === 46) {
+    const rest: string = name.substring(2, n)
     const dot: i32 = toI32(host.indexOf("."))
     const restLength: i32 = n - 2
     return (
       pkiValidDns(rest) &&
       pkiLabelCount(rest) >= 2 &&
       dot > 0 &&
-      toI32(host.length) - dot - 1 === restLength &&
-      pkiFoldEqualAt(host, dot + 1, rest, 0, restLength)
+      // Unsigned: dot and restLength are below host.length, so the sum cannot
+      // wrap.
+      toI32(toU32(dot) + toU32(restLength) + 1) === toI32(host.length) &&
+      pkiFoldEqualAt(host, toI32(toU32(dot) + 1), rest, 0, restLength)
     )
   }
   return pkiValidDns(name) && n === toI32(host.length) && pkiFoldEqualAt(name, 0, host, 0, n)
@@ -662,11 +714,12 @@ export const pkiVerifySignature = (cert: X509Certificate, issuer: X509Certificat
 
 /** `pkiSignatureCode` within the call's budget of signatures. */
 const pkiCheckSignature = (s: PkiSearch, cert: X509Certificate, issuer: X509Certificate): i32 => {
-  if (s.signatures >= PKI_MAX_SIGNATURES) {
+  const used: i32 = s.signatures
+  if (used >= PKI_MAX_SIGNATURES) {
     s.spent = true
     return PKI_ERR_BUDGET
   }
-  s.signatures = s.signatures + 1
+  s.signatures = used + 1
   return pkiSignatureCode(cert, issuer)
 }
 
@@ -683,7 +736,7 @@ const pkiDnsWithin = (name: string, base: string): boolean => {
   const b: string = pkiStripDot(base)
   const nb: i32 = toI32(b.length)
   const nn: i32 = toI32(name.length)
-  if (nb === 0) {
+  if (toI32(b.length) < 1) {
     return true
   }
   if (toI32(b.charCodeAt(0)) === 46) {
@@ -692,12 +745,17 @@ const pkiDnsWithin = (name: string, base: string): boolean => {
   if (nn === nb) {
     return pkiFoldEqualAt(name, 0, b, 0, nb)
   }
-  return nn > nb && toI32(name.charCodeAt(nn - nb - 1)) === 46 && pkiFoldEqualAt(name, nn - nb, b, 0, nb)
+  if (nn <= nb) {
+    return false
+  }
+  // The octet before the base's last nb: nn > nb >= 1, so it lies in name.
+  const dot: i32 = nn - nb - 1
+  return dot >= 0 && dot < toI32(name.length) && toI32(name.charCodeAt(dot)) === 46 && pkiFoldEqualAt(name, nn - nb, b, 0, nb)
 }
 
 /** `base` as the name its subtree is rooted at: without its leading dot. */
 const pkiSubtreeRoot = (base: string): string =>
-  base.length > 0 && toI32(base.charCodeAt(0)) === 46 ? base.slice(1, toI32(base.length)) : base
+  toI32(base.length) >= 1 && toI32(base.charCodeAt(0)) === 46 ? base.substring(1, toI32(base.length)) : base
 
 /**
  * Whether `issuer`'s dNSName constraints allow the name `dns`: inside one
@@ -709,7 +767,7 @@ const pkiSubtreeRoot = (base: string): string =>
 const pkiDnsAllowed = (issuer: X509Certificate, dns: string): boolean => {
   const name: string = pkiStripDot(dns)
   const wildcard: boolean = name.startsWith("*.")
-  const base: string = wildcard ? name.slice(2, toI32(name.length)) : name
+  const base: string = wildcard ? name.substring(2, toI32(name.length)) : name
   let listed: boolean = false
   let inside: boolean = false
   for (const p of issuer.ncPermitted) {
@@ -877,16 +935,38 @@ const pkiConstraintsCode = (s: PkiSearch, issuer: X509Certificate): i32 => {
       return PKI_ERR_NAME_CONSTRAINTS
     }
   }
-  let names: i32 = 1
-  for (const c of s.path) {
-    names = names + toI32(c.sanDns.length) + toI32(c.sanIp.length) + 1
+  // Each name below the issuer, the host's included, against each subtree.
+  // Past PKI_MAX_NAME_CHECKS names, one subtree is already over the budget.
+  const subtrees: i64 = toI64(issuer.ncPermitted.length) + toI64(issuer.ncExcluded.length)
+  let cost: i64 = 0
+  if (subtrees > 0) {
+    let names: i64 = 1
+    for (const c of s.path) {
+      // Unsigned: names is at most PKI_MAX_NAME_CHECKS before the add and each
+      // length below 2^32, so the sum cannot wrap.
+      names = toI64(toU64(names) + toU64(toI64(c.sanDns.length)) + toU64(toI64(c.sanIp.length)) + 1)
+      if (names > toI64(PKI_MAX_NAME_CHECKS)) {
+        s.spent = true
+        return PKI_ERR_BUDGET
+      }
+    }
+    // Unsigned: names is at most PKI_MAX_NAME_CHECKS and subtrees below 2^33,
+    // so the product stays below 2^51.
+    cost = toI64(toU64(names) * toU64(subtrees))
   }
-  const cost: i32 = names * (toI32(issuer.ncPermitted.length) + toI32(issuer.ncExcluded.length))
-  if (cost > PKI_MAX_NAME_CHECKS - s.nameChecks) {
+  const used: i32 = s.nameChecks
+  if (cost < 0 || cost > toI64(PKI_MAX_NAME_CHECKS)) {
     s.spent = true
     return PKI_ERR_BUDGET
   }
-  s.nameChecks = s.nameChecks + cost
+  // Unsigned: used and cost are each at most PKI_MAX_NAME_CHECKS, so the sum
+  // cannot wrap.
+  const total: i64 = toI64(toU64(toI64(used)) + toU64(cost))
+  if (total > toI64(PKI_MAX_NAME_CHECKS)) {
+    s.spent = true
+    return PKI_ERR_BUDGET
+  }
+  s.nameChecks = toI32(total)
   if (s.host.length > 0 && !pkiDnsAllowed(issuer, s.host)) {
     return PKI_ERR_NAME_CONSTRAINTS
   }
@@ -966,7 +1046,7 @@ const pkiCriticalitySound = (c: X509Certificate): boolean => !c.akiCritical && (
  */
 const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certificate, root: boolean): i32 => {
   // No intermediate is added past PKI_MAX_PATH - 1, so a root always fits.
-  if (!root && toI32(s.path.length) + 2 > PKI_MAX_PATH) {
+  if (!root && toI32(s.path.length) > PKI_MAX_PATH - 2) {
     return PKI_ERR_CHAIN_TOO_LONG
   }
   if (pkiIsDistrusted(s.store, cand)) {
@@ -998,7 +1078,8 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
     let below: i32 = 0
     for (let i: i32 = 1; i < toI32(s.path.length); i++) {
       if (!pkiSelfIssued(s.path[i])) {
-        below++
+        // Unsigned: below counts certificates of the path, so it cannot wrap.
+        below = toI32(toU32(below) + 1)
       }
     }
     if (below > cand.bcPathLen) {
@@ -1054,6 +1135,10 @@ const pkiCandidate = (s: PkiSearch, child: X509Certificate, cand: X509Certificat
  */
 const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
   const depth: i32 = toI32(s.path.length)
+  // Unsigned: pkiIssuerCode keeps the path to PKI_MAX_PATH certificates, so
+  // neither position wraps.
+  const above: i32 = toI32(toU32(depth) + 1)
+  const atRoot: i32 = toI32(toU32(PKI_AT_ROOT) + toU32(above))
   if (toI32(child.issuer.length) > 2) {
     const roots: X509Certificate[] | undefined = s.store.bySubject.get(pkiHex(child.issuer))
     if (roots !== undefined) {
@@ -1067,7 +1152,7 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
             s.path.push(root)
             return true
           }
-          pkiNote(s, code, PKI_AT_ROOT + depth + 1)
+          pkiNote(s, code, atRoot)
         }
       }
     }
@@ -1078,7 +1163,7 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
           return false
         }
         if (code !== PKI_OK) {
-          pkiNote(s, code, depth + 1)
+          pkiNote(s, code, above)
         } else {
           s.path.push(cand)
           if (pkiExtend(s, cand)) {
@@ -1087,7 +1172,9 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
           if (s.spent) {
             return false
           }
-          s.path.pop()
+          if (toI32(s.path.length) > 0) {
+            s.path.pop()
+          }
         }
       }
     }
@@ -1122,8 +1209,9 @@ const pkiSerialSound = (c: X509Certificate): boolean => {
 const pkiSanDnsSound = (san: string): boolean => {
   const name: string = pkiStripDot(san)
   const n: i32 = toI32(name.length)
-  const wild: boolean = n >= 2 && toI32(name.charCodeAt(0)) === 42 && toI32(name.charCodeAt(1)) === 46
-  return name.indexOf("_") < 0 && pkiValidDns(wild ? name.slice(2, n) : name)
+  const wild: boolean =
+    toI32(name.length) >= 2 && toI32(name.charCodeAt(0)) === 42 && toI32(name.charCodeAt(1)) === 46
+  return name.indexOf("_") < 0 && pkiValidDns(wild ? name.substring(2, n) : name)
 }
 
 /**
@@ -1305,28 +1393,38 @@ export const pkiVerifyServer = (
   if (count > PKI_MAX_CHAIN_CERTS) {
     return new PkiResult(PKI_ERR_CHAIN_TOO_LONG, none)
   }
-  let bytes: i32 = 0
+  let bytes: i64 = 0
   for (const der of chain) {
-    bytes = bytes + toI32(der.length)
-    if (bytes > PKI_MAX_CHAIN_BYTES) {
+    // Unsigned: bytes is at most PKI_MAX_CHAIN_BYTES before the add and a
+    // length below 2^32, so the sum cannot wrap.
+    bytes = toI64(toU64(bytes) + toU64(toI64(der.length)))
+    if (bytes > toI64(PKI_MAX_CHAIN_BYTES)) {
       return new PkiResult(PKI_ERR_CHAIN_TOO_LONG, none)
     }
   }
   const certs: X509Certificate[] = []
+  let first: X509Certificate | null = null
   for (const der of chain) {
     const c: X509Certificate | null = x509ParseCertificate(der)
     if (c === null) {
       return new PkiResult(PKI_ERR_MALFORMED, none)
     }
     if (
-      toI32(c.sanDns.length) + toI32(c.sanIp.length) > PKI_MAX_NAMES ||
-      toI32(c.ncPermitted.length) + toI32(c.ncExcluded.length) > PKI_MAX_SUBTREES
+      toI64(c.sanDns.length) + toI64(c.sanIp.length) > toI64(PKI_MAX_NAMES) ||
+      toI64(c.ncPermitted.length) + toI64(c.ncExcluded.length) > toI64(PKI_MAX_SUBTREES)
     ) {
       return new PkiResult(PKI_ERR_BUDGET, none)
     }
+    if (first === null) {
+      first = c
+    }
     certs.push(c)
   }
-  const leaf: X509Certificate = certs[0]
+  // The chain is not empty, so the loop set it; restated for the type.
+  if (first === null) {
+    return new PkiResult(PKI_ERR_MALFORMED, none)
+  }
+  const leaf: X509Certificate = first
   const leafCode: i32 = pkiLeafCode(leaf, hostname, nowMs)
   if (leafCode !== PKI_OK) {
     return new PkiResult(leafCode, none)

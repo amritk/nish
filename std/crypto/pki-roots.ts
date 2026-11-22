@@ -105,19 +105,48 @@ class PkiRootsLoad {
   }
 }
 
+/**
+ * Counts one PEM block or file skipped. The count is not capped: past
+ * `PKI_ROOTS_MAX_FILES` a trust directory's entries are each counted without
+ * a read, so no bound below 2^31 holds for it (PKI-R8).
+ */
+const pkiRootsSkip = (load: PkiRootsLoad): void => {
+  load.out.skipped = load.out.skipped + 1
+}
+
+/** The lower-case hex digit of `v`, 0 to 15. */
+const pkiRootsHexChar = (v: i32): string => String.fromCharCode(v < 10 ? 48 + v : 87 + v)
+
+/**
+ * `bytes[lo .. hi)` in lower-case hex, joined in halves so the copying stays
+ * `n log n`; `""` for an empty or outside range. The key a DER is kept once by.
+ */
+const pkiRootsHex = (bytes: u8[], lo: i32, hi: i32): string => {
+  if (lo < 0 || lo >= toI32(bytes.length) || hi > toI32(bytes.length) || lo >= hi) {
+    return ""
+  }
+  if (lo + 1 === hi) {
+    const b: i32 = toI32(bytes[lo])
+    return `${pkiRootsHexChar(b >> 4)}${pkiRootsHexChar(b & 15)}`
+  }
+  // Unsigned: both ends are at most bytes.length, so the sum cannot wrap.
+  const mid: i32 = toI32((toU32(lo) + toU32(hi)) / 2)
+  return `${pkiRootsHex(bytes, lo, mid)}${pkiRootsHex(bytes, mid, hi)}`
+}
+
 /** Keeps `der` as a root when it parses, is new, and the cap has room; counts it skipped otherwise. */
 const pkiRootsKeep = (load: PkiRootsLoad, der: u8[]): void => {
   const cert: X509Certificate | null = x509ParseCertificate(der)
   if (cert === null) {
-    load.out.skipped = load.out.skipped + 1
+    pkiRootsSkip(load)
     return
   }
-  const key: string = String.fromBytes(der, 0, der.length)
+  const key: string = pkiRootsHex(der, 0, toI32(der.length))
   if (load.seen.has(key)) {
     return
   }
   if (toI32(load.out.roots.length) >= PKI_ROOTS_MAX_ROOTS) {
-    load.out.skipped = load.out.skipped + 1
+    pkiRootsSkip(load)
     return
   }
   load.seen.add(key)
@@ -130,11 +159,16 @@ const pkiRootsKeep = (load: PkiRootsLoad, der: u8[]): void => {
  */
 const pkiRootsBlock = (load: PkiRootsLoad, text: string): void => {
   const ders: u8[][] | null = pemToDer(text, "CERTIFICATE")
-  if (ders === null || ders.length !== 1) {
-    load.out.skipped = load.out.skipped + 1
+  if (ders === null) {
+    pkiRootsSkip(load)
     return
   }
-  pkiRootsKeep(load, ders[0])
+  const list: u8[][] = ders
+  if (toI32(list.length) < 1 || toI32(list.length) > 1) {
+    pkiRootsSkip(load)
+    return
+  }
+  pkiRootsKeep(load, list[0])
 }
 
 /**
@@ -148,39 +182,43 @@ const pkiRootsSplit = (load: PkiRootsLoad, text: string): void => {
   let open: boolean = false
   let blockStart: i32 = 0
   let lineStart: i32 = 0
-  while (lineStart < n) {
+  while (lineStart >= 0 && lineStart < n) {
     let lineEnd: i32 = lineStart
-    while (lineEnd >= 0 && lineEnd < toI32(text.length) && toI32(text.charCodeAt(lineEnd)) !== 10) {
-      lineEnd = lineEnd + 1
+    while (lineEnd >= 0 && lineEnd < toI32(text.length)) {
+      if (toI32(text.charCodeAt(lineEnd)) === 10) {
+        break
+      }
+      // Unsigned: lineEnd is below text.length, so it cannot wrap.
+      lineEnd = toI32(toU32(lineEnd) + 1)
     }
-    const next: i32 = lineEnd < n ? lineEnd + 1 : n
+    // Unsigned: lineEnd is below n on that side, so it cannot wrap.
+    const next: i32 = lineEnd < n ? toI32(toU32(lineEnd) + 1) : n
     // A carriage return, space or tab before the line feed is no part of the
     // line, so a BEGIN with trailing whitespace still opens a block and is
     // counted when `pemToDer` refuses it, rather than lost unseen.
     let end: i32 = lineEnd
-    while (
-      end > lineStart &&
-      (toI32(text.charCodeAt(end - 1)) === 13 ||
-        toI32(text.charCodeAt(end - 1)) === 32 ||
-        toI32(text.charCodeAt(end - 1)) === 9)
-    ) {
+    while (end > lineStart && end >= 1 && end <= toI32(text.length)) {
+      const c: i32 = toI32(text.charCodeAt(end - 1))
+      if (c !== 13 && c !== 32 && c !== 9) {
+        break
+      }
       end = end - 1
     }
-    const line: string = text.slice(lineStart, end)
+    const line: string = text.substring(lineStart, end)
     if (line.startsWith("-----BEGIN ") && line.endsWith("-----") && line.length > 16) {
       if (open) {
-        load.out.skipped = load.out.skipped + 1
+        pkiRootsSkip(load)
       }
       open = true
       blockStart = lineStart
     } else if (open && line.startsWith("-----END ")) {
-      pkiRootsBlock(load, text.slice(blockStart, next))
+      pkiRootsBlock(load, text.substring(blockStart, next))
       open = false
     }
     lineStart = next
   }
   if (open) {
-    load.out.skipped = load.out.skipped + 1
+    pkiRootsSkip(load)
   }
 }
 
@@ -200,8 +238,9 @@ const pkiRootsRegular = (path: string): string | null => {
 
 /** Reads `path` as roots: `false` when it is not a regular file that reads, `true` when it was (or would have been, past a cap). */
 const pkiRootsFile = (load: PkiRootsLoad, path: string): boolean => {
-  if (load.files >= PKI_ROOTS_MAX_FILES) {
-    load.out.skipped = load.out.skipped + 1
+  const files: i32 = load.files
+  if (files >= PKI_ROOTS_MAX_FILES) {
+    pkiRootsSkip(load)
     return true
   }
   const real: string | null = pkiRootsRegular(path)
@@ -209,10 +248,10 @@ const pkiRootsFile = (load: PkiRootsLoad, path: string): boolean => {
   if (text === null) {
     return false
   }
-  load.files = load.files + 1
+  load.files = files + 1
   load.out.sources.push(path)
   if (toI32(text.length) > PKI_ROOTS_MAX_FILE_BYTES) {
-    load.out.skipped = load.out.skipped + 1
+    pkiRootsSkip(load)
     return true
   }
   pkiRootsSplit(load, text)
@@ -236,7 +275,7 @@ export const pkiRootsDirEntry = (name: string): boolean => {
     return name.length > 4
   }
   const n: i32 = toI32(name.length)
-  if (n < 10 || toI32(name.charCodeAt(8)) !== 46) {
+  if (n < 10 || toI32(name.length) < 10 || toI32(name.charCodeAt(8)) !== 46) {
     return false
   }
   for (let i: i32 = 0; i < 8 && i < toI32(name.length); i = i + 1) {
@@ -258,9 +297,10 @@ const pkiRootsDir = (load: PkiRootsLoad, dir: string): void => {
   if (names === null) {
     return
   }
+  const list: string[] = names
   const base: string = dir.endsWith("/") ? dir : `${dir}/`
-  for (let i: i32 = 0; i < toI32(names.length); i = i + 1) {
-    const name: string = names[i]
+  for (let i: i32 = 0; i < toI32(list.length); i = i + 1) {
+    const name: string = list[i]
     if (pkiRootsDirEntry(name)) {
       pkiRootsFile(load, `${base}${name}`)
     }
@@ -298,14 +338,17 @@ export const pkiLoadRoots = (file: string | null, dirs: string[], bundles: strin
 const pkiRootsSplitDirs = (list: string): string[] => {
   const out: string[] = []
   let start: i32 = 0
-  const n: i32 = toI32(list.length)
-  for (let i: i32 = 0; i <= n; i = i + 1) {
-    if (i >= n || (i >= 0 && i < toI32(list.length) && toI32(list.charCodeAt(i)) === 58)) {
+  for (let i: i32 = 0; i < toI32(list.length); i = i + 1) {
+    if (toI32(list.charCodeAt(i)) === 58) {
       if (i > start) {
-        out.push(list.slice(start, i))
+        out.push(list.substring(start, i))
       }
       start = i + 1
     }
+  }
+  const n: i32 = toI32(list.length)
+  if (n > start) {
+    out.push(list.substring(start, n))
   }
   return out
 }
