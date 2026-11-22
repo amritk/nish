@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 4683,
+  "total": 4245,
   "explicit": {
-    "kept": 354,
-    "toFix": 70
+    "kept": 356,
+    "toFix": 57
   },
   "modules": {
     "std/base64.ts": {
@@ -211,13 +211,7 @@
       "panic": 9
     },
     "std/net/handler.ts": {
-      "array-length": 14,
-      "divide": 4,
-      "index": 80,
-      "overflow": 70,
-      "panic": 19,
-      "pop": 1,
-      "slice": 1
+      "panic": 9
     },
     "std/net/hpack.ts": {
       "panic": 8
@@ -309,17 +303,12 @@
       "panic": 6
     },
     "std/net/serve.ts": {
-      "array-length": 19,
-      "index": 67,
-      "overflow": 41,
-      "panic": 5,
+      "array-length": 3,
+      "panic": 3,
       "slice": 8
     },
     "std/net/static.ts": {
-      "array-length": 8,
-      "divide": 5,
-      "index": 49,
-      "overflow": 71,
+      "panic": 1,
       "slice": 4
     },
     "std/net/tls-tcp.ts": {
@@ -937,8 +926,8 @@
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpHandler.end",
-      "reason": "end requires a started response and the full declared body length written; a caller sequencing contract"
+      "function": "HttpHandler.constructor",
+      "reason": "limits below the documented minimums or a failed pollCreate; openHttpHandler answers both as Err, and the doc points there"
     },
     {
       "module": "std/net/handler.ts",
@@ -947,8 +936,8 @@
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpHandler.sendJson",
-      "reason": "sendJson requires a value begun with json() first; a caller sequencing contract"
+      "function": "HttpHandler.kept",
+      "reason": "an answer out of sequence (not taken, already answered, no json() begun, a status outside 200 to 599, end before the declared body); each answer's try twin gives the same message as Err"
     },
     {
       "module": "std/net/handler.ts",
@@ -958,12 +947,32 @@
     {
       "module": "std/net/handler.ts",
       "function": "HttpHandler.watch",
-      "reason": "id must be 0 to HANDLER_MAX_WATCHED - 1; a static choice of the program"
+      "reason": "id must be 0 to HANDLER_MAX_WATCHED - 1; a static choice of the program; tryWatch answers Err instead"
     },
     {
       "module": "std/net/handler.ts",
-      "function": "HttpRequest.checkParam",
-      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it"
+      "function": "HttpRequest.paramBound",
+      "reason": "param index must be below the route's declared parameter count; the route pattern is static, so the caller knows it; tryParamStart, tryParamEnd and tryParamDecimal answer Err instead"
+    },
+    {
+      "module": "std/net/handler.ts",
+      "function": "HttpRequest.valueBound",
+      "reason": "a field index header() did not answer; the caller holds the index header() gave, so only a program bug passes another; tryValueStart and tryValueEnd answer Err instead"
+    },
+    {
+      "module": "std/net/serve.ts",
+      "function": "Response.bytes",
+      "reason": "The off/len body window must lie inside buf; the handler controls it statically"
+    },
+    {
+      "module": "std/net/serve.ts",
+      "function": "serveFields",
+      "reason": "ServeLimits.server is a program-written config string that must hold no control bytes"
+    },
+    {
+      "module": "std/net/static.ts",
+      "function": "StaticFiles.serveHandler",
+      "reason": "a request whose field spans disagree with its own header() answers, the handler's invariant; it was HttpRequest.valueStart's panic before; tryServeHandler answers Err instead"
     },
     {
       "module": "std/net/hpack.ts",
@@ -1554,16 +1563,6 @@
       "module": "std/net/router.ts",
       "function": "routerOutside",
       "reason": "the match range must lie inside its buffer; a caller precondition of Router.match"
-    },
-    {
-      "module": "std/net/serve.ts",
-      "function": "Response.bytes",
-      "reason": "The off/len body window must lie inside buf; the handler controls it statically"
-    },
-    {
-      "module": "std/net/serve.ts",
-      "function": "serveFields",
-      "reason": "ServeLimits.server is a program-written config string that must hold no control bytes"
     },
     {
       "module": "std/net/tls/schedule.ts",

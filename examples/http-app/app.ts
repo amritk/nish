@@ -24,6 +24,7 @@ const NO_CONTENT: i32 = 204
 const BAD_REQUEST: i32 = 400
 const NOT_FOUND: i32 = 404
 const METHOD_NOT_ALLOWED: i32 = 405
+const INTERNAL_SERVER_ERROR: i32 = 500
 const INSUFFICIENT_STORAGE: i32 = 507
 
 const ZERO: i32 = 0
@@ -108,6 +109,35 @@ const writeNote = (w: JsonWriter, id: i32, text: string): void => {
   w.endObject()
 }
 
+/**
+ * Logs an answer the handler refused for a broken contract — a request
+ * answered twice, a status out of range — which this program's own code
+ * would have to have made, and answers `req` with a bare 500 instead. A
+ * refusal before the head leaves `req` as it was, so the 500 answers it; one
+ * after the head, or of a request answered already, has nothing left to
+ * answer, so the 500 is refused too and that refusal is logged, and then
+ * nothing of `req` is left to answer.
+ */
+const logRefusal = (h: HttpHandler, req: HttpRequest, sent: Result<i32, string>): void => {
+  if (sent.isOk()) {
+    return
+  }
+  console.error(`http-app: ${sent.error}`)
+  const fallback: Result<i32, string> = h.tryEmpty(req, INTERNAL_SERVER_ERROR)
+  if (fallback.isErr()) {
+    console.error(`http-app: ${fallback.error}`)
+  }
+}
+
+/**
+ * Logs `error`, a route parameter the route table does not give, and answers
+ * 500: the table is this program's, so the fault is the server's.
+ */
+const routeFault = (h: HttpHandler, req: HttpRequest, error: string): i32 => {
+  logRefusal(h, req, Err(error))
+  return INTERNAL_SERVER_ERROR
+}
+
 /** The API: its notes, its handler and how it logs. */
 export class App {
   h: HttpHandler
@@ -150,7 +180,7 @@ export class App {
         w.key("notes")
         w.i32(this.notes.count())
         w.endObject()
-        h.sendJson(req, OK)
+        logRefusal(h, req, h.trySendJson(req, OK))
         return OK
       }
       case LIST: {
@@ -160,62 +190,99 @@ export class App {
           writeNote(w, this.notes.ids[k], this.notes.texts[k])
         }
         w.endArray()
-        h.sendJson(req, OK)
+        logRefusal(h, req, h.trySendJson(req, OK))
         return OK
       }
       case CREATE: {
         const text: string | null = jsonField(String.fromBytes(req.body, ZERO, req.bodyLength), "text")
         if (text === null) {
-          h.problem(req, BAD_REQUEST, "Bad Request", 'the body is a JSON object with a string field "text"')
+          logRefusal(
+            h,
+            req,
+            h.tryProblem(
+              req,
+              BAD_REQUEST,
+              "Bad Request",
+              'the body is a JSON object with a string field "text"'
+            )
+          )
           return BAD_REQUEST
         }
         const id: i32 = this.notes.add(text)
         if (id < 0) {
-          h.problem(
+          logRefusal(
+            h,
             req,
-            INSUFFICIENT_STORAGE,
-            "Insufficient Storage",
-            `the store holds ${this.notes.capacity} notes`
+            h.tryProblem(
+              req,
+              INSUFFICIENT_STORAGE,
+              "Insufficient Storage",
+              `the store holds ${this.notes.capacity} notes`
+            )
           )
           return INSUFFICIENT_STORAGE
         }
         writeNote(h.json(), id, text)
-        h.sendJson(req, CREATED)
+        logRefusal(h, req, h.trySendJson(req, CREATED))
         return CREATED
       }
       case SHOW: {
-        const at: i32 = this.notes.find(req.paramDecimal(ZERO))
+        // The route `/notes/:id` has its one parameter, so it is no `Err`; a
+        // parameter that is not a decimal is -1, an id no note has.
+        const id: Result<i32, string> = req.tryParamDecimal(ZERO)
+        if (id.isErr()) {
+          return routeFault(h, req, id.error)
+        }
+        const at: i32 = this.notes.find(id.value)
         if (at < 0 || at >= toI32(this.notes.ids.length) || at >= toI32(this.notes.texts.length)) {
-          h.problem(req, NOT_FOUND, "Not Found", "there is no note with that id")
+          logRefusal(h, req, h.tryProblem(req, NOT_FOUND, "Not Found", "there is no note with that id"))
           return NOT_FOUND
         }
         writeNote(h.json(), this.notes.ids[at], this.notes.texts[at])
-        h.sendJson(req, OK)
+        logRefusal(h, req, h.trySendJson(req, OK))
         return OK
       }
-      case REMOVE:
-        if (!this.notes.remove(req.paramDecimal(ZERO))) {
-          h.problem(req, NOT_FOUND, "Not Found", "there is no note with that id")
+      case REMOVE: {
+        const id: Result<i32, string> = req.tryParamDecimal(ZERO)
+        if (id.isErr()) {
+          return routeFault(h, req, id.error)
+        }
+        if (!this.notes.remove(id.value)) {
+          logRefusal(h, req, h.tryProblem(req, NOT_FOUND, "Not Found", "there is no note with that id"))
           return NOT_FOUND
         }
-        h.empty(req, NO_CONTENT)
+        logRefusal(h, req, h.tryEmpty(req, NO_CONTENT))
         return NO_CONTENT
+      }
       case FILES: {
         const files: StaticFiles | null = this.files
-        // A path it refuses, a file that is not there, or no `--static`: 404.
-        if (
-          files !== null &&
-          files.serveHandler(h, req, req.paramStart(ZERO), req.paramEnd(ZERO)) !== STATIC_NOT_FOUND
-        ) {
-          return files.status
+        // The route `/static/*` has its one parameter, so neither is an `Err`.
+        const start: Result<i32, string> = req.tryParamStart(ZERO)
+        if (start.isErr()) {
+          return routeFault(h, req, start.error)
         }
-        h.refuse(req)
+        const end: Result<i32, string> = req.tryParamEnd(ZERO)
+        if (end.isErr()) {
+          return routeFault(h, req, end.error)
+        }
+        // A path it refuses, a file that is not there, or no `--static`: 404.
+        if (files !== null) {
+          const served: Result<i32, string> = files.tryServeHandler(h, req, start.value, end.value)
+          if (served.isErr()) {
+            logRefusal(h, req, served)
+            return INTERNAL_SERVER_ERROR
+          }
+          if (served.value !== STATIC_NOT_FOUND) {
+            return files.status
+          }
+        }
+        logRefusal(h, req, h.tryRefuse(req))
         return NOT_FOUND
       }
       default: {
         // NOT_FOUND, or METHOD_NOT_ALLOWED with the `Allow` of the methods the path takes.
         const status: i32 = req.route === ROUTER_METHOD_NOT_ALLOWED ? METHOD_NOT_ALLOWED : NOT_FOUND
-        h.refuse(req)
+        logRefusal(h, req, h.tryRefuse(req))
         return status
       }
     }
@@ -225,8 +292,10 @@ export class App {
 /** Turns the handler once and answers every whole request it made. */
 export const serveTurn = (app: App, timeoutMs: i32): void => {
   app.h.wait(timeoutMs)
-  while (app.h.ready()) {
-    app.answer(app.h.take())
+  let req: HttpRequest | null = app.h.next()
+  while (req !== null) {
+    app.answer(req)
+    req = app.h.next()
   }
 }
 

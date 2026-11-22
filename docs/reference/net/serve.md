@@ -306,6 +306,9 @@ class Request
 | `path(): string` | The path: the target up to its `?`, still percent-encoded. |
 | `query(name: string): string` | The first query parameter named `name`, form-decoded (`+` as a space, `%XX` as its byte). |
 | `text(): string` | The body as text. |
+| `tryParam(k: i32): Result<string, string>` | Route parameter `k`, percent-decoded, as `param` reads it, or an error naming the parameter the route does not have. |
+| `tryParamMalformed(k: i32): Result<boolean, string>` | Whether route parameter `k` holds a malformed percent escape, as `paramMalformed` answers it, or an error naming the parameter the route does not have. |
+| `tryParamNumber(k: i32): Result<i32, string>` | Route parameter `k` read as a decimal number, as `paramNumber` reads it, or an error naming the parameter the route does not have. |
 
 ### Response
 
@@ -327,6 +330,7 @@ class Response
 | `bytes(type: string, buf: u8[], off: i32, len: i32): Response` | Sets a body of bytes with a content type. |
 | `json(s: string): Response` | Sets a JSON body the program wrote. |
 | `text(s: string): Response` | Sets a plain-text body. |
+| `tryBytes(type: string, buf: u8[], off: i32, len: i32): Result<Response, string>` | Sets a body of bytes with a content type, as `bytes` does, or an error when the window lies outside `buf`; nothing is set on an error. |
 
 ### ServeLimits
 
@@ -363,7 +367,7 @@ class ServeStats
 | `new ServeStats()` |  |
 | `answered: i32` | Requests answered, by a task or by the server itself. |
 | `busy: i32` | Requests answered 503 because `inFlight` tasks were already running. |
-| `failed: i32` | Answers a task wrote that broke a cap or a rule, answered 500 instead. |
+| `failed: i32` | Answers that failed: one a task wrote that broke a cap or a rule, or a request the server could not hand a task, answered 500 instead before its head; and one whose head or body the carrier refused, whose connection is closed with it unfinished. |
 | `sends: i64` | The writes the server began to send answers, counted at the end of each loop turn: a pipelined burst that fits the output is one. |
 | `slots: i32` | How many slots the server made: the most requests ever in flight at once. |
 | `usedEnd: i64` | `Arena.used()` in the server's loop once `maxRequests` were answered, before draining. |
