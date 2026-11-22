@@ -10275,6 +10275,25 @@ const DECLARED = [
       "tests/link/net_prefork_checked/main.ts": ["exit"],
     }
   ),
+  // WP80 S2: compared only under `--no-sidecars`, where the WP8 sidecars no
+  // longer hide these programs. The ring and region modules, the pool, and
+  // the mains that inline their calls move with this branch's checks; the
+  // checked-ring test calls twins the seed does not have.
+  ...stdPanicFree(
+    "std/sync/ring and std/sync/shm check every offset a peer can write before they use it, and BufferPool.lent subtracts in 64 bits, so these modules and the code that inlines them change",
+    {
+      "bench/http1-conn/main.ts": ["buffer-pool.ll", "record.ll"],
+      "tests/link/net_serve_idle_record/main.ts": ["buffer-pool.ll"],
+      "tests/link/net_serve_rss_flat/main.ts": ["buffer-pool.ll", "record.ll"],
+      "tests/link/sync_ring/main.ts": ["main.ll", "ring.ll", "shm.ll"],
+      "tests/link/sync_ring_checked/main.ts": ["exit"],
+      "tests/link/sync_ring_inplace/main.ts": ["ring.ll", "shm.ll"],
+      "tests/link/sync_ring_inplace_memmove/main.ts": ["main.ll", "ring.ll", "shm.ll"],
+      "tests/link/sync_ring_inplace_partial/main.ts": ["main.ll", "ring.ll", "shm.ll"],
+      "tests/link/sync_shm/main.ts": ["shm.ll"],
+      "tests/link/sync_shm_window/main.ts": ["shm.ll"],
+    }
+  ),
   // WP80 S2: BufferPool.take tests its free list before it reads and pops
   // it, and lent() subtracts in 64 bits, so the pool and every module that
   // inlines take (quic-stream, the buffer-pool tests themselves) move.
