@@ -80,7 +80,6 @@ import {
   DNS_ERR_QUESTION,
   DNS_ERR_RCODE,
   DNS_MAX_ANSWERS,
-  DNS_MAX_LABEL_BYTES,
   DNS_MAX_NAME_BYTES,
   DNS_NOERROR,
   DNS_NXDOMAIN,
@@ -144,6 +143,10 @@ const DNS_Q_DONE: i32 = 3
 const DNS_L_FREE: i32 = 0
 const DNS_L_RUNNING: i32 = 1
 const DNS_L_DONE: i32 = 2
+// One query's addresses and one lookup's, in bytes: module constants fold
+// where a product of the imported ones written inline would not.
+const DNS_RESOLVER_ANSWER_BYTES: i32 = DNS_MAX_ANSWERS * DNS_ADDRESS_BYTES
+const DNS_RESOLVER_LOOKUP_BYTES: i32 = DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES
 
 /**
  * A stub resolver of `maxLookups` concurrent lookups over `config`'s servers,
@@ -301,7 +304,10 @@ export class DnsResolver {
     this.config = config
     this.hosts = hosts
     this.maxLookups = maxLookups
-    const n: i32 = maxLookups * 2
+    // The guard above holds `maxLookups` to 1 to 64, so both conversions are
+    // exact; as `u16`s the array lengths below are known to be non-negative.
+    const lookups: u16 = toU16(maxLookups)
+    const n: u16 = toU16(toI32(lookups) * 2)
     this.queries = []
     this.names = []
     this.starts = []
@@ -312,19 +318,19 @@ export class DnsResolver {
     this.lookupAddresses = []
     this.lookupTtls = []
     let q: i32 = 0
-    while (q < n) {
+    while (q < toI32(n)) {
       this.queries.push(new Array<u8>(DNS_QUERY_MAX_BYTES))
       this.names.push(new Array<u8>(DNS_MAX_NAME_BYTES))
       this.starts.push(new Array<u8>(DNS_MAX_NAME_BYTES))
       this.streams.push(new Array<u8>(DNS_TCP_MAX_REPLY))
-      this.answers.push(new Array<u8>(DNS_MAX_ANSWERS * DNS_ADDRESS_BYTES))
+      this.answers.push(new Array<u8>(DNS_RESOLVER_ANSWER_BYTES))
       this.answerTtls.push(new Array<i32>(DNS_MAX_ANSWERS))
       q += 1
     }
     let l: i32 = 0
-    while (l < maxLookups) {
+    while (l < toI32(lookups)) {
       this.bases.push(new Array<u8>(DNS_MAX_NAME_BYTES))
-      this.lookupAddresses.push(new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES))
+      this.lookupAddresses.push(new Array<u8>(DNS_RESOLVER_LOOKUP_BYTES))
       this.lookupTtls.push(new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES))
       l += 1
     }
@@ -341,16 +347,16 @@ export class DnsResolver {
     this.deadline = new Array<i64>(n)
     this.streamHave = new Array<i32>(n)
     this.streamWant = new Array<i32>(n)
-    this.baseLength = new Array<i32>(maxLookups)
+    this.baseLength = new Array<i32>(lookups)
     this.nxdomain = new Array<boolean>(n)
-    this.absolute = new Array<boolean>(maxLookups)
-    this.candidate = new Array<i32>(maxLookups)
-    this.candidates = new Array<i32>(maxLookups)
-    this.fallback = new Array<i32>(maxLookups)
-    this.dots = new Array<i32>(maxLookups)
-    this.lookupState = new Array<i32>(maxLookups)
-    this.lookupResult = new Array<i32>(maxLookups)
-    this.lookupPort = new Array<i32>(maxLookups)
+    this.absolute = new Array<boolean>(lookups)
+    this.candidate = new Array<i32>(lookups)
+    this.candidates = new Array<i32>(lookups)
+    this.fallback = new Array<i32>(lookups)
+    this.dots = new Array<i32>(lookups)
+    this.lookupState = new Array<i32>(lookups)
+    this.lookupResult = new Array<i32>(lookups)
+    this.lookupPort = new Array<i32>(lookups)
   }
 
   /**
@@ -378,67 +384,116 @@ export class DnsResolver {
     if (port < 0 || port > 0xffff) {
       panic(`DnsResolver.start: the port ${port} is not 16 bits`)
     }
+    const lookupState: i32[] = this.lookupState
     let l: i32 = 0
-    while (l < this.maxLookups && this.lookupState[l] !== DNS_L_FREE) {
+    while (l < this.maxLookups && l < toI32(lookupState.length) && lookupState[l] !== DNS_L_FREE) {
       l += 1
     }
-    if (l === this.maxLookups) {
+    // There are `maxLookups` slots, at most 64, so `l > 63` never holds; it
+    // bounds `l * 2` for the panic prover. `result`, `cancel` and `settle`
+    // take a slot below both bounds, so `start` hands out no other.
+    if (l >= this.maxLookups || l >= toI32(lookupState.length) || l > 63) {
       return DNS_RESOLVE_BUSY
     }
-    this.state[l * 2] = DNS_Q_IDLE
-    this.state[l * 2 + 1] = DNS_Q_IDLE
-    const at: u8[] = this.lookupAddresses[l]
-    const ttls: i32[] = this.lookupTtls[l]
+    const a: i32 = l * 2
+    const state: i32[] = this.state
+    const answers: u8[][] = this.answers
+    const lookupAddresses: u8[][] = this.lookupAddresses
+    const lookupTtls: i32[][] = this.lookupTtls
+    const bases: u8[][] = this.bases
+    // Each per-query array holds two entries per slot and each per-lookup one
+    // holds one, so no part of this holds.
+    if (
+      a >= toI32(state.length) - 1 ||
+      a >= toI32(answers.length) - 1 ||
+      l >= toI32(lookupAddresses.length) ||
+      l >= toI32(lookupTtls.length) ||
+      l >= toI32(bases.length)
+    ) {
+      return DNS_RESOLVE_BUSY
+    }
+    state[a] = DNS_Q_IDLE
+    state[a + 1] = DNS_Q_IDLE
+    const at: u8[] = lookupAddresses[l]
+    const ttls: i32[] = lookupTtls[l]
+    const base: u8[] = bases[l]
+    const four: u8[] = answers[a]
+    const six: u8[] = answers[a + 1]
     if (dnsResolverIsLocalhost(name)) {
       dnsResolverLoopback(at, port)
-      ttls[0] = 0
-      ttls[1] = 0
+      dnsResolverZeroTtls(ttls, 2)
       return dnsResolverFinishNow(this, l, 2)
     }
-    if (dnsResolverLiteral(this.scratch, name, at, port)) {
-      ttls[0] = 0
+    const scratch: u8[] = this.scratch
+    if (dnsResolverLiteral(scratch, name, at, port)) {
+      dnsResolverZeroTtls(ttls, 1)
       return dnsResolverFinishNow(this, l, 1)
     }
-    const built: i32 = dnsBuildQuery(this.scratch, 0, name, DNS_TYPE_A)
+    const built: i32 = dnsBuildQuery(scratch, 0, name, DNS_TYPE_A)
     if (built < 0) {
       return built
     }
     const hosts: DnsHosts | null = this.hosts
     if (hosts !== null) {
-      const v4: i32 = dnsHostsFind(hosts, name, DNS_TYPE_A, port, this.answers[l * 2], DNS_MAX_ANSWERS)
-      const v6: i32 = dnsHostsFind(hosts, name, DNS_TYPE_AAAA, port, this.answers[l * 2 + 1], DNS_MAX_ANSWERS)
-      if (v4 + v6 > 0) {
+      const v4: i32 = dnsHostsFind(hosts, name, DNS_TYPE_A, port, four, DNS_MAX_ANSWERS)
+      const v6: i32 = dnsHostsFind(hosts, name, DNS_TYPE_AAAA, port, six, DNS_MAX_ANSWERS)
+      // dnsHostsFind answers 0 to its `max`, DNS_MAX_ANSWERS (8).
+      if (v4 >= 0 && v4 <= 8 && v6 >= 0 && v6 <= 8 && v4 + v6 > 0) {
         dnsResolverGather(this, l, v4, v6, false)
         return dnsResolverFinishNow(this, l, v4 + v6)
       }
     }
     // The wire name is the query's bytes after the header, less the root byte
     // and the question's type and class.
-    const base: u8[] = this.bases[l]
     const baseLength: i32 = built - 12 - 5
     let i: i32 = 0
     let dots: i32 = 0
-    while (i < baseLength && i < toI32(base.length)) {
-      base[i] = this.scratch[12 + i]
+    while (i < baseLength && i < toI32(base.length) && i < toI32(scratch.length) - 12) {
+      base[i] = scratch[12 + i]
       i += 1
     }
-    // Every length byte past the first is a dot of the name.
+    // Every length byte past the first is a dot of the name. A wire name is
+    // at most 255 bytes, which `base` holds, so `p < 256` and `dots < 255`
+    // never stop the walk; they bound it for the panic prover.
     let p: i32 = 0
-    while (p >= 0 && p < baseLength && p < toI32(base.length)) {
+    while (p >= 0 && p < baseLength && p < toI32(base.length) && p < 256) {
       p += toI32(base[p]) + 1
-      if (p < baseLength) {
+      if (p < baseLength && dots < 255) {
         dots += 1
       }
     }
-    this.baseLength[l] = baseLength
-    this.absolute[l] = toI32(name.charCodeAt(toI32(name.length) - 1)) === 46
-    this.dots[l] = dots
-    this.candidate[l] = 0
-    this.fallback[l] = 0
-    this.candidates[l] = this.absolute[l] ? 1 : this.config.searchCount + 1
-    this.lookupPort[l] = port
-    this.lookupState[l] = DNS_L_RUNNING
-    this.lookupResult[l] = DNS_RESOLVE_PENDING
+    const nameLength: i32 = toI32(name.length)
+    const absolute: boolean = nameLength > 0 && toI32(name.charCodeAt(nameLength - 1)) === 46
+    const baseLengths: i32[] = this.baseLength
+    const absolutes: boolean[] = this.absolute
+    const dotCounts: i32[] = this.dots
+    const candidate: i32[] = this.candidate
+    const fallback: i32[] = this.fallback
+    const candidates: i32[] = this.candidates
+    const lookupPort: i32[] = this.lookupPort
+    const lookupResult: i32[] = this.lookupResult
+    if (
+      l >= toI32(baseLengths.length) ||
+      l >= toI32(absolutes.length) ||
+      l >= toI32(dotCounts.length) ||
+      l >= toI32(candidate.length) ||
+      l >= toI32(fallback.length) ||
+      l >= toI32(candidates.length) ||
+      l >= toI32(lookupPort.length) ||
+      l >= toI32(lookupState.length) ||
+      l >= toI32(lookupResult.length)
+    ) {
+      return DNS_RESOLVE_BUSY
+    }
+    baseLengths[l] = baseLength
+    absolutes[l] = absolute
+    dotCounts[l] = dots
+    candidate[l] = 0
+    fallback[l] = 0
+    candidates[l] = absolute ? 1 : dnsResolverCount(this.config.searchCount)
+    lookupPort[l] = port
+    lookupState[l] = DNS_L_RUNNING
+    lookupResult[l] = DNS_RESOLVE_PENDING
     if (!dnsResolverNextCandidate(this, l, nowNanos)) {
       dnsResolverFinish(this, l, DNS_RESOLVE_NOT_FOUND)
     }
@@ -483,44 +538,56 @@ export class DnsResolver {
     ) {
       panic("DnsResolver.nextOutgoing: out, to or meta is too short")
     }
-    const n: i32 = this.maxLookups * 2
-    let k: i32 = 0
-    while (k < n) {
-      const q: i32 = (this.cursor + k) % n
-      const kind: i32 = this.pending[q]
-      if (kind !== 0) {
-        this.pending[q] = 0
-        this.cursor = (q + 1) % n
-        meta[0] = kind
-        meta[1] = 0
-        if (kind === DNS_CLOSE) {
-          return q
-        }
-        const query: u8[] = this.queries[q]
-        setU16BE(query, 0, toU16(id))
-        const length: i32 = this.queryLength[q]
-        const skip: i32 = kind === DNS_SEND_TCP ? 2 : 0
-        if (skip === 2) {
-          setU16BE(out, 0, toU16(length))
-        }
-        let i: i32 = 0
-        while (i < length && i < toI32(query.length)) {
-          out[skip + i] = query[i]
-          i += 1
-        }
-        meta[1] = skip + length
-        const from: i32 = this.server[q] * DNS_ADDRESS_BYTES
-        i = 0
-        while (i < DNS_ADDRESS_BYTES && i < toI32(to.length)) {
-          to[i] = this.config.servers[from + i]
-          i += 1
-        }
-        this.sent = dnsResolverCount(this.sent)
-        return q
-      }
-      k += 1
+    // Queries take turns: the first owed one from the cursor on, then from 0.
+    const pending: i32[] = this.pending
+    const n: i32 = toI32(pending.length)
+    const cursor: i32 = this.cursor
+    let q: i32 = dnsResolverFirstPending(pending, cursor, n)
+    if (q < 0) {
+      q = dnsResolverFirstPending(pending, 0, cursor)
     }
-    return -1
+    const queries: u8[][] = this.queries
+    const queryLength: i32[] = this.queryLength
+    const server: i32[] = this.server
+    // Every per-query array has the same length, so only `q < 0` (nothing
+    // owed) takes this.
+    if (
+      q < 0 ||
+      q >= n ||
+      q >= toI32(queries.length) ||
+      q >= toI32(queryLength.length) ||
+      q >= toI32(server.length)
+    ) {
+      return -1
+    }
+    const kind: i32 = pending[q]
+    pending[q] = 0
+    this.cursor = q + 1 < n ? q + 1 : 0
+    meta[0] = kind
+    meta[1] = 0
+    if (kind === DNS_CLOSE) {
+      return q
+    }
+    const query: u8[] = queries[q]
+    setU16BE(query, 0, toU16(id))
+    const length: i32 = queryLength[q]
+    const skip: i32 = kind === DNS_SEND_TCP ? 2 : 0
+    if (skip === 2) {
+      setU16BE(out, 0, toU16(length))
+    }
+    // A query's length is at most its buffer's, and `out` holds the longest
+    // with its two-byte prefix, so `o` ends at `skip + length`.
+    let i: i32 = 0
+    let o: i32 = skip
+    while (i < length && i < toI32(query.length) && o >= 0 && o < toI32(out.length)) {
+      out[o] = query[i]
+      i += 1
+      o += 1
+    }
+    meta[1] = o
+    dnsResolverServerAddress(this.config.servers, server[q], to)
+    this.sent = dnsResolverCount(this.sent)
+    return q
   }
 
   /**
@@ -546,27 +613,34 @@ export class DnsResolver {
     if (len < 0 || len > toI32(buf.length) || toI32(from.length) < DNS_ADDRESS_BYTES) {
       panic("DnsResolver.receive: len is outside buf, or from is shorter than 18 bytes")
     }
-    if (this.state[q] !== DNS_Q_UDP) {
+    const state: i32[] = this.state
+    const server: i32[] = this.server
+    const queries: u8[][] = this.queries
+    const queryLength: i32[] = this.queryLength
+    const lookupPort: i32[] = this.lookupPort
+    const l: i32 = q / 2
+    // The check above holds `q` to a query, and every per-query array (and
+    // per-lookup one, by `q / 2`) is that long, so this never returns.
+    if (
+      q < 0 ||
+      q >= toI32(state.length) ||
+      q >= toI32(server.length) ||
+      q >= toI32(queries.length) ||
+      q >= toI32(queryLength.length) ||
+      l < 0 ||
+      l >= toI32(lookupPort.length)
+    ) {
+      return
+    }
+    if (state[q] !== DNS_Q_UDP) {
       this.droppedMalformed = dnsResolverCount(this.droppedMalformed)
       return
     }
-    const at: i32 = this.server[q] * DNS_ADDRESS_BYTES
-    let i: i32 = 0
-    while (i < DNS_ADDRESS_BYTES && i < toI32(from.length)) {
-      if (from[i] !== this.config.servers[at + i]) {
-        this.droppedSource = dnsResolverCount(this.droppedSource)
-        return
-      }
-      i += 1
+    if (!dnsResolverSameServer(this.config.servers, server[q], from)) {
+      this.droppedSource = dnsResolverCount(this.droppedSource)
+      return
     }
-    const status: i32 = dnsParseReply(
-      buf,
-      len,
-      this.queries[q],
-      this.queryLength[q],
-      this.lookupPort[q / 2],
-      this.reply
-    )
+    const status: i32 = dnsParseReply(buf, len, queries[q], queryLength[q], lookupPort[l], this.reply)
     if (status === DNS_ERR_ID) {
       this.droppedId = dnsResolverCount(this.droppedId)
     } else if (status === DNS_ERR_QUESTION) {
@@ -603,37 +677,63 @@ export class DnsResolver {
     if (len < 0 || len > toI32(buf.length)) {
       panic("DnsResolver.receiveStream: len is outside buf")
     }
-    if (this.state[q] !== DNS_Q_TCP) {
+    const state: i32[] = this.state
+    const streams: u8[][] = this.streams
+    const streamHave: i32[] = this.streamHave
+    const streamWant: i32[] = this.streamWant
+    const queries: u8[][] = this.queries
+    const queryLength: i32[] = this.queryLength
+    const lookupPort: i32[] = this.lookupPort
+    const l: i32 = q / 2
+    // The check above holds `q` to a query, and every per-query array (and
+    // per-lookup one, by `q / 2`) is that long, so this never returns.
+    if (
+      q < 0 ||
+      q >= toI32(state.length) ||
+      q >= toI32(streams.length) ||
+      q >= toI32(streamHave.length) ||
+      q >= toI32(streamWant.length) ||
+      q >= toI32(queries.length) ||
+      q >= toI32(queryLength.length) ||
+      l < 0 ||
+      l >= toI32(lookupPort.length)
+    ) {
       return
     }
-    const stream: u8[] = this.streams[q]
+    if (state[q] !== DNS_Q_TCP) {
+      return
+    }
+    const stream: u8[] = streams[q]
+    let have: i32 = streamHave[q]
+    let want: i32 = streamWant[q]
     let i: i32 = 0
-    while (i < len) {
-      const have: i32 = this.streamHave[q]
+    while (i < len && i < toI32(buf.length)) {
       if (have < 2) {
-        this.streamWant[q] = (this.streamWant[q] << 8) | toI32(buf[i])
-        if (have === 1 && (this.streamWant[q] < 12 || this.streamWant[q] > DNS_TCP_MAX_REPLY)) {
+        want = (want << 8) | toI32(buf[i])
+        if (have === 1 && (want < 12 || want > DNS_TCP_MAX_REPLY)) {
+          streamHave[q] = have
+          streamWant[q] = want
           dnsResolverServerFailed(this, q, nowNanos)
           return
         }
-      } else if (have - 2 < this.streamWant[q]) {
-        stream[have - 2] = buf[i]
+      } else {
+        // `want` passed the check above, so the stream, DNS_TCP_MAX_REPLY
+        // bytes, holds every byte below it.
+        const at: i32 = have - 2
+        if (at < want && at < toI32(stream.length)) {
+          stream[at] = buf[i]
+        }
       }
-      this.streamHave[q] = have + 1
+      // Held at the i32 maximum: past the reply's length a byte only counts.
+      have = dnsResolverCount(have)
       i += 1
     }
-    const want: i32 = this.streamWant[q]
-    if (this.streamHave[q] < 2 || this.streamHave[q] - 2 < want) {
+    streamHave[q] = have
+    streamWant[q] = want
+    if (have < 2 || have - 2 < want) {
       return
     }
-    const status: i32 = dnsParseReply(
-      stream,
-      want,
-      this.queries[q],
-      this.queryLength[q],
-      this.lookupPort[q / 2],
-      this.reply
-    )
+    const status: i32 = dnsParseReply(stream, want, queries[q], queryLength[q], lookupPort[l], this.reply)
     if (status < 0 || this.reply.truncated) {
       dnsResolverServerFailed(this, q, nowNanos)
     } else {
@@ -654,7 +754,9 @@ export class DnsResolver {
    */
   fail(q: i32, nowNanos: i64): void {
     dnsResolverCheckQuery(this, q, "fail")
-    if (this.state[q] === DNS_Q_UDP || this.state[q] === DNS_Q_TCP) {
+    const state: i32[] = this.state
+    // The check above holds `q` to a query, so `q` is always in `state`.
+    if (q >= 0 && q < toI32(state.length) && (state[q] === DNS_Q_UDP || state[q] === DNS_Q_TCP)) {
       dnsResolverServerFailed(this, q, nowNanos)
     }
   }
@@ -667,10 +769,11 @@ export class DnsResolver {
    * @param nowNanos The caller's monotonic clock now, in nanoseconds.
    */
   tick(nowNanos: i64): void {
-    const n: i32 = this.maxLookups * 2
+    const state: i32[] = this.state
+    const deadline: i64[] = this.deadline
     let q: i32 = 0
-    while (q < n) {
-      if ((this.state[q] === DNS_Q_UDP || this.state[q] === DNS_Q_TCP) && this.deadline[q] <= nowNanos) {
+    while (q < toI32(state.length) && q < toI32(deadline.length)) {
+      if ((state[q] === DNS_Q_UDP || state[q] === DNS_Q_TCP) && deadline[q] <= nowNanos) {
         this.timeouts = dnsResolverCount(this.timeouts)
         dnsResolverServerFailed(this, q, nowNanos)
       }
@@ -686,15 +789,13 @@ export class DnsResolver {
    *   -1 when no try is in flight.
    */
   nextDeadlineNanos(): i64 {
-    const n: i32 = this.maxLookups * 2
+    const state: i32[] = this.state
+    const deadline: i64[] = this.deadline
     let soonest: i64 = -1
     let q: i32 = 0
-    while (q < n) {
-      if (
-        (this.state[q] === DNS_Q_UDP || this.state[q] === DNS_Q_TCP) &&
-        (soonest < 0 || this.deadline[q] < soonest)
-      ) {
-        soonest = this.deadline[q]
+    while (q < toI32(state.length) && q < toI32(deadline.length)) {
+      if ((state[q] === DNS_Q_UDP || state[q] === DNS_Q_TCP) && (soonest < 0 || deadline[q] < soonest)) {
+        soonest = deadline[q]
       }
       q += 1
     }
@@ -721,7 +822,16 @@ export class DnsResolver {
    *   `DNS_RESOLVE_NO_ANSWER` or `DNS_RESOLVE_CNAME`.
    */
   result(lookup: i32, out: u8[], ttls: i32[]): i32 {
-    if (lookup < 0 || lookup >= this.maxLookups || this.lookupState[lookup] === DNS_L_FREE) {
+    const lookupState: i32[] = this.lookupState
+    // `lookupState` holds `maxLookups` slots, at most 64, so the last two
+    // tests add nothing; they bound `lookup` for the panic prover.
+    if (
+      lookup < 0 ||
+      lookup >= this.maxLookups ||
+      lookup >= toI32(lookupState.length) ||
+      lookup > 63 ||
+      lookupState[lookup] === DNS_L_FREE
+    ) {
       panic(`DnsResolver.result: ${lookup} is not a lookup in progress`)
     }
     if (
@@ -730,21 +840,39 @@ export class DnsResolver {
     ) {
       panic("DnsResolver.result: out or ttls has no room for DNS_RESOLVE_MAX_ADDRESSES")
     }
-    if (this.lookupState[lookup] !== DNS_L_DONE) {
+    if (lookupState[lookup] !== DNS_L_DONE) {
       return DNS_RESOLVE_PENDING
     }
-    const count: i32 = this.lookupResult[lookup]
+    const lookupResult: i32[] = this.lookupResult
+    const lookupAddresses: u8[][] = this.lookupAddresses
+    const lookupTtls: i32[][] = this.lookupTtls
+    // Every per-lookup array holds `maxLookups` slots, so this never returns.
+    if (
+      lookup >= toI32(lookupResult.length) ||
+      lookup >= toI32(lookupAddresses.length) ||
+      lookup >= toI32(lookupTtls.length)
+    ) {
+      return DNS_RESOLVE_PENDING
+    }
+    const count: i32 = lookupResult[lookup]
+    const addresses: u8[] = lookupAddresses[lookup]
+    const addressTtls: i32[] = lookupTtls[lookup]
+    // A count is at most DNS_RESOLVE_MAX_ADDRESSES (16); a code copies nothing.
+    let bytes: i32 = 0
+    if (count > 0 && count <= 16) {
+      bytes = count * DNS_ADDRESS_BYTES
+    }
     let i: i32 = 0
-    while (i < count * DNS_ADDRESS_BYTES && i < toI32(out.length)) {
-      out[i] = this.lookupAddresses[lookup][i]
+    while (i < bytes && i < toI32(out.length) && i < toI32(addresses.length)) {
+      out[i] = addresses[i]
       i += 1
     }
     i = 0
-    while (i < count && i < toI32(ttls.length)) {
-      ttls[i] = this.lookupTtls[lookup][i]
+    while (i < count && i < toI32(ttls.length) && i < toI32(addressTtls.length)) {
+      ttls[i] = addressTtls[i]
       i += 1
     }
-    this.lookupState[lookup] = DNS_L_FREE
+    lookupState[lookup] = DNS_L_FREE
     return count
   }
 
@@ -757,12 +885,21 @@ export class DnsResolver {
    * @param lookup The slot `start` answered.
    */
   cancel(lookup: i32): void {
-    if (lookup < 0 || lookup >= this.maxLookups || this.lookupState[lookup] === DNS_L_FREE) {
+    const lookupState: i32[] = this.lookupState
+    // `lookupState` holds `maxLookups` slots, at most 64, so the last two
+    // tests add nothing; they bound `lookup` for the panic prover.
+    if (
+      lookup < 0 ||
+      lookup >= this.maxLookups ||
+      lookup >= toI32(lookupState.length) ||
+      lookup > 63 ||
+      lookupState[lookup] === DNS_L_FREE
+    ) {
       panic(`DnsResolver.cancel: ${lookup} is not a lookup in progress`)
     }
     dnsResolverStop(this, lookup * 2)
     dnsResolverStop(this, lookup * 2 + 1)
-    this.lookupState[lookup] = DNS_L_FREE
+    lookupState[lookup] = DNS_L_FREE
   }
 
   /**
@@ -779,20 +916,35 @@ export class DnsResolver {
    *   to read; true for one that had finished already.
    */
   settle(lookup: i32): boolean {
-    if (lookup < 0 || lookup >= this.maxLookups || this.lookupState[lookup] === DNS_L_FREE) {
+    const lookupState: i32[] = this.lookupState
+    // `lookupState` holds `maxLookups` slots, at most 64, so the last two
+    // tests add nothing; they bound `lookup` for the panic prover.
+    if (
+      lookup < 0 ||
+      lookup >= this.maxLookups ||
+      lookup >= toI32(lookupState.length) ||
+      lookup > 63 ||
+      lookupState[lookup] === DNS_L_FREE
+    ) {
       panic(`DnsResolver.settle: ${lookup} is not a lookup in progress`)
     }
-    if (this.lookupState[lookup] === DNS_L_DONE) {
+    if (lookupState[lookup] === DNS_L_DONE) {
       return true
     }
     const a: i32 = lookup * 2
+    const state: i32[] = this.state
+    const outcome: i32[] = this.outcome
+    // Each lookup has two queries in both, so this never returns.
+    if (a >= toI32(state.length) - 1 || a >= toI32(outcome.length) - 1) {
+      return false
+    }
     let open: i32 = -1
-    if (this.state[a] === DNS_Q_DONE && this.outcome[a] > 0) {
+    if (state[a] === DNS_Q_DONE && outcome[a] > 0) {
       open = a + 1
-    } else if (this.state[a + 1] === DNS_Q_DONE && this.outcome[a + 1] > 0) {
+    } else if (state[a + 1] === DNS_Q_DONE && outcome[a + 1] > 0) {
       open = a
     }
-    if (open < 0 || this.state[open] === DNS_Q_DONE) {
+    if (open < 0 || open >= toI32(state.length) || state[open] === DNS_Q_DONE) {
       return false
     }
     // The other has addresses, so this finishes the lookup and never reaches a next name, which alone reads the clock.
@@ -807,11 +959,12 @@ export class DnsResolver {
    *   0 to `maxLookups`.
    */
   active(): i32 {
+    const lookupState: i32[] = this.lookupState
     let count: i32 = 0
     let l: i32 = 0
-    while (l < this.maxLookups) {
-      if (this.lookupState[l] !== DNS_L_FREE) {
-        count += 1
+    while (l < toI32(lookupState.length)) {
+      if (lookupState[l] !== DNS_L_FREE) {
+        count = dnsResolverCount(count)
       }
       l += 1
     }
@@ -821,7 +974,8 @@ export class DnsResolver {
 
 /** Panics unless `q` names one of `r`'s queries. */
 const dnsResolverCheckQuery = (r: DnsResolver, q: i32, who: string): void => {
-  if (q < 0 || q >= r.maxLookups * 2) {
+  // `q / 2 >= maxLookups` is `q >= 2 * maxLookups` without the product.
+  if (q < 0 || q / 2 >= r.maxLookups) {
     panic(`DnsResolver.${who}: ${q} is not a query`)
   }
 }
@@ -843,9 +997,14 @@ const dnsResolverIsLocalhost = (name: string): boolean => {
   if (n === 10 || (n > 10 && toI32(name.charCodeAt(n - 11)) === 46)) {
     return false
   }
+  // `n` is at least 9 and at most the name's length, so `at` stays in it.
+  let at: i32 = n - 9
   let i: i32 = 0
   while (i < 9 && i < toI32(word.length)) {
-    let b: i32 = toI32(name.charCodeAt(n - 9 + i))
+    if (at < 0 || at >= toI32(name.length)) {
+      return false
+    }
+    let b: i32 = toI32(name.charCodeAt(at))
     if (b >= 65 && b <= 90) {
       b += 32
     }
@@ -853,12 +1012,18 @@ const dnsResolverIsLocalhost = (name: string): boolean => {
       return false
     }
     i += 1
+    at += 1
   }
   return true
 }
 
 /** Writes 127.0.0.1 then ::1, both with `port`, to `out`. */
 const dnsResolverLoopback = (out: u8[], port: i32): void => {
+  // `out` is a lookup's answer, DNS_RESOLVE_MAX_ADDRESSES addresses long, so
+  // it always holds the two (36 bytes).
+  if (toI32(out.length) < 36) {
+    return
+  }
   let i: i32 = 0
   while (i < 2 * DNS_ADDRESS_BYTES && i < toI32(out.length)) {
     out[i] = toU8(0)
@@ -894,28 +1059,109 @@ const dnsResolverLiteral = (scratch: u8[], name: string, out: u8[], port: i32): 
   return dnsParseAddress(scratch, 0, n, out, 0, port)
 }
 
+/**
+ * The first query from `from` up to `to` with an action owed, or -1 when there
+ * is none.
+ */
+const dnsResolverFirstPending = (pending: i32[], from: i32, to: i32): i32 => {
+  let q: i32 = from < 0 ? 0 : from
+  while (q >= 0 && q < to && q < toI32(pending.length)) {
+    if (pending[q] !== 0) {
+      return q
+    }
+    q += 1
+  }
+  return -1
+}
+
+/**
+ * Copies server `s`'s 18-byte address from `servers` to `to`. A resolver's
+ * server is always one `servers` holds, at most `DNS_MAX_SERVERS` (3), so the
+ * `s > 2` that would copy nothing never holds; it bounds the offset.
+ */
+const dnsResolverServerAddress = (servers: u8[], s: i32, to: u8[]): void => {
+  if (s < 0 || s > 2) {
+    return
+  }
+  let at: i32 = s * DNS_ADDRESS_BYTES
+  let i: i32 = 0
+  while (i < DNS_ADDRESS_BYTES && i < toI32(to.length) && at < toI32(servers.length)) {
+    to[i] = servers[at]
+    i += 1
+    at += 1
+  }
+}
+
+/**
+ * Whether `from` is server `s`'s 18-byte address in `servers`. A resolver's
+ * server is always one `servers` holds, at most `DNS_MAX_SERVERS` (3), so
+ * `s > 2` never holds; it bounds the offset.
+ */
+const dnsResolverSameServer = (servers: u8[], s: i32, from: u8[]): boolean => {
+  if (s < 0 || s > 2) {
+    return false
+  }
+  let at: i32 = s * DNS_ADDRESS_BYTES
+  let i: i32 = 0
+  while (i < DNS_ADDRESS_BYTES && i < toI32(from.length)) {
+    if (at < 0 || at >= toI32(servers.length) || from[i] !== servers[at]) {
+      return false
+    }
+    i += 1
+    at += 1
+  }
+  return true
+}
+
+/** Zeroes the first `count` TTLs of `ttls`: an answer that needed no packet. */
+const dnsResolverZeroTtls = (ttls: i32[], count: i32): void => {
+  let i: i32 = 0
+  while (i < count && i < toI32(ttls.length)) {
+    ttls[i] = 0
+    i += 1
+  }
+}
+
 /** Finishes lookup `l` before any query was sent, with `count` addresses already in place. */
 const dnsResolverFinishNow = (r: DnsResolver, l: i32, count: i32): i32 => {
-  r.lookupState[l] = DNS_L_DONE
-  r.lookupResult[l] = count
+  dnsResolverSetResult(r, l, count)
   return l
 }
 
 /** Ends lookup `l` with `result`, and owes the driver a close for each of its queries still holding a socket. */
 const dnsResolverFinish = (r: DnsResolver, l: i32, result: i32): void => {
-  dnsResolverStop(r, l * 2)
-  dnsResolverStop(r, l * 2 + 1)
-  r.lookupState[l] = DNS_L_DONE
-  r.lookupResult[l] = result
+  // A lookup is below maxLookups, at most 64, so `l > 63` never holds; it
+  // bounds `l * 2`.
+  if (l >= 0 && l <= 63) {
+    dnsResolverStop(r, l * 2)
+    dnsResolverStop(r, l * 2 + 1)
+  }
+  dnsResolverSetResult(r, l, result)
+}
+
+/** Marks lookup `l` done with `result`; every lookup is in both arrays. */
+const dnsResolverSetResult = (r: DnsResolver, l: i32, result: i32): void => {
+  const lookupState: i32[] = r.lookupState
+  const lookupResult: i32[] = r.lookupResult
+  if (l >= 0 && l < toI32(lookupState.length) && l < toI32(lookupResult.length)) {
+    lookupState[l] = DNS_L_DONE
+    lookupResult[l] = result
+  }
 }
 
 /** Stops query `q`, and owes the driver a close if a socket may be open for it. */
 const dnsResolverStop = (r: DnsResolver, q: i32): void => {
-  if (r.state[q] === DNS_Q_UDP || r.state[q] === DNS_Q_TCP || r.pending[q] !== 0) {
-    r.pending[q] = DNS_CLOSE
+  const state: i32[] = r.state
+  const pending: i32[] = r.pending
+  // Every query is in both, so this never returns.
+  if (q < 0 || q >= toI32(state.length) || q >= toI32(pending.length)) {
+    return
   }
-  if (r.state[q] !== DNS_Q_IDLE) {
-    r.state[q] = DNS_Q_DONE
+  if (state[q] === DNS_Q_UDP || state[q] === DNS_Q_TCP || pending[q] !== 0) {
+    pending[q] = DNS_CLOSE
+  }
+  if (state[q] !== DNS_Q_IDLE) {
+    state[q] = DNS_Q_DONE
   }
 }
 
@@ -927,27 +1173,56 @@ const dnsResolverStop = (r: DnsResolver, q: i32): void => {
  * the file holds.
  */
 const dnsResolverGather = (r: DnsResolver, l: i32, v4: i32, v6: i32, fromServer: boolean): void => {
-  const out: u8[] = r.lookupAddresses[l]
-  const ttls: i32[] = r.lookupTtls[l]
+  const lookupAddresses: u8[][] = r.lookupAddresses
+  const lookupTtls: i32[][] = r.lookupTtls
+  const answers: u8[][] = r.answers
+  const answerTtls: i32[][] = r.answerTtls
+  // A lookup is below maxLookups, at most 64, and has two queries in each
+  // per-query array, so this never returns.
+  if (
+    l < 0 ||
+    l > 63 ||
+    l >= toI32(lookupAddresses.length) ||
+    l >= toI32(lookupTtls.length) ||
+    l * 2 >= toI32(answers.length) - 1 ||
+    l * 2 >= toI32(answerTtls.length) - 1
+  ) {
+    return
+  }
+  const out: u8[] = lookupAddresses[l]
+  const ttls: i32[] = lookupTtls[l]
   let k: i32 = 0
   let half: i32 = 0
   while (half < 2) {
     const q: i32 = l * 2 + half
+    if (q >= toI32(answers.length) || q >= toI32(answerTtls.length)) {
+      return
+    }
+    const answer: u8[] = answers[q]
+    const answerTtl: i32[] = answerTtls[q]
     const count: i32 = half === 0 ? v4 : v6
     let least: i32 = 0
     let j: i32 = 0
-    while (fromServer && j < count) {
-      const t: i32 = r.answerTtls[q][j]
+    while (fromServer && j < count && j < toI32(answerTtl.length)) {
+      const t: i32 = answerTtl[j]
       if (j === 0 || t < least) {
         least = t
       }
       j += 1
     }
+    // A query holds at most DNS_MAX_ANSWERS (8) addresses and a lookup
+    // DNS_RESOLVE_MAX_ADDRESSES (16), the lengths of `answer` and `out`, so
+    // the caps only bound the offsets.
     let i: i32 = 0
-    while (i < count && k >= 0 && k < toI32(ttls.length)) {
+    while (i < count && i < 8 && k >= 0 && k < toI32(ttls.length) && k < 16) {
       let b: i32 = 0
-      while (b < DNS_ADDRESS_BYTES) {
-        out[k * DNS_ADDRESS_BYTES + b] = r.answers[q][i * DNS_ADDRESS_BYTES + b]
+      // 18 is DNS_ADDRESS_BYTES, written out so it bounds the offsets.
+      while (b < 18) {
+        const to: i32 = k * DNS_ADDRESS_BYTES + b
+        const from: i32 = i * DNS_ADDRESS_BYTES + b
+        if (to < toI32(out.length) && from < toI32(answer.length)) {
+          out[to] = answer[from]
+        }
         b += 1
       }
       ttls[k] = least
@@ -967,30 +1242,57 @@ const dnsResolverGather = (r: DnsResolver, l: i32, v4: i32, v6: i32, fromServer:
  * other name is each suffix and then itself.
  */
 const dnsResolverNextCandidate = (r: DnsResolver, l: i32, nowNanos: i64): boolean => {
-  while (r.candidate[l] < r.candidates[l]) {
-    const c: i32 = r.candidate[l]
+  const candidate: i32[] = r.candidate
+  const candidates: i32[] = r.candidates
+  const absolute: boolean[] = r.absolute
+  const dots: i32[] = r.dots
+  const names: u8[][] = r.names
+  // A lookup is below maxLookups, at most 64, with its two queries in
+  // `names`, so this never returns.
+  if (
+    l < 0 ||
+    l > 63 ||
+    l >= toI32(candidate.length) ||
+    l >= toI32(candidates.length) ||
+    l >= toI32(absolute.length) ||
+    l >= toI32(dots.length) ||
+    l * 2 >= toI32(names.length) - 1
+  ) {
+    return false
+  }
+  const a: i32 = l * 2
+  while (candidate[l] < candidates[l]) {
+    const c: i32 = candidate[l]
     const search: i32 = r.config.searchCount
     let suffix: i32 = -1
-    if (!r.absolute[l]) {
-      if (r.dots[l] >= r.config.ndots) {
-        suffix = c - 1
+    if (!absolute[l]) {
+      if (dots[l] >= r.config.ndots) {
+        // Any negative suffix is no suffix, so `c` 0 or below gives -1.
+        if (c > 0) {
+          suffix = c - 1
+        }
       } else {
         suffix = c < search ? c : -1
       }
     }
-    const a: i32 = l * 2
-    const length: i32 = dnsResolverCandidate(r, l, suffix, r.names[a])
+    // As above: never taken.
+    if (a >= toI32(names.length) - 1) {
+      return false
+    }
+    const first: u8[] = names[a]
+    const length: i32 = dnsResolverCandidate(r, l, suffix, first)
     if (length > 0) {
       dnsResolverBegin(r, a, length, DNS_TYPE_A, nowNanos)
+      const second: u8[] = names[a + 1]
       let i: i32 = 0
-      while (i < length) {
-        r.names[a + 1][i] = r.names[a][i]
+      while (i < length && i < toI32(second.length) && i < toI32(first.length)) {
+        second[i] = first[i]
         i += 1
       }
       dnsResolverBegin(r, a + 1, length, DNS_TYPE_AAAA, nowNanos)
       return true
     }
-    r.candidate[l] = c + 1
+    candidate[l] = dnsResolverCount(c)
   }
   return false
 }
@@ -1002,39 +1304,82 @@ const dnsResolverNextCandidate = (r: DnsResolver, l: i32, nowNanos: i64): boolea
  * bytes.
  */
 const dnsResolverCandidate = (r: DnsResolver, l: i32, suffix: i32, out: u8[]): i32 => {
-  const base: u8[] = r.bases[l]
-  let n: i32 = r.baseLength[l]
+  const bases: u8[][] = r.bases
+  const baseLengths: i32[] = r.baseLength
+  // Every lookup has a base, and `start` keeps its length under 255, so
+  // this never returns.
+  if (l < 0 || l >= toI32(bases.length) || l >= toI32(baseLengths.length)) {
+    return 0
+  }
+  const base: u8[] = bases[l]
+  let n: i32 = baseLengths[l]
+  if (n < 0 || n > 255) {
+    return 0
+  }
   let i: i32 = 0
   while (i < n && i < toI32(out.length) && i < toI32(base.length)) {
     out[i] = base[i]
     i += 1
   }
   if (suffix >= 0) {
-    const start: i32 = r.config.searchStart[suffix]
-    const length: i32 = r.config.searchLength[suffix]
+    const starts: i32[] = r.config.searchStart
+    const lengths: i32[] = r.config.searchLength
+    const search: u8[] = r.config.search
+    // A suffix is one of the config's domains, inside its 256-byte
+    // DNS_MAX_SEARCH_BYTES buffer, so this never returns.
+    if (suffix >= toI32(starts.length) || suffix >= toI32(lengths.length)) {
+      return 0
+    }
+    const start: i32 = starts[suffix]
+    const length: i32 = lengths[suffix]
+    if (start < 0 || start > 256 || length < 0 || length > 256) {
+      return 0
+    }
     // The suffix's text becomes labels: each dot, and its end, closes the
-    // label whose length byte sits at `n`.
+    // label whose length byte sits at `n`. The caps 63 (DNS_MAX_LABEL_BYTES)
+    // and 255 or 252 (from DNS_MAX_NAME_BYTES) are written out so they bound
+    // the offsets; each only restates the test beside it.
     let label: i32 = 0
     let k: i32 = 0
     while (k <= length) {
-      const b: i32 = k < length ? toI32(r.config.search[start + k]) : 46
+      let b: i32 = 46
+      if (k < length) {
+        const at: i32 = start + k
+        if (at >= toI32(search.length)) {
+          return 0
+        }
+        b = toI32(search[at])
+      }
       if (b === 46) {
-        if (label === 0 || label > DNS_MAX_LABEL_BYTES || n < 0 || n >= toI32(out.length)) {
+        if (label === 0 || label > 63 || n < 0 || n > 255 || n >= toI32(out.length)) {
           return 0
         }
         out[n] = toU8(label)
         n += label + 1
         label = 0
-      } else if (b < 33 || b > 126 || n + 1 + label > DNS_MAX_NAME_BYTES - 2) {
+      } else if (
+        b < 33 ||
+        b > 126 ||
+        n < 0 ||
+        n > 252 ||
+        label < 0 ||
+        label > 252 ||
+        n + 1 + label > DNS_MAX_NAME_BYTES - 2
+      ) {
         return 0
       } else {
-        out[n + 1 + label] = toU8(b)
+        const at: i32 = n + 1 + label
+        if (at >= toI32(out.length)) {
+          return 0
+        }
+        out[at] = toU8(b)
         label += 1
       }
       k += 1
     }
   }
-  if (n + 1 > DNS_MAX_NAME_BYTES) {
+  // `n > 254` is `n + 1 > DNS_MAX_NAME_BYTES`; `out` holds 255 bytes.
+  if (n < 0 || n > 254 || n >= toI32(out.length)) {
     return 0
   }
   out[n] = toU8(0)
@@ -1047,12 +1392,29 @@ const dnsResolverCandidate = (r: DnsResolver, l: i32, suffix: i32, out: u8[]): i
  * server.
  */
 const dnsResolverBegin = (r: DnsResolver, q: i32, length: i32, qtype: i32, nowNanos: i64): void => {
-  r.hops[q] = 0
-  r.nameLength[q] = length
+  const hops: i32[] = r.hops
+  const nameLength: i32[] = r.nameLength
+  const names: u8[][] = r.names
+  const starts: u8[][] = r.starts
+  // A query is below 2 * maxLookups, these arrays' length, so this never returns.
+  if (
+    q < 0 ||
+    q >= toI32(hops.length) ||
+    q >= toI32(nameLength.length) ||
+    q >= toI32(names.length) ||
+    q >= toI32(starts.length)
+  ) {
+    return
+  }
+  hops[q] = 0
+  nameLength[q] = length
+  const name: u8[] = names[q]
+  const start: u8[] = starts[q]
+  // Both hold 255 bytes, and a candidate name is at most that long.
   let i: i32 = 0
-  while (i < length) {
-    const b: i32 = toI32(r.names[q][i])
-    r.starts[q][i] = toU8(b >= 65 && b <= 90 ? b + 32 : b)
+  while (i < length && i < toI32(name.length) && i < toI32(start.length)) {
+    const b: i32 = toI32(name[i])
+    start[i] = toU8(b >= 65 && b <= 90 ? b + 32 : b)
     i += 1
   }
   dnsResolverAsk(r, q, qtype, nowNanos)
@@ -1060,8 +1422,33 @@ const dnsResolverBegin = (r: DnsResolver, q: i32, length: i32, qtype: i32, nowNa
 
 /** Writes query `q`'s bytes for its current name and `qtype`, ID 0 until it is sent, and sends it to the first server. */
 const dnsResolverAsk = (r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void => {
-  const query: u8[] = r.queries[q]
-  const length: i32 = r.nameLength[q]
+  const queries: u8[][] = r.queries
+  const names: u8[][] = r.names
+  const nameLength: i32[] = r.nameLength
+  const queryLength: i32[] = r.queryLength
+  const nxdomain: boolean[] = r.nxdomain
+  const server: i32[] = r.server
+  const round: i32[] = r.round
+  // As in dnsResolverBegin: never taken.
+  if (
+    q < 0 ||
+    q >= toI32(queries.length) ||
+    q >= toI32(names.length) ||
+    q >= toI32(nameLength.length) ||
+    q >= toI32(queryLength.length) ||
+    q >= toI32(nxdomain.length) ||
+    q >= toI32(server.length) ||
+    q >= toI32(round.length)
+  ) {
+    return
+  }
+  const query: u8[] = queries[q]
+  const name: u8[] = names[q]
+  const length: i32 = nameLength[q]
+  // `255` is DNS_MAX_NAME_BYTES: every name written to `names` fits it, so this never returns.
+  if (length < 0 || length > 255) {
+    return
+  }
   // The bytes are dnsBuildQuery's: the ID, RD, one question, then the name, type and class IN.
   setU16BE(query, 0, toU16(0))
   setU16BE(query, 2, toU16(0x0100))
@@ -1070,27 +1457,45 @@ const dnsResolverAsk = (r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void
   setU16BE(query, 8, toU16(0))
   setU16BE(query, 10, toU16(0))
   let i: i32 = 0
-  while (i < length && 12 + i < toI32(query.length)) {
-    query[12 + i] = r.names[q][i]
+  let o: i32 = 12
+  while (i < length && i < toI32(name.length) && o >= 0 && o < toI32(query.length)) {
+    query[o] = name[i]
     i += 1
+    o += 1
   }
   setU16BE(query, 12 + length, toU16(qtype))
   setU16BE(query, 14 + length, toU16(1))
-  r.queryLength[q] = 16 + length
+  queryLength[q] = 16 + length
   // Only this name's reply may say NXDOMAIN, not an earlier candidate's or lookup's.
-  r.nxdomain[q] = false
-  r.server[q] = 0
-  r.round[q] = 0
+  nxdomain[q] = false
+  server[q] = 0
+  round[q] = 0
   dnsResolverSend(r, q, DNS_Q_UDP, nowNanos)
 }
 
 /** Owes the driver a send of query `q` to its current server over `how`, with a deadline `timeout` seconds after `nowNanos`. */
 const dnsResolverSend = (r: DnsResolver, q: i32, how: i32, nowNanos: i64): void => {
-  r.state[q] = how
-  r.pending[q] = how === DNS_Q_TCP ? DNS_SEND_TCP : DNS_SEND_UDP
-  r.streamHave[q] = 0
-  r.streamWant[q] = 0
-  r.deadline[q] = nowNanos + toI64(r.config.timeout) * toI64(1000000000)
+  const state: i32[] = r.state
+  const pending: i32[] = r.pending
+  const streamHave: i32[] = r.streamHave
+  const streamWant: i32[] = r.streamWant
+  const deadline: i64[] = r.deadline
+  // As in dnsResolverBegin: never taken.
+  if (
+    q < 0 ||
+    q >= toI32(state.length) ||
+    q >= toI32(pending.length) ||
+    q >= toI32(streamHave.length) ||
+    q >= toI32(streamWant.length) ||
+    q >= toI32(deadline.length)
+  ) {
+    return
+  }
+  state[q] = how
+  pending[q] = how === DNS_Q_TCP ? DNS_SEND_TCP : DNS_SEND_UDP
+  streamHave[q] = 0
+  streamWant[q] = 0
+  deadline[q] = nowNanos + toI64(r.config.timeout) * toI64(1000000000)
 }
 
 /**
@@ -1100,12 +1505,19 @@ const dnsResolverSend = (r: DnsResolver, q: i32, how: i32, nowNanos: i64): void 
  */
 const dnsResolverServerFailed = (r: DnsResolver, q: i32, nowNanos: i64): void => {
   r.serverFailures = dnsResolverCount(r.serverFailures)
-  r.server[q] = r.server[q] + 1
-  if (r.server[q] >= r.config.serverCount) {
-    r.server[q] = 0
-    r.round[q] = r.round[q] + 1
+  const server: i32[] = r.server
+  const round: i32[] = r.round
+  // As in dnsResolverBegin: never taken.
+  if (q < 0 || q >= toI32(server.length) || q >= toI32(round.length)) {
+    return
   }
-  if (r.round[q] >= r.config.attempts) {
+  // A server is below serverCount and a round below attempts, so the counts never saturate.
+  server[q] = dnsResolverCount(server[q])
+  if (server[q] >= r.config.serverCount) {
+    server[q] = 0
+    round[q] = dnsResolverCount(round[q])
+  }
+  if (round[q] >= r.config.attempts) {
     dnsResolverDone(r, q, DNS_RESOLVE_NO_ANSWER, nowNanos)
     return
   }
@@ -1119,7 +1531,27 @@ const dnsResolverServerFailed = (r: DnsResolver, q: i32, nowNanos: i64): void =>
  */
 const dnsResolverAnswer = (r: DnsResolver, q: i32, status: i32, nowNanos: i64): void => {
   const reply: DnsReply = r.reply
-  r.nxdomain[q] = status === DNS_NXDOMAIN
+  const nxdomain: boolean[] = r.nxdomain
+  const answers: u8[][] = r.answers
+  const answerTtls: i32[][] = r.answerTtls
+  const hops: i32[] = r.hops
+  const names: u8[][] = r.names
+  const nameLength: i32[] = r.nameLength
+  const starts: u8[][] = r.starts
+  // As in dnsResolverBegin: never taken.
+  if (
+    q < 0 ||
+    q >= toI32(nxdomain.length) ||
+    q >= toI32(answers.length) ||
+    q >= toI32(answerTtls.length) ||
+    q >= toI32(hops.length) ||
+    q >= toI32(names.length) ||
+    q >= toI32(nameLength.length) ||
+    q >= toI32(starts.length)
+  ) {
+    return
+  }
+  nxdomain[q] = status === DNS_NXDOMAIN
   if (status === DNS_NXDOMAIN) {
     dnsResolverDone(r, q, DNS_RESOLVE_NOT_FOUND, nowNanos)
     return
@@ -1128,18 +1560,25 @@ const dnsResolverAnswer = (r: DnsResolver, q: i32, status: i32, nowNanos: i64): 
     dnsResolverServerFailed(r, q, nowNanos)
     return
   }
-  if (reply.count > 0) {
+  const count: i32 = reply.count
+  if (count > 0) {
+    const answer: u8[] = answers[q]
+    const addresses: u8[] = reply.addresses
+    // `i / 18 < count` is `i < count * DNS_ADDRESS_BYTES` without the product;
+    // both arrays hold DNS_MAX_ANSWERS addresses, as many as a reply counts.
     let i: i32 = 0
-    while (i < reply.count * DNS_ADDRESS_BYTES) {
-      r.answers[q][i] = reply.addresses[i]
+    while (i < toI32(answer.length) && i < toI32(addresses.length) && i / 18 < count) {
+      answer[i] = addresses[i]
       i += 1
     }
+    const answerTtl: i32[] = answerTtls[q]
+    const ttls: i32[] = reply.ttls
     i = 0
-    while (i < reply.count) {
-      r.answerTtls[q][i] = reply.ttls[i]
+    while (i < count && i < toI32(answerTtl.length) && i < toI32(ttls.length)) {
+      answerTtl[i] = ttls[i]
       i += 1
     }
-    dnsResolverDone(r, q, reply.count, nowNanos)
+    dnsResolverDone(r, q, count, nowNanos)
     return
   }
   if (dnsResolverSameName(reply.chain, reply.asked)) {
@@ -1147,29 +1586,36 @@ const dnsResolverAnswer = (r: DnsResolver, q: i32, status: i32, nowNanos: i64): 
     return
   }
   // The chain left the reply without an address: ask for its end.
-  if (r.hops[q] >= DNS_RESOLVER_MAX_CNAME_HOPS || dnsResolverSameName(reply.chain, r.starts[q])) {
+  if (hops[q] >= DNS_RESOLVER_MAX_CNAME_HOPS || dnsResolverSameName(reply.chain, starts[q])) {
     dnsResolverDone(r, q, DNS_RESOLVE_CNAME, nowNanos)
     return
   }
-  r.hops[q] = r.hops[q] + 1
+  hops[q] = dnsResolverCount(hops[q])
   r.cnameQueries = dnsResolverCount(r.cnameQueries)
-  const length: i32 = dnsResolverNameLength(reply.chain)
+  const chain: u8[] = reply.chain
+  const name: u8[] = names[q]
+  const length: i32 = dnsResolverNameLength(chain)
+  // `chain` and `name` both hold 255 bytes, and the chain is a name dnsReadName read.
   let i: i32 = 0
-  while (i < length) {
-    r.names[q][i] = reply.chain[i]
+  while (i < length && i < toI32(chain.length) && i < toI32(name.length)) {
+    name[i] = chain[i]
     i += 1
   }
-  r.nameLength[q] = length
+  nameLength[q] = length
   dnsResolverAsk(r, q, (q & 1) === 0 ? DNS_TYPE_A : DNS_TYPE_AAAA, nowNanos)
 }
 
 /** The length of the wire name in `name`, its root byte included, read label by label since a label may hold a 0 byte. */
 const dnsResolverNameLength = (name: u8[]): i32 => {
+  // `i < 256`: every name here is held in DNS_MAX_NAME_BYTES (255), so `i < name.length` ends the walk first.
   let i: i32 = 0
-  while (i >= 0 && i < toI32(name.length) && name[i] !== toU8(0)) {
-    i += toI32(name[i]) + 1
+  let end: i32 = 1
+  while (i >= 0 && i < 256 && i < toI32(name.length) && name[i] !== toU8(0)) {
+    const next: i32 = i + toI32(name[i]) + 1
+    i = next
+    end = next + 1
   }
-  return i + 1
+  return end
 }
 
 /** Whether the lowercase wire names `a` and `b` are the same name. */
@@ -1203,21 +1649,46 @@ const dnsResolverSameName = (a: u8[], b: u8[]): boolean => {
  * when no later candidate answers.
  */
 const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): void => {
-  if (r.state[q] === DNS_Q_UDP || r.state[q] === DNS_Q_TCP) {
-    r.pending[q] = DNS_CLOSE
-  }
-  r.state[q] = DNS_Q_DONE
-  r.outcome[q] = outcome
-  const l: i32 = q / 2
-  const a: i32 = l * 2
-  if (r.state[a] !== DNS_Q_DONE || r.state[a + 1] !== DNS_Q_DONE) {
+  const state: i32[] = r.state
+  const pending: i32[] = r.pending
+  const outcomes: i32[] = r.outcome
+  const nxdomain: boolean[] = r.nxdomain
+  const fallback: i32[] = r.fallback
+  const candidate: i32[] = r.candidate
+  // A query is below 2 * maxLookups, the per-query arrays' even length, and
+  // its lookup below maxLookups, the others', so this never returns.
+  if (q < 0 || q >= toI32(state.length) || q >= toI32(pending.length) || q >= toI32(outcomes.length)) {
     return
   }
-  const v4: i32 = r.outcome[a]
-  const v6: i32 = r.outcome[a + 1]
+  if (state[q] === DNS_Q_UDP || state[q] === DNS_Q_TCP) {
+    pending[q] = DNS_CLOSE
+  }
+  state[q] = DNS_Q_DONE
+  outcomes[q] = outcome
+  const l: i32 = q / 2
+  const a: i32 = l * 2
+  // As above: never taken.
+  if (
+    a >= toI32(state.length) - 1 ||
+    a >= toI32(outcomes.length) - 1 ||
+    a >= toI32(nxdomain.length) - 1 ||
+    l >= toI32(fallback.length) ||
+    l >= toI32(candidate.length)
+  ) {
+    return
+  }
+  if (state[a] !== DNS_Q_DONE || state[a + 1] !== DNS_Q_DONE) {
+    return
+  }
+  const v4: i32 = outcomes[a]
+  const v6: i32 = outcomes[a + 1]
   if (v4 > 0 || v6 > 0) {
     const four: i32 = v4 > 0 ? v4 : 0
     const six: i32 = v6 > 0 ? v6 : 0
+    // A positive outcome is a reply's address count, at most DNS_MAX_ANSWERS (8): never taken.
+    if (four < 0 || four > 8 || six < 0 || six > 8) {
+      return
+    }
     dnsResolverGather(r, l, four, six, true)
     dnsResolverFinish(r, l, four + six)
     return
@@ -1228,22 +1699,23 @@ const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): v
   } else if (v6 === DNS_RESOLVE_NO_ANSWER || v6 === DNS_RESOLVE_CNAME) {
     error = v6
   }
-  const named: boolean = r.nxdomain[a] || r.nxdomain[a + 1]
+  const named: boolean = nxdomain[a] || nxdomain[a + 1]
   if (error !== 0 && !named) {
     dnsResolverFinish(r, l, error)
     return
   }
-  if (error === 0 && !(r.nxdomain[a] && r.nxdomain[a + 1])) {
+  if (error === 0 && !(nxdomain[a] && nxdomain[a + 1])) {
     // NODATA answers for the name, so an earlier candidate's fallback does not stand.
     dnsResolverFinish(r, l, DNS_RESOLVE_NOT_FOUND)
     return
   }
-  if (error !== 0 && r.fallback[l] === 0) {
-    r.fallback[l] = error
+  if (error !== 0 && fallback[l] === 0) {
+    fallback[l] = error
   }
-  r.candidate[l] = r.candidate[l] + 1
+  candidate[l] = dnsResolverCount(candidate[l])
   if (dnsResolverNextCandidate(r, l, nowNanos)) {
     return
   }
-  dnsResolverFinish(r, l, r.fallback[l] !== 0 ? r.fallback[l] : DNS_RESOLVE_NOT_FOUND)
+  const last: i32 = fallback[l]
+  dnsResolverFinish(r, l, last !== 0 ? last : DNS_RESOLVE_NOT_FOUND)
 }

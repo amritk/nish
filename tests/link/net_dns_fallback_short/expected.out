@@ -1,0 +1,4 @@
+servers: 2, table: 54 bytes
+first: 127.0.0.1 port 53
+second ends in 1, port 53
+listed: 3, table: 54 bytes, third ends in 3
