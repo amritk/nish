@@ -143,7 +143,11 @@ class BcryptBatchKey {
   readonly key: Secret<u8[]>
 
   constructor(length: i32) {
-    this.key = secret(new Array<u8>(length))
+    const key: u8[] = []
+    for (let i: i32 = 0; i < length; i++) {
+      key.push(toU8(0))
+    }
+    this.key = secret(key)
   }
 
   /** @internal Called by `BcryptBatcher.run`; the class is not exported. */
@@ -192,11 +196,11 @@ class BcryptBatchShare {
    */
   hashes: string[]
   /**
-   * 16 bytes a request; a verify's are zeros and are not read.
+   * Each request's salt: 16 bytes for a hash, none for a verify.
    *
    * @internal Read by this module's task functions; the class is not exported.
    */
-  salts: u8[]
+  salts: u8[][]
   /** @internal Read by this module's task functions; the class is not exported. */
   cost: i32
   /** @internal Read by this module's task functions; the class is not exported. */
@@ -212,9 +216,12 @@ class BcryptBatchShare {
   }
 }
 
-/** The holder at `list[i]` of `share`, or at `list[0]` past the batch's end (that lane is then passed as null). */
-const bcryptBatchLane = (share: BcryptBatchShare, list: i32[], i: i32): BcryptBatchKey => {
-  const at: i32 = i < toI32(list.length) ? list[i] : list[0]
+/** The holder at `list[i]` of `share`, or null for a lane past the first `n` of `list`, which reads nothing. */
+const bcryptBatchLane = (share: BcryptBatchShare, list: i32[], n: i32, i: i32): BcryptBatchKey | null => {
+  if (i < 0 || i >= n || i >= toI32(list.length)) {
+    return null
+  }
+  const at: i32 = list[i]
   return share.passwords[at]
 }
 
@@ -229,7 +236,8 @@ const bcryptBatchVerifyAlone = (held: BcryptBatchKey, hash: string): string => {
 
 /**
  * One `bcryptVerifyN` over the first `n` of `list`: a holder's field is
- * passed only as a call's argument, so each lane count is its own call.
+ * passed only as a call's argument, so each lane count is its own call. A
+ * lane past `n` is null and reads nothing; an empty batch is an error.
  */
 const bcryptBatchVerifyLanes = (
   share: BcryptBatchShare,
@@ -237,25 +245,28 @@ const bcryptBatchVerifyLanes = (
   n: i32,
   hashes: string[]
 ): Result<boolean[], string> => {
-  const a: BcryptBatchKey = bcryptBatchLane(share, list, 0)
-  const b: BcryptBatchKey = bcryptBatchLane(share, list, 1)
-  const c: BcryptBatchKey = bcryptBatchLane(share, list, 2)
-  const d: BcryptBatchKey = bcryptBatchLane(share, list, 3)
-  const e: BcryptBatchKey = bcryptBatchLane(share, list, 4)
-  const f: BcryptBatchKey = bcryptBatchLane(share, list, 5)
-  if (n <= 1) {
+  const a: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 0)
+  if (a === null) {
+    return Err("bcrypt: a batch has no lanes")
+  }
+  const b: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 1)
+  const c: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 2)
+  const d: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 3)
+  const e: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 4)
+  const f: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 5)
+  if (b === null) {
     return bcryptVerifyN(a.key, null, null, null, null, null, hashes)
   }
-  if (n === 2) {
+  if (c === null) {
     return bcryptVerifyN(a.key, b.key, null, null, null, null, hashes)
   }
-  if (n === 3) {
+  if (d === null) {
     return bcryptVerifyN(a.key, b.key, c.key, null, null, null, hashes)
   }
-  if (n === 4) {
+  if (e === null) {
     return bcryptVerifyN(a.key, b.key, c.key, d.key, null, null, hashes)
   }
-  if (n === 5) {
+  if (f === null) {
     return bcryptVerifyN(a.key, b.key, c.key, d.key, e.key, null, hashes)
   }
   return bcryptVerifyN(a.key, b.key, c.key, d.key, e.key, f.key, hashes)
@@ -268,25 +279,28 @@ const bcryptBatchHashLanes = (
   n: i32,
   salts: u8[]
 ): Result<string[], string> => {
-  const a: BcryptBatchKey = bcryptBatchLane(share, list, 0)
-  const b: BcryptBatchKey = bcryptBatchLane(share, list, 1)
-  const c: BcryptBatchKey = bcryptBatchLane(share, list, 2)
-  const d: BcryptBatchKey = bcryptBatchLane(share, list, 3)
-  const e: BcryptBatchKey = bcryptBatchLane(share, list, 4)
-  const f: BcryptBatchKey = bcryptBatchLane(share, list, 5)
-  if (n <= 1) {
+  const a: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 0)
+  if (a === null) {
+    return Err("bcrypt: a batch has no lanes")
+  }
+  const b: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 1)
+  const c: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 2)
+  const d: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 3)
+  const e: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 4)
+  const f: BcryptBatchKey | null = bcryptBatchLane(share, list, n, 5)
+  if (b === null) {
     return bcryptHashN(a.key, null, null, null, null, null, salts, share.cost)
   }
-  if (n === 2) {
+  if (c === null) {
     return bcryptHashN(a.key, b.key, null, null, null, null, salts, share.cost)
   }
-  if (n === 3) {
+  if (d === null) {
     return bcryptHashN(a.key, b.key, c.key, null, null, null, salts, share.cost)
   }
-  if (n === 4) {
+  if (e === null) {
     return bcryptHashN(a.key, b.key, c.key, d.key, null, null, salts, share.cost)
   }
-  if (n === 5) {
+  if (f === null) {
     return bcryptHashN(a.key, b.key, c.key, d.key, e.key, null, salts, share.cost)
   }
   return bcryptHashN(a.key, b.key, c.key, d.key, e.key, f.key, salts, share.cost)
@@ -301,10 +315,12 @@ const bcryptBatchVerifyRun = (
   out: string[]
 ): void => {
   const lanes: i32[] = []
-  for (let i: i32 = from; i < from + n && i < toI32(list.length); i++) {
+  let i: i32 = from
+  for (let k: i32 = 0; k < n && i < toI32(list.length); k++) {
     if (i >= 0) {
       lanes.push(list[i])
     }
+    i += 1
   }
   if (toI32(lanes.length) === 0) {
     return
@@ -337,23 +353,30 @@ const bcryptBatchVerifyRun = (
 
 /** The hashes of `share` at `list[from..from + n)` as one `bcryptHashN`, each lane's answer into `out` at its index. */
 const bcryptBatchHashRun = (share: BcryptBatchShare, list: i32[], from: i32, n: i32, out: string[]): void => {
+  // Each lane's salt goes into `salts` at 16 times its lane; a request
+  // without a 16-byte salt is answered with bcrypt's error and joins no lane.
   const lanes: i32[] = []
-  for (let i: i32 = from; i < from + n && i < toI32(list.length); i++) {
+  const salts: u8[] = new Array<u8>(96)
+  let q: i32 = 0
+  let i: i32 = from
+  for (let k: i32 = 0; k < n && i < toI32(list.length); k++) {
     if (i >= 0) {
-      lanes.push(list[i])
+      const at: i32 = list[i]
+      const salt: u8[] = at >= 0 && at < toI32(share.salts.length) ? share.salts[at] : []
+      if (toI32(salt.length) === 16 && q >= 0 && q <= toI32(salts.length) - 16) {
+        for (let j: i32 = 0; j < 16 && q < toI32(salts.length); j++) {
+          salts[q] = salt[j]
+          q += 1
+        }
+        lanes.push(at)
+      } else if (at >= 0 && at < toI32(out.length)) {
+        out[at] = "!bcrypt: the salt is not 16 bytes"
+      }
     }
+    i += 1
   }
   if (toI32(lanes.length) === 0) {
     return
-  }
-  const salts: u8[] = new Array<u8>(96)
-  for (let s: i32 = 0; s < toI32(lanes.length) && s < 6; s++) {
-    const at: i32 = lanes[s]
-    for (let j: i32 = 0; j < 16 && 16 * at + j < toI32(share.salts.length); j++) {
-      if (at >= 0) {
-        salts[16 * s + j] = share.salts[16 * at + j]
-      }
-    }
   }
   const made: Result<string[], string> = bcryptBatchHashLanes(share, lanes, toI32(lanes.length), salts)
   for (let s: i32 = 0; s < toI32(lanes.length); s++) {
@@ -394,14 +417,22 @@ const bcryptBatchShareRun = (share: BcryptBatchShare): string => {
   for (let i: i32 = 0; i < toI32(share.kinds.length); i++) {
     out.push("")
   }
-  const width: i32 = share.width < 1 ? 1 : share.width
+  // `bcryptBatcher` refuses a width outside 1 to 6, so this keeps it as given.
+  const least: i32 = share.width < 1 ? 1 : share.width
+  const width: i32 = least > 6 ? 6 : least
   const verifies: i32[] = bcryptBatchOfKind(share, BCRYPT_BATCH_VERIFY)
-  for (let i: i32 = 0; i < toI32(verifies.length); i += width) {
-    bcryptBatchVerifyRun(share, verifies, i, width, out)
-  }
   const hashes: i32[] = bcryptBatchOfKind(share, BCRYPT_BATCH_HASH)
-  for (let i: i32 = 0; i < toI32(hashes.length); i += width) {
-    bcryptBatchHashRun(share, hashes, i, width, out)
+  if (width > 0) {
+    for (let i: i32 = 0; i < toI32(verifies.length); i++) {
+      if (i % width === 0) {
+        bcryptBatchVerifyRun(share, verifies, i, width, out)
+      }
+    }
+    for (let i: i32 = 0; i < toI32(hashes.length); i++) {
+      if (i % width === 0) {
+        bcryptBatchHashRun(share, hashes, i, width, out)
+      }
+    }
   }
   return out.join("\n")
 }
@@ -429,11 +460,11 @@ const bcryptBatchLines = (joined: string): string[] => {
   let from: i32 = 0
   while (from >= 0 && from <= toI32(joined.length)) {
     const at: i32 = toI32(joined.indexOf("\n", from))
-    if (at < from || at > toI32(joined.length)) {
-      lines.push(joined.slice(from))
+    if (at < 0 || at < from || at >= toI32(joined.length)) {
+      lines.push(joined.substring(from))
       return lines
     }
-    lines.push(joined.slice(from, at))
+    lines.push(joined.substring(from, at))
     from = at + 1
   }
   return lines
@@ -457,11 +488,11 @@ const bcryptBatchAnswerOf = (ticket: i32, kind: i32, said: string): BcryptAnswer
  */
 export class BcryptBatcher {
   private holdNanos: i64
-  /** The queue, from `head`: each request's copy of its password, kind, stored hash, salt (16 bytes each), ticket and arrival. */
+  /** The queue, from `head`: each request's copy of its password, kind, stored hash, salt (16 bytes for a hash, none for a verify), ticket and arrival. */
   private passwords: BcryptBatchKey[]
   private kinds: i32[]
   private hashes: string[]
-  private salts: u8[]
+  private salts: u8[][]
   private tickets: i32[]
   private arrived: i64[]
   /** Answers made without a batch (a salt of the wrong length), handed out by the next `run`. */
@@ -470,7 +501,10 @@ export class BcryptBatcher {
   private cores: i32
   private cost: i32
   private head: i32
-  /** The next ticket. */
+  /**
+   * The next ticket; after 2^31 - 1 it wraps to 0. Two requests share a
+   * ticket only if one is still queued after 2^31 others are made.
+   */
   private next: i32
 
   /**
@@ -515,12 +549,15 @@ export class BcryptBatcher {
    * @param hash The stored hash; its cost sets the work, so it must be one you
    *   stored.
    * @param now The time of the call, from `monotonicNanos()`.
-   * @returns The ticket its `BcryptAnswer` will carry.
+   * @returns The ticket its `BcryptAnswer` will carry: tickets count up from
+   *   0 and wrap to 0 after 2^31 - 1, so a later request can carry a smaller
+   *   one.
    */
   verify(password: Secret<u8[]>, hash: string, now: i64): i32 {
     const ticket: i32 = this.next
-    this.next = this.next + 1
-    this.enqueue(password, BCRYPT_BATCH_VERIFY, hash, new Array<u8>(16), ticket, now)
+    this.next = ticket < 0x7fffffff ? ticket + 1 : 0
+    const noSalt: u8[] = []
+    this.enqueue(password, BCRYPT_BATCH_VERIFY, hash, noSalt, ticket, now)
     return ticket
   }
 
@@ -535,11 +572,13 @@ export class BcryptBatcher {
    *   is bad, and the caller still owns and wipes it.
    * @param salt 16 fresh random bytes; read, not kept.
    * @param now The time of the call, from `monotonicNanos()`.
-   * @returns The ticket its `BcryptAnswer` will carry.
+   * @returns The ticket its `BcryptAnswer` will carry: tickets count up from
+   *   0 and wrap to 0 after 2^31 - 1, so a later request can carry a smaller
+   *   one.
    */
   hash(password: Secret<u8[]>, salt: u8[], now: i64): i32 {
     const ticket: i32 = this.next
-    this.next = this.next + 1
+    this.next = ticket < 0x7fffffff ? ticket + 1 : 0
     if (toI32(salt.length) !== 16) {
       this.early.push(new BcryptAnswer(ticket, false, "", "bcrypt: the salt is not 16 bytes"))
       return ticket
@@ -553,9 +592,11 @@ export class BcryptBatcher {
     this.passwords.push(bcryptBatchTake(password))
     this.kinds.push(kind)
     this.hashes.push(hash)
+    const own: u8[] = []
     for (let j: i32 = 0; j < 16 && j < toI32(salt.length); j++) {
-      this.salts.push(salt[j])
+      own.push(salt[j])
     }
+    this.salts.push(own)
     this.tickets.push(ticket)
     this.arrived.push(now)
   }
@@ -573,14 +614,18 @@ export class BcryptBatcher {
     if (toI32(this.early.length) > 0) {
       return 0
     }
-    const queued: i32 = toI32(this.kinds.length) - this.head
+    const head: i32 = this.head
+    if (head < 0) {
+      return 0
+    }
+    const queued: i32 = toI32(this.kinds.length) - head
     if (queued <= 0) {
       return -1
     }
-    if (queued >= this.width || this.head >= toI32(this.arrived.length)) {
+    if (queued >= this.width || head >= toI32(this.arrived.length)) {
       return 0
     }
-    const waited: i64 = now - this.arrived[this.head]
+    const waited: i64 = now - this.arrived[head]
     return waited >= this.holdNanos ? 0 : this.holdNanos - waited
   }
 
@@ -606,30 +651,45 @@ export class BcryptBatcher {
     if (this.waitNanos(now) !== 0) {
       return answers
     }
-    const queued: i32 = toI32(this.kinds.length) - this.head
+    const head: i32 = this.head
+    if (head < 0) {
+      return answers
+    }
+    const queued: i32 = toI32(this.kinds.length) - head
     if (queued <= 0) {
       return answers
     }
-    const most: i32 = this.width * this.cores
-    const taken: i32 = queued < most ? queued : most
+    const most: i64 = toI64(this.width) * toI64(this.cores)
+    const taken: i32 = toI64(queued) < most ? queued : toI32(most)
     const order: i32[] = this.orderOf(taken)
     const tasks: i32 = taken < this.cores ? taken : this.cores
+    const parts: i64 = toI64(tasks)
+    if (parts <= 0) {
+      return answers
+    }
     const shares: BcryptBatchShare[] = []
     // Share k takes order[taken·k/tasks, taken·(k+1)/tasks): contiguous, so one cost's verifies stay together.
     const owner: i32[] = []
     for (let k: i32 = 0; k < tasks; k++) {
       const share: BcryptBatchShare = new BcryptBatchShare(this.cost, this.width)
-      const lo: i32 = (taken * k) / tasks
-      const hi: i32 = (taken * (k + 1)) / tasks
+      const lo: i32 = toI32((toI64(taken) * toI64(k)) / parts)
+      const hi: i32 = toI32((toI64(taken) * (toI64(k) + 1)) / parts)
       for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(order.length); i++) {
         const at: i32 = order[i]
-        if (at >= 0 && at < toI32(this.passwords.length) && at < toI32(this.kinds.length)) {
+        const queue: i32[] = this.kinds
+        const saltQueue: u8[][] = this.salts
+        if (
+          at >= 0 &&
+          at < toI32(this.passwords.length) &&
+          at < toI32(queue.length) &&
+          at < toI32(saltQueue.length)
+        ) {
+          const kind: i32 = queue[at]
+          const salt: u8[] = saltQueue[at]
           share.passwords.push(this.passwords[at])
-          share.kinds.push(this.kinds[at])
+          share.kinds.push(kind)
           share.hashes.push(at < toI32(this.hashes.length) ? this.hashes[at] : "")
-          for (let j: i32 = 0; j < 16; j++) {
-            share.salts.push(16 * at + j < toI32(this.salts.length) ? this.salts[16 * at + j] : toU8(0))
-          }
+          share.salts.push(salt)
           owner.push(at)
         }
       }
@@ -641,7 +701,7 @@ export class BcryptBatcher {
     }
     {
       using s = scope()
-      for (let k: i32 = 0; k < toI32(shares.length); k++) {
+      for (let k: i32 = 0; k < toI32(shares.length) && k < toI32(said.length); k++) {
         s.spawn(bcryptBatchShareRun, shares[k], said, k)
       }
     }
@@ -674,10 +734,14 @@ export class BcryptBatcher {
   private orderOf(taken: i32): i32[] {
     const keyed: i32[] = []
     const keys: i32[] = []
-    for (let i: i32 = this.head; i < this.head + taken && i < toI32(this.kinds.length); i++) {
+    let n: i32 = 0
+    const queue: i32[] = this.kinds
+    for (let i: i32 = this.head; n < taken && i >= 0 && i < toI32(queue.length); i++) {
+      n += 1
+      const kind: i32 = queue[i]
       keyed.push(i)
       let key: i32 = 1000
-      if (this.kinds[i] !== BCRYPT_BATCH_HASH) {
+      if (kind !== BCRYPT_BATCH_HASH) {
         key = i < toI32(this.hashes.length) ? bcryptBatchCostOf(this.hashes[i]) : -1
       }
       keys.push(key)
@@ -708,30 +772,40 @@ export class BcryptBatcher {
 
   /** Drops the requests before `head` once they are most of the queue, so a long-lived batcher's arrays stay small. */
   private compact(): void {
-    if (this.head < 64 || this.head * 2 < toI32(this.kinds.length)) {
+    if (this.head < 64 || toI64(this.head) * 2 < toI64(this.kinds.length)) {
       return
     }
     const passwords: BcryptBatchKey[] = []
     const kinds: i32[] = []
     const hashes: string[] = []
-    const salts: u8[] = []
+    const salts: u8[][] = []
     const tickets: i32[] = []
     const arrived: i64[] = []
-    for (let i: i32 = this.head; i < toI32(this.kinds.length); i++) {
+    const oldPasswords: BcryptBatchKey[] = this.passwords
+    const oldKinds: i32[] = this.kinds
+    const oldHashes: string[] = this.hashes
+    const oldSalts: u8[][] = this.salts
+    const oldTickets: i32[] = this.tickets
+    const oldArrived: i64[] = this.arrived
+    for (let i: i32 = this.head; i >= 0 && i < toI32(oldKinds.length); i++) {
       if (
-        i < toI32(this.passwords.length) &&
-        i < toI32(this.hashes.length) &&
-        i < toI32(this.tickets.length) &&
-        i < toI32(this.arrived.length)
+        i < toI32(oldPasswords.length) &&
+        i < toI32(oldHashes.length) &&
+        i < toI32(oldSalts.length) &&
+        i < toI32(oldTickets.length) &&
+        i < toI32(oldArrived.length)
       ) {
-        passwords.push(this.passwords[i])
-        kinds.push(this.kinds[i])
-        hashes.push(this.hashes[i])
-        for (let j: i32 = 0; j < 16; j++) {
-          salts.push(16 * i + j < toI32(this.salts.length) ? this.salts[16 * i + j] : toU8(0))
-        }
-        tickets.push(this.tickets[i])
-        arrived.push(this.arrived[i])
+        const kind: i32 = oldKinds[i]
+        const hash: string = oldHashes[i]
+        const salt: u8[] = oldSalts[i]
+        const ticket: i32 = oldTickets[i]
+        const time: i64 = oldArrived[i]
+        passwords.push(oldPasswords[i])
+        kinds.push(kind)
+        hashes.push(hash)
+        salts.push(salt)
+        tickets.push(ticket)
+        arrived.push(time)
       }
     }
     this.passwords = passwords

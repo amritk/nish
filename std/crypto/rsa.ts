@@ -64,6 +64,7 @@
  * functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
+import { timingSafeEqual } from "nish/crypto/ct"
 import { sha256 } from "nish/crypto/sha256"
 import { sha384, sha512 } from "nish/crypto/sha512"
 
@@ -114,112 +115,106 @@ export class RsaPublicKey {
 // The key's DER (X.690 §8.1, §8.3, §10.1)
 // ---------------------------------------------------------------------------
 
+/** Where an element's contents lie in its DER: `der[start .. end)`. */
+class RsaDerSpan {
+  /** The first byte of the contents. */
+  start: i32
+  /** One past the last byte of the contents. */
+  end: i32
+
+  constructor(start: i32, end: i32) {
+    this.start = start
+    this.end = end
+  }
+}
+
 /**
- * Where the contents of the element at `der[at]` start, when it has the
- * identifier `tag` and a definite length in its shortest form that fits
- * before `end`; -1 otherwise. The length is `rsaDerLength`'s answer for the
- * same arguments. Lengths of more than two octets are refused: the largest
- * key's DER is about a kilobyte.
+ * The contents of the element at `der[at]`, when it has the identifier `tag`
+ * and a definite length in its shortest form that fits before `end`; `null`
+ * otherwise, and for an `at` or `end` outside `der`. Lengths of more than two
+ * octets are refused: the largest key's DER is about a kilobyte.
  */
-const rsaDerContents = (der: u8[], at: i32, end: i32, tag: i32): i32 => {
-  if (at < 0 || at + 2 > end || toI32(der[at]) !== tag) {
-    return -1
+const rsaDerElement = (der: u8[], at: i32, end: i32, tag: i32): RsaDerSpan | null => {
+  const total: i32 = toI32(der.length)
+  if (end < 2 || end > total || at < 0 || at > end - 2 || at > total - 2 || toI32(der[at]) !== tag) {
+    return null
   }
   const first: i32 = toI32(der[at + 1])
   let start: i32 = at + 2
   let length: i32 = first
   if (first === 0x81) {
-    if (at + 3 > end) {
-      return -1
+    if (at > end - 3 || at > total - 3) {
+      return null
     }
     length = toI32(der[at + 2])
     if (length < 0x80) {
-      return -1
+      return null
     }
     start = at + 3
   } else if (first === 0x82) {
-    if (at + 4 > end) {
-      return -1
+    if (at > end - 4 || at > total - 4) {
+      return null
     }
     length = (toI32(der[at + 2]) << 8) | toI32(der[at + 3])
     if (length < 0x100) {
-      return -1
+      return null
     }
     start = at + 4
   } else if (first >= 0x80) {
-    return -1
+    return null
   }
   if (length > end - start) {
-    return -1
+    return null
   }
-  return start
-}
-
-/** The contents length of the element `rsaDerContents` found at `der[at]`. */
-const rsaDerLength = (der: u8[], at: i32): i32 => {
-  const first: i32 = toI32(der[at + 1])
-  if (first === 0x81) {
-    return toI32(der[at + 2])
-  }
-  if (first === 0x82) {
-    return (toI32(der[at + 2]) << 8) | toI32(der[at + 3])
-  }
-  return first
+  // In i64, as the prover cannot add two i32s it only bounds apart; the check
+  // above keeps the sum at most `end`.
+  return new RsaDerSpan(start, toI32(toI64(start) + toI64(length)))
 }
 
 /**
  * The magnitude of the positive INTEGER whose contents are `der[start ..
- * start + length)`, big-endian with no leading zero byte; `null` for an empty
- * one, a negative one, and one not in its shortest form (a leading 0x00 that
- * a clear top bit after it did not need).
+ * end)`, big-endian with no leading zero byte; `null` for an empty one, a
+ * negative one, one not in its shortest form (a leading 0x00 that a clear top
+ * bit after it did not need), and a range outside `der`.
  */
-const rsaDerUnsigned = (der: u8[], start: i32, length: i32): u8[] | null => {
-  const end: i32 = start + length
-  if (start < 0 || length < 1 || end > toI32(der.length) || toI32(der[start]) >= 0x80) {
+const rsaDerUnsigned = (der: u8[], start: i32, end: i32): u8[] | null => {
+  const total: i32 = toI32(der.length)
+  if (start < 0 || start >= end || start >= total || end > total || toI32(der[start]) >= 0x80) {
     return null
   }
   let from: i32 = start
   if (toI32(der[start]) === 0) {
-    if (length === 1 || toI32(der[start + 1]) < 0x80) {
+    from = start + 1
+    if (from >= end || from >= total || toI32(der[from]) < 0x80) {
       return null
     }
-    from = start + 1
   }
-  const out: u8[] = new Array<u8>(end - from)
-  for (let i: i32 = from; i < end; i++) {
-    out[i - from] = der[i]
-  }
-  return out
+  const first: i32 = from
+  return der.filter((_b: u8, k: number): boolean => toI32(k) >= first && toI32(k) < end)
 }
 
-/** The number of significant bits in the big-endian `v`, which has no leading zero byte. */
+/**
+ * The number of significant bits in the big-endian `v`, which has no leading
+ * zero byte; -1 for one of 2^28 bytes or more, whose count an `i32` might
+ * not hold.
+ */
 const rsaBitLength = (v: u8[]): i32 => {
-  const length: i32 = toI32(v.length)
-  if (length === 0) {
+  if (toI32(v.length) < 1) {
     return 0
   }
-  let top: i32 = toI32(v[0])
-  let bits: i32 = (length - 1) << 3
-  while (top > 0) {
-    bits += 1
-    top = top >> 1
+  const length: i32 = toI32(v.length)
+  if (length > 0x0fffffff) {
+    return -1
   }
-  return bits
-}
-
-/** Whether the big-endian `a` is below `b`, both without a leading zero byte. */
-const rsaBytesBelow = (a: u8[], b: u8[]): boolean => {
-  const aLength: i32 = toI32(a.length)
-  const bLength: i32 = toI32(b.length)
-  if (aLength !== bLength) {
-    return aLength < bLength
-  }
-  for (let i: i32 = 0; i < aLength && i < bLength; i++) {
-    if (a[i] !== b[i]) {
-      return a[i] < b[i]
+  const top: i32 = toI32(v[0])
+  let topBits: i32 = 0
+  for (let b: i32 = 0; b < 8; b++) {
+    if (top >> b !== 0) {
+      topBits = b + 1
     }
   }
-  return false
+  // At most (2^28 - 2) 8 + 8, below 2^31, so the u32 sum is the count.
+  return toI32(toU32(length - 1) * 8 + toU32(topBits))
 }
 
 /**
@@ -236,34 +231,37 @@ const rsaBytesBelow = (a: u8[], b: u8[]): boolean => {
  */
 export const rsaParsePublicKey = (der: u8[]): RsaPublicKey | null => {
   const total: i32 = toI32(der.length)
-  const body: i32 = rsaDerContents(der, 0, total, 0x30)
-  if (body < 0 || body + rsaDerLength(der, 0) !== total) {
+  const body: RsaDerSpan | null = rsaDerElement(der, 0, total, 0x30)
+  if (body === null || body.end !== total) {
     return null
   }
-  const nStart: i32 = rsaDerContents(der, body, total, 0x02)
-  if (nStart < 0) {
+  const nSpan: RsaDerSpan | null = rsaDerElement(der, body.start, total, 0x02)
+  if (nSpan === null) {
     return null
   }
-  const nEnd: i32 = nStart + rsaDerLength(der, body)
-  const eStart: i32 = rsaDerContents(der, nEnd, total, 0x02)
-  if (eStart < 0) {
+  const eSpan: RsaDerSpan | null = rsaDerElement(der, nSpan.end, total, 0x02)
+  if (eSpan === null || eSpan.end !== total) {
     return null
   }
-  const eLength: i32 = rsaDerLength(der, nEnd)
-  if (eStart + eLength !== total) {
+  const nRead: u8[] | null = rsaDerUnsigned(der, nSpan.start, nSpan.end)
+  const eRead: u8[] | null = rsaDerUnsigned(der, eSpan.start, eSpan.end)
+  if (nRead === null || eRead === null) {
     return null
   }
-  const n: u8[] | null = rsaDerUnsigned(der, nStart, nEnd - nStart)
-  const e: u8[] | null = rsaDerUnsigned(der, eStart, eLength)
-  if (n === null || e === null) {
+  const n: u8[] = nRead
+  const e: u8[] = eRead
+  const nLength: i32 = toI32(n.length)
+  const eLength: i32 = toI32(e.length)
+  if (nLength === 0 || eLength === 0) {
     return null
   }
+  const nLast: i32 = toI32(n[nLength - 1])
+  const eLast: i32 = toI32(e[eLength - 1])
   const bits: i32 = rsaBitLength(n)
-  if (bits < RSA_MIN_BITS || bits > RSA_MAX_BITS || (toI32(n[toI32(n.length) - 1]) & 1) === 0) {
+  if (bits < RSA_MIN_BITS || bits > RSA_MAX_BITS || (nLast & 1) === 0 || eLength > 4) {
     return null
   }
-  const eLast: i32 = toI32(e[toI32(e.length) - 1])
-  if (toI32(e.length) > 4 || (eLast & 1) === 0 || (toI32(e.length) === 1 && eLast < 3)) {
+  if ((eLast & 1) === 0 || (eLength === 1 && eLast < 3)) {
     return null
   }
   return new RsaPublicKey(n, e, bits)
@@ -273,33 +271,39 @@ export const rsaParsePublicKey = (der: u8[]): RsaPublicKey | null => {
 // Montgomery arithmetic on little-endian u32 limbs
 // ---------------------------------------------------------------------------
 
-/** The big-endian `bytes` as `limbs` little-endian `u32` limbs, limb 0 the least significant; `bytes` fits. */
-const rsaLimbsFromBytes = (bytes: u8[], limbs: i32): u32[] => {
-  const out: u32[] = new Array<u32>(limbs)
-  const size: i32 = toI32(out.length)
-  const length: i32 = toI32(bytes.length)
-  for (let i: i32 = 0; i < length; i++) {
-    const shift: i32 = length - 1 - i
-    const limb: i32 = shift >> 2
-    if (limb >= 0 && limb < size) {
-      out[limb] = out[limb] | (toU32(bytes[i]) << toU32((shift & 3) << 3))
+/**
+ * The big-endian `bytes` into the first `limbs` little-endian `u32` limbs of
+ * `out`, limb 0 the least significant; `bytes` fits in them. A byte before the
+ * start of `bytes` is one of its leading zeros.
+ */
+const rsaLimbsFromBytes = (out: u32[], bytes: u8[], limbs: i32): void => {
+  // `at` walks `bytes` from its last byte; once it passes the first, the
+  // bytes left are the leading zeros.
+  let at: i32 = toI32(bytes.length) - 1
+  for (let limb: i32 = 0; limb < limbs; limb++) {
+    let v: u32 = 0
+    for (let b: i32 = 0; b < 4; b++) {
+      if (at >= 0) {
+        v = v | (toU32(bytes[at]) << toU32(b * 8))
+        at = at - 1
+      }
     }
+    out[limb] = v
   }
-  return out
 }
 
-/** The limbs `a` as `size` big-endian bytes; the value fits. */
+/**
+ * The limbs `a` as `size` big-endian bytes, `size` 1 to 1024; the value fits.
+ * Byte `j` from the bottom is built at `1023 - j` of a 1024-byte buffer, whose
+ * last `size` bytes are the answer.
+ */
 const rsaBytesFromLimbs = (a: u32[], size: i32): u8[] => {
-  const out: u8[] = new Array<u8>(size)
-  const limbs: i32 = toI32(a.length)
-  for (let i: i32 = 0; i < toI32(out.length); i++) {
-    const shift: i32 = size - 1 - i
-    const limb: i32 = shift >> 2
-    if (limb >= 0 && limb < limbs) {
-      out[i] = toU8(a[limb] >> toU32((shift & 3) << 3))
-    }
+  const out: u8[] = new Array<u8>(1024)
+  for (let j: i32 = 0; j < size; j++) {
+    out[1023 - j] = toU8(a[toI32(j / 4)] >> toU32((j & 3) << 3))
   }
-  return out
+  const from: i32 = 1024 - size
+  return out.filter((_b: u8, k: number): boolean => toI32(k) >= from)
 }
 
 /**
@@ -318,9 +322,6 @@ const rsaMontInverse = (n0: u32): u32 => {
 
 /** Whether the `count`-limb value `a` is at least `n`, compared from the top limb. */
 const rsaAtLeast = (a: u32[], n: u32[], count: i32): boolean => {
-  if (count > toI32(a.length) || count > toI32(n.length)) {
-    return true
-  }
   for (let i: i32 = count - 1; i >= 0; i--) {
     if (a[i] !== n[i]) {
       return a[i] > n[i]
@@ -331,9 +332,6 @@ const rsaAtLeast = (a: u32[], n: u32[], count: i32): boolean => {
 
 /** `a = a - n` over `count` limbs, dropping the borrow out of the top. */
 const rsaSubInPlace = (a: u32[], n: u32[], count: i32): void => {
-  if (count > toI32(a.length) || count > toI32(n.length)) {
-    return
-  }
   let borrow: u64 = 0
   for (let i: i32 = 0; i < count; i++) {
     const d: u64 = toU64(a[i]) - toU64(n[i]) - borrow
@@ -351,19 +349,11 @@ const rsaSubInPlace = (a: u32[], n: u32[], count: i32): void => {
  * at most (2^32 - 1) + (2^32 - 1)^2 + (2^32 - 1) = 2^64 - 1, so a `u64` holds it.
  */
 const rsaMontMul = (out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t: u32[], count: i32): void => {
-  if (
-    count < 1 ||
-    count > toI32(out.length) ||
-    count > toI32(a.length) ||
-    count > toI32(b.length) ||
-    count > toI32(n.length) ||
-    count + 2 > toI32(t.length)
-  ) {
-    return
-  }
-  for (let i: i32 = 0; i < toI32(t.length); i++) {
+  for (let i: i32 = 0; i < count; i++) {
     t[i] = 0
   }
+  t[count] = 0
+  t[count + 1] = 0
   for (let i: i32 = 0; i < count; i++) {
     const bi: u64 = toU64(b[i])
     let carry: u64 = 0
@@ -396,9 +386,6 @@ const rsaMontMul = (out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t: u32
 
 /** `r = 2 r mod n` over `count` limbs, for `r` below `n`; `r[count]` takes the bit the doubling carries out, so the comparison with `n` sees it. */
 const rsaDoubleMod = (r: u32[], n: u32[], count: i32): void => {
-  if (count < 1 || count > toI32(n.length) || count + 1 > toI32(r.length)) {
-    return
-  }
   let carry: u32 = 0
   for (let i: i32 = 0; i < count; i++) {
     const v: u32 = r[i]
@@ -413,61 +400,94 @@ const rsaDoubleMod = (r: u32[], n: u32[], count: i32): void => {
 }
 
 /**
- * R^2 mod n, R = 2^(32 count), for the `count`-limb odd `n`. Writing 32 count
- * as `s 2^j` with `s` odd, doubling 1 modulo `n` 32 count + s times gives
- * R 2^s, and each Montgomery squaring of R 2^x gives R 2^2x, so `j` of them
- * reach R 2^(32 count) = R^2: about a quarter of the work of doubling all the
- * way.
+ * R^2 mod n into `r`, which holds zeros, R = 2^(32 count), for the
+ * `count`-limb odd `n`. Writing 32 count as `s 2^j` with `s` odd, doubling 1
+ * modulo `n` 32 count + s times gives R 2^s, and each Montgomery squaring of
+ * R 2^x gives R 2^2x, so `j` of them reach R 2^(32 count) = R^2: about a
+ * quarter of the work of doubling all the way.
  */
-const rsaMontR2 = (n: u32[], n0inv: u32, t: u32[], count: i32): u32[] => {
-  let s: i32 = count << 5
+const rsaMontR2 = (r: u32[], n: u32[], n0inv: u32, t: u32[], count: i32): void => {
+  let s: i32 = count * 32
   let squarings: i32 = 0
-  while (s > 0 && (s & 1) === 0) {
-    s = s >> 1
-    squarings += 1
+  // `s` is 32 to 8192, 2^13, so it halves to odd within 13 steps.
+  for (let j: i32 = 0; j < 13; j++) {
+    if ((s & 1) === 0) {
+      s = s >> 1
+      squarings = j + 1
+    }
   }
-  const r: u32[] = new Array<u32>(count + 1)
   r[0] = 1
-  for (let k: i32 = 0; k < (count << 5) + s; k++) {
+  for (let k: i32 = 0; k < count * 32; k++) {
+    rsaDoubleMod(r, n, count)
+  }
+  for (let k: i32 = 0; k < s; k++) {
     rsaDoubleMod(r, n, count)
   }
   for (let k: i32 = 0; k < squarings; k++) {
     rsaMontMul(r, r, r, n, n0inv, t, count)
   }
-  return r
 }
 
 /**
- * `s^e mod n` as `size` big-endian bytes, for an odd `n` and an `s` below it.
- * R^2 mod n comes from `rsaMontR2`; `s` is moved into
- * the Montgomery domain by one multiplication by it, raised by square and
- * multiply from the exponent's top bit, and moved out by a multiplication by 1.
+ * `s^e mod n` as big-endian bytes as long as `n`, for an odd `n`; `null`
+ * for an `n` of no bytes or more than 1024, an `e` of zero, and an `s` longer
+ * than `n` or not below it (RSAVP1's range check). Every limb array is 256 limbs, the most a 1024-byte `n` has, plus
+ * the room `rsaDoubleMod`'s carry and `rsaMontMul`'s scratch take. R^2 mod n
+ * comes from `rsaMontR2`; `s` is moved into the Montgomery domain by one
+ * multiplication by it, raised by square and multiply from the exponent's top
+ * bit, and moved out by a multiplication by 1.
  */
-const rsaModPow = (s: u8[], e: u8[], n: u8[], size: i32): u8[] => {
-  const count: i32 = (toI32(n.length) + 3) >> 2
-  const nl: u32[] = rsaLimbsFromBytes(n, count)
-  const n0inv: u32 = rsaMontInverse(nl[0])
-  const t: u32[] = new Array<u32>(count + 2)
-  const r2: u32[] = rsaMontR2(nl, n0inv, t, count)
-  const base: u32[] = new Array<u32>(count)
-  rsaMontMul(base, rsaLimbsFromBytes(s, count), r2, nl, n0inv, t, count)
-  const acc: u32[] = new Array<u32>(count)
-  for (let i: i32 = 0; i < toI32(acc.length) && i < toI32(base.length); i++) {
-    acc[i] = base[i]
+const rsaModPow = (s: u8[], e: u8[], n: u8[]): u8[] | null => {
+  const nLength: i32 = toI32(n.length)
+  if (nLength < 1 || nLength > 1024 || toI32(s.length) > nLength || rsaBitLength(e) < 1) {
+    return null
   }
-  const bits: i32 = rsaBitLength(e)
-  const eLength: i32 = toI32(e.length)
-  for (let k: i32 = bits - 2; k >= 0; k--) {
-    rsaMontMul(acc, acc, acc, nl, n0inv, t, count)
-    const at: i32 = eLength - 1 - (k >> 3)
-    if (at >= 0 && at < eLength && ((toI32(e[at]) >> (k & 7)) & 1) === 1) {
-      rsaMontMul(acc, acc, base, nl, n0inv, t, count)
+  const count: i32 = toI32((nLength + 3) / 4)
+  const nl: u32[] = new Array<u32>(256)
+  rsaLimbsFromBytes(nl, n, count)
+  const n0inv: u32 = rsaMontInverse(nl[0])
+  const t: u32[] = new Array<u32>(258)
+  const r2: u32[] = new Array<u32>(257)
+  rsaMontR2(r2, nl, n0inv, t, count)
+  const sl: u32[] = new Array<u32>(256)
+  rsaLimbsFromBytes(sl, s, count)
+  // RSAVP1's range check: `s` must be below `n`. Limbs past `count` are zero
+  // in both, so the compare walks all 256 from the top.
+  let below: i32 = 0
+  for (let i: i32 = 255; i >= 0; i--) {
+    if (below === 0 && sl[i] !== nl[i]) {
+      below = sl[i] < nl[i] ? 1 : -1
     }
   }
-  const one: u32[] = new Array<u32>(count)
+  if (below !== 1) {
+    return null
+  }
+  const base: u32[] = new Array<u32>(256)
+  rsaMontMul(base, sl, r2, nl, n0inv, t, count)
+  const acc: u32[] = new Array<u32>(256)
+  for (let i: i32 = 0; i < count; i++) {
+    acc[i] = base[i]
+  }
+  // `acc` holds `s` for the top bit; each bit after it squares, and a set
+  // one multiplies by `s`.
+  let started: boolean = false
+  for (const byte of e) {
+    for (let b: i32 = 7; b >= 0; b--) {
+      const bit: i32 = (toI32(byte) >> b) & 1
+      if (started) {
+        rsaMontMul(acc, acc, acc, nl, n0inv, t, count)
+        if (bit === 1) {
+          rsaMontMul(acc, acc, base, nl, n0inv, t, count)
+        }
+      } else if (bit === 1) {
+        started = true
+      }
+    }
+  }
+  const one: u32[] = new Array<u32>(256)
   one[0] = 1
   rsaMontMul(acc, acc, one, nl, n0inv, t, count)
-  return rsaBytesFromLimbs(acc, size)
+  return rsaBytesFromLimbs(acc, nLength)
 }
 
 /**
@@ -482,27 +502,25 @@ const rsaOpen = (key: RsaPublicKey, sig: u8[], size: i32): u8[] | null => {
   if (k !== toI32(key.n.length) || size < 0 || size > k) {
     return null
   }
-  let lead: i32 = 0
-  while (lead < k && toI32(sig[lead]) === 0) {
-    lead += 1
-  }
-  const trimmed: u8[] = new Array<u8>(k - lead)
-  for (let i: i32 = lead; i < k; i++) {
-    trimmed[i - lead] = sig[i]
-  }
-  if (!rsaBytesBelow(trimmed, key.n)) {
+  const opened: u8[] | null = rsaModPow(sig, key.e, key.n)
+  if (opened === null) {
     return null
   }
-  const m: u8[] = rsaModPow(trimmed, key.e, key.n, k)
+  const m: u8[] = opened
   const mLength: i32 = toI32(m.length)
-  for (let i: i32 = 0; i < mLength - size && i < mLength; i++) {
-    if (toI32(m[i]) !== 0) {
-      return null
-    }
+  if (mLength < size) {
+    return null
   }
-  const out: u8[] = new Array<u8>(size)
-  for (let i: i32 = 0; i < toI32(out.length); i++) {
-    out[i] = m[mLength - size + i]
+  // The bytes above the last `size` are zeros, or the value is too large.
+  const out: u8[] = []
+  for (let i: i32 = 0; i < toI32(m.length); i++) {
+    if (i < mLength - size) {
+      if (toI32(m[i]) !== 0) {
+        return null
+      }
+    } else {
+      out.push(m[i])
+    }
   }
   return out
 }
@@ -546,24 +564,11 @@ const rsaDigestInfoPrefix = (hash: i32, hashSize: i32): u8[] => {
     0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00,
     0x04, 0x20,
   ]
-  out[1] = toU8(hashSize + 17)
+  // A digest is at most 64 bytes, so the u32 sum is the body's length.
+  out[1] = toU8(toU32(hashSize) + 17)
   out[14] = toU8(hash)
   out[18] = toU8(hashSize)
   return out
-}
-
-/** Whether `a` and `b` hold the same bytes. Both are public, so it stops at the first difference. */
-const rsaSameBytes = (a: u8[], b: u8[]): boolean => {
-  const length: i32 = toI32(a.length)
-  if (toI32(b.length) !== length) {
-    return false
-  }
-  for (let i: i32 = 0; i < length && i < toI32(b.length); i++) {
-    if (a[i] !== b[i]) {
-      return false
-    }
-  }
-  return true
 }
 
 /**
@@ -583,9 +588,14 @@ const rsaSameBytes = (a: u8[], b: u8[]): boolean => {
 export const rsaVerifyPkcs1v15 = (key: RsaPublicKey, hash: i32, msg: u8[], sig: u8[]): boolean => {
   const hashSize: i32 = rsaHashSize(hash)
   const k: i32 = toI32(key.n.length)
+  // 1024 is RSA_MAX_BITS / 8: a longer modulus is one the parser refuses.
+  if (hashSize < 1 || hashSize > 64 || k > 1024) {
+    return false
+  }
   const prefix: u8[] = rsaDigestInfoPrefix(hash, hashSize)
-  const tLength: i32 = toI32(prefix.length) + hashSize
-  if (hashSize === 0 || k < tLength + 11) {
+  // The prefix is the 19-byte literal `rsaDigestInfoPrefix` builds.
+  const tLength: i32 = 19 + hashSize
+  if (k < tLength + 11) {
     return false
   }
   const em: u8[] | null = rsaOpen(key, sig, k)
@@ -603,16 +613,19 @@ export const rsaVerifyPkcs1v15 = (key: RsaPublicKey, hash: i32, msg: u8[], sig: 
   for (const byte of rsaDigest(hash, msg)) {
     expected.push(byte)
   }
-  return rsaSameBytes(em, expected)
+  return timingSafeEqual(em, expected)
 }
 
 /**
- * MGF1 (RFC 8017 §B.2.1) with the hash id `hash` over `seed`, `length` bytes:
- * the digests of `seed || C` for the four-byte counters C = 0, 1, …, joined.
+ * XORs MGF1 (RFC 8017 §B.2.1) with the hash id `hash` over `seed` into
+ * `target`, as many bytes as it holds: the digests of `seed || C` for the
+ * four-byte counters C = 0, 1, …, joined.
  */
-const rsaMgf1 = (hash: i32, seed: u8[], length: i32): u8[] => {
-  const out: u8[] = []
-  for (let counter: i32 = 0; toI32(out.length) < length; counter++) {
+const rsaMgf1Xor = (hash: i32, seed: u8[], target: u8[]): void => {
+  let pos: i32 = 0
+  let counter: u32 = 0
+  // Each round's digest is at least 32 bytes, so the loop ends.
+  while (pos < toI32(target.length)) {
     const input: u8[] = []
     for (const byte of seed) {
       input.push(byte)
@@ -622,12 +635,13 @@ const rsaMgf1 = (hash: i32, seed: u8[], length: i32): u8[] => {
     input.push(toU8(counter >> 8))
     input.push(toU8(counter))
     for (const byte of rsaDigest(hash, input)) {
-      if (toI32(out.length) < length) {
-        out.push(byte)
+      if (pos < toI32(target.length)) {
+        target[pos] = target[pos] ^ byte
+        pos += 1
       }
     }
+    counter = counter + 1
   }
-  return out
 }
 
 /**
@@ -650,48 +664,77 @@ const rsaMgf1 = (hash: i32, seed: u8[], length: i32): u8[] => {
  */
 export const rsaVerifyPss = (key: RsaPublicKey, hash: i32, saltLen: i32, msg: u8[], sig: u8[]): boolean => {
   const hashSize: i32 = rsaHashSize(hash)
-  if (hashSize === 0 || saltLen < 0) {
+  const bits: i32 = rsaBitLength(key.n)
+  // 8192 is RSA_MAX_BITS: a longer modulus is one the parser refuses.
+  if (hashSize < 1 || hashSize > 64 || saltLen < 0 || bits < 2 || bits > 8192) {
     return false
   }
-  const emBits: i32 = rsaBitLength(key.n) - 1
+  const emBits: i32 = bits - 1
   const emLen: i32 = (emBits + 7) >> 3
-  if (saltLen > emLen || emLen < hashSize + saltLen + 2) {
-    return false
-  }
-  const em: u8[] | null = rsaOpen(key, sig, emLen)
-  if (em === null || toI32(em[emLen - 1]) !== 0xbc) {
+  if (emLen < 1 || emLen > 1024 || saltLen > emLen || emLen < hashSize + saltLen + 2) {
     return false
   }
   const dbLength: i32 = emLen - hashSize - 1
-  const full: i32 = 0xff
-  const topMask: i32 = full >> ((emLen << 3) - emBits)
-  if ((toI32(em[0]) & ~topMask) !== 0) {
+  const opened: u8[] | null = rsaOpen(key, sig, emLen)
+  if (opened === null) {
     return false
   }
+  const em: u8[] = opened
+  const emLength: i32 = toI32(em.length)
+  if (emLength !== emLen) {
+    return false
+  }
+  const full: i32 = 0xff
+  const topMask: i32 = full >> (emLen * 8 - emBits)
+  // EM is maskedDB, then H, then the trailer 0xbc; the leftmost bits of
+  // maskedDB above emBits must be zero.
+  const db: u8[] = []
   const h: u8[] = []
-  for (let i: i32 = dbLength; i < emLen - 1; i++) {
-    h.push(em[i])
-  }
-  const db: u8[] = rsaMgf1(hash, h, dbLength)
-  for (let i: i32 = 0; i < dbLength && i < toI32(db.length); i++) {
-    db[i] = db[i] ^ em[i]
-  }
-  db[0] = toU8(toI32(db[0]) & topMask)
-  const zeros: i32 = emLen - hashSize - saltLen - 2
-  for (let i: i32 = 0; i < zeros && i < toI32(db.length); i++) {
-    if (toI32(db[i]) !== 0) {
-      return false
+  let trailer: i32 = 0
+  for (let i: i32 = 0; i < toI32(em.length); i++) {
+    if (i < dbLength) {
+      if (i === 0 && (toI32(em[i]) & ~topMask) !== 0) {
+        return false
+      }
+      db.push(em[i])
+    } else if (i < emLength - 1) {
+      h.push(em[i])
+    } else {
+      trailer = toI32(em[i])
     }
   }
-  if (toI32(db[zeros]) !== 0x01) {
+  if (trailer !== 0xbc) {
     return false
   }
+  rsaMgf1Xor(hash, h, db)
+  // DB is PS (zeros), 0x01, then the salt, which M' takes after the
+  // message's digest.
+  const zeros: i32 = emLen - hashSize - saltLen - 2
   const prime: u8[] = [0, 0, 0, 0, 0, 0, 0, 0]
   for (const byte of rsaDigest(hash, msg)) {
     prime.push(byte)
   }
-  for (let i: i32 = dbLength - saltLen; i >= 0 && i < dbLength && i < toI32(db.length); i++) {
-    prime.push(db[i])
+  let separated: boolean = false
+  for (let i: i32 = 0; i < toI32(db.length); i++) {
+    let v: i32 = toI32(db[i])
+    if (i === 0) {
+      v = v & topMask
+    }
+    if (i < zeros) {
+      if (v !== 0) {
+        return false
+      }
+    } else if (i === zeros) {
+      if (v !== 0x01) {
+        return false
+      }
+      separated = true
+    } else {
+      prime.push(toU8(v))
+    }
   }
-  return rsaSameBytes(rsaDigest(hash, prime), h)
+  if (!separated) {
+    return false
+  }
+  return timingSafeEqual(rsaDigest(hash, prime), h)
 }
