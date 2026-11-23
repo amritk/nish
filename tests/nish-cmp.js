@@ -18106,6 +18106,18 @@ const DECLARED = [
     changelog: "postgres panic-free",
     why: "std/net/postgres.ts's `PgBatchTurns` drops its `size` field and bounds its slots by `busy.length`, which the prover can see, so the struct the header lays out for it loses that field",
   },
+  {
+    program: "bench/pg-codec.ts",
+    file: "pg-codec.h",
+    changelog: "postgres panic-free",
+    why: "std/net/postgres.ts's `PgBatchTurns` drops its `size` field and bounds its slots by `busy.length`, which the prover can see, so the struct the header lays out for it loses that field (on aarch64; the x86_64 run shows no row for this header)",
+  },
+  ...["bench/pg-codec.ts:pg-codec.ll", "bench/postgres/main.ts:main.ll"].map((entry) => ({
+    program: entry.split(":")[0],
+    file: entry.split(":")[1],
+    changelog: "postgres panic-free",
+    why: "std/net/postgres.ts's `PgConnection.room` takes its byte count as i64 so the length arithmetic is proved in range, and the attributes of the postgres functions the program declares change with their new guards, so the declarations it carries renumber their attribute groups",
+  })),
   ...pgTls(
     "PgConfig gains tls, tlsRootsPath and tlsServerName and the carrier a TLS session per slot, so the config struct grows by 24 bytes and every module that lays it out or reaches the carrier moves; the new TLS tests use exports the reference does not have, so only the candidate compiles them",
     {
