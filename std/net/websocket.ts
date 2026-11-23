@@ -1025,7 +1025,8 @@ export class WsAcceptKey {
     this.hasher = new Sha1()
     const text: string = WS_GUID
     const guid: i32 = toI32(text.length)
-    const input: u8[] = websocketBytes(websocketAdd(WS_KEY_LENGTH, guid))
+    // The 24-character key and the 36-character GUID.
+    const input: u8[] = new Array<u8>(60)
     const inputLength: i32 = toI32(input.length)
     let t: i32 = WS_KEY_LENGTH
     for (let k: i32 = 0; k < guid && t >= 0 && t < inputLength; k += 1) {
