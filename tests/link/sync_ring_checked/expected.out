@@ -1,0 +1,54 @@
+PASS  offer answers RING_TOO_LONG for a record above the slot
+PASS  and for a negative length
+PASS  and queues nothing
+PASS  offer queues record 0
+PASS  offer queues record 1
+PASS  offer queues record 2
+PASS  offer queues record 3
+PASS  offer answers RING_FULL for a full ring
+PASS  take gives record 0 back
+PASS  record 0 reads as it was offered
+PASS  take gives record 1 back
+PASS  record 1 reads as it was offered
+PASS  take gives record 2 back
+PASS  record 2 reads as it was offered
+PASS  take gives record 3 back
+PASS  record 3 reads as it was offered
+PASS  leaving none
+PASS  a record is offered
+PASS  take answers RING_CORRUPT for a length no producer wrote
+PASS  and leaves the slot, so it answers the same again
+PASS  as does takeWait
+PASS  a negative length is RING_CORRUPT too
+PASS  with the length repaired, take gives the record back
+PASS  as it was offered
+PASS  a ring with no doorbell answers takeWait with SHM_UNSUPPORTED
+PASS  a second record is offered
+PASS  offer answers RING_CORRUPT for an enqueue position written back
+PASS  and RING_FULL for one written far ahead
+PASS  with the position repaired, take gives the second record back
+PASS  attachMpscRing refuses a header whose slot count was scribbled
+PASS  takeWait answers RING_EMPTY when the wait runs out
+PASS  tryInitMpscRing refuses 3 slots
+PASS  saying why
+PASS  and a slot of 12 bytes
+PASS  and a slot of 0 bytes
+PASS  and a base off a 64-byte boundary
+PASS  saying why
+PASS  and a ring that runs past the region
+PASS  saying why
+PASS  and a negative base
+PASS  none of which wrote over the ring that was there
+PASS  attachMpscRing refuses a misaligned base
+PASS  and a base at the region's end
+PASS  saying why
+PASS  and a negative base
+PASS  attachSpscRing finds the SPSC ring
+PASS  and refuses a misaligned base
+PASS  saying why
+PASS  and a base past the region's end
+PASS  and a negative base
+PASS  a record 3 bytes short of 2^31 stops the child
+PASS  with the ring's own panic
+PASS  unlink the region
+nish/sync/ring checked: 53 passed, 0 failed, 0 skipped

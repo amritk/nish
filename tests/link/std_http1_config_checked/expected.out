@@ -1,0 +1,6 @@
+PASS  the default caps pass
+PASS  a linger timeout of 0 is refused
+PASS  a header cap below 64 is refused
+PASS  a head past the parser's buffers is refused
+PASS  the first cap outside is the one named
+http1-config-checked: 5 passed, 0 failed, 0 skipped

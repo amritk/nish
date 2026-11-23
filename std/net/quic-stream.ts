@@ -98,6 +98,7 @@
 import {
   QUIC_ERROR_FINAL_SIZE,
   QUIC_ERROR_FLOW_CONTROL,
+  QUIC_ERROR_INTERNAL,
   QUIC_ERROR_NO_ERROR,
   QUIC_ERROR_STREAM_LIMIT,
   QUIC_ERROR_STREAM_STATE,
@@ -295,9 +296,14 @@ const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
   let at: i32 = k >> 3
   // `at` is `k >> 3` and `whole` is within the array, so the bounds on `at` hold whenever `k`'s do; they
   // are what the bounds pass reads to drop the check on `bits[at]`.
-  while (at >= 0 && at < bytes && k < whole && toI32(bits[at]) === full) {
-    k = k + 8
-    at = at + 1
+  // `k` is a multiple of 8 below `whole` here, so the loop steps `at` alone, a byte at a time, and
+  // `k` follows it: `at` stays below `whole >> 3`, so neither can wrap.
+  if (k < whole) {
+    const wholeAt: i32 = whole >> 3
+    while (at >= 0 && at < bytes && at < wholeAt && toI32(bits[at]) === full) {
+      at = at + 1
+    }
+    k = at << 3
   }
   while (k < to) {
     if (quicStreamBit(bits, k) !== on) {
@@ -312,26 +318,37 @@ const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
  * The first of `count` bytes of a ring of `size` from index `slot`: they run
  * to the ring's end at most, and the rest wrap to index 0.
  */
-const quicStreamFirstRun = (size: i32, slot: i32, count: i32): i32 =>
-  count < size - slot ? count : size - slot
+const quicStreamFirstRun = (size: i32, slot: i32, count: i32): i32 => {
+  // In `i64`, where `size - slot` cannot wrap; the result is `count` or a room no larger than it.
+  const room: i64 = toI64(size) - toI64(slot)
+  return toI64(count) < room ? count : toI32(room)
+}
+
+/**
+ * `a + b` and `a - b` for ring offsets, summed in `i64`: every caller's operands are an index into a
+ * ring or a source and a run inside it, so the true result fits an `i32` and the conversion back is
+ * exact.
+ */
+const quicStreamAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+const quicStreamSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
 
 /** Sets or clears the bits of `count` ring indexes from `slot`, wrapping at `size`: at most two runs. */
 const quicStreamMarkRing = (bits: u8[], size: i32, slot: i32, count: i32, on: boolean): void => {
   const first: i32 = quicStreamFirstRun(size, slot, count)
-  quicStreamSetBits(bits, slot, slot + first, on)
+  quicStreamSetBits(bits, slot, quicStreamAdd(slot, first), on)
   if (count > first) {
-    quicStreamSetBits(bits, 0, count - first, on)
+    quicStreamSetBits(bits, 0, quicStreamSub(count, first), on)
   }
 }
 
 /** How many of `count` ring indexes from `slot`, wrapping at `size`, have their bit `on` before the first that does not. */
 const quicStreamRingRun = (bits: u8[], size: i32, slot: i32, count: i32, on: boolean): i32 => {
   const first: i32 = quicStreamFirstRun(size, slot, count)
-  const got: i32 = quicStreamScan(bits, slot, slot + first, on) - slot
+  const got: i32 = quicStreamSub(quicStreamScan(bits, slot, quicStreamAdd(slot, first), on), slot)
   if (got < first || count <= first) {
     return got
   }
-  return first + quicStreamScan(bits, 0, count - first, on)
+  return quicStreamAdd(first, quicStreamScan(bits, 0, quicStreamSub(count, first), on))
 }
 
 /**
@@ -344,7 +361,7 @@ const quicStreamRingIn = (ring: u8[], slot: i32, src: u8[], from: i32, count: i3
   const first: i32 = quicStreamFirstRun(toI32(ring.length), slot, count)
   copyBytes(ring, slot, src, from, first)
   if (count > first) {
-    copyBytes(ring, 0, src, from + first, count - first)
+    copyBytes(ring, 0, src, quicStreamAdd(from, first), quicStreamSub(count, first))
   }
 }
 
@@ -357,8 +374,82 @@ const quicStreamRingOut = (dst: u8[], at: i32, ring: u8[], slot: i32, count: i32
   const first: i32 = quicStreamFirstRun(toI32(ring.length), slot, count)
   copyBytes(dst, at, ring, slot, first)
   if (count > first) {
-    copyBytes(dst, at + first, ring, 0, count - first)
+    copyBytes(dst, quicStreamAdd(at, first), ring, 0, quicStreamSub(count, first))
   }
+}
+
+/** The bytes of a bitmap holding a bit for each of `bytes` bytes: `bytes` over 8, rounded up. */
+const quicStreamBitBytes = (bytes: i32): i32 => toI32((toI64(bytes) + 7) >> 3)
+
+/**
+ * Fills a new reserve list with `none`, three entries for each of `streams` streams: a packet that
+ * lends nothing and takes back every buffer its connection held still fits.
+ */
+const quicStreamFillReserve = (list: u8[][], none: u8[], streams: i32): void => {
+  for (let k: i32 = 0; k < streams; k += 1) {
+    list.push(none)
+    list.push(none)
+    list.push(none)
+  }
+}
+
+/**
+ * A list of `count` zeros, pushed one at a time.
+ *
+ * @param count How many zeros; none when 0 or less.
+ * @returns The list.
+ */
+const quicStreamZeros = (count: i32): i32[] => {
+  const list: i32[] = []
+  for (let k: i32 = 0; k < count; k += 1) {
+    list.push(0)
+  }
+  return list
+}
+
+/** 2^63 − 1, the largest `i64`, which a sum past it is held at. */
+const quicStreamTop = (): i64 => toI64((toU64(1) << toU64(63)) - toU64(1))
+
+/**
+ * `a + b`, held at 2^63 − 1 when the true sum is past it and at −2^63 when it is below. Stream
+ * offsets, counts and limits are varints, below 2^62, so a held sum is one no peer can send:
+ * a limit that is never reached. Taken in `u64`, whose `+` wraps, and read back as the `i64`
+ * with the same bits, which is the true sum whenever that fits.
+ */
+const quicStreamSum = (a: i64, b: i64): i64 => {
+  const sum: i64 = toI64(toU64(a) + toU64(b))
+  if (a >= 0 && b >= 0 && sum < 0) {
+    return quicStreamTop()
+  }
+  if (a < 0 && b < 0 && sum >= 0) {
+    return toI64(toU64(1) << toU64(63))
+  }
+  return sum
+}
+
+/** `a − b`, held at 2^63 − 1 / −2^63 where the true difference passes either, as `quicStreamSum` holds a sum. */
+const quicStreamLess = (a: i64, b: i64): i64 => {
+  const diff: i64 = toI64(toU64(a) - toU64(b))
+  if (a >= 0 && b < 0 && diff < 0) {
+    return quicStreamTop()
+  }
+  if (a < 0 && b >= 0 && diff >= 0) {
+    return toI64(toU64(1) << toU64(63))
+  }
+  return diff
+}
+
+/**
+ * A pool's ceiling, two buffers for each of `streams` streams on each of `connections`
+ * connections, held at 2^31 − 1 (an `i32`, as `BufferPool` counts): a ceiling no server's
+ * memory reaches. 0 when either count is.
+ */
+const quicStreamCeiling = (streams: i32, connections: i32): i32 => {
+  if (streams <= 0 || connections <= 0) {
+    return 0
+  }
+  const want: u64 = toU64(streams) * toU64(connections) * toU64(2)
+  return want >= toU64(2147483647) ? 2147483647 : toI32(want)
 }
 
 /** The smaller of two `i64`s. */
@@ -424,16 +515,18 @@ export class QuicStreamPools {
    *   `streams * 2 * connections` buffers.
    */
   constructor(bufferSize: i32, streams: i32, connections: i32) {
-    this.data = new BufferPool("QuicStreams.data", bufferSize, streams * 2 * connections)
-    this.bits = new BufferPool("QuicStreams.bits", (bufferSize + 7) >> 3, streams * 2 * connections)
+    this.data = new BufferPool("QuicStreams.data", bufferSize, quicStreamCeiling(streams, connections))
+    this.bits = new BufferPool(
+      "QuicStreams.bits",
+      quicStreamBitBytes(bufferSize),
+      quicStreamCeiling(streams, connections)
+    )
     this.none = []
     this.hold = streams
     this.readyData = []
     this.readyBits = []
-    for (let k: i32 = 0; k < streams * 3; k += 1) {
-      this.readyData.push(this.none)
-      this.readyBits.push(this.none)
-    }
+    quicStreamFillReserve(this.readyData, this.none, streams)
+    quicStreamFillReserve(this.readyBits, this.none, streams)
   }
 
   /**
@@ -444,10 +537,24 @@ export class QuicStreamPools {
    */
   prime(need: i32): void {
     this.drain(this.hold)
-    while (this.ready < need && this.ready < toI32(this.readyData.length)) {
-      this.readyData[this.ready] = this.data.take()
-      this.readyBits[this.ready] = this.bits.take()
-      this.ready = this.ready + 1
+    const data: u8[][] = this.readyData
+    const bits: u8[][] = this.readyBits
+    // The two lists are made the same length and `ready` never leaves `0..length`, so the bounds
+    // below stop the loop only where `need` or the list's length would.
+    let ready: i32 = this.ready
+    while (ready >= 0 && ready < need && ready < toI32(data.length) && ready < toI32(bits.length)) {
+      // Taken first: the bounds above hold for the stores, which nothing between them can move.
+      const buf: u8[] = this.data.take()
+      const have: u8[] = this.bits.take()
+      if (ready >= toI32(data.length) || ready >= toI32(bits.length)) {
+        this.data.give(buf, QUIC_STREAM_NO_BYTES)
+        this.bits.give(have, QUIC_STREAM_NO_BYTES)
+        break
+      }
+      data[ready] = buf
+      bits[ready] = have
+      ready = ready + 1
+      this.ready = ready
     }
     this.fit()
   }
@@ -457,12 +564,21 @@ export class QuicStreamPools {
    * @internal Read in quic-stream.ts outside the class.
    */
   drain(most: i32): void {
-    while (this.ready > most) {
-      this.ready = this.ready - 1
-      this.data.give(this.readyData[this.ready], QUIC_STREAM_NO_BYTES)
-      this.bits.give(this.readyBits[this.ready], QUIC_STREAM_NO_BYTES)
-      this.readyData[this.ready] = this.none
-      this.readyBits[this.ready] = this.none
+    const data: u8[][] = this.readyData
+    const bits: u8[][] = this.readyBits
+    // `ready` never leaves `1..length` while the reserve holds a buffer, so the bounds below stop
+    // the loop only where `most` would.
+    let ready: i32 = this.ready
+    while (ready > most && ready > 0 && ready <= toI32(data.length) && ready <= toI32(bits.length)) {
+      const at: i32 = ready - 1
+      const buf: u8[] = data[at]
+      const have: u8[] = bits[at]
+      data[at] = this.none
+      bits[at] = this.none
+      this.data.give(buf, QUIC_STREAM_NO_BYTES)
+      this.bits.give(have, QUIC_STREAM_NO_BYTES)
+      ready = at
+      this.ready = ready
     }
   }
 
@@ -479,7 +595,14 @@ export class QuicStreamPools {
     if (made <= this.room) {
       return
     }
-    let target: i32 = this.room + this.room
+    const room: i32 = this.room
+    // `room` is never above `made` (it is set to at most `made` or the ceiling), so doubling it
+    // stays inside an `i32` while `made` does; in `i64` it cannot wrap regardless.
+    let target: i32 = made
+    const doubled: i64 = toI64(room) + toI64(room)
+    if (doubled > toI64(made)) {
+      target = toI32(doubled)
+    }
     if (target < made) {
       target = made
     }
@@ -492,18 +615,28 @@ export class QuicStreamPools {
   }
 
   /**
-   * Lends the reserve's last buffer, into `stream`'s receive side. Panics when the reserve is empty: a packet handled without `prime`.
+   * Lends the reserve's last buffer, into `stream`'s receive side. Answers false, lending nothing,
+   * when the reserve is empty: a packet handled without `prime`, where a take would allocate inside
+   * the arena scope.
+   *
+   * @param stream The stream whose receive side takes the buffer and its bitmap.
+   * @returns Whether a buffer was lent.
    * @internal Read in quic-stream.ts outside the class.
    */
-  lend(stream: QuicStream): void {
-    if (this.ready <= 0) {
-      panic("QuicStreams: a receive buffer was wanted with none primed")
+  lend(stream: QuicStream): boolean {
+    const data: u8[][] = this.readyData
+    const bits: u8[][] = this.readyBits
+    const ready: i32 = this.ready
+    if (ready <= 0 || ready > toI32(data.length) || ready > toI32(bits.length)) {
+      return false
     }
-    this.ready = this.ready - 1
-    stream.recvBuf = this.readyData[this.ready]
-    stream.recvHave = this.readyBits[this.ready]
-    this.readyData[this.ready] = this.none
-    this.readyBits[this.ready] = this.none
+    const at: i32 = ready - 1
+    this.ready = at
+    stream.recvBuf = data[at]
+    stream.recvHave = bits[at]
+    data[at] = this.none
+    bits[at] = this.none
+    return true
   }
 
   /**
@@ -515,12 +648,24 @@ export class QuicStreamPools {
    * @internal Read in quic-stream.ts outside the class.
    */
   lendSend(stream: QuicStream): void {
-    if (this.data.free.length === 0 && this.data.made >= this.data.ceiling && this.ready > 0) {
-      this.ready = this.ready - 1
-      stream.sendBuf = this.readyData[this.ready]
-      stream.sendAcked = this.readyBits[this.ready]
-      this.readyData[this.ready] = this.none
-      this.readyBits[this.ready] = this.none
+    const data: u8[][] = this.readyData
+    const bits: u8[][] = this.readyBits
+    const ready: i32 = this.ready
+    // `ready` never leaves `0..length`, so the two length bounds are never what sends a side with the
+    // reserve holding a buffer on to `take`.
+    if (
+      this.data.free.length === 0 &&
+      this.data.made >= this.data.ceiling &&
+      ready > 0 &&
+      ready <= toI32(data.length) &&
+      ready <= toI32(bits.length)
+    ) {
+      const at: i32 = ready - 1
+      this.ready = at
+      stream.sendBuf = data[at]
+      stream.sendAcked = bits[at]
+      data[at] = this.none
+      bits[at] = this.none
       return
     }
     stream.sendBuf = this.data.take()
@@ -531,19 +676,30 @@ export class QuicStreamPools {
   /**
    * Takes `buf` and its bitmap `have` back into the reserve, zeroing the
    * first `used` bytes of the buffer and the bits of them. Safe inside an
-   * arena scope. Panics when the reserve is full: more given back between
-   * two `drain`s than one connection holds, a table's bug.
+   * arena scope. A reserve already full, more given back between two
+   * `drain`s than three times one connection's streams, takes nothing and
+   * answers false: the caller's stream keeps the pair, zeroed as a fresh
+   * loan is, since storing it anywhere else could allocate inside the scope.
+   *
+   * @param buf The receive buffer given back.
+   * @param have Its bitmap.
+   * @param used How many bytes of `buf` a frame reached, the extent zeroed.
+   * @returns Whether the reserve took the pair.
    * @internal Read in quic-stream.ts outside the class.
    */
-  keep(buf: u8[], have: u8[], used: i32): void {
-    if (this.ready >= toI32(this.readyData.length)) {
-      panic(`QuicStreamPools: the reserve of ${this.readyData.length} buffers is full`)
-    }
+  keep(buf: u8[], have: u8[], used: i32): boolean {
+    const data: u8[][] = this.readyData
+    const bits: u8[][] = this.readyBits
+    const ready: i32 = this.ready
     buf.fill(0, 0, used)
-    have.fill(0, 0, (used + 7) >> 3)
-    this.readyData[this.ready] = buf
-    this.readyBits[this.ready] = have
-    this.ready = this.ready + 1
+    have.fill(0, 0, quicStreamBitBytes(used))
+    if (ready < 0 || ready >= toI32(data.length) || ready >= toI32(bits.length)) {
+      return false
+    }
+    data[ready] = buf
+    bits[ready] = have
+    this.ready = ready + 1
+    return true
   }
 
   /**
@@ -553,7 +709,11 @@ export class QuicStreamPools {
    * @returns The buffers plus the bitmaps out on loan, so a side holding both counts 2.
    */
   lent(): i32 {
-    return this.data.lent() + this.bits.lent() - this.ready - this.ready
+    // In `i64`, where four `i32`s cannot wrap; the count is between 0 and the two pools' ceilings.
+    const data: i32 = this.data.lent()
+    const bits: i32 = this.bits.lent()
+    const ready: i32 = this.ready
+    return toI32(toI64(data) + toI64(bits) - toI64(ready) - toI64(ready))
   }
 }
 
@@ -571,7 +731,8 @@ export const quicStreamGrowFree = (free: u8[][], target: i32, none: u8[]): void 
   while (toI32(free.length) < target) {
     free.push(none)
   }
-  while (toI32(free.length) > length) {
+  // `length` is the list's own starting length, never below 0, so the second test never stops it.
+  while (toI32(free.length) > length && free.length > 0) {
     free.pop()
   }
 }
@@ -714,7 +875,8 @@ export class QuicStream {
    * @returns `offset` modulo the buffer size, or 0 when the size is 0.
    */
   at(offset: i64): i32 {
-    return this.size > 0 ? toI32(offset % toI64(this.size)) : 0
+    const size: i64 = toI64(this.size)
+    return size > 0 ? toI32(offset % size) : 0
   }
 
   /**
@@ -722,7 +884,7 @@ export class QuicStream {
    * @internal Read by http3.ts and quic.ts, and in quic-stream.ts outside the class.
    */
   readable(): i64 {
-    return this.recvContiguous - this.recvRead
+    return quicStreamLess(this.recvContiguous, this.recvRead)
   }
 
   /**
@@ -735,7 +897,7 @@ export class QuicStream {
    * @returns The buffer size less the bytes written and not yet acknowledged.
    */
   room(): i64 {
-    return toI64(this.size) - (this.sendEnd - this.sendBase)
+    return quicStreamLess(toI64(this.size), quicStreamLess(this.sendEnd, this.sendBase))
   }
 
   /**
@@ -821,7 +983,7 @@ export class QuicStream {
     }
     // Bytes below the buffer's start were acknowledged and their room reused.
     const low: i64 = offset < this.sendBase ? this.sendBase : offset
-    const high: i64 = offset + toI64(length)
+    const high: i64 = quicStreamSum(offset, toI64(length))
     if (high > low) {
       if (this.resendLow < 0) {
         this.resendLow = low
@@ -964,19 +1126,21 @@ export class QuicStreams {
    * @param windowData The connection's receive window in bytes, the MAX_DATA step.
    */
   constructor(maxBidi: i64, maxUni: i64, localStreams: i64, bufferSize: i32, windowData: i64) {
-    const count: i32 = toI32(maxBidi + maxUni + localStreams)
+    const count: i32 = toI32(quicStreamSum(quicStreamSum(maxBidi, maxUni), localStreams))
     this.none = []
     this.slots = []
     for (let k: i32 = 0; k < count; k += 1) {
       this.slots.push(new QuicStream(bufferSize, this.none))
     }
+    // The smallest power of two from 4 up that is at least twice `count`. The cap at 2^30 is never
+    // what stops it: `count` above 2^29 would have made more than half a billion slots above.
     let size: i32 = 4
-    while (size < count * 2) {
-      size = size * 2
+    while (size >> 1 < count && size < 1073741824) {
+      size = size << 1
     }
-    this.index = new Array<i32>(size)
-    this.events = new Array<i32>(count > 0 ? count : QUIC_STREAM_ONE)
-    this.free = new Array<i32>(count > 0 ? count : QUIC_STREAM_ONE)
+    this.index = quicStreamZeros(size)
+    this.events = quicStreamZeros(count > 0 ? count : QUIC_STREAM_ONE)
+    this.free = quicStreamZeros(count > 0 ? count : QUIC_STREAM_ONE)
     this.bufferSize = bufferSize
     this.maxBidi = maxBidi
     this.maxUni = maxUni
@@ -1049,7 +1213,8 @@ export class QuicStreams {
   prime(bytes: i32): void {
     const pools: QuicStreamPools | null = this.ownPools()
     if (pools !== null) {
-      const idle: i32 = toI32(this.slots.length) - this.recvLent
+      // `recvLent` counts slots, so it lies in `0..slots.length` and the difference is exact.
+      const idle: i32 = quicStreamSub(toI32(this.slots.length), this.recvLent)
       const most: i32 = (bytes > 0 ? bytes : QUIC_STREAM_NO_BYTES) / 3 + 1
       pools.prime(idle < most ? idle : most)
     }
@@ -1072,38 +1237,53 @@ export class QuicStreams {
 
   /**
    * Lends `stream` a receive buffer and bitmap from the reserve `prime`
-   * filled, unless it holds them already or the streams have none. Panics
+   * filled, unless it holds them already or the streams have none. Fails
    * when the reserve is empty: a packet handled without `prime`, where a
    * take would allocate inside the scope.
+   *
+   * @param stream The stream wanting a receive buffer.
+   * @returns False when no buffer could be lent: no pools, an empty reserve,
+   *   or a lent count out of step with the slots. None happens with `prime`
+   *   called first; the caller closes the connection with an internal error.
    */
-  private borrowRecv(stream: QuicStream): void {
+  private borrowRecv(stream: QuicStream): boolean {
     const pools: QuicStreamPools | null = this.pools
     if (stream.recvBuf.length > 0 || this.bufferSize <= 0) {
-      return
+      return true
     }
-    if (pools === null) {
-      panic("QuicStreams: a receive buffer was wanted with none primed")
+    // `recvLent` counts the slots holding a receive buffer and `stream` holds none, so it is below
+    // the slot count: the bound is never what fails.
+    const lent: i32 = this.recvLent
+    if (pools === null || lent < 0 || lent >= toI32(this.slots.length)) {
+      return false
     }
-    pools.lend(stream)
-    this.recvLent = this.recvLent + 1
+    if (!pools.lend(stream)) {
+      return false
+    }
+    this.recvLent = lent + 1
+    return true
   }
 
   /**
    * Gives `stream`'s receive buffer and bitmap back to the pools, zeroing
    * every byte a frame reached: below `recvHighest`, which past a whole
-   * buffer is all of it. Nothing when it holds none.
+   * buffer is all of it. Nothing when it holds none, or when the reserve is
+   * full: then `stream` keeps them until the next give-back.
    */
   private giveRecv(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (pools !== null && stream.recvBuf.length > 0) {
-      pools.keep(
-        stream.recvBuf,
-        stream.recvHave,
-        toI32(quicStreamMin(stream.recvHighest, toI64(stream.size)))
-      )
+      const used: i32 = toI32(quicStreamMin(stream.recvHighest, toI64(stream.size)))
+      if (!pools.keep(stream.recvBuf, stream.recvHave, used)) {
+        return
+      }
       stream.recvBuf = this.none
       stream.recvHave = this.none
-      this.recvLent = this.recvLent - 1
+      // `stream` held a buffer, so it is one of the `recvLent`: the count is at least 1.
+      const lent: i32 = this.recvLent
+      if (lent > 0) {
+        this.recvLent = lent - 1
+      }
     }
   }
 
@@ -1120,12 +1300,16 @@ export class QuicStreams {
    * every byte a write reached: below `sendEnd`, which past a whole buffer is
    * all of it. Called only once nothing can be sent again from it — every
    * byte acknowledged, or the side reset — and before a reset moves
-   * `sendEnd` back.
+   * `sendEnd` back. Nothing when the reserve is full: then `stream` keeps
+   * them, zeroed, until the next give-back.
    */
   private giveSend(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (pools !== null && stream.sendBuf.length > 0) {
-      pools.keep(stream.sendBuf, stream.sendAcked, toI32(quicStreamMin(stream.sendEnd, toI64(stream.size))))
+      const used: i32 = toI32(quicStreamMin(stream.sendEnd, toI64(stream.size)))
+      if (!pools.keep(stream.sendBuf, stream.sendAcked, used)) {
+        return
+      }
       stream.sendBuf = this.none
       stream.sendAcked = this.none
     }
@@ -1251,10 +1435,12 @@ export class QuicStreams {
       if (h < 0 || h >= size) {
         return -1
       }
-      const entry: i32 = this.index[h] - 1
-      if (entry < 0) {
+      // The index holds 0 or a slot plus one.
+      const stored: i32 = this.index[h]
+      if (stored <= 0) {
         return -1
       }
+      const entry: i32 = stored - 1
       if (entry < toI32(this.slots.length) && this.slots[entry].id === id) {
         return entry
       }
@@ -1277,6 +1463,10 @@ export class QuicStreams {
   /** Puts slot `k` in the index under its stream's ID. */
   private indexInsert(k: i32, id: i64): void {
     const size: i32 = toI32(this.index.length)
+    // `k` comes from the free stack, a slot index: never out of range.
+    if (k < 0 || k >= toI32(this.slots.length)) {
+      return
+    }
     let h: i32 = this.bucket(id)
     for (let probe: i32 = 0; probe < size; probe += 1) {
       if (h < 0 || h >= size) {
@@ -1294,6 +1484,10 @@ export class QuicStreams {
   private indexRemove(k: i32, id: i64): void {
     const size: i32 = toI32(this.index.length)
     const mask: i32 = size - 1
+    // `k` is the slot being released, checked by `release`: never out of range.
+    if (k < 0 || k >= toI32(this.slots.length)) {
+      return
+    }
     let h: i32 = this.bucket(id)
     let found: i32 = -1
     for (let probe: i32 = 0; probe < size && h >= 0 && h < size; probe += 1) {
@@ -1306,7 +1500,7 @@ export class QuicStreams {
       }
       h = (h + 1) & mask
     }
-    if (found < 0) {
+    if (found < 0 || found >= size) {
       return
     }
     let hole: i32 = found
@@ -1316,14 +1510,16 @@ export class QuicStreams {
       probe < size && next >= 0 && next < size && hole >= 0 && hole < size;
       probe += 1
     ) {
-      const entry: i32 = this.index[next] - 1
-      if (entry < 0) {
+      const stored: i32 = this.index[next]
+      if (stored <= 0) {
         break
       }
+      const entry: i32 = stored - 1
       const home: i32 = entry < toI32(this.slots.length) ? this.bucket(this.slots[entry].id) : next
-      // The entry may move into the hole when its home is not between the hole and it.
-      const distanceNext: i32 = (next - home) & mask
-      const distanceHole: i32 = (hole - home) & mask
+      // The entry may move into the hole when its home is not between the hole and it. `next`,
+      // `hole` and `home` all lie in `0..size`, so the differences are exact.
+      const distanceNext: i32 = quicStreamSub(next, home) & mask
+      const distanceHole: i32 = quicStreamSub(hole, home) & mask
       if (distanceHole < distanceNext) {
         this.index[hole] = this.index[next]
         hole = next
@@ -1341,10 +1537,16 @@ export class QuicStreams {
     if (k < 0 || k >= toI32(this.slots.length) || this.slots[k].queued || this.eventCount >= size) {
       return
     }
-    const at: i32 = (this.eventHead + this.eventCount) % size
+    const head: i32 = this.eventHead
+    const count: i32 = this.eventCount
+    // The head lies in `0..size` and the count in `0..size`, so neither bound is ever what returns.
+    if (head < 0 || count < 0 || size <= 0 || count >= size) {
+      return
+    }
+    const at: i32 = quicStreamAdd(head, count) % size
     if (at >= 0 && at < size) {
       this.events[at] = k
-      this.eventCount = this.eventCount + 1
+      this.eventCount = count + 1
       this.slots[k].queued = true
     }
   }
@@ -1359,11 +1561,21 @@ export class QuicStreams {
    */
   nextEvent(): i64 {
     const size: i32 = toI32(this.events.length)
-    while (this.eventCount > 0 && size > 0) {
+    while (size > 0) {
+      const count: i32 = this.eventCount
+      if (count <= 0) {
+        break
+      }
       const at: i32 = this.eventHead
-      this.eventHead = (at + 1) % size
-      this.eventCount = this.eventCount - 1
-      const k: i32 = at >= 0 && at < size ? this.events[at] : -1
+      let k: i32 = -1
+      // The head lies in `0..size`; the reset to 0 is never taken.
+      if (at >= 0 && at < size) {
+        this.eventHead = (at + 1) % size
+        k = this.events[at]
+      } else {
+        this.eventHead = 0
+      }
+      this.eventCount = count - 1
       if (k >= 0 && k < toI32(this.slots.length)) {
         const stream: QuicStream = this.slots[k]
         stream.queued = false
@@ -1386,10 +1598,11 @@ export class QuicStreams {
 
   /** Takes a free slot off the stack, or -1 when every slot is in use. */
   private takeFree(): i32 {
-    const at: i32 = this.freeCount - 1
-    if (at < 0 || at >= toI32(this.free.length)) {
+    const count: i32 = this.freeCount
+    if (count <= 0 || count > toI32(this.free.length)) {
       return -1
     }
+    const at: i32 = count - 1
     this.freeCount = at
     return this.free[at]
   }
@@ -1435,20 +1648,26 @@ export class QuicStreams {
     stream.id = -1
     this.pushFree(k)
     if (quicStreamIsLocal(id)) {
-      this.localOpen = this.localOpen - 1
+      // `stream` was one of the `localOpen`, so the count is at least 1.
+      const open: i64 = this.localOpen
+      if (open > 0) {
+        this.localOpen = open - 1
+      }
       return
     }
     if (quicStreamIsUni(id)) {
-      this.peerUniClosed = this.peerUniClosed + 1
-      if (this.peerUniClosed + this.maxUni - this.peerUniLimit >= (this.maxUni + 1) / 2) {
-        this.peerUniLimit = this.peerUniClosed + this.maxUni
+      this.peerUniClosed = quicStreamSum(this.peerUniClosed, 1)
+      const raised: i64 = quicStreamSum(this.peerUniClosed, this.maxUni)
+      if (quicStreamLess(raised, this.peerUniLimit) >= quicStreamSum(this.maxUni, 1) / 2) {
+        this.peerUniLimit = raised
         this.maxStreamsUniOwed = true
       }
       return
     }
-    this.peerBidiClosed = this.peerBidiClosed + 1
-    if (this.peerBidiClosed + this.maxBidi - this.peerBidiLimit >= (this.maxBidi + 1) / 2) {
-      this.peerBidiLimit = this.peerBidiClosed + this.maxBidi
+    this.peerBidiClosed = quicStreamSum(this.peerBidiClosed, 1)
+    const raised: i64 = quicStreamSum(this.peerBidiClosed, this.maxBidi)
+    if (quicStreamLess(raised, this.peerBidiLimit) >= quicStreamSum(this.maxBidi, 1) / 2) {
+      this.peerBidiLimit = raised
       this.maxStreamsBidiOwed = true
     }
   }
@@ -1493,7 +1712,7 @@ export class QuicStreams {
     while (opened <= sequence) {
       const next: i64 = (opened << 2) | (id & 3)
       const k: i32 = this.openSlot(next)
-      opened = opened + 1
+      opened = quicStreamSum(opened, 1)
       if (k >= 0) {
         this.queue(k)
         found = k
@@ -1516,8 +1735,13 @@ export class QuicStreams {
     if (end > stream.recvLimit) {
       return QUIC_ERROR_FLOW_CONTROL
     }
-    if (end > stream.recvHighest) {
-      this.recvTotal = this.recvTotal + (end - stream.recvHighest)
+    const highest: i64 = stream.recvHighest
+    // Both are stream offsets (callers pass a varint or a checked frame's end), never negative: never taken.
+    if (end < 0 || highest < 0) {
+      return QUIC_ERROR_INTERNAL
+    }
+    if (end > highest) {
+      this.recvTotal = quicStreamSum(this.recvTotal, quicStreamLess(end, highest))
       stream.recvHighest = end
       if (this.recvTotal > this.recvMaxData) {
         return QUIC_ERROR_FLOW_CONTROL
@@ -1539,9 +1763,14 @@ export class QuicStreams {
    * @param length How many bytes the frame carries.
    * @param fin Whether the frame carries the FIN, fixing the final size at `offset + length`.
    * @returns `QUIC_ERROR_NO_ERROR` (0), or `QUIC_ERROR_STREAM_LIMIT`, `QUIC_ERROR_STREAM_STATE`,
-   *   `QUIC_ERROR_FINAL_SIZE` or `QUIC_ERROR_FLOW_CONTROL` to close the connection with.
+   *   `QUIC_ERROR_FINAL_SIZE` or `QUIC_ERROR_FLOW_CONTROL` to close the connection with;
+   *   `QUIC_ERROR_INTERNAL` for a negative argument or a `length` past the end of `buf`.
    */
   onStream(id: i64, offset: i64, buf: u8[], from: i32, length: i32, fin: boolean): i64 {
+    // The frame parser hands a frame that lies inside its packet, at a varint offset: never taken.
+    if (offset < 0 || from < 0 || length < 0 || length > toI32(buf.length) - from) {
+      return QUIC_ERROR_INTERNAL
+    }
     const k: i32 = this.locate(id, true)
     if (k === -2) {
       return this.locateError
@@ -1550,7 +1779,7 @@ export class QuicStreams {
       return QUIC_ERROR_NO_ERROR
     }
     const stream: QuicStream = this.slots[k]
-    const end: i64 = offset + toI64(length)
+    const end: i64 = quicStreamSum(offset, toI64(length))
     if (stream.recvFinal >= 0 && (end > stream.recvFinal || (fin && end !== stream.recvFinal))) {
       return QUIC_ERROR_FINAL_SIZE
     }
@@ -1570,38 +1799,54 @@ export class QuicStreams {
       stream.recvState = QUIC_RECV_SIZE_KNOWN
     }
     const before: i64 = stream.recvContiguous
-    if (length > 0 && end > stream.recvContiguous) {
-      this.borrowRecv(stream)
+    if (length > 0 && end > stream.recvContiguous && !this.borrowRecv(stream)) {
+      // Never taken with `prime` called before the packet: see `borrowRecv`.
+      return QUIC_ERROR_INTERNAL
     }
     const size: i32 = toI32(stream.recvBuf.length)
     // A side holds either no buffer (length 0) or one from the pools, whose buffers are the table's
     // `bufferSize` (`share` refuses pools of another size), so the size test fails only with no buffer.
     if (size > 0 && size === stream.size) {
-      // The frame's bytes from the first not yet contiguous, inside `buf`; of
-      // more than a buffer, the last buffer's worth, which a byte-wise copy
-      // would have left there. Both clamps below are defensive: the credit
-      // check above caps a frame's end at `recvRead` plus a ring, so no peer
-      // frame reaches them, and they keep the copy in range if that changes.
-      const skipped: i64 = quicStreamMin(stream.recvContiguous - offset, toI64(length))
-      let low: i32 = skipped > 0 ? toI32(skipped) : 0
-      if (low < -from) {
-        low = -from
+      // The contiguous prefix is never negative nor past the highest byte seen: never taken.
+      const contiguous: i64 = stream.recvContiguous
+      const highest: i64 = stream.recvHighest
+      if (contiguous < 0 || highest < 0) {
+        return QUIC_ERROR_INTERNAL
       }
-      const high: i32 = length < toI32(buf.length) - from ? length : toI32(buf.length) - from
+      // The frame's bytes from the first not yet contiguous, inside `buf` (the
+      // check on entry keeps `from + length` inside it); of more than a
+      // buffer, the last buffer's worth, which a byte-wise copy would have
+      // left there. That clamp is defensive: the credit check above caps a
+      // frame's end at `recvRead` plus a ring, so no peer frame reaches it.
+      const ahead: i64 = contiguous - offset
+      let low: i32 = 0
+      if (ahead >= toI64(length)) {
+        low = length
+      } else if (ahead > 0) {
+        low = toI32(ahead)
+      }
+      // `ahead` lies in `1..length` on the second branch, so `low` is in `0..length`: never taken.
+      if (low < 0 || low > length) {
+        return QUIC_ERROR_INTERNAL
+      }
+      const high: i32 = length
       if (high - low > size) {
         low = high - size
       }
-      if (low < high) {
-        const slot: i32 = stream.at(offset + toI64(low))
-        quicStreamRingIn(stream.recvBuf, slot, buf, from + low, high - low)
+      // The clamp leaves `low` at `high - size`, above zero, so `low >= 0` always holds here.
+      if (low >= 0 && low < high) {
+        const slot: i32 = stream.at(quicStreamSum(offset, toI64(low)))
+        // `from + low` is at most `from + length`, inside `buf`: exact.
+        quicStreamRingIn(stream.recvBuf, slot, buf, quicStreamAdd(from, low), high - low)
         quicStreamMarkRing(stream.recvHave, size, slot, high - low, true)
       }
-      if (stream.recvContiguous < stream.recvHighest) {
-        const pending: i64 = stream.recvHighest - stream.recvContiguous
+      if (contiguous < highest) {
+        const pending: i64 = highest - contiguous
         const count: i32 = toI32(quicStreamMin(pending, toI64(size)))
-        stream.recvContiguous =
-          stream.recvContiguous +
+        stream.recvContiguous = quicStreamSum(
+          stream.recvContiguous,
           toI64(quicStreamRingRun(stream.recvHave, size, stream.at(stream.recvContiguous), count, true))
+        )
       }
     }
     if (stream.recvFinal >= 0 && stream.recvContiguous === stream.recvFinal) {
@@ -1644,7 +1889,12 @@ export class QuicStreams {
       return QUIC_ERROR_NO_ERROR
     }
     // §4.5: a reset stream's bytes count as consumed for the connection.
-    this.consume(finalSize - stream.recvRead)
+    // The final size is a varint and the read offset a count, never negative: never taken.
+    const read: i64 = stream.recvRead
+    if (finalSize < 0 || read < 0) {
+      return QUIC_ERROR_INTERNAL
+    }
+    this.consume(finalSize - read)
     stream.recvRead = finalSize
     stream.recvContiguous = finalSize
     // Nothing of a reset stream is read again (§3.2 "Reset Recvd").
@@ -1746,12 +1996,13 @@ export class QuicStreams {
 
   /** Counts `bytes` read (or abandoned by a reset) toward the connection's credit, raising it once half the window is used. */
   private consume(bytes: i64): void {
-    this.recvConsumed = this.recvConsumed + bytes
+    this.recvConsumed = quicStreamSum(this.recvConsumed, bytes)
     if (
-      this.recvConsumed + this.windowData - this.recvMaxData >= this.windowData / 2 &&
+      quicStreamLess(quicStreamSum(this.recvConsumed, this.windowData), this.recvMaxData) >=
+        this.windowData / 2 &&
       this.windowData > 0
     ) {
-      this.recvMaxData = this.recvConsumed + this.windowData
+      this.recvMaxData = quicStreamSum(this.recvConsumed, this.windowData)
       this.maxDataOwed = true
     }
   }
@@ -1782,11 +2033,11 @@ export class QuicStreams {
       return toI64(QUIC_STREAM_ERR_LIMIT)
     }
     if (bidi) {
-      this.localBidiOpened = opened + 1
+      this.localBidiOpened = quicStreamSum(opened, 1)
     } else {
-      this.localUniOpened = opened + 1
+      this.localUniOpened = quicStreamSum(opened, 1)
     }
-    this.localOpen = this.localOpen + 1
+    this.localOpen = quicStreamSum(this.localOpen, 1)
     return id
   }
 
@@ -1836,8 +2087,8 @@ export class QuicStreams {
     if (n > 0 && toI32(stream.sendBuf.length) === stream.size) {
       quicStreamRingIn(stream.sendBuf, stream.at(stream.sendEnd), buf, from, n)
     }
-    stream.sendEnd = stream.sendEnd + toI64(n)
-    this.writtenTotal = this.writtenTotal + toI64(n)
+    stream.sendEnd = quicStreamSum(stream.sendEnd, toI64(n))
+    this.writtenTotal = quicStreamSum(this.writtenTotal, toI64(n))
     stream.wantsWrite = n < length
     if (fin && n === length) {
       stream.finQueued = true
@@ -1894,7 +2145,7 @@ export class QuicStreams {
       quicStreamRingOut(buf, at, stream.recvBuf, slot, n)
       quicStreamMarkRing(stream.recvHave, size, slot, n, false)
     }
-    stream.recvRead = stream.recvRead + toI64(n)
+    stream.recvRead = quicStreamSum(stream.recvRead, toI64(n))
     if (n > 0) {
       this.consume(toI64(n))
     }
@@ -1902,9 +2153,9 @@ export class QuicStreams {
     const window: i32 = stream.size
     if (
       stream.recvState === QUIC_RECV_RECV &&
-      stream.recvRead + toI64(window) - stream.recvLimit >= toI64(window / 2)
+      quicStreamLess(quicStreamSum(stream.recvRead, toI64(window)), stream.recvLimit) >= toI64(window / 2)
     ) {
-      stream.recvLimit = stream.recvRead + toI64(window)
+      stream.recvLimit = quicStreamSum(stream.recvRead, toI64(window))
       stream.maxDataOwed = true
       this.streamOwes = true
     }
@@ -1938,7 +2189,7 @@ export class QuicStreams {
     // Nothing is sent again once reset (§3.1), and the used extent is the
     // one written, so the buffer goes back before `sendEnd` moves.
     this.giveSend(stream)
-    this.writtenTotal = this.writtenTotal - (stream.sendEnd - stream.sendNext)
+    this.writtenTotal = quicStreamLess(this.writtenTotal, quicStreamLess(stream.sendEnd, stream.sendNext))
     stream.sendEnd = stream.sendNext
     stream.sendState = QUIC_SEND_RESET_SENT
     stream.resetSentCode = code
@@ -2026,11 +2277,18 @@ export class QuicStreams {
    */
   putNextChunk(buf: u8[], at: i32, end: i32): i32 {
     const count: i32 = toI32(this.slots.length)
-    while (this.scanned < count && count > 0) {
+    while (count > 0) {
+      const scanned: i32 = this.scanned
+      if (scanned >= count) {
+        break
+      }
       const k: i32 = this.cursor % count
-      this.cursor = (k + 1) % count
-      this.scanned = this.scanned + 1
-      if (k >= 0 && k < count) {
+      this.scanned = scanned + 1
+      // The cursor is only ever set to `0..count`, so `k` is in range and the reset is never taken.
+      if (k < 0 || k >= count) {
+        this.cursor = 0
+      } else {
+        this.cursor = (k + 1) % count
         const stream: QuicStream = this.slots[k]
         if (stream.id >= 0 && stream.wantsToSend()) {
           let next: i32 = at
@@ -2060,23 +2318,38 @@ export class QuicStreams {
    */
   private putResend(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
     if (stream.resendLow >= 0) {
+      const high: i64 = stream.resendHigh
       let low: i64 = stream.resendLow < stream.sendBase ? stream.sendBase : stream.resendLow
-      if (low < stream.resendHigh && stream.size > 0) {
-        const span: i64 = stream.resendHigh - low
-        const count: i32 = toI32(quicStreamMin(span, toI64(stream.size)))
-        low = low + toI64(quicStreamRingRun(stream.sendAcked, stream.size, stream.at(low), count, true))
+      // Stream offsets and the frame's bounds in `buf` are never negative: never taken.
+      if (low < 0 || high < 0 || at < 0 || end < 0 || end < at) {
+        return at
       }
-      const want: i32 = toI32(stream.resendHigh - low)
+      if (low < high && stream.size > 0) {
+        const span: i64 = high - low
+        const count: i32 = toI32(quicStreamMin(span, toI64(stream.size)))
+        low = quicStreamSum(
+          low,
+          toI64(quicStreamRingRun(stream.sendAcked, stream.size, stream.at(low), count, true))
+        )
+      }
+      // A run of acknowledged bytes is never negative, so `low` stays above zero: never taken.
+      if (low < 0) {
+        return at
+      }
+      const want: i32 = toI32(high - low)
       if (want <= 0) {
         stream.resendLow = -1
         stream.resendHigh = -1
       } else {
-        const room: i32 = end - at - quicStreamOverhead(stream.id, low, want)
-        if (room <= 0) {
+        const space: i32 = end - at
+        const over: i32 = quicStreamOverhead(stream.id, low, want)
+        // No room past the frame's header: `over` and `space` are never negative.
+        if (over < 0 || space < 0 || space <= over) {
           return at
         }
+        const room: i32 = space - over
         const n: i32 = room < want ? room : want
-        const fin: boolean = stream.resendFin && n === want && low + toI64(n) === stream.sendEnd
+        const fin: boolean = stream.resendFin && n === want && quicStreamSum(low, toI64(n)) === stream.sendEnd
         const next: i32 = quicPutStream(buf, at, end, stream.id, low, stream.sendBuf, stream.at(low), n, fin)
         if (next < 0) {
           return at
@@ -2086,7 +2359,7 @@ export class QuicStreams {
           stream.resendLow = -1
           stream.resendHigh = -1
         } else {
-          stream.resendLow = low + toI64(n)
+          stream.resendLow = quicStreamSum(low, toI64(n))
         }
         if (fin) {
           stream.resendFin = false
@@ -2129,9 +2402,27 @@ export class QuicStreams {
    * held back by a credit owes the matching BLOCKED frame, once per limit.
    */
   private putNew(stream: QuicStream, k: i32, buf: u8[], at: i32, end: i32): i32 {
-    const unsent: i64 = stream.sendEnd - stream.sendNext
-    const streamCredit: i64 = stream.sendLimit - stream.sendNext
-    const connectionCredit: i64 = this.sendMaxData - this.sendTotal
+    const sendEnd: i64 = stream.sendEnd
+    const sendNext: i64 = stream.sendNext
+    const sendLimit: i64 = stream.sendLimit
+    const maxData: i64 = this.sendMaxData
+    const total: i64 = this.sendTotal
+    // Offsets, limits and the frame's bounds in `buf` are never negative: never taken.
+    if (
+      sendEnd < 0 ||
+      sendNext < 0 ||
+      sendLimit < 0 ||
+      maxData < 0 ||
+      total < 0 ||
+      at < 0 ||
+      end < 0 ||
+      end < at
+    ) {
+      return at
+    }
+    const unsent: i64 = sendEnd - sendNext
+    const streamCredit: i64 = sendLimit - sendNext
+    const connectionCredit: i64 = maxData - total
     let allowed: i64 = quicStreamMin(unsent, quicStreamMin(streamCredit, connectionCredit))
     if (allowed < 0) {
       allowed = 0
@@ -2150,10 +2441,13 @@ export class QuicStreams {
     if (want === 0 && !finNow) {
       return at
     }
-    const room: i32 = end - at - quicStreamOverhead(stream.id, stream.sendNext, want)
-    if (room < 0 || (room === 0 && want > 0)) {
+    const space: i32 = end - at
+    const over: i32 = quicStreamOverhead(stream.id, sendNext, want)
+    // No room past the frame's header, or none for a byte it must carry: `over` and `space` are never negative.
+    if (over < 0 || space < 0 || space < over || (over === space && want > 0)) {
       return at
     }
+    const room: i32 = space - over
     const n: i32 = room < want ? room : want
     const fin: boolean = finNow && n === want
     const next: i32 = quicPutStream(
@@ -2171,8 +2465,8 @@ export class QuicStreams {
       return at
     }
     this.noteChunk(stream.id, stream.sendNext, n, fin)
-    stream.sendNext = stream.sendNext + toI64(n)
-    this.sendTotal = this.sendTotal + toI64(n)
+    stream.sendNext = quicStreamSum(stream.sendNext, toI64(n))
+    this.sendTotal = quicStreamSum(this.sendTotal, toI64(n))
     if (fin) {
       stream.finSent = true
       stream.sendState = QUIC_SEND_DATA_SENT
@@ -2344,10 +2638,12 @@ export class QuicStreams {
     const before: i64 = stream.sendBase
     const size: i32 = stream.size
     if (size > 0) {
-      const top: i64 = offset + toI64(length) < stream.sendEnd ? offset + toI64(length) : stream.sendEnd
+      const reach: i64 = quicStreamSum(offset, toI64(length))
+      const top: i64 = reach < stream.sendEnd ? reach : stream.sendEnd
       const low: i64 = offset < stream.sendBase ? stream.sendBase : offset
       // The bytes in flight are fewer than a buffer, so a chunk is too.
-      if (low < top) {
+      // Stream offsets are never negative, so the first two tests always hold.
+      if (low >= 0 && top >= 0 && low < top) {
         quicStreamMarkRing(
           stream.sendAcked,
           size,
@@ -2356,12 +2652,15 @@ export class QuicStreams {
           true
         )
       }
-      if (stream.sendBase < stream.sendNext) {
-        const slot: i32 = stream.at(stream.sendBase)
-        const count: i32 = toI32(quicStreamMin(stream.sendNext - stream.sendBase, toI64(size)))
+      const base: i64 = stream.sendBase
+      const next: i64 = stream.sendNext
+      // Stream offsets are never negative, so the first two tests always hold.
+      if (base >= 0 && next >= 0 && base < next) {
+        const slot: i32 = stream.at(base)
+        const count: i32 = toI32(quicStreamMin(next - base, toI64(size)))
         const done: i32 = quicStreamRingRun(stream.sendAcked, size, slot, count, true)
         quicStreamMarkRing(stream.sendAcked, size, slot, done, false)
-        stream.sendBase = stream.sendBase + toI64(done)
+        stream.sendBase = quicStreamSum(base, toI64(done))
       }
     }
     if (fin) {

@@ -1,0 +1,18 @@
+PASS  a 0-byte buffer has 0 bytes
+PASS  a 0-byte buffer is zeroed
+PASS  a 1-byte buffer has 1 bytes
+PASS  a 1-byte buffer is zeroed
+PASS  a 65535-byte buffer has 65535 bytes
+PASS  a 65535-byte buffer is zeroed
+PASS  a 65536-byte buffer has 65536 bytes
+PASS  a 65536-byte buffer is zeroed
+PASS  a 65537-byte buffer has 65537 bytes
+PASS  a 65537-byte buffer is zeroed
+PASS  a 200000-byte buffer has 200000 bytes
+PASS  a 200000-byte buffer is zeroed
+PASS  a negative size is an empty buffer
+PASS  the buffer given back is taken next
+PASS  it keeps what it held
+PASS  the pool made one
+http1-output-bytes: 16 passed, 0 failed, 0 skipped
+

@@ -202,6 +202,18 @@ export const pskWireChecks = (): i32 => {
   t.eqStr("and wrote the same bytes there", toHex(slice(placed, five, 205)), NST);
   t.eqStr("and left the five bytes before it alone", toHex(slice(placed, zero, five)), "eeeeeeeeee");
   t.eqStr("and the two after it", toHex(slice(placed, 210, 2)), "eeee");
+  // A nonce past its u8 length field or a ticket past its u16 one is refused
+  // (`tlsPutLength`), not written under a truncated length.
+  t.eqI32(
+    "tlsWriteNewSessionTicket refuses a 256-byte nonce with -1",
+    tlsWriteNewSessionTicket(new Array<u8>(1024), zero, lifetime, ageAdd, fill(256, 1), zero, 256, ticket, zero, 161, extra),
+    toI32(-1)
+  );
+  t.eqI32(
+    "tlsEncodeNewSessionTicket answers empty for a 65,536-byte ticket",
+    toI32(tlsEncodeNewSessionTicket(lifetime, ageAdd, nonce, fill(65536, 1), extra).length),
+    zero
+  );
   const resMaster: Secret<u8[]> = secret(fromHex(RES_MASTER));
   const pskSecret: Secret<u8[]> = tlsResumptionPsk(H, resMaster, nonce);
   t.eqStr("tlsResumptionPsk gives RFC 8448 §3's PSK for nonce 0000", secretHex(pskSecret), PSK);

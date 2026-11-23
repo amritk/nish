@@ -77,8 +77,11 @@
  * Misuse — a status outside 200 to 599, a reserved field (`Content-Length`,
  * `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`), more body than
  * the length said, a second `start` — panics: it is a bug in the program,
- * never something a peer can cause. What a peer can cause answers a code the
- * program may ignore, so no answer needs its result bound.
+ * never something a peer can cause. Each answering method has a `try` twin
+ * (`tryWrite`, `tryEnd`, `trySend`, ...) that answers the same misuse as an
+ * `Err` instead, for a program built without panics; the class doc says
+ * what each refusal leaves of the request. What a peer can cause answers a
+ * code the program may ignore, so no answer needs its result bound.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -133,6 +136,8 @@ import {
   httpContentEncoding,
 } from "nish/net/http-compress"
 
+/** A core's answer when the call broke its contract: `refusal` says how, and the public method panics with it. */
+const HANDLER_REFUSED: i32 = -24
 /** An answer sent, or queued to be sent. */
 export const HANDLER_SENT: i32 = 0
 /** An answer for a request whose connection closed first: nothing was sent. */
@@ -422,63 +427,143 @@ export class HttpRequest {
   }
 
   /**
-   * Where parameter `k` starts in `head`. Panics on a parameter the route does not have.
+   * Where parameter `k` starts in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the byte offset in `head` of the parameter's first raw byte
    */
   paramStart(k: i32): i32 {
-    this.checkParam(k)
-    return this.params[2 * k]
+    return this.paramBound(k, HANDLER_ZERO)
   }
 
   /**
-   * Where parameter `k` ends in `head`.
+   * Where parameter `k` ends in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the byte offset in `head` just past the parameter's last raw byte
    */
   paramEnd(k: i32): i32 {
-    this.checkParam(k)
-    return this.params[2 * k + 1]
+    return this.paramBound(k, toI32(1))
   }
 
   /**
-   * Whether parameter `k`, raw, is exactly `text`.
+   * Whether parameter `k`, raw, is exactly `text`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @param text the value to compare with, as it would appear still percent-encoded
    * @returns true when the raw parameter bytes are exactly `text`
    */
   paramIs(k: i32, text: string): boolean {
-    this.checkParam(k)
-    return handlerSpanIs(this.head, this.params[2 * k], this.params[2 * k + 1], text)
+    return handlerSpanIs(this.head, this.paramBound(k, HANDLER_ZERO), this.paramBound(k, toI32(1)), text)
   }
 
   /**
    * Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its
    * length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM`
-   * when `out` is too short. Nothing is written on a code.
+   * when `out` is too short. Nothing is written on a code. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @param out where the decoded bytes go, from index 0; the caller's buffer
    * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
-    this.checkParam(k)
-    return routerDecode(this.head, this.params[2 * k], this.params[2 * k + 1], out)
+    return routerDecode(this.head, this.paramBound(k, HANDLER_ZERO), this.paramBound(k, toI32(1)), out)
   }
 
   /**
-   * Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1.
+   * Parameter `k` read as a decimal number that is not negative and fits an
+   * `i32`, or -1. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
    */
   paramDecimal(k: i32): i32 {
-    this.checkParam(k)
-    return handlerDecimal(this.head, this.params[2 * k], this.params[2 * k + 1])
+    return handlerDecimal(this.head, this.paramBound(k, HANDLER_ZERO), this.paramBound(k, toI32(1)))
   }
 
-  private checkParam(k: i32): void {
-    if (k < 0 || k >= this.paramCount) {
-      panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
+  /**
+   * Where parameter `k` starts in `head`, or an error naming the parameter the route does not have.
+   * @param k the parameter's position in the route pattern, from 0
+   * @returns `Ok` with the byte offset in `head` of the parameter's first raw byte, or `Err` when the route has no parameter `k`
+   */
+  tryParamStart(k: i32): Result<i32, string> {
+    return this.tryParamBound(k, HANDLER_ZERO)
+  }
+
+  /**
+   * Where parameter `k` ends in `head`, or an error naming the parameter the route does not have.
+   * @param k the parameter's position in the route pattern, from 0
+   * @returns `Ok` with the byte offset in `head` just past the parameter's last raw byte, or `Err` when the route has no parameter `k`
+   */
+  tryParamEnd(k: i32): Result<i32, string> {
+    return this.tryParamBound(k, toI32(1))
+  }
+
+  /**
+   * Parameter `k` read as a decimal number, as `paramDecimal` reads it, or an
+   * error naming the parameter the route does not have.
+   * @param k the parameter's position in the route pattern, from 0
+   * @returns `Ok` with the number, or -1 when the parameter is empty, holds a non-digit or overflows; `Err` when the route has no parameter `k`
+   */
+  tryParamDecimal(k: i32): Result<i32, string> {
+    const start = this.tryParamBound(k, HANDLER_ZERO)
+    if (start.isErr()) {
+      return Err(start.error)
     }
+    const end = this.tryParamBound(k, toI32(1))
+    if (end.isErr()) {
+      return Err(end.error)
+    }
+    return Ok(handlerDecimal(this.head, start.value, end.value))
+  }
+
+  /**
+   * Parameter `k`'s start (`side` 0) or end (`side` 1) in `head`: the one
+   * place the parameter contract panics.
+   */
+  private paramBound(k: i32, side: i32): i32 {
+    const bound: i32 = this.paramAt(k, side)
+    if (bound < 0) {
+      // A parameter the route does not have: the program's own mistake.
+      panic(this.paramFault(k))
+    }
+    return bound
+  }
+
+  /**
+   * Parameter `k`'s start (`side` 0) or end (`side` 1) in `head`, or why the
+   * route has no parameter `k`.
+   */
+  private tryParamBound(k: i32, side: i32): Result<i32, string> {
+    const bound: i32 = this.paramAt(k, side)
+    if (bound < 0) {
+      return Err(this.paramFault(k))
+    }
+    return Ok(bound)
+  }
+
+  /**
+   * Parameter `k`'s start (`side` 0) or end (`side` 1) in `head`, or -1 when
+   * the route has no parameter `k`: an offset in `head` is never negative, so
+   * -1 is no answer a span gives. It builds no `Result`, so the hot path
+   * allocates nothing. The literal bound on `k` comes first, so `2 * k + 1`
+   * is seen not to overflow; a route holds far fewer parameters.
+   */
+  private paramAt(k: i32, side: i32): i32 {
+    if (k < 0 || k >= this.paramCount || k > 65535) {
+      return -1
+    }
+    const at: i32 = 2 * k
+    if (at + 1 >= toI32(this.params.length)) {
+      return -1
+    }
+    return side === 0 ? this.params[at] : this.params[at + 1]
+  }
+
+  /** Why `paramAt` gave -1 for parameter `k`. */
+  private paramFault(k: i32): string {
+    if (k < 0 || k >= this.paramCount) {
+      return `HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`
+    }
+    if (k > 65535) {
+      return `HttpRequest.param: parameter ${k} is past the 65536 a route can hold`
+    }
+    return `HttpRequest.param: the request holds no span for parameter ${k}`
   }
 
   /**
@@ -493,11 +578,7 @@ export class HttpRequest {
    * @returns how many decoded bytes were written, or `HANDLER_ABSENT` or a negative `ROUTER_*` code
    */
   query(name: string, out: u8[]): i32 {
-    const at: i32 = this.queryIndex(name)
-    if (at < 0) {
-      return HANDLER_ABSENT
-    }
-    return handlerFormDecode(this.head, this.queryValueStart, this.queryValueEnd, out)
+    return this.queryScan(name, out, true)
   }
 
   /**
@@ -520,25 +601,63 @@ export class HttpRequest {
    * @returns the byte offset in `head` where the matching `name=value` pair starts, or -1 when none matches
    */
   queryIndex(name: string): i32 {
-    let at: i32 = this.pathEnd + 1
-    const end: i32 = this.targetEnd
+    // Without `decode` the walk writes nothing to `out`.
+    return this.queryScan(name, this.head, false)
+  }
+
+  /**
+   * `queryIndex`'s walk: with `decode`, the matching value decoded into `out`
+   * as `query` answers it (`HANDLER_ABSENT` when none matches), else the
+   * pair's start or -1. The decode reads the span the walk proved inside
+   * `head`, so it needs no check of its own.
+   */
+  private queryScan(name: string, out: u8[], decode: boolean): i32 {
+    const none: i32 = decode ? HANDLER_ABSENT : -1
+    // The target lies inside `head`; the bound says so to the prover.
+    const length: i32 = toI32(this.head.length)
+    const end: i32 = this.targetEnd < length ? this.targetEnd : length
+    // A path that runs to the target's end has no query.
+    const pathEnd: i32 = this.pathEnd
+    if (pathEnd < 0 || pathEnd >= end || pathEnd >= length) {
+      return none
+    }
+    let at: i32 = pathEnd + 1
     while (at < end) {
       let pairEnd: i32 = at
-      while (pairEnd < end && toI32(this.head[pairEnd]) !== 38) {
+      while (
+        pairEnd >= 0 &&
+        pairEnd < end &&
+        pairEnd < toI32(this.head.length) &&
+        toI32(this.head[pairEnd]) !== 38
+      ) {
         pairEnd += 1
       }
       let keyEnd: i32 = at
-      while (keyEnd < pairEnd && toI32(this.head[keyEnd]) !== 61) {
+      while (
+        keyEnd >= 0 &&
+        keyEnd < pairEnd &&
+        keyEnd < toI32(this.head.length) &&
+        toI32(this.head[keyEnd]) !== 61
+      ) {
         keyEnd += 1
       }
       if (handlerFormIs(this.head, at, keyEnd, name)) {
-        this.queryValueStart = keyEnd < pairEnd ? keyEnd + 1 : pairEnd
+        // A pair with no `=` has an empty value, at its end. The length is
+        // worked in 64 bits: both ends lie inside `head`, so it is exact, but
+        // the prover keeps no lower bound on `keyEnd` across the loop.
+        const valueStart: i32 = keyEnd < pairEnd ? keyEnd + 1 : pairEnd
+        const valueLength: i32 = keyEnd < pairEnd ? toI32(toI64(pairEnd) - toI64(keyEnd) - 1) : 0
+        this.queryValueStart = valueStart
         this.queryValueEnd = pairEnd
-        return at
+        return decode ? handlerFormDecode(this.head, valueStart, valueLength, out) : at
+      }
+      // The last pair ends the query.
+      if (pairEnd >= end) {
+        return none
       }
       at = pairEnd + 1
     }
-    return -1
+    return none
   }
 
   /**
@@ -547,30 +666,95 @@ export class HttpRequest {
    * @returns the field's index for `valueStart` and `valueEnd`, or `HANDLER_ABSENT` when no field has the name
    */
   header(name: string): i32 {
-    for (let i: i32 = 0; i < this.headerCount; i++) {
-      if (handlerSpanIs(this.head, this.spans[4 * i], this.spans[4 * i + 1], name)) {
+    // `at` steps four slots a field, so it is `4 * i` without the product;
+    // the literal bound keeps the step from overflowing.
+    let at: i32 = 0
+    for (let i: i32 = 0; i < this.headerCount && at < 1048576 && at + 1 < toI32(this.spans.length); i++) {
+      if (handlerSpanIs(this.head, this.spans[at], this.spans[at + 1], name)) {
         return i
       }
+      at += 4
     }
     return HANDLER_ABSENT
   }
 
   /**
-   * Where field `i`'s value starts in `head`.
+   * Where field `i`'s value starts in `head`. Panics on an `i` that is not a
+   * field index, a caller contract: pass only what `header` answered, after
+   * checking it is not `HANDLER_ABSENT`.
    * @param i a field index, as `header` answered it
    * @returns the byte offset in `head` of the value's first byte
    */
   valueStart(i: i32): i32 {
-    return this.spans[4 * i + 2]
+    return this.valueBound(i, toI32(2))
   }
 
   /**
-   * Where field `i`'s value ends in `head`.
+   * Where field `i`'s value ends in `head`. Panics on an `i` that is not a
+   * field index, a caller contract: pass only what `header` answered, after
+   * checking it is not `HANDLER_ABSENT`.
    * @param i a field index, as `header` answered it
    * @returns the byte offset in `head` just past the value's last byte
    */
   valueEnd(i: i32): i32 {
-    return this.spans[4 * i + 3]
+    return this.valueBound(i, toI32(3))
+  }
+
+  /**
+   * Where field `i`'s value starts in `head`, or an error when `i` is not a
+   * field index `header` answered.
+   * @param i a field index, as `header` answered it
+   * @returns `Ok` with the byte offset in `head` of the value's first byte, or `Err` naming `i`
+   */
+  tryValueStart(i: i32): Result<i32, string> {
+    return this.tryValueBound(i, toI32(2))
+  }
+
+  /**
+   * Where field `i`'s value ends in `head`, or an error when `i` is not a
+   * field index `header` answered.
+   * @param i a field index, as `header` answered it
+   * @returns `Ok` with the byte offset in `head` just past the value's last byte, or `Err` naming `i`
+   */
+  tryValueEnd(i: i32): Result<i32, string> {
+    return this.tryValueBound(i, toI32(3))
+  }
+
+  /** Field `i`'s value start (`part` 2) or end (`part` 3): the one place the field contract panics. */
+  private valueBound(i: i32, part: i32): i32 {
+    const bound: i32 = this.valueAt(i, part)
+    if (bound < 0) {
+      // A field index `header` did not answer: the program's own mistake.
+      panic(this.valueFault(i))
+    }
+    return bound
+  }
+
+  /** Field `i`'s value start (`part` 2) or end (`part` 3) in `head`, or why `i` is no field index. */
+  private tryValueBound(i: i32, part: i32): Result<i32, string> {
+    const bound: i32 = this.valueAt(i, part)
+    if (bound < 0) {
+      return Err(this.valueFault(i))
+    }
+    return Ok(bound)
+  }
+
+  /**
+   * Field `i`'s value start (`part` 2) or end (`part` 3) in `head`, or -1 when
+   * `i` is no field index: an offset in `head` is never negative. It builds
+   * no `Result`, so the hot path allocates nothing.
+   */
+  private valueAt(i: i32, part: i32): i32 {
+    const at: i32 = handlerSpanSlot(i, part)
+    if (i < 0 || i >= this.headerCount || at < 0 || at >= toI32(this.spans.length)) {
+      return -1
+    }
+    return this.spans[at]
+  }
+
+  /** Why `valueAt` gave -1 for field `i`. */
+  private valueFault(i: i32): string {
+    return `HttpRequest.value: ${i} is not a field index of the ${this.headerCount} \`header\` answers`
   }
 
   /**
@@ -580,14 +764,37 @@ export class HttpRequest {
    * @returns true when the field is present and its first occurrence has exactly that value
    */
   headerIs(name: string, value: string): boolean {
+    // An absent field (`HANDLER_ABSENT`) is no field index: both answer -1.
     const i: i32 = this.header(name)
-    return i >= 0 && handlerSpanIs(this.head, this.spans[4 * i + 2], this.spans[4 * i + 3], value)
+    const start: i32 = this.valueAt(i, toI32(2))
+    const end: i32 = this.valueAt(i, toI32(3))
+    if (start < 0 || end < 0) {
+      return false
+    }
+    return handlerSpanIs(this.head, start, end, value)
   }
 }
 
 /**
  * The HTTP/1.1 server: a carrier, its readiness loop, a router and a pool of
  * requests. One per thread; nothing in it is shared.
+ *
+ * A `try` twin refuses a broken contract with an `Err`, and what it leaves
+ * depends on whether the response's head went out:
+ *
+ * - **Refused before the head** — a request not taken or already answered,
+ *   a status outside 200 to 599, a one-shot answer's body window outside its
+ *   buffer (`trySend`): nothing is sent and `r` is as it was, so a request
+ *   still owed an answer can be answered again (a bare 500, say).
+ * - **Abandoned after the head** — a head the carrier refuses (a reserved
+ *   field, a name or value that is not field text), a `tryWrite` window
+ *   outside its buffer or more body than the declared length (the head went
+ *   out with `tryStart`, so these fall here, not above), or a body short of
+ *   it (`tryEnd`): the response cannot be completed, so the connection is
+ *   closed and `r` is the handler's again. Nothing more is owed for `r`; a
+ *   further answer for it is refused too.
+ *
+ * The plain methods panic with the same message where their twins refuse.
  */
 export class HttpHandler {
   /**
@@ -673,6 +880,8 @@ export class HttpHandler {
   private deferring: boolean = false
   /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
   private jsonBegun: boolean = false
+  /** Why the last core answered `HANDLER_REFUSED`. */
+  private refusal: string = ""
 
   /**
    * A handler over `listener`, a listening socket the program made
@@ -687,15 +896,16 @@ export class HttpHandler {
    *   caps live
    * @param listener the listening socket's descriptor, still the program's to close
    * @param router the routes, which the handler keeps and consults at each request head
+   * @param loop a readiness loop from `pollCreate` for the handler to own, or
+   *   -1 (the default) to make one here; any other negative is a failed
+   *   `pollCreate` passed through. Panics on limits below their least and on
+   *   a failed loop, each a contract of this constructor: use
+   *   `openHttpHandler` for a `Result`.
    */
-  constructor(limits: HandlerLimits, listener: i32, router: Router) {
-    if (limits.slots < 1 || limits.jsonBytes < 256 || limits.maxEvents < 1 || limits.bodyTimeout < 1) {
-      panic(
-        `HttpHandler: slots ${limits.slots}, jsonBytes ${limits.jsonBytes}, maxEvents ${limits.maxEvents} and bodyTimeout ${limits.bodyTimeout} need at least 1, 256, 1 and 1`
-      )
-    }
-    if (limits.maxDecoded < 0) {
-      panic(`HttpHandler: maxDecoded ${limits.maxDecoded} is negative`)
+  constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
+    const fault: string = handlerLimitsFault(limits)
+    if (fault.length > 0) {
+      panic(fault)
     }
     this.maxDecoded = limits.maxDecoded
     this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
@@ -707,19 +917,16 @@ export class HttpHandler {
     this.requests = []
     this.free = []
     this.queue = new Array<i32>(16)
-    this.slotGen = new Array<i32>(limits.slots)
-    this.current = new Array<i32>(limits.slots)
-    this.open = new Array<boolean>(limits.slots)
-    this.owing = new Array<boolean>(limits.slots)
-    this.owed = new Array<i32>(limits.slots)
-    for (let s: i32 = 0; s < limits.slots; s++) {
-      this.current[s] = -1
-    }
-    this.readyFds = new Array<i32>(2 * limits.maxEvents)
-    this.watchedFired = new Array<boolean>(HANDLER_MAX_WATCHED)
-    this.scratch = new Array<u8>(limits.jsonBytes)
+    this.slotGen = handlerInts(limits.slots, HANDLER_ZERO)
+    this.current = handlerInts(limits.slots, -1)
+    this.open = handlerFlags(limits.slots)
+    this.owing = handlerFlags(limits.slots)
+    this.owed = handlerInts(limits.slots, HANDLER_ZERO)
+    this.readyFds = handlerInts(handlerAdd(limits.maxEvents, limits.maxEvents), HANDLER_ZERO)
+    this.watchedFired = handlerFlags(HANDLER_MAX_WATCHED)
+    this.scratch = handlerBytes(limits.jsonBytes)
     this.writer = new JsonWriter(this.scratch, HANDLER_ZERO)
-    this.probe = new Array<i32>(2 * router.maxParams + 2)
+    this.probe = handlerInts(handlerProbeLength(router.maxParams), HANDLER_ZERO)
     this.jsonType = httpFieldBytes("application/json")
     this.problemType = httpFieldBytes("application/problem+json")
     const contentType: u8[] = httpFieldBytes("content-type")
@@ -733,7 +940,7 @@ export class HttpHandler {
     this.noFields = []
     this.namesBy = []
     this.valuesBy = []
-    this.loop = pollCreate()
+    this.loop = loop === -1 ? pollCreate() : loop
     if (this.loop < 0) {
       panic(`HttpHandler: pollCreate failed: ${this.loop}`)
     }
@@ -758,12 +965,28 @@ export class HttpHandler {
   }
 
   /**
+   * `watch`, with an id outside the range answered as an `Err` instead of a panic.
+   * @param fd the program's descriptor to watch for reading; it stays the program's to read and close
+   * @param id the name `fired` asks about it by, from 0 to `HANDLER_MAX_WATCHED - 1`
+   * @returns `Ok(true)` once `fd` is watched, or `Err` naming the id outside the range
+   */
+  tryWatch(fd: i32, id: i32): Result<boolean, string> {
+    if (id < 0 || id >= HANDLER_MAX_WATCHED) {
+      return Err(`HttpHandler.watch: id ${id} is outside 0 to ${HANDLER_MAX_WATCHED - 1}`)
+    }
+    pollAdd(this.loop, fd, H1_WANT_READ, -2 - id)
+    return Ok(true)
+  }
+
+  /**
    * Whether watched descriptor `id` was ready in the last `wait`.
    * @param id the name the descriptor was given to `watch`
    * @returns true when it was readable in the last turn; false for an id outside the range
    */
   fired(id: i32): boolean {
-    return id >= 0 && id < HANDLER_MAX_WATCHED && this.watchedFired[id]
+    return (
+      id >= 0 && id < HANDLER_MAX_WATCHED && id < toI32(this.watchedFired.length) && this.watchedFired[id]
+    )
   }
 
   /**
@@ -776,8 +999,9 @@ export class HttpHandler {
    */
   wait(timeoutMs: i32): i32 {
     this.flush()
-    for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
-      this.watchedFired[id] = false
+    const fired: boolean[] = this.watchedFired
+    for (let id: i32 = 0; id < HANDLER_MAX_WATCHED && id < toI32(fired.length); id++) {
+      fired[id] = false
     }
     if (this.acceptRestUntil > 0 && monotonicNanos() >= this.acceptRestUntil) {
       this.endAcceptRest()
@@ -785,7 +1009,10 @@ export class HttpHandler {
     let timeout: i32 = timeoutMs
     if (this.acceptRestUntil > 0 && !this.draining) {
       // Wake for the listener's return, whatever the program asked.
-      const rest: i32 = toI32((this.acceptRestUntil - monotonicNanos()) / toI64(1000000)) + 1
+      const rest: i32 = handlerAdd(
+        toI32(handlerSince(monotonicNanos(), this.acceptRestUntil) / toI64(1000000)),
+        1
+      )
       if (timeout < 0 || rest < timeout) {
         timeout = rest
       }
@@ -799,17 +1026,24 @@ export class HttpHandler {
     const n: i32 = pollWait(this.loop, this.readyFds, timeout)
     const now: i64 = monotonicNanos()
     this.turnAt = now
-    for (let k: i32 = 0; k < n; k++) {
-      const token: i32 = this.readyFds[2 * k]
+    const fds: i32[] = this.readyFds
+    // Two numbers an event; the literal bound keeps `2 * k + 1` in an `i32`.
+    for (let k: i32 = 0; k < n && k < 1048576; k++) {
+      const at: i32 = 2 * k
+      if (at + 1 >= toI32(fds.length)) {
+        break
+      }
+      const token: i32 = fds[at]
+      const bits: i32 = fds[at + 1]
       if (token === HANDLER_LISTENER) {
         this.acceptAll()
       } else if (token <= -2) {
-        const id: i32 = -2 - token
-        if (id < HANDLER_MAX_WATCHED) {
-          this.watchedFired[id] = true
+        const id: i32 = handlerSub(-2, token)
+        if (id >= 0 && id < HANDLER_MAX_WATCHED && id < toI32(fired.length)) {
+          fired[id] = true
         }
       } else if (token >= 0 && this.server.holds(token)) {
-        if ((this.readyFds[2 * k + 1] & HANDLER_READ_BITS) !== 0) {
+        if ((bits & HANDLER_READ_BITS) !== 0) {
           this.server.readable(token)
         } else {
           this.server.writable(token)
@@ -821,7 +1055,7 @@ export class HttpHandler {
       this.sweep()
     }
     if (now >= this.bodyCheckAt) {
-      this.bodyCheckAt = now + HANDLER_BODY_SWEEP
+      this.bodyCheckAt = handlerLater(now, HANDLER_BODY_SWEEP)
       this.expireBodies(now)
     }
     return this.queueCount
@@ -853,15 +1087,19 @@ export class HttpHandler {
     if (this.acceptRestUntil === 0) {
       pollRemove(this.loop, this.listener)
     }
-    for (let s: i32 = 0; s < toI32(this.open.length) && s < toI32(this.current.length); s++) {
+    const open: boolean[] = this.open
+    const current: i32[] = this.current
+    for (let s: i32 = 0; s < toI32(open.length) && s < toI32(current.length); s++) {
+      const isOpen: boolean = open[s]
+      const idle: boolean = current[s] === -1
       if (
-        this.open[s] &&
+        isOpen &&
         this.server.holds(s) &&
-        this.current[s] === -1 &&
+        idle &&
         (this.server.resting(s) || !this.server.connection(s).wantsWrite())
       ) {
         this.closeSlot(s)
-      } else if (this.open[s] && this.server.holds(s)) {
+      } else if (isOpen && this.server.holds(s)) {
         // Its exchange is its last: the answer says `Connection: close` if
         // it is not yet started, and no pipelined request is read behind it.
         this.server.connection(s).closeAfter = true
@@ -876,9 +1114,12 @@ export class HttpHandler {
     }
     let slot: i32 = this.server.accept()
     while (slot >= 0 || slot === H1_POOL_FULL || slot === HANDLER_ACCEPT_ABORTED) {
-      if (slot >= 0) {
-        this.open[slot] = true
-        this.current[slot] = -1
+      const open: boolean[] = this.open
+      const current: i32[] = this.current
+      // The carrier hands only its own slots, each with a place in both.
+      if (slot >= 0 && slot < toI32(open.length) && slot < toI32(current.length)) {
+        open[slot] = true
+        current[slot] = -1
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
       }
       slot = this.server.accept()
@@ -888,7 +1129,7 @@ export class HttpHandler {
       // stays in the backlog and the listener stays readable, so rest it
       // rather than spin, until a close frees one or the rest ends.
       pollRemove(this.loop, this.listener)
-      this.acceptRestUntil = monotonicNanos() + HANDLER_ACCEPT_REST
+      this.acceptRestUntil = handlerLater(monotonicNanos(), HANDLER_ACCEPT_REST)
     }
   }
 
@@ -900,10 +1141,16 @@ export class HttpHandler {
   flush(): void {
     const n: i32 = this.owedCount
     this.owedCount = 0
-    for (let k: i32 = 0; k < n; k++) {
-      const slot: i32 = this.owed[k]
-      this.owing[slot] = false
-      if (this.open[slot] && this.server.holds(slot)) {
+    const owed: i32[] = this.owed
+    const owing: boolean[] = this.owing
+    const open: boolean[] = this.open
+    for (let k: i32 = 0; k < n && k < toI32(owed.length); k++) {
+      const slot: i32 = owed[k]
+      if (slot < 0 || slot >= toI32(owing.length) || slot >= toI32(open.length)) {
+        continue
+      }
+      owing[slot] = false
+      if (open[slot] && this.server.holds(slot)) {
         this.settle(slot, this.server.connection(slot))
       }
     }
@@ -942,13 +1189,18 @@ export class HttpHandler {
       // The carrier has written its refusal and ends the connection; a
       // request it was reading is nobody's.
       this.releaseReading(slot)
-    } else if (this.owable(slot, conn)) {
-      if (!this.owing[slot]) {
-        this.owing[slot] = true
-        this.owed[this.owedCount] = slot
-        this.owedCount += 1
+    } else if (this.owable(slot, conn) && slot >= 0 && slot < toI32(this.owing.length)) {
+      if (this.owing[slot]) {
+        return
       }
-      return
+      // `owed` has a place for every slot and holds each at most once, so `n` is in range.
+      const n: i32 = this.owedCount
+      if (n >= 0 && n < toI32(this.owed.length)) {
+        this.owing[slot] = true
+        this.owed[n] = slot
+        this.owedCount = n + 1
+        return
+      }
     }
     this.settle(slot, conn)
   }
@@ -965,21 +1217,48 @@ export class HttpHandler {
    * the handler waits.
    */
   private owable(slot: i32, conn: Http1Connection): boolean {
-    const at: i32 = this.current[slot]
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
     return (
       this.deferring &&
       !this.draining &&
       conn.wantsWrite() &&
       !conn.writeHeld &&
       this.roomy(conn) &&
-      (at < 0 || this.requests[at].state !== HANDLER_PARKED)
+      (r === null || r.state !== HANDLER_PARKED)
     )
+  }
+
+  /** The index of the request `slot` is reading or answering, or -1 for none (or a slot out of range). */
+  private currentOf(slot: i32): i32 {
+    return slot >= 0 && slot < toI32(this.current.length) ? this.current[slot] : -1
+  }
+
+  /** The request at index `at`, or null for -1 (or an index out of range). */
+  private requestAt(at: i32): HttpRequest | null {
+    return at >= 0 && at < toI32(this.requests.length) ? this.requests[at] : null
+  }
+
+  /** The request at the head of the queue, or null when the queue is empty. */
+  private queued(): HttpRequest | null {
+    const start: i32 = this.queueStart
+    if (this.queueCount <= 0 || start < 0 || start >= toI32(this.queue.length)) {
+      return null
+    }
+    return this.requestAt(this.queue[start])
+  }
+
+  /** Drops the request at the head of the queue. */
+  private dequeue(): void {
+    this.queueStart = handlerRing(this.queueStart, 1, toI32(this.queue.length))
+    this.queueCount = handlerSub(this.queueCount, 1)
   }
 
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
   private settle(slot: i32, conn: Http1Connection): void {
     if (conn.wantsWrite()) {
-      this.sent += 1
+      // Worked in `u64`, whose wrapping sum has the bits of the signed one: a
+      // count of sends is centuries short of 2^63.
+      this.sent = toI64(toU64(this.sent) + toU64(1))
     }
     // `flush` arms a held write for writing even once its send emptied the output.
     const wants: i32 = this.server.flush(slot)
@@ -987,26 +1266,34 @@ export class HttpHandler {
       this.closeSlot(slot)
       return
     }
-    if (this.draining && this.current[slot] === -1 && !conn.wantsWrite()) {
+    if (this.draining && this.currentOf(slot) === -1 && !conn.wantsWrite()) {
       this.closeSlot(slot)
       return
     }
     if (this.server.rearm(slot, wants)) {
       pollModify(this.loop, this.server.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot)
     }
-    const at: i32 = this.current[slot]
-    if (at >= 0 && this.requests[at].state === HANDLER_PARKED && this.roomy(conn)) {
-      this.enqueue(this.requests[at])
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    if (r !== null && r.state === HANDLER_PARKED && this.roomy(conn)) {
+      this.enqueue(r)
     }
   }
 
   /** Whether `conn`'s output holds at most half its size unsent, so a response head fits behind it. */
   private roomy(conn: Http1Connection): boolean {
-    return (conn.outputEnd - conn.outputStart) * 2 <= this.outputSize
+    // `2 * unsent <= size` is `unsent <= size / 2` for whole numbers, without the doubling.
+    return toI64(conn.outputEnd) - toI64(conn.outputStart) <= toI64(this.outputSize) / toI64(2)
   }
 
   /** A head: a request from the free list, the head copied into it, and its route. */
   private begin(slot: i32, conn: Http1Connection): void {
+    const current: i32[] = this.current
+    const slotGen: i32[] = this.slotGen
+    // `drive` hands only the carrier's slots, each with a place in both.
+    if (slot < 0 || slot >= toI32(current.length) || slot >= toI32(slotGen.length)) {
+      return
+    }
+    const gen: i32 = slotGen[slot]
     if (this.draining) {
       // A head read during the drain is the connection's last.
       conn.closeAfter = true
@@ -1015,15 +1302,18 @@ export class HttpHandler {
     const p = conn.parser
     const length: i32 = p.headLength
     if (toI32(r.head.length) < length) {
-      r.head = new Array<u8>(handlerGrown(toI32(r.head.length), length))
+      r.head = handlerBytes(handlerGrown(toI32(r.head.length), length))
     }
     copyBytes(r.head, HANDLER_ZERO, p.head, HANDLER_ZERO, length)
-    // The parser's spans are copied whole, as one `set`: only the first
-    // `4 * headerCount` are this head's, and only those are ever read.
-    if (toI32(r.spans.length) < toI32(p.spans.length)) {
-      r.spans = new Array<i32>(handlerGrown(toI32(r.spans.length), toI32(p.spans.length)))
+    // Only the first `4 * headerCount` spans are this head's, and only those
+    // are ever read, so only those are copied.
+    const spanCount: i32 = handlerSpanSlot(p.headerCount, 0)
+    if (toI32(r.spans.length) < spanCount) {
+      r.spans = handlerInts(handlerGrown(toI32(r.spans.length), spanCount), HANDLER_ZERO)
     }
-    r.spans.set(p.spans)
+    for (let k: i32 = 0; k < spanCount && k < toI32(r.spans.length) && k < toI32(p.spans.length); k++) {
+      r.spans[k] = p.spans[k]
+    }
     r.headLength = length
     r.headerCount = p.headerCount
     r.methodStart = p.methodStart
@@ -1034,7 +1324,7 @@ export class HttpHandler {
     r.decodedFrom = HTTP_CODING_IDENTITY
     r.refusal = 0
     r.slot = slot
-    r.gen = this.slotGen[slot]
+    r.gen = gen
     r.since = this.turnAt
     r.state = HANDLER_READING
     r.pendingStart = 0
@@ -1044,7 +1334,9 @@ export class HttpHandler {
     this.route(r)
     // The router found where the path ends, before any query, as it matched.
     r.pathEnd = this.router.pathEnd
-    this.current[slot] = r.index
+    if (slot < toI32(current.length)) {
+      current[slot] = r.index
+    }
   }
 
   /**
@@ -1065,7 +1357,11 @@ export class HttpHandler {
     )
     if (route === ROUTER_METHOD_NOT_ALLOWED && r.methodIs("HEAD")) {
       const get: i32 = this.router.methodIndex("GET")
-      if (get >= 0) {
+      if (
+        get >= 0 &&
+        get < toI32(this.router.methodStart.length) &&
+        get < toI32(this.router.methodEnd.length)
+      ) {
         const viaGet: i32 = this.router.match(
           this.router.methodBytes,
           this.router.methodStart[get],
@@ -1086,15 +1382,18 @@ export class HttpHandler {
 
   /** Body bytes: appended to the request's body, which the carrier's cap bounds. */
   private gather(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.current[slot]
-    if (at < 0) {
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    if (r === null) {
       return
     }
-    const r: HttpRequest = this.requests[at]
     const n: i32 = conn.dataLength
-    const need: i32 = r.bodyLength + n
+    // The carrier's cap keeps a body far below 2^31 bytes.
+    const need: i32 = handlerAdd(r.bodyLength, n)
+    if (need < 0) {
+      return
+    }
     if (toI32(r.body.length) < need) {
-      const grown: u8[] = new Array<u8>(handlerGrown(toI32(r.body.length), need))
+      const grown: u8[] = handlerBytes(handlerGrown(toI32(r.body.length), need))
       copyBytes(grown, HANDLER_ZERO, r.body, HANDLER_ZERO, r.bodyLength)
       r.body = grown
     }
@@ -1104,11 +1403,10 @@ export class HttpHandler {
 
   /** The request is whole: queued for `take`, or parked while the response before it is still mostly unsent. */
   private whole(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.current[slot]
-    if (at < 0) {
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    if (r === null) {
       return
     }
-    const r: HttpRequest = this.requests[at]
     this.decode(r)
     if (this.roomy(conn)) {
       this.enqueue(r)
@@ -1127,9 +1425,17 @@ export class HttpHandler {
       return
     }
     let coding: i32 = HTTP_CODING_IDENTITY
+    const spans: i32[] = r.spans
     for (let i: i32 = 0; i < r.headerCount; i++) {
-      if (handlerSpanIs(r.head, r.spans[4 * i], r.spans[4 * i + 1], "content-encoding")) {
-        const named: i32 = httpContentEncoding(r.head, r.spans[4 * i + 2], r.spans[4 * i + 3])
+      // A head's spans are four a field; the literal bound keeps `at + 3` in an `i32`.
+      const at: i32 = handlerSpanSlot(i, 0)
+      if (at < 0 || at > 1048576 || at + 3 >= toI32(spans.length)) {
+        break
+      }
+      const valueStart: i32 = spans[at + 2]
+      const valueEnd: i32 = spans[at + 3]
+      if (handlerSpanIs(r.head, spans[at], spans[at + 1], "content-encoding")) {
+        const named: i32 = httpContentEncoding(r.head, valueStart, valueEnd)
         // A second field stacks its codings on the first's (RFC 9110 §5.3).
         coding = coding === HTTP_CODING_IDENTITY ? named : HTTP_CODING_NONE
       }
@@ -1152,26 +1458,34 @@ export class HttpHandler {
 
   private enqueue(r: HttpRequest): void {
     r.state = HANDLER_QUEUED
-    const size: i32 = toI32(this.queue.length)
-    if (this.queueCount === size) {
-      const grown: i32[] = new Array<i32>(2 * size)
+    const old: i32[] = this.queue
+    const size: i32 = toI32(old.length)
+    if (this.queueCount >= size) {
+      const grown: i32[] = handlerInts(handlerAdd(size, size), -1)
       for (let k: i32 = 0; k < size && k < toI32(grown.length); k++) {
-        grown[k] = this.queue[(this.queueStart + k) % size]
+        const from: i32 = handlerRing(this.queueStart, k, size)
+        if (from >= 0 && from < toI32(old.length)) {
+          grown[k] = old[from]
+        }
       }
       this.queue = grown
       this.queueStart = 0
     }
-    this.queue[(this.queueStart + this.queueCount) % toI32(this.queue.length)] = r.index
-    this.queueCount += 1
+    const queue: i32[] = this.queue
+    // `handlerRing` answers in `[0, size)` for a queue of `size` places.
+    const end: i32 = handlerRing(this.queueStart, this.queueCount, toI32(queue.length))
+    if (end >= 0 && end < toI32(queue.length)) {
+      queue[end] = r.index
+      this.queueCount = handlerAdd(this.queueCount, 1)
+    }
   }
 
   /** `H1_WRITE`: the carrier has room again for the response under way. */
   private resume(slot: i32, conn: Http1Connection): void {
-    const at: i32 = this.current[slot]
-    if (at < 0) {
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    if (r === null) {
       return
     }
-    const r: HttpRequest = this.requests[at]
     if (r.state !== HANDLER_STREAMING && r.state !== HANDLER_FLUSHING) {
       return
     }
@@ -1183,13 +1497,13 @@ export class HttpHandler {
 
   /** Hands the carrier as much of `r`'s pending bytes as it takes. */
   private pushPending(r: HttpRequest, conn: Http1Connection): void {
-    const left: i32 = r.pendingEnd - r.pendingStart
+    const left: i32 = handlerSub(r.pendingEnd, r.pendingStart)
     if (left === 0) {
       return
     }
     const taken: i32 = conn.write(r.pending, r.pendingStart, left)
     if (taken > 0) {
-      r.pendingStart += taken
+      r.pendingStart = handlerAdd(r.pendingStart, taken)
     }
     if (r.pendingStart === r.pendingEnd) {
       r.pendingStart = 0
@@ -1207,20 +1521,30 @@ export class HttpHandler {
     if (conn.end() === H1_AGAIN) {
       return
     }
-    this.current[r.slot] = -1
+    const current: i32[] = this.current
+    const slot: i32 = r.slot
+    if (slot >= 0 && slot < toI32(current.length)) {
+      current[slot] = -1
+    }
     this.release(r)
   }
 
   /** A free request, or a new one. */
   private obtain(): HttpRequest {
-    const count: i32 = toI32(this.free.length)
+    const free: i32[] = this.free
+    const count: i32 = toI32(free.length)
     if (count > 0) {
-      const at: i32 = this.free[count - 1]
-      this.free.pop()
-      return this.requests[at]
+      const at: i32 = free[count - 1]
+      if (free.length > 0) {
+        free.pop()
+      }
+      const reused: HttpRequest | null = this.requestAt(at)
+      if (reused !== null) {
+        return reused
+      }
     }
     const r: HttpRequest = new HttpRequest(toI32(this.requests.length))
-    r.params = new Array<i32>(2 * this.router.maxParams + 2)
+    r.params = handlerInts(handlerProbeLength(this.router.maxParams), HANDLER_ZERO)
     this.requests.push(r)
     return r
   }
@@ -1235,10 +1559,11 @@ export class HttpHandler {
 
   /** Hands back the request `slot` was reading when the carrier refused it. */
   private releaseReading(slot: i32): void {
-    const at: i32 = this.current[slot]
-    if (at >= 0 && this.requests[at].state === HANDLER_READING) {
-      this.current[slot] = -1
-      this.release(this.requests[at])
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    const current: i32[] = this.current
+    if (r !== null && r.state === HANDLER_READING && slot >= 0 && slot < toI32(current.length)) {
+      current[slot] = -1
+      this.release(r)
     }
   }
 
@@ -1268,12 +1593,23 @@ export class HttpHandler {
     if (this.acceptRestUntil > 0 && !this.draining) {
       this.endAcceptRest()
     }
-    this.open[slot] = false
-    this.slotGen[slot] = this.slotGen[slot] + 1
-    const at: i32 = this.current[slot]
-    this.current[slot] = -1
-    if (at >= 0) {
-      const r: HttpRequest = this.requests[at]
+    const open: boolean[] = this.open
+    const slotGen: i32[] = this.slotGen
+    const current: i32[] = this.current
+    // Every slot the carrier hands has a place in all three.
+    if (
+      slot < 0 ||
+      slot >= toI32(open.length) ||
+      slot >= toI32(slotGen.length) ||
+      slot >= toI32(current.length)
+    ) {
+      return
+    }
+    open[slot] = false
+    slotGen[slot] = handlerAdd(slotGen[slot], 1)
+    const r: HttpRequest | null = this.requestAt(current[slot])
+    current[slot] = -1
+    if (r !== null) {
       if (r.state === HANDLER_READING || r.state === HANDLER_PARKED || r.state === HANDLER_FLUSHING) {
         this.release(r)
       }
@@ -1286,7 +1622,8 @@ export class HttpHandler {
       const at: i32 = this.current[s]
       if (this.open[s] && at >= 0 && at < toI32(this.requests.length)) {
         const r: HttpRequest = this.requests[at]
-        if (r.state === HANDLER_READING && now - r.since > this.bodyTimeout) {
+        const since: i64 = r.since
+        if (r.state === HANDLER_READING && handlerSince(since, now) > this.bodyTimeout) {
           this.closeSlot(s)
         }
       }
@@ -1312,24 +1649,39 @@ export class HttpHandler {
    */
   ready(): boolean {
     while (this.queueCount > 0) {
-      const r: HttpRequest = this.requests[this.queue[this.queueStart]]
+      const r: HttpRequest | null = this.queued()
+      if (r === null) {
+        // A place that names no request: none is ever queued, but it is passed over all the same.
+        this.dequeue()
+        continue
+      }
       const live: boolean = this.live(r)
       if (live && r.refusal === 0) {
         return true
       }
-      this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
-      this.queueCount -= 1
+      this.dequeue()
       if (live) {
         r.state = HANDLER_HELD
+        let sent: i32 = HANDLER_REFUSED
         if (r.refusal === 413) {
-          this.problem(r, toI32(413), "Content Too Large", "the body decodes to more than this server takes")
+          sent = this.problemCore(
+            r,
+            toI32(413),
+            "Content Too Large",
+            "the body decodes to more than this server takes"
+          )
         } else {
-          this.problem(
+          sent = this.problemCore(
             r,
             toI32(400),
             "Bad Request",
             "the body is not in the coding its Content-Encoding names"
           )
+        }
+        // Held a line above, with a status in range, so it is not refused;
+        // were it, the request goes back rather than staying held.
+        if (sent === HANDLER_REFUSED) {
+          this.release(r)
         }
       } else {
         this.release(r)
@@ -1343,12 +1695,23 @@ export class HttpHandler {
    * @returns the oldest queued request, the program's until it answers it
    */
   take(): HttpRequest {
-    if (!this.ready()) {
+    const r: HttpRequest | null = this.next()
+    if (r === null) {
       panic("HttpHandler.take: no request is ready")
     }
-    const r: HttpRequest = this.requests[this.queue[this.queueStart]]
-    this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
-    this.queueCount -= 1
+    return r
+  }
+
+  /**
+   * The next whole request, as `take` hands it over, or null when none is `ready`.
+   * @returns the oldest queued request, the program's until it answers it, or null
+   */
+  next(): HttpRequest | null {
+    const r: HttpRequest | null = this.ready() ? this.queued() : null
+    if (r === null) {
+      return null
+    }
+    this.dequeue()
     r.state = HANDLER_HELD
     return r
   }
@@ -1383,7 +1746,8 @@ export class HttpHandler {
     if (left === 0) {
       return HANDLER_NEXT
     }
-    const low: i32 = left & (0 - left)
+    // The lowest bit set, `left & -left`, negated in wrapping unsigned arithmetic.
+    const low: i32 = toI32(toU32(left) & (toU32(0) - toU32(left)))
     r.stepsLeft = left ^ low
     r.stepsRan = r.stepsRan | low
     return toI32(31) - toI32(Math.clz32(toU32(low)))
@@ -1429,7 +1793,7 @@ export class HttpHandler {
     if (at >= HANDLER_MAX_ADDED) {
       panic(`HttpHandler.field: more than ${HANDLER_MAX_ADDED} fields added to one answer`)
     }
-    if (at < toI32(r.addedNames.length) && at < toI32(r.addedValues.length)) {
+    if (at >= 0 && at < toI32(r.addedNames.length) && at < toI32(r.addedValues.length)) {
       r.addedNames[at] = name
       r.addedValues[at] = value
     } else {
@@ -1453,7 +1817,9 @@ export class HttpHandler {
 
   /** Whether `r`'s connection is the one it was read on, still open. */
   private live(r: HttpRequest): boolean {
-    return this.server.holds(r.slot) && this.slotGen[r.slot] === r.gen
+    const gens: i32[] = this.slotGen
+    const slot: i32 = r.slot
+    return slot >= 0 && slot < toI32(gens.length) && gens[slot] === r.gen && this.server.holds(slot)
   }
 
   /**
@@ -1502,14 +1868,35 @@ export class HttpHandler {
    *   the connection was closed for it
    */
   start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 {
+    return this.kept(this.startCore(r, status, names, values, bodyLength))
+  }
+
+  /**
+   * `start`, with a broken contract answered as an `Err` instead of a panic:
+   * a request not taken or already answered, a status outside 200 to 599 or
+   * a body length below `HTTP1_CHUNKED` leave `r` as it was; a field the
+   * carrier refuses closes the connection and hands `r` back.
+   * @param r a request taken and not yet answered
+   * @param status the response status, from 200 to 599
+   * @param names the field names, as bytes, beside `values`
+   * @param values each field's value, `values[k]` for `names[k]`
+   * @param bodyLength how many body bytes will follow, or `HTTP1_CHUNKED` for a body of unknown length
+   * @returns `Ok` with what `start` answers, or `Err` saying which contract the call broke
+   */
+  tryStart(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): Result<i32, string> {
+    return this.checked(this.startCore(r, status, names, values, bodyLength))
+  }
+
+  /** `start`'s work, answering `HANDLER_REFUSED` where `start` panics. */
+  private startCore(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 {
     if (r.state !== HANDLER_HELD) {
-      panic(`HttpHandler.start: the request is not one taken and unanswered (state ${r.state})`)
+      return this.refused(`HttpHandler.start: the request is not one taken and unanswered (state ${r.state})`)
     }
     if (status < 200 || status > 599) {
-      panic(`HttpHandler.start: status ${status} is outside 200 to 599`)
+      return this.refused(`HttpHandler.start: status ${status} is outside 200 to 599`)
     }
     if (bodyLength < HTTP1_CHUNKED) {
-      panic(`HttpHandler.start: body length ${bodyLength}`)
+      return this.refused(`HttpHandler.start: body length ${bodyLength}`)
     }
     r.state = HANDLER_STREAMING
     if (!this.live(r)) {
@@ -1533,7 +1920,8 @@ export class HttpHandler {
       return HANDLER_DROPPED
     }
     if (sent !== 0) {
-      panic(
+      this.abandon(r)
+      return this.refused(
         `HttpHandler.start: the carrier refused the head (${sent}): a reserved field, or a name or value that is not a token or field text`
       )
     }
@@ -1543,7 +1931,9 @@ export class HttpHandler {
   /**
    * Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room
    * for is copied and sent as room comes, so `buf` is the caller's again on
-   * return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`.
+   * return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. A response not
+   * started, a window outside `buf`, or more bytes than the declared length
+   * leaves panics; `tryWrite` answers those instead, closing the connection.
    * @param r a request whose response `start` began
    * @param buf the bytes to send from; the caller's again on return
    * @param off where in `buf` the body bytes start
@@ -1551,6 +1941,28 @@ export class HttpHandler {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32 {
+    return this.kept(this.writeCore(r, buf, off, len))
+  }
+
+  /**
+   * `write`, with a broken contract answered as an `Err` instead of a panic.
+   * A response not started leaves `r` as it was. A window outside `buf`, or
+   * more bytes than the declared length leaves (whether this check or the
+   * carrier finds it), abandons the response: the head is out and the body
+   * cannot follow it as declared, so the connection is closed and `r` is
+   * the handler's again. The caller answers nothing more for `r`.
+   * @param r a request whose response `start` began
+   * @param buf the bytes to send from; the caller's again on return
+   * @param off where in `buf` the body bytes start
+   * @param len how many bytes to send
+   * @returns `Ok` with what `write` answers, or `Err` saying which contract the call broke
+   */
+  tryWrite(r: HttpRequest, buf: u8[], off: i32, len: i32): Result<i32, string> {
+    return this.checked(this.writeCore(r, buf, off, len))
+  }
+
+  /** `write`'s work, answering `HANDLER_REFUSED` where `write` panics. */
+  private writeCore(r: HttpRequest, buf: u8[], off: i32, len: i32): i32 {
     const put: i32 = this.put(r, buf, off, len)
     if (put === HANDLER_SENT) {
       this.drive(r.slot)
@@ -1567,10 +1979,13 @@ export class HttpHandler {
    */
   private put(r: HttpRequest, buf: u8[], off: i32, len: i32): i32 {
     if (r.state !== HANDLER_STREAMING) {
-      panic(`HttpHandler.write: the response is not started (state ${r.state})`)
+      return this.refused(`HttpHandler.write: the response is not started (state ${r.state})`)
     }
-    if (off < 0 || len < 0 || off > toI32(buf.length) - len) {
-      panic(`HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
+    // From here a refusal abandons `r`: its head is out, so a body the
+    // program cannot write as declared leaves no response to complete.
+    if (handlerOutside(buf, off, len)) {
+      this.abandon(r)
+      return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
     if (!this.live(r)) {
       return HANDLER_DROPPED
@@ -1578,9 +1993,10 @@ export class HttpHandler {
     const conn: Http1Connection = this.server.connection(r.slot)
     // The carrier checks the length of what it takes; what is pending it has
     // not seen, so the check counts it here.
-    const owed: i32 = conn.responseLeft - (r.pendingEnd - r.pendingStart)
+    const owed: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
     if (conn.responseFraming >= 0 && !conn.responseEmpty && len > owed) {
-      panic(
+      this.abandon(r)
+      return this.refused(
         `HttpHandler.write: ${len} byte(s) is more than the ${owed} the length the response declared leaves`
       )
     }
@@ -1590,25 +2006,29 @@ export class HttpHandler {
       if (taken === H1_AGAIN) {
         taken = 0
       } else if (taken < 0) {
-        panic(
+        // The same contract as the length check above, as `write` has always
+        // answered it, and abandoned the same way.
+        this.abandon(r)
+        return this.refused(
           `HttpHandler.write: the carrier refused the body (${taken}): more than the length the response declared`
         )
       }
     }
     if (taken < len) {
-      this.keep(r, buf, off + taken, len - taken)
+      this.keep(r, buf, handlerAdd(off, taken), handlerSub(len, taken))
     }
     return HANDLER_SENT
   }
 
   /** Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. */
   private keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void {
-    const live: i32 = r.pendingEnd - r.pendingStart
-    if (toI32(r.pending.length) - r.pendingEnd < len) {
-      if (r.pendingStart > 0 || toI32(r.pending.length) < live + len) {
+    const live: i32 = handlerSub(r.pendingEnd, r.pendingStart)
+    const want: i32 = handlerAdd(live, len)
+    if (handlerSub(toI32(r.pending.length), r.pendingEnd) < len) {
+      if (r.pendingStart > 0 || toI32(r.pending.length) < want) {
         const target: u8[] =
-          toI32(r.pending.length) < live + len
-            ? new Array<u8>(handlerGrown(toI32(r.pending.length), live + len))
+          toI32(r.pending.length) < want
+            ? handlerBytes(handlerGrown(toI32(r.pending.length), want))
             : r.pending
         copyBytes(target, HANDLER_ZERO, r.pending, r.pendingStart, live)
         r.pending = target
@@ -1617,7 +2037,7 @@ export class HttpHandler {
       }
     }
     copyBytes(r.pending, r.pendingEnd, buf, off, len)
-    r.pendingEnd += len
+    r.pendingEnd = handlerAdd(r.pendingEnd, len)
   }
 
   /**
@@ -1630,8 +2050,25 @@ export class HttpHandler {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   end(r: HttpRequest): i32 {
+    return this.kept(this.endCore(r))
+  }
+
+  /**
+   * `end`, with a broken contract answered as an `Err` instead of a panic: a
+   * response not started leaves `r` as it was; a body short of the declared
+   * length closes the connection, since the response cannot be completed,
+   * and hands `r` back.
+   * @param r a request whose response `start` began; the handler's again after an `Ok`
+   * @returns `Ok` with what `end` answers, or `Err` saying which contract the call broke
+   */
+  tryEnd(r: HttpRequest): Result<i32, string> {
+    return this.checked(this.endCore(r))
+  }
+
+  /** `end`'s work, answering `HANDLER_REFUSED` where `end` panics. */
+  private endCore(r: HttpRequest): i32 {
     if (r.state !== HANDLER_STREAMING) {
-      panic(`HttpHandler.end: the response is not started (state ${r.state})`)
+      return this.refused(`HttpHandler.end: the response is not started (state ${r.state})`)
     }
     if (!this.live(r)) {
       this.release(r)
@@ -1639,9 +2076,12 @@ export class HttpHandler {
     }
     const slot: i32 = r.slot
     const conn: Http1Connection = this.server.connection(slot)
-    const short: i32 = conn.responseLeft - (r.pendingEnd - r.pendingStart)
+    const short: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
     if (conn.responseFraming >= 0 && short > 0 && !conn.responseEmpty) {
-      panic(`HttpHandler.end: the body is ${short} byte(s) short of the length the response declared`)
+      this.abandon(r)
+      return this.refused(
+        `HttpHandler.end: the body is ${short} byte(s) short of the length the response declared`
+      )
     }
     this.finish(r, conn)
     this.drive(slot)
@@ -1661,8 +2101,39 @@ export class HttpHandler {
    *   the connection was closed for it
    */
   send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32 {
-    this.typeValue[0] = contentType
-    return this.sendFields(r, status, this.typeName, this.typeValue, body, off, len)
+    return this.kept(this.sendCore(r, status, contentType, body, off, len))
+  }
+
+  /**
+   * `send`, with a broken contract answered as an `Err` instead of a panic,
+   * as `trySendFields` answers it.
+   * @param r a request taken and not yet answered; the handler's again after an `Ok`
+   * @param status the response status, from 200 to 599
+   * @param contentType the `Content-Type` value, as bytes
+   * @param body the buffer holding the body; the caller's again on return
+   * @param off where in `body` the body bytes start
+   * @param len how many body bytes to send
+   * @returns `Ok` with what `send` answers, or `Err` saying which contract the call broke
+   */
+  trySend(
+    r: HttpRequest,
+    status: i32,
+    contentType: u8[],
+    body: u8[],
+    off: i32,
+    len: i32
+  ): Result<i32, string> {
+    return this.checked(this.sendCore(r, status, contentType, body, off, len))
+  }
+
+  /** `send`'s work, answering `HANDLER_REFUSED` where `send` panics. */
+  private sendCore(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32 {
+    if (this.typeValue.length > 0) {
+      this.typeValue[0] = contentType
+    } else {
+      this.typeValue.push(contentType)
+    }
+    return this.sendFieldsCore(r, status, this.typeName, this.typeValue, body, off, len)
   }
 
   /**
@@ -1687,16 +2158,70 @@ export class HttpHandler {
     off: i32,
     len: i32
   ): i32 {
-    const started: i32 = this.start(r, status, names, values, len)
+    return this.kept(this.sendFieldsCore(r, status, names, values, body, off, len))
+  }
+
+  /**
+   * `sendFields`, with a broken contract answered as an `Err` instead of a
+   * panic: a request not taken or already answered, a status outside 200 to
+   * 599 or, when a body is sent (`len` above 0, a status other than 204 and
+   * 304), a window outside `body` leave `r` as it was; a field the carrier
+   * refuses closes the connection and hands `r` back.
+   * @param r a request taken and not yet answered; the handler's again after an `Ok`
+   * @param status the response status, from 200 to 599
+   * @param names the field names, as bytes, beside `values`
+   * @param values each field's value, `values[k]` for `names[k]`
+   * @param body the buffer holding the body; the caller's again on return
+   * @param off where in `body` the body bytes start
+   * @param len how many body bytes to send
+   * @returns `Ok` with what `sendFields` answers, or `Err` saying which contract the call broke
+   */
+  trySendFields(
+    r: HttpRequest,
+    status: i32,
+    names: u8[][],
+    values: u8[][],
+    body: u8[],
+    off: i32,
+    len: i32
+  ): Result<i32, string> {
+    return this.checked(this.sendFieldsCore(r, status, names, values, body, off, len))
+  }
+
+  /** `sendFields`'s work, answering `HANDLER_REFUSED` where `sendFields` panics. */
+  private sendFieldsCore(
+    r: HttpRequest,
+    status: i32,
+    names: u8[][],
+    values: u8[][],
+    body: u8[],
+    off: i32,
+    len: i32
+  ): i32 {
+    // Only a body that is sent has a window; it is checked before the head
+    // goes, so a refused one leaves `r` untouched. A chunked length or a
+    // 204 or 304 sends none, as before.
+    const sends: boolean = len > 0 && status !== 204 && status !== 304
+    if (sends && handlerOutside(body, off, len)) {
+      return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${body.length} bytes`)
+    }
+    const started: i32 = this.startCore(r, status, names, values, len)
     if (started === HANDLER_DROPPED) {
       this.release(r)
       return HANDLER_DROPPED
     }
-    if (len > 0 && status !== 204 && status !== 304) {
-      // No pass between the body and the end: `end` drives the slot once.
-      this.put(r, body, off, len)
+    if (started !== HANDLER_SENT) {
+      return started
     }
-    return this.end(r)
+    if (sends) {
+      // No pass between the body and the end: `end` drives the slot once.
+      // The head declared `len` and the window is checked, so `put` has no
+      // contract left to refuse; should it refuse one, it abandons `r`.
+      if (this.put(r, body, off, len) === HANDLER_REFUSED) {
+        return HANDLER_REFUSED
+      }
+    }
+    return this.endCore(r)
   }
 
   /**
@@ -1708,7 +2233,31 @@ export class HttpHandler {
    *   the connection was closed for it
    */
   empty(r: HttpRequest, status: i32): i32 {
-    return this.sendFields(r, status, this.noFields, this.noFields, this.scratch, HANDLER_ZERO, HANDLER_ZERO)
+    return this.kept(this.emptyCore(r, status))
+  }
+
+  /**
+   * `empty`, with a broken contract answered as an `Err` instead of a panic:
+   * a request not taken or already answered, or a status outside 200 to 599,
+   * leaves `r` as it was.
+   * @param r a request taken and not yet answered; the handler's again after an `Ok`
+   * @param status the response status, from 200 to 599
+   * @returns `Ok` with what `empty` answers, or `Err` saying which contract the call broke
+   */
+  tryEmpty(r: HttpRequest, status: i32): Result<i32, string> {
+    return this.checked(this.emptyCore(r, status))
+  }
+
+  private emptyCore(r: HttpRequest, status: i32): i32 {
+    return this.sendFieldsCore(
+      r,
+      status,
+      this.noFields,
+      this.noFields,
+      this.scratch,
+      HANDLER_ZERO,
+      HANDLER_ZERO
+    )
   }
 
   /**
@@ -1734,14 +2283,30 @@ export class HttpHandler {
    *   the connection was closed for it
    */
   sendJson(r: HttpRequest, status: i32): i32 {
+    return this.kept(this.sendJsonCore(r, status))
+  }
+
+  /**
+   * `sendJson`, with a broken contract answered as an `Err` instead of a
+   * panic: no value begun with `json`, a request not taken or already
+   * answered, or a status outside 200 to 599, leaves `r` as it was.
+   * @param r a request taken and not yet answered; the handler's again after an `Ok`
+   * @param status the response status for a value that fit, from 200 to 599
+   * @returns `Ok` with what `sendJson` answers, or `Err` saying which contract the call broke
+   */
+  trySendJson(r: HttpRequest, status: i32): Result<i32, string> {
+    return this.checked(this.sendJsonCore(r, status))
+  }
+
+  private sendJsonCore(r: HttpRequest, status: i32): i32 {
     if (!this.jsonBegun) {
-      panic("HttpHandler.sendJson: no value was begun with json()")
+      return this.refused("HttpHandler.sendJson: no value was begun with json()")
     }
     this.jsonBegun = false
     if (!this.writer.complete()) {
-      return this.problem(r, toI32(500), "Internal Server Error", "the response did not fit its buffer")
+      return this.problemCore(r, toI32(500), "Internal Server Error", "the response did not fit its buffer")
     }
-    return this.send(r, status, this.jsonType, this.scratch, HANDLER_ZERO, this.writer.end)
+    return this.sendCore(r, status, this.jsonType, this.scratch, HANDLER_ZERO, this.writer.end)
   }
 
   /**
@@ -1759,8 +2324,26 @@ export class HttpHandler {
    *   the connection was closed for it
    */
   problem(r: HttpRequest, status: i32, title: string, detail: string): i32 {
+    return this.kept(this.problemCore(r, status, title, detail))
+  }
+
+  /**
+   * `problem`, with a broken contract answered as an `Err` instead of a
+   * panic: a request not taken or already answered, or a status outside 200
+   * to 599, leaves `r` as it was.
+   * @param r a request taken and not yet answered; the handler's again after an `Ok`
+   * @param status the response status, from 200 to 599, also written into the object
+   * @param title the status's reason phrase, or empty to leave it out
+   * @param detail a sentence for a person about this occurrence, or empty to leave it out
+   * @returns `Ok` with what `problem` answers, or `Err` saying which contract the call broke
+   */
+  tryProblem(r: HttpRequest, status: i32, title: string, detail: string): Result<i32, string> {
+    return this.checked(this.problemCore(r, status, title, detail))
+  }
+
+  private problemCore(r: HttpRequest, status: i32, title: string, detail: string): i32 {
     const length: i32 = this.writeProblem(status, title, detail)
-    return this.send(r, status, this.problemType, this.scratch, HANDLER_ZERO, length)
+    return this.sendCore(r, status, this.problemType, this.scratch, HANDLER_ZERO, length)
   }
 
   /**
@@ -1811,10 +2394,33 @@ export class HttpHandler {
    *   the connection was closed for it
    */
   refuse(r: HttpRequest): i32 {
+    return this.kept(this.refuseCore(r))
+  }
+
+  /**
+   * `refuse`, with a broken contract answered as an `Err` instead of a
+   * panic: a request not taken or already answered leaves `r` as it was.
+   * @param r a request whose `route` is negative, taken and not yet answered; the handler's again after an `Ok`
+   * @returns `Ok` with what `refuse` answers, or `Err` saying which contract the call broke
+   */
+  tryRefuse(r: HttpRequest): Result<i32, string> {
+    return this.checked(this.refuseCore(r))
+  }
+
+  private refuseCore(r: HttpRequest): i32 {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
       const length: i32 = this.writeProblem(toI32(405), "Method Not Allowed", "")
-      this.allowValues[1] = this.allowFor(r)
-      return this.sendFields(
+      // The `Allow` value goes in the pair the constructor made, one store a
+      // 405; the length test, after `allowFor` runs, proves the index, and
+      // its other branch, never taken, answers the same by making the pair.
+      const allow: u8[] = this.allowFor(r)
+      const values: u8[][] = this.allowValues
+      if (toI32(values.length) >= 2) {
+        values[1] = allow
+      } else {
+        this.allowValues = [this.problemType, allow]
+      }
+      return this.sendFieldsCore(
         r,
         toI32(405),
         this.allowNames,
@@ -1824,7 +2430,37 @@ export class HttpHandler {
         length
       )
     }
-    return this.problem(r, toI32(404), "Not Found", "")
+    return this.problemCore(r, toI32(404), "Not Found", "")
+  }
+
+  /** Records why a call broke its contract and answers `HANDLER_REFUSED`. */
+  private refused(why: string): i32 {
+    this.refusal = why
+    return HANDLER_REFUSED
+  }
+
+  /** A core's answer for a public method: the panic it keeps for a broken contract, or the answer. */
+  private kept(code: i32): i32 {
+    if (code === HANDLER_REFUSED) {
+      panic(this.refusal)
+    }
+    return code
+  }
+
+  /** A core's answer for a `try` twin. */
+  private checked(code: i32): Result<i32, string> {
+    if (code === HANDLER_REFUSED) {
+      return Err(this.refusal)
+    }
+    return Ok(code)
+  }
+
+  /** Gives up on `r`'s answer: its connection is closed, since the response cannot be completed, and `r` goes back. */
+  private abandon(r: HttpRequest): void {
+    if (this.live(r)) {
+      this.closeSlot(r.slot)
+    }
+    this.release(r)
   }
 
   /**
@@ -1834,13 +2470,17 @@ export class HttpHandler {
    */
   private allowFor(r: HttpRequest): u8[] {
     const router: Router = this.router
-    const methods: i32 = toI32(router.methodStart.length)
+    const starts: i32[] = router.methodStart
+    const ends: i32[] = router.methodEnd
+    const methods: i32 = toI32(starts.length) < toI32(ends.length) ? toI32(starts.length) : toI32(ends.length)
     let mask: i64 = 0
-    for (let m: i32 = 0; m < methods; m++) {
+    for (let m: i32 = 0; m < methods && m < toI32(starts.length) && m < toI32(ends.length); m++) {
+      const start: i32 = starts[m]
+      const end: i32 = ends[m]
       const route: i32 = router.match(
         router.methodBytes,
-        router.methodStart[m],
-        router.methodEnd[m],
+        start,
+        end,
         r.head,
         r.targetStart,
         r.targetEnd,
@@ -1850,18 +2490,20 @@ export class HttpHandler {
         mask = mask | (toI64(1) << toI64(m))
       }
     }
-    for (let k: i32 = 0; k < toI32(this.allowMasks.length); k++) {
-      if (this.allowMasks[k] === mask) {
-        return this.allowBytes[k]
+    const masks: i64[] = this.allowMasks
+    const made: u8[][] = this.allowBytes
+    for (let k: i32 = 0; k < toI32(masks.length) && k < toI32(made.length); k++) {
+      if (masks[k] === mask) {
+        return made[k]
       }
     }
     let get: boolean = false
     let head: boolean = false
     const value: u8[] = []
-    for (let m: i32 = 0; m < methods; m++) {
+    for (let m: i32 = 0; m < methods && m < toI32(starts.length) && m < toI32(ends.length); m++) {
       if ((mask & (toI64(1) << toI64(m))) !== toI64(0)) {
-        const start: i32 = router.methodStart[m]
-        const end: i32 = router.methodEnd[m]
+        const start: i32 = starts[m]
+        const end: i32 = ends[m]
         get = get || handlerSpanIs(router.methodBytes, start, end, "GET")
         head = head || handlerSpanIs(router.methodBytes, start, end, "HEAD")
         handlerAllowAppend(value, router.methodBytes, start, end)
@@ -1890,11 +2532,133 @@ const handlerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): voi
   }
 }
 
+/**
+ * The first `n` elements' length as a `u16`, at most 65535, and 0 when `n` is
+ * not positive: an allocation of a `u16` length is not an `array-length`
+ * site, so the helpers below allocate once up to it and push only past it.
+ */
+const handlerHead = (n: i32): u16 => {
+  if (n <= 0) {
+    return 0
+  }
+  return toU16(n < 65535 ? n : toI32(65535))
+}
+
+/** `n` copies of `fill`, none when `n` is not positive: one allocation up to 65535, pushed past it. */
+const handlerInts = (n: i32, fill: i32): i32[] => {
+  const out: i32[] = new Array<i32>(handlerHead(n))
+  if (fill !== 0) {
+    out.fill(fill)
+  }
+  for (let k: i32 = 65535; k < n; k++) {
+    out.push(fill)
+  }
+  return out
+}
+
+/** `n` flags, each false, made as `handlerInts` makes its numbers. */
+const handlerFlags = (n: i32): boolean[] => {
+  const out: boolean[] = new Array<boolean>(handlerHead(n))
+  for (let k: i32 = 65535; k < n; k++) {
+    out.push(false)
+  }
+  return out
+}
+
+/** `n` zero bytes, made as `handlerInts` makes its numbers. */
+const handlerBytes = (n: i32): u8[] => {
+  const out: u8[] = new Array<u8>(handlerHead(n))
+  for (let k: i32 = 65535; k < n; k++) {
+    out.push(0)
+  }
+  return out
+}
+
+/** The length of `Router.match`'s scratch for routes of up to `maxParams` parameters: two a parameter and two more. */
+const handlerProbeLength = (maxParams: i32): i32 => toI32(toI64(maxParams) * toI64(2) + toI64(2))
+
+/**
+ * The nanoseconds from the `monotonicNanos` instant `from` to `to`, or 0 when
+ * `to` is not after it. Worked in `u64`, which has the bits of the signed
+ * difference once `to` is the later.
+ */
+const handlerSince = (from: i64, to: i64): i64 => (to > from ? toI64(toU64(to) - toU64(from)) : toI64(0))
+
+/**
+ * The `monotonicNanos` instant `span` nanoseconds after `now`. Worked in
+ * `u64`, whose wrapping sum has the bits of the signed one: an instant is
+ * centuries short of 2^63 and the span a constant of a second or less.
+ */
+const handlerLater = (now: i64, span: i64): i64 => toI64(toU64(now) + toU64(span))
+
+/** Place `start + k` of a ring of `size` places, in `[0, size)`; -1 for an empty ring or a negative place. */
+const handlerRing = (start: i32, k: i32, size: i32): i32 => {
+  const n: i64 = toI64(size)
+  if (n < 1 || start < 0 || k < 0) {
+    return -1
+  }
+  // Two non-negative `i32`s sum below 2^32, so the `i64` sum is exact.
+  const at: i64 = toI64(start) + toI64(k)
+  return toI32(at % n)
+}
+
+/**
+ * A handler as `new HttpHandler(limits, listener, router)` makes one, with
+ * what that constructor panics on answered as an `Err`: limits below their
+ * least, or a readiness loop `pollCreate` could not make.
+ * @param limits the caps and timeouts, as the constructor reads them
+ * @param listener the listening socket's descriptor, still the program's to close
+ * @param router the routes, which the handler keeps and consults at each request head
+ * @returns `Ok` with the handler, or `Err` saying which limit is below its least or how `pollCreate` failed
+ */
+export const openHttpHandler = (
+  limits: HandlerLimits,
+  listener: i32,
+  router: Router
+): Result<HttpHandler, string> => {
+  const fault: string = handlerLimitsFault(limits)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  const loop: i32 = pollCreate()
+  if (loop < 0) {
+    return Err(`HttpHandler: pollCreate failed: ${loop}`)
+  }
+  return Ok(new HttpHandler(limits, listener, router, loop))
+}
+
+/** Why `limits` cannot make a handler, or `""` when it can. */
+const handlerLimitsFault = (limits: HandlerLimits): string => {
+  if (limits.slots < 1 || limits.jsonBytes < 256 || limits.maxEvents < 1 || limits.bodyTimeout < 1) {
+    return `HttpHandler: slots ${limits.slots}, jsonBytes ${limits.jsonBytes}, maxEvents ${limits.maxEvents} and bodyTimeout ${limits.bodyTimeout} need at least 1, 256, 1 and 1`
+  }
+  if (limits.maxDecoded < 0) {
+    return `HttpHandler: maxDecoded ${limits.maxDecoded} is negative`
+  }
+  return ""
+}
+
+/** Whether `buf[off .. off + len)` is not a window of `buf`. */
+const handlerOutside = (buf: u8[], off: i32, len: i32): boolean =>
+  off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)
+
+/** `a + b`, wrapped to an `i32`: the sum is taken in `i64`, where two `i32`s cannot overflow. */
+const handlerAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+
+/** `a - b`, wrapped to an `i32`, taken in `i64` as `handlerAdd` takes a sum. */
+const handlerSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
+
+/** Where slot `part` of field `i` sits in `spans`, four to a field, or -1 when that is past an `i32`. */
+const handlerSpanSlot = (i: i32, part: i32): i32 => {
+  const at: i64 = toI64(i) * toI64(4) + toI64(part)
+  return at < toI64(0) || at > toI64(2147483647) ? -1 : toI32(at)
+}
+
 /** A buffer size of at least `need`: `have` doubled until it is, starting from 64. */
 const handlerGrown = (have: i32, need: i32): i32 => {
   let size: i32 = have < 64 ? 64 : have
   while (size < need && size < 1073741824) {
-    size = size * 2
+    size = handlerAdd(size, size)
   }
   return size < need ? need : size
 }
@@ -1902,31 +2666,38 @@ const handlerGrown = (have: i32, need: i32): i32 => {
 /** Whether `bytes[start .. end)` is exactly `text`. */
 const handlerSpanIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
   const n: i32 = toI32(text.length)
-  if (end - start !== n || start < 0 || end > toI32(bytes.length)) {
+  if (start < 0 || end < start || end > toI32(bytes.length) || handlerSub(end, start) !== n) {
     return false
   }
+  let at: i32 = start
   for (let k: i32 = 0; k < n; k++) {
-    if (toI32(bytes[start + k]) !== toI32(text.charCodeAt(k))) {
+    if (at < 0 || at >= toI32(bytes.length) || toI32(bytes[at]) !== toI32(text.charCodeAt(k))) {
       return false
     }
+    at = handlerAdd(at, 1)
   }
   return true
 }
 
 /** `bytes[start .. end)` as a decimal number that is not negative and fits an `i32`, or -1. */
 const handlerDecimal = (bytes: u8[], start: i32, end: i32): i32 => {
-  if (start < 0 || end <= start || end - start > 10 || end > toI32(bytes.length)) {
+  if (start < 0 || end <= start || end > toI32(bytes.length) || handlerSub(end, start) > 10) {
     return -1
   }
-  let n: i64 = 0
+  let value: i32 = 0
   for (let k: i32 = start; k < end && k < toI32(bytes.length); k++) {
-    const digit: i32 = toI32(bytes[k]) - 48
-    if (digit < 0 || digit > 9) {
+    const c: i32 = toI32(bytes[k])
+    // A value past 999999999 has ten digits already, and an eleventh is past an `i32`.
+    if (c < 48 || c > 57 || value < 0 || value > 999999999) {
       return -1
     }
-    n = n * toI64(10) + toI64(digit)
+    const next: i64 = toI64(value) * toI64(10) + toI64(c - 48)
+    if (next > toI64(2147483647)) {
+      return -1
+    }
+    value = toI32(next)
   }
-  return n > toI64(2147483647) ? -1 : toI32(n)
+  return value
 }
 
 /**
@@ -1934,6 +2705,11 @@ const handlerDecimal = (bytes: u8[], start: i32, end: i32): i32 => {
  * many bytes it took, packed as `byte | taken << 8`; -1 for a malformed escape.
  */
 const handlerFormByte = (bytes: u8[], at: i32, end: i32): i32 => {
+  // Its callers step `at` inside a span of `bytes`; the literal bound keeps
+  // `at + 2` from overflowing, far past any head.
+  if (at < 0 || at >= end || at >= toI32(bytes.length) || at > 1073741823) {
+    return -1
+  }
   const c: i32 = toI32(bytes[at])
   if (c === 43) {
     return 32 | HANDLER_TOOK_ONE
@@ -1941,12 +2717,15 @@ const handlerFormByte = (bytes: u8[], at: i32, end: i32): i32 => {
   if (c !== 37) {
     return c | HANDLER_TOOK_ONE
   }
-  if (at + 2 >= end) {
+  if (at + 2 >= end || at + 2 >= toI32(bytes.length)) {
     return -1
   }
-  const hi: i32 = http1HexValue(toI32(bytes[at + 1]))
-  const lo: i32 = http1HexValue(toI32(bytes[at + 2]))
-  if (hi < 0 || lo < 0) {
+  // Both bytes read before either call, which the prover takes to move lengths.
+  const high: i32 = toI32(bytes[at + 1])
+  const low: i32 = toI32(bytes[at + 2])
+  const hi: i32 = http1HexValue(high)
+  const lo: i32 = http1HexValue(low)
+  if (hi < 0 || lo < 0 || hi > 15 || lo > 15) {
     return -1
   }
   return (hi * 16 + lo) | HANDLER_TOOK_THREE
@@ -1957,27 +2736,34 @@ const handlerFormIs = (bytes: u8[], start: i32, end: i32, name: string): boolean
   const n: i32 = toI32(name.length)
   let at: i32 = start
   let k: i32 = 0
-  while (at < end) {
+  // A head is capped far below the literal bound, which keeps `at + 3` in an `i32`.
+  while (at < end && at >= 0 && at < 1073741824) {
     const packed: i32 = handlerFormByte(bytes, at, end)
     if (packed < 0 || k >= n || (packed & 255) !== toI32(name.charCodeAt(k))) {
       return false
     }
-    at += packed >> 8
+    // One byte taken, or three for an escape; `handlerFormByte` kept `at` far
+    // below the top of an `i32`.
+    if ((packed & HANDLER_TOOK_THREE) === HANDLER_TOOK_THREE) {
+      at += 3
+    } else {
+      at += 1
+    }
     k += 1
   }
   return k === n
 }
 
 /**
- * `bytes[start .. end)` form-decoded into `out` from 0: its length,
+ * `bytes[start .. start + len)` form-decoded into `out` from 0: its length,
  * `ROUTER_BAD_ESCAPE`, or `ROUTER_NO_ROOM`. `%00` decodes like any byte, as a
  * route parameter's does.
  */
-const handlerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 => {
+const handlerFormDecode = (bytes: u8[], start: i32, len: i32, out: u8[]): i32 => {
   const length: i32 = percentDecode(
     bytes,
     start,
-    end - start,
+    len,
     out,
     HANDLER_ZERO,
     URL_DECODE_FORM | URL_DECODE_ALLOW_NUL
@@ -1995,21 +2781,32 @@ const handlerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 =>
  */
 const handlerWithAdded = (byLength: u8[][][], given: u8[][], added: u8[][], count: i32): u8[][] => {
   const have: i32 = toI32(given.length)
-  const length: i32 = have + count
+  const length: i32 = handlerAdd(have, count)
+  if (length < 0 || added.length === 0) {
+    return given
+  }
+  const first: u8[] = added.length > 0 ? added[0] : []
   while (toI32(byLength.length) <= length) {
     const size: i32 = toI32(byLength.length)
     const made: u8[][] = []
     for (let k: i32 = 0; k < size; k++) {
-      made.push(added[0])
+      made.push(first)
     }
     byLength.push(made)
+  }
+  if (length >= toI32(byLength.length)) {
+    return given
   }
   const out: u8[][] = byLength[length]
   for (let k: i32 = 0; k < toI32(given.length) && k < toI32(out.length); k++) {
     out[k] = given[k]
   }
+  let at: i32 = have
   for (let k: i32 = 0; k < count && k < toI32(added.length); k++) {
-    out[have + k] = added[k]
+    if (at >= 0 && at < toI32(out.length)) {
+      out[at] = added[k]
+    }
+    at = handlerAdd(at, 1)
   }
   return out
 }

@@ -367,6 +367,31 @@ const reserveAtCeiling = (t: Suite, shared: boolean, what: string): void => {
   t.ok(`${what}: its bytes go out from the buffer it borrowed`, drain(s) === n32(100));
 };
 
+/**
+ * A send side acknowledged to its end while the reserve is full: the stream
+ * keeps its buffer and bitmap, zeroed, rather than dropping a pair the pools
+ * still count as lent, so `reset` gives every buffer back.
+ */
+const sendKeptWhenFull = (t: Suite): void => {
+  const s = table();
+  saturate(s);
+  const pools: QuicStreamPools | null = s.pools;
+  if (pools === null) {
+    t.fail("a full reserve's table has pools", "none were made");
+    return;
+  }
+  const stream: QuicStream = streamOf(s, n64(0));
+  const none: u8[] = [];
+  s.write(n64(0), none, n32(0), n32(0), true);
+  const ready: i32 = pools.ready;
+  pools.ready = toI32(pools.readyData.length);
+  drain(s);
+  t.ok("a reserve full when the send side is acknowledged: the stream keeps the pair, zeroed", stream.sendBuf.length === 1024 && zeros(stream.sendBuf) && zeros(stream.sendAcked));
+  pools.ready = ready;
+  s.reset();
+  t.ok("reset after a full reserve, every buffer is back", pools.lent() === n32(0));
+};
+
 /** Every check of this file. */
 export const poolChecks = (t: Suite): void => {
   keptUntilAck(t);
@@ -380,4 +405,5 @@ export const poolChecks = (t: Suite): void => {
   readAfterRelease(t);
   reserveAtCeiling(t, false, "a table of its own");
   reserveAtCeiling(t, true, "two tables sharing pools");
+  sendKeptWhenFull(t);
 };

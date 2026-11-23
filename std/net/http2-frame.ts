@@ -65,6 +65,8 @@
  * Written from RFC 9113, not ported from another implementation.
  */
 
+import { tryCopyBytes } from "nish/bytes"
+
 /** The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream identifier (§4.1). */
 export const H2_FRAME_HEADER_SIZE: i32 = 9
 
@@ -243,8 +245,8 @@ export class Http2Frame {
 }
 
 /** Panics unless `[off, off + len)` lies inside `buf`: a window outside it is the program's mistake. */
-const http2FrameCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
+const http2FrameCheckWindow = (what: string, buf: u8[], off: i32, len: i64): void => {
+  if (off < 0 || len < toI64(0) || len > toI64(buf.length) - toI64(off)) {
     panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
   }
 }
@@ -256,23 +258,54 @@ const http2FrameCheckStream = (what: string, id: i32): void => {
   }
 }
 
-/** The big-endian 32-bit value at `buf[at]`. */
-const http2FrameU32 = (buf: u8[], at: i32): i64 =>
-  (toI64(buf[at]) << toI64(24)) |
-  (toI64(buf[at + 1]) << toI64(16)) |
-  (toI64(buf[at + 2]) << toI64(8)) |
-  toI64(buf[at + 3])
+/**
+ * The big-endian 32-bit value at `buf[at]`, or -1 when the four bytes are not
+ * all inside `buf`; every caller has checked they are.
+ */
+const http2FrameU32 = (buf: u8[], at: i32): i64 => {
+  // `at` is below `length - 3`, so `at + 3` is inside `buf` and cannot wrap.
+  if (at < 0 || at >= toI32(buf.length) - 3) {
+    return toI64(-1)
+  }
+  return (
+    (toI64(buf[at]) << toI64(24)) |
+    (toI64(buf[at + 1]) << toI64(16)) |
+    (toI64(buf[at + 2]) << toI64(8)) |
+    toI64(buf[at + 3])
+  )
+}
 
-/** The big-endian 31-bit value at `buf[at]`, its reserved top bit dropped. */
-const http2FrameU31 = (buf: u8[], at: i32): i32 => toI32(http2FrameU32(buf, at) & toI64(2147483647))
+/** The big-endian 31-bit value at `buf[at]`, its reserved top bit dropped, or -1 as `http2FrameU32` answers it. */
+const http2FrameU31 = (buf: u8[], at: i32): i32 => {
+  const value: i64 = http2FrameU32(buf, at)
+  return value < toI64(0) ? H2_FRAME_NONE : toI32(value & toI64(2147483647))
+}
 
-/** Writes `value`'s low 32 bits big-endian at `out[at]`. */
-const http2FramePut32 = (out: u8[], at: i32, value: i64): void => {
+/**
+ * Writes `value`'s low 32 bits big-endian at `out[at]` and answers true, or
+ * answers false and writes nothing when the four bytes are not all inside
+ * `out`; every caller has checked they are.
+ */
+const http2FramePut32 = (out: u8[], at: i32, value: i64): boolean => {
+  // `at` is below `length - 3`, so `at + 3` is inside `out` and cannot wrap.
+  if (at < 0 || at >= toI32(out.length) - 3) {
+    return false
+  }
   out[at] = toU8((value >> toI64(24)) & toI64(255))
   out[at + 1] = toU8((value >> toI64(16)) & toI64(255))
   out[at + 2] = toU8((value >> toI64(8)) & toI64(255))
   out[at + 3] = toU8(value & toI64(255))
+  return true
 }
+
+/**
+ * A frame length summed in `i64`, held at its largest when past an `i32`: `http2WriteHeader` refuses
+ * that as past 2^24 − 1, as it does any length there.
+ */
+const http2FrameLength = (total: i64): i32 => (total > toI64(H2_MAX_WINDOW) ? H2_MAX_WINDOW : toI32(total))
+
+/** `a + b` for two offsets whose sum a caller has checked fits an `i32`; widened, so it cannot wrap. */
+const http2FrameAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
 
 /**
  * Reads the nine-byte header at `buf[off]` into `frame`, when `len` bytes from
@@ -289,14 +322,20 @@ const http2FramePut32 = (out: u8[], at: i32, value: i64): void => {
  *   untouched, so the reader waits for more.
  */
 export const http2ReadHeader = (frame: Http2Frame, buf: u8[], off: i32, len: i32): boolean => {
-  http2FrameCheckWindow("http2ReadHeader", buf, off, len)
-  if (len < H2_FRAME_HEADER_SIZE) {
+  http2FrameCheckWindow("http2ReadHeader", buf, off, toI64(len))
+  // The window is inside `buf`, so with nine bytes in it `off` is below
+  // `length - 8`: every byte read is inside `buf` and `off + 9` cannot wrap.
+  if (len < H2_FRAME_HEADER_SIZE || off < 0 || off >= toI32(buf.length) - 8) {
     return false
   }
   frame.length = (toI32(buf[off]) << 16) | (toI32(buf[off + 1]) << 8) | toI32(buf[off + 2])
   frame.type = toI32(buf[off + 3])
   frame.flags = toI32(buf[off + 4])
-  frame.streamId = http2FrameU31(buf, off + 5)
+  frame.streamId =
+    ((toI32(buf[off + 5]) & 127) << 24) |
+    (toI32(buf[off + 6]) << 16) |
+    (toI32(buf[off + 7]) << 8) |
+    toI32(buf[off + 8])
   frame.payload = off + H2_FRAME_HEADER_SIZE
   return true
 }
@@ -309,29 +348,59 @@ export const http2ReadHeader = (frame: Http2Frame, buf: u8[], off: i32, len: i32
  */
 const http2FrameUnpad = (frame: Http2Frame, buf: u8[], fixed: i32): i32 => {
   const padded: boolean = frame.has(H2_FLAG_PADDED)
-  const head: i32 = (padded ? H2_FRAME_ONE : H2_FRAME_ZERO) + fixed
-  if (frame.length < head) {
+  // The callers pass 0, 4 or 5 fixed bytes, so `head` is 0 to 6; widened,
+  // the sum cannot wrap.
+  const head: i32 = padded ? toI32(toI64(fixed) + toI64(1)) : fixed
+  const length: i32 = frame.length
+  if (fixed < 0 || length < head) {
     return H2_FRAME_SIZE_ERROR
   }
-  frame.padLength = padded ? toI32(buf[frame.payload]) : H2_FRAME_NONE
+  const p: i32 = frame.payload
+  if (padded) {
+    // `http2ParseFrame` checked the payload is inside `buf`, and it is at
+    // least `head` bytes, so its first byte is there.
+    if (p < 0 || p >= toI32(buf.length)) {
+      return H2_FRAME_SIZE_ERROR
+    }
+    frame.padLength = toI32(buf[p])
+  } else {
+    frame.padLength = H2_FRAME_NONE
+  }
   const pad: i32 = padded ? frame.padLength : H2_FRAME_ZERO
-  if (pad > frame.length - head) {
+  // Widened, so neither the difference nor the sums below can wrap.
+  if (toI64(pad) > toI64(length) - toI64(head)) {
     return H2_PROTOCOL_ERROR
   }
-  frame.contentStart = frame.payload + head
-  frame.contentLength = frame.length - head - pad
+  // Both lie inside the payload `http2ParseFrame` checked, so both fit an `i32`.
+  frame.contentStart = toI32(toI64(p) + toI64(head))
+  frame.contentLength = toI32(toI64(length) - toI64(head) - toI64(pad))
   return H2_NO_ERROR
 }
 
-/** Reads the five bytes of priority fields at `buf[at]` into `frame` (§6.3). A stream may not depend on itself (§5.3.1). */
-const http2FramePriority = (frame: Http2Frame, buf: u8[], at: i32): void => {
+/**
+ * Reads the five bytes of priority fields at `buf[at]` into `frame` (§6.3). A
+ * stream may not depend on itself (§5.3.1). Answers 0, or
+ * `H2_FRAME_SIZE_ERROR` with `frame` unchanged when the five bytes are not all
+ * inside `buf`; every caller has checked they are.
+ */
+const http2FramePriority = (frame: Http2Frame, buf: u8[], at: i32): i32 => {
+  // `at` is below `length - 4`, so `at + 4` is inside `buf` and cannot wrap.
+  if (at < 0 || at >= toI32(buf.length) - 4) {
+    return H2_FRAME_SIZE_ERROR
+  }
   frame.hasPriority = true
   frame.exclusive = (toI32(buf[at]) & 128) !== 0
-  frame.dependency = http2FrameU31(buf, at)
-  frame.weight = toI32(buf[at + 4]) + 1
+  frame.dependency =
+    ((toI32(buf[at]) & 127) << 24) |
+    (toI32(buf[at + 1]) << 16) |
+    (toI32(buf[at + 2]) << 8) |
+    toI32(buf[at + 3])
+  // A byte is 0 to 255, so the weight is 1 to 256.
+  frame.weight = toI32(toU32(buf[at + 4]) + toU32(1))
   if (frame.dependency === frame.streamId) {
     frame.streamError = H2_PROTOCOL_ERROR
   }
+  return H2_NO_ERROR
 }
 
 /**
@@ -352,7 +421,13 @@ const http2FramePriority = (frame: Http2Frame, buf: u8[], at: i32): void => {
  *   with, `H2_FRAME_SIZE_ERROR` or `H2_PROTOCOL_ERROR`.
  */
 export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrameSize: i32): i32 => {
-  http2FrameCheckWindow("http2ParseFrame", buf, off, H2_FRAME_HEADER_SIZE + frame.length)
+  http2FrameCheckWindow("http2ParseFrame", buf, off, toI64(H2_FRAME_HEADER_SIZE) + toI64(frame.length))
+  // The window holds the nine header bytes unless `frame.length` is negative,
+  // which no header `http2ReadHeader` read can give; with `off` below
+  // `length - 8`, `off + 9` cannot wrap.
+  if (frame.length < 0 || off < 0 || off >= toI32(buf.length) - 8) {
+    return H2_FRAME_SIZE_ERROR
+  }
   frame.payload = off + H2_FRAME_HEADER_SIZE
   frame.contentStart = frame.payload
   frame.contentLength = frame.length
@@ -377,7 +452,8 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
       const priority: boolean = frame.has(H2_FLAG_PRIORITY)
       const error: i32 = http2FrameUnpad(frame, buf, priority ? 5 : 0)
       if (error === H2_NO_ERROR && priority) {
-        http2FramePriority(frame, buf, frame.contentStart - 5)
+        // `http2FrameUnpad` put the content 5 bytes or more past the payload's start.
+        return http2FramePriority(frame, buf, http2FrameAdd(frame.contentStart, -5))
       }
       return error
     }
@@ -389,8 +465,7 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
         frame.streamError = H2_FRAME_SIZE_ERROR
         return H2_NO_ERROR
       }
-      http2FramePriority(frame, buf, p)
-      return H2_NO_ERROR
+      return http2FramePriority(frame, buf, p)
     case H2_FRAME_RST_STREAM:
       if (!onStream) {
         return H2_PROTOCOL_ERROR
@@ -398,8 +473,9 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
       if (frame.length !== 4) {
         return H2_FRAME_SIZE_ERROR
       }
+      // The four bytes are inside the window checked above; -1 cannot come back.
       frame.errorCode = http2FrameU32(buf, p)
-      return H2_NO_ERROR
+      return frame.errorCode < toI64(0) ? H2_FRAME_SIZE_ERROR : H2_NO_ERROR
     case H2_FRAME_SETTINGS:
       if (onStream) {
         return H2_PROTOCOL_ERROR
@@ -413,10 +489,13 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
         return H2_PROTOCOL_ERROR
       }
       const error: i32 = http2FrameUnpad(frame, buf, 4)
-      if (error === H2_NO_ERROR) {
-        frame.promisedId = http2FrameU31(buf, frame.contentStart - 4)
+      if (error !== H2_NO_ERROR) {
+        return error
       }
-      return error
+      // `http2FrameUnpad` put the content 4 bytes or more past the payload's
+      // start, inside the window checked above; -1 cannot come back.
+      frame.promisedId = http2FrameU31(buf, http2FrameAdd(frame.contentStart, -4))
+      return frame.promisedId < 0 ? H2_FRAME_SIZE_ERROR : H2_NO_ERROR
     }
     case H2_FRAME_PING:
       if (onStream) {
@@ -430,16 +509,22 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
       if (frame.length < 8) {
         return H2_FRAME_SIZE_ERROR
       }
+      // The 8 bytes are inside the window checked above, so the sums fit an
+      // `i32` and -1 cannot come back.
       frame.lastStreamId = http2FrameU31(buf, p)
-      frame.errorCode = http2FrameU32(buf, p + 4)
-      frame.contentStart = p + 8
-      frame.contentLength = frame.length - 8
-      return H2_NO_ERROR
+      frame.errorCode = http2FrameU32(buf, http2FrameAdd(p, 4))
+      frame.contentStart = http2FrameAdd(p, 8)
+      frame.contentLength = http2FrameAdd(frame.length, -8)
+      return frame.lastStreamId < 0 || frame.errorCode < toI64(0) ? H2_FRAME_SIZE_ERROR : H2_NO_ERROR
     case H2_FRAME_WINDOW_UPDATE:
       if (frame.length !== 4) {
         return H2_FRAME_SIZE_ERROR
       }
+      // The four bytes are inside the window checked above; -1 cannot come back.
       frame.increment = http2FrameU31(buf, p)
+      if (frame.increment < 0) {
+        return H2_FRAME_SIZE_ERROR
+      }
       if (frame.increment === 0) {
         if (!onStream) {
           return H2_PROTOCOL_ERROR
@@ -463,15 +548,37 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
 export const http2SettingCount = (frame: Http2Frame): i32 => frame.length / H2_SETTING_SIZE
 
 /**
+ * Where setting `k` of the SETTINGS frame in `buf` starts, or -1 for a `k`
+ * outside the frame's settings or six bytes not all inside `buf`. Summed in
+ * `i64`, where a `k` from any `i32` cannot wrap it.
+ */
+const http2SettingAt = (frame: Http2Frame, buf: u8[], k: i32): i32 => {
+  if (k < 0 || k >= http2SettingCount(frame)) {
+    return -1
+  }
+  // `k` is below the count, so the widened product and sum cannot wrap.
+  const at: i64 = toI64(frame.payload) + toI64(k) * toI64(H2_SETTING_SIZE)
+  if (at < toI64(0) || at > toI64(buf.length) - toI64(H2_SETTING_SIZE)) {
+    return -1
+  }
+  return toI32(at)
+}
+
+/**
  * The identifier of setting `k` of the SETTINGS frame in `buf`.
  *
  * @param frame The SETTINGS frame `http2ParseFrame` accepted.
  * @param buf The buffer that frame was read from, unchanged since.
- * @param k Which setting, 0 to `http2SettingCount(frame)` − 1; nothing here checks the bound.
- * @returns The 16-bit identifier, 0 to 65,535: an `H2_SETTINGS_*`, or one this module does not know.
+ * @param k Which setting, 0 to `http2SettingCount(frame)` − 1.
+ * @returns The 16-bit identifier, 0 to 65,535: an `H2_SETTINGS_*`, or one this module does not know; -1
+ *   for a `k` outside 0 to `http2SettingCount(frame)` − 1, or a setting not inside `buf`.
  */
 export const http2SettingId = (frame: Http2Frame, buf: u8[], k: i32): i32 => {
-  const at: i32 = frame.payload + k * H2_SETTING_SIZE
+  const at: i32 = http2SettingAt(frame, buf, k)
+  // `http2SettingAt` answers -1 or an offset below `length - 5`, so `at + 1` cannot wrap.
+  if (at < 0 || at >= toI32(buf.length) - 1) {
+    return -1
+  }
   return (toI32(buf[at]) << 8) | toI32(buf[at + 1])
 }
 
@@ -480,11 +587,15 @@ export const http2SettingId = (frame: Http2Frame, buf: u8[], k: i32): i32 => {
  *
  * @param frame The SETTINGS frame `http2ParseFrame` accepted.
  * @param buf The buffer that frame was read from, unchanged since.
- * @param k Which setting, 0 to `http2SettingCount(frame)` − 1; nothing here checks the bound.
- * @returns The value as sent, 0 to 2^32 − 1, not yet checked: `http2SettingError` checks it.
+ * @param k Which setting, 0 to `http2SettingCount(frame)` − 1.
+ * @returns The value as sent, 0 to 2^32 − 1, not yet checked: `http2SettingError` checks it; -1 for a `k`
+ *   outside 0 to `http2SettingCount(frame)` − 1, or a setting not inside `buf`.
  */
-export const http2SettingValue = (frame: Http2Frame, buf: u8[], k: i32): i64 =>
-  http2FrameU32(buf, frame.payload + k * H2_SETTING_SIZE + 2)
+export const http2SettingValue = (frame: Http2Frame, buf: u8[], k: i32): i64 => {
+  const at: i32 = http2SettingAt(frame, buf, k)
+  // `http2SettingAt` answers -1 or an offset below `length - 5`, so `at + 2` cannot wrap.
+  return at < 0 ? toI64(-1) : http2FrameU32(buf, http2FrameAdd(at, 2))
+}
 
 /**
  * The connection error a setting's value is, or 0 (§6.5.2, RFC 8441 §3). A
@@ -539,7 +650,12 @@ export const http2WriteHeader = (
   if (at < 0 || length < 0 || length > H2_MAX_FRAME_LIMIT) {
     panic(`http2WriteHeader: a frame of ${length} bytes at ${at}`)
   }
-  if (toI64(at) + toI64(H2_FRAME_HEADER_SIZE) + toI64(length) > toI64(out.length)) {
+  // With room for the header, `at` is below `length - 8`: the nine bytes are
+  // inside `out` and `at + 9` cannot wrap.
+  if (
+    toI64(at) + toI64(H2_FRAME_HEADER_SIZE) + toI64(length) > toI64(out.length) ||
+    at >= toI32(out.length) - 8
+  ) {
     return -1
   }
   out[at] = toU8((length >> 16) & 255)
@@ -547,15 +663,11 @@ export const http2WriteHeader = (
   out[at + 2] = toU8(length & 255)
   out[at + 3] = toU8(type)
   out[at + 4] = toU8(flags)
-  http2FramePut32(out, at + 5, toI64(streamId))
+  out[at + 5] = toU8((streamId >> 24) & 255)
+  out[at + 6] = toU8((streamId >> 16) & 255)
+  out[at + 7] = toU8((streamId >> 8) & 255)
+  out[at + 8] = toU8(streamId & 255)
   return at + H2_FRAME_HEADER_SIZE
-}
-
-/** Copies `src[off, off + len)` to `out[at]`; the callers have checked both windows. */
-const http2FrameCopy = (out: u8[], at: i32, src: u8[], off: i32, len: i32): void => {
-  for (let k: i32 = 0; k < len; k++) {
-    out[at + k] = src[off + k]
-  }
 }
 
 /**
@@ -576,17 +688,19 @@ const http2FrameWritePadded = (
   len: i32,
   pad: i32
 ): i32 => {
-  http2FrameCheckWindow("http2Write", src, off, len)
+  http2FrameCheckWindow("http2Write", src, off, toI64(len))
   if (pad > 255) {
     panic(`http2Write: ${pad} bytes of padding, past 255`)
   }
   const padded: boolean = pad >= 0
-  const head: i32 = (padded ? H2_FRAME_ONE : H2_FRAME_ZERO) + fixed
+  // `fixed` is 0 or 4, `pad` -1 to 255 and `len` 0 to 2^31 − 1, so the widened sums cannot wrap.
+  const head: i32 = padded ? toI32(toI64(fixed) + toI64(1)) : fixed
   const tail: i32 = padded ? pad : H2_FRAME_ZERO
+  const total: i64 = toI64(head) + toI64(len) + toI64(tail)
   const at2: i32 = http2WriteHeader(
     out,
     at,
-    head + len + tail,
+    http2FrameLength(total),
     type,
     padded ? flags | H2_FLAG_PADDED : flags & ~H2_FLAG_PADDED,
     streamId
@@ -594,13 +708,21 @@ const http2FrameWritePadded = (
   if (at2 < 0) {
     return -1
   }
+  // `http2WriteHeader` found room for `total` bytes from `at2`, so every
+  // offset below is inside `out` and fits an `i32`.
+  const body: i32 = toI32(toI64(at2) + toI64(head))
+  const end: i32 = toI32(toI64(body) + toI64(len) + toI64(tail))
   if (padded) {
+    if (at2 >= toI32(out.length)) {
+      return -1
+    }
     out[at2] = toU8(pad)
   }
-  const body: i32 = at2 + head
-  http2FrameCopy(out, body, src, off, len)
-  out.fill(0, body + len, body + len + tail)
-  return body + len + tail
+  if (!tryCopyBytes(out, body, src, off, len)) {
+    return -1
+  }
+  out.fill(0, toI32(toI64(body) + toI64(len)), end)
+  return end
 }
 
 /**
@@ -719,11 +841,13 @@ export const http2WritePriority = (
     panic(`http2WritePriority: stream ${streamId} on ${dependency} with weight ${weight}`)
   }
   const body: i32 = http2WriteHeader(out, at, 5, H2_FRAME_PRIORITY, H2_FRAME_ZERO, streamId)
-  if (body < 0) {
+  // With room for the 5 bytes, `body` is below `length - 4`, so `body + 5` cannot wrap.
+  if (body < 0 || body >= toI32(out.length) - 4) {
     return -1
   }
   http2FramePut32(out, body, toI64(dependency) | (exclusive ? H2_FRAME_EXCLUSIVE : toI64(0)))
-  out[body + 4] = toU8(weight - 1)
+  // The check above put `weight` at 1 to 256.
+  out[body + 4] = toU8(toU32(weight) - toU32(1))
   return body + 5
 }
 
@@ -741,10 +865,10 @@ export const http2WriteRstStream = (out: u8[], at: i32, streamId: i32, code: i64
     panic("http2WriteRstStream: RST_STREAM on stream 0")
   }
   const body: i32 = http2WriteHeader(out, at, 4, H2_FRAME_RST_STREAM, H2_FRAME_ZERO, streamId)
-  if (body < 0) {
+  // With room for the 4 bytes, `body` is below `length - 3`, so `body + 4` cannot wrap.
+  if (body < 0 || !http2FramePut32(out, body, code) || body >= toI32(out.length) - 3) {
     return -1
   }
-  http2FramePut32(out, body, code)
   return body + 4
 }
 
@@ -775,10 +899,12 @@ export const http2WriteSettings = (out: u8[], at: i32, ids: i32[], values: i64[]
       panic(`http2WriteSettings: setting ${ids[k]} = ${values[k]}`)
     }
   }
+  // Summed in `i64`, where `n` settings cannot wrap.
+  const total: i64 = toI64(n) * toI64(H2_SETTING_SIZE)
   const body: i32 = http2WriteHeader(
     out,
     at,
-    n * H2_SETTING_SIZE,
+    http2FrameLength(total),
     H2_FRAME_SETTINGS,
     H2_FRAME_ZERO,
     H2_FRAME_ZERO
@@ -787,14 +913,19 @@ export const http2WriteSettings = (out: u8[], at: i32, ids: i32[], values: i64[]
     return -1
   }
   for (let k: i32 = 0; k < n && k < toI32(ids.length) && k < toI32(values.length); k++) {
-    const at2: i32 = body + k * H2_SETTING_SIZE
-    if (at2 >= 0 && at2 < toI32(out.length) && at2 + 1 < toI32(out.length)) {
-      out[at2] = toU8((ids[k] >> 8) & 255)
-      out[at2 + 1] = toU8(ids[k] & 255)
+    // Inside the `total` bytes `http2WriteHeader` found room for, so it fits an `i32`.
+    const at2: i32 = toI32(toI64(body) + toI64(k) * toI64(H2_SETTING_SIZE))
+    // Below `length - 5`, so `at2 + 2` cannot wrap.
+    if (at2 < 0 || at2 >= toI32(out.length) - 5) {
+      return -1
     }
-    http2FramePut32(out, at2 + 2, values[k])
+    out[at2] = toU8((ids[k] >> 8) & 255)
+    out[at2 + 1] = toU8(ids[k] & 255)
+    if (!http2FramePut32(out, at2 + 2, values[k])) {
+      return -1
+    }
   }
-  return body + n * H2_SETTING_SIZE
+  return toI32(toI64(body) + toI64(n) * toI64(H2_SETTING_SIZE))
 }
 
 /**
@@ -853,12 +984,10 @@ export const http2WritePushPromise = (
     len,
     pad
   )
-  if (end >= 0) {
-    http2FramePut32(
-      out,
-      at + H2_FRAME_HEADER_SIZE + (pad >= 0 ? H2_FRAME_ONE : H2_FRAME_ZERO),
-      toI64(promisedId)
-    )
+  // The frame was written from `at`, so the field's offset is inside `out` and fits an `i32`.
+  const field: i64 = toI64(at) + toI64(H2_FRAME_HEADER_SIZE) + toI64(pad >= 0 ? H2_FRAME_ONE : H2_FRAME_ZERO)
+  if (end < 0 || !http2FramePut32(out, toI32(field), toI64(promisedId))) {
+    return -1
   }
   return end
 }
@@ -874,12 +1003,12 @@ export const http2WritePushPromise = (
  * @returns The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
  */
 export const http2WritePing = (out: u8[], at: i32, opaque: u8[], off: i32, ack: boolean): i32 => {
-  http2FrameCheckWindow("http2WritePing", opaque, off, 8)
+  http2FrameCheckWindow("http2WritePing", opaque, off, toI64(8))
   const body: i32 = http2WriteHeader(out, at, 8, H2_FRAME_PING, ack ? H2_FLAG_ACK : 0, H2_FRAME_ZERO)
-  if (body < 0) {
+  // With room for the 8 bytes, `body` is below `length - 7`, so `body + 8` cannot wrap.
+  if (body < 0 || body >= toI32(out.length) - 7 || !tryCopyBytes(out, body, opaque, off, 8)) {
     return -1
   }
-  http2FrameCopy(out, body, opaque, off, 8)
   return body + 8
 }
 
@@ -908,15 +1037,29 @@ export const http2WriteGoaway = (
   len: i32
 ): i32 => {
   http2FrameCheckStream("http2WriteGoaway", lastStreamId)
-  http2FrameCheckWindow("http2WriteGoaway", debug, off, len)
-  const body: i32 = http2WriteHeader(out, at, 8 + len, H2_FRAME_GOAWAY, H2_FRAME_ZERO, H2_FRAME_ZERO)
-  if (body < 0) {
+  http2FrameCheckWindow("http2WriteGoaway", debug, off, toI64(len))
+  // `len` is 0 to 2^31 − 1, so the sum fits an `i64`.
+  const total: i64 = toI64(8) + toI64(len)
+  const body: i32 = http2WriteHeader(
+    out,
+    at,
+    http2FrameLength(total),
+    H2_FRAME_GOAWAY,
+    H2_FRAME_ZERO,
+    H2_FRAME_ZERO
+  )
+  // With room for `total` bytes, `body` is below `length - 7`, so `body + 4`
+  // and `body + 8` cannot wrap, and `body + total` fits an `i32`.
+  if (
+    body < 0 ||
+    body >= toI32(out.length) - 7 ||
+    !http2FramePut32(out, body, toI64(lastStreamId)) ||
+    !http2FramePut32(out, body + 4, code) ||
+    !tryCopyBytes(out, body + 8, debug, off, len)
+  ) {
     return -1
   }
-  http2FramePut32(out, body, toI64(lastStreamId))
-  http2FramePut32(out, body + 4, code)
-  http2FrameCopy(out, body + 8, debug, off, len)
-  return body + 8 + len
+  return toI32(toI64(body) + toI64(8) + toI64(len))
 }
 
 /**
@@ -934,10 +1077,10 @@ export const http2WriteWindowUpdate = (out: u8[], at: i32, streamId: i32, increm
     panic(`http2WriteWindowUpdate: an increment of ${increment}`)
   }
   const body: i32 = http2WriteHeader(out, at, 4, H2_FRAME_WINDOW_UPDATE, H2_FRAME_ZERO, streamId)
-  if (body < 0) {
+  // With room for the 4 bytes, `body` is below `length - 3`, so `body + 4` cannot wrap.
+  if (body < 0 || body >= toI32(out.length) - 3 || !http2FramePut32(out, body, toI64(increment))) {
     return -1
   }
-  http2FramePut32(out, body, toI64(increment))
   return body + 4
 }
 

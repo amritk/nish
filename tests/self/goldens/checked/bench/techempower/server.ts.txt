@@ -162,7 +162,7 @@ function TfbServer.dispatch(this: TfbServer, token: i32, events: i32): void -> @
   callee +0:7 TfbServer.acceptAll -> @TfbServer.acceptAll
   callee +2:7 TfbServer.serve -> @TfbServer.serve
 function TfbServer.acceptAll(this: TfbServer): void -> @TfbServer.acceptAll [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.accept
   calls: TfbServer.pause nish.Http1Server.accept nish.Http1Server.fd nish_poll_add
   pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.pause#0
@@ -188,7 +188,7 @@ function TfbServer.waitMs(this: TfbServer): i32 -> @TfbServer.waitMs [exported m
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TfbServer.close(this: TfbServer, slot: i32): void -> @TfbServer.close [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.close
   escaping: slot
   calls: TfbServer.unpause nish.Http1Server.close

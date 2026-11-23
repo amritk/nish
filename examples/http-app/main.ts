@@ -1,8 +1,15 @@
-// Opt-out (`--allow-panics`): calls into `std/json`, `std/net/handler`,
-// `std/net/http1-server` and `std/net/router` reach their panic sites, and
-// app.ts's `String.fromBytes` slice keeps a range check the checker cannot yet
-// discharge. Follow-up: make those modules panic-free and teach the prover that
-// slice's bound, then build this program without `--allow-panics`.
+// Opt-out (`--allow-panics`): `nish/net/handler`, `nish/net/serve` and
+// `nish/net/static` keep no panic site this program reaches but the two named
+// below, and it answers through their `try` calls. What it still reaches: the caps panic of
+// `std/net/http1-server`'s `Http1Connection` constructor, through every
+// answer, `wait`, `next` and `drain`, which the handler's limits checked
+// already, a proof the prover cannot yet make; `std/net/router`'s sites,
+// through `Router`, `add` and `tryRefuse`; the limits panic of the
+// `HttpHandler` constructor, which `openHttpHandler` calls only once the
+// limits passed the same check; and two `String.fromBytes` slices, app.ts's
+// and the one `tryServeHandler` reaches in `std/net/static`, range checks it
+// cannot yet discharge. Follow-up: make the router panic-free and teach the
+// prover those bounds, then build this program without `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
@@ -28,7 +35,7 @@
 // with its `Allow`). Without a port it prints how to run it and exits 2.
 // smoke: args --allow-panics
 // smoke: exit 2
-import { HttpHandler, HandlerLimits } from "nish/net/handler"
+import { HttpHandler, HandlerLimits, openHttpHandler } from "nish/net/handler"
 import { Router } from "nish/net/router"
 import { netClose, tcpListen } from "nish:net"
 import { monotonicNanos, readSignal, signalFd } from "nish:process"
@@ -65,8 +72,21 @@ export const main = (): i32 => {
     return 1
   }
   const router: Router = appRoutes()
-  const h = new HttpHandler(new HandlerLimits(), listener, router)
-  h.watch(signals, SIGNALS)
+  const opened: Result<HttpHandler, string> = openHttpHandler(new HandlerLimits(), listener, router)
+  if (opened.isErr()) {
+    console.error(`http-app: ${opened.error}`)
+    netClose(signals)
+    netClose(listener)
+    return 1
+  }
+  const h: HttpHandler = opened.value
+  const watched: Result<boolean, string> = h.tryWatch(signals, SIGNALS)
+  if (watched.isErr()) {
+    console.error(`http-app: ${watched.error}`)
+    netClose(signals)
+    netClose(listener)
+    return 1
+  }
   const app = new App(h, config)
   console.log(`http-app: listening on port ${config.port}`)
 

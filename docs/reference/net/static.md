@@ -154,7 +154,8 @@ class StaticFiles
 | `root: string` | The root's real path, or `""` when it did not resolve (then every request is not found). |
 | `status: i32` | The status the last `serve` sent, or 0 when it sent none. |
 | `serve(server: HttpServer, r: HttpServerRequest, pathStart: i32, pathEnd: i32): i32` | Serves the file `r`'s head names at `[pathStart, pathEnd)`, a path relative to the root (one leading `/` is dropped), through `server`. |
-| `serveHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): i32` | `serve` through `nish/net/handler`'s HTTP/1.1 carrier. |
+| `serveHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): i32` | `serve` through `nish/net/handler`'s HTTP/1.1 carrier. Panics where `HttpHandler.start`, `write` or `end` would, and on a field index the handler gives no value span for; `tryServeHandler` answers each as an `Err` instead. |
+| `tryServeHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): Result<i32, string>` | `serveHandler` through the handler's `try` calls: a misuse that makes `start`, `write` or `end` panic comes back as the handler's reason instead, with the file closed; so does a field index the handler gives no value span for, before anything is sent. An `Err` from before the head (that field index, a request not taken) leaves `r` owed an answer; one from after it (`tryWrite` or `tryEnd` refusing the body) has closed the connection and handed `r` back, as `HttpHandler` describes. |
 
 ### StaticLimits
 
