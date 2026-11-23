@@ -53,7 +53,7 @@
     "pg-carrier": { "n": 1500, "instructions": 85797412 },
     "std-compress-deflate": { "n": 2, "instructions": 203069611 },
     "std-compress-inflate": { "n": 40, "instructions": 249172164 },
-    "std-compress-checksum": { "n": 60, "instructions": 106385092 },
-    "std-compress-gzip": { "n": 3, "instructions": 189505675 }
+    "std-compress-checksum": { "n": 60, "instructions": 106368115 },
+    "std-compress-gzip": { "n": 3, "instructions": 189410010 }
   }
 }
