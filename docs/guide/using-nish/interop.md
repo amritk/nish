@@ -123,7 +123,7 @@ read, `getenv`, a clock, a spawn — is refused at compile time rather than at
 the link, at your call that leads there, and names the dependency when it is
 a package's code that makes the call:
 
-```text
+```log
 main.ts:6:32: error: `getenv` reaches the operating system, and a wasm32 build has none to reach; the dependency `pkg_conf` calls it in `load` — the chain that reaches it: main.ts:6:32 calls configSize, node_modules/pkg_conf/src/index.ts:9:38 calls load, node_modules/pkg_conf/src/index.ts:5:17 calls getenv
 ```
 

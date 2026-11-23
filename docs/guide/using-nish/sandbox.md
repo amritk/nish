@@ -150,7 +150,7 @@ your own `package.json` says it may. Those six, `fs.read`, `fs.write`,
 capabilities. Without a grant, the build stops in the dependency's source,
 naming the package, the capability and the chain of calls that reaches it:
 
-```text
+```log
 node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
 ```
 
@@ -207,7 +207,7 @@ capability, as it always did.
 The build checks what it can see. A dependency that passes a fixed path,
 program or address outside its grant stops the build, at that string:
 
-```text
+```log
 node_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands `readFileSync` "/etc/passwd", which its `fs.read` grant does not cover: it is granted fs.read=data; name it in the grant, or grant `fs.read` whole
 ```
 

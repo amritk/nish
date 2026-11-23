@@ -127,7 +127,7 @@ export const main = (): i32 => {
 nish run greet.ts
 ```
 
-```
+```log
 greet.ts:8:17: error: Argument 2 of `greet`: expected i32, got string
   8 |   greet("Nish", "3");
     |                 ^~~
@@ -234,7 +234,7 @@ export const main = (): i32 => {
 nish run overflow.ts
 ```
 
-```
+```log
 overflow.ts:4:9: error: `overflow` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), ...
 ```
 

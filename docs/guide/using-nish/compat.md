@@ -56,7 +56,7 @@ the ones you want, such as `["nullish"]`. `[]` is the dialect with no feature.
 When the strict dialect refuses something a feature would accept, the error
 says which feature to add:
 
-```text
+```log
 main.ts:4:10: error: Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)
   = add `nullish` to `nish.compat` in package.json to accept it
 ```
@@ -84,7 +84,7 @@ export const main = (): void => {
 }
 ```
 
-```text
+```log
 package.json:5:16: error: `asnyc` is no feature of the compatibility dialect: `nish.compat` is `true` or an array of feature names, and the ones this compiler has built are `nullish`, `optional-chaining`, `string-switch`, `for-of-string`, `optional-params`, `overloads`
 ```
 
@@ -454,7 +454,7 @@ package whose `package.json` is nearest above the file you compile. A
 dependency cannot widen it. If a package in `node_modules` asks for
 `"compat"` and yours does not, the import is refused (`NL3057`):
 
-```text
+```log
 main.ts:3:23: error: Package `pkg_loose` asks for the compatibility dialect, which the root package's `compat` does not allow: a program is compiled in its root package's dialect, so `pkg_loose` cannot be part of this one until the root's `package.json` allows it in `nish.compat` (or the build passes `--compat`)
 ```
 
