@@ -3142,7 +3142,8 @@ export class Inflater {
    * (answers 0, the state back at a block header), or until the input or
    * the output runs short or the stream is malformed (answers that code).
    * Answers `DEFLATE_ERR_HUFFMAN` when a table is not its size, which the
-   * constructor rules out.
+   * constructor rules out, and `DEFLATE_ERR_TRUNCATED` when `inEnd` or
+   * `outEnd` is negative, which `step` rules out.
    */
   private huffman(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 {
     const lt: InflateTable = this.fixed ? this.fixedLit : this.lit
@@ -3152,8 +3153,11 @@ export class Inflater {
     if (toI32(le.length) !== INF_LIT_ENOUGH || toI32(de.length) !== INF_DIST_ENOUGH) {
       return DEFLATE_ERR_HUFFMAN
     }
-    const litMask: u64 = toU64((1 << INF_LIT_BITS) - 1)
-    const distMask: u64 = toU64((1 << INF_DIST_BITS) - 1)
+    if (inEnd < 0 || outEnd < 0) {
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const litMask: u64 = (toU64(1) << toU64(INF_LIT_BITS)) - toU64(1)
+    const distMask: u64 = (toU64(1) << toU64(INF_DIST_BITS)) - toU64(1)
     // The fast loop runs while eight bytes of input can be loaded and the
     // longest match, with sixteen bytes of copy slack, fits the output.
     const inFast: i32 = inEnd - 8
@@ -3213,7 +3217,12 @@ export class Inflater {
               // A code longer than the table: its last bits index a subtable.
               bb = bb >> toU64(e)
               bc = wrappingSub(bc, e)
-              e = uncheckedGet(le, (e >> 16) + toI32(bb & toU64((toI32(1) << ((e >> 11) & 15)) - 1)))
+              // Cannot wrap: the subtable starts under the table's length and
+              // the index into it is under 2^15.
+              e = uncheckedGet(
+                le,
+                toI32(toU32(e >> 16) + toU32(bb & ((toU64(1) << toU64((e >> 11) & 15)) - toU64(1))))
+              )
             } else if ((e & 0x700) === INF_SLOW << 8) {
               // Only a table built for an incomplete code (none at all, or
               // one one-bit code) has these, and every code it does have
@@ -3239,14 +3248,20 @@ export class Inflater {
               }
             } else {
               const lx: i32 = (e >> 11) & 15
-              const len: i32 = (e >> 16) + toI32(bb & ((toU64(1) << toU64(lx)) - toU64(1)))
+              // Cannot wrap: a length base is at most 258 and its extra bits
+              // at most 5.
+              const len: i32 = toI32(toU32(e >> 16) + toU32(bb & ((toU64(1) << toU64(lx)) - toU64(1))))
               bb = bb >> toU64(lx)
               bc = wrappingSub(bc, lx)
               let d: i32 = uncheckedGet(de, toI32(bb & distMask))
               if ((d & 0x700) === INF_SUB << 8) {
                 bb = bb >> toU64(d)
                 bc = wrappingSub(bc, d)
-                d = uncheckedGet(de, (d >> 16) + toI32(bb & toU64((toI32(1) << ((d >> 11) & 15)) - 1)))
+                // Cannot wrap, as for the literal/length subtable.
+                d = uncheckedGet(
+                  de,
+                  toI32(toU32(d >> 16) + toU32(bb & ((toU64(1) << toU64((d >> 11) & 15)) - toU64(1))))
+                )
               }
               if ((d & 0x700) !== 0) {
                 // A slow entry, as for the literal/length table, or one of
@@ -3257,10 +3272,12 @@ export class Inflater {
               bb = bb >> toU64(d)
               bc = wrappingSub(bc, d)
               const dx: i32 = (d >> 11) & 15
-              const dist: i32 = (d >> 16) + toI32(bb & ((toU64(1) << toU64(dx)) - toU64(1)))
+              // Cannot wrap: a distance base is under 2^15 and its extra
+              // bits at most 13, and `op` never falls below `histStart`.
+              const dist: i32 = toI32(toU32(d >> 16) + toU32(bb & ((toU64(1) << toU64(dx)) - toU64(1))))
               bb = bb >> toU64(dx)
               bc = wrappingSub(bc, dx)
-              if (dist > op - histStart) {
+              if (dist > toI32(toU32(op) - toU32(histStart))) {
                 status = DEFLATE_ERR_DISTANCE
                 break
               }
@@ -3276,8 +3293,9 @@ export class Inflater {
                 // always hold; they are what lets the positions enter the
                 // copy's range without a check, and the bytes loop after is
                 // what would finish a copy they ever stopped.
+                // Cannot wrap: `dist` is at most `op - histStart`.
                 let to: i32 = op
-                let from: i32 = op - dist
+                let from: i32 = toI32(toU32(op) - toU32(dist))
                 while (to < stop && to >= 0 && to <= 2147483631 && from >= 0 && from <= 2147483631) {
                   inflateCopy16(out, to, from)
                   to = wrappingAdd(to, 16)
@@ -3290,7 +3308,8 @@ export class Inflater {
                 }
               } else if (dist === 1) {
                 // A run of one byte, sixteen at a time, bounded as above.
-                const four: u64 = toU64(uncheckedGet(out, op - 1)) * toU64(0x01010101)
+                // Cannot wrap: `op` is past `histStart` by at least `dist`.
+                const four: u64 = toU64(uncheckedGet(out, toI32(toU32(op) - toU32(1)))) * toU64(0x01010101)
                 const w: u64 = four | (four << toU64(32))
                 let to: i32 = op
                 while (to < stop && to >= 0 && to <= 2147483631) {
@@ -3302,7 +3321,8 @@ export class Inflater {
                   to = wrappingAdd(to, 1)
                 }
               } else {
-                let from: i32 = op - dist
+                // Cannot wrap, as above.
+                let from: i32 = toI32(toU32(op) - toU32(dist))
                 let to: i32 = op
                 while (to < stop) {
                   uncheckedSet(out, to, uncheckedGet(out, from))
@@ -3362,7 +3382,8 @@ export class Inflater {
       const kind: i32 = (e >> 8) & 7
       const n: i32 = e & 15
       bb = bb >> toU64(n)
-      bc -= n
+      // Cannot wrap: `lookup` answers only a code whose bits are all here.
+      bc = toI32(toU32(bc) - toU32(n))
       if (kind === INF_LITERAL) {
         if (op >= outEnd) {
           bb = sBb
@@ -3382,9 +3403,11 @@ export class Inflater {
           status = more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
           break
         }
-        const len: i32 = (e >> 16) + toI32(bb & ((toU64(1) << toU64(lx)) - toU64(1)))
+        // Cannot wrap, as in the fast loop; `lx` is at most `bc`, checked
+        // above.
+        const len: i32 = toI32(toU32(e >> 16) + toU32(bb & ((toU64(1) << toU64(lx)) - toU64(1))))
         bb = bb >> toU64(lx)
-        bc -= lx
+        bc = toI32(toU32(bc) - toU32(lx))
         const d: i32 = this.lookup(dt, INF_TABLE_DIST, de, bb, bc)
         if (d === -1) {
           bb = sBb
@@ -3407,26 +3430,30 @@ export class Inflater {
           break
         }
         bb = bb >> toU64(dn)
-        const dist: i32 = (d >> 16) + toI32(bb & ((toU64(1) << toU64(dx)) - toU64(1)))
+        // Cannot wrap, as in the fast loop; `dn + dx` is at most `bc`,
+        // checked above, and `op` stays within [histStart, outEnd].
+        const dist: i32 = toI32(toU32(d >> 16) + toU32(bb & ((toU64(1) << toU64(dx)) - toU64(1))))
         bb = bb >> toU64(dx)
-        bc -= dn + dx
-        if (dist > op - histStart) {
+        bc = toI32(toU32(bc) - toU32(dn + dx))
+        if (dist > toI32(toU32(op) - toU32(histStart))) {
           status = DEFLATE_ERR_DISTANCE
           break
         }
-        if (len > outEnd - op) {
+        if (len > toI32(toU32(outEnd) - toU32(op))) {
           bb = sBb
           bc = sBc
           ip = sIp
           status = INFLATE_NEED_OUTPUT
           break
         }
-        let from: i32 = op - dist
-        const stop: i32 = op + len
+        // Cannot wrap: `dist` is at most `op - histStart`, `len` at most
+        // `outEnd - op`, and `from` stays below `op`.
+        let from: i32 = toI32(toU32(op) - toU32(dist))
+        const stop: i32 = toI32(toU32(op) + toU32(len))
         while (op < stop) {
           uncheckedSet(out, op, uncheckedGet(out, from))
           op += 1
-          from += 1
+          from = toI32(toU32(from) + toU32(1))
         }
       } else if (kind === INF_END) {
         this.state = INF_S_BLOCK
