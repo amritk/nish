@@ -175,18 +175,18 @@ const INF_S_DONE: i32 = 3
  * The most bytes `Deflater.compress` writes for `n` bytes of input, at any
  * level: the input stored, five bytes of framing for every 65,535 and for
  * every block, and slack for the last partial byte. A negative `n`
- * answers 0, and an `n` past 2,146,000,000 answers -1: its bound, with
- * gzip's framing, would pass 2^31 - 1.
+ * answers 0, and an `n` past 2,146,664,744, the largest whose bound fits,
+ * answers -1: its bound would pass 2^31 - 1.
  *
  * @param n The length of the input, in bytes.
  * @returns A size in bytes, not a position: an `out` with this many bytes
- *   from `at` always holds the stream; or -1 for an `n` past 2,146,000,000.
+ *   from `at` always holds the stream; or -1 for an `n` past 2,146,664,744.
  */
 export const deflateBound = (n: i32): i32 => {
   if (n < 0) {
     return 0
   }
-  if (n > 2146000000) {
+  if (n > 2146664744) {
     return -1
   }
   return n + ((n >> 16) + (n >> 14) + 2) * 5 + 8
@@ -200,7 +200,7 @@ export const deflateBound = (n: i32): i32 => {
  * @param n The length of the input, in bytes.
  * @returns A size in bytes, not a position: an `out` with this many bytes
  *   from `at` always holds the raw, zlib or gzip stream; or -1 for an `n`
- *   past 2,146,000,000, as `deflateBound` answers.
+ *   past 2,146,664,726, the largest whose bound with the 18 bytes fits.
  */
 export const compressBound = (n: i32): i32 => {
   const b: i32 = deflateBound(n)
@@ -345,8 +345,11 @@ const deflateLengthBase = (s: i32): i32 => {
   return (((toI32(4) + (s & 3)) << ((s >> 2) - 1)) & 255) + 3
 }
 
-/** The extra bits of each length symbol 257 + s (§3.2.5). */
-const deflateLengthExtra = (s: i32): i32 => (s < 8 || s === 28 ? 0 : (s >> 2) - 1)
+/**
+ * The extra bits of each length symbol 257 + s (§3.2.5); every `s` past 27
+ * answers symbol 28's, 0.
+ */
+const deflateLengthExtra = (s: i32): i32 => (s < 8 || s >= 28 ? 0 : (s >> 2) - 1)
 
 /**
  * The base distance of each distance symbol (§3.2.5); every `d` past 29
@@ -996,6 +999,11 @@ export class Deflater {
     const end: i32 = this.compressRange(src, off, srcEnd, off, true, out, at, toI32(out.length))
     this.finish(srcEnd)
     if (end < 0) {
+      // Every other -1 under `compressRange` (a table not its size, a code
+      // that does not build, a position past i32) cannot happen: the
+      // constructor sizes the tables, the codes are built from frequencies
+      // this class counted, and `begin` and `rebase` keep positions low. So
+      // this is a lack of room, which a larger `out` cures.
       return DEFLATE_NO_ROOM
     }
     return this.flushBits(out, end, toI32(out.length))
@@ -1043,7 +1051,11 @@ export class Deflater {
     const delta: i32 = this.delta
     // DEFLATE_REBASE - 1 and DEFLATE_REBASE, spelled out for the bounds prover.
     if (shift < 0 || shift > 1073741823 || delta > 1073741824) {
-      // A slide no rebase can follow: drop the history instead.
+      // A slide no rebase can follow: drop the history instead. The output
+      // stays valid DEFLATE; only matches into the dropped history are lost.
+      // `GzipWriter` never gets here: it shifts by 1 to 65,536 right after a
+      // `compressRange`, which rebased any position past DEFLATE_REBASE, so
+      // `delta` is at most DEFLATE_REBASE.
       this.forget()
       this.delta = DEFLATE_WINDOW + 1
       return
@@ -1082,9 +1094,14 @@ export class Deflater {
    * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Writes the whole bytes of the bit buffer, and the last partial byte
    * padded with zeros, into `out` at `op`; answers the end, or
-   * `DEFLATE_NO_ROOM`.
+   * `DEFLATE_NO_ROOM`, which a pending `begin` refusal also answers.
    */
   flushBits(out: u8[], op: i32, oe: i32): i32 {
+    return this.settle(this.writeBits(out, op, oe))
+  }
+
+  /** `flushBits` without settling `overrun`: a step inside a write. */
+  private writeBits(out: u8[], op: i32, oe: i32): i32 {
     // The buffer holds at most 64 bits: the mask keeps every bit of the
     // count, and tells the prover so.
     const bytes: i32 = toI32(((this.bitCount + 7) >> 3) & 15)
@@ -1138,7 +1155,7 @@ export class Deflater {
    * starts at. Answers the new `op`; the caller has checked the room.
    */
   private alignBits(out: u8[], op: i32): i32 {
-    const p: i32 = this.flushBits(out, op, toI32(out.length))
+    const p: i32 = this.writeBits(out, op, toI32(out.length))
     if (p < 0) {
       this.overrun = true
       return op
@@ -1164,10 +1181,10 @@ export class Deflater {
     oe: i32
   ): i32 {
     if (start < 0 || histStart < 0 || histStart > start || start > end || end > toI32(src.length)) {
-      return -1
+      return this.settle(toI32(-1))
     }
     if (op < 0 || oe < 0 || oe > toI32(out.length) || op > oe) {
-      return -1
+      return this.settle(toI32(-1))
     }
     let p: i32 = start
     let o: i32 = op
@@ -1177,7 +1194,7 @@ export class Deflater {
       }
       // An empty final block, in the fixed code: ten bits.
       if (toI32((this.bitCount + toU32(17)) >> 3) > oe - o) {
-        return -1
+        return this.settle(toI32(-1))
       }
       o = this.putBits(out, o, toI32(3), toI32(3))
       return this.settle(this.putBits(out, o, deflateFixedLitCode(256), deflateFixedLitLength(256)))
@@ -2019,18 +2036,18 @@ export class Deflater {
  * The most bytes `FixedDeflater.compress` writes for `n` bytes of input: nine
  * bits a byte, the block's header and end code, and the eight bytes of slack
  * its word-wide bit writer stores past the last whole byte. A negative `n`
- * answers the bound of 0, and an `n` past 1,908,000,000 answers -1: its
- * bound would pass 2^31 - 1.
+ * answers the bound of 0, and an `n` past 1,908,874,339, the largest whose
+ * bound fits, answers -1: its bound would pass 2^31 - 1.
  *
  * @param n The length of the input, in bytes.
  * @returns A size in bytes, not a position: a `room` of this many always
- *   holds the block; or -1 for an `n` past 1,908,000,000.
+ *   holds the block; or -1 for an `n` past 1,908,874,339.
  */
 export const fixedDeflateBound = (n: i32): i32 => {
   if (n < 0) {
     return 16
   }
-  if (n > 1908000000) {
+  if (n > 1908874339) {
     return -1
   }
   return n + (n >> 3) + 16

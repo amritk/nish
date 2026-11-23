@@ -1,0 +1,8 @@
+deflateBound: 0 18 2147483647 -1
+compressBound: 2147483647 -1
+fixedDeflateBound: 16 16 2147483647 -1
+under GzipWriter: true true
+refused begin, flush: -1
+then flush: 0
+refused begin, bad range: -1
+then a range: true
