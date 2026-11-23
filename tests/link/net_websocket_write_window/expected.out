@@ -1,1 +1,3 @@
 framing bytes 1 to 3 of a 2-byte array
+refused: WS_REFUSED, out[0] still 0
+framing byte 1: ends at 3, opcode byte 129

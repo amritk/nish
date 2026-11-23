@@ -787,9 +787,29 @@ buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`
 (`net_http1_server_write_window`), `sendBody`
 (`net_http1_server_send_body_window`) and `sendFrame`
 (`net_http1_server_frame_window`), `http1WriteChunk`
-(`net_http1_write_chunk_window`), `websocketWriteFrame`
-(`net_websocket_write_window`), and the parser's and decoder's own `feed`
+(`net_http1_write_chunk_window`), `websocketIsUtf8`
+(`net_websocket_utf8_window`), and the parser's and decoder's own `feed`
 (`net_http1_feed_window`, `net_websocket_feed_window`).
+
+**`websocket.ts` panics only in those two window checks.** Every index,
+overflow, slice and array-length site in the module is proven by a guard, by
+arithmetic worked in `i64`, or by a fixed-size array (`WsAcceptKey`'s
+60-byte input); what is left are the window checks of `WsDecoder.feed` and
+`websocketIsUtf8`, kept entries with their reasons in `tests/std-panics.json`.
+A new site fails
+`std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`
+and a kept one that goes fails `std-panics: every kept panic in tests/std-panics.json`.
+The frame writers answer instead of panicking: `websocketWriteFrame` answers
+`WS_REFUSED` for a payload window outside its buffer, leaving `out` untouched
+(`link/net_websocket_write_window: exits with 0 and stdout matches expected.out`),
+`websocketFrame` answers null and `websocketFrameSize` `WS_REFUSED` for a
+negative or too-long length
+(`link/net_websocket_frame_window: exits with 0 and stdout matches expected.out`),
+and a program calling them builds under the no-panic default
+(`link/net_websocket_malformed_strict: exits with 0 and stdout matches expected.out`).
+The handshake's base64 still reaches the kept sites of
+`std/crypto/base64url.ts`, so a program that accepts or opens a WebSocket
+builds with `--allow-panics`.
 
 ## What is and is not wiped
 

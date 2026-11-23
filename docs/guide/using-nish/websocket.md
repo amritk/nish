@@ -24,15 +24,17 @@ the slot's `next()` answers `H1_WS_MESSAGE` (the message in `conn.data`,
 `conn.closeWebSocket(code)`.
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/websocket`
-keeps panic sites no proof removes yet, so a call to it is refused by default
-until the standard library is made panic-free, and the examples add up
-numbers nothing bounds, which a guard that bounds them, such as a test
-against a limit, proves. The client also calls `crypto.getRandomValues`, which
-exits the program when the system has no random bytes to give, and calls
-`panic` itself; a proof removes neither.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): the handshake's
+`Sec-WebSocket-Accept` and client key are encoded by `nish/crypto/base64url`,
+which keeps panic sites no proof removes yet, so a call that reaches it is
+refused by default until the standard library is made panic-free.
+`nish/net/websocket` itself answers a malformed frame or handshake with a
+code; it panics only when `WsDecoder.feed` or `websocketIsUtf8` is handed a
+window outside its buffer, a bug in the caller. The client also calls
+`crypto.getRandomValues`, which exits the program when the system has no
+random bytes to give, and calls `panic` itself; a proof removes neither.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/base64url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Http1Connection } from "nish/net/http1-server";
@@ -78,7 +80,7 @@ ASCII case. Write each origin as a browser sends it: scheme, host and a port
 that is not the scheme's default, with no path or trailing slash
 (`https://example.com`, `http://localhost:8080`). Refuse the rest with a 403.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/base64url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Http1Connection } from "nish/net/http1-server";

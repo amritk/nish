@@ -22665,6 +22665,7 @@ import base64StdPadEncode from "nish/crypto/base64url" -> function @nish.base64S
 import base64StdPadEncodeInto from "nish/crypto/base64url" -> function @nish.base64StdPadEncodeInto
 import SHA1_SIZE from "nish/crypto/sha1" -> const SHA1_SIZE
 import Sha1 from "nish/crypto/sha1" -> struct Sha1
+import tryCopyBytes from "nish/bytes" -> function @nish.tryCopyBytes
 import HTTP1_NO_ROOM from "nish/net/http1-codec" -> const HTTP1_NO_ROOM
 import HTTP1_REFUSED from "nish/net/http1-codec" -> const HTTP1_REFUSED
 import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
@@ -22761,17 +22762,29 @@ function websocketUtf8Reset(state: WsUtf8): void -> @nish.websocketUtf8Reset
 function websocketIsKnownOpcode(opcode: i32): boolean -> @nish.websocketIsKnownOpcode
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function websocketAdd(a: i32, b: i32): i32 -> @nish.websocketAdd
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function websocketSub(a: i32, b: i32): i32 -> @nish.websocketSub
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function websocketBytes(n: i32): u8[] -> @nish.websocketBytes
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local +0:9 out: u8[] (const)
+  local +1:12 k: i32 (let)
 function websocketUtf8Run(state: WsUtf8, buf: u8[], off: i32, len: i32): boolean -> @nish.websocketUtf8Run
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_overflow
   pointer state: size=12 writesThrough=true captured=false
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -28:7 need: i32 (let)
-  local -27:7 lo: i32 (let)
-  local -26:7 hi: i32 (let)
+  local -29:7 need: i32 (let)
+  local -28:7 lo: i32 (let)
+  local -27:7 hi: i32 (let)
+  local -26:9 stop: i64 (const)
   local -25:12 k: i32 (let)
   local -24:11 b: i32 (const)
 function websocketIsUtf8(buf: u8[], off: i32, len: i32): boolean -> @nish.websocketIsUtf8 [exported]
@@ -22795,19 +22808,18 @@ function WsDecoder.constructor(this: WsDecoder, expectMasked: boolean, maxMessag
   stackSites=0 stackLocals=0
   callee +0:5 WsDecoder.reset -> @nish.WsDecoder.reset
 function WsDecoder.feed(this: WsDecoder, data: u8[], off: i32, len: i32): void -> @nish.WsDecoder.feed [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  escaping: len
-  calls: nish.websocketReserve nish_panic nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.websocketReserve#0
-  pointer data: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: len off
+  calls: nish.tryCopyBytes nish.websocketAdd nish.websocketFail nish.websocketReserve nish_panic
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.websocketReserve#0 nish.websocketFail#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
   local -12:11 size: i32 (const)
-  callee -5:5 websocketReserve -> @nish.websocketReserve
-  local -4:11 buf: u8[] (const)
-  local -3:11 at: i32 (const)
-  local +4:14 k: i32 (let)
-  local +5:13 to: i32 (const)
+  callee -4:10 websocketReserve -> @nish.websocketReserve
+  callee -4:42 tryCopyBytes -> @nish.tryCopyBytes
+  callee -3:7 websocketFail -> @nish.websocketFail
+  callee +0:16 websocketAdd -> @nish.websocketAdd
 function WsDecoder.next(this: WsDecoder): i32 -> @nish.WsDecoder.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.websocketNext
@@ -22822,114 +22834,145 @@ function WsDecoder.reset(this: WsDecoder): void -> @nish.WsDecoder.reset [export
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +11:5 websocketUtf8Reset -> @nish.websocketUtf8Reset
-function websocketReserve(d: WsDecoder, len: i32): void -> @nish.websocketReserve
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic nish_panic_index nish_panic_overflow
+function websocketReserve(d: WsDecoder, len: i32): boolean -> @nish.websocketReserve
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len
+  calls: nish.tryCopyBytes nish.websocketAdd nish.websocketBytes
   pointer d: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -16:9 old: u8[] (const)
-  local -15:9 capacity: i32 (const)
-  local -11:9 live: i32 (const)
-  local -10:7 size: i32 (let)
-  local -3:9 buf: u8[] (const)
-  local -2:9 from: i32 (const)
-  local -1:12 k: i32 (let)
+  local -32:9 old: u8[] (const)
+  local -31:9 capacity: i32 (const)
+  local -30:9 start: i32 (const)
+  local -29:9 end: i32 (const)
+  local -22:9 live: i32 (const)
+  local -18:9 need: i32 (const)
+  callee -18:21 websocketAdd -> @nish.websocketAdd
+  local -15:7 size: i32 (let)
+  local -4:9 buf: u8[] (const)
+  callee -4:47 websocketBytes -> @nish.websocketBytes
+  callee -3:8 tryCopyBytes -> @nish.tryCopyBytes
 function websocketFail(d: WsDecoder, code: i32, reason: string): i32 -> @nish.websocketFail
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: code reason
   pointer d: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function websocketUnmaskInto(buf: u8[], from: i32, len: i32, masked: boolean, maskAt: i32, phase: i32, to: u8[], at: i32): void -> @nish.websocketUnmaskInto
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function websocketUnmaskInto(buf: u8[], from: i32, len: i32, masked: boolean, maskAt: i32, phase: i32, to: u8[], at: i32): boolean -> @nish.websocketUnmaskInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: maskAt
-  calls: nish_panic_index nish_panic_overflow
-  pointer buf: size=0 writesThrough=false captured=false
-  pointer to: size=0 writesThrough=true captured=false
+  escaping: at from len maskAt
+  calls: nish.tryCopyBytes
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  pointer to: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0
   stackSites=0 stackLocals=0
-  local -12:7 key: u32 (let)
-  local -4:12 r: i32 (let)
+  callee -23:12 tryCopyBytes -> @nish.tryCopyBytes
+  local -21:9 bufLength: i32 (const)
+  local -20:9 toLength: i32 (const)
+  local -11:7 key: u32 (let)
+  local -6:12 r: i32 (let)
+  local -3:7 s: i32 (let)
+  local -2:7 t: i32 (let)
   local -1:12 k: i32 (let)
 function websocketMessageRoom(d: WsDecoder, need: i32): void -> @nish.websocketMessageRoom
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish_panic nish_panic_overflow
+  calls: nish.tryCopyBytes nish.websocketAdd nish.websocketBytes
   pointer d: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -13:9 old: u8[] (const)
-  local -12:7 size: i32 (let)
-  local -5:9 grown: u8[] (const)
-  local -4:9 live: i32 (const)
-  local -3:12 k: i32 (let)
+  local -15:9 old: u8[] (const)
+  local -14:9 oldLength: i32 (const)
+  local -10:7 size: i64 (let)
+  local -3:9 grown: u8[] (const)
+  callee -3:23 websocketBytes -> @nish.websocketBytes
+  local -2:9 live: i32 (const)
+  callee -2:21 websocketAdd -> @nish.websocketAdd
+  callee -1:3 tryCopyBytes -> @nish.tryCopyBytes
 function websocketReadClose(d: WsDecoder, len: i32): i32 -> @nish.websocketReadClose
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.websocketFail nish.websocketIsSendableCode nish.websocketIsUtf8 nish_alloc_struct nish_array_grow nish_panic_index nish_str_new
-  pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0
+  calls: nish.websocketFail nish.websocketIsSendableCode nish.websocketIsUtf8 nish_alloc_struct nish_array_grow nish_str_new
+  pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0
   stackSites=1 stackLocals=1
   local -2:9 payload: u8[] (const)
   callee +6:12 websocketFail -> @nish.websocketFail
-  local +8:9 code: i32 (const)
-  callee +9:8 websocketIsSendableCode -> @nish.websocketIsSendableCode
   callee +10:12 websocketFail -> @nish.websocketFail
-  local +12:9 reasonStart: i32 (const)
-  callee +13:8 websocketIsUtf8 -> @nish.websocketIsUtf8
+  local +12:9 code: i32 (const)
+  callee +13:8 websocketIsSendableCode -> @nish.websocketIsSendableCode
   callee +14:12 websocketFail -> @nish.websocketFail
-  local +16:9 parts: string[] (const)
-  local +17:12 k: i32 (let)
+  local +16:9 reasonStart: i32 (const)
+  callee +17:8 websocketIsUtf8 -> @nish.websocketIsUtf8
+  callee +18:12 websocketFail -> @nish.websocketFail
+  local +20:9 parts: string[] (const)
+  local +21:12 k: i32 (let)
 function websocketFrameEvent(d: WsDecoder): i32 -> @nish.websocketFrameEvent
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.websocketFail nish.websocketIsKnownOpcode nish.websocketMessageRoom nish.websocketReadClose nish.websocketUnmaskInto nish.websocketUtf8Reset nish.websocketUtf8Run nish_panic_index nish_panic_overflow
-  pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketMessageRoom#0 nish.websocketFail#0 nish.websocketReadClose#0 nish.websocketMessageRoom#0 nish.websocketFail#0
+  calls: nish.websocketAdd nish.websocketFail nish.websocketIsKnownOpcode nish.websocketMessageRoom nish.websocketReadClose nish.websocketSub nish.websocketUnmaskInto nish.websocketUtf8Reset nish.websocketUtf8Run
+  pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketMessageRoom#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketReadClose#0 nish.websocketMessageRoom#0 nish.websocketFail#0 nish.websocketFail#0
   stackSites=0 stackLocals=0
-  local -102:9 buf: u8[] (const)
-  local -101:9 at: i32 (const)
-  local -100:9 ready: i32 (const)
-  local -96:9 b0: i32 (const)
-  local -95:9 b1: i32 (const)
-  local -94:9 fin: boolean (const)
-  local -93:9 opcode: i32 (const)
-  local -92:9 masked: boolean (const)
-  local -91:9 short: i32 (const)
-  local -89:7 extended: i32 (let)
-  local -83:9 headerLength: i32 (const)
-  callee -78:12 websocketFail -> @nish.websocketFail
-  local -76:9 control: boolean (const)
-  callee -75:8 websocketIsKnownOpcode -> @nish.websocketIsKnownOpcode
-  callee -74:12 websocketFail -> @nish.websocketFail
-  callee -71:12 websocketFail -> @nish.websocketFail
-  local -64:7 length: i32 (let)
-  callee -60:14 websocketFail -> @nish.websocketFail
-  callee -56:14 websocketFail -> @nish.websocketFail
-  local -52:9 high: i32 (let)
-  local -51:14 k: i32 (let)
-  callee -47:14 websocketFail -> @nish.websocketFail
+  local -133:9 buf: u8[] (const)
+  local -132:9 at: i32 (const)
+  local -131:9 end: i32 (const)
+  local -130:9 bufLength: i32 (const)
+  local -126:9 ready: i32 (const)
+  local -122:9 b0: i32 (const)
+  local -121:9 b1: i32 (const)
+  local -120:9 fin: boolean (const)
+  local -119:9 opcode: i32 (const)
+  local -118:9 masked: boolean (const)
+  local -117:9 short: i32 (const)
+  local -115:7 extended: i32 (let)
+  local -109:7 keyLength: i32 (let)
+  local -105:9 headerLength: i32 (const)
+  local -100:9 body: i32 (const)
+  callee -98:12 websocketFail -> @nish.websocketFail
+  local -96:9 control: boolean (const)
+  callee -95:8 websocketIsKnownOpcode -> @nish.websocketIsKnownOpcode
+  callee -94:12 websocketFail -> @nish.websocketFail
+  callee -91:12 websocketFail -> @nish.websocketFail
+  local -82:7 length: i32 (let)
+  callee -75:14 websocketFail -> @nish.websocketFail
+  callee -68:14 websocketFail -> @nish.websocketFail
+  local -64:11 high: i32 (const)
+  callee -62:14 websocketFail -> @nish.websocketFail
+  callee -57:14 websocketFail -> @nish.websocketFail
+  callee -52:14 websocketFail -> @nish.websocketFail
+  callee -49:14 websocketFail -> @nish.websocketFail
+  callee -45:14 websocketFail -> @nish.websocketFail
   callee -42:14 websocketFail -> @nish.websocketFail
-  callee -37:14 websocketFail -> @nish.websocketFail
-  callee -34:14 websocketFail -> @nish.websocketFail
-  callee -30:14 websocketFail -> @nish.websocketFail
-  callee -27:14 websocketFail -> @nish.websocketFail
-  callee -24:14 websocketFail -> @nish.websocketFail
-  local -21:9 payloadAt: i32 (const)
-  local -20:9 maskAt: i32 (const)
-  local -19:9 text: boolean (const)
-  local -13:11 arrived: i32 (const)
-  local -12:11 from: i32 (const)
-  local -11:11 done: i32 (const)
-  callee -7:7 websocketUtf8Reset -> @nish.websocketUtf8Reset
-  callee -2:7 websocketMessageRoom -> @nish.websocketMessageRoom
-  callee -1:7 websocketUnmaskInto -> @nish.websocketUnmaskInto
+  callee -39:14 websocketFail -> @nish.websocketFail
+  local -36:9 payloadAt: i32 (const)
+  callee -36:26 websocketAdd -> @nish.websocketAdd
+  local -35:9 maskAt: i32 (const)
+  callee -35:23 websocketAdd -> @nish.websocketAdd
+  local -34:9 text: boolean (const)
+  local -28:11 arrived: i32 (const)
+  local -27:11 from: i32 (const)
+  local -26:11 done: i32 (const)
+  callee -22:7 websocketUtf8Reset -> @nish.websocketUtf8Reset
+  local -17:13 fresh: i32 (const)
+  callee -17:26 websocketSub -> @nish.websocketSub
+  local -16:13 freshAt: i32 (const)
+  callee -16:28 websocketAdd -> @nish.websocketAdd
+  callee -15:7 websocketMessageRoom -> @nish.websocketMessageRoom
+  callee -15:31 websocketAdd -> @nish.websocketAdd
+  callee -13:10 websocketUnmaskInto -> @nish.websocketUnmaskInto
+  callee -11:11 websocketAdd -> @nish.websocketAdd
+  callee -2:16 websocketFail -> @nish.websocketFail
   callee +1:12 websocketUtf8Run -> @nish.websocketUtf8Run
   callee +2:16 websocketFail -> @nish.websocketFail
-  callee +13:5 websocketUnmaskInto -> @nish.websocketUnmaskInto
-  callee +18:14 websocketReadClose -> @nish.websocketReadClose
-  local +25:9 from: i32 (const)
-  callee +28:5 websocketMessageRoom -> @nish.websocketMessageRoom
-  callee +29:5 websocketUnmaskInto -> @nish.websocketUnmaskInto
-  callee +36:12 websocketFail -> @nish.websocketFail
+  callee +10:13 websocketAdd -> @nish.websocketAdd
+  callee +13:10 websocketUnmaskInto -> @nish.websocketUnmaskInto
+  callee +14:14 websocketFail -> @nish.websocketFail
+  callee +20:14 websocketReadClose -> @nish.websocketReadClose
+  local +27:9 from: i32 (const)
+  local +28:9 total: i32 (const)
+  callee +28:22 websocketAdd -> @nish.websocketAdd
+  callee +31:5 websocketMessageRoom -> @nish.websocketMessageRoom
+  callee +32:10 websocketUnmaskInto -> @nish.websocketUnmaskInto
+  callee +33:14 websocketFail -> @nish.websocketFail
+  callee +41:12 websocketFail -> @nish.websocketFail
 function websocketNext(d: WsDecoder): i32 -> @nish.websocketNext
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.websocketFrameEvent
@@ -22939,98 +22982,112 @@ function websocketNext(d: WsDecoder): i32 -> @nish.websocketNext
   local +0:11 event: i32 (const)
   callee +0:24 websocketFrameEvent -> @nish.websocketFrameEvent
 function websocketFrameSize(len: i32, masked: boolean): i32 -> @nish.websocketFrameSize [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: len masked
+  calls: nish.websocketAdd nish.websocketHeaderLength
   stackSites=0 stackLocals=0
-  local +0:7 extended: i32 (let)
+  callee +0:10 websocketAdd -> @nish.websocketAdd
+  callee +0:23 websocketHeaderLength -> @nish.websocketHeaderLength
+function websocketHeaderLength(len: i32, masked: boolean): i32 -> @nish.websocketHeaderLength
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:7 key: i32 (let)
 function websocketWriteFrame(out: u8[], at: i32, fin: boolean, opcode: i32, payload: u8[], off: i32, len: i32, mask: u8[] | null): i32 -> @nish.websocketWriteFrame [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  escaping: at len opcode
-  calls: nish.websocketFrameSize nish.websocketIsKnownOpcode nish.websocketUnmaskInto nish_panic nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.websocketUnmaskInto#0 nish.websocketUnmaskInto#6
-  pointer payload: size=0 writesThrough=false captured=false
-  pointer mask: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at len off opcode
+  calls: nish.tryCopyBytes nish.websocketAdd nish.websocketHeaderLength nish.websocketIsKnownOpcode nish.websocketUnmaskInto
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0 nish.tryCopyBytes#0 nish.websocketUnmaskInto#0 nish.websocketUnmaskInto#6
+  pointer payload: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  pointer mask: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  local -30:9 size: i32 (const)
-  callee -26:8 websocketIsKnownOpcode -> @nish.websocketIsKnownOpcode
-  local -23:9 control: boolean (const)
-  local -13:9 frameSize: i32 (const)
-  callee -13:26 websocketFrameSize -> @nish.websocketFrameSize
-  local -12:9 outLength: i32 (const)
-  local -8:7 extended: i32 (let)
-  local -2:9 headerLength: i32 (const)
-  local -1:9 finBit: i32 (const)
-  local +1:9 maskBit: i32 (const)
-  local +11:14 k: i32 (let)
-  local +19:9 payloadAt: i32 (const)
-  local +20:12 k: i32 (let)
-  local +24:11 keyAt: i32 (const)
-  local +25:14 k: i32 (let)
-  callee +30:5 websocketUnmaskInto -> @nish.websocketUnmaskInto
+  local -29:9 size: i32 (const)
+  callee -25:8 websocketIsKnownOpcode -> @nish.websocketIsKnownOpcode
+  local -22:9 control: boolean (const)
+  local -15:9 headerLength: i32 (const)
+  callee -15:29 websocketHeaderLength -> @nish.websocketHeaderLength
+  local -14:9 outLength: i32 (const)
+  local -10:9 finBit: i32 (const)
+  local -9:9 maskBit: i32 (const)
+  local -6:7 extended: i32 (let)
+  local +27:9 payloadAt: i32 (const)
+  callee +27:26 websocketAdd -> @nish.websocketAdd
+  callee +28:8 tryCopyBytes -> @nish.tryCopyBytes
+  local +32:11 keyAt: i32 (const)
+  callee +32:24 websocketAdd -> @nish.websocketAdd
+  callee +36:8 tryCopyBytes -> @nish.tryCopyBytes
+  callee +37:8 websocketUnmaskInto -> @nish.websocketUnmaskInto
+  callee +42:10 websocketAdd -> @nish.websocketAdd
 function websocketFrame(fin: boolean, opcode: i32, payload: u8[], off: i32, len: i32, mask: u8[] | null): u8[] | null -> @nish.websocketFrame [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.websocketWriteFrame
   escaping: fin len off opcode
-  calls: nish.websocketFrameSize nish.websocketWriteFrame nish_panic
+  calls: nish.websocketBytes nish.websocketFrameSize nish.websocketWriteFrame
   pointer payload: size=0 writesThrough=false captured=false passedTo=nish.websocketWriteFrame#4
   pointer mask: size=0 writesThrough=false captured=false passedTo=nish.websocketWriteFrame#7
   stackSites=0 stackLocals=0
   local +0:9 size: i32 (const)
-  local +7:9 out: u8[] (const)
-  callee +7:35 websocketFrameSize -> @nish.websocketFrameSize
-  local +8:9 at: i32 (const)
-  callee +9:10 websocketWriteFrame -> @nish.websocketWriteFrame
+  local +4:9 out: u8[] (const)
+  callee +4:21 websocketBytes -> @nish.websocketBytes
+  callee +4:36 websocketFrameSize -> @nish.websocketFrameSize
+  local +5:9 at: i32 (const)
+  callee +6:10 websocketWriteFrame -> @nish.websocketWriteFrame
 function websocketClosePayload(code: i32, reason: string): u8[] | null -> @nish.websocketClosePayload [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: code
-  calls: nish.websocketIsSendableCode nish.websocketIsUtf8 nish_panic nish_panic_index nish_panic_overflow
+  calls: nish.websocketIsSendableCode nish.websocketIsUtf8 nish_array_grow
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   callee +1:8 websocketIsSendableCode -> @nish.websocketIsSendableCode
   local +4:9 out: u8[] (const)
-  local +5:9 outLength: i32 (const)
-  local +8:12 k: i32 (let)
-  local +11:9 reasonStart: i32 (const)
-  callee +12:8 websocketIsUtf8 -> @nish.websocketIsUtf8
+  local +5:12 k: i32 (let)
+  local +8:9 reasonStart: i32 (const)
+  callee +9:8 websocketIsUtf8 -> @nish.websocketIsUtf8
 function websocketBytesOf(text: string): u8[] -> @nish.websocketBytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.websocketBytes
   stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +1:9 out: u8[] (const)
-  local +2:9 outLength: i32 (const)
-  local +3:12 k: i32 (let)
+  local -4:9 n: i32 (const)
+  local -3:9 out: u8[] (const)
+  callee -3:21 websocketBytes -> @nish.websocketBytes
+  local -2:9 outLength: i32 (const)
+  local -1:12 k: i32 (let)
 function websocketKeySpanIsValid(text: u8[], start: i32, end: i32): boolean -> @nish.websocketKeySpanIsValid
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: start
-  calls: nish.base64StdPadDecodedLength nish_panic_overflow
+  calls: nish.base64StdPadDecodedLength
   pointer text: size=0 writesThrough=false captured=false passedTo=nish.base64StdPadDecodedLength#0
   stackSites=0 stackLocals=0
   callee +0:3 base64StdPadDecodedLength -> @nish.base64StdPadDecodedLength
 function WsAcceptKey.constructor(this: WsAcceptKey): void -> @nish.WsAcceptKey.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish.Sha1.constructor nish_alloc_struct nish_panic nish_panic_index nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Sha1.constructor nish_alloc_struct
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:19 new Sha1 -> @nish.Sha1.constructor
-  local +1:11 guid: i32 (const)
-  local +3:14 k: i32 (let)
+  local +1:11 text: string (const)
+  local +2:11 guid: i32 (const)
+  local +4:11 input: u8[] (const)
+  local +5:11 inputLength: i32 (const)
+  local +6:9 t: i32 (let)
+  local +7:14 k: i32 (let)
 function WsAcceptKey.compute(this: WsAcceptKey, text: u8[], start: i32, end: i32): boolean -> @nish.WsAcceptKey.compute [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tryCopyBytes
   escaping: end start
-  calls: nish.Sha1.digestInto nish.base64StdPadEncodeInto nish.websocketKeySpanIsValid nish_panic_index nish_panic_overflow
+  calls: nish.Sha1.digestInto nish.base64StdPadEncodeInto nish.tryCopyBytes nish.websocketKeySpanIsValid
   pointer this: size=32 writesThrough=false captured=false
-  pointer text: size=0 writesThrough=false captured=false passedTo=nish.websocketKeySpanIsValid#0
+  pointer text: size=0 writesThrough=false captured=false passedTo=nish.websocketKeySpanIsValid#0 nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  callee -5:10 websocketKeySpanIsValid -> @nish.websocketKeySpanIsValid
-  local -2:11 input: u8[] (const)
-  local -1:14 k: i32 (let)
-  callee +2:5 Sha1.digestInto -> @nish.Sha1.digestInto
-  callee +3:5 base64StdPadEncodeInto -> @nish.base64StdPadEncodeInto
+  callee +0:10 websocketKeySpanIsValid -> @nish.websocketKeySpanIsValid
+  local +3:11 input: u8[] (const)
+  callee +5:10 tryCopyBytes -> @nish.tryCopyBytes
+  callee +8:5 Sha1.digestInto -> @nish.Sha1.digestInto
+  callee +9:5 base64StdPadEncodeInto -> @nish.base64StdPadEncodeInto
 function websocketAcceptKey(key: string): string -> @nish.websocketAcceptKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Sha1.digestInto
+  sharedWrite: via nish.websocketBytesOf
   calls: nish.Sha1.constructor nish.Sha1.digestInto nish.base64StdPadEncodeInto nish.http1Text nish.websocketBytesOf nish_str_concat
   stackSites=1 stackLocals=0
   local +0:9 input: u8[] (const)
@@ -23042,7 +23099,8 @@ function websocketAcceptKey(key: string): string -> @nish.websocketAcceptKey [ex
   callee +4:3 base64StdPadEncodeInto -> @nish.base64StdPadEncodeInto
   callee +5:10 http1Text -> @nish.http1Text
 function websocketKeyIsValid(key: string): boolean -> @nish.websocketKeyIsValid [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.websocketBytesOf
   escaping: key
   calls: nish.websocketBytesOf nish.websocketKeySpanIsValid nish_arena_mark nish_arena_release
   stackSites=0 stackLocals=0
@@ -23051,7 +23109,7 @@ function websocketKeyIsValid(key: string): boolean -> @nish.websocketKeyIsValid 
   callee +1:10 websocketKeySpanIsValid -> @nish.websocketKeySpanIsValid
 function websocketRequestKeyField(p: Http1Parser): i32 -> @nish.websocketRequestKeyField [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.Http1Parser.headerIndex nish.Http1Parser.headerIs nish.Http1Parser.methodIs nish.Http1Parser.upgradeIs nish.websocketKeySpanIsValid nish_panic_index nish_panic_overflow
+  calls: nish.Http1Parser.headerIndex nish.Http1Parser.headerIs nish.Http1Parser.methodIs nish.Http1Parser.upgradeIs nish.websocketKeySpanIsValid nish.websocketValueAt
   pointer p: size=232 writesThrough=false captured=false passedTo=nish.Http1Parser.methodIs#0 nish.Http1Parser.upgradeIs#0 nish.Http1Parser.headerIs#0 nish.Http1Parser.headerIndex#0
   stackSites=0 stackLocals=0
   callee +0:8 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
@@ -23060,133 +23118,177 @@ function websocketRequestKeyField(p: Http1Parser): i32 -> @nish.websocketRequest
   local +6:9 i: i32 (const)
   callee +6:18 Http1Parser.headerIndex -> @nish.Http1Parser.headerIndex
   local +7:9 spans: i32[] (const)
-  callee +11:8 websocketKeySpanIsValid -> @nish.websocketKeySpanIsValid
+  local +8:9 at: i32 (const)
+  callee +8:19 websocketValueAt -> @nish.websocketValueAt
+  callee +9:51 websocketKeySpanIsValid -> @nish.websocketKeySpanIsValid
 function websocketRequestKey(p: Http1Parser): string | null -> @nish.websocketRequestKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.http1Text nish.websocketRequestKeyField nish_panic_index nish_panic_overflow
+  calls: nish.http1Text nish.websocketRequestKeyField nish.websocketValueAt
   pointer p: size=232 writesThrough=false captured=false passedTo=nish.websocketRequestKeyField#0
   stackSites=0 stackLocals=0
-  local +0:9 i: i32 (const)
-  callee +0:18 websocketRequestKeyField -> @nish.websocketRequestKeyField
-  local +1:9 spans: i32[] (const)
+  local +0:9 spans: i32[] (const)
+  local +1:9 at: i32 (const)
+  callee +1:19 websocketValueAt -> @nish.websocketValueAt
+  callee +1:43 websocketRequestKeyField -> @nish.websocketRequestKeyField
   callee +5:10 http1Text -> @nish.http1Text
+function websocketValueAt(spans: i32[], i: i32): i32 -> @nish.websocketValueAt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer spans: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 at: i32 (const)
 function websocketPutText(out: u8[], at: i32, text: string): i32 -> @nish.websocketPutText
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
+  escaping: at
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -2:9 n: i32 (const)
+  local -4:9 n: i32 (const)
+  local -3:9 outLength: i32 (const)
+  local -2:7 j: i32 (let)
   local -1:12 k: i32 (let)
 function websocketWriteUpgradeResponse(out: u8[], at: i32, accept: u8[], protocol: string): i32 -> @nish.websocketWriteUpgradeResponse [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.websocketPutText
   escaping: at protocol
-  calls: nish.http1IsToken nish.websocketPutText nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0
-  pointer accept: size=0 writesThrough=false captured=false
+  calls: nish.http1IsToken nish.tryCopyBytes nish.websocketAdd nish.websocketPutText
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.websocketPutText#0 nish.tryCopyBytes#0 nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0 nish.websocketPutText#0
+  pointer accept: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  local -12:9 p: i32 (const)
-  callee -11:63 http1IsToken -> @nish.http1IsToken
-  local -8:9 fixed: i32 (const)
-  local -7:9 named: i32 (const)
-  local -6:9 length: i32 (const)
-  local -2:7 j: i32 (let)
-  callee -2:16 websocketPutText -> @nish.websocketPutText
-  local -1:12 k: i32 (let)
-  callee +2:7 websocketPutText -> @nish.websocketPutText
-  callee +4:9 websocketPutText -> @nish.websocketPutText
-  callee +5:9 websocketPutText -> @nish.websocketPutText
-  callee +6:9 websocketPutText -> @nish.websocketPutText
-  callee +8:10 websocketPutText -> @nish.websocketPutText
+  local +0:9 p: i32 (const)
+  callee +4:63 http1IsToken -> @nish.http1IsToken
+  local +7:9 fixed: i32 (const)
+  local +8:7 named: i32 (let)
+  local +12:9 length: i32 (const)
+  callee +12:23 websocketAdd -> @nish.websocketAdd
+  local +16:7 j: i32 (let)
+  callee +16:16 websocketPutText -> @nish.websocketPutText
+  callee +17:8 tryCopyBytes -> @nish.tryCopyBytes
+  callee +20:7 websocketPutText -> @nish.websocketPutText
+  callee +20:29 websocketAdd -> @nish.websocketAdd
+  callee +22:9 websocketPutText -> @nish.websocketPutText
+  callee +23:9 websocketPutText -> @nish.websocketPutText
+  callee +24:9 websocketPutText -> @nish.websocketPutText
+  callee +26:10 websocketPutText -> @nish.websocketPutText
 function websocketUpgradeResponse(key: string, protocol: string): u8[] | null -> @nish.websocketUpgradeResponse [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
   escaping: key protocol
-  calls: nish.WsAcceptKey.compute nish.WsAcceptKey.constructor nish.websocketBytesOf nish.websocketWriteUpgradeResponse nish_panic nish_panic_overflow
+  calls: nish.WsAcceptKey.compute nish.WsAcceptKey.constructor nish.websocketAdd nish.websocketBytes nish.websocketBytesOf nish.websocketWriteUpgradeResponse
   stackSites=1 stackLocals=1
-  local +0:9 bytes: u8[] (const)
-  callee +0:23 websocketBytesOf -> @nish.websocketBytesOf
-  local +1:9 accept: WsAcceptKey (const)
-  callee +1:18 new WsAcceptKey -> @nish.WsAcceptKey.constructor
-  callee +2:8 WsAcceptKey.compute -> @nish.WsAcceptKey.compute
-  local +5:9 out: u8[] (const)
-  local +6:9 end: i32 (const)
-  callee +6:20 websocketWriteUpgradeResponse -> @nish.websocketWriteUpgradeResponse
-  local +10:9 head: u8[] (const)
-  local +11:12 k: i32 (let)
+  local -14:9 bytes: u8[] (const)
+  callee -14:23 websocketBytesOf -> @nish.websocketBytesOf
+  local -13:9 accept: WsAcceptKey (const)
+  callee -13:18 new WsAcceptKey -> @nish.WsAcceptKey.constructor
+  callee -12:8 WsAcceptKey.compute -> @nish.WsAcceptKey.compute
+  local -9:9 out: u8[] (const)
+  callee -9:21 websocketBytes -> @nish.websocketBytes
+  callee -8:5 websocketAdd -> @nish.websocketAdd
+  callee -8:18 websocketAdd -> @nish.websocketAdd
+  local -6:9 end: i32 (const)
+  callee -6:20 websocketWriteUpgradeResponse -> @nish.websocketWriteUpgradeResponse
+  local -2:9 head: u8[] (const)
+  callee -2:22 websocketBytes -> @nish.websocketBytes
+  local -1:12 k: i32 (let)
 function websocketOfferedProtocols(p: Http1Parser): string[] | null -> @nish.websocketOfferedProtocols [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.http1IsToken nish.websocketListInto nish.websocketSpanIs nish_panic_index nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.http1IsToken nish.websocketListInto nish.websocketSpanIs
   pointer p: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   local +1:9 head: u8[] (const)
   local +2:9 spans: i32[] (const)
-  local +3:12 i: i32 (let)
-  callee +4:9 websocketSpanIs -> @nish.websocketSpanIs
-  callee +5:7 websocketListInto -> @nish.websocketListInto
-  local +8:12 k: i32 (let)
-  callee +9:10 http1IsToken -> @nish.http1IsToken
+  local +4:7 s: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:11 valueStart: i32 (const)
+  local +7:11 valueEnd: i32 (const)
+  local +8:11 offers: boolean (const)
+  callee +8:29 websocketSpanIs -> @nish.websocketSpanIs
+  callee +11:7 websocketListInto -> @nish.websocketListInto
+  local +14:12 k: i32 (let)
+  callee +15:10 http1IsToken -> @nish.http1IsToken
 function websocketOriginAllowed(p: Http1Parser, allowed: string[]): boolean -> @nish.websocketOriginAllowed [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.websocketSpanFolds nish.websocketSpanIs nish_panic_index nish_panic_overflow
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.websocketSpanFolds nish.websocketSpanIs
   pointer p: size=232 writesThrough=false captured=false
   pointer allowed: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:9 head: u8[] (const)
   local +1:9 spans: i32[] (const)
-  local +2:7 found: i32 (let)
-  local +3:12 i: i32 (let)
-  callee +4:9 websocketSpanIs -> @nish.websocketSpanIs
-  local +14:12 k: i32 (let)
-  callee +15:9 websocketSpanFolds -> @nish.websocketSpanFolds
+  local +4:7 found: i32 (let)
+  local +5:7 s: i32 (let)
+  local +6:12 i: i32 (let)
+  callee +7:9 websocketSpanIs -> @nish.websocketSpanIs
+  local +18:12 k: i32 (let)
+  callee +19:9 websocketSpanFolds -> @nish.websocketSpanFolds
 function websocketSpanFolds(bytes: u8[], a: i32, b: i32, text: string): boolean -> @nish.websocketSpanFolds
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:12 k: i32 (let)
-  local +5:11 at: i32 (const)
+  local +4:7 at: i32 (let)
+  local +5:12 k: i32 (let)
   local +9:9 c: i32 (let)
   local +13:9 w: i32 (let)
 function websocketSpanIs(bytes: u8[], a: i32, b: i32, word: string): boolean -> @nish.websocketSpanIs
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:12 k: i32 (let)
-  local +5:11 at: i32 (const)
+  local +4:7 at: i32 (let)
+  local +5:12 k: i32 (let)
   local +9:9 c: i32 (let)
 function websocketListInto(bytes: u8[], from: i32, to: i32, out: string[]): void -> @nish.websocketListInto
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
-  escaping: from
-  calls: nish.http1IsOws nish.http1Text nish_array_grow nish_panic_index nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.websocketElementInto
+  escaping: from to
+  calls: nish.websocketElementInto
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.websocketElementInto#0 nish.websocketElementInto#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.websocketElementInto#3 nish.websocketElementInto#3
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +4:7 start: i32 (let)
+  local +5:12 k: i32 (let)
+  callee +7:7 websocketElementInto -> @nish.websocketElementInto
+  callee +11:3 websocketElementInto -> @nish.websocketElementInto
+function websocketElementInto(bytes: u8[], a: i32, b: i32, out: string[]): void -> @nish.websocketElementInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: a b
+  calls: nish.http1IsOws nish.http1Text nish_array_grow
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.http1Text#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -12:7 start: i32 (let)
-  local -11:12 k: i32 (let)
-  local -9:11 a: i32 (let)
-  local -8:11 b: i32 (let)
-  callee -7:60 http1IsOws -> @nish.http1IsOws
-  callee -4:68 http1IsOws -> @nish.http1IsOws
-  callee +0:18 http1Text -> @nish.http1Text
+  local -14:9 n: i32 (const)
+  local -13:7 x: i32 (let)
+  local -12:7 y: i32 (let)
+  callee -11:38 http1IsOws -> @nish.http1IsOws
+  local -7:11 c: i32 (const)
+  callee -6:29 http1IsOws -> @nish.http1IsOws
+  callee +0:14 http1Text -> @nish.http1Text
 function websocketListHas(value: string, word: string): boolean -> @nish.websocketListHas
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value word
-  calls: nish.http1IsOws nish.http1SameWord nish_panic_index nish_panic_overflow
+  calls: nish.websocketElementIs
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:7 start: i32 (let)
   local +2:12 k: i32 (let)
-  local +4:11 a: i32 (let)
-  local +5:11 b: i32 (let)
-  callee +6:42 http1IsOws -> @nish.http1IsOws
-  callee +9:50 http1IsOws -> @nish.http1IsOws
-  callee +12:11 http1SameWord -> @nish.http1SameWord
+  callee +4:11 websocketElementIs -> @nish.websocketElementIs
+  callee +10:10 websocketElementIs -> @nish.websocketElementIs
+function websocketElementIs(value: string, a: i32, b: i32, word: string): boolean -> @nish.websocketElementIs
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b value word
+  calls: nish.http1IsOws nish.http1SameWord
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +1:7 x: i32 (let)
+  local +2:7 y: i32 (let)
+  callee +3:38 http1IsOws -> @nish.http1IsOws
+  local +7:11 c: i32 (const)
+  callee +8:29 http1IsOws -> @nish.http1IsOws
+  callee +13:10 http1SameWord -> @nish.http1SameWord
 function websocketClientKey(nonce: u8[]): string | null -> @nish.websocketClientKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.base64StdPadEncode
@@ -23195,7 +23297,7 @@ function websocketClientKey(nonce: u8[]): string | null -> @nish.websocketClient
   callee +0:10 base64StdPadEncode -> @nish.base64StdPadEncode
 function websocketUpgradeRequest(host: string, target: string, key: string, protocols: string[]): u8[] | null -> @nish.websocketUpgradeRequest [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.http1UpgradeRequestHead
+  sharedWrite: via nish.websocketKeyIsValid
   escaping: host key target
   calls: nish.http1IsToken nish.http1UpgradeRequestHead nish.websocketKeyIsValid nish_alloc_struct nish_array_grow nish_str_eq
   pointer protocols: size=0 writesThrough=true captured=false
@@ -23215,9 +23317,9 @@ function WsHandshake.constructor(this: WsHandshake, error: i32, protocol: string
   stackSites=0 stackLocals=0
 function websocketCheckResponse(response: Http1ResponseParser, key: string, offered: string[]): WsHandshake -> @nish.websocketCheckResponse [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: via nish.websocketAcceptKey
+  sharedWrite: via nish.websocketKeyIsValid
   escaping: key
-  calls: nish.WsHandshake.constructor nish.http1IsToken nish.http1SameWord nish.websocketAcceptKey nish.websocketKeyIsValid nish.websocketListHas nish_alloc_struct nish_panic_overflow nish_str_eq
+  calls: nish.WsHandshake.constructor nish.http1IsToken nish.http1SameWord nish.websocketAcceptKey nish.websocketKeyIsValid nish.websocketListHas nish_alloc_struct nish_str_eq
   pointer response: size=192 writesThrough=false captured=false
   pointer offered: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -23239,18 +23341,18 @@ function websocketCheckResponse(response: Http1ResponseParser, key: string, offe
   local +16:12 i: i32 (let)
   local +17:11 name: string (const)
   local +18:11 value: string (const)
-  callee +21:19 http1SameWord -> @nish.http1SameWord
-  callee +23:11 websocketListHas -> @nish.websocketListHas
-  callee +37:12 new WsHandshake -> @nish.WsHandshake.constructor
-  callee +40:12 new WsHandshake -> @nish.WsHandshake.constructor
+  callee +23:19 http1SameWord -> @nish.http1SameWord
+  callee +25:11 websocketListHas -> @nish.websocketListHas
   callee +43:12 new WsHandshake -> @nish.WsHandshake.constructor
   callee +46:12 new WsHandshake -> @nish.WsHandshake.constructor
   callee +49:12 new WsHandshake -> @nish.WsHandshake.constructor
-  callee +51:25 http1IsToken -> @nish.http1IsToken
   callee +52:12 new WsHandshake -> @nish.WsHandshake.constructor
-  local +54:12 i: i32 (let)
-  callee +56:14 new WsHandshake -> @nish.WsHandshake.constructor
-  callee +59:10 new WsHandshake -> @nish.WsHandshake.constructor
+  callee +55:12 new WsHandshake -> @nish.WsHandshake.constructor
+  callee +57:25 http1IsToken -> @nish.http1IsToken
+  callee +58:12 new WsHandshake -> @nish.WsHandshake.constructor
+  local +60:12 i: i32 (let)
+  callee +62:14 new WsHandshake -> @nish.WsHandshake.constructor
+  callee +65:10 new WsHandshake -> @nish.WsHandshake.constructor
 module std/crypto/sha1.ts [package nish]
 const SHA1_SIZE: i32 = 20 [exported]
 const SHA1_BLOCK: i32 = 64 [exported]
@@ -30223,7 +30325,7 @@ function Http1Connection.nextFrame(this: Http1Connection): i32 -> @nish.Http1Con
   callee +18:9 Http1Connection.sendClose -> @nish.Http1Connection.sendClose
   callee +23:9 Http1Connection.sendClose -> @nish.Http1Connection.sendClose
 function Http1Connection.sendPong(this: Http1Connection): boolean -> @nish.Http1Connection.sendPong [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.room nish.websocketWriteFrame
   pointer this: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
@@ -30504,7 +30606,7 @@ function Http1Connection.acceptWebSocket(this: Http1Connection, protocol: string
   callee -5:22 websocketWriteUpgradeResponse -> @nish.websocketWriteUpgradeResponse
   callee -1:20 http1ServerSub -> @nish.http1ServerSub
 function Http1Connection.acceptStorage(this: Http1Connection): WsAcceptKey -> @nish.Http1Connection.acceptStorage [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: +0:5
   calls: nish.WsAcceptKey.constructor nish_alloc_struct
   pointer this: size=312 writesThrough=true captured=false
@@ -47524,7 +47626,7 @@ import QUIC_DATAGRAM_ERR_FULL from "nish/net/quic" -> const QUIC_DATAGRAM_ERR_FU
 import QUIC_DATAGRAM_NONE from "nish/net/quic" -> const QUIC_DATAGRAM_NONE
 import QUIC_DATAGRAM_OK from "nish/net/quic" -> const QUIC_DATAGRAM_OK
 import QuicConnection from "nish/net/quic" -> struct QuicConnection
-import quicPacketCopy from "nish/net/quic-packet" -> function @nish.quicPacketCopy
+import tryCopyBytes from "nish/bytes" -> function @nish.tryCopyBytes
 import quicVarintSize from "nish/net/quic-packet" -> function @nish.quicVarintSize
 import quicStreamIsUni from "nish/net/quic-stream" -> function @nish.quicStreamIsUni
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
@@ -47567,7 +47669,7 @@ const WT_ONE: i32 = 1
 const WT_NONE: i32 = -1
 const WT_NONE64: i64 = -1
 const WT_U32: i64 = 4294967295
-const WT_HASH_MULTIPLIER: i64 = 2654435761
+const WT_GOLDEN: f64 = 0.6180339887498949
 struct WebTransportConfig (class) size=16 align=4 exported
   field maxStreams: i32 index=0 offset=0 initialized
   field maxPending: i32 index=1 offset=4 initialized
@@ -47589,7 +47691,33 @@ struct WebTransportWaiting (class) size=64 align=8 exported
   method add -> @nish.WebTransportWaiting.add
   method first -> @nish.WebTransportWaiting.first
   method take -> @nish.WebTransportWaiting.take
-struct WebTransport (class) size=424 align=8 exported
+struct WebTransportSession (class) size=104 align=8
+  field id: i64 index=0 offset=0 initialized
+  field capType: i64 index=1 offset=8 initialized
+  field capLeft: i64 index=2 offset=16 initialized
+  field capHead: u8[] index=3 offset=24
+  field lastActive: i64 index=4 offset=32 initialized
+  field rateSince: i64 index=5 offset=40 initialized
+  field reason: u8[] index=6 offset=48
+  field index: i32 index=7 offset=56 initialized
+  field state: i32 index=8 offset=60 initialized
+  field slot: i32 index=9 offset=64 initialized
+  field firstStream: i32 index=10 offset=68 initialized
+  field streams: i32 index=11 offset=72 initialized
+  field capHeadLen: i32 index=12 offset=76 initialized
+  field capFill: i32 index=13 offset=80 initialized
+  field datagramsIn: i32 index=14 offset=84 initialized
+  field datagramsOut: i32 index=15 offset=88 initialized
+  field rateCount: i32 index=16 offset=92 initialized
+  field closeRead: boolean index=17 offset=96 initialized
+  constructor -> @nish.WebTransportSession.constructor
+struct WebTransportStream (class) size=24 align=8
+  field id: i64 index=0 offset=0 initialized
+  field session: i32 index=1 offset=8 initialized
+  field next: i32 index=2 offset=12 initialized
+  field prev: i32 index=3 offset=16 initialized
+  field bits: i32 index=4 offset=20 initialized
+struct WebTransport (class) size=296 align=8 exported
   field config: WebTransportConfig index=0 offset=0
   field h3: Http3Connection index=1 offset=8
   field quic: QuicConnection index=2 offset=16
@@ -47599,63 +47727,50 @@ struct WebTransport (class) size=424 align=8 exported
   field outgoing: u8[] index=6 offset=48
   field capsuleOut: u8[] index=7 offset=56
   field data: u8[] index=8 offset=64
-  field reason: u8[] index=9 offset=72
-  field acceptNames: u8[][] index=10 offset=80
-  field acceptValues: u8[][] index=11 offset=88
-  field none: u8[][] index=12 offset=96
+  field acceptNames: u8[][] index=9 offset=72
+  field acceptValues: u8[][] index=10 offset=80
+  field none: u8[][] index=11 offset=88
+  field table: WebTransportSession[] index=12 offset=96
   field sessionIds: i64[] index=13 offset=104
-  field capType: i64[] index=14 offset=112
-  field capLeft: i64[] index=15 offset=120
-  field states: i32[] index=16 offset=128
-  field sessionSlot: i32[] index=17 offset=136
-  field firstStream: i32[] index=18 offset=144
-  field streamCount: i32[] index=19 offset=152
-  field closeRead: boolean[] index=20 offset=160
-  field capHeadLen: i32[] index=21 offset=168
-  field capHead: u8[] index=22 offset=176
-  field capFill: i32[] index=23 offset=184
-  field datagramsIn: i32[] index=24 offset=192
-  field datagramsOut: i32[] index=25 offset=200
-  field lastActive: i64[] index=26 offset=208
-  field rateSince: i64[] index=27 offset=216
-  field rateCount: i32[] index=28 offset=224
-  field free: i32[] index=29 offset=232
-  field expiredSessions: i32[] index=30 offset=240
-  field expiredIds: i64[] index=31 offset=248
-  field now: i64 index=32 offset=256 initialized
-  field expireAfter: i64 index=33 offset=264 initialized
-  field sessionAt: i32[] index=34 offset=272
-  field streamIds: i64[] index=35 offset=280
-  field streamSession: i32[] index=36 offset=288
-  field nextStream: i32[] index=37 offset=296
-  field prevStream: i32[] index=38 offset=304
-  field streamBits: i32[] index=39 offset=312
-  field waiting: WebTransportWaiting index=40 offset=320
-  field adoptions: i32[] index=41 offset=328
-  field sessionId: i64 index=42 offset=336 initialized
-  field stream: i64 index=43 offset=344 initialized
-  field errorCode: i64 index=44 offset=352 initialized
-  field appCode: i64 index=45 offset=360 initialized
-  field expiredCount: i32 index=46 offset=368 initialized
-  field capAt: i32 index=47 offset=372 initialized
-  field capEnd: i32 index=48 offset=376 initialized
-  field capSession: i32 index=49 offset=380 initialized
-  field session: i32 index=50 offset=384 initialized
-  field dataStart: i32 index=51 offset=388 initialized
-  field dataLength: i32 index=52 offset=392 initialized
-  field freeCount: i32 index=53 offset=396 initialized
-  field adoptCount: i32 index=54 offset=400 initialized
-  field generation: i32 index=55 offset=404 initialized
-  field datagramsDropped: i32 index=56 offset=408 initialized
-  field sessionsRefused: i32 index=57 offset=412 initialized
-  field streamsRefused: i32 index=58 offset=416 initialized
-  field bidirectional: boolean index=59 offset=420 initialized
-  field closedByPeer: boolean index=60 offset=421 initialized
+  field streamCount: i32[] index=14 offset=112
+  field datagramsIn: i32[] index=15 offset=120
+  field datagramsOut: i32[] index=16 offset=128
+  field free: i32[] index=17 offset=136
+  field expiredSessions: i32[] index=18 offset=144
+  field expiredIds: i64[] index=19 offset=152
+  field now: i64 index=20 offset=160 initialized
+  field expireAfter: i64 index=21 offset=168 initialized
+  field sessionAt: i32[] index=22 offset=176
+  field slots: WebTransportStream[] index=23 offset=184
+  field waiting: WebTransportWaiting index=24 offset=192
+  field adoptions: i32[] index=25 offset=200
+  field sessionId: i64 index=26 offset=208 initialized
+  field stream: i64 index=27 offset=216 initialized
+  field errorCode: i64 index=28 offset=224 initialized
+  field appCode: i64 index=29 offset=232 initialized
+  field expiredCount: i32 index=30 offset=240 initialized
+  field capAt: i32 index=31 offset=244 initialized
+  field capEnd: i32 index=32 offset=248 initialized
+  field capSession: i32 index=33 offset=252 initialized
+  field session: i32 index=34 offset=256 initialized
+  field dataStart: i32 index=35 offset=260 initialized
+  field dataLength: i32 index=36 offset=264 initialized
+  field freeCount: i32 index=37 offset=268 initialized
+  field adoptCount: i32 index=38 offset=272 initialized
+  field generation: i32 index=39 offset=276 initialized
+  field datagramsDropped: i32 index=40 offset=280 initialized
+  field sessionsRefused: i32 index=41 offset=284 initialized
+  field streamsRefused: i32 index=42 offset=288 initialized
+  field bidirectional: boolean index=43 offset=292 initialized
+  field closedByPeer: boolean index=44 offset=293 initialized
   constructor -> @nish.WebTransport.constructor
   method restart -> @nish.WebTransport.restart
   method current -> @nish.WebTransport.current
+  method at -> @nish.WebTransport.at
+  method slotAt -> @nish.WebTransport.slotAt
+  method publish -> @nish.WebTransport.publish
   method sessionOf -> @nish.WebTransport.sessionOf
-  method streamSlot -> @nish.WebTransport.streamSlot
+  method streamOf -> @nish.WebTransport.streamOf
   method openSession -> @nish.WebTransport.openSession
   method next -> @nish.WebTransport.next
   method receiveDatagram -> @nish.WebTransport.receiveDatagram
@@ -47674,6 +47789,7 @@ struct WebTransport (class) size=424 align=8 exported
   method close -> @nish.WebTransport.close
   method drain -> @nish.WebTransport.drain
   method touch -> @nish.WebTransport.touch
+  method idleNanos -> @nish.WebTransport.idleNanos
   method expire -> @nish.WebTransport.expire
   method expiresNoSooner -> @nish.WebTransport.expiresNoSooner
   method timeOut -> @nish.WebTransport.timeOut
@@ -47694,35 +47810,72 @@ struct WebTransport (class) size=424 align=8 exported
   method maxDatagramPayload -> @nish.WebTransport.maxDatagramPayload
   method sendDatagram -> @nish.WebTransport.sendDatagram
 function wtCodeToHttp3(code: i64): i64 -> @nish.wtCodeToHttp3 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_div nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i64.f64 nish_floor
   stackSites=0 stackLocals=0
-  local +0:9 n: i64 (const)
+  local +0:9 n: f64 (const)
 function wtCodeFromHttp3(code: i64): i64 -> @nish.wtCodeFromHttp3 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: code
-  calls: nish.h3Greased nish.wtCodeToHttp3 nish_panic_div nish_panic_overflow
+  calls: llvm.fptosi.sat.i64.f64 nish.h3Greased nish.wtCodeToHttp3 nish_floor
   stackSites=0 stackLocals=0
   local +0:9 last: i64 (const)
   callee +0:21 wtCodeToHttp3 -> @nish.wtCodeToHttp3
   callee +1:50 h3Greased -> @nish.h3Greased
-  local +4:9 shifted: i64 (const)
+  local +5:9 shifted: f64 (const)
 function webtransportCheckCap(what: string, value: i32, low: i32, high: i32): void -> @nish.webtransportCheckCap
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+function wtAdd(a: i32, b: i32): i32 -> @nish.wtAdd
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function wtSub(a: i32, b: i32): i32 -> @nish.wtSub
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function wtBytes(n: i32): u8[] -> @nish.wtBytes
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local +0:9 out: u8[] (const)
+  local +1:12 k: i32 (let)
+function wtI32s(n: i32): i32[] -> @nish.wtI32s
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local +0:9 out: i32[] (const)
+  local +1:12 k: i32 (let)
+function wtI64s(n: i32): i64[] -> @nish.wtI64s
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local +0:9 out: i64[] (const)
+  local +1:12 k: i32 (let)
+function wtBuckets(n: i32): i32 -> @nish.wtBuckets
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:12 shift: i32 (let)
+  local +1:11 size: i32 (const)
 function WebTransportWaiting.constructor(this: WebTransportWaiting, size: i32): void -> @nish.WebTransportWaiting.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish_random_fill
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: +0:5
   escaping: size
-  calls: nish.WebTransportWaiting.reset nish_panic nish_panic_overflow nish_random_fill
+  calls: nish.WebTransportWaiting.reset nish.wtBuckets nish.wtBytes nish.wtI32s nish.wtI64s nish_random_fill
   pointer this: size=64 writesThrough=true captured=false passedTo=nish.WebTransportWaiting.reset#0
-  stackSites=1 stackLocals=1
-  local +0:11 n: i32 (const)
-  local +5:9 buckets: i32 (let)
-  local +11:11 entropy: u8[] (const)
-  local +13:14 j: i32 (let)
-  callee +16:5 WebTransportWaiting.reset -> @nish.WebTransportWaiting.reset
+  stackSites=0 stackLocals=0
+  local -9:11 n: i32 (const)
+  callee -8:20 wtI64s -> @nish.wtI64s
+  callee -7:21 wtI64s -> @nish.wtI64s
+  callee -6:17 wtI32s -> @nish.wtI32s
+  callee -5:17 wtI32s -> @nish.wtI32s
+  local -4:11 buckets: i32 (const)
+  callee -4:26 wtBuckets -> @nish.wtBuckets
+  callee -3:18 wtI32s -> @nish.wtI32s
+  callee -2:18 wtI32s -> @nish.wtI32s
+  local -1:11 entropy: u8[] (const)
+  callee -1:27 wtBytes -> @nish.wtBytes
+  local +1:14 j: i32 (let)
+  callee +4:5 WebTransportWaiting.reset -> @nish.WebTransportWaiting.reset
 function WebTransportWaiting.reset(this: WebTransportWaiting): void -> @nish.WebTransportWaiting.reset [exported method]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -47731,50 +47884,76 @@ function WebTransportWaiting.reset(this: WebTransportWaiting): void -> @nish.Web
   local +2:11 n: i32 (const)
   local +3:14 e: i32 (let)
 function WebTransportWaiting.bucket(this: WebTransportWaiting, session: i64): i32 -> @nish.WebTransportWaiting.bucket [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_floor
   pointer this: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 x: i64 (const)
-  local +1:11 mixed: i64 (const)
+  local +1:11 scaled: f64 (const)
 function WebTransportWaiting.add(this: WebTransportWaiting, stream: i64, session: i64): boolean -> @nish.WebTransportWaiting.add [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: session stream
-  calls: nish.WebTransportWaiting.bucket nish_panic_index nish_panic_overflow
+  calls: nish.WebTransportWaiting.bucket
   pointer this: size=64 writesThrough=true captured=false passedTo=nish.WebTransportWaiting.bucket#0
   stackSites=0 stackLocals=0
-  local -4:11 e: i32 (const)
-  local +1:11 b: i32 (const)
-  callee +1:20 WebTransportWaiting.bucket -> @nish.WebTransportWaiting.bucket
-  local +2:11 tail: i32 (const)
+  local -21:11 next: i32[] (const)
+  local -20:11 prev: i32[] (const)
+  local -19:11 heads: i32[] (const)
+  local -18:11 tails: i32[] (const)
+  local -17:11 streams: i64[] (const)
+  local -16:11 sessions: i64[] (const)
+  local -15:11 e: i32 (const)
+  local -14:11 b: i32 (const)
+  callee -14:20 WebTransportWaiting.bucket -> @nish.WebTransportWaiting.bucket
+  local +1:11 tail: i32 (const)
+  local +12:11 count: i32 (const)
 function WebTransportWaiting.first(this: WebTransportWaiting, session: i64): i32 -> @nish.WebTransportWaiting.first [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: session
-  calls: nish.WebTransportWaiting.bucket nish_panic_index
+  calls: nish.WebTransportWaiting.bucket
   pointer this: size=64 writesThrough=false captured=false passedTo=nish.WebTransportWaiting.bucket#0
   stackSites=0 stackLocals=0
-  local +0:9 e: i32 (let)
-  callee +0:29 WebTransportWaiting.bucket -> @nish.WebTransportWaiting.bucket
-  local +2:11 guard: i32 (let)
+  local +0:11 heads: i32[] (const)
+  local +1:11 next: i32[] (const)
+  local +2:11 sessions: i64[] (const)
+  local +3:11 b: i32 (const)
+  callee +3:20 WebTransportWaiting.bucket -> @nish.WebTransportWaiting.bucket
+  local +7:9 e: i32 (let)
+  local +9:11 guard: i32 (let)
 function WebTransportWaiting.take(this: WebTransportWaiting, e: i32): i64 -> @nish.WebTransportWaiting.take [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: e
-  calls: nish.WebTransportWaiting.bucket nish_panic_index nish_panic_overflow
+  calls: nish.WebTransportWaiting.bucket
   pointer this: size=64 writesThrough=true captured=false passedTo=nish.WebTransportWaiting.bucket#0
   stackSites=0 stackLocals=0
-  local -5:11 stream: i64 (const)
-  local -4:11 b: i32 (const)
-  callee -4:20 WebTransportWaiting.bucket -> @nish.WebTransportWaiting.bucket
+  local -23:11 next: i32[] (const)
+  local -22:11 prev: i32[] (const)
+  local -21:11 heads: i32[] (const)
+  local -20:11 tails: i32[] (const)
+  local -19:11 streams: i64[] (const)
+  local -18:11 sessions: i64[] (const)
+  local -8:11 b: i32 (const)
+  callee -8:20 WebTransportWaiting.bucket -> @nish.WebTransportWaiting.bucket
+  local -4:11 stream: i64 (const)
   local -3:11 before: i32 (const)
   local -2:11 after: i32 (const)
+  local +11:11 count: i32 (const)
+function WebTransportSession.constructor(this: WebTransportSession, index: i32): void -> @nish.WebTransportSession.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: index
+  calls: nish.wtBytes
+  pointer this: size=104 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:20 wtBytes -> @nish.wtBytes
+  callee +1:19 wtBytes -> @nish.wtBytes
 function WebTransport.constructor(this: WebTransport, config: WebTransportConfig, h3: Http3Connection): void -> @nish.WebTransport.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   escaping: config h3
-  calls: nish.WebTransport.restart nish.WebTransportWaiting.constructor nish.httpFieldBytes nish.webtransportCheckCap nish_alloc_struct nish_monotonic_nanos nish_panic nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
+  calls: nish.WebTransport.restart nish.WebTransportSession.constructor nish.WebTransportWaiting.constructor nish.httpFieldBytes nish.webtransportCheckCap nish.wtAdd nish.wtBytes nish.wtI32s nish.wtI64s nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
   pointer config: size=16 writesThrough=true captured=true
   pointer h3: size=536 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -47784,110 +47963,181 @@ function WebTransport.constructor(this: WebTransport, config: WebTransportConfig
   callee +7:5 webtransportCheckCap -> @nish.webtransportCheckCap
   callee +8:5 webtransportCheckCap -> @nish.webtransportCheckCap
   local +14:11 entry: i32 (const)
-  callee +20:25 httpFieldBytes -> @nish.httpFieldBytes
-  callee +21:26 httpFieldBytes -> @nish.httpFieldBytes
-  local +43:11 n: i32 (const)
-  local +44:11 slots: i32 (const)
-  callee +51:20 new WebTransportWaiting -> @nish.WebTransportWaiting.constructor
-  callee +53:5 WebTransport.restart -> @nish.WebTransport.restart
+  callee +15:21 wtBytes -> @nish.wtBytes
+  callee +16:21 wtBytes -> @nish.wtBytes
+  callee +16:29 wtAdd -> @nish.wtAdd
+  callee +17:23 wtBytes -> @nish.wtBytes
+  callee +19:25 httpFieldBytes -> @nish.httpFieldBytes
+  callee +20:26 httpFieldBytes -> @nish.httpFieldBytes
+  local +22:11 table: WebTransportSession[] (const)
+  local +23:14 s: i32 (let)
+  callee +24:18 new WebTransportSession -> @nish.WebTransportSession.constructor
+  callee +27:23 wtI64s -> @nish.wtI64s
+  callee +28:24 wtI32s -> @nish.wtI32s
+  callee +29:24 wtI32s -> @nish.wtI32s
+  callee +30:25 wtI32s -> @nish.wtI32s
+  callee +31:17 wtI32s -> @nish.wtI32s
+  callee +32:28 wtI32s -> @nish.wtI32s
+  callee +33:23 wtI64s -> @nish.wtI64s
+  local +35:11 n: i32 (const)
+  local +36:11 count: i32 (const)
+  callee +37:22 wtI32s -> @nish.wtI32s
+  local +38:11 slots: WebTransportStream[] (const)
+  local +39:14 k: i32 (let)
+  callee +43:20 new WebTransportWaiting -> @nish.WebTransportWaiting.constructor
+  callee +44:22 wtI32s -> @nish.wtI32s
+  callee +45:5 WebTransport.restart -> @nish.WebTransport.restart
 function WebTransport.restart(this: WebTransport): void -> @nish.WebTransport.restart [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.WebTransportWaiting.reset nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false
+  calls: nish.WebTransport.publish nish.WebTransportWaiting.reset
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.publish#0
   stackSites=0 stackLocals=0
-  local +7:14 s: i32 (let)
-  callee +11:5 WebTransportWaiting.reset -> @nish.WebTransportWaiting.reset
+  local +1:11 table: WebTransportSession[] (const)
+  local +2:14 s: i32 (let)
+  local +3:13 w: WebTransportSession (const)
+  callee +6:7 WebTransport.publish -> @nish.WebTransport.publish
+  local +9:11 slots: WebTransportStream[] (const)
+  local +10:14 k: i32 (let)
+  local +11:13 t: WebTransportStream (const)
+  local +15:11 free: i32[] (const)
+  local +16:9 count: i32 (let)
+  local +17:14 s: i32 (let)
+  callee +24:5 WebTransportWaiting.reset -> @nish.WebTransportWaiting.reset
 function WebTransport.current(this: WebTransport): void -> @nish.WebTransport.current [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.restart
   calls: nish.WebTransport.restart
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
   stackSites=0 stackLocals=0
   callee +0:7 WebTransport.restart -> @nish.WebTransport.restart
-function WebTransport.sessionOf(this: WebTransport, id: i64): i32 -> @nish.WebTransport.sessionOf [exported method]
+function WebTransport.at(this: WebTransport, s: i32): WebTransportSession | null -> @nish.WebTransport.at [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  pointer this: size=296 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 table: WebTransportSession[] (const)
+function WebTransport.slotAt(this: WebTransport, k: i32): WebTransportStream | null -> @nish.WebTransport.slotAt [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  pointer this: size=296 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 slots: WebTransportStream[] (const)
+function WebTransport.publish(this: WebTransport, w: WebTransportSession): void -> @nish.WebTransport.publish [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  pointer this: size=296 writesThrough=false captured=false
+  pointer w: size=104 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -3:11 s: i32 (const)
+  local -2:11 ids: i64[] (const)
+  local +2:11 streams: i32[] (const)
+  local +6:11 into: i32[] (const)
+  local +10:11 out: i32[] (const)
+function WebTransport.sessionOf(this: WebTransport, id: i64): WebTransportSession | null -> @nish.WebTransport.sessionOf [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
-  calls: nish.QuicStreams.slotOf
-  pointer this: size=424 writesThrough=false captured=false
+  calls: nish.QuicStreams.slotOf nish.WebTransport.at
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.at#0
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local +4:11 s: i32 (const)
-function WebTransport.streamSlot(this: WebTransport, id: i64): i32 -> @nish.WebTransport.streamSlot [exported method]
+  local +1:11 at: i32[] (const)
+  local +5:11 w: WebTransportSession | null (const)
+  callee +5:43 WebTransport.at -> @nish.WebTransport.at
+function WebTransport.streamOf(this: WebTransport, id: i64): WebTransportStream | null -> @nish.WebTransport.streamOf [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
-  calls: nish.QuicStreams.slotOf
-  pointer this: size=424 writesThrough=false captured=false
+  calls: nish.QuicStreams.slotOf nish.WebTransport.slotAt
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.slotAt#0
   stackSites=0 stackLocals=0
-  local +0:11 k: i32 (const)
-  callee +0:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-function WebTransport.openSession(this: WebTransport, id: i64): i32 -> @nish.WebTransport.openSession [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +0:11 t: WebTransportStream | null (const)
+  callee +0:42 WebTransport.slotAt -> @nish.WebTransport.slotAt
+  callee +0:54 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+function WebTransport.openSession(this: WebTransport, id: i64): WebTransportSession | null -> @nish.WebTransport.openSession [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.current
   escaping: id
-  calls: nish.WebTransport.current nish.WebTransport.sessionOf nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
+  calls: nish.WebTransport.current nish.WebTransport.sessionOf
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
-  local +1:11 s: i32 (const)
-  callee +1:20 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
+  local +1:11 w: WebTransportSession | null (const)
+  callee +1:43 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
 function WebTransport.next(this: WebTransport): i32 -> @nish.WebTransport.next [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.Http3Connection.next nish.WebTransport.adoptWaiting nish.WebTransport.capsules nish.WebTransport.closedEvent nish.WebTransport.current nish.WebTransport.receiveDatagram nish.WebTransport.route nish_monotonic_nanos nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.closedEvent#0 nish.WebTransport.adoptWaiting#0 nish.WebTransport.capsules#0 nish.WebTransport.receiveDatagram#0 nish.WebTransport.route#0
+  calls: nish.Http3Connection.next nish.WebTransport.adoptWaiting nish.WebTransport.at nish.WebTransport.capsules nish.WebTransport.closedEvent nish.WebTransport.current nish.WebTransport.receiveDatagram nish.WebTransport.route nish_monotonic_nanos
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.at#0 nish.WebTransport.closedEvent#0 nish.WebTransport.adoptWaiting#0 nish.WebTransport.capsules#0 nish.WebTransport.receiveDatagram#0 nish.WebTransport.route#0
   stackSites=0 stackLocals=0
   callee -3:5 WebTransport.current -> @nish.WebTransport.current
   local -2:11 clock: i64 (const)
-  local +3:13 id: i64 (const)
-  callee +6:14 WebTransport.closedEvent -> @nish.WebTransport.closedEvent
-  local +8:14 guard: i32 (let)
-  local +10:15 event: i32 (const)
-  callee +10:28 WebTransport.adoptWaiting -> @nish.WebTransport.adoptWaiting
-  local +17:15 event: i32 (const)
-  callee +17:28 WebTransport.capsules -> @nish.WebTransport.capsules
-  local +23:13 got: i32 (const)
-  callee +23:24 WebTransport.receiveDatagram -> @nish.WebTransport.receiveDatagram
-  local +30:13 event: i32 (const)
-  callee +30:26 Http3Connection.next -> @nish.Http3Connection.next
-  local +34:13 routed: i32 (const)
-  callee +34:27 WebTransport.route -> @nish.WebTransport.route
+  local +1:11 expired: i32 (const)
+  local +3:13 i: i32 (const)
+  local +5:13 ids: i64[] (const)
+  local +6:13 sessions: i32[] (const)
+  local +8:15 w: WebTransportSession | null (const)
+  callee +8:47 WebTransport.at -> @nish.WebTransport.at
+  local +10:17 id: i64 (const)
+  callee +13:18 WebTransport.closedEvent -> @nish.WebTransport.closedEvent
+  local +17:14 guard: i32 (let)
+  local +19:15 event: i32 (const)
+  callee +19:28 WebTransport.adoptWaiting -> @nish.WebTransport.adoptWaiting
+  local +26:15 event: i32 (const)
+  callee +26:28 WebTransport.capsules -> @nish.WebTransport.capsules
+  local +32:13 got: i32 (const)
+  callee +32:24 WebTransport.receiveDatagram -> @nish.WebTransport.receiveDatagram
+  local +39:13 event: i32 (const)
+  callee +39:26 Http3Connection.next -> @nish.Http3Connection.next
+  local +43:13 routed: i32 (const)
+  callee +43:27 WebTransport.route -> @nish.WebTransport.route
 function WebTransport.receiveDatagram(this: WebTransport): i32 -> @nish.WebTransport.receiveDatagram [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.Http3Connection.fail nish.QuicConnection.readDatagram nish.WebTransport.sessionOf nish.h3Count nish.h3ReadVarint nish.h3VarintLength nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0
+  calls: nish.Http3Connection.fail nish.QuicConnection.readDatagram nish.WebTransport.publish nish.WebTransport.sessionOf nish.h3Count nish.h3ReadVarint nish.h3VarintLength nish.wtAdd nish.wtSub
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0 nish.WebTransport.publish#0
   stackSites=0 stackLocals=0
-  local -13:11 n: i32 (const)
-  callee -13:20 QuicConnection.readDatagram -> @nish.QuicConnection.readDatagram
-  local -9:11 quarter: i64 (const)
-  callee -9:26 h3ReadVarint -> @nish.h3ReadVarint
-  callee -6:7 Http3Connection.fail -> @nish.Http3Connection.fail
-  local -3:11 s: i32 (const)
-  callee -3:20 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
+  local -15:11 buf: u8[] (const)
+  local -14:11 n: i32 (const)
+  callee -14:20 QuicConnection.readDatagram -> @nish.QuicConnection.readDatagram
+  local -10:11 quarter: i64 (const)
+  callee -10:26 h3ReadVarint -> @nish.h3ReadVarint
+  callee -7:7 Http3Connection.fail -> @nish.Http3Connection.fail
+  local -3:11 w: WebTransportSession | null (const)
+  callee -3:43 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
   callee +0:31 h3Count -> @nish.h3Count
-  callee +9:31 h3Count -> @nish.h3Count
-  local +14:11 at: i32 (const)
-  callee +14:21 h3VarintLength -> @nish.h3VarintLength
-  callee +15:27 h3Count -> @nish.h3Count
+  local +3:11 now: i64 (const)
+  local +4:11 since: i64 (const)
+  local +10:11 taken: i32 (const)
+  callee +13:31 h3Count -> @nish.h3Count
+  callee +16:19 wtAdd -> @nish.wtAdd
+  local +18:11 at: i32 (const)
+  callee +18:21 h3VarintLength -> @nish.h3VarintLength
+  callee +19:21 h3Count -> @nish.h3Count
+  callee +20:5 WebTransport.publish -> @nish.WebTransport.publish
+  callee +25:23 wtSub -> @nish.wtSub
 function WebTransport.route(this: WebTransport, event: i32): i32 -> @nish.WebTransport.route [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: event
-  calls: nish.WebTransport.arrived nish.WebTransport.asked nish.WebTransport.codes nish.WebTransport.connectEvent nish.WebTransport.dropPending nish.WebTransport.settle nish.WebTransport.touch nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.arrived#0 nish.WebTransport.dropPending#0 nish.WebTransport.asked#0 nish.WebTransport.dropPending#0 nish.WebTransport.connectEvent#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0
+  calls: nish.WebTransport.arrived nish.WebTransport.asked nish.WebTransport.at nish.WebTransport.codes nish.WebTransport.connectEvent nish.WebTransport.dropPending nish.WebTransport.settle nish.WebTransport.slotAt nish.WebTransport.touch
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.arrived#0 nish.WebTransport.dropPending#0 nish.WebTransport.asked#0 nish.WebTransport.dropPending#0 nish.WebTransport.at#0 nish.WebTransport.connectEvent#0 nish.WebTransport.slotAt#0 nish.WebTransport.at#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0
   stackSites=0 stackLocals=0
-  local -33:11 h3: Http3Connection (const)
-  local -32:11 id: i64 (const)
-  callee -30:14 WebTransport.arrived -> @nish.WebTransport.arrived
-  callee -23:7 WebTransport.dropPending -> @nish.WebTransport.dropPending
-  callee -18:16 WebTransport.asked -> @nish.WebTransport.asked
-  callee -15:7 WebTransport.dropPending -> @nish.WebTransport.dropPending
-  local -11:11 k: i32 (const)
-  local -10:11 s: i32 (const)
-  callee -8:14 WebTransport.connectEvent -> @nish.WebTransport.connectEvent
-  local -2:11 t: i32 (const)
+  local -37:11 h3: Http3Connection (const)
+  local -36:11 id: i64 (const)
+  callee -34:14 WebTransport.arrived -> @nish.WebTransport.arrived
+  callee -27:7 WebTransport.dropPending -> @nish.WebTransport.dropPending
+  callee -22:16 WebTransport.asked -> @nish.WebTransport.asked
+  callee -19:7 WebTransport.dropPending -> @nish.WebTransport.dropPending
+  local -15:11 k: i32 (const)
+  local -14:11 at: i32[] (const)
+  local -12:13 w: WebTransportSession | null (const)
+  callee -12:45 WebTransport.at -> @nish.WebTransport.at
+  callee -10:16 WebTransport.connectEvent -> @nish.WebTransport.connectEvent
+  local -7:11 t: WebTransportStream | null (const)
+  callee -7:42 WebTransport.slotAt -> @nish.WebTransport.slotAt
+  local -2:11 owner: WebTransportSession | null (const)
+  callee -2:47 WebTransport.at -> @nish.WebTransport.at
   callee -1:5 WebTransport.touch -> @nish.WebTransport.touch
   callee +10:7 WebTransport.settle -> @nish.WebTransport.settle
   callee +14:7 WebTransport.codes -> @nish.WebTransport.codes
@@ -47895,21 +48145,22 @@ function WebTransport.route(this: WebTransport, event: i32): i32 -> @nish.WebTra
   callee +19:7 WebTransport.codes -> @nish.WebTransport.codes
   callee +20:7 WebTransport.settle -> @nish.WebTransport.settle
 function WebTransport.codes(this: WebTransport, code: i64): void -> @nish.WebTransport.codes [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: code
   calls: nish.wtCodeFromHttp3
-  pointer this: size=424 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +1:20 wtCodeFromHttp3 -> @nish.wtCodeFromHttp3
-function WebTransport.connectEvent(this: WebTransport, s: i32, event: i32): i32 -> @nish.WebTransport.connectEvent [exported method]
+function WebTransport.connectEvent(this: WebTransport, w: WebTransportSession, event: i32): i32 -> @nish.WebTransport.connectEvent [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: s
-  calls: nish.Http3Connection.reset nish.WebTransport.capsules nish.WebTransport.closedEvent nish.WebTransport.finish nish.WebTransport.release nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.capsules#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0 nish.WebTransport.closedEvent#0 nish.WebTransport.finish#0 nish.WebTransport.closedEvent#0
+  calls: nish.Http3Connection.reset nish.WebTransport.capsules nish.WebTransport.closedEvent nish.WebTransport.finish nish.WebTransport.release nish.wtAdd
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.capsules#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0 nish.WebTransport.closedEvent#0 nish.WebTransport.finish#0 nish.WebTransport.closedEvent#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.release#1 nish.WebTransport.closedEvent#1 nish.WebTransport.closedEvent#1 nish.WebTransport.closedEvent#1
   stackSites=0 stackLocals=0
   local -1:11 h3: Http3Connection (const)
+  callee +11:21 wtAdd -> @nish.wtAdd
   callee +12:14 WebTransport.capsules -> @nish.WebTransport.capsules
   local +16:13 id: i64 (const)
   local +17:13 wasGone: boolean (const)
@@ -47925,43 +48176,50 @@ function WebTransport.finish(this: WebTransport, id: i64): boolean -> @nish.WebT
   sharedWrite: via nish.Http3Connection.writeData
   escaping: id
   calls: nish.Http3Connection.reset nish.Http3Connection.writeData
-  pointer this: size=424 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:9 Http3Connection.writeData -> @nish.Http3Connection.writeData
   callee +3:5 Http3Connection.reset -> @nish.Http3Connection.reset
-function WebTransport.closedEvent(this: WebTransport, s: i32, code: i64, length: i32, byPeer: boolean): i32 -> @nish.WebTransport.closedEvent [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function WebTransport.closedEvent(this: WebTransport, w: WebTransportSession, code: i64, length: i32, byPeer: boolean): i32 -> @nish.WebTransport.closedEvent [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: byPeer length s
-  calls: nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false
+  escaping: byPeer length
+  pointer this: size=296 writesThrough=true captured=false
+  pointer w: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function WebTransport.asked(this: WebTransport, id: i64): i32 -> @nish.WebTransport.asked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: id
-  calls: nish.QuicStreams.slotOf nish.WebTransport.answer nish.WebTransport.dropPending nish.WebTransport.release nish.httpFieldIs nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.answer#0 nish.WebTransport.dropPending#0
+  calls: nish.QuicStreams.slotOf nish.WebTransport.answer nish.WebTransport.at nish.WebTransport.dropPending nish.WebTransport.publish nish.WebTransport.release nish.httpFieldIs nish.wtSub
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.at#0 nish.WebTransport.release#0 nish.WebTransport.answer#0 nish.WebTransport.dropPending#0 nish.WebTransport.at#0 nish.WebTransport.publish#0
   stackSites=0 stackLocals=0
-  local -32:11 h3: Http3Connection (const)
-  local -31:11 f: HttpFields (const)
-  local -30:11 k: i32 (const)
-  callee -30:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local -28:13 stale: i32 (const)
-  callee -24:9 WebTransport.release -> @nish.WebTransport.release
-  local -21:9 status: i32 (let)
-  local -20:11 peer: Http3Settings (const)
-  callee -19:10 httpFieldIs -> @nish.httpFieldIs
-  callee -16:8 httpFieldIs -> @nish.httpFieldIs
-  callee -7:7 WebTransport.answer -> @nish.WebTransport.answer
-  callee -6:7 WebTransport.dropPending -> @nish.WebTransport.dropPending
-  local +1:11 s: i32 (const)
+  local -42:11 h3: Http3Connection (const)
+  local -41:11 f: HttpFields (const)
+  local -40:11 k: i32 (const)
+  callee -40:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local -39:11 at: i32[] (const)
+  local -37:13 stale: WebTransportSession | null (const)
+  callee -37:49 WebTransport.at -> @nish.WebTransport.at
+  callee -33:9 WebTransport.release -> @nish.WebTransport.release
+  local -30:9 status: i32 (let)
+  local -29:11 peer: Http3Settings (const)
+  callee -28:10 httpFieldIs -> @nish.httpFieldIs
+  callee -25:8 httpFieldIs -> @nish.httpFieldIs
+  callee -16:7 WebTransport.answer -> @nish.WebTransport.answer
+  callee -15:7 WebTransport.dropPending -> @nish.WebTransport.dropPending
+  local -9:11 free: i32[] (const)
+  local -8:11 i: i32 (const)
+  callee -8:20 wtSub -> @nish.wtSub
+  local -4:11 w: WebTransportSession | null (const)
+  callee -4:43 WebTransport.at -> @nish.WebTransport.at
+  callee +16:5 WebTransport.publish -> @nish.WebTransport.publish
 function WebTransport.answer(this: WebTransport, id: i64, status: i32): void -> @nish.WebTransport.answer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: id status
   calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.Http3Connection.respond nish.h3Count
-  pointer this: size=424 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:28 h3Count -> @nish.h3Count
   callee +1:9 Http3Connection.respond -> @nish.Http3Connection.respond
@@ -47971,185 +48229,229 @@ function WebTransport.accept(this: WebTransport, id: i64): i32 -> @nish.WebTrans
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: id
-  calls: nish.Http3Connection.respond nish.WebTransport.current nish.WebTransport.sessionOf nish.WebTransportWaiting.first nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
+  calls: nish.Http3Connection.respond nish.WebTransport.current nish.WebTransport.sessionOf nish.WebTransportWaiting.first
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
   stackSites=0 stackLocals=0
   callee -9:5 WebTransport.current -> @nish.WebTransport.current
-  local -8:11 s: i32 (const)
-  callee -8:20 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
+  local -8:11 w: WebTransportSession | null (const)
+  callee -8:43 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
   local -4:11 result: i32 (const)
   callee -4:25 Http3Connection.respond -> @nish.Http3Connection.respond
-  callee +3:9 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
+  local +3:11 list: i32[] (const)
+  local +4:11 c: i32 (const)
+  callee +5:9 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
 function WebTransport.refuse(this: WebTransport, id: i64, status: i32): i32 -> @nish.WebTransport.refuse [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.current
   escaping: id status
-  calls: nish.WebTransport.answer nish.WebTransport.current nish.WebTransport.release nish.WebTransport.sessionOf nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0 nish.WebTransport.answer#0 nish.WebTransport.release#0
+  calls: nish.WebTransport.answer nish.WebTransport.current nish.WebTransport.release nish.WebTransport.sessionOf
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0 nish.WebTransport.answer#0 nish.WebTransport.release#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
-  local +1:11 s: i32 (const)
-  callee +1:20 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
+  local +1:11 w: WebTransportSession | null (const)
+  callee +1:43 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
   callee +8:5 WebTransport.answer -> @nish.WebTransport.answer
   callee +9:5 WebTransport.release -> @nish.WebTransport.release
-function WebTransport.release(this: WebTransport, s: i32): void -> @nish.WebTransport.release [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function WebTransport.release(this: WebTransport, w: WebTransportSession): void -> @nish.WebTransport.release [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: s
-  calls: nish.WebTransport.end nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.end#0
+  calls: nish.WebTransport.end nish.WebTransport.publish
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.end#0 nish.WebTransport.publish#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.end#1 nish.WebTransport.publish#1
   stackSites=0 stackLocals=0
-  callee -3:5 WebTransport.end -> @nish.WebTransport.end
-  local -2:11 k: i32 (const)
-function WebTransport.end(this: WebTransport, s: i32): void -> @nish.WebTransport.end [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee -4:5 WebTransport.end -> @nish.WebTransport.end
+  local -3:11 k: i32 (const)
+  local -2:11 at: i32[] (const)
+  callee +4:5 WebTransport.publish -> @nish.WebTransport.publish
+  local +8:11 free: i32[] (const)
+  local +9:11 c: i32 (const)
+function WebTransport.end(this: WebTransport, w: WebTransportSession): void -> @nish.WebTransport.end [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: s
-  calls: nish.Http3Connection.refuseStream nish.WebTransport.dropPending nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.dropPending#0
+  calls: nish.Http3Connection.refuseStream nish.WebTransport.dropPending nish.WebTransport.publish nish.WebTransport.slotAt
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.slotAt#0 nish.WebTransport.publish#0 nish.WebTransport.dropPending#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.publish#1
   stackSites=0 stackLocals=0
-  local -4:9 k: i32 (let)
-  local -3:14 guard: i32 (let)
+  local -8:9 k: i32 (let)
+  local -7:14 guard: i32 (let)
+  local -6:13 t: WebTransportStream | null (const)
+  callee -6:44 WebTransport.slotAt -> @nish.WebTransport.slotAt
   local -2:13 following: i32 (const)
   callee -1:7 Http3Connection.refuseStream -> @nish.Http3Connection.refuseStream
-  callee +6:5 WebTransport.dropPending -> @nish.WebTransport.dropPending
+  callee +6:5 WebTransport.publish -> @nish.WebTransport.publish
+  callee +7:5 WebTransport.dropPending -> @nish.WebTransport.dropPending
 function WebTransport.dropPending(this: WebTransport, id: i64): void -> @nish.WebTransport.dropPending [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.WebTransport.refuseStream
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.WebTransportWaiting.take
   escaping: id
   calls: nish.WebTransport.refuseStream nish.WebTransportWaiting.first nish.WebTransportWaiting.take
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0
   stackSites=0 stackLocals=0
   local +0:9 e: i32 (let)
   callee +0:18 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
   local +1:14 guard: i32 (let)
-  callee +2:7 WebTransport.refuseStream -> @nish.WebTransport.refuseStream
-  callee +2:25 WebTransportWaiting.take -> @nish.WebTransportWaiting.take
-  callee +3:11 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
+  local +2:13 stream: i64 (const)
+  callee +2:27 WebTransportWaiting.take -> @nish.WebTransportWaiting.take
+  callee +6:7 WebTransport.refuseStream -> @nish.WebTransport.refuseStream
+  callee +7:11 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
 function WebTransport.close(this: WebTransport, id: i64, code: i64, buf: u8[], off: i32, len: i32): i32 -> @nish.WebTransport.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: via nish.WebTransport.openSession
   escaping: id len off
-  calls: nish.Http3Connection.writeDataWhole nish.WebTransport.end nish.WebTransport.openSession nish.h3CheckWindow nish.h3PutFrameHeader nish.quicPacketCopy nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.end#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicPacketCopy#2
-  stackSites=0 stackLocals=0
-  callee -12:5 h3CheckWindow -> @nish.h3CheckWindow
-  local -11:11 s: i32 (const)
-  callee -11:20 WebTransport.openSession -> @nish.WebTransport.openSession
-  local -4:11 out: u8[] (const)
-  local -3:11 end: i32 (const)
-  local -2:9 p: i32 (let)
-  callee -2:18 h3PutFrameHeader -> @nish.h3PutFrameHeader
-  local -1:11 value: i64 (const)
-  callee +5:5 quicPacketCopy -> @nish.quicPacketCopy
-  local +6:11 result: i32 (const)
-  callee +6:25 Http3Connection.writeDataWhole -> @nish.Http3Connection.writeDataWhole
-  callee +10:5 WebTransport.end -> @nish.WebTransport.end
+  calls: nish.Http3Connection.writeDataWhole nish.WebTransport.end nish.WebTransport.openSession nish.h3CheckWindow nish.h3PutFrameHeader nish.tryCopyBytes nish.wtAdd
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.end#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.tryCopyBytes#2
+  stackSites=1 stackLocals=1
+  callee +0:5 h3CheckWindow -> @nish.h3CheckWindow
+  local +1:11 w: WebTransportSession | null (const)
+  callee +1:43 WebTransport.openSession -> @nish.WebTransport.openSession
+  local +8:11 out: u8[] (const)
+  local +9:11 end: i32 (const)
+  local +10:11 p: i32 (const)
+  callee +10:20 h3PutFrameHeader -> @nish.h3PutFrameHeader
+  local +11:11 value: i64 (const)
+  local +12:11 head: u8[] (const)
+  local +18:11 at: i32 (const)
+  callee +18:21 wtAdd -> @nish.wtAdd
+  callee +19:19 tryCopyBytes -> @nish.tryCopyBytes
+  callee +19:62 tryCopyBytes -> @nish.tryCopyBytes
+  local +22:11 result: i32 (const)
+  callee +22:25 Http3Connection.writeDataWhole -> @nish.Http3Connection.writeDataWhole
+  callee +22:66 wtAdd -> @nish.wtAdd
+  callee +26:5 WebTransport.end -> @nish.WebTransport.end
 function WebTransport.drain(this: WebTransport, id: i64): i32 -> @nish.WebTransport.drain [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.openSession
   escaping: id
   calls: nish.Http3Connection.writeDataWhole nish.WebTransport.openSession nish.h3PutFrameHeader
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
   stackSites=0 stackLocals=0
-  local +0:11 s: i32 (const)
-  callee +0:20 WebTransport.openSession -> @nish.WebTransport.openSession
-  local +4:11 out: u8[] (const)
-  local +5:11 end: i32 (const)
-  local +6:11 p: i32 (const)
-  callee +6:20 h3PutFrameHeader -> @nish.h3PutFrameHeader
-  callee +7:12 Http3Connection.writeDataWhole -> @nish.Http3Connection.writeDataWhole
-function WebTransport.touch(this: WebTransport, k: i32): void -> @nish.WebTransport.touch [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +0:9 WebTransport.openSession -> @nish.WebTransport.openSession
+  local +3:11 out: u8[] (const)
+  local +4:11 end: i32 (const)
+  local +5:11 p: i32 (const)
+  callee +5:20 h3PutFrameHeader -> @nish.h3PutFrameHeader
+  callee +6:12 Http3Connection.writeDataWhole -> @nish.Http3Connection.writeDataWhole
+function WebTransport.touch(this: WebTransport, t: WebTransportStream): void -> @nish.WebTransport.touch [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: k
-  calls: nish_panic_index
-  pointer this: size=424 writesThrough=false captured=false
+  calls: nish.WebTransport.at
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.at#0
+  pointer t: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -2:11 t: i32 (const)
+  local -2:11 w: WebTransportSession | null (const)
+  callee -2:43 WebTransport.at -> @nish.WebTransport.at
+function WebTransport.idleNanos(this: WebTransport): i64 -> @nish.WebTransport.idleNanos [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i64.f64
+  pointer this: size=296 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function WebTransport.expire(this: WebTransport, now: i64): i32 -> @nish.WebTransport.expire [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now
-  calls: nish.WebTransport.current nish.WebTransport.timeOut nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.timeOut#0
+  calls: nish.WebTransport.current nish.WebTransport.idleNanos nish.WebTransport.timeOut nish.wtAdd nish_panic_overflow
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.idleNanos#0 nish.WebTransport.timeOut#0
   stackSites=0 stackLocals=0
-  callee -4:5 WebTransport.current -> @nish.WebTransport.current
-  local +1:11 idle: i64 (const)
-  local +2:9 soonest: i64 (let)
+  callee -5:5 WebTransport.current -> @nish.WebTransport.current
+  local -4:11 idle: i64 (const)
+  callee -4:23 WebTransport.idleNanos -> @nish.WebTransport.idleNanos
+  local +2:9 wait: i64 (let)
   local +3:9 n: i32 (let)
-  local +4:14 s: i32 (let)
-  local +5:13 state: i32 (const)
-  local +7:15 deadline: i64 (const)
-  callee +9:11 WebTransport.timeOut -> @nish.WebTransport.timeOut
+  local +4:11 table: WebTransportSession[] (const)
+  local +5:14 s: i32 (let)
+  local +6:13 w: WebTransportSession (const)
+  local +7:13 state: i32 (const)
+  local +9:15 last: i64 (const)
+  local +11:15 quiet: i64 (const)
+  callee +13:11 WebTransport.timeOut -> @nish.WebTransport.timeOut
+  callee +14:15 wtAdd -> @nish.wtAdd
 function WebTransport.expiresNoSooner(this: WebTransport, now: i64): i64 -> @nish.WebTransport.expiresNoSooner [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=false captured=false
+  calls: nish.WebTransport.idleNanos nish_panic_overflow
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.idleNanos#0
   stackSites=0 stackLocals=0
   local +0:11 idle: i64 (const)
-  local +1:9 soonest: i64 (let)
-  local +2:14 s: i32 (let)
-function WebTransport.timeOut(this: WebTransport, s: i32, state: i32): void -> @nish.WebTransport.timeOut [exported method]
+  callee +0:23 WebTransport.idleNanos -> @nish.WebTransport.idleNanos
+  local +4:9 wait: i64 (let)
+  local +5:11 table: WebTransportSession[] (const)
+  local +6:14 s: i32 (let)
+  local +7:13 w: WebTransportSession (const)
+  local +9:15 last: i64 (const)
+  local +10:15 quiet: i64 (const)
+function WebTransport.timeOut(this: WebTransport, w: WebTransportSession, state: i32): void -> @nish.WebTransport.timeOut [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: s
-  calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.WebTransport.answer nish.WebTransport.close nish.WebTransport.release nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.answer#0 nish.WebTransport.release#0 nish.WebTransport.close#0 nish.WebTransport.release#0 nish.WebTransport.release#0
+  calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.WebTransport.answer nish.WebTransport.close nish.WebTransport.release
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.answer#0 nish.WebTransport.release#0 nish.WebTransport.close#0 nish.WebTransport.release#0 nish.WebTransport.release#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.release#1 nish.WebTransport.release#1 nish.WebTransport.release#1
   stackSites=0 stackLocals=0
-  local -17:11 id: i64 (const)
-  callee -15:7 WebTransport.answer -> @nish.WebTransport.answer
-  callee -14:7 WebTransport.release -> @nish.WebTransport.release
-  callee -12:11 WebTransport.close -> @nish.WebTransport.close
-  callee -10:9 Http3Connection.reset -> @nish.Http3Connection.reset
-  callee -9:9 WebTransport.release -> @nish.WebTransport.release
-  callee -5:7 Http3Connection.discardRequest -> @nish.Http3Connection.discardRequest
-  callee -4:7 WebTransport.release -> @nish.WebTransport.release
+  local -20:11 id: i64 (const)
+  callee -18:7 WebTransport.answer -> @nish.WebTransport.answer
+  callee -17:7 WebTransport.release -> @nish.WebTransport.release
+  callee -15:11 WebTransport.close -> @nish.WebTransport.close
+  callee -13:9 Http3Connection.reset -> @nish.Http3Connection.reset
+  callee -12:9 WebTransport.release -> @nish.WebTransport.release
+  callee -8:7 Http3Connection.discardRequest -> @nish.Http3Connection.discardRequest
+  callee -7:7 WebTransport.release -> @nish.WebTransport.release
+  local -4:11 sessions: i32[] (const)
+  local -3:11 ids: i64[] (const)
+  local -2:11 c: i32 (const)
 function WebTransport.capsules(this: WebTransport): i32 -> @nish.WebTransport.capsules [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
-  calls: nish.WebTransport.capsule nish.WebTransport.malformed nish.h3ReadFrameHeader nish.quicPacketCopy nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.capsule#0
+  sharedWrite: +0:7
+  calls: nish.WebTransport.at nish.WebTransport.capsule nish.WebTransport.malformed nish.h3ReadFrameHeader nish.tryCopyBytes nish.wtAdd nish.wtSub
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.at#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.capsule#0
   stackSites=0 stackLocals=0
-  local -14:11 s: i32 (const)
-  local -13:11 bytes: u8[] (const)
-  local -12:11 base: i32 (const)
-  callee -8:16 WebTransport.malformed -> @nish.WebTransport.malformed
-  local -4:15 have: i32 (const)
-  callee -2:18 WebTransport.malformed -> @nish.WebTransport.malformed
-  callee +3:13 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
-  local +7:15 type: i64 (const)
-  local +8:15 length: i64 (const)
-  callee +10:18 WebTransport.malformed -> @nish.WebTransport.malformed
-  callee +13:18 WebTransport.malformed -> @nish.WebTransport.malformed
-  local +19:15 want: i64 (const)
-  local +20:15 take: i32 (const)
-  callee +22:11 quicPacketCopy -> @nish.quicPacketCopy
-  local +30:15 event: i32 (const)
-  callee +30:28 WebTransport.capsule -> @nish.WebTransport.capsule
-function WebTransport.capsule(this: WebTransport, s: i32, type: i64): i32 -> @nish.WebTransport.capsule [exported method]
+  local -2:11 w: WebTransportSession | null (const)
+  callee -2:43 WebTransport.at -> @nish.WebTransport.at
+  local +3:11 bytes: u8[] (const)
+  local +5:13 at: i32 (const)
+  callee +8:16 WebTransport.malformed -> @nish.WebTransport.malformed
+  local +10:13 left: i64 (const)
+  local +13:15 have: i32 (const)
+  local +14:15 head: u8[] (const)
+  callee +16:18 WebTransport.malformed -> @nish.WebTransport.malformed
+  callee +19:22 wtAdd -> @nish.wtAdd
+  callee +21:13 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
+  local +25:15 type: i64 (const)
+  local +26:15 length: i64 (const)
+  callee +28:18 WebTransport.malformed -> @nish.WebTransport.malformed
+  callee +31:18 WebTransport.malformed -> @nish.WebTransport.malformed
+  local +37:15 want: i64 (const)
+  callee +37:33 wtSub -> @nish.wtSub
+  local +38:15 take: i32 (const)
+  callee +40:18 WebTransport.malformed -> @nish.WebTransport.malformed
+  callee +43:48 tryCopyBytes -> @nish.tryCopyBytes
+  callee +44:18 WebTransport.malformed -> @nish.WebTransport.malformed
+  callee +47:23 wtAdd -> @nish.wtAdd
+  callee +49:22 wtAdd -> @nish.wtAdd
+  local +54:15 event: i32 (const)
+  callee +54:28 WebTransport.capsule -> @nish.WebTransport.capsule
+function WebTransport.capsule(this: WebTransport, w: WebTransportSession, type: i64): i32 -> @nish.WebTransport.capsule [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: s
-  calls: nish.WebTransport.closedEvent nish.WebTransport.end nish.WebTransport.finish nish.WebTransport.release nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.end#0 nish.WebTransport.finish#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
+  calls: nish.WebTransport.closedEvent nish.WebTransport.end nish.WebTransport.finish nish.WebTransport.release
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.end#0 nish.WebTransport.finish#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.end#1 nish.WebTransport.release#1 nish.WebTransport.closedEvent#1
   stackSites=0 stackLocals=0
-  local +15:11 at: i32 (const)
+  local +15:11 reason: u8[] (const)
   local +16:9 code: i64 (let)
   local +17:14 j: i32 (let)
   callee +20:5 WebTransport.end -> @nish.WebTransport.end
-  local +21:11 length: i32 (const)
-  callee +23:10 WebTransport.finish -> @nish.WebTransport.finish
-  callee +24:7 WebTransport.release -> @nish.WebTransport.release
-  callee +26:12 WebTransport.closedEvent -> @nish.WebTransport.closedEvent
-function WebTransport.malformed(this: WebTransport, s: i32, code: i64): i32 -> @nish.WebTransport.malformed [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +22:11 fill: i32 (const)
+  local +23:11 length: i32 (const)
+  callee +25:10 WebTransport.finish -> @nish.WebTransport.finish
+  callee +26:7 WebTransport.release -> @nish.WebTransport.release
+  callee +28:12 WebTransport.closedEvent -> @nish.WebTransport.closedEvent
+function WebTransport.malformed(this: WebTransport, w: WebTransportSession, code: i64): i32 -> @nish.WebTransport.malformed [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: code s
-  calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.WebTransport.closedEvent nish.WebTransport.release nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
+  escaping: code
+  calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.WebTransport.closedEvent nish.WebTransport.release
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.release#1 nish.WebTransport.closedEvent#1
   stackSites=0 stackLocals=0
   local -2:11 id: i64 (const)
   local -1:11 wasGone: boolean (const)
@@ -48158,89 +48460,107 @@ function WebTransport.malformed(this: WebTransport, s: i32, code: i64): i32 -> @
   callee +3:5 Http3Connection.discardRequest -> @nish.Http3Connection.discardRequest
   callee +6:37 WebTransport.closedEvent -> @nish.WebTransport.closedEvent
 function WebTransport.arrived(this: WebTransport, id: i64, session: i64): i32 -> @nish.WebTransport.arrived [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.adopt
   escaping: id session
-  calls: nish.Http3Connection.awaitsRequest nish.WebTransport.adopt nish.WebTransport.refuseStream nish.WebTransport.sessionOf nish.WebTransportWaiting.add nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0 nish.WebTransport.adopt#0 nish.WebTransport.refuseStream#0 nish.WebTransport.refuseStream#0
+  calls: nish.Http3Connection.awaitsRequest nish.WebTransport.adopt nish.WebTransport.refuseStream nish.WebTransport.sessionOf nish.WebTransportWaiting.add
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0 nish.WebTransport.adopt#0 nish.WebTransport.refuseStream#0 nish.WebTransport.refuseStream#0
   stackSites=0 stackLocals=0
-  local +0:11 s: i32 (const)
-  callee +0:20 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
+  local +0:11 w: WebTransportSession | null (const)
+  callee +0:43 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
   callee +2:14 WebTransport.adopt -> @nish.WebTransport.adopt
-  callee +4:62 Http3Connection.awaitsRequest -> @nish.Http3Connection.awaitsRequest
+  callee +4:64 Http3Connection.awaitsRequest -> @nish.Http3Connection.awaitsRequest
   callee +6:58 WebTransportWaiting.add -> @nish.WebTransportWaiting.add
   callee +9:7 WebTransport.refuseStream -> @nish.WebTransport.refuseStream
   callee +12:5 WebTransport.refuseStream -> @nish.WebTransport.refuseStream
 function WebTransport.adoptWaiting(this: WebTransport): i32 -> @nish.WebTransport.adoptWaiting [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish.WebTransport.adopt nish.WebTransportWaiting.first nish.WebTransportWaiting.take nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.adopt#0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.WebTransport.adopt nish.WebTransport.at nish.WebTransportWaiting.first nish.WebTransportWaiting.take nish.wtSub
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.at#0 nish.WebTransport.adopt#0
   stackSites=0 stackLocals=0
-  local -7:11 s: i32 (const)
-  local -5:13 e: i32 (const)
-  callee -5:22 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
-  callee -3:16 WebTransport.adopt -> @nish.WebTransport.adopt
-  callee -3:30 WebTransportWaiting.take -> @nish.WebTransportWaiting.take
+  local -3:11 list: i32[] (const)
+  local -2:11 i: i32 (const)
+  callee -2:20 wtSub -> @nish.wtSub
+  local +3:11 w: WebTransportSession | null (const)
+  callee +3:43 WebTransport.at -> @nish.WebTransport.at
+  local +5:13 e: i32 (const)
+  callee +5:22 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
+  local +6:13 stream: i64 (const)
+  callee +6:36 WebTransportWaiting.take -> @nish.WebTransportWaiting.take
+  callee +8:16 WebTransport.adopt -> @nish.WebTransport.adopt
 function WebTransport.refuseStream(this: WebTransport, id: i64, code: i64): void -> @nish.WebTransport.refuseStream [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: code id
   calls: nish.Http3Connection.refuseStream nish.h3Count
-  pointer this: size=424 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:27 h3Count -> @nish.h3Count
   callee +1:5 Http3Connection.refuseStream -> @nish.Http3Connection.refuseStream
-function WebTransport.adopt(this: WebTransport, s: i32, id: i64): i32 -> @nish.WebTransport.adopt [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function WebTransport.adopt(this: WebTransport, w: WebTransportSession, id: i64): i32 -> @nish.WebTransport.adopt [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: id s
-  calls: nish.Http3Connection.acceptStream nish.WebTransport.link nish.WebTransport.refuseStream nish.quicStreamIsUni nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0 nish.WebTransport.link#0
+  escaping: id
+  calls: nish.Http3Connection.acceptStream nish.WebTransport.link nish.WebTransport.refuseStream nish.quicStreamIsUni
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0 nish.WebTransport.link#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.link#1
   stackSites=0 stackLocals=0
   callee -7:7 WebTransport.refuseStream -> @nish.WebTransport.refuseStream
   local -4:11 bidi: boolean (const)
   callee -4:28 quicStreamIsUni -> @nish.quicStreamIsUni
   callee -3:9 Http3Connection.acceptStream -> @nish.Http3Connection.acceptStream
   callee -3:43 WebTransport.link -> @nish.WebTransport.link
-function WebTransport.link(this: WebTransport, s: i32, id: i64, bits: i32): i32 -> @nish.WebTransport.link [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function WebTransport.link(this: WebTransport, w: WebTransportSession, id: i64, bits: i32): i32 -> @nish.WebTransport.link [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: bits id s
-  calls: nish.QuicStreams.slotOf nish.WebTransport.unlink nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
+  escaping: bits id
+  calls: nish.QuicStreams.slotOf nish.WebTransport.publish nish.WebTransport.slotAt nish.WebTransport.unlink nish.wtAdd
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.slotAt#0 nish.WebTransport.unlink#0 nish.WebTransport.slotAt#0 nish.WebTransport.publish#0
+  pointer w: size=104 writesThrough=true captured=false passedTo=nish.WebTransport.publish#1
   stackSites=0 stackLocals=0
-  local -9:11 k: i32 (const)
-  callee -9:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local -10:11 k: i32 (const)
+  callee -10:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local -9:11 t: WebTransportStream | null (const)
+  callee -9:42 WebTransport.slotAt -> @nish.WebTransport.slotAt
   callee -3:7 WebTransport.unlink -> @nish.WebTransport.unlink
   local -1:11 head: i32 (const)
-function WebTransport.settle(this: WebTransport, k: i32, bits: i32): void -> @nish.WebTransport.settle [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +5:11 first: WebTransportStream | null (const)
+  callee +5:46 WebTransport.slotAt -> @nish.WebTransport.slotAt
+  callee +11:17 wtAdd -> @nish.wtAdd
+  callee +12:5 WebTransport.publish -> @nish.WebTransport.publish
+function WebTransport.settle(this: WebTransport, t: WebTransportStream, bits: i32): void -> @nish.WebTransport.settle [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: k
-  calls: nish.WebTransport.unlink nish_panic_index
-  pointer this: size=424 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
+  calls: nish.WebTransport.unlink
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
+  pointer t: size=24 writesThrough=true captured=false passedTo=nish.WebTransport.unlink#1
   stackSites=0 stackLocals=0
   callee +2:7 WebTransport.unlink -> @nish.WebTransport.unlink
-function WebTransport.unlink(this: WebTransport, k: i32): void -> @nish.WebTransport.unlink [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function WebTransport.unlink(this: WebTransport, t: WebTransportStream): void -> @nish.WebTransport.unlink [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: k
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=false captured=false
+  calls: nish.WebTransport.at nish.WebTransport.publish nish.WebTransport.slotAt nish.wtSub
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.WebTransport.at#0 nish.WebTransport.slotAt#0 nish.WebTransport.slotAt#0 nish.WebTransport.publish#0
+  pointer t: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -4:11 s: i32 (const)
-  local -3:11 before: i32 (const)
-  local -2:11 after: i32 (const)
+  local -4:11 w: WebTransportSession | null (const)
+  callee -4:43 WebTransport.at -> @nish.WebTransport.at
+  local -3:11 before: WebTransportStream | null (const)
+  callee -3:47 WebTransport.slotAt -> @nish.WebTransport.slotAt
+  local -2:11 after: WebTransportStream | null (const)
+  callee -2:46 WebTransport.slotAt -> @nish.WebTransport.slotAt
+  callee +8:19 wtSub -> @nish.wtSub
+  callee +9:7 WebTransport.publish -> @nish.WebTransport.publish
 function WebTransport.openStream(this: WebTransport, id: i64, bidirectional: boolean): i64 -> @nish.WebTransport.openStream [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.openSession
   escaping: bidirectional id
-  calls: nish.Http3Connection.openStream nish.WebTransport.link nish.WebTransport.openSession nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.link#0
+  calls: nish.Http3Connection.openStream nish.WebTransport.link nish.WebTransport.openSession
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.link#0
   stackSites=0 stackLocals=0
-  local +0:11 s: i32 (const)
-  callee +0:20 WebTransport.openSession -> @nish.WebTransport.openSession
+  local +0:11 w: WebTransportSession | null (const)
+  callee +0:43 WebTransport.openSession -> @nish.WebTransport.openSession
   local +7:11 stream: i64 (const)
   callee +7:25 Http3Connection.openStream -> @nish.Http3Connection.openStream
   callee +11:5 WebTransport.link -> @nish.WebTransport.link
@@ -48248,75 +48568,79 @@ function WebTransport.write(this: WebTransport, id: i64, buf: u8[], off: i32, le
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.current
   escaping: fin id len off
-  calls: nish.Http3Connection.writeStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamSlot nish.WebTransport.touch
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0
+  calls: nish.Http3Connection.writeStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamOf nish.WebTransport.touch
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamOf#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http3Connection.writeStream#2
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
-  local +1:11 k: i32 (const)
-  callee +1:20 WebTransport.streamSlot -> @nish.WebTransport.streamSlot
+  local +1:11 t: WebTransportStream | null (const)
+  callee +1:42 WebTransport.streamOf -> @nish.WebTransport.streamOf
   local +5:11 n: i32 (const)
   callee +5:20 Http3Connection.writeStream -> @nish.Http3Connection.writeStream
   callee +7:7 WebTransport.touch -> @nish.WebTransport.touch
   callee +10:7 WebTransport.settle -> @nish.WebTransport.settle
 function WebTransport.resetStream(this: WebTransport, id: i64, code: i64): i32 -> @nish.WebTransport.resetStream [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.current
   escaping: code id
-  calls: nish.Http3Connection.resetStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamSlot nish.wtCodeToHttp3
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.settle#0
+  calls: nish.Http3Connection.resetStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamOf nish.wtCodeToHttp3
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamOf#0 nish.WebTransport.settle#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
-  local +1:11 k: i32 (const)
-  callee +1:20 WebTransport.streamSlot -> @nish.WebTransport.streamSlot
+  local +1:11 t: WebTransportStream | null (const)
+  callee +1:42 WebTransport.streamOf -> @nish.WebTransport.streamOf
   local +5:11 result: i32 (const)
   callee +5:25 Http3Connection.resetStream -> @nish.Http3Connection.resetStream
   callee +5:49 wtCodeToHttp3 -> @nish.wtCodeToHttp3
   callee +9:5 WebTransport.settle -> @nish.WebTransport.settle
 function WebTransport.stopSending(this: WebTransport, id: i64, code: i64): i32 -> @nish.WebTransport.stopSending [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.current
   escaping: code id
-  calls: nish.Http3Connection.stopStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamSlot nish.wtCodeToHttp3 nish_panic_index
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.settle#0
+  calls: nish.Http3Connection.stopStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamOf nish.wtCodeToHttp3
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamOf#0 nish.WebTransport.settle#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
-  local +1:11 k: i32 (const)
-  callee +1:20 WebTransport.streamSlot -> @nish.WebTransport.streamSlot
+  local +1:11 t: WebTransportStream | null (const)
+  callee +1:42 WebTransport.streamOf -> @nish.WebTransport.streamOf
   local +5:11 result: i32 (const)
   callee +5:25 Http3Connection.stopStream -> @nish.Http3Connection.stopStream
   callee +5:48 wtCodeToHttp3 -> @nish.wtCodeToHttp3
   callee +9:5 WebTransport.settle -> @nish.WebTransport.settle
 function WebTransport.maxDatagramPayload(this: WebTransport, id: i64): i32 -> @nish.WebTransport.maxDatagramPayload [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.openSession
   escaping: id
-  calls: nish.QuicConnection.maxDatagramPayload nish.WebTransport.openSession nish.quicVarintSize nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
+  calls: nish.QuicConnection.maxDatagramPayload nish.WebTransport.openSession nish.quicVarintSize nish.wtSub
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
   stackSites=0 stackLocals=0
   callee +0:9 WebTransport.openSession -> @nish.WebTransport.openSession
   local +3:11 room: i32 (const)
-  callee +3:23 QuicConnection.maxDatagramPayload -> @nish.QuicConnection.maxDatagramPayload
-  callee +3:56 quicVarintSize -> @nish.quicVarintSize
+  callee +3:23 wtSub -> @nish.wtSub
+  callee +3:29 QuicConnection.maxDatagramPayload -> @nish.QuicConnection.maxDatagramPayload
+  callee +3:61 quicVarintSize -> @nish.quicVarintSize
 function WebTransport.sendDatagram(this: WebTransport, id: i64, buf: u8[], off: i32, len: i32): i32 -> @nish.WebTransport.sendDatagram [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: id len off
-  calls: nish.QuicConnection.maxDatagramPayload nish.QuicConnection.sendDatagram nish.WebTransport.openSession nish.h3CheckWindow nish.h3Count nish.h3PutVarint nish.quicPacketCopy nish_panic_index nish_panic_overflow
-  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicPacketCopy#2
+  calls: nish.QuicConnection.maxDatagramPayload nish.QuicConnection.sendDatagram nish.WebTransport.openSession nish.WebTransport.publish nish.h3CheckWindow nish.h3Count nish.h3PutVarint nish.tryCopyBytes nish.wtAdd nish.wtSub
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.publish#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  callee -14:5 h3CheckWindow -> @nish.h3CheckWindow
-  local -13:11 s: i32 (const)
-  callee -13:20 WebTransport.openSession -> @nish.WebTransport.openSession
-  local -9:11 out: u8[] (const)
-  local -8:11 p: i32 (const)
-  callee -8:20 h3PutVarint -> @nish.h3PutVarint
-  callee -6:24 QuicConnection.maxDatagramPayload -> @nish.QuicConnection.maxDatagramPayload
-  callee -3:5 quicPacketCopy -> @nish.quicPacketCopy
+  callee -13:5 h3CheckWindow -> @nish.h3CheckWindow
+  local -12:11 w: WebTransportSession | null (const)
+  callee -12:43 WebTransport.openSession -> @nish.WebTransport.openSession
+  local -8:11 out: u8[] (const)
+  local -7:11 p: i32 (const)
+  callee -7:20 h3PutVarint -> @nish.h3PutVarint
+  callee -5:24 wtSub -> @nish.wtSub
+  callee -5:30 QuicConnection.maxDatagramPayload -> @nish.QuicConnection.maxDatagramPayload
+  callee -5:69 tryCopyBytes -> @nish.tryCopyBytes
   local -2:11 result: i32 (const)
   callee -2:25 QuicConnection.sendDatagram -> @nish.QuicConnection.sendDatagram
-  callee +1:30 h3Count -> @nish.h3Count
+  callee -2:62 wtAdd -> @nish.wtAdd
+  callee +1:24 h3Count -> @nish.h3Count
+  callee +2:7 WebTransport.publish -> @nish.WebTransport.publish
 import writeFileSyncMode from "nish:fs" -> builtin writeFileSyncMode
 import udpBind from "nish:net" -> builtin udpBind
 import monotonicNanos from "nish:process" -> builtin monotonicNanos

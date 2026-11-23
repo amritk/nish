@@ -76,6 +76,7 @@
  */
 import { base64StdPadDecodedLength, base64StdPadEncode, base64StdPadEncodeInto } from "nish/crypto/base64url"
 import { SHA1_SIZE, Sha1 } from "nish/crypto/sha1"
+import { tryCopyBytes } from "nish/bytes"
 import {
   HTTP1_NO_ROOM,
   HTTP1_REFUSED,
@@ -179,6 +180,35 @@ const websocketIsKnownOpcode = (opcode: i32): boolean =>
 const WS_CONTINUE: i32 = -1
 
 /**
+ * `a + b`, worked in `i64` and held to `i32`. Every caller adds an offset
+ * and a length that lie inside one array, so the sum is an index into it or
+ * just past it and always fits.
+ */
+const websocketAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+
+/** `a - b`, worked as `websocketAdd` is, for offsets inside one array. */
+const websocketSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
+
+/**
+ * A zeroed array of `n` bytes, or of none when `n` is below zero. Up to
+ * 65535 bytes is one allocation; past that the array grows a byte at a time
+ * from a 65535-byte start, which an `i32` length cannot make fail.
+ */
+const websocketBytes = (n: i32): u8[] => {
+  if (n < 0) {
+    return []
+  }
+  if (n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/**
  * Runs `buf[off .. off + len)` through the check `state` holds. Answers false
  * at the first byte that cannot continue well-formed UTF-8 (RFC 3629 §4: no
  * stray continuation byte, no overlong form, no surrogate, nothing past
@@ -189,7 +219,8 @@ const websocketUtf8Run = (state: WsUtf8, buf: u8[], off: i32, len: i32): boolean
   let need: i32 = state.need
   let lo: i32 = state.lo
   let hi: i32 = state.hi
-  for (let k: i32 = off; k >= 0 && k < off + len && k < toI32(buf.length); k += 1) {
+  const stop: i64 = toI64(off) + toI64(len)
+  for (let k: i32 = off; k >= 0 && toI64(k) < stop && k < toI32(buf.length); k += 1) {
     const b: i32 = toI32(buf[k])
     if (need > 0) {
       if (b < lo || b > hi) {
@@ -327,22 +358,12 @@ export class WsDecoder {
     if (this.state !== WS_S_FRAMES) {
       return
     }
-    websocketReserve(this, len)
-    const buf: u8[] = this.buf
-    const at: i32 = this.end
-    // A whole array is one `set`; `set` takes no window of its source.
-    if (off === 0 && len === size) {
-      buf.set(data, at)
-      this.end = at + len
+    // More than 2^31 - 1 bytes waiting is more than any message.
+    if (!websocketReserve(this, len) || !tryCopyBytes(this.buf, this.end, data, off, len)) {
+      websocketFail(this, WS_CLOSE_TOO_BIG, "more than 2^31 - 1 bytes of input waiting")
       return
     }
-    for (let k: i32 = 0; k < len; k += 1) {
-      const to: i32 = at + k
-      if (to >= 0 && to < toI32(buf.length)) {
-        buf[to] = data[off + k]
-      }
-    }
-    this.end = at + len
+    this.end = websocketAdd(this.end, len)
   }
 
   /**
@@ -374,29 +395,48 @@ export class WsDecoder {
   }
 }
 
-/** Makes room for `len` more input bytes at `d.end`, moving the live bytes down first. */
-const websocketReserve = (d: WsDecoder, len: i32): void => {
+/**
+ * Makes room for `len` more input bytes at `d.end`, moving the live bytes
+ * down first. Answers false, changing nothing, when the live bytes and `len`
+ * together pass 2^31 - 1.
+ */
+const websocketReserve = (d: WsDecoder, len: i32): boolean => {
   const old: u8[] = d.buf
   const capacity: i32 = toI32(old.length)
-  if (len <= capacity - d.end) {
-    return
+  const start: i32 = d.start
+  const end: i32 = d.end
+  if (len < 0 || start < 0 || end < 0 || end < start) {
+    return false
   }
-  const live: i32 = d.end - d.start
+  if (len <= capacity - end) {
+    return true
+  }
+  const live: i32 = end - start
+  if (toI64(len) > toI64(2147483647) - toI64(live)) {
+    return false
+  }
+  const need: i32 = websocketAdd(live, len)
+  // Room enough moves the live bytes down in place; otherwise the buffer
+  // at least doubles.
   let size: i32 = capacity
-  while (size - live < len) {
-    if (size > 1073741823) {
-      panic("WsDecoder: more than 2^31 - 1 bytes buffered")
+  if (need > capacity) {
+    if (capacity > 1073741823) {
+      size = 2147483647
+    } else {
+      size = capacity * 2
     }
-    size = size * 2
+    if (size < need) {
+      size = need
+    }
   }
-  const buf: u8[] = size === capacity ? old : new Array<u8>(size)
-  const from: i32 = d.start
-  for (let k: i32 = 0; k < live && k < toI32(buf.length); k += 1) {
-    buf[k] = old[from + k]
+  const buf: u8[] = size === capacity ? old : websocketBytes(size)
+  if (!tryCopyBytes(buf, 0, old, start, live)) {
+    return false
   }
   d.buf = buf
   d.start = 0
   d.end = live
+  return true
 }
 
 /** Refuses the input; the connection is to be closed with `code`. Answers `WS_ERROR`. */
@@ -413,6 +453,7 @@ const websocketFail = (d: WsDecoder, code: i32, reason: string): i32 => {
  * unmasking it with the key at `buf[maskAt .. maskAt + 4)` when `masked`
  * (§5.3: byte i is XORed with key byte i mod 4). `phase` is how far into the
  * payload `from` is, so a payload can be unmasked a piece at a time.
+ * Answers false, writing nothing, when a window lies outside its array.
  */
 const websocketUnmaskInto = (
   buf: u8[],
@@ -423,24 +464,37 @@ const websocketUnmaskInto = (
   phase: i32,
   to: u8[],
   at: i32
-): void => {
+): boolean => {
+  if (!masked) {
+    return tryCopyBytes(to, at, buf, from, len)
+  }
+  const bufLength: i32 = toI32(buf.length)
+  const toLength: i32 = toI32(to.length)
+  if (len < 0 || from < 0 || at < 0 || from > bufLength - len || at > toLength - len) {
+    return false
+  }
+  if (maskAt < 0 || maskAt >= bufLength - 3) {
+    return false
+  }
   // The four key bytes in one word, high byte first, rotated a byte left
   // after each payload byte, so its top byte is always key byte k mod 4.
-  let key: u32 = 0
-  if (masked) {
-    key =
-      (toU32(buf[maskAt]) << 24) |
-      (toU32(buf[maskAt + 1]) << 16) |
-      (toU32(buf[maskAt + 2]) << 8) |
-      toU32(buf[maskAt + 3])
-  }
+  let key: u32 =
+    (toU32(buf[maskAt]) << 24) |
+    (toU32(buf[maskAt + 1]) << 16) |
+    (toU32(buf[maskAt + 2]) << 8) |
+    toU32(buf[maskAt + 3])
   for (let r: i32 = 0; r < (phase & 3); r += 1) {
     key = (key << 8) | (key >>> 24)
   }
-  for (let k: i32 = 0; k < len; k += 1) {
-    to[at + k] = buf[from + k] ^ toU8(key >>> 24)
+  let s: i32 = from
+  let t: i32 = at
+  for (let k: i32 = 0; k < len && s >= 0 && s < bufLength && t >= 0 && t < toLength; k += 1) {
+    to[t] = buf[s] ^ toU8(key >>> 24)
     key = (key << 8) | (key >>> 24)
+    s += 1
+    t += 1
   }
+  return true
 }
 
 /**
@@ -449,18 +503,20 @@ const websocketUnmaskInto = (
  */
 const websocketMessageRoom = (d: WsDecoder, need: i32): void => {
   const old: u8[] = d.message
-  let size: i32 = toI32(old.length)
-  if (need <= size) {
+  const oldLength: i32 = toI32(old.length)
+  if (need <= oldLength) {
     return
   }
-  while (size < need) {
-    size = size > 1073741823 ? 2147483647 : size * 2
+  let size: i64 = toI64(oldLength) * toI64(2)
+  if (size < toI64(need)) {
+    size = toI64(need)
   }
-  const grown: u8[] = new Array<u8>(size)
-  const live: i32 = d.messageLen + d.frameChecked
-  for (let k: i32 = 0; k < live && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
-    grown[k] = old[k]
+  if (size > toI64(2147483647)) {
+    size = toI64(2147483647)
   }
+  const grown: u8[] = websocketBytes(toI32(size))
+  const live: i32 = websocketAdd(d.messageLen, d.frameChecked)
+  tryCopyBytes(grown, 0, old, 0, live < oldLength ? live : oldLength)
   d.message = grown
 }
 
@@ -479,6 +535,10 @@ const websocketReadClose = (d: WsDecoder, len: i32): i32 => {
   }
   if (len === 1) {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a close frame with a one-byte payload")
+  }
+  // `control` holds 125 bytes and the frame's payload was copied into it.
+  if (len < 2 || toI32(payload.length) < 2) {
+    return websocketFail(d, WS_CLOSE_INTERNAL_ERROR, "a close frame payload that was not kept")
   }
   const code: i32 = (toI32(payload[0]) << 8) | toI32(payload[1])
   if (!websocketIsSendableCode(code)) {
@@ -507,8 +567,13 @@ const websocketReadClose = (d: WsDecoder, len: i32): i32 => {
 const websocketFrameEvent = (d: WsDecoder): i32 => {
   const buf: u8[] = d.buf
   const at: i32 = d.start
-  const ready: i32 = d.end - at
-  if (ready < 2 || at < 0 || at + 1 >= toI32(buf.length)) {
+  const end: i32 = d.end
+  const bufLength: i32 = toI32(buf.length)
+  if (at < 0 || end < 0 || end < at || end > bufLength || at >= bufLength - 1) {
+    return WS_NEED_MORE
+  }
+  const ready: i32 = end - at
+  if (ready < 2) {
     return WS_NEED_MORE
   }
   const b0: i32 = toI32(buf[at])
@@ -524,10 +589,16 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
   } else if (short === 127) {
     extended = 8
   }
-  const headerLength: i32 = 2 + extended + (masked ? 4 : 0)
+  let keyLength: i32 = 0
+  if (masked) {
+    keyLength = 4
+  }
+  const headerLength: i32 = 2 + extended + keyLength
   if (ready < headerLength) {
     return WS_NEED_MORE
   }
+  // What of the payload has arrived; at least zero, past the guard above.
+  const body: i32 = ready - headerLength
   if ((b0 & 0x70) !== 0) {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a reserved bit set with no extension negotiated")
   }
@@ -543,22 +614,27 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     )
   }
   // The payload length (§5.2), held to `i32` and refused before it is used.
+  // `ready` covers the header, so its bytes lie inside `buf`; the checks on
+  // `at` say so in the form the index proofs read.
   let length: i32 = short
   if (extended === 2) {
+    if (at >= bufLength - 3) {
+      return WS_NEED_MORE
+    }
     length = (toI32(buf[at + 2]) << 8) | toI32(buf[at + 3])
     if (length < 126) {
       return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a 16-bit length under 126")
     }
   } else if (extended === 8) {
+    if (at >= bufLength - 9) {
+      return WS_NEED_MORE
+    }
     if ((toI32(buf[at + 2]) & 0x80) !== 0) {
       return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a 64-bit length with its top bit set")
     }
     // Anything in the high four bytes, or a top bit in the low four, is more
     // than an `i32` holds and so more than any `maxMessage`.
-    let high: i32 = 0
-    for (let k: i32 = 2; k < 6; k += 1) {
-      high = high | toI32(buf[at + k])
-    }
+    const high: i32 = toI32(buf[at + 2]) | toI32(buf[at + 3]) | toI32(buf[at + 4]) | toI32(buf[at + 5])
     if (high !== 0 || (toI32(buf[at + 6]) & 0x80) !== 0) {
       return websocketFail(d, WS_CLOSE_TOO_BIG, "a frame longer than 2^31 - 1 bytes")
     }
@@ -582,19 +658,19 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     if (opcode !== WS_OP_CONTINUATION && d.messageOpcode !== 0) {
       return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a new message before the last one ended")
     }
-    if (length > d.maxMessage - d.messageLen) {
+    if (toI64(length) > toI64(d.maxMessage) - toI64(d.messageLen)) {
       return websocketFail(d, WS_CLOSE_TOO_BIG, "a message longer than the limit")
     }
   }
-  const payloadAt: i32 = at + headerLength
-  const maskAt: i32 = payloadAt - 4
+  const payloadAt: i32 = websocketAdd(at, headerLength)
+  const maskAt: i32 = websocketAdd(at, headerLength - 4)
   const text: boolean =
     opcode === WS_OP_TEXT || (opcode === WS_OP_CONTINUATION && d.messageOpcode === WS_OP_TEXT)
   if (text) {
     // A text frame is unmasked and checked as its bytes arrive, so a byte
     // that cannot continue UTF-8 fails the connection at once (§8.1), not
     // when the frame or the message ends.
-    const arrived: i32 = ready - headerLength < length ? ready - headerLength : length
+    const arrived: i32 = body < length ? body : length
     const from: i32 = d.messageLen
     const done: i32 = d.frameChecked
     if (done === 0 && opcode === WS_OP_TEXT) {
@@ -605,22 +681,39 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     if (arrived > done) {
       // Room for the bytes that have arrived, not the length the header
       // declares: a peer that declares much and sends little costs little.
-      websocketMessageRoom(d, from + arrived)
-      websocketUnmaskInto(buf, payloadAt + done, arrived - done, masked, maskAt, done, d.message, from + done)
+      const fresh: i32 = websocketSub(arrived, done)
+      const freshAt: i32 = websocketAdd(from, done)
+      websocketMessageRoom(d, websocketAdd(from, arrived))
+      if (
+        !websocketUnmaskInto(
+          buf,
+          websocketAdd(payloadAt, done),
+          fresh,
+          masked,
+          maskAt,
+          done,
+          d.message,
+          freshAt
+        )
+      ) {
+        return websocketFail(d, WS_CLOSE_INTERNAL_ERROR, "a frame outside the decoder's buffers")
+      }
       d.frameChecked = arrived
-      if (!websocketUtf8Run(d.utf8, d.message, from + done, arrived - done)) {
+      if (!websocketUtf8Run(d.utf8, d.message, freshAt, fresh)) {
         return websocketFail(d, WS_CLOSE_INVALID_DATA, "a text message that is not UTF-8")
       }
     }
   }
-  if (ready - headerLength < length) {
+  if (body < length) {
     return WS_NEED_MORE
   }
   // The whole frame is here: take it out of the input.
-  d.start = payloadAt + length
+  d.start = websocketAdd(payloadAt, length)
   d.frameChecked = 0
   if (control) {
-    websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, 0, d.control, 0)
+    if (!websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, 0, d.control, 0)) {
+      return websocketFail(d, WS_CLOSE_INTERNAL_ERROR, "a frame outside the decoder's buffers")
+    }
     d.opcode = opcode
     d.data = d.control
     d.dataLen = length
@@ -633,12 +726,15 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     d.messageOpcode = opcode
   }
   const from: i32 = d.messageLen
+  const total: i32 = websocketAdd(from, length)
   if (!text) {
     // A text frame's payload is already in `message`, unmasked and checked.
-    websocketMessageRoom(d, from + length)
-    websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, 0, d.message, from)
+    websocketMessageRoom(d, total)
+    if (!websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, 0, d.message, from)) {
+      return websocketFail(d, WS_CLOSE_INTERNAL_ERROR, "a frame outside the decoder's buffers")
+    }
   }
-  d.messageLen = from + length
+  d.messageLen = total
   if (!fin) {
     return WS_CONTINUE
   }
@@ -682,16 +778,28 @@ export const WS_REFUSED: i32 = -2
  *
  * @param len The payload's length in bytes, at least 0.
  * @param masked Whether the frame carries a 4-byte mask key, as every frame a client sends does.
- * @returns The frame's size in bytes: 2 to 14 bytes of header, then `len`.
+ * @returns The frame's size in bytes: 2 to 14 bytes of header, then `len`; `WS_REFUSED` for a negative `len` or one past 2^31 - 15, whose frame `websocketWriteFrame` refuses.
  */
 export const websocketFrameSize = (len: i32, masked: boolean): i32 => {
-  let extended: i32 = 8
-  if (len < 126) {
-    extended = 0
-  } else if (len < 65536) {
-    extended = 2
+  if (len < 0 || len > WS_MAX_FRAME_PAYLOAD) {
+    return WS_REFUSED
   }
-  return 2 + extended + (masked ? 4 : 0) + len
+  return websocketAdd(websocketHeaderLength(len, masked), len)
+}
+
+/** A frame's header length for a payload of `len` bytes, 0 to `WS_MAX_FRAME_PAYLOAD`: 2 to 14. */
+const websocketHeaderLength = (len: i32, masked: boolean): i32 => {
+  let key: i32 = 0
+  if (masked) {
+    key = 4
+  }
+  if (len < 126) {
+    return 2 + key
+  }
+  if (len < 65536) {
+    return 4 + key
+  }
+  return 10 + key
 }
 
 /**
@@ -702,12 +810,12 @@ export const websocketFrameSize = (len: i32, masked: boolean): i32 => {
  * shortest of its three forms.
  *
  * Answers where the frame ends, `WS_NO_ROOM` when it does not fit, or
- * `WS_REFUSED` for an opcode RFC 6455 does not define, a control frame that is
- * not FIN or is longer than 125 bytes, and a mask that is not 4 bytes; on
- * either refusal `out` is untouched. A window outside `payload` panics, and so
- * does a payload longer than 2^31 - 15 bytes. A text frame's payload is not
- * checked here, because a fragment may end inside a character;
- * `websocketIsUtf8` checks a whole message.
+ * `WS_REFUSED` for a window outside `payload`, a payload longer than
+ * 2^31 - 15 bytes, an opcode RFC 6455 does not define, a control frame that
+ * is not FIN or is longer than 125 bytes, and a mask that is not 4 bytes; on
+ * either refusal `out` is untouched. A text frame's payload is not checked
+ * here, because a fragment may end inside a character; `websocketIsUtf8`
+ * checks a whole message.
  *
  * @param out The buffer the frame is written into.
  * @param at The index in `out` the frame starts at; one outside `out` answers `WS_NO_ROOM`.
@@ -730,8 +838,8 @@ export const websocketWriteFrame = (
   mask: u8[] | null
 ): i32 => {
   const size: i32 = toI32(payload.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
-    panic("websocketWriteFrame: the window is outside the buffer")
+  if (off < 0 || len < 0 || off > size || len > size - off || len > WS_MAX_FRAME_PAYLOAD) {
+    return WS_REFUSED
   }
   if (!websocketIsKnownOpcode(opcode)) {
     return WS_REFUSED
@@ -743,60 +851,69 @@ export const websocketWriteFrame = (
   if (mask !== null && toI32(mask.length) !== 4) {
     return WS_REFUSED
   }
-  if (len > WS_MAX_FRAME_PAYLOAD) {
-    panic("websocketWriteFrame: a frame longer than 2^31 - 1 bytes")
-  }
-  const frameSize: i32 = websocketFrameSize(len, mask !== null)
+  const headerLength: i32 = websocketHeaderLength(len, mask !== null)
   const outLength: i32 = toI32(out.length)
-  if (at < 0 || at > outLength || frameSize > outLength - at) {
+  if (at < 0 || at > outLength || toI64(headerLength) + toI64(len) > toI64(outLength) - toI64(at)) {
     return WS_NO_ROOM
   }
+  const finBit: i32 = fin ? 0x80 : 0
+  const maskBit: i32 = mask === null ? 0 : 0x80
+  // The room check covers the header; each form's own check on `at` says so
+  // in the form the index proofs read.
   let extended: i32 = 8
   if (len < 126) {
     extended = 0
+    if (at >= outLength - 1) {
+      return WS_NO_ROOM
+    }
+    out[at] = toU8(finBit | opcode)
+    out[at + 1] = toU8(maskBit | len)
   } else if (len < 65536) {
     extended = 2
-  }
-  const headerLength: i32 = frameSize - len
-  const finBit: i32 = fin ? 0x80 : 0
-  out[at] = toU8(finBit | opcode)
-  const maskBit: i32 = mask === null ? 0 : 0x80
-  if (extended === 0) {
-    out[at + 1] = toU8(maskBit | len)
-  } else if (extended === 2) {
+    if (at >= outLength - 3) {
+      return WS_NO_ROOM
+    }
+    out[at] = toU8(finBit | opcode)
     out[at + 1] = toU8(maskBit | 126)
     out[at + 2] = toU8(len >> 8)
     out[at + 3] = toU8(len)
   } else {
+    if (at >= outLength - 9) {
+      return WS_NO_ROOM
+    }
+    out[at] = toU8(finBit | opcode)
     out[at + 1] = toU8(maskBit | 127)
     // The top four bytes are zero: `len` is an `i32`.
-    for (let k: i32 = 2; k < 6; k += 1) {
-      out[at + k] = 0
-    }
+    out[at + 2] = 0
+    out[at + 3] = 0
+    out[at + 4] = 0
+    out[at + 5] = 0
     out[at + 6] = toU8(len >> 24)
     out[at + 7] = toU8(len >> 16)
     out[at + 8] = toU8(len >> 8)
     out[at + 9] = toU8(len)
   }
-  const payloadAt: i32 = at + headerLength
-  for (let k: i32 = 0; k < len && payloadAt + k < outLength; k += 1) {
-    out[payloadAt + k] = payload[off + k]
+  const payloadAt: i32 = websocketAdd(at, headerLength)
+  if (!tryCopyBytes(out, payloadAt, payload, off, len)) {
+    return WS_NO_ROOM
   }
   if (mask !== null) {
-    const keyAt: i32 = at + 2 + extended
-    for (let k: i32 = 0; k < 4 && k < toI32(mask.length); k += 1) {
-      out[keyAt + k] = mask[k]
-    }
+    const keyAt: i32 = websocketAdd(at, 2 + extended)
     // Masking and unmasking are the same XOR, so the copied payload goes
     // through the decoder's own loop, reading the key just written.
-    websocketUnmaskInto(out, payloadAt, len, true, keyAt, 0, out, payloadAt)
+    if (
+      !tryCopyBytes(out, keyAt, mask, 0, 4) ||
+      !websocketUnmaskInto(out, payloadAt, len, true, keyAt, 0, out, payloadAt)
+    ) {
+      return WS_NO_ROOM
+    }
   }
-  return payloadAt + len
+  return websocketAdd(payloadAt, len)
 }
 
 /**
  * One frame, as `websocketWriteFrame` writes it, in an array of its own; the
- * same refusals answer `null`. A window outside `payload` panics.
+ * same refusals, a window outside `payload` among them, answer `null`.
  *
  * @param fin Whether this is the message's last frame; a control frame must set it.
  * @param opcode The frame's opcode, such as `WS_OP_TEXT` or `WS_OP_PING`.
@@ -815,13 +932,10 @@ export const websocketFrame = (
   mask: u8[] | null
 ): u8[] | null => {
   const size: i32 = toI32(payload.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
-    panic("websocketFrame: the window is outside the buffer")
+  if (off < 0 || len < 0 || off > size || len > size - off || len > WS_MAX_FRAME_PAYLOAD) {
+    return null
   }
-  if (len > WS_MAX_FRAME_PAYLOAD) {
-    panic("websocketFrame: a frame longer than 2^31 - 1 bytes")
-  }
-  const out: u8[] = new Array<u8>(websocketFrameSize(len, mask !== null))
+  const out: u8[] = websocketBytes(websocketFrameSize(len, mask !== null))
   const at: i32 = 0
   return websocketWriteFrame(out, at, fin, opcode, payload, off, len, mask) < 0 ? null : out
 }
@@ -841,12 +955,9 @@ export const websocketClosePayload = (code: i32, reason: string): u8[] | null =>
   if (!websocketIsSendableCode(code) || n > WS_MAX_CONTROL - 2) {
     return null
   }
-  const out: u8[] = new Array<u8>(n + 2)
-  const outLength: i32 = toI32(out.length)
-  out[0] = toU8(code >> 8)
-  out[1] = toU8(code)
-  for (let k: i32 = 0; k < n && k + 2 < outLength; k += 1) {
-    out[k + 2] = toU8(reason.charCodeAt(k))
+  const out: u8[] = [toU8(code >> 8), toU8(code)]
+  for (let k: i32 = 0; k < n; k += 1) {
+    out.push(toU8(reason.charCodeAt(k)))
   }
   const reasonStart: i32 = 2
   if (!websocketIsUtf8(out, reasonStart, n)) {
@@ -860,7 +971,7 @@ export const websocketClosePayload = (code: i32, reason: string): u8[] | null =>
 /** The bytes of `text`, as the language holds a string. */
 const websocketBytesOf = (text: string): u8[] => {
   const n: i32 = toI32(text.length)
-  const out: u8[] = new Array<u8>(n)
+  const out: u8[] = websocketBytes(n)
   const outLength: i32 = toI32(out.length)
   for (let k: i32 = 0; k < outLength && k < n; k += 1) {
     out[k] = toU8(text.charCodeAt(k))
@@ -883,6 +994,7 @@ const WS_ACCEPT_LENGTH: i32 = 28
  */
 const websocketKeySpanIsValid = (text: u8[], start: i32, end: i32): boolean =>
   start >= 0 &&
+  end >= 0 &&
   end <= toI32(text.length) &&
   end - start === WS_KEY_LENGTH &&
   base64StdPadDecodedLength(text, start, WS_KEY_LENGTH) === 16
@@ -911,11 +1023,17 @@ export class WsAcceptKey {
   /** Storage for one accept value, its hasher and buffers allocated. */
   constructor() {
     this.hasher = new Sha1()
-    const guid: i32 = toI32(WS_GUID.length)
-    this.input = new Array<u8>(WS_KEY_LENGTH + guid)
-    for (let k: i32 = 0; k < guid; k += 1) {
-      this.input[WS_KEY_LENGTH + k] = toU8(WS_GUID.charCodeAt(k))
+    const text: string = WS_GUID
+    const guid: i32 = toI32(text.length)
+    // The 24-character key and the 36-character GUID.
+    const input: u8[] = new Array<u8>(60)
+    const inputLength: i32 = toI32(input.length)
+    let t: i32 = WS_KEY_LENGTH
+    for (let k: i32 = 0; k < guid && t >= 0 && t < inputLength; k += 1) {
+      input[t] = toU8(text.charCodeAt(k))
+      t += 1
     }
+    this.input = input
     this.digest = new Array<u8>(SHA1_SIZE)
     this.value = new Array<u8>(WS_ACCEPT_LENGTH)
   }
@@ -934,8 +1052,9 @@ export class WsAcceptKey {
       return false
     }
     const input: u8[] = this.input
-    for (let k: i32 = 0; k < WS_KEY_LENGTH && k < toI32(input.length); k += 1) {
-      input[k] = text[start + k]
+    // A valid key is 24 bytes inside `text`, so the copy fits.
+    if (!tryCopyBytes(input, WS_ZERO, text, start, WS_KEY_LENGTH)) {
+      return false
     }
     this.hasher.digestInto(input, WS_ZERO, toI32(input.length), this.digest, WS_ZERO)
     base64StdPadEncodeInto(this.digest, WS_ZERO, SHA1_SIZE, this.value, WS_ZERO)
@@ -994,10 +1113,8 @@ export const websocketRequestKeyField = (p: Http1Parser): i32 => {
   }
   const i: i32 = p.headerIndex("sec-websocket-key")
   const spans: i32[] = p.spans
-  if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
-    return -1
-  }
-  if (!websocketKeySpanIsValid(p.head, spans[4 * i + 2], spans[4 * i + 3])) {
+  const at: i32 = websocketValueAt(spans, i)
+  if (at < 0 || at >= toI32(spans.length) - 1 || !websocketKeySpanIsValid(p.head, spans[at], spans[at + 1])) {
     return -1
   }
   return i
@@ -1013,21 +1130,40 @@ export const websocketRequestKeyField = (p: Http1Parser): i32 => {
  * @returns The `Sec-WebSocket-Key` to pass to `websocketUpgradeResponse`, or null when the request is not a valid handshake.
  */
 export const websocketRequestKey = (p: Http1Parser): string | null => {
-  const i: i32 = websocketRequestKeyField(p)
   const spans: i32[] = p.spans
-  if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+  const at: i32 = websocketValueAt(spans, websocketRequestKeyField(p))
+  if (at < 0 || at >= toI32(spans.length) - 1) {
     return null
   }
-  return http1Text(p.head, spans[4 * i + 2], spans[4 * i + 3], false)
+  return http1Text(p.head, spans[at], spans[at + 1], false)
+}
+
+/**
+ * Where field `i`'s value span starts in `spans` (four entries a field: the
+ * name's start and end, then the value's), or -1 when `i` is not a field
+ * `spans` holds; `spans[at]` and `spans[at + 1]` are then the value's ends.
+ */
+const websocketValueAt = (spans: i32[], i: i32): i32 => {
+  if (i < 0 || i > 536870910) {
+    return -1
+  }
+  const at: i32 = 4 * i + 2
+  if (at >= toI32(spans.length) - 1) {
+    return -1
+  }
+  return at
 }
 
 /** Writes `text` into `out` from `at`; the caller has checked it fits. */
 const websocketPutText = (out: u8[], at: i32, text: string): i32 => {
   const n: i32 = toI32(text.length)
-  for (let k: i32 = 0; k < n; k += 1) {
-    out[at + k] = toU8(text.charCodeAt(k))
+  const outLength: i32 = toI32(out.length)
+  let j: i32 = at
+  for (let k: i32 = 0; k < n && j >= 0 && j < outLength; k += 1) {
+    out[j] = toU8(text.charCodeAt(k))
+    j += 1
   }
-  return at + n
+  return j
 }
 
 /** The 101's status line and its first two fields, which never change. */
@@ -1049,20 +1185,26 @@ const WS_SWITCHING: string =
  */
 export const websocketWriteUpgradeResponse = (out: u8[], at: i32, accept: u8[], protocol: string): i32 => {
   const p: i32 = toI32(protocol.length)
-  if (toI32(accept.length) !== WS_ACCEPT_LENGTH || (p > 0 && !http1IsToken(protocol)) || p > 65536) {
+  if (p < 0 || p > 65536) {
+    return HTTP1_REFUSED
+  }
+  if (toI32(accept.length) !== WS_ACCEPT_LENGTH || (p > 0 && !http1IsToken(protocol))) {
     return HTTP1_REFUSED
   }
   const fixed: i32 = toI32(WS_SWITCHING.length)
-  const named: i32 = p > 0 ? 26 + p : 0
-  const length: i32 = fixed + WS_ACCEPT_LENGTH + 2 + named + 2
-  if (at < 0 || at > toI32(out.length) - length) {
+  let named: i32 = 0
+  if (p > 0) {
+    named = 26 + p
+  }
+  const length: i32 = websocketAdd(fixed, named + WS_ACCEPT_LENGTH + 4)
+  if (at < 0 || toI64(at) + toI64(length) > toI64(toI32(out.length))) {
     return HTTP1_NO_ROOM
   }
   let j: i32 = websocketPutText(out, at, WS_SWITCHING)
-  for (let k: i32 = 0; k < toI32(accept.length); k += 1) {
-    out[j + k] = accept[k]
+  if (!tryCopyBytes(out, j, accept, WS_ZERO, WS_ACCEPT_LENGTH)) {
+    return HTTP1_NO_ROOM
   }
-  j = websocketPutText(out, j + WS_ACCEPT_LENGTH, "\r\n")
+  j = websocketPutText(out, websocketAdd(j, WS_ACCEPT_LENGTH), "\r\n")
   if (p > 0) {
     j = websocketPutText(out, j, "Sec-WebSocket-Protocol: ")
     j = websocketPutText(out, j, protocol)
@@ -1090,12 +1232,14 @@ export const websocketUpgradeResponse = (key: string, protocol: string): u8[] | 
   if (!accept.compute(bytes, WS_ZERO, toI32(bytes.length))) {
     return null
   }
-  const out: u8[] = new Array<u8>(toI32(WS_SWITCHING.length) + WS_ACCEPT_LENGTH + 30 + toI32(protocol.length))
+  const out: u8[] = websocketBytes(
+    websocketAdd(websocketAdd(toI32(WS_SWITCHING.length), WS_ACCEPT_LENGTH + 30), toI32(protocol.length))
+  )
   const end: i32 = websocketWriteUpgradeResponse(out, WS_ZERO, accept.value, protocol)
   if (end < 0) {
     return null
   }
-  const head: u8[] = new Array<u8>(end)
+  const head: u8[] = websocketBytes(end)
   for (let k: i32 = 0; k < toI32(head.length) && k < toI32(out.length); k++) {
     head[k] = out[k]
   }
@@ -1117,9 +1261,15 @@ export const websocketOfferedProtocols = (p: Http1Parser): string[] | null => {
   const out: string[] = []
   const head: u8[] = p.head
   const spans: i32[] = p.spans
-  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
-    if (websocketSpanIs(head, spans[4 * i], spans[4 * i + 1], "sec-websocket-protocol")) {
-      websocketListInto(head, spans[4 * i + 2], spans[4 * i + 3], out)
+  // `s` steps through the four spans of each field in turn.
+  let s: i32 = 0
+  for (let i: i32 = 0; i < p.headerCount && s >= 0 && s < toI32(spans.length) - 3; i += 1) {
+    const valueStart: i32 = spans[s + 2]
+    const valueEnd: i32 = spans[s + 3]
+    const offers: boolean = websocketSpanIs(head, spans[s], spans[s + 1], "sec-websocket-protocol")
+    s += 4
+    if (offers) {
+      websocketListInto(head, valueStart, valueEnd, out)
     }
   }
   for (let k: i32 = 0; k < toI32(out.length); k += 1) {
@@ -1153,20 +1303,24 @@ export const websocketOfferedProtocols = (p: Http1Parser): string[] | null => {
 export const websocketOriginAllowed = (p: Http1Parser, allowed: string[]): boolean => {
   const head: u8[] = p.head
   const spans: i32[] = p.spans
+  // `s` steps through the four spans of each field in turn; `found` is where
+  // the `Origin` field's spans start.
   let found: i32 = -1
-  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
-    if (websocketSpanIs(head, spans[4 * i], spans[4 * i + 1], "origin")) {
+  let s: i32 = 0
+  for (let i: i32 = 0; i < p.headerCount && s >= 0 && s < toI32(spans.length) - 3; i += 1) {
+    if (websocketSpanIs(head, spans[s], spans[s + 1], "origin")) {
       if (found >= 0) {
         return false
       }
-      found = i
+      found = s
     }
+    s += 4
   }
-  if (found < 0) {
+  if (found < 0 || found >= toI32(spans.length) - 3) {
     return false
   }
   for (let k: i32 = 0; k < toI32(allowed.length); k += 1) {
-    if (websocketSpanFolds(head, spans[4 * found + 2], spans[4 * found + 3], allowed[k])) {
+    if (websocketSpanFolds(head, spans[found + 2], spans[found + 3], allowed[k])) {
       return true
     }
   }
@@ -1179,11 +1333,11 @@ export const websocketOriginAllowed = (p: Http1Parser, allowed: string[]): boole
  */
 const websocketSpanFolds = (bytes: u8[], a: i32, b: i32, text: string): boolean => {
   const n: i32 = toI32(text.length)
-  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+  if (a < 0 || b < 0 || b - a !== n || b > toI32(bytes.length)) {
     return false
   }
+  let at: i32 = a
   for (let k: i32 = 0; k < n; k += 1) {
-    const at: i32 = a + k
     if (at < 0 || at >= toI32(bytes.length) || k >= toI32(text.length)) {
       return false
     }
@@ -1198,6 +1352,7 @@ const websocketSpanFolds = (bytes: u8[], a: i32, b: i32, text: string): boolean 
     if (c !== w) {
       return false
     }
+    at += 1
   }
   return true
 }
@@ -1205,11 +1360,11 @@ const websocketSpanFolds = (bytes: u8[], a: i32, b: i32, text: string): boolean 
 /** Whether `bytes[a .. b)` is `word`, which is lower case, in any ASCII case. Allocates nothing. */
 const websocketSpanIs = (bytes: u8[], a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+  if (a < 0 || b < 0 || b - a !== n || b > toI32(bytes.length)) {
     return false
   }
+  let at: i32 = a
   for (let k: i32 = 0; k < n; k += 1) {
-    const at: i32 = a + k
     if (at < 0 || at >= toI32(bytes.length) || k >= toI32(word.length)) {
       return false
     }
@@ -1220,6 +1375,7 @@ const websocketSpanIs = (bytes: u8[], a: i32, b: i32, word: string): boolean => 
     if (c !== toI32(word.charCodeAt(k))) {
       return false
     }
+    at += 1
   }
   return true
 }
@@ -1229,25 +1385,37 @@ const websocketSpanIs = (bytes: u8[], a: i32, b: i32, word: string): boolean => 
  * (RFC 9110 §5.6.1) to `out`, each trimmed of OWS, the empty ones dropped.
  */
 const websocketListInto = (bytes: u8[], from: i32, to: i32, out: string[]): void => {
-  if (from < 0 || to > toI32(bytes.length)) {
+  const n: i32 = toI32(bytes.length)
+  if (from < 0 || to > n) {
     return
   }
   let start: i32 = from
-  for (let k: i32 = from; k <= to; k += 1) {
-    if (k === to || (k >= 0 && k < toI32(bytes.length) && toI32(bytes[k]) === 44)) {
-      let a: i32 = start
-      let b: i32 = k
-      while (a < b && a >= 0 && a < toI32(bytes.length) && http1IsOws(toI32(bytes[a]))) {
-        a += 1
-      }
-      while (b > a && b - 1 >= 0 && b - 1 < toI32(bytes.length) && http1IsOws(toI32(bytes[b - 1]))) {
-        b -= 1
-      }
-      if (b > a) {
-        out.push(http1Text(bytes, a, b, false))
-      }
+  for (let k: i32 = from; k >= 0 && k < to && k < toI32(bytes.length); k += 1) {
+    if (toI32(bytes[k]) === 44) {
+      websocketElementInto(bytes, start, k, out)
       start = k + 1
     }
+  }
+  websocketElementInto(bytes, start, to, out)
+}
+
+/** Appends `bytes[a .. b)`, trimmed of OWS, to `out` unless it is empty. */
+const websocketElementInto = (bytes: u8[], a: i32, b: i32, out: string[]): void => {
+  const n: i32 = toI32(bytes.length)
+  let x: i32 = a
+  let y: i32 = b
+  while (x < y && x >= 0 && x < n && http1IsOws(toI32(bytes[x]))) {
+    x += 1
+  }
+  while (y > x && y > 0 && y <= n) {
+    const c: i32 = y - 1
+    if (c < 0 || c >= n || !http1IsOws(toI32(bytes[c]))) {
+      break
+    }
+    y = c
+  }
+  if (y > x) {
+    out.push(http1Text(bytes, x, y, false))
   }
 }
 
@@ -1255,23 +1423,33 @@ const websocketListInto = (bytes: u8[], from: i32, to: i32, out: string[]): void
 const websocketListHas = (value: string, word: string): boolean => {
   const n: i32 = toI32(value.length)
   let start: i32 = 0
-  for (let k: i32 = 0; k <= n; k += 1) {
-    if (k === n || (k >= 0 && k < n && toI32(value.charCodeAt(k)) === 44)) {
-      let a: i32 = start
-      let b: i32 = k
-      while (a < b && a >= 0 && a < n && http1IsOws(toI32(value.charCodeAt(a)))) {
-        a += 1
-      }
-      while (b > a && b - 1 >= 0 && b - 1 < n && http1IsOws(toI32(value.charCodeAt(b - 1)))) {
-        b -= 1
-      }
-      if (http1SameWord(value, a, b, word)) {
+  for (let k: i32 = 0; k >= 0 && k < n; k += 1) {
+    if (toI32(value.charCodeAt(k)) === 44) {
+      if (websocketElementIs(value, start, k, word)) {
         return true
       }
       start = k + 1
     }
   }
-  return false
+  return websocketElementIs(value, start, n, word)
+}
+
+/** Whether `value[a .. b)`, trimmed of OWS, is `word` in any ASCII case. */
+const websocketElementIs = (value: string, a: i32, b: i32, word: string): boolean => {
+  const n: i32 = toI32(value.length)
+  let x: i32 = a
+  let y: i32 = b
+  while (x < y && x >= 0 && x < n && http1IsOws(toI32(value.charCodeAt(x)))) {
+    x += 1
+  }
+  while (y > x && y > 0 && y <= n) {
+    const c: i32 = y - 1
+    if (c < 0 || c >= n || !http1IsOws(toI32(value.charCodeAt(c)))) {
+      break
+    }
+    y = c
+  }
+  return http1SameWord(value, x, y, word)
 }
 
 /**
@@ -1424,19 +1602,25 @@ export const websocketCheckResponse = (
     const name: string = names[i]
     const value: string = values[i]
     if (name === "upgrade") {
-      upgrades += 1
+      if (upgrades < 2) {
+        upgrades += 1
+      }
       upgradeOk = http1SameWord(value, 0, toI32(value.length), "websocket")
     } else if (name === "connection") {
       if (websocketListHas(value, "upgrade")) {
         connection = true
       }
     } else if (name === "sec-websocket-accept") {
-      accepts += 1
+      if (accepts < 2) {
+        accepts += 1
+      }
       acceptOk = toI32(expected.length) > 0 && value === expected
     } else if (name === "sec-websocket-extensions") {
       extensions = true
     } else if (name === "sec-websocket-protocol") {
-      protocols += 1
+      if (protocols < 2) {
+        protocols += 1
+      }
       protocol = value
     }
   }

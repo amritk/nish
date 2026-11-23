@@ -295,10 +295,10 @@ class WebTransport
 | `bidirectional: boolean` | WT_STREAM's kind, and whether WT_CLOSED came from the client. |
 | `closedByPeer: boolean` | Whether the last WT_CLOSED came from the client: its CLOSE capsule, its FIN, or a reset the client sent; false when this side ended the session, including when it reset the stream for a malformed capsule or a FIN inside one. |
 | `config: WebTransportConfig` | The caps this layer was made with; the arrays they size are made by the constructor. |
-| `data: u8[]` | The buffer the window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED lies in: this layer's own datagram buffer, the `Http3Connection`'s `data`, or this layer's store of CLOSE reasons. Valid until the next call. |
+| `data: u8[]` | The buffer the window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED lies in: this layer's own datagram buffer, the `Http3Connection`'s `data`, or the session's own store of its CLOSE reason. Valid until the next call. |
 | `datagramsDropped: i32` | Counters for a log or a test, each saturating: datagrams dropped, sessions refused here, streams refused. |
-| `datagramsIn: i32[]` | Counters for a log or a rate cap, each saturating: datagrams in and out. |
-| `datagramsOut: i32[]` | How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. |
+| `datagramsIn: i32[]` | Counters for a log or a rate cap, each saturating: datagrams in and out. Read-only: copied from the session at each event. |
+| `datagramsOut: i32[]` | How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. Read-only: copied from the session at each event. |
 | `dataLength: i32` | How many bytes the last event's window has. |
 | `dataStart: i32` | Where the last event's window starts in `data`. |
 | `errorCode: i64` | The HTTP/3 code of the last WT_STREAM_RESET or WT_STREAM_STOPPED, or the 32-bit code of the last WT_CLOSED's CLOSE capsule (0 when the session ended without one). |
@@ -307,10 +307,10 @@ class WebTransport
 | `session: i32` | The last event's session index, and its window onto `data`. |
 | `sessionAt: i32[]` | The session whose CONNECT stream the slot holds, or -1. |
 | `sessionId: i64` | The last event's session ID, stream, and codes. |
-| `sessionIds: i64[]` | Each session's ID, its CONNECT stream's ID, by session index; -1 for a free index. |
+| `sessionIds: i64[]` | Each session's ID, its CONNECT stream's ID, by session index; -1 for a free index. Read-only: copied from the session at each event. |
 | `sessionsRefused: i32` | How many requests for a session this layer answered with a 400, 429 or 501, or `refuse` refused. |
 | `stream: i64` | The stream ID of the last event about a stream: the client's or this side's stream, or the session's CONNECT stream; a WT_DATAGRAM leaves it as it was. |
-| `streamCount: i32[]` | How many streams each session holds, the client's and this side's together, up to `maxStreams`; a stream stops counting once both of its sides are over. |
+| `streamCount: i32[]` | How many streams each session holds, the client's and this side's together, up to `maxStreams`; a stream stops counting once both of its sides are over. Read-only: copied from the session at each event. |
 | `waiting: WebTransportWaiting` | The streams waiting for a session. |
 | `accept(id: i64): i32` | Accepts session `id` with a 200 (draft-02 §3.2): its datagrams and streams reach the program from now on, the streams that waited for it first. Answers 0, H3_AGAIN when the response does not fit yet, or H3_CLOSED for one that is not a session asked for. |
 | `close(id: i64, code: i64, buf: u8[], off: i32, len: i32): i32` | Closes session `id` (draft-02 §5): CLOSE_WEBTRANSPORT_SESSION with the application's `code` and the reason `buf[off .. off + len)`, at most 1024 bytes of UTF-8, then the FIN; every stream of the session is reset with WT_SESSION_GONE. Answers 0; H3_INVALID for a reason too long; H3_AGAIN while the CONNECT stream has no room for the capsule, and WT_WRITABLE then names it; or H3_CLOSED. |

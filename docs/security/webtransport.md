@@ -228,6 +228,24 @@ a connection with WebTransport off (`net_webtransport_bad_layer`);
 (`net_webtransport_datagram_window`, `_close_window`, `_stream_window`,
 `_whole_window`).
 
+**Panic sites: the program's mistakes and the clock.** In
+`webtransport.ts` each session's state and each stream slot's state is one
+object (`WebTransportSession`, `WebTransportStream`), reached through a
+lookup that answers null for an index outside its table, so no touch of a
+session or a stream is an unproven index; a CLOSE capsule's reason is read
+into its own session's buffer, and the code mappings and the waiting room's
+hash are worked in `f64`, which holds their values exactly. The sites left
+are five: the two kept panics, `webtransportCheckCap` and the constructor's
+checks above (entries with their reasons in `tests/std-panics.json`); the
+salt `WebTransportWaiting` draws with `crypto.getRandomValues`, which exits
+when the system has no entropy; and the two `i64` sums of a clock reading and
+a wait of at most a day in `expire` and `expiresNoSooner`, which overflow
+only for a clock reading within a day of 2^63. The window panics above are
+`nish/net/http3-frame`'s, whose window check these calls share. A new site
+fails
+`std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`
+and a kept one that goes fails `std-panics: every kept panic in tests/std-panics.json`.
+
 **Nothing allocates per datagram, stream or session** (`arena.ts`, every
 server call measured on its own with `Arena.used()`): 200 rounds on a warm
 session, each a 300-byte datagram and a bidirectional and a unidirectional
