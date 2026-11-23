@@ -937,8 +937,8 @@ The `length` bytes, held as a `Secret` the caller wipes, or `null`
 HKDF-Extract (RFC 5869 §2.2) over the hash `hashLength` names, the PRK's
 HashLen bytes written at `out[at]`. An empty `salt` keys HMAC with no bytes,
 which HMAC pads to the block with zeros, exactly as the HashLen zeros §2.2
-asks for would be. An `ikm` longer than 2^31 - 1 bytes panics, as
-`hmacSha256` does.
+asks for would be. The whole `ikm` is hashed, at any length, as
+`hmacSha256` hashes its message.
 
 ```ts
 const hkdfExtractInto: (

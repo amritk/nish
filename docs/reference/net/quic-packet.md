@@ -1230,7 +1230,7 @@ A new `QuicPacket`; read its `error` before any other field.
 ### quicPacketCopy
 
 Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the caller has checked both windows.
-The part of the run outside either window is skipped rather than written, so a wrong window cannot panic.
+A run that is not inside both arrays writes nothing, so a wrong window cannot panic.
 
 ```ts
 const quicPacketCopy: (

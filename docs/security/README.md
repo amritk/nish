@@ -29,7 +29,7 @@ the record that found it. The notes below the table name each such finding.
 | ChaCha20 keystream kernel | [crypto-chacha20-hw.md](crypto-chacha20-hw.md) | `runtime/runtime-chacha20.c`; its lowering (`isChacha20Seam` in `src/kernels.ts`, `emitKernelArm` in `src/emit.ts`) | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, `std/crypto/ed25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²³ |
-| SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
+| SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 2 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 12 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
@@ -41,7 +41,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 3 / 6 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
-| Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
+| Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 3 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 8 | 0 / 0 / 0 / 0 ⁷ |
@@ -64,7 +64,7 @@ the record that found it. The notes below the table name each such finding.
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
 | A package's C link | [package-link.md](package-link.md) | `src/manifest.ts` (`manifestNish`'s `link` key, `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem`), `src/compile.ts` (`readLinkSet`, `linkPackages`, `refuseUngranted`, `addLinkRequest`, `readLinkIncludes`, `linkProgram`), `src/run-cache.ts` (`LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey`), `scripts/build.sh` (`--link-lib`, `--link-source`, `--link-depends`) | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ³⁰ |
 | PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts`, `std/crypto/scram.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
-| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
+| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
@@ -386,6 +386,8 @@ the record that found it. The notes below the table name each such finding.
     (Low), accepted when found, is superseded, since the kernel is now as
     wide as the lanes given; BCRYPT-9 was a limitation of the language, since
     lifted. BCRYPT-5 is a property checked and found to hold, not a finding.
+    BCRYPT-12 (Medium), the login batcher's ticket counter overflowing at
+    the 2^31st request, was found by WP83's panic-site work and fixed.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,

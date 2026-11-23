@@ -78,8 +78,58 @@ const grantReject = (out: RelayGrant, code: i32, reason: string): i32 => {
   return code
 }
 
+/** The byte of `buf` at `at`, or -1 for an `at` outside it. */
+const grantByte = (buf: u8[], at: i32): i32 => (at >= 0 && at < toI32(buf.length) ? toI32(buf[at]) : -1)
+
 /** `x` rotated right by `n` bits (FIPS 180-4 §3.2). */
 const grantRotr = (x: u32, n: u32): u32 => (x >>> n) | (x << (toU32(32) - n))
+
+/**
+ * One SHA-256 block (FIPS 180-4 §6.2.2) folded into `h`, its first sixteen
+ * words already in `w`. The length checks hold for the arrays `grantSha256`
+ * makes; they are what lets every index below be proved in range.
+ */
+const grantCompress = (h: u32[], w: u32[], k: u32[]): void => {
+  if (toI32(k.length) < 64 || toI32(h.length) < 8 || toI32(w.length) < 64) {
+    return
+  }
+  for (let t: i32 = 16; t < 64; t++) {
+    const w2: u32 = w[t - 2]
+    const w15: u32 = w[t - 15]
+    const sigma1: u32 = grantRotr(w2, 17) ^ grantRotr(w2, 19) ^ (w2 >>> 10)
+    const sigma0: u32 = grantRotr(w15, 7) ^ grantRotr(w15, 18) ^ (w15 >>> 3)
+    w[t] = sigma1 + w[t - 7] + sigma0 + w[t - 16]
+  }
+  let a: u32 = h[0]
+  let b: u32 = h[1]
+  let c: u32 = h[2]
+  let d: u32 = h[3]
+  let e: u32 = h[4]
+  let f: u32 = h[5]
+  let g: u32 = h[6]
+  let hh: u32 = h[7]
+  for (let t: i32 = 0; t < 64; t++) {
+    const t1: u32 =
+      hh + (grantRotr(e, 6) ^ grantRotr(e, 11) ^ grantRotr(e, 25)) + ((e & f) ^ (~e & g)) + k[t] + w[t]
+    const t2: u32 = (grantRotr(a, 2) ^ grantRotr(a, 13) ^ grantRotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))
+    hh = g
+    g = f
+    f = e
+    e = d + t1
+    d = c
+    c = b
+    b = a
+    a = t1 + t2
+  }
+  h[0] += a
+  h[1] += b
+  h[2] += c
+  h[3] += d
+  h[4] += e
+  h[5] += f
+  h[6] += g
+  h[7] += hh
+}
 
 /**
  * The SHA-256 of `data` (FIPS 180-4 §6.2), with every array a local the call
@@ -102,70 +152,39 @@ const grantSha256 = (data: u8[]): u8[] => {
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ]
   // §5.1.1: the message, a 1 bit, zeros to 56 bytes into a block, and the length in bits.
-  const n: i32 = toI32(data.length)
-  const size: i32 = ((n + 9 + SHA256_BLOCK - 1) / SHA256_BLOCK) * SHA256_BLOCK
-  const m: u8[] = new Array<u8>(size)
-  quicPacketCopy(m, GRANT_ZERO, data, GRANT_ZERO, n)
-  m[n] = 0x80
-  const bits: u64 = toU64(n) << toU64(3)
-  for (let i: i32 = 0; i < 8; i++) {
-    m[size - 1 - i] = toU8(bits >>> toU64(8 * i))
+  const m: u8[] = []
+  for (let i: i32 = 0; i < toI32(data.length); i++) {
+    m.push(data[i])
   }
+  m.push(toU8(0x80))
+  while ((toI32(m.length) & 63) !== 56) {
+    m.push(toU8(0))
+  }
+  const bits: u64 = toU64(toI32(data.length)) << toU64(3)
+  for (let i: i32 = 7; i >= 0; i--) {
+    m.push(toU8(bits >>> toU64(8 * i)))
+  }
+  // Each byte shifts into the word it ends; every 64th byte closes a block.
   const w: u32[] = new Array<u32>(64)
-  if (toI32(k.length) >= 64 && toI32(h.length) >= 8 && toI32(w.length) >= 64) {
-    for (let at: i32 = 0; at + SHA256_BLOCK <= size; at += SHA256_BLOCK) {
-      for (let t: i32 = 0; t < 16; t++) {
-        let word: u32 = 0
-        for (let j: i32 = at + 4 * t; j >= 0 && j < at + 4 * t + 4 && j < toI32(m.length); j++) {
-          word = (word << 8) | toU32(m[j])
-        }
-        w[t] = word
-      }
-      for (let t: i32 = 16; t < 64; t++) {
-        const w2: u32 = w[t - 2]
-        const w15: u32 = w[t - 15]
-        const sigma1: u32 = grantRotr(w2, 17) ^ grantRotr(w2, 19) ^ (w2 >>> 10)
-        const sigma0: u32 = grantRotr(w15, 7) ^ grantRotr(w15, 18) ^ (w15 >>> 3)
-        w[t] = sigma1 + w[t - 7] + sigma0 + w[t - 16]
-      }
-      let a: u32 = h[0]
-      let b: u32 = h[1]
-      let c: u32 = h[2]
-      let d: u32 = h[3]
-      let e: u32 = h[4]
-      let f: u32 = h[5]
-      let g: u32 = h[6]
-      let hh: u32 = h[7]
-      for (let t: i32 = 0; t < 64; t++) {
-        const t1: u32 =
-          hh + (grantRotr(e, 6) ^ grantRotr(e, 11) ^ grantRotr(e, 25)) + ((e & f) ^ (~e & g)) + k[t] + w[t]
-        const t2: u32 =
-          (grantRotr(a, 2) ^ grantRotr(a, 13) ^ grantRotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))
-        hh = g
-        g = f
-        f = e
-        e = d + t1
-        d = c
-        c = b
-        b = a
-        a = t1 + t2
-      }
-      h[0] += a
-      h[1] += b
-      h[2] += c
-      h[3] += d
-      h[4] += e
-      h[5] += f
-      h[6] += g
-      h[7] += hh
+  let word: u32 = 0
+  for (let j: i32 = 0; j < toI32(m.length) && toI32(w.length) >= 64; j++) {
+    word = (word << 8) | toU32(m[j])
+    if ((j & 3) === 3) {
+      const slot: i32 = (j >> 2) & 15
+      w[slot] = word
+      word = 0
+    }
+    if ((j & 63) === 63) {
+      grantCompress(h, w, k)
     }
   }
-  const out: u8[] = new Array<u8>(SHA256_SIZE)
+  const out: u8[] = []
   for (let i: i32 = 0; i < 8 && i < toI32(h.length); i++) {
-    out[4 * i] = toU8(h[i] >>> 24)
-    out[4 * i + 1] = toU8(h[i] >>> 16)
-    out[4 * i + 2] = toU8(h[i] >>> 8)
-    out[4 * i + 3] = toU8(h[i])
+    const v: u32 = h[i]
+    out.push(toU8(v >>> 24))
+    out.push(toU8(v >>> 16))
+    out.push(toU8(v >>> 8))
+    out.push(toU8(v))
   }
   wipe(m)
   wipe(w)
@@ -175,11 +194,13 @@ const grantSha256 = (data: u8[]): u8[] => {
 
 /** SHA-256 of `key XOR pad` (a block, the key no longer than one) followed by `data`, with the padded block wiped. */
 const grantPadHash = (key: u8[], pad: i32, data: u8[]): u8[] => {
-  const block: u8[] = new Array<u8>(SHA256_BLOCK + toI32(data.length))
-  for (let k: i32 = 0; k < SHA256_BLOCK && k < toI32(block.length); k++) {
-    block[k] = toU8((k < toI32(key.length) ? toI32(key[k]) : GRANT_ZERO) ^ pad)
+  const block: u8[] = []
+  for (let k: i32 = 0; k < SHA256_BLOCK; k++) {
+    block.push(toU8((k < toI32(key.length) ? toI32(key[k]) : GRANT_ZERO) ^ pad))
   }
-  quicPacketCopy(block, SHA256_BLOCK, data, GRANT_ZERO, toI32(data.length))
+  for (let k: i32 = 0; k < toI32(data.length); k++) {
+    block.push(data[k])
+  }
   const digest: u8[] = grantSha256(block)
   wipe(block)
   return digest
@@ -210,8 +231,10 @@ const grantTagHolds = (key: u8[], signed: u8[]): boolean => {
   if (n < 0) {
     return false
   }
-  const message: u8[] = new Array<u8>(n)
-  quicPacketCopy(message, GRANT_ZERO, signed, GRANT_ZERO, n)
+  const message: u8[] = []
+  for (let k: i32 = 0; k < n && k < toI32(signed.length); k++) {
+    message.push(signed[k])
+  }
   const tag: u8[] = grantHmac(key, message)
   const holds: boolean =
     toI32(tag.length) === SHA256_SIZE && timingSafeEqualAt(tag, 0, signed, n, SHA256_SIZE)
@@ -246,8 +269,9 @@ export class GrantVerifier {
     h3CheckWindow("GrantVerifier.verify", buf, off, len)
     // What the decoding allocates dies here: only numbers leave, into `out`'s arrays.
     using a = arena()
-    // Three parts, split on the dots.
-    const end: i32 = off + len
+    // Three parts, split on the dots. `h3CheckWindow` has held the window inside `buf`.
+    const wide: i64 = toI64(off) + toI64(len)
+    const end: i32 = wide < toI64(buf.length) ? toI32(wide) : toI32(buf.length)
     let first: i32 = -1
     let second: i32 = -1
     for (let k: i32 = off; k >= 0 && k < end && k < toI32(buf.length); k++) {
@@ -261,29 +285,48 @@ export class GrantVerifier {
         }
       }
     }
-    if (second < 0 || first - off !== 2 || buf[off] !== 0x76 || buf[off + 1] !== 0x31) {
+    if (
+      second < 0 ||
+      first < 1 ||
+      toI64(first) - toI64(off) !== toI64(2) ||
+      grantByte(buf, off) !== 0x76 ||
+      grantByte(buf, first - 1) !== 0x31
+    ) {
       return grantReject(out, CLOSE_TOKEN_INVALID, "malformed token")
     }
-    // The two base64url parts as strings, which is what `base64urlDecode` reads.
+    // The two base64url parts as strings, which is what `base64urlDecode` reads,
+    // and `v1.` with the payload as written, the bytes the MAC is over.
     const macText: string[] = []
-    for (let k: i32 = second + 1; k >= 0 && k < end && k < toI32(buf.length); k++) {
-      macText.push(this.chars[toI32(buf[k])])
-    }
     const payloadText: string[] = []
-    for (let k: i32 = first + 1; k >= 0 && k < second && k < toI32(buf.length); k++) {
-      payloadText.push(this.chars[toI32(buf[k])])
+    const signed: u8[] = []
+    const chars: string[] = this.chars
+    for (let k: i32 = off; k >= 0 && k < end && k < toI32(buf.length); k++) {
+      const b: i32 = toI32(buf[k])
+      if (b >= toI32(chars.length)) {
+        return grantReject(out, CLOSE_TOKEN_INVALID, "malformed token")
+      }
+      const char: string = chars[b]
+      if (k > second) {
+        macText.push(char)
+      } else if (k < second) {
+        signed.push(buf[k])
+        if (k > first) {
+          payloadText.push(char)
+        }
+      }
     }
     const signature: u8[] | null = base64urlDecode(macText.join(""))
     if (signature === null) {
       return grantReject(out, CLOSE_TOKEN_INVALID, "malformed token")
     }
-    // The MAC is over `v1.` and the payload as written; the signature rides at the end for the check.
+    // The signature rides at the end of the signed bytes for the check.
     if (toI32(signature.length) !== SHA256_SIZE) {
       return grantReject(out, CLOSE_TOKEN_INVALID, "bad signature")
     }
-    const signed: u8[] = new Array<u8>(second - off + SHA256_SIZE)
-    quicPacketCopy(signed, GRANT_ZERO, buf, off, second - off)
-    quicPacketCopy(signed, second - off, signature, GRANT_ZERO, SHA256_SIZE)
+    const mac: u8[] = signature
+    for (let k: i32 = 0; k < toI32(mac.length); k++) {
+      signed.push(mac[k])
+    }
     if (!exposeWith(secret, signed, grantTagHolds)) {
       return grantReject(out, CLOSE_TOKEN_INVALID, "bad signature")
     }
@@ -297,28 +340,40 @@ export class GrantVerifier {
     const host: i32 = json.find("host")
     const port: i32 = json.find("port")
     const expires: i32 = json.find("expiresAt")
+    // `find` answers a member below `count`, a row of every array here; the checks say so to the prover.
+    const kind: i32[] = json.kind
+    const integer: i64[] = json.integer
+    const valueStart: i32[] = json.valueStart
+    const valueLength: i32[] = json.valueLength
     if (
       host < 0 ||
       port < 0 ||
       expires < 0 ||
-      json.kind[host] !== JSON_STRING ||
-      json.kind[port] !== JSON_INTEGER ||
-      json.kind[expires] !== JSON_INTEGER ||
-      json.valueLength[host] > RELAY_HOST_MAX ||
-      json.integer[port] < 0 ||
-      json.integer[port] > 65535
+      host >= toI32(kind.length) ||
+      port >= toI32(kind.length) ||
+      expires >= toI32(kind.length) ||
+      host >= toI32(valueStart.length) ||
+      host >= toI32(valueLength.length) ||
+      port >= toI32(integer.length) ||
+      expires >= toI32(integer.length) ||
+      kind[host] !== JSON_STRING ||
+      kind[port] !== JSON_INTEGER ||
+      kind[expires] !== JSON_INTEGER ||
+      valueLength[host] > RELAY_HOST_MAX ||
+      integer[port] < 0 ||
+      integer[port] > 65535
     ) {
       return grantReject(out, CLOSE_TOKEN_INVALID, "malformed payload")
     }
-    const expiresAt: i64 = json.integer[expires]
+    const expiresAt: i64 = integer[expires]
     if (expiresAt <= now) {
       return grantReject(out, CLOSE_TOKEN_EXPIRED, "token expired")
     }
-    const start: i32 = json.valueStart[host]
-    const n: i32 = json.valueLength[host]
+    const start: i32 = valueStart[host]
+    const n: i32 = valueLength[host]
     quicPacketCopy(out.host, GRANT_ZERO, json.text, start, n)
     out.hostLength = n
-    out.port = toI32(json.integer[port])
+    out.port = toI32(integer[port])
     out.expiresAt = expiresAt
     out.code = GRANT_OK
     out.reason = ""

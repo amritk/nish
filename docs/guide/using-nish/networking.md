@@ -532,7 +532,9 @@ numbers: `workers`, `backoffMs`, `backoffCapMs`, `quickExitMs` (what counts as
 dying young), `graceMs` and `tickMs` (how often the supervisor looks for a
 restart that is due). A negative number, a `tickMs` or `backoffMs` of zero,
 or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
-the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
+the field; `tryPreforkWith(process.argv, config)` answers the same config as
+an `Err` with that reason instead, before any worker starts, and otherwise
+`Ok` with what `preforkWith` would. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
 By default the workers are not pinned to cores. Each one binds the port with
@@ -898,7 +900,7 @@ it opens, and answers each lookup with the 18-byte addresses `tcpConnect` and
 tokens it owns and the time; it never waits and never reads the clock itself,
 so a slow lookup costs your other sockets nothing.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts`, `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";

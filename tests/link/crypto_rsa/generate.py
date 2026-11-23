@@ -157,6 +157,15 @@ c("KEY_E_ONE", der_key(nA, 1), "e = 1.")
 c("KEY_E_THREE", der_key(nA, 3), "e = 3.")
 c("KEY_E_BIG", der_key(nA, (1 << 32) + 1), "e = 2^32 + 1, five bytes.")
 c("KEY_E_MAX", der_key(nA, (1 << 32) - 1), "e = 2^32 - 1, the largest allowed.")
+# A key B PSS signature with a zero top byte: without it, it is as long as
+# key B's encoded message, a byte shorter than the modulus.
+i = 0
+while True:
+    m = MSG + str(i).encode(); s = sign(nB, dB, pss_em(nB, '256', m, 32))
+    if s[0] == 0: break
+    i += 1
+c("B_PSS_SHORT_MSG", m, "A message whose SHA-256 PSS signature under key B, salt 32, starts with a zero byte.")
+c("B_PSS_SHORT_SIG", s, "That signature.")
 HEAD = (
     "// Generated keys and signatures for suite.ts: deterministic, from a fixed\n"
     "// seed, made for these tests and signed with their own private keys.\n"

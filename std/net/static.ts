@@ -64,7 +64,7 @@ import { copyBytes } from "nish/bytes"
 import { HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
 import { HTTP_DATE_SIZE, httpDateWrite, httpFieldBytes } from "nish/net/http-fields"
 import { HttpServer, HttpServerRequest } from "nish/net/http-server"
-import { percentDecode } from "nish/net/url"
+import { tryPercentDecode } from "nish/net/url"
 
 /** What `serve` answers when it sent nothing: the file is missing or not a regular file, or the path was refused (`refused`). */
 export const STATIC_NOT_FOUND: i32 = -30
@@ -133,6 +133,104 @@ const STATIC_TYPES: string =
 const staticLower = (b: i32): i32 => (b >= 65 && b <= 90 ? b + 32 : b)
 
 /**
+ * `a + b` worked in 64 bits and narrowed: the offsets and counts added here
+ * are spans of a request head, a path or a file under 2^31, so the sum
+ * fits; one that does not wraps to a value the caller's range test refuses.
+ */
+const staticAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+
+/** `a - b` worked in 64 bits and narrowed, for the same offsets as `staticAdd`. */
+const staticSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
+
+/**
+ * Field `i`'s value start (`start`) or end in `r.head`, -1 for an absent field
+ * (`i` below 0), or the handler's `Err` for an index it gives no span for.
+ */
+const staticValue = (r: HttpRequest, i: i32, start: boolean): Result<i32, string> => {
+  if (i < 0) {
+    return Ok(toI32(-1))
+  }
+  return start ? r.tryValueStart(i) : r.tryValueEnd(i)
+}
+
+/**
+ * `b[i]`, or -1 when `i` is outside `b`. Every caller compares the answer
+ * with a byte (a digit range, `,`, `.`, `/`, `"`, `=`, a space or an ETag
+ * byte), which -1 never is, so a read past the end fails its parse as the
+ * end of the input does.
+ */
+const staticByte = (b: u8[], i: i32): i32 => (i >= 0 && i < toI32(b.length) ? toI32(b[i]) : -1)
+
+/**
+ * `a + b` for file offsets and sizes, worked in `u64`, whose wrapping sum
+ * has the bits of the signed one: they are below 2^31, so it never wraps.
+ */
+const staticAdd64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+
+/** `a - b` for the same offsets as `staticAdd64`, the same way. */
+const staticSub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+
+/**
+ * Writes `v` to `out[i]` and answers `i + 1`, the next write's index; -1,
+ * writing nothing, when `i` is outside `out`, so a chain of writes carries
+ * the -1 to its end, where every caller checks it.
+ */
+const staticPut = (out: u8[], i: i32, v: i32): i32 => {
+  if (i < 0 || i >= toI32(out.length)) {
+    return -1
+  }
+  out[i] = toU8(v)
+  return i + 1
+}
+
+/**
+ * `n` zeroed bytes, `n` at most 2^30: one `new Array` up to 65535, which a
+ * `u16` length proves, and pushes past it.
+ */
+const staticBytes = (n: i32): u8[] => {
+  if (n <= 65535) {
+    let size: i32 = 0
+    if (n > 0) {
+      size = n
+    }
+    return new Array<u8>(toU16(size))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let i: i32 = 65535; i < n; i++) {
+    out.push(0)
+  }
+  return out
+}
+
+/** The power of two from 64 up that holds `size`, at most 2^30. */
+const staticCap = (size: i32): i32 => {
+  let cap: i32 = 64
+  while (cap < size && cap < 1073741824) {
+    cap = staticAdd(cap, cap)
+  }
+  return cap
+}
+
+/** Reads `size` bytes of `fd` from its start into `into`: false when a read fails or `into` is short. */
+const staticReadAll = (fd: i32, into: u8[], size: i32): boolean => {
+  if (size > toI32(into.length)) {
+    return false
+  }
+  let got: i32 = 0
+  while (got < size) {
+    const n: i32 = fileReadAt(fd, into, got, staticSub(size, got), toI64(got))
+    if (n <= 0) {
+      return false
+    }
+    got = staticAdd(got, n)
+  }
+  return true
+}
+
+/** The code unit of `s` at `i`, or -1 when `i` is outside `s`. */
+const staticChar = (s: string, i: i32): i32 => (i >= 0 && i < toI32(s.length) ? toI32(s.charCodeAt(i)) : -1)
+
+/**
  * The content type `serve` sends for a file name, by its extension (ASCII
  * case is ignored); `application/octet-stream` for one the table lacks.
  * @param name the file name, or a path ending in it
@@ -156,18 +254,24 @@ export const staticContentType = (name: string): string => {
   let at: i32 = 0
   while (at < toI32(STATIC_TYPES.length)) {
     let k: i32 = 0
+    // The name is shorter than the table, so `k` stays far below 2^31.
     while (
       k < length &&
-      toI32(STATIC_TYPES.charCodeAt(at + k)) === staticLower(toI32(name.charCodeAt(dot + 1 + k)))
+      k < 65536 &&
+      staticChar(STATIC_TYPES, staticAdd(at, k)) ===
+        staticLower(staticChar(name, staticAdd(dot, staticAdd(1, k))))
     ) {
       k++
     }
     const space: i32 = toI32(STATIC_TYPES.indexOf(" ", at))
     const bar: i32 = toI32(STATIC_TYPES.indexOf("|", space))
-    if (k === length && space === at + length) {
-      return STATIC_TYPES.substring(space + 1, bar)
+    if (space < 0 || bar < 0) {
+      break
     }
-    at = bar + 1
+    if (k === length && space === staticAdd(at, length)) {
+      return STATIC_TYPES.substring(staticAdd(space, 1), bar)
+    }
+    at = staticAdd(bar, 1)
   }
   return "application/octet-stream"
 }
@@ -175,11 +279,12 @@ export const staticContentType = (name: string): string => {
 /** Whether `bytes[start .. end)` is `text`, ASCII case ignored. */
 const staticIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
   const size: i32 = toI32(text.length)
-  if (end - start !== size) {
+  if (staticSub(end, start) !== size) {
     return false
   }
   for (let k: i32 = 0; k < size; k++) {
-    if (staticLower(toI32(bytes[start + k])) !== staticLower(toI32(text.charCodeAt(k)))) {
+    const b: i32 = staticByte(bytes, staticAdd(start, k))
+    if (b < 0 || staticLower(b) !== staticLower(toI32(text.charCodeAt(k)))) {
       return false
     }
   }
@@ -189,28 +294,50 @@ const staticIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
 /** Whether `b` is a space or a tab. */
 const staticSpace = (b: i32): boolean => b === 32 || b === 9
 
-/** Writes `v` (0 or more) in base `radix` (10 or 16, lowercase) at `out[at ..)` and answers the index past it. */
+/**
+ * Writes `v` (0 or more) in base `radix` (10 or 16, lowercase) at
+ * `out[at ..)` and answers the index past it; -1, writing nothing, when `at`
+ * is -1 or the digits do not fit, which every caller checks. Every `v` a
+ * caller passes is 0 or more (a size `staticResolve` refused below 0, a
+ * range inside it, an mtime clamped at 0), so each remainder is a digit and
+ * the guard in the loop never skips a byte.
+ */
 const staticDigits = (out: u8[], at: i32, v: i64, radix: i64): i32 => {
+  // Any radix but 16 is 10.
+  const hex: boolean = radix === 16
   let digits: i32 = 1
-  let rest: i64 = v / radix
-  while (rest > 0) {
+  let rest: i64 = hex ? v / 16 : v / 10
+  // An i64 has at most 20 digits in base 10.
+  while (rest > 0 && digits < 32) {
     digits++
-    rest = rest / radix
+    rest = hex ? rest / 16 : rest / 10
+  }
+  if (at < 0 || staticAdd(at, digits) > toI32(out.length)) {
+    return -1
   }
   let x: i64 = v
   for (let k: i32 = digits - 1; k >= 0; k--) {
-    const d: i32 = toI32(x % radix)
-    out[at + k] = toU8(d < 10 ? 48 + d : 87 + d)
-    x = x / radix
+    const d: i32 = toI32(hex ? x % 16 : x % 10)
+    // The test above keeps `i` inside `out`, and a remainder is a digit;
+    // this repeats it where the prover reads it.
+    const i: i32 = staticAdd(at, k)
+    if (i >= 0 && i < toI32(out.length) && d >= 0 && d < 16) {
+      out[i] = toU8(d < 10 ? 48 + d : 87 + d)
+    }
+    x = hex ? x / 16 : x / 10
   }
-  return at + digits
+  return staticAdd(at, digits)
 }
 
 /** The two digits at `b[at ..)` as a number, or -1. */
 const staticTwo = (b: u8[], at: i32): i32 => {
-  const hi: i32 = toI32(b[at]) - 48
-  const lo: i32 = toI32(b[at + 1]) - 48
-  return hi < 0 || hi > 9 || lo < 0 || lo > 9 ? -1 : 10 * hi + lo
+  const hi: i32 = staticByte(b, at)
+  const lo: i32 = staticByte(b, staticAdd(at, 1))
+  if (hi < 48 || hi > 57 || lo < 48 || lo > 57) {
+    return -1
+  }
+  const ten: i32 = 10
+  return ten * (hi - 48) + (lo - 48)
 }
 
 /** The month names, three letters each from January. */
@@ -222,64 +349,104 @@ const STATIC_MONTHS: string = "JanFebMarAprMayJunJulAugSepOctNovDec"
  * asctime forms are not read.
  */
 const staticDate = (b: u8[], start: i32, end: i32): i64 => {
-  if (end - start !== HTTP_DATE_SIZE || b[start + 3] !== 44 || b[start + 4] !== 32) {
+  if (
+    start < 0 ||
+    end > toI32(b.length) ||
+    staticSub(end, start) !== HTTP_DATE_SIZE ||
+    staticByte(b, staticAdd(start, 3)) !== 44 ||
+    staticByte(b, staticAdd(start, 4)) !== 32
+  ) {
     return -1
   }
-  const at: i32 = start + 5
-  // The guard the prover reads for the month's three bytes, which the size
-  // test above already implies: it says `at + 5` is inside `b`.
-  if (at < 0 || at + 5 >= toI32(b.length)) {
-    return -1
-  }
-  const m0: i32 = toI32(b[at + 3])
-  const m1: i32 = toI32(b[at + 4])
-  const m2: i32 = toI32(b[at + 5])
+  const at: i32 = staticAdd(start, 5)
+  const m0: i32 = staticByte(b, staticAdd(at, 3))
+  const m1: i32 = staticByte(b, staticAdd(at, 4))
+  const m2: i32 = staticByte(b, staticAdd(at, 5))
   const day: i32 = staticTwo(b, at)
   let month: i32 = -1
   for (let m: i32 = 0; m < 12; m++) {
     if (
-      m0 === toI32(STATIC_MONTHS.charCodeAt(3 * m)) &&
-      m1 === toI32(STATIC_MONTHS.charCodeAt(3 * m + 1)) &&
-      m2 === toI32(STATIC_MONTHS.charCodeAt(3 * m + 2))
+      m0 === staticChar(STATIC_MONTHS, 3 * m) &&
+      m1 === staticChar(STATIC_MONTHS, 3 * m + 1) &&
+      m2 === staticChar(STATIC_MONTHS, 3 * m + 2)
     ) {
       month = m + 1
     }
   }
-  const century: i32 = staticTwo(b, at + 7)
-  const years: i32 = staticTwo(b, at + 9)
-  const hour: i32 = staticTwo(b, at + 12)
-  const minute: i32 = staticTwo(b, at + 15)
-  const second: i32 = staticTwo(b, at + 18)
+  const century: i32 = staticTwo(b, staticAdd(at, 7))
+  const years: i32 = staticTwo(b, staticAdd(at, 9))
+  const hour: i32 = staticTwo(b, staticAdd(at, 12))
+  const minute: i32 = staticTwo(b, staticAdd(at, 15))
+  const second: i32 = staticTwo(b, staticAdd(at, 18))
   if (
     day < 1 ||
     day > 31 ||
     month < 0 ||
+    month > 12 ||
     century < 0 ||
+    century > 99 ||
     years < 0 ||
+    years > 99 ||
     hour < 0 ||
     hour > 23 ||
     minute < 0 ||
     minute > 59 ||
     second < 0 ||
     second > 60 ||
-    !staticIs(b, at + 20, at + 24, " GMT") ||
-    b[at + 2] !== 32 ||
-    b[at + 6] !== 32 ||
-    b[at + 11] !== 32 ||
-    b[at + 14] !== 58 ||
-    b[at + 17] !== 58
+    !staticIs(b, staticAdd(at, 20), staticAdd(at, 24), " GMT") ||
+    staticByte(b, staticAdd(at, 2)) !== 32 ||
+    staticByte(b, staticAdd(at, 6)) !== 32 ||
+    staticByte(b, staticAdd(at, 11)) !== 32 ||
+    staticByte(b, staticAdd(at, 14)) !== 58 ||
+    staticByte(b, staticAdd(at, 17)) !== 58
   ) {
     return -1
   }
-  // Days from 1970-01-01 to the civil date (Howard Hinnant's days_from_civil).
-  const year: i64 = toI64(100 * century + years - (month <= 2 ? 1 : 0))
-  const era: i64 = year / 400
-  const yearOfEra: i64 = year - era * 400
-  const mp: i64 = toI64(month > 2 ? month - 3 : month + 9)
-  const dayOfYear: i64 = (153 * mp + 2) / 5 + toI64(day - 1)
-  const dayOfEra: i64 = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
-  const days: i64 = era * 146097 + dayOfEra - 719468
-  return days * 86400 + toI64(3600 * hour + 60 * minute + second)
+  // The bounds again, alone, where the prover reads them for the sums below.
+  if (century < 0 || century > 99) {
+    return -1
+  }
+  if (years < 0 || years > 99) {
+    return -1
+  }
+  if (month < 1 || month > 12) {
+    return -1
+  }
+  if (day < 1 || day > 31) {
+    return -1
+  }
+  if (hour < 0 || hour > 23) {
+    return -1
+  }
+  if (minute < 0 || minute > 59) {
+    return -1
+  }
+  if (second < 0 || second > 60) {
+    return -1
+  }
+  // Days from 1970-01-01 to the civil date (Howard Hinnant's days_from_civil),
+  // with the year starting in March. For a year of 0 or more, the eras of
+  // 400 years add up to the leap days counted below, and so does 0000's
+  // January, the one year of -1; every term is small enough for an `i32`.
+  let year: i32 = 100 * century + years
+  let mp: i32 = month + 9
+  if (month > 2) {
+    mp = month - 3
+  } else {
+    year = year - 1
+  }
+  // The prover does not carry `year` through the branches, so `365 * year`
+  // is worked in `u64`, whose wrapping keeps the signed bits.
+  const y: i32 = year
+  const dayOfYear: i32 = (153 * mp + 2) / 5 + day - 1
+  const leaps: i32 = staticAdd(staticSub(y / 4, y / 100), y / 400)
+  const days: i32 = staticSub(
+    staticAdd(staticAdd(toI32(toI64(toU64(y) * toU64(365))), leaps), dayOfYear),
+    719468
+  )
+  // Worked in `u64`, whose wrapping has the bits of the signed result: `days`
+  // is within 2^22 of 0, so the seconds never wrap.
+  return toI64(toU64(days) * toU64(86400) + toU64(3600 * hour + 60 * minute + second))
 }
 
 /**
@@ -287,7 +454,7 @@ const staticDate = (b: u8[], start: i32, end: i32): i64 => {
  * byte that is not a digit, or more than 18 digits.
  */
 const staticNumber = (b: u8[], start: i32, end: i32): i64 => {
-  if (start < 0 || end <= start || end - start > 18) {
+  if (start < 0 || end <= start || staticSub(end, start) > 18) {
     return -1
   }
   let n: i64 = 0
@@ -296,7 +463,9 @@ const staticNumber = (b: u8[], start: i32, end: i32): i64 => {
     if (d < 0 || d > 9) {
       return -1
     }
-    n = n * 10 + toI64(d)
+    // Worked in `u64`, whose wrapping result has the bits of the signed
+    // one: eighteen digits are below 10^18, so it never wraps.
+    n = toI64(toU64(n) * toU64(10) + toU64(d))
   }
   return n
 }
@@ -306,24 +475,26 @@ const staticNumber = (b: u8[], start: i32, end: i32): i64 => {
  * `1.000`), or -1 when it is not one.
  */
 const staticQ = (b: u8[], start: i32, end: i32): i32 => {
-  if (end <= start || end - start > 5) {
+  if (end <= start || staticSub(end, start) > 5) {
     return -1
   }
-  const whole: i32 = toI32(b[start]) - 48
-  if (whole < 0 || whole > 1) {
+  const first: i32 = staticByte(b, start)
+  if (first < 48 || first > 49) {
     return -1
   }
-  if (end - start === 1) {
+  const whole: i32 = first - 48
+  if (staticSub(end, start) === 1) {
     return 1000 * whole
   }
-  if (b[start + 1] !== 46) {
+  if (staticByte(b, staticAdd(start, 1)) !== 46) {
     return -1
   }
   let q: i32 = 1000 * whole
   let scale: i32 = 100
-  for (let k: i32 = start + 2; k < end && k < toI32(b.length); k++) {
+  for (let k: i32 = staticAdd(start, 2); k >= 0 && k < end && k < toI32(b.length); k++) {
     const d: i32 = toI32(b[k]) - 48
-    if (d < 0 || d > 9) {
+    // Three digits at most, so `q` stays under 2000 and `scale` at most 100.
+    if (d < 0 || d > 9 || q < 0 || q > 2000 || scale < 0 || scale > 100) {
       return -1
     }
     q += scale * d
@@ -334,8 +505,10 @@ const staticQ = (b: u8[], start: i32, end: i32): i32 => {
 
 /** A new array of `src[0 .. length)`. */
 const staticCut = (src: u8[], length: i32): u8[] => {
-  const out: u8[] = new Array<u8>(length)
-  copyBytes(out, 0, src, 0, length)
+  const out: u8[] = []
+  for (let k: i32 = 0; k < length && k < toI32(src.length); k++) {
+    out.push(src[k])
+  }
   return out
 }
 
@@ -404,8 +577,8 @@ export class StaticFiles {
   /** @internal */
   ifRangeEnd: i32 = -1
 
-  /** The cache keys, `maxEntries` strides of `path.length` bytes. @internal */
-  keys: u8[]
+  /** The cache keys, one of `path.length` bytes per entry. @internal */
+  keys: u8[][]
   /** How many bytes of each key are used, -1 for an empty slot. @internal */
   keyLength: i32[]
   /** Each key's coding. @internal */
@@ -448,26 +621,32 @@ export class StaticFiles {
     let room: i32 = 17
     const asked: i32 = limits.maxEntries
     const longest: i32 = limits.maxPath
-    // Literal bounds, so the prover sees that the sum and product cannot overflow.
+    // Literal bounds, so the prover sees that the sum cannot overflow and that
+    // each length below fits the `u16` an array length is proven by.
     if (ok && asked <= 4096 && longest <= 4096 && asked >= 1 && longest >= 1) {
       entries = asked
       room = longest + 16
     }
     own.maxEntries = entries
     own.maxPath = room - 16
-    this.path = new Array<u8>(room)
-    this.keys = new Array<u8>(entries * room)
+    const width: u16 = toU16(room)
+    const count: u16 = toU16(entries)
+    this.path = new Array<u8>(width)
     this.etag = new Array<u8>(48)
     this.chunk = new Array<u8>(STATIC_CHUNK)
-    this.keyLength = new Array<i32>(entries)
-    this.keyCoding = new Array<i32>(entries)
-    this.sizes = new Array<i64>(entries)
-    this.mtimes = new Array<f64>(entries)
+    this.keyCoding = new Array<i32>(count)
+    this.sizes = new Array<i64>(count)
+    this.mtimes = new Array<f64>(count)
+    const lengths: i32[] = []
+    const keys: u8[][] = []
     const slots: u8[][] = []
     for (let k: i32 = 0; k < entries; k++) {
-      this.keyLength[k] = -1
+      lengths.push(-1)
+      keys.push(new Array<u8>(width))
       slots.push(new Array<u8>(0))
     }
+    this.keyLength = lengths
+    this.keys = keys
     this.bytes = slots
   }
 
@@ -509,13 +688,15 @@ export class StaticFiles {
       let pos: i64 = this.from
       while (sent === HANDLER_SENT && pos < this.to) {
         const n: i32 = this.staticFill(pos)
+        // `staticLoad` made `slot` an index of `bytes`, or -1.
+        const slot: i32 = this.slot
         sent = server.write(
           r,
-          this.slot >= 0 ? this.bytes[this.slot] : this.chunk,
-          this.slot >= 0 ? toI32(pos) : toI32(0),
+          slot >= 0 && slot < toI32(this.bytes.length) ? this.bytes[slot] : this.chunk,
+          slot >= 0 ? toI32(pos) : toI32(0),
           n
         )
-        pos += toI64(n)
+        pos = staticAdd64(pos, toI64(n))
       }
     }
     this.staticClose()
@@ -523,7 +704,10 @@ export class StaticFiles {
   }
 
   /**
-   * `serve` through `nish/net/handler`'s HTTP/1.1 carrier.
+   * `serve` through `nish/net/handler`'s HTTP/1.1 carrier. Panics where
+   * `HttpHandler.start`, `write` or `end` would, and on a field index the
+   * handler gives no value span for; `tryServeHandler` answers each as an
+   * `Err` instead.
    * @param h the handler `r` came from
    * @param r a request taken and not yet answered
    * @param pathStart where the path starts in `r.head`
@@ -531,23 +715,15 @@ export class StaticFiles {
    * @returns `HANDLER_SENT`, `HANDLER_DROPPED`, or `STATIC_NOT_FOUND` with nothing sent
    */
   serveHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): i32 {
-    const ae: i32 = r.header("accept-encoding")
-    this.acceptStart = ae < 0 ? -1 : r.valueStart(ae)
-    this.acceptEnd = ae < 0 ? -1 : r.valueEnd(ae)
-    const nm: i32 = r.header("if-none-match")
-    this.noneMatchStart = nm < 0 ? -1 : r.valueStart(nm)
-    this.noneMatchEnd = nm < 0 ? -1 : r.valueEnd(nm)
-    const ims: i32 = r.header("if-modified-since")
-    this.sinceStart = ims < 0 ? -1 : r.valueStart(ims)
-    this.sinceEnd = ims < 0 ? -1 : r.valueEnd(ims)
-    const rg: i32 = r.header("range")
-    this.rangeStart = rg < 0 ? -1 : r.valueStart(rg)
-    this.rangeEnd = rg < 0 ? -1 : r.valueEnd(rg)
-    const ir: i32 = r.header("if-range")
-    this.ifRangeStart = ir < 0 ? -1 : r.valueStart(ir)
-    this.ifRangeEnd = ir < 0 ? -1 : r.valueEnd(ir)
     const head: boolean = r.methodIs("HEAD")
-    const status: i32 = this.staticPlan(r.head, pathStart, pathEnd, head || r.methodIs("GET"), head)
+    const planned = this.staticRequest(r, pathStart, pathEnd)
+    if (planned.isErr()) {
+      // `HttpRequest.valueStart`'s contract, as this read it before: an index
+      // `header` answered always has a span, so this is the handler's fault.
+      // `tryServeHandler` answers it as an `Err` instead.
+      panic(planned.error)
+    }
+    const status: i32 = planned.value
     if (status === STATIC_NOT_FOUND) {
       return STATIC_NOT_FOUND
     }
@@ -559,17 +735,111 @@ export class StaticFiles {
       let pos: i64 = this.from
       while (sent === HANDLER_SENT && pos < this.to) {
         const n: i32 = this.staticFill(pos)
+        // `staticLoad` made `slot` an index of `bytes`, or -1.
+        const slot: i32 = this.slot
         sent = h.write(
           r,
-          this.slot >= 0 ? this.bytes[this.slot] : this.chunk,
-          this.slot >= 0 ? toI32(pos) : toI32(0),
+          slot >= 0 && slot < toI32(this.bytes.length) ? this.bytes[slot] : this.chunk,
+          slot >= 0 ? toI32(pos) : toI32(0),
           n
         )
-        pos += toI64(n)
+        pos = staticAdd64(pos, toI64(n))
       }
     }
     this.staticClose()
-    return sent === HANDLER_SENT ? h.end(r) : sent
+    // `end` also after `HANDLER_DROPPED`: it is what hands `r` back.
+    return h.end(r)
+  }
+
+  /**
+   * `serveHandler` through the handler's `try` calls: a misuse that makes
+   * `start`, `write` or `end` panic comes back as the handler's reason
+   * instead, with the file closed; so does a field index the handler gives
+   * no value span for, before anything is sent. An `Err` from before the
+   * head (that field index, a request not taken) leaves `r` owed an answer;
+   * one from after it (`tryWrite` or `tryEnd` refusing the body) has closed
+   * the connection and handed `r` back, as `HttpHandler` describes.
+   * @param h the handler `r` came from
+   * @param r a request taken and not yet answered
+   * @param pathStart where the path starts in `r.head`
+   * @param pathEnd one past its last byte
+   * @returns Ok of what `serveHandler` answers, or Err of the handler's reason
+   */
+  tryServeHandler(h: HttpHandler, r: HttpRequest, pathStart: i32, pathEnd: i32): Result<i32, string> {
+    const head: boolean = r.methodIs("HEAD")
+    const status: i32 = this.staticRequest(r, pathStart, pathEnd).orReturn()
+    if (status === STATIC_NOT_FOUND) {
+      return Ok(STATIC_NOT_FOUND)
+    }
+    const names: u8[][] = []
+    const values: u8[][] = []
+    this.staticFields(status, names, values)
+    const started: Result<i32, string> = h.tryStart(
+      r,
+      status,
+      names,
+      values,
+      toI32(this.staticBodyLength(status))
+    )
+    if (started.isErr()) {
+      this.staticClose()
+      return Err(started.error)
+    }
+    let sent: i32 = started.value
+    if (sent === HANDLER_SENT && !head && this.staticBodyLength(status) > 0) {
+      let pos: i64 = this.from
+      while (sent === HANDLER_SENT && pos < this.to) {
+        const n: i32 = this.staticFill(pos)
+        // `staticLoad` made `slot` an index of `bytes`, or -1.
+        const slot: i32 = this.slot
+        const wrote: Result<i32, string> = h.tryWrite(
+          r,
+          slot >= 0 && slot < toI32(this.bytes.length) ? this.bytes[slot] : this.chunk,
+          slot >= 0 ? toI32(pos) : toI32(0),
+          n
+        )
+        if (wrote.isErr()) {
+          this.staticClose()
+          return Err(wrote.error)
+        }
+        sent = wrote.value
+        pos = staticAdd64(pos, toI64(n))
+      }
+    }
+    this.staticClose()
+    // `tryEnd` also after `HANDLER_DROPPED`: it is what hands `r` back, and
+    // for a dropped request it answers `Ok(HANDLER_DROPPED)`.
+    const ended: Result<i32, string> = h.tryEnd(r)
+    if (ended.isErr()) {
+      return Err(ended.error)
+    }
+    return Ok(ended.value)
+  }
+
+  /**
+   * Reads the request's conditional, range and coding headers and plans the
+   * answer: its status, or `STATIC_NOT_FOUND`; `Err` when the handler gives
+   * no value span for a field index its `header` answered.
+   * @internal Called by `serveHandler` and `tryServeHandler`.
+   */
+  staticRequest(r: HttpRequest, pathStart: i32, pathEnd: i32): Result<i32, string> {
+    const ae: i32 = r.header("accept-encoding")
+    this.acceptStart = staticValue(r, ae, true).orReturn()
+    this.acceptEnd = staticValue(r, ae, false).orReturn()
+    const nm: i32 = r.header("if-none-match")
+    this.noneMatchStart = staticValue(r, nm, true).orReturn()
+    this.noneMatchEnd = staticValue(r, nm, false).orReturn()
+    const ims: i32 = r.header("if-modified-since")
+    this.sinceStart = staticValue(r, ims, true).orReturn()
+    this.sinceEnd = staticValue(r, ims, false).orReturn()
+    const rg: i32 = r.header("range")
+    this.rangeStart = staticValue(r, rg, true).orReturn()
+    this.rangeEnd = staticValue(r, rg, false).orReturn()
+    const ir: i32 = r.header("if-range")
+    this.ifRangeStart = staticValue(r, ir, true).orReturn()
+    this.ifRangeEnd = staticValue(r, ir, false).orReturn()
+    const head: boolean = r.methodIs("HEAD")
+    return Ok(this.staticPlan(r.head, pathStart, pathEnd, head || r.methodIs("GET"), head))
   }
 
   /**
@@ -627,13 +897,13 @@ export class StaticFiles {
    */
   staticResolve(head: u8[], pathStart: i32, pathEnd: i32): i32 {
     using _scope = arena()
-    const length: i32 = pathEnd - pathStart
+    const length: i32 = staticSub(pathEnd, pathStart)
     if (length < 0 || length > this.limits.maxPath) {
       this.refused = true
       return STATIC_NOT_FOUND
     }
     const path: u8[] = this.path
-    const decoded: i32 = percentDecode(head, pathStart, length, path, 0, 0)
+    const decoded: i32 = tryPercentDecode(head, pathStart, length, path, 0, 0)
     if (decoded < 0) {
       this.refused = true
       return STATIC_NOT_FOUND
@@ -643,22 +913,25 @@ export class StaticFiles {
     // guard the prover reads.
     const room: i32 = toI32(path.length)
     let m: i32 = decoded
-    if (decoded > 0 && path[0] === 47) {
+    if (decoded > 0 && staticByte(path, 0) === 47) {
       m = decoded - 1
       for (let k: i32 = 1; k < decoded && k < room; k++) {
         path[k - 1] = path[k]
       }
     }
-    if (m === 0 || path[m - 1] === 47) {
+    if (m === 0 || staticByte(path, staticSub(m, 1)) === 47) {
       if (!this.limits.index) {
         return STATIC_NOT_FOUND
       }
       const index: string = "index.html"
       const size: i32 = toI32(index.length)
-      for (let k: i32 = 0; k < size && m + k < room; k++) {
-        path[m + k] = toU8(index.charCodeAt(k))
+      for (let k: i32 = 0; k < size; k++) {
+        if (staticPut(path, staticAdd(m, k), toI32(index.charCodeAt(k))) < 0) {
+          this.refused = true
+          return STATIC_NOT_FOUND
+        }
       }
-      m += size
+      m = staticAdd(m, size)
     }
     if (m > room) {
       this.refused = true
@@ -685,6 +958,10 @@ export class StaticFiles {
       }
     }
     if (m === segment || dot) {
+      this.refused = true
+      return STATIC_NOT_FOUND
+    }
+    if (m < 0 || m > toI32(path.length)) {
       this.refused = true
       return STATIC_NOT_FOUND
     }
@@ -792,8 +1069,12 @@ export class StaticFiles {
         while (c < j && c < n && head[c] !== 59 && !staticSpace(toI32(head[c]))) {
           c++
         }
-        if (c - ps >= 2 && ps + 1 < n && staticLower(toI32(head[ps])) === 113 && head[ps + 1] === 61) {
-          q = staticQ(head, ps + 2, c)
+        if (
+          staticSub(c, ps) >= 2 &&
+          staticLower(staticByte(head, ps)) === 113 &&
+          staticByte(head, staticAdd(ps, 1)) === 61
+        ) {
+          q = staticQ(head, staticAdd(ps, 2), c)
           ok = q >= 0
         }
       }
@@ -804,11 +1085,11 @@ export class StaticFiles {
           gzip = q
         } else if (staticIs(head, a, b, "identity")) {
           identity = q
-        } else if (b - a === 1 && a < n && head[a] === 42) {
+        } else if (staticSub(b, a) === 1 && staticByte(head, a) === 42) {
           star = q
         }
       }
-      i = j + 1
+      i = staticAdd(j, 1)
     }
     // A coding the header does not name takes `*`'s weight, else its default.
     const coded: i32 = star >= 0 ? star : 0
@@ -825,28 +1106,34 @@ export class StaticFiles {
 
   /** Writes the strong ETag into `etag`. @internal Called by `staticPlan`. */
   staticTag(): void {
+    // `etag` has 48 bytes, and the longest tag, two 16-digit numbers, three
+    // quotes and dashes and a coding, is 38.
+    // A write that does not fit answers -1 and every later one carries it:
+    // the file then has no ETag (`etagLength` 0), sent or matched — which
+    // RFC 9110 §8.8.3 allows, an ETag being optional; at 38 bytes of 48 it
+    // does not happen.
     const out: u8[] = this.etag
-    out[0] = 34
-    let at: i32 = staticDigits(out, 1, this.size, 16)
-    out[at] = 45
-    at = staticDigits(out, at + 1, this.mtime > 0 ? toI64(this.mtime * 1000) : 0, 16)
+    let at: i32 = staticPut(out, 0, 34)
+    at = staticDigits(out, at, this.size, 16)
+    at = staticPut(out, at, 45)
+    at = staticDigits(out, at, this.mtime > 0 ? toI64(this.mtime * 1000) : 0, 16)
     if (this.coding !== STATIC_IDENTITY) {
-      out[at] = 45
-      out[at + 1] = this.coding === STATIC_BR ? 98 : 103
-      out[at + 2] = this.coding === STATIC_BR ? 114 : 122
-      at += 3
+      at = staticPut(out, at, 45)
+      at = staticPut(out, at, this.coding === STATIC_BR ? 98 : 103)
+      at = staticPut(out, at, this.coding === STATIC_BR ? 114 : 122)
     }
-    out[at] = 34
-    this.etagLength = at + 1
+    at = staticPut(out, at, 34)
+    this.etagLength = at < 0 ? 0 : at
   }
 
   /** Whether `head[start .. end)` is the ETag, byte for byte. @internal */
   staticSameTag(head: u8[], start: i32, end: i32): boolean {
-    if (end - start !== this.etagLength) {
+    if (this.etagLength <= 0 || staticSub(end, start) !== this.etagLength) {
       return false
     }
+    const etag: u8[] = this.etag
     for (let k: i32 = 0; k < this.etagLength; k++) {
-      if (head[start + k] !== this.etag[k]) {
+      if (k >= toI32(etag.length) || staticByte(head, staticAdd(start, k)) !== toI32(etag[k])) {
         return false
       }
     }
@@ -865,8 +1152,13 @@ export class StaticFiles {
       if (b === 42) {
         return true
       }
-      if (b === 87 && k + 2 < e && k + 2 < n && head[k + 1] === 47 && head[k + 2] === 34) {
-        k += 2
+      if (
+        b === 87 &&
+        staticByte(head, staticAdd(k, 1)) === 47 &&
+        staticByte(head, staticAdd(k, 2)) === 34 &&
+        staticAdd(k, 2) < e
+      ) {
+        k = staticAdd(k, 2)
       } else if (b === 34) {
         let close: i32 = k + 1
         while (close < e && close < n && head[close] !== 34) {
@@ -896,17 +1188,18 @@ export class StaticFiles {
     while (s < e && s >= 0 && s < n && staticSpace(toI32(head[s]))) {
       s++
     }
-    while (e > s && staticSpace(toI32(head[e - 1]))) {
-      e--
+    while (e > s && staticSpace(staticByte(head, staticSub(e, 1)))) {
+      e = staticSub(e, 1)
     }
-    if (s < e && head[s] === 34) {
+    if (s < e && staticByte(head, s) === 34) {
       return this.staticSameTag(head, s, e)
     }
     const at: i64 = staticDate(head, s, e)
     const last: i64 = this.staticSecond()
     // A date validates only a strong Last-Modified, a second or more before
     // now (RFC 9110 §13.1.5): two versions within one second share the date.
-    return at >= 0 && at === last && (last + 1) * 1000 <= toI64(Date.now())
+    // `last` is a time in seconds, far below 2^53, so the product never wraps.
+    return at >= 0 && at === last && toI64((toU64(last) + toU64(1)) * toU64(1000)) <= toI64(Date.now())
   }
 
   /**
@@ -924,16 +1217,16 @@ export class StaticFiles {
     while (s < e && s >= 0 && s < n && staticSpace(toI32(head[s]))) {
       s++
     }
-    while (e > s && staticSpace(toI32(head[e - 1]))) {
-      e--
+    while (e > s && staticSpace(staticByte(head, staticSub(e, 1)))) {
+      e = staticSub(e, 1)
     }
-    if (e - s < 6 || !staticIs(head, s, s + 6, "bytes=")) {
+    if (staticSub(e, s) < 6 || !staticIs(head, s, staticAdd(s, 6), "bytes=")) {
       return 200
     }
     if (this.ifRangeStart >= 0 && !this.staticIfRange(head)) {
       return 200
     }
-    let k: i32 = s + 6
+    let k: i32 = staticAdd(s, 6)
     while (k < e && k >= 0 && k < n && staticSpace(toI32(head[k]))) {
       k++
     }
@@ -950,7 +1243,7 @@ export class StaticFiles {
       return 416
     }
     const first: i64 = dash > k ? staticNumber(head, k, dash) : -2
-    const last: i64 = dash + 1 < e ? staticNumber(head, dash + 1, e) : -2
+    const last: i64 = staticAdd(dash, 1) < e ? staticNumber(head, staticAdd(dash, 1), e) : -2
     if (first === -1 || last === -1) {
       return 416
     }
@@ -958,7 +1251,7 @@ export class StaticFiles {
       if (last <= 0) {
         return 416
       }
-      this.from = this.size > last ? this.size - last : 0
+      this.from = this.size > last ? staticSub64(this.size, last) : 0
       this.to = this.size
       return 206
     }
@@ -966,7 +1259,7 @@ export class StaticFiles {
       return 416
     }
     this.from = first
-    this.to = last === -2 || last >= this.size ? this.size : last + 1
+    this.to = last === -2 || last >= this.size ? this.size : staticAdd64(last, 1)
     return 206
   }
 
@@ -980,53 +1273,83 @@ export class StaticFiles {
     if (this.size > toI64(this.limits.maxCachedBytes)) {
       return
     }
-    const stride: i32 = toI32(this.path.length)
     const m: i32 = this.pathLength
+    const path: u8[] = this.path
+    const keyLength: i32[] = this.keyLength
+    const keyCoding: i32[] = this.keyCoding
+    const keys: u8[][] = this.keys
+    const entries: i32 = this.limits.maxEntries
     let hit: i32 = -1
-    for (let k: i32 = 0; k < this.limits.maxEntries && hit < 0; k++) {
-      if (this.keyLength[k] === m && this.keyCoding[k] === this.coding) {
-        let same: boolean = true
-        for (let x: i32 = 0; x < m && same; x++) {
-          same = this.keys[k * stride + x] === this.path[x]
-        }
-        if (same) {
-          hit = k
+    for (let k: i32 = 0; k < entries && hit < 0; k++) {
+      if (k < toI32(keyLength.length) && k < toI32(keyCoding.length) && k < toI32(keys.length)) {
+        if (keyLength[k] === m && keyCoding[k] === this.coding) {
+          const key: u8[] = keys[k]
+          let same: boolean = true
+          for (let x: i32 = 0; x < m && same; x++) {
+            same = x < toI32(key.length) && x < toI32(path.length) && key[x] === path[x]
+          }
+          if (same) {
+            hit = k
+          }
         }
       }
     }
-    if (hit >= 0 && this.sizes[hit] === this.size && this.mtimes[hit] === this.mtime) {
-      this.slot = hit
-      return
-    }
+    const sizes: i64[] = this.sizes
+    const mtimes: f64[] = this.mtimes
+    const bytes: u8[][] = this.bytes
     let k: i32 = hit
     if (k < 0) {
       k = this.hand
-      this.hand = (this.hand + 1) % this.limits.maxEntries
+      const next: i32 = staticAdd(k, 1)
+      this.hand = next < 0 || next >= entries ? 0 : next
     }
-    this.keyLength[k] = -1
+    // Every row has `maxEntries` entries and `hand` stays below it; an entry
+    // outside them, which never happens, streams like a file too big to keep.
+    if (
+      k < 0 ||
+      k >= toI32(keyLength.length) ||
+      k >= toI32(keyCoding.length) ||
+      k >= toI32(keys.length) ||
+      k >= toI32(sizes.length) ||
+      k >= toI32(mtimes.length) ||
+      k >= toI32(bytes.length)
+    ) {
+      return
+    }
+    if (hit >= 0 && sizes[k] === this.size && mtimes[k] === this.mtime) {
+      this.slot = k
+      return
+    }
+    const at: i32 = k
+    keyLength[at] = -1
     const size: i32 = toI32(this.size)
-    if (toI32(this.bytes[k].length) < size) {
-      let cap: i32 = 64
-      while (cap < size) {
-        cap = 2 * cap
-      }
-      this.bytes[k] = new Array<u8>(cap)
-    }
-    const into: u8[] = this.bytes[k]
-    let got: i32 = 0
-    while (got < size) {
-      const n: i32 = fileReadAt(this.fd, into, got, size - got, toI64(got))
-      if (n <= 0) {
+    let into: u8[] = bytes[at]
+    if (toI32(into.length) < size) {
+      into = staticBytes(staticCap(size))
+      // A call may change any array's length, so the bound is read again.
+      if (at >= toI32(bytes.length)) {
         return
       }
-      got += n
+      bytes[at] = into
     }
-    copyBytes(this.keys, k * stride, this.path, 0, m)
-    this.keyLength[k] = m
-    this.keyCoding[k] = this.coding
-    this.sizes[k] = this.size
-    this.mtimes[k] = this.mtime
-    this.slot = k
+    if (!staticReadAll(this.fd, into, size)) {
+      return
+    }
+    if (
+      at >= toI32(keyLength.length) ||
+      at >= toI32(keyCoding.length) ||
+      at >= toI32(keys.length) ||
+      at >= toI32(sizes.length) ||
+      at >= toI32(mtimes.length)
+    ) {
+      return
+    }
+    copyBytes(keys[at], 0, path, 0, m)
+    keyLength[at] = m
+    keyCoding[at] = this.coding
+    sizes[at] = this.size
+    mtimes[at] = this.mtime
+    this.slot = at
   }
 
   /**
@@ -1036,14 +1359,17 @@ export class StaticFiles {
    * @internal Called by `serve` and `serveHandler`.
    */
   staticFill(pos: i64): i32 {
-    const left: i64 = this.to - pos
+    const left: i64 = staticSub64(this.to, pos)
     if (this.slot >= 0) {
       return toI32(left)
     }
     const n: i32 = left > toI64(STATIC_CHUNK) ? STATIC_CHUNK : toI32(left)
     const got: i32 = fileReadAt(this.fd, this.chunk, 0, n, pos)
-    for (let k: i32 = got < 0 ? 0 : got; k < n; k++) {
-      this.chunk[k] = 0
+    const chunk: u8[] = this.chunk
+    for (let k: i32 = 0; k < n && k < toI32(chunk.length); k++) {
+      if (k >= got) {
+        chunk[k] = 0
+      }
     }
     return n
   }
@@ -1058,7 +1384,7 @@ export class StaticFiles {
 
   /** The body length the head declares for `status`. @internal */
   staticBodyLength(status: i32): i64 {
-    return status === 200 || status === 206 ? this.to - this.from : 0
+    return status === 200 || status === 206 ? staticSub64(this.to, this.from) : 0
   }
 
   /**
@@ -1074,18 +1400,25 @@ export class StaticFiles {
     }
     const scratch: u8[] = new Array<u8>(64)
     if (status === 416) {
+      // A size below 2^31 (`STATIC_MAX_FILE`) has 10 digits, which
+      // `scratch` holds; -1 would send the 416 without the field, which
+      // RFC 9110 §15.5.17 only recommends.
       const at: i32 = staticDigits(scratch, 8, this.size, 10)
       copyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
-      names.push(httpFieldBytes("content-range"))
-      values.push(staticCut(scratch, at))
+      if (at >= 0) {
+        names.push(httpFieldBytes("content-range"))
+        values.push(staticCut(scratch, at))
+      }
       return
     }
     if (status !== 304) {
       names.push(httpFieldBytes("content-type"))
       values.push(httpFieldBytes(staticContentType(String.fromBytes(this.path, 0, this.pathLength))))
     }
-    names.push(httpFieldBytes("etag"))
-    values.push(staticCut(this.etag, this.etagLength))
+    if (this.etagLength > 0) {
+      names.push(httpFieldBytes("etag"))
+      values.push(staticCut(this.etag, this.etagLength))
+    }
     const date: u8[] = new Array<u8>(HTTP_DATE_SIZE)
     if (httpDateWrite(date, 0, this.staticSecond()) > 0) {
       names.push(httpFieldBytes("last-modified"))
@@ -1108,13 +1441,18 @@ export class StaticFiles {
     }
     if (status === 206) {
       copyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
+      // Three numbers below 2^31 (`STATIC_MAX_FILE`) and the words around
+      // them, 38 bytes at most, fit `scratch`'s 64, so the field is never
+      // dropped: a 206 without it would break RFC 9110 §15.3.7.
       let at: i32 = staticDigits(scratch, 6, this.from, 10)
-      scratch[at] = 45
-      at = staticDigits(scratch, at + 1, this.to - 1, 10)
-      scratch[at] = 47
-      at = staticDigits(scratch, at + 1, this.size, 10)
-      names.push(httpFieldBytes("content-range"))
-      values.push(staticCut(scratch, at))
+      at = staticPut(scratch, at, 45)
+      at = staticDigits(scratch, at, staticSub64(this.to, 1), 10)
+      at = staticPut(scratch, at, 47)
+      at = staticDigits(scratch, at, this.size, 10)
+      if (at >= 0) {
+        names.push(httpFieldBytes("content-range"))
+        values.push(staticCut(scratch, at))
+      }
     }
   }
 }

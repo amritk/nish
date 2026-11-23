@@ -157,6 +157,9 @@ const BCRYPT_STATE_WORDS: i32 = 1042
 /** The length of the setting, `$2b$NN$` and the 22 salt characters. */
 const BCRYPT_SETTING_LENGTH: i32 = 29
 
+/** The 22 bcrypt base64 characters of a 16-byte salt. */
+const BCRYPT_SALT_CHARS: i32 = 22
+
 /** What the hash needs besides the password, as one argument, since `exposeWith` hands on only one. */
 interface BcryptSetting {
   /** The salt as four big-endian words. */
@@ -222,12 +225,12 @@ const bcryptSextetOf = (c: i32): i32 => {
 }
 
 /**
- * `BF_encode`: the first `n` bytes of `src` as bcrypt base64, three bytes to
- * four characters, and a one- or two-byte tail to two or three.
+ * `BF_encode` of a 16-byte salt: its 22 bcrypt base64 characters, three bytes
+ * to four and the one-byte tail to two.
  */
-const bcryptEncode = (src: u8[], n: i32): u8[] => {
-  const out: u8[] = new Array<u8>((n * 4 + 2) / 3)
-  bcryptEncodeInto(out, 0, src, n)
+const bcryptEncode = (src: u8[]): u8[] => {
+  const out: u8[] = new Array<u8>(BCRYPT_SALT_CHARS)
+  bcryptEncodeInto(out, 0, src, BCRYPT_SALT_SIZE)
   return out
 }
 
@@ -238,7 +241,7 @@ const bcryptEncode = (src: u8[], n: i32): u8[] => {
 const bcryptEncodeInto = (out: u8[], at: i32, src: u8[], n: i32): void => {
   let i: i32 = 0
   let o: i32 = at
-  while (i + 2 < n && i + 2 < toI32(src.length) && o >= 0 && o + 3 < toI32(out.length)) {
+  while (i < toI32(src.length) - 2 && i + 2 < n && o >= 0 && o < toI32(out.length) - 3) {
     const c1: i32 = toI32(src[i])
     const c2: i32 = toI32(src[i + 1])
     const c3: i32 = toI32(src[i + 2])
@@ -249,10 +252,10 @@ const bcryptEncodeInto = (out: u8[], at: i32, src: u8[], n: i32): void => {
     i += 3
     o += 4
   }
-  if (i >= 0 && i < n && i < toI32(src.length) && o >= 0 && o + 1 < toI32(out.length)) {
+  if (i >= 0 && i < n && i < toI32(src.length) && o >= 0 && o < toI32(out.length) - 1) {
     const c1: i32 = toI32(src[i])
     out[o] = bcryptCharOf(c1 >> 2)
-    if (i + 1 < n && i + 1 < toI32(src.length) && o + 2 < toI32(out.length)) {
+    if (i < toI32(src.length) - 1 && i + 1 < n && o < toI32(out.length) - 2) {
       const c2: i32 = toI32(src[i + 1])
       out[o + 1] = bcryptCharOf(((c1 & 0x03) << 4) | (c2 >> 4))
       out[o + 2] = bcryptCharOf((c2 & 0x0f) << 2)
@@ -264,11 +267,12 @@ const bcryptEncodeInto = (out: u8[], at: i32, src: u8[], n: i32): void => {
 
 /** `src` copied into `dst` from `at`, as far as `dst` reaches. */
 const bcryptPut = (dst: u8[], at: i32, src: u8[]): void => {
-  for (let k: i32 = 0; k < toI32(src.length); k++) {
-    const o: i32 = at + k
-    if (o >= 0 && o < toI32(dst.length)) {
+  let o: i32 = at
+  for (let k: i32 = 0; k < toI32(src.length) && o < toI32(dst.length); k++) {
+    if (o >= 0) {
       dst[o] = src[k]
     }
+    o += 1
   }
 }
 
@@ -279,8 +283,8 @@ const bcryptPut = (dst: u8[], at: i32, src: u8[]): void => {
  */
 const bcryptDecodeSalt = (text: string, at: i32): u32[] | null => {
   const sx: i32[] = new Array<i32>(22)
+  let p: i32 = at
   for (let k: i32 = 0; k < toI32(sx.length); k++) {
-    const p: i32 = at + k
     if (p < 0 || p >= toI32(text.length)) {
       return null
     }
@@ -289,11 +293,12 @@ const bcryptDecodeSalt = (text: string, at: i32): u32[] | null => {
       return null
     }
     sx[k] = v
+    p += 1
   }
-  const bytes: u8[] = new Array<u8>(BCRYPT_SALT_SIZE)
+  const bytes: u8[] = new Array<u8>(16)
   let s: i32 = 0
   let d: i32 = 0
-  while (s + 3 < toI32(sx.length) && d + 2 < toI32(bytes.length)) {
+  while (s < toI32(sx.length) - 3 && d < toI32(bytes.length) - 2) {
     const c2: i32 = sx[s + 1]
     const c3: i32 = sx[s + 2]
     bytes[d] = toU8((sx[s] << 2) | ((c2 & 0x30) >> 4))
@@ -310,7 +315,7 @@ const bcryptDecodeSalt = (text: string, at: i32): u32[] | null => {
 const bcryptSaltWords = (bytes: u8[]): u32[] => {
   const words: u32[] = new Array<u32>(4)
   let w: i32 = 0
-  for (let b: i32 = 0; b + 3 < toI32(bytes.length) && w < toI32(words.length); b += 4) {
+  for (let b: i32 = 0; b < toI32(bytes.length) - 3 && w < toI32(words.length); b += 4) {
     words[w] =
       (toU32(bytes[b]) << 24) | (toU32(bytes[b + 1]) << 16) | (toU32(bytes[b + 2]) << 8) | toU32(bytes[b + 3])
     w++
@@ -320,7 +325,7 @@ const bcryptSaltWords = (bytes: u8[]): u32[] => {
 
 /** `$2b$NN$` and the 22 salt characters for a cost and 16 salt bytes. */
 const bcryptSettingOf = (salt: u8[], cost: i32): u8[] => {
-  const out: u8[] = new Array<u8>(BCRYPT_SETTING_LENGTH)
+  const out: u8[] = new Array<u8>(29)
   out[0] = 36
   out[1] = 50
   out[2] = 98
@@ -328,7 +333,7 @@ const bcryptSettingOf = (salt: u8[], cost: i32): u8[] => {
   out[4] = toU8(cost / 10 + 48)
   out[5] = toU8((cost % 10) + 48)
   out[6] = 36
-  bcryptPut(out, 7, bcryptEncode(salt, BCRYPT_SALT_SIZE))
+  bcryptPut(out, 7, bcryptEncode(salt))
   return out
 }
 
@@ -364,8 +369,8 @@ const bcryptParse = (text: string): Result<BcryptParsed, string> => {
   if (salt === null) {
     return Err("bcrypt: the salt is not bcrypt base64")
   }
-  const prefix: u8[] = new Array<u8>(BCRYPT_SETTING_LENGTH)
-  for (let i: i32 = 0; i + 1 < toI32(prefix.length) && i < toI32(text.length); i++) {
+  const prefix: u8[] = new Array<u8>(29)
+  for (let i: i32 = 0; i < toI32(prefix.length) - 1 && i < toI32(text.length); i++) {
     prefix[i] = toU8(text.charCodeAt(i))
   }
   prefix[28] = bcryptCharOf(bcryptSextetOf(toI32(text.charCodeAt(28))) & 0x30)
@@ -425,7 +430,7 @@ const bcryptBody = (st: u32[]): void => {
   }
   let l: u32 = 0
   let r: u32 = 0
-  for (let i: i32 = 0; i + 1 < toI32(st.length); i += 2) {
+  for (let i: i32 = 0; i < toI32(st.length) - 1; i += 2) {
     l ^= st[0]
     for (let n: i32 = 1; n < 17; n += 2) {
       const la: i32 = toI32(l >>> 24) & 0xff
@@ -487,7 +492,7 @@ const bcryptKeySchedule = (expanded: u32[], password: u8[], safety: u32): void =
         sign |= buggy & 0x80
       }
       // The next position, or 0 after a NUL: 1 if c is nonzero, else 0.
-      p = (p + 1) * ((c | -c) >>> 31)
+      p = (q + 1) * ((c | -c) >>> 31)
     }
     diff |= correct ^ buggy
     expanded[i] = correct
@@ -664,8 +669,10 @@ const bcryptInitState = (st: u32[], at: i32): void => {
   if (at < 0) {
     return
   }
-  for (let i: i32 = 0; i < toI32(init.length) && at + i < toI32(st.length); i++) {
-    st[at + i] = init[i]
+  let o: i32 = at
+  for (let i: i32 = 0; i < toI32(init.length) && o < toI32(st.length); i++) {
+    st[o] = init[i]
+    o += 1
   }
 }
 
@@ -695,15 +702,25 @@ const bcryptXorKey = (st: u32[], expanded: u32[]): void => {
 
 /** The 18 P words at `at` XORed with the salt words, repeated: the second half of a cost round. */
 const bcryptXorSalt = (st: u32[], at: i32, s0: u32, s1: u32, s2: u32, s3: u32): void => {
-  if (at < 0 || at + 17 >= toI32(st.length)) {
+  if (at < 0 || at >= toI32(st.length) - 17) {
     return
   }
-  for (let i: i32 = 0; i + 3 < 16; i += 4) {
-    st[at + i] ^= s0
-    st[at + i + 1] ^= s1
-    st[at + i + 2] ^= s2
-    st[at + i + 3] ^= s3
-  }
+  st[at] ^= s0
+  st[at + 1] ^= s1
+  st[at + 2] ^= s2
+  st[at + 3] ^= s3
+  st[at + 4] ^= s0
+  st[at + 5] ^= s1
+  st[at + 6] ^= s2
+  st[at + 7] ^= s3
+  st[at + 8] ^= s0
+  st[at + 9] ^= s1
+  st[at + 10] ^= s2
+  st[at + 11] ^= s3
+  st[at + 12] ^= s0
+  st[at + 13] ^= s1
+  st[at + 14] ^= s2
+  st[at + 15] ^= s3
   st[at + 16] ^= s0
   st[at + 17] ^= s1
 }
@@ -731,7 +748,7 @@ const bcryptExposed = (password: u8[], setting: BcryptSetting, out: u8[]): void 
 
   // The salted expansion: each block is XORed with a salt half before it is
   // encrypted, the first half and the second in turn (`BF_crypt`'s two loops).
-  for (let i: i32 = 0; i < BCRYPT_STATE_WORDS; i += 2) {
+  for (let i: i32 = 0; i < 1042 && lr.length >= 2; i += 2) {
     const odd: boolean = (i & 2) !== 0
     lr[0] ^= odd ? s2 : s0
     lr[1] ^= odd ? s3 : s1
@@ -764,6 +781,9 @@ const bcryptExposed = (password: u8[], setting: BcryptSetting, out: u8[]): void 
 
 /** One pair of the magic string, encrypted 64 times under `st`, into `dst` at `at` as eight big-endian bytes. */
 const bcryptMagic = (st: u32[], lr: u32[], dst: u8[], at: i32, l: u32, r: u32): void => {
+  if (lr.length < 2) {
+    return
+  }
   lr[0] = l
   lr[1] = r
   for (let k: i32 = 0; k < 64; k++) {
@@ -785,6 +805,21 @@ const bcryptPutBlock = (dst: u8[], at: i32, l: u32, r: u32): void => {
   dst[at + 5] = toU8((r >>> 16) & 0xff)
   dst[at + 6] = toU8((r >>> 8) & 0xff)
   dst[at + 7] = toU8(r & 0xff)
+}
+
+/**
+ * The `n` bytes of `bytes` from `at` as a string, a character each: a hash is
+ * ASCII, so this is `String.fromBytes`, whose range check no proof removes.
+ * It stops at the end of `bytes`.
+ */
+const bcryptText = (bytes: u8[], at: i32, n: i32): string => {
+  const parts: string[] = []
+  let i: i32 = at
+  for (let k: i32 = 0; k < n && i >= 0 && i < toI32(bytes.length); k++) {
+    parts.push(String.fromCharCode(bytes[i]))
+    i += 1
+  }
+  return parts.join("")
 }
 
 /**
@@ -853,7 +888,7 @@ export const bcryptHash = (password: Secret<u8[]>, salt: u8[], cost: i32): Resul
   const setting: BcryptSetting = { salt: bcryptSaltWords(salt), cost: cost, safety: toU32(0) }
   const job: BcryptJob = { setting: setting, prefix: bcryptSettingOf(salt, cost), hash: "" }
   const out: u8[] = exposeWith(password, job, bcryptHashExposed)
-  return Ok(String.fromBytes(out, 0, BCRYPT_HASH_LENGTH))
+  return Ok(bcryptText(out, 0, BCRYPT_HASH_LENGTH))
 }
 
 /**
@@ -930,11 +965,10 @@ const bcryptBytesOf = (given: u8[], hash: string): void => {
 
 /** The most lanes a batch runs. */
 const BCRYPT_BATCH_LANES: i32 = 6
-/** Where the six expanded keys of 18 start in the batch state, after the six Blowfish states. */
-const BCRYPT_BATCH_KEYS: i32 = 6252
-/** Where the six safety words start, after the keys. */
-const BCRYPT_BATCH_SAFETY: i32 = 6360
-/** Words in the batch state: six Blowfish states, six expanded keys of 18 and six safety words. */
+/**
+ * Words in the batch state: six Blowfish states of 1042, six expanded keys of
+ * 18 from word 6252, and six safety words from word 6360.
+ */
 const BCRYPT_BATCH_WORDS: i32 = 6366
 
 /**
@@ -954,13 +988,15 @@ interface BcryptBatch {
 
 /** The six states set to π and each slot's safety word stored, for `exposeWith` on the fresh batch state. */
 const bcryptInitN = (st: u32[], batch: BcryptBatch): i32 => {
-  if (toI32(st.length) < BCRYPT_BATCH_WORDS) {
+  if (toI32(st.length) < 6366) {
     return 0
   }
   const safety: u32[] = batch.safety
-  for (let k: i32 = 0; k < BCRYPT_BATCH_LANES; k++) {
-    bcryptInitState(st, k * BCRYPT_STATE_WORDS)
-    st[BCRYPT_BATCH_SAFETY + k] = k < toI32(safety.length) ? safety[k] : 0
+  for (let k: i32 = 0; k < 6; k++) {
+    st[6360 + k] = k < toI32(safety.length) ? safety[k] : 0
+  }
+  for (let k: i32 = 0; k < 6; k++) {
+    bcryptInitState(st, k * 1042)
   }
   return 0
 }
@@ -975,7 +1011,7 @@ const bcryptKeyWord = (password: u8[], arg: i32): u32 => {
   const safety: u32 = (arg & 32) !== 0 ? 0x10000 : 0
   bcryptKeySchedule(expanded, password, safety)
   const k: i32 = arg & 31
-  const word: u32 = k < 19 ? expanded[k] : 0
+  const word: u32 = k < toI32(expanded.length) ? expanded[k] : 0
   wipe(expanded)
   return word
 }
@@ -987,21 +1023,29 @@ const bcryptKeyWord = (password: u8[], arg: i32): u32 => {
  * function is exposing and a `Secret` cannot be handed into it otherwise.
  */
 const bcryptLoadLane = (st: u32[], password: Secret<u8[]>, slot: i32): i32 => {
-  if (toI32(st.length) < BCRYPT_BATCH_WORDS) {
+  if (toI32(st.length) < 6366) {
     return 0
   }
-  if (slot < 0 || slot >= BCRYPT_BATCH_LANES) {
+  if (slot < 0 || slot >= 6) {
     return 0
   }
-  const at: i32 = slot * BCRYPT_STATE_WORDS
-  const kept: i32 = slot * 18 + BCRYPT_BATCH_KEYS
-  const flag: i32 = st[BCRYPT_BATCH_SAFETY + slot] !== 0 ? 32 : 0
-  for (let k: i32 = 0; k < 18; k++) {
+  const at: i32 = slot * 1042
+  const flag: i32 = st[6360 + slot] !== 0 ? 32 : 0
+  let p: i32 = at
+  let kept: i32 = slot * 18 + 6252
+  for (let k: i32 = 0; k < 18 && p < toI32(st.length) && kept < toI32(st.length); k++) {
     const word: u32 = exposeWith(password, k | flag, bcryptKeyWord)
-    st[at + k] ^= word
-    st[kept + k] = word
+    if (p < toI32(st.length) && kept < toI32(st.length)) {
+      st[p] ^= word
+      st[kept] = word
+    }
+    p += 1
+    kept += 1
   }
-  st[at] ^= exposeWith(password, 18 | flag, bcryptKeyWord)
+  const last: u32 = exposeWith(password, 18 | flag, bcryptKeyWord)
+  if (at < toI32(st.length)) {
+    st[at] ^= last
+  }
   return 0
 }
 
@@ -1573,7 +1617,7 @@ const bcryptBodyN = (st: u32[], width: i32): void => {
 
 /** `bcryptEncrypt` under the state at `at`: one block, `lr[0]` and `lr[1]` in place. */
 const bcryptEncryptAt = (st: u32[], at: i32, lr: u32[]): void => {
-  if (at < 0 || at + BCRYPT_STATE_WORDS > toI32(st.length)) {
+  if (at < 0 || at > toI32(st.length) - 1042) {
     return
   }
   if (lr.length < 2) {
@@ -1581,17 +1625,19 @@ const bcryptEncryptAt = (st: u32[], at: i32, lr: u32[]): void => {
   }
   let l: u32 = lr[0] ^ st[at]
   let r: u32 = lr[1]
-  for (let n: i32 = 1; n < 17; n += 2) {
+  let p: i32 = at + 1
+  for (let n: i32 = 1; n < 17 && p < toI32(st.length) - 1; n += 2) {
     const la: i32 = toI32(l >>> 24) & 0xff
     const lb: i32 = toI32(l >>> 16) & 0xff
     const lc: i32 = toI32(l >>> 8) & 0xff
     const ld: i32 = toI32(l) & 0xff
-    r ^= st[at + n] ^ (((st[at + 18 + la] + st[at + 274 + lb]) ^ st[at + 530 + lc]) + st[at + 786 + ld])
+    r ^= st[p] ^ (((st[at + 18 + la] + st[at + 274 + lb]) ^ st[at + 530 + lc]) + st[at + 786 + ld])
     const ra: i32 = toI32(r >>> 24) & 0xff
     const rb: i32 = toI32(r >>> 16) & 0xff
     const rc: i32 = toI32(r >>> 8) & 0xff
     const rd: i32 = toI32(r) & 0xff
-    l ^= st[at + n + 1] ^ (((st[at + 18 + ra] + st[at + 274 + rb]) ^ st[at + 530 + rc]) + st[at + 786 + rd])
+    l ^= st[p + 1] ^ (((st[at + 18 + ra] + st[at + 274 + rb]) ^ st[at + 530 + rc]) + st[at + 786 + rd])
+    p += 2
   }
   lr[0] = r ^ st[at + 17]
   lr[1] = l
@@ -1599,14 +1645,20 @@ const bcryptEncryptAt = (st: u32[], at: i32, lr: u32[]): void => {
 
 /** Each running slot's P XORed with its kept expanded key, as `bcryptXorKey`. */
 const bcryptXorKeyN = (st: u32[], width: i32): void => {
-  if (toI32(st.length) < BCRYPT_BATCH_WORDS) {
+  if (toI32(st.length) < 6366) {
     return
   }
-  for (let k: i32 = 0; k < width && k < BCRYPT_BATCH_LANES; k++) {
-    const at: i32 = k * BCRYPT_STATE_WORDS
-    const kept: i32 = k * 18 + BCRYPT_BATCH_KEYS
-    for (let i: i32 = 0; i < 18; i++) {
-      st[at + i] ^= st[kept + i]
+  for (let k: i32 = 0; k < width && k < 6; k++) {
+    let p: i32 = k * 1042
+    let kept: i32 = k * 18 + 6252
+    for (
+      let i: i32 = 0;
+      i < 18 && p >= 0 && p < toI32(st.length) && kept >= 0 && kept < toI32(st.length);
+      i++
+    ) {
+      st[p] ^= st[kept]
+      p += 1
+      kept += 1
     }
   }
 }
@@ -1616,15 +1668,10 @@ const bcryptXorSaltN = (st: u32[], salts: u32[], width: i32): void => {
   if (salts.length < 24) {
     return
   }
-  for (let k: i32 = 0; k < width && k < BCRYPT_BATCH_LANES; k++) {
-    bcryptXorSalt(
-      st,
-      k * BCRYPT_STATE_WORDS,
-      salts[k * 4],
-      salts[k * 4 + 1],
-      salts[k * 4 + 2],
-      salts[k * 4 + 3]
-    )
+  let s: i32 = 0
+  for (let k: i32 = 0; k < width && k < 6 && s >= 0 && s < toI32(salts.length) - 3; k++) {
+    bcryptXorSalt(st, k * 1042, salts[s], salts[s + 1], salts[s + 2], salts[s + 3])
+    s += 4
   }
 }
 
@@ -1634,20 +1681,30 @@ const bcryptXorSaltN = (st: u32[], salts: u32[], width: i32): void => {
  * written over P and the S-boxes.
  */
 const bcryptExpandAt = (st: u32[], at: i32, salts: u32[], k: i32, lr: u32[]): void => {
-  if (lr.length < 2 || 4 * k + 3 >= toI32(salts.length)) {
+  if (lr.length < 2 || k < 0 || k > 5 || 4 * k > toI32(salts.length) - 4) {
     return
   }
+  if (at < 0 || at > toI32(st.length) - 1042) {
+    return
+  }
+  const s: i32 = 4 * k
+  const w0: u32 = salts[s]
+  const w1: u32 = salts[s + 1]
+  const w2: u32 = salts[s + 2]
+  const w3: u32 = salts[s + 3]
   lr[0] = 0
   lr[1] = 0
-  for (let i: i32 = 0; i < BCRYPT_STATE_WORDS; i += 2) {
-    const half: i32 = (i & 2) !== 0 ? 2 : 0
-    lr[0] ^= salts[4 * k + half]
-    lr[1] ^= salts[4 * k + half + 1]
+  let p: i32 = at
+  for (let i: i32 = 0; i < 1042; i += 2) {
+    const odd: boolean = (i & 2) !== 0
+    lr[0] ^= odd ? w2 : w0
+    lr[1] ^= odd ? w3 : w1
     bcryptEncryptAt(st, at, lr)
-    if (at + i + 1 < toI32(st.length)) {
-      st[at + i] = lr[0]
-      st[at + i + 1] = lr[1]
+    if (p >= 0 && p < toI32(st.length) - 1) {
+      st[p] = lr[0]
+      st[p + 1] = lr[1]
     }
+    p += 2
   }
 }
 
@@ -1671,12 +1728,12 @@ const bcryptMagicAt = (st: u32[], at: i32, lr: u32[], dst: u8[], to: i32, l: u32
  * caller made and wipes. The block and digest copies are wiped here.
  */
 const bcryptEksN = (st: u32[], salts: u32[], cost: i32, width: i32, digests: u8[]): void => {
-  if (toI32(st.length) < BCRYPT_BATCH_WORDS || salts.length < 24 || width < 2 || width > BCRYPT_BATCH_LANES) {
+  if (toI32(st.length) < 6366 || salts.length < 24 || width < 2 || width > 6) {
     return
   }
   const lr: u32[] = new Array<u32>(2)
-  for (let k: i32 = 0; k < width; k++) {
-    bcryptExpandAt(st, k * BCRYPT_STATE_WORDS, salts, k, lr)
+  for (let k: i32 = 0; k < width && k < 6; k++) {
+    bcryptExpandAt(st, k * 1042, salts, k, lr)
   }
 
   let rounds: u32 = toU32(1) << toU32(cost)
@@ -1689,8 +1746,8 @@ const bcryptEksN = (st: u32[], salts: u32[], cost: i32, width: i32, digests: u8[
   }
 
   const digest: u8[] = new Array<u8>(24)
-  for (let k: i32 = 0; k < width; k++) {
-    const at: i32 = k * BCRYPT_STATE_WORDS
+  for (let k: i32 = 0; k < width && k < 6; k++) {
+    const at: i32 = k * 1042
     bcryptMagicAt(st, at, lr, digest, 0, 0x4f727068, 0x65616e42)
     bcryptMagicAt(st, at, lr, digest, 8, 0x65686f6c, 0x64657253)
     bcryptMagicAt(st, at, lr, digest, 16, 0x63727944, 0x6f756274)
@@ -1707,11 +1764,11 @@ const bcryptEksN = (st: u32[], salts: u32[], cost: i32, width: i32, digests: u8[
  * are wiped here.
  */
 const bcryptHashNExposed = (st: u32[], batch: BcryptBatch): u8[] => {
-  const out: u8[] = new Array<u8>(BCRYPT_BATCH_LANES * BCRYPT_HASH_LENGTH)
-  const digests: u8[] = new Array<u8>(31 * BCRYPT_BATCH_LANES)
+  const out: u8[] = new Array<u8>(360)
+  const digests: u8[] = new Array<u8>(186)
   bcryptEksN(st, batch.salts, batch.cost, batch.width, digests)
-  for (let k: i32 = 0; k < batch.width && k < toI32(batch.prefixes.length); k++) {
-    bcryptJoin(out, BCRYPT_HASH_LENGTH * k, batch.prefixes[k], digests, k)
+  for (let k: i32 = 0; k < batch.width && k < 6 && k < toI32(batch.prefixes.length); k++) {
+    bcryptJoin(out, 60 * k, batch.prefixes[k], digests, k)
   }
   wipe(digests)
   return out
@@ -1723,7 +1780,7 @@ const bcryptHashNExposed = (st: u32[], batch: BcryptBatch): u8[] => {
  * and wiped here, so the bits are all that leaves.
  */
 const bcryptVerifyNExposed = (st: u32[], batch: BcryptBatch): i32 => {
-  const digests: u8[] = new Array<u8>(31 * BCRYPT_BATCH_LANES)
+  const digests: u8[] = new Array<u8>(186)
   bcryptEksN(st, batch.salts, batch.cost, batch.width, digests)
   let same: i32 = 0
   for (
@@ -1775,8 +1832,12 @@ const bcryptLoadN = (
 }
 
 /** Slot k's 60-byte hash out of the batch's `all`, as a string. */
-const bcryptLaneString = (all: u8[], k: i32): string =>
-  String.fromBytes(all, BCRYPT_HASH_LENGTH * k, BCRYPT_HASH_LENGTH * (k + 1))
+const bcryptLaneString = (all: u8[], k: i32): string => {
+  if (k < 0 || k >= 6) {
+    return ""
+  }
+  return bcryptText(all, k * 60, 60)
+}
 
 /** Bit k set for each lane given: lane 0 always, lanes 1–5 when not null. */
 const bcryptMaskOf = (
@@ -1883,7 +1944,11 @@ export const bcryptHashN = (
   // Slot s ran lane lanes[s]; a lane not given stays "".
   const out: string[] = ["", "", "", "", "", ""]
   for (let s: i32 = 0; s < toI32(lanes.length); s++) {
-    out[lanes[s]] = bcryptLaneString(all, s)
+    const lane: i32 = lanes[s]
+    const text: string = bcryptLaneString(all, s)
+    if (lane >= 0 && lane < toI32(out.length)) {
+      out[lane] = text
+    }
   }
   return Ok(out)
 }
@@ -1934,8 +1999,12 @@ export const bcryptHash4 = (
 const bcryptBatchSalt = (words: u32[], salts: u8[], k: i32, s: i32, cost: i32): u8[] => {
   const salt: u8[] = bcryptSaltOf(salts, k)
   const four: u32[] = bcryptSaltWords(salt)
-  for (let j: i32 = 0; j < 4 && j < toI32(four.length) && 4 * s + j < toI32(words.length); j++) {
-    words[4 * s + j] = four[j]
+  if (s >= 0 && s < 6) {
+    let w: i32 = 4 * s
+    for (let j: i32 = 0; j < 4 && j < toI32(four.length) && w < toI32(words.length); j++) {
+      words[w] = four[j]
+      w += 1
+    }
   }
   return bcryptSettingOf(salt, cost)
 }
@@ -1943,8 +2012,13 @@ const bcryptBatchSalt = (words: u32[], salts: u8[], k: i32, s: i32, cost: i32): 
 /** The 16 salt bytes of lane `k` from the bytes of a batch. */
 const bcryptSaltOf = (salts: u8[], k: i32): u8[] => {
   const salt: u8[] = new Array<u8>(16)
-  for (let j: i32 = 0; j < 16 && 16 * k + j < toI32(salts.length); j++) {
-    salt[j] = salts[16 * k + j]
+  if (k < 0 || k >= 6) {
+    return salt
+  }
+  let i: i32 = 16 * k
+  for (let j: i32 = 0; j < 16 && i < toI32(salts.length); j++) {
+    salt[j] = salts[i]
+    i += 1
   }
   return salt
 }
@@ -1952,13 +2026,15 @@ const bcryptSaltOf = (salts: u8[], k: i32): u8[] => {
 /** The 60 bytes of slot `k`'s hash into `out` at `at`: its 29-byte setting, then its 31 digest characters from the batch's. */
 const bcryptJoin = (out: u8[], at: i32, prefix: u8[], digests: u8[], k: i32): void => {
   bcryptPut(out, at, prefix)
-  const o: i32 = at + BCRYPT_SETTING_LENGTH
-  for (
-    let j: i32 = 0;
-    j < 31 && 31 * k + j < toI32(digests.length) && o + j >= 0 && o + j < toI32(out.length);
-    j++
-  ) {
-    out[o + j] = digests[31 * k + j]
+  if (at < 0 || at > toI32(out.length) - 29 || k < 0 || k >= 6) {
+    return
+  }
+  let o: i32 = at + 29
+  let d: i32 = 31 * k
+  for (let j: i32 = 0; j < 31 && d < toI32(digests.length) && o < toI32(out.length); j++) {
+    out[o] = digests[d]
+    o += 1
+    d += 1
   }
 }
 
@@ -2137,7 +2213,7 @@ const bcryptVerifyGroup = (
   ok: boolean[]
 ): void => {
   const words: u32[] = new Array<u32>(24)
-  const safety: u32[] = new Array<u32>(BCRYPT_BATCH_LANES)
+  const safety: u32[] = new Array<u32>(6)
   const prefixes: u8[][] = []
   // Copies, so no callee is handed the caller's `hashes` (the thread rule).
   const given: string[] = []
@@ -2146,14 +2222,16 @@ const bcryptVerifyGroup = (
   let cost: i32 = 0
   for (const k of bcryptSlotsOf(group)) {
     const s: i32 = toI32(slots.length)
-    if (s < toI32(safety.length) && k >= 0 && k < toI32(lanes.length) && k < toI32(hashes.length)) {
+    if (s < 6 && s < toI32(safety.length) && k >= 0 && k < toI32(lanes.length) && k < toI32(hashes.length)) {
       const lane: BcryptParsed = lanes[k]
       const hash: string = hashes[k]
       const setting: BcryptSetting = lane.setting
       cost = setting.cost
       safety[s] = setting.safety
-      for (let j: i32 = 0; j < 4 && j < toI32(setting.salt.length); j++) {
-        words[4 * s + j] = setting.salt[j]
+      let w: i32 = 4 * s
+      for (let j: i32 = 0; j < 4 && j < toI32(setting.salt.length) && w < toI32(words.length); j++) {
+        words[w] = setting.salt[j]
+        w += 1
       }
       given.push(hash)
       prefixes.push(lane.prefix)
@@ -2237,7 +2315,7 @@ const bcryptCalibrateTime = (width: i32): i64 => {
 export const bcryptCalibrate = (): i32 => {
   let best: i32 = 1
   let bestTime: i64 = bcryptCalibrateTime(1)
-  for (let w: i32 = 2; w <= BCRYPT_BATCH_LANES; w++) {
+  for (let w: i32 = 2; w <= 6; w++) {
     const took: i64 = bcryptCalibrateTime(w)
     // took / w < bestTime / best, without dividing.
     if (took * toI64(best) < bestTime * toI64(w)) {

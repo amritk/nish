@@ -1045,7 +1045,7 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * which builds that pool, the most slots a server takes, on the test configuration
  * and prints the bytes.
  *
- * Measured **17,501,520 bytes** on 2026-10-20 with clang 18 on linux-x64, about 267
+ * Measured **16,435,200 bytes** on 2026-11-22 with clang 18 on linux-x64, about 251
  * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
  * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
  * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
@@ -1053,8 +1053,12 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58624
  * connections and address are built on the first Initial accepted into it, which
  * `HTTP3_SERVER_SLOT_BYTES` pins. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * WP82's panic proofs in the server (`docs/security/http3.md`, "Panic sites")
+ * moved it by +256 from main's 16,434,944: the constructor builds its per-slot
+ * tables to a length the prover can see.
  */
-export const HTTP3_SERVER_START_BYTES = 17501696
+export const HTTP3_SERVER_START_BYTES = 16435456
 
 /**
  * What one `Http3Server` slot's QUIC and HTTP/3 connections and address take from
@@ -1115,8 +1119,30 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * QUIC-10, `docs/security/quic.md`): each of the three spaces' `QuicAckRanges`
  * counts ECT(0), ECT(1) and CE, and the connection and the server each keep
  * the codepoint the datagram in hand arrived with.
+ *
+ * Moved to **111,240 bytes** (+80) by the panic-free QUIC wire helpers (WP82 S4,
+ * `docs/security/quic.md`): `quicDatagramBytes`, `quicDatagramLengths`,
+ * `quicPacketTake` and `quicCidSequences` grow a long array with `push` or return
+ * another call's array, so the layout pass cannot prove they return a fresh array
+ * (`freshReturnOf`, `src/inline-arrays.ts`) and the fields they fill keep a
+ * pointer to a header of their own instead of a boxed `len` and `data`: the
+ * datagram ring takes 32 bytes more, the packet header 32 and the
+ * connection-ID retire list 16.
+ *
+ * Moved to **111,608 bytes** (+368) when the QUIC engine stopped reaching a
+ * panic site (#2142): methods of recovery's sent-packet rings, the stream table
+ * and the connection now read array fields into a local to guard an index, and a
+ * field taken as a value is no longer stored inline, so its array keeps the
+ * pointer layout and a header of its own (`docs/LANGUAGE.md`, "Fixed-length
+ * array fields are stored inline"). Recovery's rings take +240, the streams +96
+ * and the connection +32.
+ *
+ * Moved to **111,488 bytes** (-120) by WP82's panic proofs
+ * (`docs/security/http3.md`, "Panic sites"): an `Http3Connection` keeps one
+ * per-request `contentLeft` table where it kept `dataTotal` and
+ * `contentLength`.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111160
+export const HTTP3_SERVER_SLOT_BYTES = 111488
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

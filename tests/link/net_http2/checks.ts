@@ -36,7 +36,7 @@ import { H2_AGAIN, H2_CLOSED, H2_INVALID, H2_NEED_MORE, Http2Config, Http2Pools,
 import { BufferPool } from "nish/net/buffer-pool";
 import { Suite } from "nish/testing";
 import { httpFieldBytes } from "nish/net/http-fields";
-import { Client, ZERO, filler, getOf, namesOf, postOf, valuesOf } from "./peer";
+import { Client, PREFACE, ZERO, filler, getOf, namesOf, postOf, valuesOf } from "./peer";
 
 /** The connection's configuration with the defaults. */
 const defaults = (): Http2Config => new Http2Config();
@@ -83,6 +83,26 @@ export const http2Checks = (): i32 => {
   a.wire.settingsAck();
   a.send();
   t.ok("its acknowledgement puts the server's own settings in force, and says nothing", a.conn.settingsAcked && a.takeFrames() === "");
+
+  // A preface cut short is waited for, not judged on the bytes so far: the connection answers only once
+  // all 24 have arrived.
+  const cut = new Client(defaults());
+  cut.takeFrames();
+  const whole: u8[] = httpFieldBytes(PREFACE);
+  const head: u8[] = [];
+  for (let k: i32 = 0; k < 23; k++) {
+    head.push(whole[k]);
+  }
+  cut.wire.raw(head);
+  cut.send();
+  t.eqStr("23 bytes of the preface are waited on, with no frame and no event", `${cut.takeFrames()} | ${cut.takeEvents()}`, " | ");
+  const last: u8[] = [whole[23]];
+  cut.wire.raw(last);
+  const cutIds: i32[] = [];
+  const cutValues: i64[] = [];
+  cut.wire.settings(cutIds, cutValues);
+  cut.send();
+  t.eqStr("its 24th byte completes it, and the SETTINGS after it is acknowledged", cut.takeFrames(), "SETTINGS ack");
 
   // --- 2. Requests and responses --------------------------------------------------------
   a.wire.headers(toI32(1), getOf("/hello"), H2_FLAG_END_STREAM);

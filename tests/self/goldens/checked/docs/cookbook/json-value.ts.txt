@@ -1671,6 +1671,7 @@ function jsonShortEscape(code: i32): i32 -> @nish.jsonShortEscape
 function jsonHexByte(nibble: i32): i32 -> @nish.jsonHexByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+  local +0:9 digit: i32 (const)
 function jsonIsPlainByte(code: i32): boolean -> @nish.jsonIsPlainByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -2456,6 +2457,81 @@ function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count:
   local +9:7 d: i32 (let)
   local +10:7 s: i32 (let)
   local +11:7 k: i32 (let)
+function tryGetU32LE(b: u8[], off: i32): Result<u32, string> -> @nish.tryGetU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: off
+  calls: nish.bytesRangeError nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRangeError#2
+  stackSites=0 stackLocals=0
+  local +0:11 b3: u32 (const)
+  local +1:11 b2: u32 (const)
+  local +2:11 b1: u32 (const)
+  local +3:11 b0: u32 (const)
+  callee +6:14 bytesRangeError -> @nish.bytesRangeError
+function tryGetU64LE(b: u8[], off: i32): Result<u64, string> -> @nish.tryGetU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  escaping: off
+  calls: nish.bytesRangeError nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRangeError#2
+  stackSites=0 stackLocals=0
+  local +0:11 b7: u64 (const)
+  local +1:11 b6: u64 (const)
+  local +2:11 b5: u64 (const)
+  local +3:11 b4: u64 (const)
+  local +4:11 b3: u64 (const)
+  local +5:11 b2: u64 (const)
+  local +6:11 b1: u64 (const)
+  local +7:11 b0: u64 (const)
+  callee +15:14 bytesRangeError -> @nish.bytesRangeError
+function tryGetI32LE(b: u8[], off: i32): Result<i32, string> -> @nish.tryGetI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: off
+  calls: nish.tryGetU32LE nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.tryGetU32LE#0
+  stackSites=0 stackLocals=0
+  local +0:9 v: Result<u32, string> (const)
+  callee +0:34 tryGetU32LE -> @nish.tryGetU32LE
+function tryGetI64LE(b: u8[], off: i32): Result<i64, string> -> @nish.tryGetI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  escaping: off
+  calls: nish.tryGetU64LE nish_alloc_struct
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.tryGetU64LE#0
+  stackSites=0 stackLocals=0
+  local +0:9 v: Result<u64, string> (const)
+  callee +0:34 tryGetU64LE -> @nish.tryGetU64LE
+function trySetU32LE(b: u8[], off: i32, v: u32): boolean -> @nish.trySetU32LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: off
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function trySetU64LE(b: u8[], off: i32, v: u64): boolean -> @nish.trySetU64LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: off
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function trySetI32LE(b: u8[], off: i32, v: i32): boolean -> @nish.trySetI32LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.trySetU32LE
+  escaping: off
+  calls: nish.trySetU32LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.trySetU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:68 trySetU32LE -> @nish.trySetU32LE
+function trySetI64LE(b: u8[], off: i32, v: i64): boolean -> @nish.trySetI64LE [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.trySetU64LE
+  escaping: off
+  calls: nish.trySetU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.trySetU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:68 trySetU64LE -> @nish.trySetU64LE
+function bytesRangeError(off: i32, width: i32, b: u8[]): string -> @nish.bytesRangeError
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32 nish_str_from_i64
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 module std/json-tokenizer.ts [package nish]
 import skipBlank from "nish/bytes" -> function @nish.skipBlank
 import skipJsonText from "nish/bytes" -> function @nish.skipJsonText

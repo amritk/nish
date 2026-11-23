@@ -194,6 +194,33 @@ KiB, of which 128 bytes are kept for control frames) and the reset budget
 (`resetBudget`, 100). A cap RFC 9113 does not allow panics when the connection
 is made (`net_http2_bad_config`).
 
+**Panic sites: only the program's own mistakes.** In `http2-frame.ts`,
+`http2.ts`, `http2-tls.ts` and `hpack.ts` every index, slice, overflow,
+divide and array-length site is proven by a guard, by widened or unsigned
+arithmetic, or by an early return with the error code the function already
+answers. The explicit panics that remain are the argument checks above: the
+window and stream checks and the eleven writers' range checks of
+`http2-frame.ts`; `http2CheckWindow`, `http2CheckCap` and
+`Http2Connection.received` (a count its carrier's read could not have
+written); and HPACK's window check, integer codec, table and decoder
+constructors, `HpackTable.resize`, `HpackDecoder.setSettingsLimit` and
+`HpackEncoder.encodeField`. Each is a kept entry, with its reason, in
+`tests/std-panics.json`, so a new site in any of the four fails
+`std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`
+and a kept one that goes fails
+`std-panics: every kept panic in tests/std-panics.json`. Where a guard took
+the place of a site, the answer is one the caller already handles: a frame
+too short for its fixed fields is FRAME_SIZE_ERROR, a stream that finds no
+free slot is refused with REFUSED_STREAM, a cursor outside its block is
+`HPACK_ERR_TRUNCATED`, `http2SettingId`, `http2SettingValue` and the
+`HpackTable` accessors answer -1 for an index outside what they hold, and
+`hpackHuffmanLength` answers 2^31 − 1 for a length that does not fit, which
+its callers read as "send the octets raw". A malformed header block is a
+handled error, whatever its fault: eight of them, each the code RFC 7541
+names, leave the decoder answering that code again and a fresh decoder
+decoding
+(`link/net_hpack_malformed: exits with 0 and stdout matches expected.out`).
+
 The carrier uses one configuration for every slot, and makes slot 0's
 connection in its constructor, so a bad configuration is refused there with the
 connection's own words.

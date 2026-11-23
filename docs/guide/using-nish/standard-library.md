@@ -1860,8 +1860,7 @@ in the reference.
 sections of flags with their placeholders and descriptions lined up in
 columns, and notes. It is what `nish --help` itself is built with.
 
-<!-- allow-panics: calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HelpMenu, agentDriven, styleFor } from "nish/cli";
 
@@ -1962,8 +1961,7 @@ two SGR lists, one for the theme and one for the failsafe:
 Set a pair before you build the menu; an empty list leaves that role plain.
 The defaults are the ones described above.
 
-<!-- allow-panics: calls `std/cli.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
 
@@ -2136,7 +2134,13 @@ by a name a typo could miss. Each command gets an id you choose, which a
 A mistake in the declarations — a flag declared twice in one scope, a bad spec,
 a required argument after an optional one, a command id used twice or negative,
 a required flag on a command that holds commands or with a default, a flag a
-`--no-` negation would shadow — panics at the call that made it, naming it. A
+`--no-` negation would shadow — panics at the call that made it, naming it.
+Each declaring method has a `try` twin (`tryGroup`, `tryCommand`, `tryFlag`,
+`tryArgument`, ...) that answers the same mistake as an `Err` instead, and
+`tryFlag` and `tryArgument` give a `CliFlag` or `CliArgument` that the
+result's `readFlag`, `readValue`, `readPositional` and their siblings read
+without a check that can panic, so a tool built without `--allow-panics`
+declares its tree through them. A
 module constant can only be a number, a boolean or a string, so build the tree
 in `main` or in a class's constructor.
 
@@ -3039,7 +3043,7 @@ test vectors. A byte string is a `u8[]`.
 
 | Module | Main exports |
 | --- | --- |
-| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array) |
+| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `updateAll(data)` for a whole array, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array and answers `false` when the window does not fit). A second `digest` or `digestInto` writes the same digest again rather than panicking, and a `copy` of a finished hasher is finished too; an `update` after the digest still panics |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes (`HmacSha256.digestInto(out, at)` writes the tag into your array and allocates nothing), and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
@@ -3051,7 +3055,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |
 | `nish/crypto/x25519` | X25519 key exchange |
-| `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
+| `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and for a message longer than 2^31 − 1 bytes `ed25519Sign` answers `null` and `ed25519Verify` `false`; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/p384` | P-384 ECDSA verification |
 | `nish/crypto/rsa` | RSA signature verification, PKCS#1 v1.5 and PSS over SHA-256/384/512, under a PKCS#1 public key: `rsaParsePublicKey`, `rsaVerifyPkcs1v15`, `rsaVerifyPss` |
@@ -3848,7 +3852,7 @@ until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
 with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
 datagrams, so a flood on the port cannot keep your loop inside the client.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts`, `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";

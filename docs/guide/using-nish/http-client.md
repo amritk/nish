@@ -13,13 +13,14 @@ library module ([`export` and `import`](https://github.com/amritk/nish/blob/main
 ## Fetching a URL
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/fetch` and
-`nish/net/outbound` keep panic sites no proof removes yet, and so does the
-range check of `String.fromBytes`, so those calls are refused by default for
-now. The sums and the `panic` call in your own code build under the default
-once a guard bounds each sum and the `panic` becomes an error answer.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): the range checks
+of the `netRead` and `netWrite` builtins a body read and a request write
+reach, and the URL parser `fetch` calls, keep panic sites no proof removes
+yet, so those calls are refused by default for now. The
+sums and the `panic` call in your own code build under the default once a
+guard bounds each sum and the `panic` becomes an error answer.
 
-<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
@@ -75,7 +76,7 @@ parse is not echoed at all. The URL is named as it parses: in
 `http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
 path, which is echoed, so put credentials in a header, not in a URL:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/fetch";
@@ -116,7 +117,7 @@ an https URL, writes and waits for the answer, the program's other tasks run
 ([Async functions](../language/async.md)). Two fetches under
 `awaitAll` are in flight together:
 
-<!-- allow-panics: calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { awaitAll } from "nish:async";
@@ -284,7 +285,7 @@ credentials in it; `http://127.0.0.1:6379/` reaches a database that trusts
 local callers; a name that resolves to either does the same. Give such a
 client an `OutboundPolicy`, from `nish/net/outbound`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP_E_BLOCKED, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch";
@@ -527,6 +528,7 @@ constant of `nish/net/http1-client-codec`:
 | 15 | `HTTP1_E_TRAILER_LIMIT` | a trailer section over `maxTrailerBytes` |
 | 16 | `HTTP1_E_CHUNK_LINE_LIMIT` | a chunk-size line over `HTTP1_MAX_CHUNK_LINE` (4,096 bytes) |
 | 17 | `HTTP1_E_INFORMATIONAL_LIMIT` | more than `HTTP1_MAX_INFORMATIONAL` (32) interim responses to one request |
+| 18 | `HTTP1_E_MEMORY_LIMIT` | more than 2^30 bytes fed and not read, or of one head kept |
 
 After an error the connection cannot be trusted: close it.
 

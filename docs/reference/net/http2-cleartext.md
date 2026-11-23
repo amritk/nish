@@ -117,7 +117,7 @@ class Http2CleartextServer
 
 | Member | |
 | --- | --- |
-| `new Http2CleartextServer(config: Http2Config, listener: i32, size: i32, prefaceTimeout: i32)` | A pool of `size` slots serving HTTP/2 under `config` on `listener`. Only slot 0's connection is made here, so a config it refuses panics now, with its words; every other slot's is made by the first `accept` into it and kept. The slots' preface arrays, 24 bytes each, are made here too. |
+| `new Http2CleartextServer(config: Http2Config, listener: i32, size: i32, prefaceTimeout: i32)` | A pool of `size` slots serving HTTP/2 under `config` on `listener`. Only slot 0's connection is made here, so a config it refuses panics now, with its words; every other slot's is made by the first `accept` into it and kept, with the slot's 24-byte preface array. |
 | `connections: Http2Connection[]` | The connections made so far, slot `k`'s at `k`: slot 0's, made by the constructor, and one for each slot accepted into since. |
 | `date: HttpDate` | The `date` every slot's responses carry, formatted once a second for all of them: each slot's `Http2Connection.date` is its bytes, refreshed by `connection` and `next`. `date.pin` fixes its clock. |
 | `readonly pools: Http2Pools` | The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. |
