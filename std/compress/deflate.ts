@@ -392,11 +392,31 @@ const deflateFixedLitLength = (s: i32): i32 => {
 }
 
 /**
+ * The fixed code (§3.2.6) of literal/length symbol `s`, bit-reversed for the
+ * LSB-first stream: what `deflateCanonical` gives the fixed lengths, written
+ * out by its four runs: from 0x30, 0x190, 0 and 0xc0.
+ */
+const deflateFixedLitCode = (s: i32): i32 => {
+  if (s < 144) {
+    return deflateReverse(0x30 + s, 8)
+  }
+  if (s < 256) {
+    return deflateReverse(s + 256, 9)
+  }
+  if (s < 280) {
+    return deflateReverse(s - 256, 7)
+  }
+  return deflateReverse(s - 88, 8)
+}
+
+/**
  * Fills `codes[0 .. n)` with the canonical code (§3.2.2) of the lengths
  * `lens[0 .. n)`, each already bit-reversed for the LSB-first stream. `count`
  * and `next` are scratch of at least 16 entries. A length of 0 gets code 0.
+ * Answers false, filling nothing, when a table is smaller than that, which
+ * every caller's tables rule out.
  */
-const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next: i32[]): void => {
+const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next: i32[]): boolean => {
   if (
     n < 0 ||
     n > toI32(lens.length) ||
@@ -404,7 +424,7 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
     toI32(count.length) < 16 ||
     toI32(next.length) < 16
   ) {
-    panic("deflateCanonical: a table smaller than its symbols")
+    return false
   }
   for (let i: i32 = 0; i < 16; i += 1) {
     count[i] = 0
@@ -440,6 +460,7 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
       codes[s] = 0
     }
   }
+  return true
 }
 
 /**
@@ -478,9 +499,11 @@ export class DeflateHuffmanScratch {
  * then, if a length passed `limit`, the counts per length repaired until the
  * Kraft sum is exactly 1 again. A symbol of frequency 0 gets length 0. With
  * fewer than two used symbols, symbols are given length 1 until two have
- * one, so the code is always complete. Frequencies are below 2^16.
+ * one, so the code is always complete. Frequencies are below 2^16. Answers
+ * false, setting nothing, when the alphabet or `limit` is outside the
+ * scratch's sizes, which every caller's tables rule out.
  */
-const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: DeflateHuffmanScratch): void => {
+const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: DeflateHuffmanScratch): boolean => {
   const syms: i32[] = w.syms
   const keys: i32[] = w.keys
   const tsyms: i32[] = w.tmpSyms
@@ -501,7 +524,7 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
     limit < 1 ||
     limit > 15
   ) {
-    panic("deflateLengths: an alphabet outside its scratch")
+    return false
   }
   // The used symbols, by a two-pass radix sort on the 16-bit frequency.
   let used: i32 = 0
@@ -530,7 +553,7 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
         given += 1
       }
     }
-    return
+    return true
   }
   for (let pass: i32 = 0; pass < 2; pass += 1) {
     const shift: i32 = pass * 8
@@ -652,6 +675,7 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
       }
     }
   }
+  return true
 }
 
 /**
@@ -860,8 +884,12 @@ export class Deflater {
     for (let d: i32 = 0; d < 32; d += 1) {
       this.fixedDistLens[d] = 5
     }
-    deflateCanonical(this.fixedLitLens, 288, this.fixedLitCodes, this.countScratch, this.nextScratch)
-    deflateCanonical(this.fixedDistLens, 32, this.fixedDistCodes, this.countScratch, this.nextScratch)
+    for (let s: i32 = 0; s < 288; s += 1) {
+      this.fixedLitCodes[s] = deflateFixedLitCode(s)
+    }
+    for (let d: i32 = 0; d < 32; d += 1) {
+      this.fixedDistCodes[d] = deflateReverse(d, 5)
+    }
   }
 
   /**
@@ -1002,7 +1030,6 @@ export class Deflater {
     }
     return p
   }
-
 
   /**
    * @internal Called by `GzipWriter` (std/compress/gzip.ts).
@@ -1371,7 +1398,8 @@ export class Deflater {
         n += 1
         const ls: i32 = 257 + uncheckedGet(lsym, len - 3)
         uncheckedSet(lf, ls, uncheckedGet(lf, ls) + 1)
-        const ds: i32 = dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
+        const ds: i32 =
+          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
         // The positions the match covers that `longest` did not record go
         // into the chains.
@@ -1453,15 +1481,17 @@ export class Deflater {
   /**
    * Builds the run-length coded lengths of the dynamic header (§3.2.7) for
    * `hlit` literal/length and `hdist` distance lengths, and their
-   * frequencies in `clFreq`.
+   * frequencies in `clFreq`. Answers false, building nothing, when the
+   * scratch is not its size or the counts are past the format's, which the
+   * constructor and `writeBlock` rule out.
    */
-  private buildRle(hlit: i32, hdist: i32): void {
+  private buildRle(hlit: i32, hdist: i32): boolean {
     const rle: i32[] = this.rle
     const freq: i32[] = this.clFreq
     const ll: i32[] = this.litLens
     const dl: i32[] = this.distLens
     if (toI32(rle.length) < 320 || toI32(freq.length) < 19 || hlit > 288 || hdist > 32) {
-      panic("Deflater.buildRle: a header outside its scratch")
+      return false
     }
     freq.fill(0)
     const total: i32 = hlit + hdist
@@ -1516,25 +1546,36 @@ export class Deflater {
       }
     }
     this.rleCount = n
+    return true
   }
 
   /**
    * Writes the block's symbols, `src[start .. end)`'s, as the smallest of a
    * dynamic, a fixed and a stored block; answers the new position, or -1
-   * without writing when that does not fit in `out[op .. oe)`.
+   * without writing when that does not fit in `out[op .. oe)`. Answers -1
+   * too, the stream then unusable, when a table is not its size or the header holds a code-length
+   * symbol past 18, which the constructor and `buildRle` rule out.
    */
   private writeBlock(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32 {
     const lf: i32[] = this.litFreq
     const df: i32[] = this.distFreq
     lf[256] = 1
-    deflateLengths(lf, 286, 15, this.litLens, this.scratch)
-    deflateLengths(df, 30, 15, this.distLens, this.scratch)
+    if (
+      !deflateLengths(lf, 286, 15, this.litLens, this.scratch) ||
+      !deflateLengths(df, 30, 15, this.distLens, this.scratch)
+    ) {
+      return -1
+    }
     this.litLens[286] = 0
     this.litLens[287] = 0
     this.distLens[30] = 0
     this.distLens[31] = 0
-    deflateCanonical(this.litLens, 286, this.litCodes, this.countScratch, this.nextScratch)
-    deflateCanonical(this.distLens, 30, this.distCodes, this.countScratch, this.nextScratch)
+    if (
+      !deflateCanonical(this.litLens, 286, this.litCodes, this.countScratch, this.nextScratch) ||
+      !deflateCanonical(this.distLens, 30, this.distCodes, this.countScratch, this.nextScratch)
+    ) {
+      return -1
+    }
     let hlit: i32 = 286
     while (hlit > 257 && this.litLens[hlit - 1] === 0) {
       hlit -= 1
@@ -1543,9 +1584,15 @@ export class Deflater {
     while (hdist > 1 && this.distLens[hdist - 1] === 0) {
       hdist -= 1
     }
-    this.buildRle(hlit, hdist)
-    deflateLengths(this.clFreq, 19, 7, this.clLens, this.scratch)
-    deflateCanonical(this.clLens, 19, this.clCodes, this.countScratch, this.nextScratch)
+    if (!this.buildRle(hlit, hdist)) {
+      return -1
+    }
+    if (
+      !deflateLengths(this.clFreq, 19, 7, this.clLens, this.scratch) ||
+      !deflateCanonical(this.clLens, 19, this.clCodes, this.countScratch, this.nextScratch)
+    ) {
+      return -1
+    }
     let hclen: i32 = 19
     while (hclen > 4 && this.clLens[deflateClOrder(hclen - 1)] === 0) {
       hclen -= 1
@@ -1599,7 +1646,7 @@ export class Deflater {
         const e: i32 = rle[i]
         const sym: i32 = e & 255
         if (sym < 0 || sym >= 19) {
-          panic("Deflater.writeBlock: a code-length symbol outside 0 to 18")
+          return -1
         }
         o = this.putBits(out, o, this.clCodes[sym], this.clLens[sym])
         if (sym === 16) {
@@ -1626,8 +1673,9 @@ export class Deflater {
 
   /**
    * Writes the block's symbols and its end-of-block code under the given
-   * code into `out` at `op`; answers the new position. The room was checked
-   * by the block's exact size.
+   * code into `out` at `op`; answers the new position, or -1 when a table is
+   * not its size, which the constructor rules out. The room was checked by
+   * the block's exact size.
    */
   private writeSymbols(lc: i32[], ll: i32[], dc: i32[], dl: i32[], out: u8[], op: i32): i32 {
     const tokens: i32[] = this.tokens
@@ -1651,7 +1699,7 @@ export class Deflater {
       toI32(dbase.length) < 30 ||
       toI32(dextra.length) < 30
     ) {
-      panic("Deflater.writeSymbols: a table is not its size")
+      return -1
     }
     let bb: u64 = this.bitBuf
     let bc: u32 = this.bitCount
@@ -1758,15 +1806,11 @@ export class FixedDeflater {
     this.distBase = new Array<i32>(30)
     this.distExtra = new Array<i32>(30)
     const lens: i32[] = new Array<i32>(288)
-    const codes: i32[] = new Array<i32>(288)
-    const count: i32[] = new Array<i32>(16)
-    const next: i32[] = new Array<i32>(16)
     for (let s: i32 = 0; s < 288; s += 1) {
       lens[s] = deflateFixedLitLength(s)
     }
-    deflateCanonical(lens, 288, codes, count, next)
     for (let b: i32 = 0; b < 256; b += 1) {
-      this.literal[b] = codes[b] | (lens[b] << 16)
+      this.literal[b] = deflateFixedLitCode(b) | (lens[b] << 16)
     }
     for (let s: i32 = 0; s < 29; s += 1) {
       const base: i32 = deflateLengthBase(s)
@@ -1775,7 +1819,7 @@ export class FixedDeflater {
       const top: i32 = s === 28 ? 259 : deflateLengthBase(s + 1)
       for (let l: i32 = base; l < top && l >= 3 && l <= 258; l += 1) {
         const n: i32 = lens[257 + s]
-        this.length[l - 3] = codes[257 + s] | ((l - base) << n) | ((n + extra) << 16)
+        this.length[l - 3] = deflateFixedLitCode(257 + s) | ((l - base) << n) | ((n + extra) << 16)
       }
     }
     for (let d: i32 = 0; d < 30; d += 1) {
@@ -1806,7 +1850,9 @@ export class FixedDeflater {
    * soon as it would need more than `room` bytes: a caller that only wants
    * the output when it is smaller passes the most it will take, and an input
    * that does not compress is abandoned part way. `fixedDeflateBound(len)`
-   * always fits. A window outside its array panics. Allocates nothing.
+   * always fits. A window outside its array panics. Answers
+   * `DEFLATE_NO_ROOM` too, writing nothing, when a table is not its size,
+   * which the constructor rules out. Allocates nothing.
    *
    * @param src The array that holds the data to compress.
    * @param off Where in `src` the data starts.
@@ -1839,7 +1885,7 @@ export class FixedDeflater {
       toI32(dbase.length) !== 30 ||
       toI32(dextra.length) !== 30
     ) {
-      panic("FixedDeflater.compress: a table is not its size")
+      return DEFLATE_NO_ROOM
     }
     // A table about the input's size: clearing it is most of a short call's
     // fixed cost, and a larger one finds no more matches.
