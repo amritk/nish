@@ -202,7 +202,8 @@ function serveTurn(app: App, timeoutMs: i32): void -> @serveTurn [exported]
   callee +3:5 App.answer -> @App.answer
   callee +4:11 HttpHandler.next -> @nish.HttpHandler.next
 function appRoutes(): Router -> @appRoutes [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=288
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+  sharedWrite: via nish.Router.add
   calls: nish.Router.add nish.Router.constructor nish_alloc_struct
   stackSites=1 stackLocals=0
   local +0:9 router: Router (const)
