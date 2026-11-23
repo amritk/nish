@@ -1196,6 +1196,12 @@ const x509Criticality = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: X509_CRITICALITY, why }))
   )
+/** The changelog words of WP84 S2, which clears std/compress/deflate.ts's panic sites but its contract's. */
+const WP84_DEFLATE = "deflate and inflate's panic sites"
+const wp84Deflate = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WP84_DEFLATE, why }))
+  )
 /** The changelog words of WP83 S4, which clears the panic sites of x509, pki, pki-roots and x509-random. */
 const WP83_PKI = "X.509 and the PKI"
 const wp83Pki = (why, filesByProgram) =>
@@ -11281,6 +11287,24 @@ const stdCipherPanicFree = (file, why, entries) =>
   entries.map((program) => ({ program, file, changelog: STD_CIPHER_PANIC_FREE, why }))
 
 const DECLARED = [
+  ...wp84Deflate(
+    "WP84 S2 proves std/compress/deflate.ts's panic sites but its contract's five (guards before each read, a Deflater that marks a store which would not fit and answers DEFLATE_NO_ROOM, a Huffman build that answers DEFLATE_ERR_HUFFMAN), so Deflater gains its overrun field and the deflate and inflate code moves wherever it is reached",
+    {
+      "bench/crc32.ts": ["crc32.h", "crc32.ll"],
+      "bench/gzip/main.ts": ["main.h", "main.ll"],
+      "bench/pg-carrier.ts": ["gzip.ll"],
+      "bench/std-http1.ts": ["gzip.ll"],
+      "tests/link/net_handler_limits_panic/main.ts": ["gzip.ll"],
+      "tests/link/std_compress/main.ts": ["main.h"],
+      "tests/link/std_compress_adler_paths/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_compress_crc_paths/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_compress_f64/main.ts": ["main.ll"],
+      "tests/link/std_compress_gzip_files/main.ts": ["main.h"],
+      "tests/link/std_compress_node/main.ts": ["main.h"],
+      "tests/link/std_http1_encoded_window/main.ts": ["gzip.ll"],
+      "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
+    }
+  ),
   // WP83 S4 first: `declaredFor` takes the first match, so no broader entry claims these moves.
   ...wp83Pki(
     "WP83 S4 proves or refuses all but four of the 195 panic sites in std/crypto/x509.ts, pki.ts, pki-roots.ts and x509-random.ts (guards before each read, u32 length sums bounded by the comparison before them, readers that answer null rather than an invented value, linear-time hex writers for the trust-store keys, rewritten host readers), so those modules move wherever they are reached; pkiRootsDirEntry is declared with its new attributes in crypto_pki_roots's main module, the one program that calls it directly",
