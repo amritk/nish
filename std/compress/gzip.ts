@@ -126,7 +126,7 @@ const gzipGet32 = (b: u8[], at: i32): i64 => {
     if (c < 0) {
       return -1
     }
-    v = v | (toI64(c & 255) << toI64(k * 8))
+    v = v | (toI64(c & 255) << (toI64(k) * 8))
   }
   return v
 }
@@ -811,6 +811,8 @@ export class GzipReader {
   private phase: i32
   /** Whether more input may come. */
   private more: boolean
+  /** Whether a member has been read; another may follow. */
+  private sawMember: boolean
   /** The member's running CRC-32 and length. */
   private checksum: u32
   private size: u32
@@ -818,8 +820,6 @@ export class GzipReader {
   private left: i64
   /** The most decoded bytes `read` hands out in all. */
   private readonly limit: i64
-  /** Whether a member has been read; another may follow. */
-  private sawMember: boolean
 
   /**
    * A reader that refuses more than `limit` decoded bytes in all; a negative
