@@ -479,7 +479,10 @@ const websocketUnmaskInto = (
   // The four key bytes in one word, high byte first, rotated a byte left
   // after each payload byte, so its top byte is always key byte k mod 4.
   let key: u32 =
-    (toU32(buf[maskAt]) << 24) | (toU32(buf[maskAt + 1]) << 16) | (toU32(buf[maskAt + 2]) << 8) | toU32(buf[maskAt + 3])
+    (toU32(buf[maskAt]) << 24) |
+    (toU32(buf[maskAt + 1]) << 16) |
+    (toU32(buf[maskAt + 2]) << 8) |
+    toU32(buf[maskAt + 3])
   for (let r: i32 = 0; r < (phase & 3); r += 1) {
     key = (key << 8) | (key >>> 24)
   }
@@ -681,7 +684,18 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
       const fresh: i32 = websocketSub(arrived, done)
       const freshAt: i32 = websocketAdd(from, done)
       websocketMessageRoom(d, websocketAdd(from, arrived))
-      if (!websocketUnmaskInto(buf, websocketAdd(payloadAt, done), fresh, masked, maskAt, done, d.message, freshAt)) {
+      if (
+        !websocketUnmaskInto(
+          buf,
+          websocketAdd(payloadAt, done),
+          fresh,
+          masked,
+          maskAt,
+          done,
+          d.message,
+          freshAt
+        )
+      ) {
         return websocketFail(d, WS_CLOSE_INTERNAL_ERROR, "a frame outside the decoder's buffers")
       }
       d.frameChecked = arrived
