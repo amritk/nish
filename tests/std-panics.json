@@ -4,9 +4,9 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 4245,
+  "total": 3951,
   "explicit": {
-    "kept": 356,
+    "kept": 354,
     "toFix": 57
   },
   "modules": {
@@ -52,38 +52,26 @@
       "panic": 2
     },
     "std/crypto/aes.ts": {
-      "array-length": 4,
-      "divide": 1,
-      "index": 62,
-      "overflow": 27
+      "array-length": 2,
+      "index": 15,
+      "overflow": 7
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
       "panic": 7
     },
     "std/crypto/bcrypt-batch.ts": {
-      "array-length": 1,
-      "divide": 2,
-      "index": 13,
-      "overflow": 24,
-      "slice": 2,
-      "spawn-slot": 1
+      "index": 1,
+      "overflow": 4
     },
     "std/crypto/bcrypt.ts": {
-      "array-length": 4,
-      "index": 52,
-      "overflow": 74,
-      "slice": 2
+      "index": 8,
+      "overflow": 8
     },
     "std/crypto/chacha20poly1305.ts": {
       "array-length": 4,
-      "index": 61,
-      "overflow": 22
-    },
-    "std/crypto/ed25519.ts": {
-      "array-length": 1,
-      "index": 19,
-      "panic": 2
+      "index": 16,
+      "overflow": 19
     },
     "std/crypto/hkdf.ts": {
       "panic": 14
