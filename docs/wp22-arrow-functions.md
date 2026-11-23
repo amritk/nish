@@ -142,6 +142,18 @@ quote. The allowlist groups them as pinned positions; one leaves it only
 together with the regenerated golden or the doc edit. §10 argues stage D from
 these numbers.
 
+The Nish programs the JavaScript harnesses carry as string literals
+(`tests/run.js`, `tests/ffi-*.js`, ...) are not `tests/**/*.ts` files, so the
+allowlist cannot see them; #1743 and #1748 spelled such programs as arrows by
+hand after #1722. `node scripts/inline-functions.mjs`, which the
+`arrow-corpus` check runs, reads every `tests/**/*.{js,mjs,cjs}` file and fails
+on a literal whose text opens a top-level `function` definition. A literal that
+must keep the spelling (a host module, which `src/host-module.ts` reads as
+`export function`; arrowify's own unit cases; a syntax-error source) is exempt
+only under a `// nish-function: <reason>` comment that leads it or its
+statement, and a marker with no reason, or one that covers no definition, fails
+too.
+
 ## 8. The order, and why it is forced
 
 `function` could not be removed before `src/` was arrows, and `src/` could not
@@ -322,7 +334,8 @@ makes the spelling they name wrong.
   wrong.
 - **Whether stage D happens at all.** A, B and C are done. New code outside
   the test corpus cannot use `function` (the Biome plugin), and a new test
-  cannot either (the `arrow-corpus` check). What is left is 101 non-`async`
+  cannot either (the `arrow-corpus` check, which also reads the programs the
+  JavaScript harnesses carry as strings). What is left is 101 non-`async`
   definitions, each a refused form under test or kept for a reason the
   allowlist records, and the `async` ones, which have no arrow spelling to
   move to (§7).

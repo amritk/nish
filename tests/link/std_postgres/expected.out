@@ -47,6 +47,11 @@ PASS  a column length of -2^31, past the row either way
 PASS  a column length whose high byte is set
 PASS  a message length with its top bit set
 PASS  a RowDescription field cut short
+PASS  a DataRow whose column count runs past its frame
+PASS  a DataRow cut inside its column count
+PASS  a DataRow cut inside a column's length
+PASS  a RowDescription whose field count runs past its frame
+PASS  a message length that cannot hold itself
 PASS  a row over maxColumns
 PASS  MD5 is refused
 PASS  cleartext is refused
@@ -488,4 +493,4 @@ PASS  it is failed
 PASS  a window before it
 PASS  it is failed too
 PASS  int on a refused walk fails
-postgres: 490 passed, 0 failed, 0 skipped
+postgres: 495 passed, 0 failed, 0 skipped

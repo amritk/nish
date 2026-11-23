@@ -83,9 +83,6 @@ const PG_ARRAY_HEADER: i32 = 12
 const PG_ARRAY_DIM: i32 = 8
 const PG_MAX_CAP: i32 = 1073741823
 const PG_MAX_ITERATIONS: i32 = 214748363
-const PG_EPOCH_DAYS: i64 = 730425
-const PG_FIRST_DAY: i64 = -730119
-const PG_LAST_DAY: i64 = 2921939
 const PG_LOST: i32 = 9 [exported]
 const PG_POOL_NONE: i32 = -1 [exported]
 const PG_POOL_FULL: i32 = -2 [exported]
@@ -345,18 +342,21 @@ struct PgConnection (class) size=216 align=8 exported
   method binaryFloat -> @nish.PgConnection.binaryFloat
   method tagIs -> @nish.PgConnection.tagIs
   method tagRows -> @nish.PgConnection.tagRows
-struct PgPoolSlot (class) size=64 align=8
+struct PgPoolSlot (class) size=48 align=8
   field state: i32 index=0 offset=0 initialized
   field conn: PgConnection | null index=1 offset=8 initialized
   field queued: i32 index=2 offset=16 initialized
   field described: i32 index=3 offset=20 initialized
-  field tickets: i32[] index=4 offset=24 readonly boxed
-  field leads: i32[] index=5 offset=40 readonly boxed
-  field head: i32 index=6 offset=56 initialized
-  field count: i32 index=7 offset=60 initialized
+  field tickets: i32[] index=4 offset=24 readonly
+  field leads: i32[] index=5 offset=32 readonly
+  field head: i32 index=6 offset=40 initialized
+  field count: i32 index=7 offset=44 initialized
   constructor -> @nish.PgPoolSlot.constructor
   method push -> @nish.PgPoolSlot.push
   method pop -> @nish.PgPoolSlot.pop
+  method oldest -> @nish.PgPoolSlot.oldest
+  method leading -> @nish.PgPoolSlot.leading
+  method setLeading -> @nish.PgPoolSlot.setLeading
 struct PgPool (class) size=96 align=8 exported
   field ticket: i32 index=0 offset=0 initialized
   field size: i32 index=1 offset=4 readonly
@@ -386,6 +386,8 @@ struct PgPool (class) size=96 align=8 exported
   method connect -> @nish.PgPool.connect
   method connection -> @nish.PgPool.connection
   method next -> @nish.PgPool.next
+  method slotAt -> @nish.PgPool.slotAt
+  method dequeue -> @nish.PgPool.dequeue
   method anyReady -> @nish.PgPool.anyReady
   method passwordWiped -> @nish.PgPool.passwordWiped
   method dispose -> @nish.PgPool.dispose
@@ -401,20 +403,20 @@ struct PgBatchConfig (class) size=56 align=8 exported
   field runs: i32 index=8 offset=44 initialized
   field binary: boolean index=9 offset=48 initialized
   field sorted: boolean index=10 offset=49 initialized
-struct PgBatchRun (class) size=80 align=8
-  field tags: i32[] index=0 offset=0 boxed
-  field first: i32[] index=1 offset=16 boxed
-  field had: boolean[] index=2 offset=32 boxed
-  field keys: i32 index=3 offset=48 initialized
-  field cur: i32 index=4 offset=52 initialized
-  field curRows: boolean index=5 offset=56 initialized
-  field at: i32 index=6 offset=60 initialized
-  field target: i32 index=7 offset=64 initialized
-  field handle: i32 index=8 offset=68 initialized
-  field uses: i32 index=9 offset=72 initialized
-  field open: boolean index=10 offset=76 initialized
-  field ended: boolean index=11 offset=77 initialized
-  field failed: boolean index=12 offset=78 initialized
+struct PgBatchRun (class) size=56 align=8
+  field tags: i32[] index=0 offset=0
+  field first: i32[] index=1 offset=8
+  field had: boolean[] index=2 offset=16
+  field keys: i32 index=3 offset=24 initialized
+  field cur: i32 index=4 offset=28 initialized
+  field curRows: boolean index=5 offset=32 initialized
+  field at: i32 index=6 offset=36 initialized
+  field target: i32 index=7 offset=40 initialized
+  field handle: i32 index=8 offset=44 initialized
+  field uses: i32 index=9 offset=48 initialized
+  field open: boolean index=10 offset=52 initialized
+  field ended: boolean index=11 offset=53 initialized
+  field failed: boolean index=12 offset=54 initialized
   constructor -> @nish.PgBatchRun.constructor
   method reset -> @nish.PgBatchRun.reset
 struct PgBatcher (class) size=160 align=8 exported
@@ -502,12 +504,13 @@ struct PgBatchClock (class) size=120 align=8 exported
   method started -> @nish.PgBatchClock.started
   method startsFor -> @nish.PgBatchClock.startsFor
   method quiet -> @nish.PgBatchClock.quiet
-struct PgBatchTurns (class) size=32 align=8 exported
+  method oldest -> @nish.PgBatchClock.oldest
+  method waited -> @nish.PgBatchClock.waited
+struct PgBatchTurns (class) size=24 align=8 exported
   field clock: PgBatchClock index=0 offset=0 readonly
-  field size: i32 index=1 offset=8 readonly
-  field busy: boolean[] index=2 offset=16 readonly
-  field running: i32 index=3 offset=24 initialized
-  field woken: i32 index=4 offset=28 initialized
+  field busy: boolean[] index=1 offset=8 readonly
+  field running: i32 index=2 offset=16 initialized
+  field woken: i32 index=3 offset=20 initialized
   constructor -> @nish.PgBatchTurns.constructor
   method collector -> @nish.PgBatchTurns.collector
   method inFlight -> @nish.PgBatchTurns.inFlight
@@ -537,18 +540,19 @@ function PgError.constructor(this: PgError, severity: string, code: string, mess
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function pgCopyBytes(bytes: u8[]): u8[] -> @nish.pgCopyBytes
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_slice
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 copy: u8[] (const)
+  local +1:14 b: u8 (const)
 function pgAllZero(bytes: u8[]): boolean -> @nish.pgAllZero
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 b: u8 (const)
 function PgPassword.constructor(this: PgPassword, password: Secret<u8[]>): void -> @nish.PgPassword.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.expose$arr.u8$arr.u8$fn.16.nish.pgCopyBytes nish.secret$arr.u8
   pointer this: size=16 writesThrough=true captured=false
   pointer password: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$arr.u8$fn.16.nish.pgCopyBytes#0
@@ -585,17 +589,15 @@ function pgBytesOf(text: string): u8[] -> @nish.pgBytesOf
   local +1:9 n: i32 (const)
   local +2:12 i: i32 (let)
 function pgDecimalLength(value: i64): i32 -> @nish.pgDecimalLength
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
-  calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local +0:7 n: i32 (let)
+  local +0:7 n: u32 (let)
   local +1:7 v: i64 (let)
 function pgPutDecimal(out: u8[], at: i32, value: i64, n: i32): i32 -> @nish.pgPutDecimal
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish_panic
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -7:9 first: i32 (const)
@@ -620,9 +622,8 @@ function pgHasNul(text: string): boolean -> @nish.pgHasNul
   local +0:9 n: i32 (const)
   local +1:12 i: i32 (let)
 function pgIsText(b: u8[], from: i32, end: i32): boolean -> @nish.pgIsText
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
-  calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
@@ -630,36 +631,36 @@ function pgIsText(b: u8[], from: i32, end: i32): boolean -> @nish.pgIsText
   local +11:9 more: i32 (let)
   local +12:9 low: i32 (let)
   local +13:9 high: i32 (let)
-  local +36:14 j: i32 (let)
-  local +37:13 d: i32 (const)
+  local +38:9 k: i32 (let)
+  local +40:13 d: i32 (const)
 function pgFind(b: u8[], from: i32, end: i32, byte: i32): i32 -> @nish.pgFind
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end from
-  calls: nish_panic
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
 function pgBytesAre(b: u8[], start: i32, length: i32, text: string): boolean -> @nish.pgBytesAre
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: start
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:12 i: i32 (let)
+  local +5:7 k: i32 (let)
+  local +6:12 i: i32 (let)
 function PgText.reset(this: PgText): void -> @nish.PgText.reset [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer this: size=1 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgText.int(this: PgText, b: u8[], start: i32, length: i32): i64 -> @nish.PgText.int [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: start
-  calls: nish_panic_index nish_panic_overflow
   pointer this: size=1 writesThrough=true captured=false
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -2:11 end: i32 (const)
+  local -9:11 last: i64 (const)
+  local -8:11 end: i32 (const)
   local +3:11 negative: boolean (const)
   local +4:9 i: i32 (let)
   local +20:11 head: i64 (let)
@@ -668,11 +669,11 @@ function PgText.int(this: PgText, b: u8[], start: i32, length: i32): i64 -> @nis
   local +31:11 scale: i64 (let)
   local +33:15 d: i32 (const)
   local +53:13 v: i64 (const)
-  local +57:11 lastDigit: i64 (const)
-  local +59:11 minTenth: i64 (const)
-  local +60:9 acc: i64 (let)
-  local +62:13 d: i32 (const)
-  local +67:13 digit: i64 (const)
+  local +59:11 lastDigit: u64 (const)
+  local +61:11 maxTenth: u64 (const)
+  local +62:9 acc: u64 (let)
+  local +64:13 d: i32 (const)
+  local +69:13 digit: u64 (const)
 function PgText.bool(this: PgText, b: u8[], start: i32, length: i32): boolean -> @nish.PgText.bool [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -685,29 +686,29 @@ function PgText.timestamp(this: PgText, b: u8[], start: i32, length: i32, out: u
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: at start
-  calls: nish.copyBytes nish_panic_index nish_panic_overflow
+  calls: nish.copyBytes
   pointer this: size=1 writesThrough=true captured=false
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0
   stackSites=0 stackLocals=0
+  local -11:11 last: i64 (const)
+  local -10:11 end: i32 (const)
   local +6:9 p: i32 (let)
-  local +7:11 end: i32 (const)
-  local +12:9 others: i32 (let)
-  local +13:14 i: i32 (let)
-  local +14:13 c: i32 (const)
-  local +30:9 millis: i32 (let)
-  local +33:11 digits: i32 (let)
-  local +54:11 year: i32 (const)
-  callee +59:5 copyBytes -> @nish.copyBytes
-function pgDigits(out: u8[], at: i32, value: i32, width: i32): void -> @nish.pgDigits
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +7:9 others: i32 (let)
+  local +8:14 i: i32 (let)
+  local +9:13 c: i32 (const)
+  local +27:9 millis: u32 (let)
+  local +30:11 digits: i32 (let)
+  local +61:11 year: i32 (const)
+  callee +66:5 copyBytes -> @nish.copyBytes
+function pgDigits(out: u8[], at: i32, value: u32, width: i32): void -> @nish.pgDigits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: value
-  calls: nish_panic_index nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -2:7 v: i32 (let)
-  local -1:12 i: i32 (let)
+  local -4:7 v: u32 (let)
+  local -2:7 k: i32 (let)
 function PgBinary.reset(this: PgBinary): void -> @nish.PgBinary.reset [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -733,14 +734,12 @@ function PgBinary.int(this: PgBinary, b: u8[], start: i32, length: i32): i64 -> 
   local +9:11 v: i32 (const)
   callee +9:26 getU16BE -> @nish.getU16BE
 function PgBinary.bool(this: PgBinary, b: u8[], start: i32, length: i32): boolean -> @nish.PgBinary.bool [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: length start
-  calls: nish.PgBinary.inside nish_panic_index
-  pointer this: size=1 writesThrough=true captured=false passedTo=nish.PgBinary.inside#0
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.PgBinary.inside#1
+  escaping: start
+  pointer this: size=1 writesThrough=true captured=false
+  pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee -9:25 PgBinary.inside -> @nish.PgBinary.inside
   local -8:13 c: i32 (const)
 function PgBinary.float(this: PgBinary, b: u8[], start: i32, length: i32): f64 -> @nish.PgBinary.float [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -765,33 +764,33 @@ function PgBinary.timestamp(this: PgBinary, b: u8[], start: i32, length: i32, ou
   callee +3:12 PgBinary.iso -> @nish.PgBinary.iso
   callee +3:21 getI64BE -> @nish.getI64BE
 function PgBinary.iso(this: PgBinary, micros: i64, out: u8[], at: i32): i32 -> @nish.PgBinary.iso [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: at
-  calls: nish.pgDigits nish_panic_div nish_panic_overflow
+  calls: nish.pgDigits
   pointer this: size=1 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0
   stackSites=0 stackLocals=0
-  local +4:11 dayMicros: i64 (const)
-  local +5:9 days: i64 (let)
-  local +6:9 rest: i64 (let)
-  local +17:11 z: i64 (const)
-  local +18:11 era: i64 (const)
-  local +19:11 doe: i64 (const)
-  local +20:11 yoe: i64 (const)
-  local +21:11 doy: i64 (const)
-  local +22:11 mp: i64 (const)
-  local +23:11 day: i64 (const)
-  local +24:11 month: i64 (const)
-  local +25:11 year: i64 (const)
-  local +26:11 millis: i32 (const)
-  callee +27:5 pgDigits -> @nish.pgDigits
-  callee +29:5 pgDigits -> @nish.pgDigits
-  callee +31:5 pgDigits -> @nish.pgDigits
-  callee +33:5 pgDigits -> @nish.pgDigits
-  callee +35:5 pgDigits -> @nish.pgDigits
-  callee +37:5 pgDigits -> @nish.pgDigits
-  callee +39:5 pgDigits -> @nish.pgDigits
+  local +9:11 shifted: u64 (const)
+  local +10:11 ms: u64 (const)
+  local +11:11 day0: u64 (const)
+  local +22:11 z: u32 (const)
+  local +23:11 era: u32 (const)
+  local +24:11 doe: u32 (const)
+  local +25:11 yoe: u32 (const)
+  local +26:11 doy: u32 (const)
+  local +27:11 mp: u32 (const)
+  local +28:11 day: u32 (const)
+  local +29:11 month: u32 (const)
+  local +30:11 year: u32 (const)
+  local +31:11 millis: u32 (const)
+  callee +32:5 pgDigits -> @nish.pgDigits
+  callee +34:5 pgDigits -> @nish.pgDigits
+  callee +36:5 pgDigits -> @nish.pgDigits
+  callee +38:5 pgDigits -> @nish.pgDigits
+  callee +40:5 pgDigits -> @nish.pgDigits
+  callee +42:5 pgDigits -> @nish.pgDigits
+  callee +44:5 pgDigits -> @nish.pgDigits
 function PgBinaryArray.constructor(this: PgBinaryArray, binary: PgBinary): void -> @nish.PgBinaryArray.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: binary
@@ -802,21 +801,24 @@ function PgBinaryArray.begin(this: PgBinaryArray, b: u8[], start: i32, length: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: b start
-  calls: nish.PgBinaryArray.refuse nish.getI32BE nish_panic_overflow
+  calls: nish.PgBinaryArray.refuse nish.getI32BE
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0
   pointer b: size=0 writesThrough=true captured=true passedTo=nish.getI32BE#0 nish.getI32BE#0 nish.getI32BE#0 nish.getI32BE#0
   stackSites=0 stackLocals=0
-  callee +8:7 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
-  local +11:11 ndim: i32 (const)
-  callee +11:23 getI32BE -> @nish.getI32BE
-  local +12:11 hasNull: i32 (const)
-  callee +12:26 getI32BE -> @nish.getI32BE
-  local +13:11 oid: i32 (const)
-  callee +13:22 getI32BE -> @nish.getI32BE
-  callee +27:7 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
-  local +35:13 dim: i32 (const)
-  callee +35:24 getI32BE -> @nish.getI32BE
-  callee +37:9 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local +8:11 last: i64 (const)
+  local +9:11 end: i32 (const)
+  callee +17:7 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local +20:11 ndim: i32 (const)
+  callee +20:23 getI32BE -> @nish.getI32BE
+  local +21:11 hasNull: i32 (const)
+  callee +21:26 getI32BE -> @nish.getI32BE
+  local +22:11 oid: i32 (const)
+  callee +22:22 getI32BE -> @nish.getI32BE
+  callee +36:7 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local +41:11 pos: i32 (const)
+  local +45:13 dim: i32 (const)
+  callee +45:24 getI32BE -> @nish.getI32BE
+  callee +49:9 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
 function PgBinaryArray.refuse(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.refuse [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -825,15 +827,21 @@ function PgBinaryArray.refuse(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.r
 function PgBinaryArray.next(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgBinaryArray.refuse nish.getI32BE nish_panic_overflow
+  calls: nish.PgBinaryArray.refuse nish.getI32BE
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0
   stackSites=0 stackLocals=0
-  callee -6:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
-  callee -3:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
-  local -1:11 n: i32 (const)
-  callee -1:20 getI32BE -> @nish.getI32BE
+  local -17:11 seen: i32 (const)
+  local -16:11 pos: i32 (const)
+  local -15:11 end: i32 (const)
+  callee -10:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local -6:11 p: i64 (const)
+  callee -4:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local -2:11 n: i32 (const)
+  callee -2:20 getI32BE -> @nish.getI32BE
+  local -1:11 at: i32 (const)
   callee +4:16 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
-  callee +11:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local +10:11 q: i64 (const)
+  callee +12:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
 function PgBinaryArray.int(this: PgBinaryArray): i64 -> @nish.PgBinaryArray.int [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -846,55 +854,59 @@ function PgArrayWalker.constructor(this: PgArrayWalker): void -> @nish.PgArrayWa
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgArrayWalker.begin(this: PgArrayWalker, b: u8[], start: i32, length: i32): void -> @nish.PgArrayWalker.begin [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: b start
-  calls: nish_panic_index nish_panic_overflow
   pointer this: size=32 writesThrough=true captured=false
   pointer b: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+  local +6:11 last: i64 (const)
+  local +7:11 end: i32 (const)
 function PgArrayWalker.refuse(this: PgArrayWalker): i32 -> @nish.PgArrayWalker.refuse [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgArrayWalker.next(this: PgArrayWalker): i32 -> @nish.PgArrayWalker.next [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgArrayWalker.refuse nish_panic_index nish_panic_overflow
+  calls: nish.PgArrayWalker.refuse
   pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgArrayWalker.refuse#0 nish.PgArrayWalker.refuse#0 nish.PgArrayWalker.refuse#0 nish.PgArrayWalker.refuse#0 nish.PgArrayWalker.refuse#0 nish.PgArrayWalker.refuse#0 nish.PgArrayWalker.refuse#0
   stackSites=0 stackLocals=0
-  local -6:11 b: u8[] (const)
-  local -5:11 end: i32 (const)
+  local -7:11 b: u8[] (const)
+  local -6:11 end: i32 (const)
+  local -5:9 p: i32 (let)
   callee -3:14 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
-  callee +9:16 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
-  local +13:9 p: i32 (let)
-  callee +15:14 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
-  callee +29:16 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
+  callee +7:16 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
+  local +14:13 first: i32 (const)
+  callee +21:20 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
+  callee +27:16 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
   callee +34:16 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
+  local +38:11 first: i32 (const)
   local +40:13 c: i32 (const)
   callee +42:16 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
-  callee +49:14 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
-  local +52:13 n: i32 (const)
-  local +53:13 u: i32 (const)
-  local +54:13 l1: i32 (const)
-  local +55:13 l2: i32 (const)
+  callee +50:14 PgArrayWalker.refuse -> @nish.PgArrayWalker.refuse
+  local +55:13 n: i32 (const)
+  local +56:13 u: i32 (const)
+  local +57:13 l1: i32 (const)
+  local +58:13 l2: i32 (const)
 function PgArrayWalker.copy(this: PgArrayWalker, out: u8[], at: i32): i32 -> @nish.PgArrayWalker.copy [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_panic_index nish_panic_overflow
+  escaping: at
   pointer this: size=32 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -14:11 b: u8[] (const)
-  local -13:9 n: i32 (let)
-  local -12:9 p: i32 (let)
-  local -11:11 end: i32 (const)
+  local -15:11 b: u8[] (const)
+  local -14:9 p: i32 (let)
+  local -13:11 last: i64 (const)
+  local -12:11 end: i32 (const)
+  local -8:9 k: i32 (let)
 function PgConnection.constructor(this: PgConnection, config: PgConfig, password: Secret<u8[]>, nonce: u8[]): void -> @nish.PgConnection.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.PgConnection.putI32
   escaping: config
-  calls: nish.PgConnection.putByte nish.PgConnection.putI32 nish.PgConnection.putParam nish.PgPassword.constructor nish.base64StdPadEncode nish.pgCheckConfig nish.setI32BE nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow
+  calls: nish.PgConnection.putByte nish.PgConnection.putI32 nish.PgConnection.putParam nish.PgPassword.constructor nish.base64StdPadEncode nish.pgCheckConfig nish.setI32BE nish_alloc_struct nish_array_grow nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.putI32#0 nish.PgConnection.putI32#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putByte#0
   pointer config: size=88 writesThrough=true captured=true passedTo=nish.pgCheckConfig#0
   pointer password: size=8 writesThrough=false captured=false passedTo=nish.PgPassword.constructor#1
@@ -917,7 +929,7 @@ function PgConnection.constructor(this: PgConnection, config: PgConfig, password
   callee +33:7 PgConnection.putParam -> @nish.PgConnection.putParam
   callee +36:7 PgConnection.putParam -> @nish.PgConnection.putParam
   callee +38:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +39:5 setI32BE -> @nish.setI32BE
+  callee +40:5 setI32BE -> @nish.setI32BE
 function PgConnection.inputBuffer(this: PgConnection): u8[] -> @nish.PgConnection.inputBuffer [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=216 writesThrough=false captured=false
@@ -927,30 +939,30 @@ function PgConnection.inputEnd(this: PgConnection): i32 -> @nish.PgConnection.in
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgConnection.inputRoom(this: PgConnection): i32 -> @nish.PgConnection.inputRoom [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:11 end: i32 (const)
 function PgConnection.received(this: PgConnection, n: i32): void -> @nish.PgConnection.received [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: n
-  calls: nish.PgConnection.inputRoom nish_panic nish_panic_overflow
+  calls: nish.PgConnection.inputRoom nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.inputRoom#0
   stackSites=0 stackLocals=0
+  local -4:11 last: i64 (const)
   callee -3:22 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
 function PgConnection.receive(this: PgConnection, src: u8[], start: i32, length: i32): i32 -> @nish.PgConnection.receive [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: length start
-  calls: nish.PgConnection.inputRoom nish.copyBytes nish_panic nish_panic_overflow
+  calls: nish.PgConnection.inputRoom nish.copyBytes nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.inputRoom#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
   stackSites=0 stackLocals=0
-  local -3:11 room: i32 (const)
-  callee -3:23 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
-  local -2:11 n: i32 (const)
-  callee -1:5 copyBytes -> @nish.copyBytes
+  local -4:11 room: i32 (const)
+  callee -4:23 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
+  local -3:11 n: i32 (const)
+  callee -2:5 copyBytes -> @nish.copyBytes
 function PgConnection.outputBuffer(this: PgConnection): u8[] -> @nish.PgConnection.outputBuffer [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=216 writesThrough=false captured=false
@@ -966,11 +978,11 @@ function PgConnection.outputEnd(this: PgConnection): i32 -> @nish.PgConnection.o
 function PgConnection.sent(this: PgConnection, n: i32): void -> @nish.PgConnection.sent [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: n
-  calls: nish.PgConnection.compactOutput nish.PgConnection.outputEnd nish_panic nish_panic_overflow
+  calls: nish.PgConnection.compactOutput nish.PgConnection.outputEnd nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.outputEnd#0 nish.PgConnection.compactOutput#0
   stackSites=0 stackLocals=0
-  callee -3:22 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
+  local -4:11 last: i64 (const)
+  callee -3:31 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
   callee +5:7 PgConnection.compactOutput -> @nish.PgConnection.compactOutput
 function PgConnection.closed(this: PgConnection): i32 -> @nish.PgConnection.closed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1002,32 +1014,37 @@ function PgConnection.dispose(this: PgConnection): void -> @nish.PgConnection.di
 function PgConnection.next(this: PgConnection): i32 -> @nish.PgConnection.next [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
-  calls: nish.PgConnection.compact nish.PgConnection.dispatch nish.PgConnection.fail nish_panic nish_panic_overflow nish_panic_slice
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.compact#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.compact#0 nish.PgConnection.dispatch#0
+  calls: nish.PgConnection.compact nish.PgConnection.dispatch nish.PgConnection.fail nish_panic nish_panic_slice
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.compact#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.compact#0 nish.PgConnection.dispatch#0
   stackSites=0 stackLocals=0
+  local -38:13 at: i32 (const)
+  local -37:13 inEnd: i32 (const)
+  local -36:13 b: u8[] (const)
+  callee -32:16 PgConnection.fail -> @nish.PgConnection.fail
   local -30:13 avail: i32 (const)
   callee -28:9 PgConnection.compact -> @nish.PgConnection.compact
-  local -25:13 at: i32 (const)
-  local -24:13 b: u8[] (const)
-  callee -21:16 PgConnection.fail -> @nish.PgConnection.fail
-  local -19:13 type: i32 (const)
-  local -17:13 length: i32 (const)
+  callee -24:16 PgConnection.fail -> @nish.PgConnection.fail
+  local -22:13 type: i32 (const)
+  local -20:13 length: i32 (const)
+  callee -17:16 PgConnection.fail -> @nish.PgConnection.fail
   callee -14:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -11:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -8:9 PgConnection.compact -> @nish.PgConnection.compact
-  local -7:15 size: i32 (const)
-  local -4:17 cap: i32 (const)
-  local -3:17 doubled: i32 (const)
+  callee -11:9 PgConnection.compact -> @nish.PgConnection.compact
+  local -10:15 size: i32 (const)
+  local -5:17 cap: i64 (const)
+  local -4:17 want: i64 (const)
+  local -3:17 doubled: i64 (const)
   local -2:17 grown: u8[] (const)
-  local +5:13 event: i32 (const)
-  callee +5:26 PgConnection.dispatch -> @nish.PgConnection.dispatch
+  local +5:13 end: i32 (const)
+  local +7:13 event: i32 (const)
+  callee +7:26 PgConnection.dispatch -> @nish.PgConnection.dispatch
 function PgConnection.compact(this: PgConnection): void -> @nish.PgConnection.compact [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.copyBytes nish_panic_overflow
+  calls: nish.copyBytes
   pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -6:11 start: i32 (const)
+  local -8:11 start: i32 (const)
+  local -7:11 end: i32 (const)
   local -2:11 n: i32 (const)
   callee -1:5 copyBytes -> @nish.copyBytes
 function PgConnection.fail(this: PgConnection, code: i32): i32 -> @nish.PgConnection.fail [exported method]
@@ -1043,59 +1060,71 @@ function PgConnection.dispatch(this: PgConnection, type: i32, body: i32, end: i3
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: body end
-  calls: nish.PgConnection.authenticate nish.PgConnection.fail nish.PgConnection.readDescription nish.PgConnection.readError nish.PgConnection.readRow nish.getI32BE nish.getU16BE nish.pgBytesAre nish.pgFind nish_panic_index nish_panic_overflow nish_panic_slice nish_str_eq nish_str_new
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.authenticate#0 nish.PgConnection.readError#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.readRow#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.readDescription#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
+  calls: nish.PgConnection.authenticate nish.PgConnection.fail nish.PgConnection.readDescription nish.PgConnection.readError nish.PgConnection.readRow nish.getI32BE nish.getU16BE nish.pgBytesAre nish.pgFind nish_panic_slice nish_str_eq nish_str_new
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.authenticate#0 nish.PgConnection.readError#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.readRow#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.readDescription#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
   stackSites=0 stackLocals=0
-  local -16:11 state: i32 (const)
-  callee -12:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -10:14 PgConnection.authenticate -> @nish.PgConnection.authenticate
-  callee -10:32 getI32BE -> @nish.getI32BE
-  local -6:13 error: PgError | null (const)
-  callee -6:37 PgConnection.readError -> @nish.PgConnection.readError
-  callee -4:16 PgConnection.fail -> @nish.PgConnection.fail
+  local -26:11 state: i32 (const)
+  local -25:11 b: u8[] (const)
+  callee -22:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -20:11 size: i32 (const)
+  callee -16:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee -13:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee -11:14 PgConnection.authenticate -> @nish.PgConnection.authenticate
+  callee -11:32 getI32BE -> @nish.getI32BE
+  local -7:13 error: PgError | null (const)
+  callee -7:37 PgConnection.readError -> @nish.PgConnection.readError
+  callee -5:16 PgConnection.fail -> @nish.PgConnection.fail
+  local -2:15 notices: i32 (const)
   callee +7:16 PgConnection.fail -> @nish.PgConnection.fail
   callee +10:16 PgConnection.fail -> @nish.PgConnection.fail
   local +17:13 nameEnd: i32 (const)
   callee +17:28 pgFind -> @nish.pgFind
-  callee +18:30 pgFind -> @nish.pgFind
-  callee +19:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +21:11 pgBytesAre -> @nish.pgBytesAre
-  callee +22:14 pgBytesAre -> @nish.pgBytesAre
-  callee +23:18 PgConnection.fail -> @nish.PgConnection.fail
-  callee +25:18 pgBytesAre -> @nish.pgBytesAre
-  local +27:15 valueLength: i32 (const)
-  local +28:15 iso: boolean (const)
-  callee +28:50 pgBytesAre -> @nish.pgBytesAre
-  callee +30:18 PgConnection.fail -> @nish.PgConnection.fail
-  callee +32:18 pgBytesAre -> @nish.pgBytesAre
-  callee +33:14 pgBytesAre -> @nish.pgBytesAre
-  callee +34:18 PgConnection.fail -> @nish.PgConnection.fail
-  callee +36:18 pgBytesAre -> @nish.pgBytesAre
-  callee +46:14 PgConnection.fail -> @nish.PgConnection.fail
-  callee +51:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +53:25 getI32BE -> @nish.getI32BE
-  callee +59:16 PgConnection.fail -> @nish.PgConnection.fail
-  local +61:13 status: i32 (const)
-  callee +63:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +71:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +79:14 PgConnection.fail -> @nish.PgConnection.fail
-  callee +82:14 PgConnection.readRow -> @nish.PgConnection.readRow
-  callee +86:29 pgFind -> @nish.pgFind
+  callee +20:16 PgConnection.fail -> @nish.PgConnection.fail
+  local +22:13 value: i32 (const)
+  local +23:13 valueEnd: i32 (const)
+  callee +24:47 pgFind -> @nish.pgFind
+  callee +25:16 PgConnection.fail -> @nish.PgConnection.fail
+  local +27:13 nameLength: i32 (const)
+  local +28:13 valueLength: i32 (const)
+  callee +29:11 pgBytesAre -> @nish.pgBytesAre
+  callee +30:14 pgBytesAre -> @nish.pgBytesAre
+  callee +31:18 PgConnection.fail -> @nish.PgConnection.fail
+  callee +33:18 pgBytesAre -> @nish.pgBytesAre
+  callee +35:33 pgBytesAre -> @nish.pgBytesAre
+  callee +36:18 PgConnection.fail -> @nish.PgConnection.fail
+  callee +41:20 PgConnection.fail -> @nish.PgConnection.fail
+  callee +44:20 PgConnection.fail -> @nish.PgConnection.fail
+  callee +47:18 pgBytesAre -> @nish.pgBytesAre
+  callee +48:14 pgBytesAre -> @nish.pgBytesAre
+  callee +49:18 PgConnection.fail -> @nish.PgConnection.fail
+  callee +51:18 pgBytesAre -> @nish.pgBytesAre
+  callee +61:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee +66:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee +68:25 getI32BE -> @nish.getI32BE
+  callee +74:16 PgConnection.fail -> @nish.PgConnection.fail
+  local +76:13 status: i32 (const)
+  callee +78:16 PgConnection.fail -> @nish.PgConnection.fail
+  local +85:13 inFlight: i32 (const)
   callee +87:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +96:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +104:44 PgConnection.fail -> @nish.PgConnection.fail
-  callee +108:50 getU16BE -> @nish.getU16BE
-  callee +109:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +114:14 PgConnection.readDescription -> @nish.PgConnection.readDescription
-  callee +119:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +124:12 PgConnection.fail -> @nish.PgConnection.fail
+  callee +95:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee +98:14 PgConnection.readRow -> @nish.PgConnection.readRow
+  callee +102:23 pgFind -> @nish.pgFind
+  callee +103:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee +112:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee +120:44 PgConnection.fail -> @nish.PgConnection.fail
+  callee +124:38 getU16BE -> @nish.getU16BE
+  callee +125:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee +130:14 PgConnection.readDescription -> @nish.PgConnection.readDescription
+  callee +135:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee +140:12 PgConnection.fail -> @nish.PgConnection.fail
 function PgConnection.reserveColumns(this: PgConnection, n: i32): void -> @nish.PgConnection.reserveColumns [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: n
-  calls: nish_panic nish_panic_overflow nish_panic_slice
+  calls: nish_panic nish_panic_slice
   pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -13:11 have: i32 (const)
   local -7:11 size: i32 (const)
   local -6:11 starts: i32[] (const)
   local -5:11 lengths: i32[] (const)
@@ -1104,47 +1133,50 @@ function PgConnection.readRow(this: PgConnection, body: i32, end: i32): i32 -> @
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: body
-  calls: nish.PgConnection.fail nish.PgConnection.reserveColumns nish.getU16BE nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.reserveColumns#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
+  calls: nish.PgConnection.fail nish.PgConnection.reserveColumns nish.getU16BE
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.reserveColumns#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
   stackSites=0 stackLocals=0
-  callee -24:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -22:11 b: u8[] (const)
+  local -29:11 b: u8[] (const)
+  callee -26:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee -23:14 PgConnection.fail -> @nish.PgConnection.fail
   local -21:11 n: i32 (const)
   callee -21:26 getU16BE -> @nish.getU16BE
-  callee -19:14 PgConnection.fail -> @nish.PgConnection.fail
-  callee -17:5 PgConnection.reserveColumns -> @nish.PgConnection.reserveColumns
-  local -16:11 starts: i32[] (const)
-  local -15:11 lengths: i32[] (const)
-  local -14:9 p: i32 (let)
+  local -20:9 p: i32 (let)
+  callee -18:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee -16:5 PgConnection.reserveColumns -> @nish.PgConnection.reserveColumns
+  local -15:11 starts: i32[] (const)
+  local -14:11 lengths: i32[] (const)
   local -12:14 c: i32 (let)
   callee -9:16 PgConnection.fail -> @nish.PgConnection.fail
   local -6:13 length: i32 (const)
   callee -2:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +7:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee +8:14 PgConnection.fail -> @nish.PgConnection.fail
 function PgConnection.readDescription(this: PgConnection, body: i32, end: i32): i32 -> @nish.PgConnection.readDescription [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: body end
-  calls: nish.PgConnection.fail nish.PgConnection.reserveColumns nish.getI32BE nish.getU16BE nish.pgFind nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.reserveColumns#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
+  calls: nish.PgConnection.fail nish.PgConnection.reserveColumns nish.getI32BE nish.getU16BE nish.pgFind
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.reserveColumns#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
   stackSites=0 stackLocals=0
-  callee -14:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -12:11 b: u8[] (const)
-  local -11:11 n: i32 (const)
-  callee -11:26 getU16BE -> @nish.getU16BE
-  callee -9:14 PgConnection.fail -> @nish.PgConnection.fail
-  callee -7:5 PgConnection.reserveColumns -> @nish.PgConnection.reserveColumns
-  local -6:9 p: i32 (let)
-  local -5:14 c: i32 (let)
-  local -4:13 nameEnd: i32 (const)
-  callee -4:28 pgFind -> @nish.pgFind
+  local -22:11 b: u8[] (const)
+  callee -19:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee -16:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -14:11 n: i32 (const)
+  callee -14:26 getU16BE -> @nish.getU16BE
+  local -13:9 p: i32 (let)
+  callee -11:14 PgConnection.fail -> @nish.PgConnection.fail
+  callee -9:5 PgConnection.reserveColumns -> @nish.PgConnection.reserveColumns
+  local -8:11 types: i32[] (const)
+  local -6:14 c: i32 (let)
+  local -5:13 nameEnd: i32 (const)
+  callee -5:28 pgFind -> @nish.pgFind
   callee -2:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee +0:26 getI32BE -> @nish.getI32BE
+  callee +0:18 getI32BE -> @nish.getI32BE
   callee +4:14 PgConnection.fail -> @nish.PgConnection.fail
 function PgConnection.readError(this: PgConnection, body: i32, end: i32): PgError | null -> @nish.PgConnection.readError [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: body end
-  calls: nish.PgError.constructor nish.pgFind nish_alloc_struct nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.PgError.constructor nish.pgFind nish_alloc_struct nish_panic_slice nish_str_new
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 b: u8[] (const)
@@ -1182,7 +1214,7 @@ function PgConnection.scramStart(this: PgConnection, body: i32, end: i32): i32 -
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: body end
-  calls: nish.PgConnection.endMessage nish.PgConnection.fail nish.PgConnection.firstBare nish.PgConnection.putCString nish.PgConnection.putI32 nish.PgConnection.putString nish.PgConnection.startMessage nish.pgBytesAre nish.pgFind nish_panic_overflow nish_str_concat
+  calls: nish.PgConnection.endMessage nish.PgConnection.fail nish.PgConnection.firstBare nish.PgConnection.putCString nish.PgConnection.putI32 nish.PgConnection.putString nish.PgConnection.startMessage nish.pgBytesAre nish.pgFind nish_str_concat
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.firstBare#0 nish.PgConnection.startMessage#0 nish.PgConnection.putCString#0 nish.PgConnection.putI32#0 nish.PgConnection.putString#0 nish.PgConnection.endMessage#0
   stackSites=0 stackLocals=0
   local -37:11 b: u8[] (const)
@@ -1213,36 +1245,40 @@ function PgConnection.scramContinue(this: PgConnection, body: i32, end: i32): i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: body end
-  calls: nish.PgConnection.dispose nish.PgConnection.endMessage nish.PgConnection.fail nish.PgConnection.firstBare nish.PgConnection.putString nish.PgConnection.startMessage nish.base64StdPadDecode nish.base64StdPadEncode nish.pgBytesAre nish.pgBytesOf nish.pgFind nish.scramSha256ClientProof nish.scramSha256SaltedPassword nish.scramSha256ServerSignature nish.wipe$$Secret$arr.u8 nish.wipe$arr.u8 nish_panic_overflow nish_panic_slice nish_str_concat nish_str_new
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.firstBare#0 nish.PgConnection.dispose#0 nish.PgConnection.startMessage#0 nish.PgConnection.putString#0 nish.PgConnection.endMessage#0
+  calls: nish.PgConnection.dispose nish.PgConnection.endMessage nish.PgConnection.fail nish.PgConnection.firstBare nish.PgConnection.putString nish.PgConnection.startMessage nish.base64StdPadDecode nish.base64StdPadEncode nish.pgBytesAre nish.pgBytesOf nish.pgFind nish.scramSha256ClientProof nish.scramSha256SaltedPassword nish.scramSha256ServerSignature nish.wipe$$Secret$arr.u8 nish.wipe$arr.u8 nish_panic_slice nish_str_concat nish_str_new
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.firstBare#0 nish.PgConnection.dispose#0 nish.PgConnection.startMessage#0 nish.PgConnection.putString#0 nish.PgConnection.endMessage#0
   stackSites=0 stackLocals=0
-  local -63:11 b: u8[] (const)
-  callee -61:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -59:11 nonceEnd: i32 (const)
-  callee -59:27 pgFind -> @nish.pgFind
-  local -58:11 saltEnd: i32 (const)
-  callee -58:26 pgFind -> @nish.pgFind
-  callee -54:8 pgBytesAre -> @nish.pgBytesAre
-  callee -53:8 pgBytesAre -> @nish.pgBytesAre
-  callee -51:8 pgBytesAre -> @nish.pgBytesAre
-  callee -49:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -46:11 ours: i32 (const)
-  callee -45:41 pgBytesAre -> @nish.pgBytesAre
-  callee -44:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -42:11 nonceStart: i32 (const)
-  local -41:11 digitsStart: i32 (const)
-  callee -39:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -37:14 i: i32 (let)
-  local -36:13 c: i32 (const)
-  callee -34:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -30:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -28:9 iterations: i32 (let)
-  local -27:14 i: i32 (let)
-  local -26:13 d: i32 (const)
-  callee -24:16 PgConnection.fail -> @nish.PgConnection.fail
-  callee -19:14 PgConnection.fail -> @nish.PgConnection.fail
-  local -17:11 salt: u8[] | null (const)
-  callee -17:31 base64StdPadDecode -> @nish.base64StdPadDecode
+  local -78:11 b: u8[] (const)
+  callee -76:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -72:11 nonceEnd: i32 (const)
+  callee -72:27 pgFind -> @nish.pgFind
+  callee -70:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -68:11 saltStart: i32 (const)
+  local -67:11 saltEnd: i32 (const)
+  callee -67:26 pgFind -> @nish.pgFind
+  callee -62:8 pgBytesAre -> @nish.pgBytesAre
+  callee -61:8 pgBytesAre -> @nish.pgBytesAre
+  callee -59:8 pgBytesAre -> @nish.pgBytesAre
+  callee -57:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -54:11 ours: i32 (const)
+  local -53:11 nonceAt: i32 (const)
+  callee -52:52 pgBytesAre -> @nish.pgBytesAre
+  callee -51:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -48:11 nonceStart: i32 (const)
+  local -47:11 digitsStart: i32 (const)
+  callee -45:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -43:14 i: i32 (let)
+  local -42:13 c: i32 (const)
+  callee -40:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee -36:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -34:9 iterations: i32 (let)
+  local -33:14 i: i32 (let)
+  local -32:13 d: i32 (const)
+  callee -30:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee -26:16 PgConnection.fail -> @nish.PgConnection.fail
+  callee -21:14 PgConnection.fail -> @nish.PgConnection.fail
+  local -19:11 salt: u8[] | null (const)
+  callee -19:31 base64StdPadDecode -> @nish.base64StdPadDecode
   callee -15:14 PgConnection.fail -> @nish.PgConnection.fail
   local -13:11 password: PgPassword (const)
   callee -11:14 PgConnection.fail -> @nish.PgConnection.fail
@@ -1269,11 +1305,11 @@ function PgConnection.scramFinal(this: PgConnection, body: i32, end: i32): i32 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: body
-  calls: nish.PgConnection.fail nish.base64StdPadDecode nish.pgBytesAre nish.timingSafeEqual nish.wipe$arr.u8 nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.PgConnection.fail nish.base64StdPadDecode nish.pgBytesAre nish.timingSafeEqual nish.wipe$arr.u8 nish_panic_slice nish_str_new
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0 nish.PgConnection.fail#0 nish.PgConnection.fail#0
   stackSites=0 stackLocals=0
   local -12:11 b: u8[] (const)
-  callee -11:28 pgBytesAre -> @nish.pgBytesAre
+  callee -11:51 pgBytesAre -> @nish.pgBytesAre
   callee -10:14 PgConnection.fail -> @nish.PgConnection.fail
   local -8:11 signature: u8[] | null (const)
   callee -8:36 base64StdPadDecode -> @nish.base64StdPadDecode
@@ -1281,30 +1317,37 @@ function PgConnection.scramFinal(this: PgConnection, body: i32, end: i32): i32 -
   callee -4:10 timingSafeEqual -> @nish.timingSafeEqual
   callee -3:14 PgConnection.fail -> @nish.PgConnection.fail
   callee -1:5 wipe<u8[]> -> @nish.wipe$arr.u8
-function PgConnection.room(this: PgConnection, size: i32): boolean -> @nish.PgConnection.room [exported method]
+function PgConnection.room(this: PgConnection, size: i64): boolean -> @nish.PgConnection.room [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.compactOutput
-  calls: nish.PgConnection.compactOutput nish_panic_overflow
+  calls: nish.PgConnection.compactOutput
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.compactOutput#0
   stackSites=0 stackLocals=0
-  local +0:11 queued: i32 (const)
-  callee +5:7 PgConnection.compactOutput -> @nish.PgConnection.compactOutput
-function PgConnection.tailRoom(this: PgConnection, size: i32): void -> @nish.PgConnection.tailRoom [exported method]
+  local +0:11 start: i32 (const)
+  local +1:11 end: i32 (const)
+  local +5:11 n: i32 (const)
+  callee +14:7 PgConnection.compactOutput -> @nish.PgConnection.compactOutput
+function PgConnection.tailRoom(this: PgConnection, size: i64): void -> @nish.PgConnection.tailRoom [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.compactOutput
-  calls: nish.PgConnection.compactOutput nish_panic_overflow
+  calls: nish.PgConnection.compactOutput
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.compactOutput#0
   stackSites=0 stackLocals=0
   callee +0:7 PgConnection.compactOutput -> @nish.PgConnection.compactOutput
 function PgConnection.compactOutput(this: PgConnection): void -> @nish.PgConnection.compactOutput [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.copyBytes nish_panic_overflow
+  calls: nish.copyBytes
   pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -5:11 shift: i32 (const)
+  local -8:11 shift: i32 (const)
+  local -7:11 end: i32 (const)
+  local -2:11 n: i32 (const)
   callee -1:5 copyBytes -> @nish.copyBytes
-function PgConnection.reserve(this: PgConnection, want: i32): void -> @nish.PgConnection.reserve [exported method]
+  local +3:11 bindAt: i32 (const)
+  local +4:11 countAt: i32 (const)
+  local +9:11 arrayAt: i32 (const)
+function PgConnection.reserve(this: PgConnection, want: i64): void -> @nish.PgConnection.reserve [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.grow
   escaping: want
@@ -1312,47 +1355,57 @@ function PgConnection.reserve(this: PgConnection, want: i32): void -> @nish.PgCo
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.grow#0
   stackSites=0 stackLocals=0
   callee +0:7 PgConnection.grow -> @nish.PgConnection.grow
-function PgConnection.grow(this: PgConnection, want: i32): void -> @nish.PgConnection.grow [exported method]
+function PgConnection.grow(this: PgConnection, want: i64): void -> @nish.PgConnection.grow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: want
-  calls: nish_panic nish_panic_overflow nish_panic_slice
+  calls: nish_panic nish_panic_slice
   pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -3:11 size: i32 (const)
-  local -2:11 grown: u8[] (const)
+  local -5:11 doubled: i64 (const)
+  local -4:11 grown: u8[] (const)
 function PgConnection.putByte(this: PgConnection, v: i32): void -> @nish.PgConnection.putByte [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish.PgConnection.reserve nish_panic_index nish_panic_overflow
+  sharedWrite: +0:7
+  calls: nish.PgConnection.reserve
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  callee -1:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -3:11 end: i32 (const)
+  local -2:11 b: u8[] (const)
+  callee +4:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local +5:11 grown: u8[] (const)
 function PgConnection.putI32(this: PgConnection, v: i32): void -> @nish.PgConnection.putI32 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: v
-  calls: nish.PgConnection.reserve nish.setI32BE nish_panic_overflow
+  calls: nish.PgConnection.reserve nish.setI32BE
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  callee -2:5 PgConnection.reserve -> @nish.PgConnection.reserve
-  callee -1:5 setI32BE -> @nish.setI32BE
+  local -4:11 end: i32 (const)
+  local -3:11 b: u8[] (const)
+  callee -1:7 setI32BE -> @nish.setI32BE
+  callee +3:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local +4:11 grown: u8[] (const)
+  callee +8:5 setI32BE -> @nish.setI32BE
 function PgConnection.putI16(this: PgConnection, v: i32): void -> @nish.PgConnection.putI16 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgConnection.reserve nish.setU16BE nish_panic_overflow
+  calls: nish.PgConnection.reserve nish.setU16BE
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  callee -2:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -7:11 end: i32 (const)
+  callee -6:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -5:11 b: u8[] (const)
   callee -1:5 setU16BE -> @nish.setU16BE
 function PgConnection.putString(this: PgConnection, text: string): void -> @nish.PgConnection.putString [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgConnection.reserve nish_panic_index nish_panic_overflow
+  calls: nish.PgConnection.reserve
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  local -3:11 n: i32 (const)
-  callee -2:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -8:11 n: i32 (const)
+  local -7:9 k: i32 (let)
+  callee -6:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -5:11 b: u8[] (const)
   local -1:14 i: i32 (let)
 function PgConnection.putCString(this: PgConnection, text: string): void -> @nish.PgConnection.putCString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1385,28 +1438,30 @@ function PgConnection.startMessage(this: PgConnection, type: i32): i32 -> @nish.
 function PgConnection.endMessage(this: PgConnection, at: i32): void -> @nish.PgConnection.endMessage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.setI32BE
-  calls: nish.setI32BE nish_panic_overflow
+  calls: nish.setI32BE
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:5 setI32BE -> @nish.setI32BE
+  local +0:11 end: i32 (const)
+  callee +5:5 setI32BE -> @nish.setI32BE
 function PgConnection.canSend(this: PgConnection): boolean -> @nish.PgConnection.canSend [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function PgConnection.canOpen(this: PgConnection, size: i32): boolean -> @nish.PgConnection.canOpen [exported method]
+function PgConnection.canOpen(this: PgConnection, size: i64): boolean -> @nish.PgConnection.canOpen [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: size
-  calls: nish.PgConnection.canSend nish.PgConnection.room nish_panic_overflow
+  calls: nish.PgConnection.canSend nish.PgConnection.room
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.canSend#0 nish.PgConnection.room#0
   stackSites=0 stackLocals=0
-  callee -4:10 PgConnection.canSend -> @nish.PgConnection.canSend
-  callee -4:49 PgConnection.room -> @nish.PgConnection.room
+  callee -9:10 PgConnection.canSend -> @nish.PgConnection.canSend
+  callee -9:49 PgConnection.room -> @nish.PgConnection.room
+  local -4:13 inFlight: i32 (const)
 function PgConnection.prepare(this: PgConnection, name: string, sql: string, paramTypes: i32[]): boolean -> @nish.PgConnection.prepare [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.canOpen
   escaping: name sql
-  calls: nish.PgConnection.canOpen nish.PgConnection.endMessage nish.PgConnection.putByte nish.PgConnection.putCString nish.PgConnection.putI16 nish.PgConnection.putI32 nish.PgConnection.startMessage nish.pgHasNul nish_panic_overflow
+  calls: nish.PgConnection.canOpen nish.PgConnection.endMessage nish.PgConnection.putByte nish.PgConnection.putCString nish.PgConnection.putI16 nish.PgConnection.putI32 nish.PgConnection.startMessage nish.pgHasNul
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.canOpen#0 nish.PgConnection.startMessage#0 nish.PgConnection.putCString#0 nish.PgConnection.putCString#0 nish.PgConnection.putI16#0 nish.PgConnection.putI32#0 nish.PgConnection.endMessage#0 nish.PgConnection.startMessage#0 nish.PgConnection.putByte#0 nish.PgConnection.putCString#0 nish.PgConnection.endMessage#0
   pointer paramTypes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1415,25 +1470,25 @@ function PgConnection.prepare(this: PgConnection, name: string, sql: string, par
   callee +2:9 pgHasNul -> @nish.pgHasNul
   callee +2:27 pgHasNul -> @nish.pgHasNul
   local +5:11 sqlLength: i32 (const)
-  callee +6:36 PgConnection.canOpen -> @nish.PgConnection.canOpen
-  local +9:11 at: i32 (const)
-  callee +9:21 PgConnection.startMessage -> @nish.PgConnection.startMessage
-  callee +10:5 PgConnection.putCString -> @nish.PgConnection.putCString
-  callee +11:5 PgConnection.putCString -> @nish.PgConnection.putCString
-  callee +12:5 PgConnection.putI16 -> @nish.PgConnection.putI16
-  local +13:16 oid: i32 (const)
-  callee +14:7 PgConnection.putI32 -> @nish.PgConnection.putI32
-  callee +16:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
-  local +17:11 describe: i32 (const)
-  callee +17:27 PgConnection.startMessage -> @nish.PgConnection.startMessage
-  callee +18:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +19:5 PgConnection.putCString -> @nish.PgConnection.putCString
-  callee +20:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
+  callee +8:8 PgConnection.canOpen -> @nish.PgConnection.canOpen
+  local +12:11 at: i32 (const)
+  callee +12:21 PgConnection.startMessage -> @nish.PgConnection.startMessage
+  callee +13:5 PgConnection.putCString -> @nish.PgConnection.putCString
+  callee +14:5 PgConnection.putCString -> @nish.PgConnection.putCString
+  callee +15:5 PgConnection.putI16 -> @nish.PgConnection.putI16
+  local +16:16 oid: i32 (const)
+  callee +17:7 PgConnection.putI32 -> @nish.PgConnection.putI32
+  callee +19:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
+  local +20:11 describe: i32 (const)
+  callee +20:27 PgConnection.startMessage -> @nish.PgConnection.startMessage
+  callee +21:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +22:5 PgConnection.putCString -> @nish.PgConnection.putCString
+  callee +23:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
 function PgConnection.closeStatement(this: PgConnection, name: string): boolean -> @nish.PgConnection.closeStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.canOpen
   escaping: name
-  calls: nish.PgConnection.canOpen nish.PgConnection.endMessage nish.PgConnection.putByte nish.PgConnection.putCString nish.PgConnection.startMessage nish.pgHasNul nish_panic_overflow
+  calls: nish.PgConnection.canOpen nish.PgConnection.endMessage nish.PgConnection.putByte nish.PgConnection.putCString nish.PgConnection.startMessage nish.pgHasNul
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.canOpen#0 nish.PgConnection.startMessage#0 nish.PgConnection.putByte#0 nish.PgConnection.putCString#0 nish.PgConnection.endMessage#0
   stackSites=0 stackLocals=0
   callee +0:9 pgHasNul -> @nish.pgHasNul
@@ -1463,13 +1518,13 @@ function PgConnection.openBind(this: PgConnection, name: string, binary: boolean
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: binary name
-  calls: nish.PgConnection.canOpen nish.PgConnection.putByte nish.PgConnection.putCString nish.PgConnection.putI16 nish.PgConnection.startMessage nish.pgHasNul nish_panic_overflow
+  calls: nish.PgConnection.canOpen nish.PgConnection.putByte nish.PgConnection.putCString nish.PgConnection.putI16 nish.PgConnection.startMessage nish.pgHasNul
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.canOpen#0 nish.PgConnection.startMessage#0 nish.PgConnection.putByte#0 nish.PgConnection.putCString#0 nish.PgConnection.putI16#0 nish.PgConnection.putI16#0
   stackSites=0 stackLocals=0
-  local -5:11 opens: boolean (const)
-  local -4:11 extra: i32 (const)
-  callee -3:9 pgHasNul -> @nish.pgHasNul
-  callee -3:63 PgConnection.canOpen -> @nish.PgConnection.canOpen
+  local -9:11 opens: boolean (const)
+  local -8:11 extra: i32 (const)
+  callee -6:7 pgHasNul -> @nish.pgHasNul
+  callee -4:8 PgConnection.canOpen -> @nish.PgConnection.canOpen
   callee +4:19 PgConnection.startMessage -> @nish.PgConnection.startMessage
   callee +5:5 PgConnection.putByte -> @nish.PgConnection.putByte
   callee +6:5 PgConnection.putCString -> @nish.PgConnection.putCString
@@ -1478,33 +1533,38 @@ function PgConnection.openBind(this: PgConnection, name: string, binary: boolean
 function PgConnection.startParam(this: PgConnection, size: i32): i32 -> @nish.PgConnection.startParam [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgConnection.noArrayOpen nish.PgConnection.putI32 nish.PgConnection.room nish_panic_overflow
+  calls: nish.PgConnection.noArrayOpen nish.PgConnection.putI32 nish.PgConnection.room
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.noArrayOpen#0 nish.PgConnection.room#0 nish.PgConnection.putI32#0
   stackSites=0 stackLocals=0
-  callee -6:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
-  local -4:11 owed: i32 (const)
-  callee -3:79 PgConnection.room -> @nish.PgConnection.room
+  callee -14:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
+  local -12:11 owed: i32 (const)
+  local -11:11 count: i32 (const)
+  callee -5:8 PgConnection.room -> @nish.PgConnection.room
   local +2:11 at: i32 (const)
   callee +3:5 PgConnection.putI32 -> @nish.PgConnection.putI32
 function PgConnection.startBinaryParam(this: PgConnection, size: i32): i32 -> @nish.PgConnection.startBinaryParam [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgConnection.noArrayOpen nish.PgConnection.putI32 nish.PgConnection.room nish_array_grow nish_panic_index nish_panic_overflow
+  calls: nish.PgConnection.noArrayOpen nish.PgConnection.putI32 nish.PgConnection.room nish_array_grow
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.noArrayOpen#0 nish.PgConnection.room#0 nish.PgConnection.putI32#0
   stackSites=0 stackLocals=0
-  callee -6:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
-  local -5:11 owed: i32 (const)
-  callee -4:79 PgConnection.room -> @nish.PgConnection.room
-  local +7:11 at: i32 (const)
-  callee +8:5 PgConnection.putI32 -> @nish.PgConnection.putI32
+  callee -13:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
+  local -12:11 count: i32 (const)
+  local -11:11 binary: i32 (const)
+  local -6:11 owed: i32 (const)
+  callee -5:31 PgConnection.room -> @nish.PgConnection.room
+  local -2:11 params: i32[] (const)
+  local +8:11 at: i32 (const)
+  callee +9:5 PgConnection.putI32 -> @nish.PgConnection.putI32
 function PgConnection.endParam(this: PgConnection, at: i32): void -> @nish.PgConnection.endParam [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.setI32BE
   escaping: at
-  calls: nish.setI32BE nish_panic_overflow
+  calls: nish.setI32BE
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:5 setI32BE -> @nish.setI32BE
+  local +0:11 end: i32 (const)
+  callee +5:5 setI32BE -> @nish.setI32BE
 function PgConnection.noArrayOpen(this: PgConnection): void -> @nish.PgConnection.noArrayOpen [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
@@ -1525,24 +1585,26 @@ function PgConnection.paramBytes(this: PgConnection, bytes: u8[], start: i32, le
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: length start
-  calls: nish.PgConnection.endParam nish.PgConnection.noArrayOpen nish.PgConnection.reserve nish.PgConnection.startParam nish.copyBytes nish_panic_overflow
+  calls: nish.PgConnection.endParam nish.PgConnection.noArrayOpen nish.PgConnection.reserve nish.PgConnection.startParam nish.copyBytes
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.noArrayOpen#0 nish.PgConnection.startParam#0 nish.PgConnection.reserve#0 nish.PgConnection.endParam#0
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
   stackSites=0 stackLocals=0
-  callee -10:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
-  local -6:11 at: i32 (const)
-  callee -6:21 PgConnection.startParam -> @nish.PgConnection.startParam
-  callee -2:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  callee -15:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
+  local -11:11 at: i32 (const)
+  callee -11:21 PgConnection.startParam -> @nish.PgConnection.startParam
+  local -7:11 end: i32 (const)
+  callee -6:5 PgConnection.reserve -> @nish.PgConnection.reserve
   callee -1:5 copyBytes -> @nish.copyBytes
   callee +1:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.paramNull(this: PgConnection): boolean -> @nish.PgConnection.paramNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.startParam
-  calls: nish.PgConnection.startParam nish.setI32BE nish_panic_overflow
+  calls: nish.PgConnection.startParam nish.setI32BE
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.startParam#0
   stackSites=0 stackLocals=0
-  callee +0:9 PgConnection.startParam -> @nish.PgConnection.startParam
-  callee +3:5 setI32BE -> @nish.setI32BE
+  local +0:11 at: i32 (const)
+  callee +0:21 PgConnection.startParam -> @nish.PgConnection.startParam
+  callee +5:5 setI32BE -> @nish.setI32BE
 function PgConnection.paramInt(this: PgConnection, value: i64): boolean -> @nish.PgConnection.paramInt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.startParam
@@ -1556,76 +1618,77 @@ function PgConnection.paramInt(this: PgConnection, value: i64): boolean -> @nish
   callee +5:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.putDecimal(this: PgConnection, value: i64): void -> @nish.PgConnection.putDecimal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: value
-  calls: nish.PgConnection.reserve nish.pgDecimalLength nish.pgPutDecimal nish_panic_overflow
+  calls: nish.PgConnection.reserve nish.pgDecimalLength nish.pgPutDecimal
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  local -2:11 n: i32 (const)
-  callee -2:20 pgDecimalLength -> @nish.pgDecimalLength
-  callee -1:5 PgConnection.reserve -> @nish.PgConnection.reserve
-  callee +0:19 pgPutDecimal -> @nish.pgPutDecimal
+  local -5:11 n: i32 (const)
+  callee -5:20 pgDecimalLength -> @nish.pgDecimalLength
+  callee -4:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -2:11 end: i32 (const)
+  callee -2:22 pgPutDecimal -> @nish.pgPutDecimal
 function PgConnection.paramIntArray(this: PgConnection, values: i64[], start: i32, count: i32): boolean -> @nish.PgConnection.paramIntArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.startParam
   escaping: start
-  calls: nish.PgConnection.endParam nish.PgConnection.putByte nish.PgConnection.putDecimal nish.PgConnection.startParam nish.pgDecimalLength nish_panic nish_panic_overflow
+  calls: nish.PgConnection.endParam nish.PgConnection.putByte nish.PgConnection.putDecimal nish.PgConnection.startParam nish.pgDecimalLength nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.startParam#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putDecimal#0 nish.PgConnection.putByte#0 nish.PgConnection.endParam#0
   pointer values: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 end: i32 (const)
-  local +2:9 size: i64 (let)
-  local +3:14 i: i32 (let)
-  callee +4:21 pgDecimalLength -> @nish.pgDecimalLength
-  local +6:11 at: i32 (const)
-  callee +6:21 PgConnection.startParam -> @nish.PgConnection.startParam
-  callee +10:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  local +11:14 i: i32 (let)
-  local +13:13 value: i64 (const)
-  callee +15:9 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +17:7 PgConnection.putDecimal -> @nish.PgConnection.putDecimal
-  callee +19:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +20:5 PgConnection.endParam -> @nish.PgConnection.endParam
+  local +3:9 size: i64 (let)
+  local +5:11 i: i32 (let)
+  callee +9:21 pgDecimalLength -> @nish.pgDecimalLength
+  local +11:11 at: i32 (const)
+  callee +11:21 PgConnection.startParam -> @nish.PgConnection.startParam
+  callee +15:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  local +16:14 i: i32 (let)
+  local +18:13 value: i64 (const)
+  callee +20:9 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +22:7 PgConnection.putDecimal -> @nish.PgConnection.putDecimal
+  callee +24:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +25:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.paramTextArray(this: PgConnection, items: string[]): boolean -> @nish.PgConnection.paramTextArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.startParam
-  calls: nish.PgConnection.endParam nish.PgConnection.putByte nish.PgConnection.startParam nish_panic_overflow
+  calls: nish.PgConnection.endParam nish.PgConnection.putByte nish.PgConnection.startParam
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.startParam#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.endParam#0
   pointer items: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 size: i64 (let)
   local +1:16 item: string (const)
-  local +3:13 n: i32 (const)
-  local +4:16 i: i32 (let)
-  local +5:15 c: i32 (const)
-  local +11:11 at: i32 (const)
-  callee +11:21 PgConnection.startParam -> @nish.PgConnection.startParam
-  callee +15:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  local +16:9 first: boolean (let)
-  local +17:16 item: string (const)
-  callee +19:9 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +22:7 PgConnection.putByte -> @nish.PgConnection.putByte
-  local +23:13 n: i32 (const)
-  local +24:16 i: i32 (let)
-  local +25:15 c: i32 (const)
-  callee +27:11 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +29:9 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +31:7 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +33:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +34:5 PgConnection.endParam -> @nish.PgConnection.endParam
+  local +2:13 n: i32 (const)
+  local +7:16 i: i32 (let)
+  local +8:15 c: i32 (const)
+  local +17:11 at: i32 (const)
+  callee +17:21 PgConnection.startParam -> @nish.PgConnection.startParam
+  callee +21:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  local +22:9 first: boolean (let)
+  local +23:16 item: string (const)
+  callee +25:9 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +28:7 PgConnection.putByte -> @nish.PgConnection.putByte
+  local +29:13 n: i32 (const)
+  local +30:16 i: i32 (let)
+  local +31:15 c: i32 (const)
+  callee +33:11 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +35:9 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +37:7 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +39:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +40:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.paramInt4Array(this: PgConnection, values: i64[], start: i32, count: i32): boolean -> @nish.PgConnection.paramInt4Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.paramBinaryInts
   escaping: count start
-  calls: nish.PgConnection.paramBinaryInts nish.pgFitsInt4 nish.pgIntWindow nish_panic nish_panic_overflow
+  calls: nish.PgConnection.paramBinaryInts nish.pgFitsInt4 nish.pgIntWindow nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.paramBinaryInts#0
   pointer values: size=0 writesThrough=true captured=false passedTo=nish.pgIntWindow#0 nish.PgConnection.paramBinaryInts#1
   stackSites=0 stackLocals=0
   callee +0:5 pgIntWindow -> @nish.pgIntWindow
-  local +1:11 end: i32 (const)
-  local +2:14 i: i32 (let)
-  callee +3:12 pgFitsInt4 -> @nish.pgFitsInt4
-  callee +7:12 PgConnection.paramBinaryInts -> @nish.PgConnection.paramBinaryInts
+  local +2:11 end: i32 (const)
+  local +3:14 i: i32 (let)
+  callee +4:12 pgFitsInt4 -> @nish.pgFitsInt4
+  callee +8:12 PgConnection.paramBinaryInts -> @nish.PgConnection.paramBinaryInts
 function PgConnection.paramInt8Array(this: PgConnection, values: i64[], start: i32, count: i32): boolean -> @nish.PgConnection.paramInt8Array [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.paramBinaryInts
@@ -1638,24 +1701,28 @@ function PgConnection.paramInt8Array(this: PgConnection, values: i64[], start: i
   callee +1:12 PgConnection.paramBinaryInts -> @nish.PgConnection.paramBinaryInts
 function PgConnection.paramBinaryInts(this: PgConnection, values: i64[], start: i32, count: i32, oid: i32): boolean -> @nish.PgConnection.paramBinaryInts [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   escaping: count oid start
-  calls: nish.PgConnection.endParam nish.PgConnection.putArrayHeader nish.PgConnection.reserve nish.PgConnection.startBinaryParam nish.setI32BE nish.setI64BE nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.startBinaryParam#0 nish.PgConnection.reserve#0 nish.PgConnection.putArrayHeader#0 nish.PgConnection.endParam#0
+  calls: nish.PgConnection.endParam nish.PgConnection.noArrayOpen nish.PgConnection.putArrayHeader nish.PgConnection.reserve nish.PgConnection.startBinaryParam nish.setI32BE nish.setI64BE
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.noArrayOpen#0 nish.PgConnection.startBinaryParam#0 nish.PgConnection.reserve#0 nish.PgConnection.putArrayHeader#0 nish.PgConnection.endParam#0
   pointer values: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -20:11 width: i32 (const)
-  local -18:11 size: i64 (const)
-  local -14:11 at: i32 (const)
-  callee -14:21 PgConnection.startBinaryParam -> @nish.PgConnection.startBinaryParam
-  callee -10:5 PgConnection.reserve -> @nish.PgConnection.reserve
-  callee -9:5 PgConnection.putArrayHeader -> @nish.PgConnection.putArrayHeader
-  local -8:11 end: i32 (const)
-  local -7:14 i: i32 (let)
-  callee -6:7 setI32BE -> @nish.setI32BE
-  callee -4:9 setI32BE -> @nish.setI32BE
-  callee -2:9 setI64BE -> @nish.setI64BE
-  callee +2:5 PgConnection.endParam -> @nish.PgConnection.endParam
+  local -42:11 width: i32 (const)
+  callee -41:5 PgConnection.noArrayOpen -> @nish.PgConnection.noArrayOpen
+  local -35:9 size: i64 (let)
+  local -28:11 at: i32 (const)
+  callee -28:21 PgConnection.startBinaryParam -> @nish.PgConnection.startBinaryParam
+  callee -24:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  callee -23:5 PgConnection.putArrayHeader -> @nish.PgConnection.putArrayHeader
+  local -22:11 b: u8[] (const)
+  local -21:9 p: i32 (let)
+  local -19:11 end: i32 (const)
+  local -17:14 i: i32 (let)
+  callee -12:9 setI32BE -> @nish.setI32BE
+  callee -11:9 setI32BE -> @nish.setI32BE
+  callee -5:9 setI32BE -> @nish.setI32BE
+  callee -4:9 setI64BE -> @nish.setI64BE
+  callee +1:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.putArrayHeader(this: PgConnection, oid: i32, count: i32): void -> @nish.PgConnection.putArrayHeader [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.putI32
@@ -1685,7 +1752,7 @@ function PgConnection.arrayOpen(this: PgConnection): void -> @nish.PgConnection.
 function PgConnection.elementRoom(this: PgConnection, size: i64): boolean -> @nish.PgConnection.elementRoom [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.room
-  calls: nish.PgConnection.room nish_panic_overflow
+  calls: nish.PgConnection.room
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.room#0
   stackSites=0 stackLocals=0
   local +0:11 total: i64 (const)
@@ -1694,19 +1761,20 @@ function PgConnection.arrayElement(this: PgConnection, bytes: u8[], start: i32, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: length start
-  calls: nish.PgConnection.arrayOpen nish.PgConnection.elementComma nish.PgConnection.elementRoom nish.PgConnection.putByte nish.PgConnection.reserve nish.copyBytes nish_panic nish_panic_overflow
+  calls: nish.PgConnection.arrayOpen nish.PgConnection.elementComma nish.PgConnection.elementRoom nish.PgConnection.putByte nish.PgConnection.reserve nish.copyBytes nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.arrayOpen#0 nish.PgConnection.elementRoom#0 nish.PgConnection.elementComma#0 nish.PgConnection.putByte#0 nish.PgConnection.reserve#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
   stackSites=0 stackLocals=0
-  callee -21:5 PgConnection.arrayOpen -> @nish.PgConnection.arrayOpen
-  local -16:11 end: i32 (const)
-  local -15:9 escapes: i32 (let)
-  local -14:14 i: i32 (let)
-  local -13:13 c: i32 (const)
-  callee -8:10 PgConnection.elementRoom -> @nish.PgConnection.elementRoom
-  callee -5:5 PgConnection.elementComma -> @nish.PgConnection.elementComma
-  callee -4:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee -3:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  callee -28:5 PgConnection.arrayOpen -> @nish.PgConnection.arrayOpen
+  local -22:11 end: i32 (const)
+  local -21:9 escapes: i32 (let)
+  local -20:14 i: i32 (let)
+  local -19:13 c: i32 (const)
+  callee -13:10 PgConnection.elementRoom -> @nish.PgConnection.elementRoom
+  callee -10:5 PgConnection.elementComma -> @nish.PgConnection.elementComma
+  callee -9:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  local -8:11 at: i32 (const)
+  callee -7:5 PgConnection.reserve -> @nish.PgConnection.reserve
   callee -1:7 copyBytes -> @nish.copyBytes
   local +2:16 i: i32 (let)
   local +3:15 c: i32 (const)
@@ -1726,10 +1794,12 @@ function PgConnection.arrayNull(this: PgConnection): boolean -> @nish.PgConnecti
 function PgConnection.elementComma(this: PgConnection): void -> @nish.PgConnection.elementComma [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgConnection.putByte nish_panic_overflow
+  calls: nish.PgConnection.putByte nish.pgCountUp
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.putByte#0
   stackSites=0 stackLocals=0
+  local -4:11 count: i32 (const)
   callee -2:7 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +0:23 pgCountUp -> @nish.pgCountUp
 function PgConnection.arrayInt(this: PgConnection, value: i64): boolean -> @nish.PgConnection.arrayInt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.elementRoom
@@ -1761,43 +1831,47 @@ function PgConnection.binaryArrayInt(this: PgConnection, value: i64): boolean ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: value
-  calls: nish.PgConnection.binaryArrayOpen nish.PgConnection.putI32 nish.PgConnection.reserve nish.PgConnection.room nish.pgFitsInt4 nish.setI64BE nish_panic nish_panic_overflow
+  calls: nish.PgConnection.binaryArrayOpen nish.PgConnection.putI32 nish.PgConnection.reserve nish.PgConnection.room nish.pgCountUp nish.pgFitsInt4 nish.setI64BE nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.binaryArrayOpen#0 nish.PgConnection.room#0 nish.PgConnection.putI32#0 nish.PgConnection.putI32#0 nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  callee -14:5 PgConnection.binaryArrayOpen -> @nish.PgConnection.binaryArrayOpen
-  local -13:11 width: i32 (const)
-  callee -12:25 pgFitsInt4 -> @nish.pgFitsInt4
-  callee -9:10 PgConnection.room -> @nish.PgConnection.room
-  callee -6:5 PgConnection.putI32 -> @nish.PgConnection.putI32
-  callee -4:7 PgConnection.putI32 -> @nish.PgConnection.putI32
-  callee -2:7 PgConnection.reserve -> @nish.PgConnection.reserve
+  callee -19:5 PgConnection.binaryArrayOpen -> @nish.PgConnection.binaryArrayOpen
+  local -18:11 width: i32 (const)
+  callee -17:25 pgFitsInt4 -> @nish.pgFitsInt4
+  callee -14:10 PgConnection.room -> @nish.PgConnection.room
+  callee -11:5 PgConnection.putI32 -> @nish.PgConnection.putI32
+  callee -9:7 PgConnection.putI32 -> @nish.PgConnection.putI32
+  local -7:13 at: i32 (const)
+  callee -6:7 PgConnection.reserve -> @nish.PgConnection.reserve
   callee -1:7 setI64BE -> @nish.setI64BE
+  callee +2:23 pgCountUp -> @nish.pgCountUp
 function PgConnection.binaryArrayNull(this: PgConnection): boolean -> @nish.PgConnection.binaryArrayNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgConnection.binaryArrayOpen nish.PgConnection.putI32 nish.PgConnection.room nish_panic_overflow
+  calls: nish.PgConnection.binaryArrayOpen nish.PgConnection.putI32 nish.PgConnection.room nish.pgCountUp
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.binaryArrayOpen#0 nish.PgConnection.room#0 nish.PgConnection.putI32#0
   stackSites=0 stackLocals=0
   callee -5:5 PgConnection.binaryArrayOpen -> @nish.PgConnection.binaryArrayOpen
   callee -4:10 PgConnection.room -> @nish.PgConnection.room
   callee -1:5 PgConnection.putI32 -> @nish.PgConnection.putI32
+  callee +1:23 pgCountUp -> @nish.pgCountUp
 function PgConnection.arrayEnd(this: PgConnection): void -> @nish.PgConnection.arrayEnd [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
-  calls: nish.PgConnection.endParam nish.PgConnection.putByte nish.PgConnection.tailRoom nish.setI32BE nish_panic nish_panic_overflow
+  sharedWrite: +0:11
+  calls: nish.PgConnection.endParam nish.PgConnection.putByte nish.PgConnection.tailRoom nish.setI32BE nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.tailRoom#0 nish.PgConnection.putByte#0 nish.PgConnection.endParam#0
   stackSites=0 stackLocals=0
-  local -3:13 header: i32 (const)
-  callee -1:9 setI32BE -> @nish.setI32BE
-  callee +2:9 setI32BE -> @nish.setI32BE
-  callee +3:9 setI32BE -> @nish.setI32BE
-  callee +7:7 PgConnection.tailRoom -> @nish.PgConnection.tailRoom
-  callee +8:7 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +10:5 PgConnection.endParam -> @nish.PgConnection.endParam
+  local -5:13 at: i32 (const)
+  local -3:15 header: i32 (const)
+  callee -1:11 setI32BE -> @nish.setI32BE
+  callee +2:11 setI32BE -> @nish.setI32BE
+  callee +3:11 setI32BE -> @nish.setI32BE
+  callee +8:7 PgConnection.tailRoom -> @nish.PgConnection.tailRoom
+  callee +9:7 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +11:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.bindEnd(this: PgConnection): boolean -> @nish.PgConnection.bindEnd [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgConnection.endMessage nish.PgConnection.putByte nish.PgConnection.putFormatCodes nish.PgConnection.putI16 nish.PgConnection.putI32 nish.PgConnection.startMessage nish.PgConnection.tailRoom nish.setU16BE nish_panic nish_panic_overflow
+  calls: nish.PgConnection.endMessage nish.PgConnection.putByte nish.PgConnection.putFormatCodes nish.PgConnection.putI16 nish.PgConnection.putI32 nish.PgConnection.startMessage nish.PgConnection.tailRoom nish.setU16BE nish_panic
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.tailRoom#0 nish.PgConnection.putFormatCodes#0 nish.PgConnection.putI16#0 nish.PgConnection.putI16#0 nish.PgConnection.putI16#0 nish.PgConnection.endMessage#0 nish.PgConnection.startMessage#0 nish.PgConnection.putByte#0 nish.PgConnection.putI32#0 nish.PgConnection.endMessage#0
   stackSites=0 stackLocals=0
   local -15:11 binary: boolean (const)
@@ -1815,12 +1889,13 @@ function PgConnection.bindEnd(this: PgConnection): boolean -> @nish.PgConnection
   callee +4:5 PgConnection.putI32 -> @nish.PgConnection.putI32
   callee +5:5 PgConnection.endMessage -> @nish.PgConnection.endMessage
 function PgConnection.bindCancel(this: PgConnection): boolean -> @nish.PgConnection.bindCancel [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgConnection.dropBind nish_panic_overflow
+  calls: nish.PgConnection.dropBind
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.dropBind#0
   stackSites=0 stackLocals=0
-  callee -2:5 PgConnection.dropBind -> @nish.PgConnection.dropBind
+  callee -4:5 PgConnection.dropBind -> @nish.PgConnection.dropBind
+  local -2:11 inFlight: i32 (const)
 function PgConnection.dropBind(this: PgConnection): void -> @nish.PgConnection.dropBind [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1829,18 +1904,25 @@ function PgConnection.dropBind(this: PgConnection): void -> @nish.PgConnection.d
 function PgConnection.putFormatCodes(this: PgConnection): void -> @nish.PgConnection.putFormatCodes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgConnection.reserve nish.copyBytes nish.setU16BE nish_panic_overflow
+  calls: nish.PgConnection.reserve nish.copyBytes nish.setU16BE
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  local -4:11 from: i32 (const)
-  local -3:11 codes: i32 (const)
-  callee -2:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -17:11 from: i32 (const)
+  local -16:11 count: i32 (const)
+  local -15:11 end: i32 (const)
+  local -9:11 codes: i32 (const)
+  callee -8:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  local -7:11 b: u8[] (const)
+  local -2:11 moved: i32 (const)
   callee -1:5 copyBytes -> @nish.copyBytes
   callee +1:5 setU16BE -> @nish.setU16BE
-  local +2:14 i: i32 (let)
-  callee +3:7 setU16BE -> @nish.setU16BE
-  local +5:14 k: i32 (let)
-  callee +6:7 setU16BE -> @nish.setU16BE
+  local +3:14 i: i32 (let)
+  local +4:13 at: i32 (const)
+  callee +8:7 setU16BE -> @nish.setU16BE
+  local +10:11 params: i32[] (const)
+  local +11:14 k: i32 (let)
+  local +12:13 param: i32 (const)
+  callee +16:7 setU16BE -> @nish.setU16BE
 function PgConnection.sync(this: PgConnection): boolean -> @nish.PgConnection.sync [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1883,7 +1965,7 @@ function PgConnection.isNull(this: PgConnection, c: i32): boolean -> @nish.PgCon
 function PgConnection.columnText(this: PgConnection, c: i32): string -> @nish.PgConnection.columnText [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: c
-  calls: nish_panic_index nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish_panic_index nish_panic_slice nish_str_new
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 length: i32 (const)
@@ -1935,21 +2017,28 @@ function PgConnection.binaryFloat(this: PgConnection, c: i32): f64 -> @nish.PgCo
   stackSites=0 stackLocals=0
   callee +0:12 PgBinary.float -> @nish.PgBinary.float
 function PgConnection.tagIs(this: PgConnection, word: string): boolean -> @nish.PgConnection.tagIs [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: word
-  calls: nish.pgBytesAre nish_panic_index nish_panic_overflow
+  calls: nish.pgBytesAre
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
-  callee +1:32 pgBytesAre -> @nish.pgBytesAre
+  local +1:11 start: i32 (const)
+  local +2:11 b: u8[] (const)
+  callee +3:32 pgBytesAre -> @nish.pgBytesAre
+  local +10:11 at: i32 (const)
 function PgConnection.tagRows(this: PgConnection): i64 -> @nish.PgConnection.tagRows [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.PgText.int nish_panic_index nish_panic_overflow
+  calls: nish.PgText.int
   pointer this: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -10:11 end: i32 (const)
-  local -9:9 p: i32 (let)
+  local -24:11 start: i32 (const)
+  local -23:11 b: u8[] (const)
+  local -22:11 last: i64 (const)
+  local -17:11 end: i32 (const)
+  local -13:9 p: i32 (let)
+  local -11:13 digit: i32 (const)
   local -1:11 failed: boolean (const)
   local +1:11 rows: i64 (const)
   callee +1:23 PgText.int -> @nish.PgText.int
@@ -1958,22 +2047,50 @@ function PgPoolSlot.constructor(this: PgPoolSlot, ring: i32): void -> @nish.PgPo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: ring
   calls: nish_panic
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function PgPoolSlot.push(this: PgPoolSlot, ticket: i32, leads: i32): void -> @nish.PgPoolSlot.push [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function PgPoolSlot.push(this: PgPoolSlot, ticket: i32, leads: i32): boolean -> @nish.PgPoolSlot.push [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: leads ticket
-  calls: nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -1:11 at: i32 (const)
+  local -16:11 tickets: i32[] (const)
+  local -15:11 leadCounts: i32[] (const)
+  local -14:11 head: i32 (const)
+  local -13:11 count: i32 (const)
+  local -12:11 size: i32 (const)
+  local -6:11 sum: i64 (const)
+  local -5:11 at: i32 (const)
 function PgPoolSlot.pop(this: PgPoolSlot): void -> @nish.PgPoolSlot.pop [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_div nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -8:11 head: i32 (const)
+  local -7:11 count: i32 (const)
+  local -6:11 size: i32 (const)
+  local -1:11 after: i32 (const)
+function PgPoolSlot.oldest(this: PgPoolSlot): i32 -> @nish.PgPoolSlot.oldest [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 tickets: i32[] (const)
+  local +1:11 head: i32 (const)
+function PgPoolSlot.leading(this: PgPoolSlot): i32 -> @nish.PgPoolSlot.leading [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 leadCounts: i32[] (const)
+  local +1:11 head: i32 (const)
+function PgPoolSlot.setLeading(this: PgPoolSlot, n: i32): void -> @nish.PgPoolSlot.setLeading [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: n
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -6:11 leadCounts: i32[] (const)
+  local -5:11 head: i32 (const)
 function PgPool.constructor(this: PgPool, config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32): void -> @nish.PgPool.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: config queueSize size
@@ -2011,98 +2128,142 @@ function PgPool.register(this: PgPool, name: string, sql: string, paramTypes: i3
   local -4:11 types: i32[] (const)
   local -3:16 oid: i32 (const)
 function PgPool.request(this: PgPool): i32 -> @nish.PgPool.request [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_div nish_panic_index nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -5:11 room: i32 (const)
+  local -17:11 queue: i32[] (const)
+  local -16:11 room: i32 (const)
+  local -15:11 head: i32 (const)
+  local -14:11 count: i32 (const)
+  local -7:11 sum: i64 (const)
+  local -6:11 at: i32 (const)
   local -1:11 ticket: i32 (const)
 function PgPool.waiting(this: PgPool): i32 -> @nish.PgPool.waiting [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgPool.inFlight(this: PgPool): i32 -> @nish.PgPool.inFlight [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (let)
   local +1:16 slot: PgPoolSlot (const)
+  local +2:13 count: i32 (const)
 function PgPool.dispatch(this: PgPool): i32 -> @nish.PgPool.dispatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.PgConnection.prepare nish.PgPool.connection nish.PgPoolSlot.push nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
+  calls: nish.PgConnection.prepare nish.PgPool.connection nish.PgPool.dequeue nish.PgPool.slotAt nish.PgPoolSlot.push
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.slotAt#0 nish.PgPool.slotAt#0 nish.PgPool.dequeue#0 nish.PgPool.connection#0
   stackSites=0 stackLocals=0
-  local -22:11 cap: i32 (const)
-  local -21:11 pack: boolean (const)
-  local -20:9 best: i32 (let)
-  local -19:9 load: i32 (let)
-  local -18:9 starting: i32 (let)
-  local -17:9 idle: i32 (let)
-  local -16:14 s: i32 (let)
-  local -15:13 slot: PgPoolSlot (const)
-  local -14:13 conn: PgConnection | null (const)
-  local +4:11 ticket: i32 (const)
-  local +7:11 slot: PgPoolSlot (const)
-  local +8:11 conn: PgConnection (const)
-  callee +8:32 PgPool.connection -> @nish.PgPool.connection
-  local +9:9 leads: i32 (let)
-  local +11:13 k: i32 (const)
-  callee +12:12 PgConnection.prepare -> @nish.PgConnection.prepare
-  callee +18:5 PgPoolSlot.push -> @nish.PgPoolSlot.push
+  local -33:11 slots: PgPoolSlot[] (const)
+  local -32:11 cap: i32 (const)
+  local -31:11 pack: boolean (const)
+  local -30:9 best: i32 (let)
+  local -29:9 load: i32 (let)
+  local -28:9 starting: i32 (let)
+  local -27:9 idle: i32 (let)
+  local -26:14 s: i32 (let)
+  local -25:13 slot: PgPoolSlot (const)
+  local -24:13 conn: PgConnection | null (const)
+  local -2:13 spare: PgPoolSlot | null (const)
+  callee -2:40 PgPool.slotAt -> @nish.PgPool.slotAt
+  local +4:11 slot: PgPoolSlot | null (const)
+  callee +4:37 PgPool.slotAt -> @nish.PgPool.slotAt
+  local +5:11 ticket: i32 (const)
+  callee +5:25 PgPool.dequeue -> @nish.PgPool.dequeue
+  local +10:11 conn: PgConnection (const)
+  callee +10:32 PgPool.connection -> @nish.PgPool.connection
+  local +11:11 names: string[] (const)
+  local +12:11 sqls: string[] (const)
+  local +13:11 types: i32[][] (const)
+  local +14:11 start: i32 (const)
+  local +15:9 k: i32 (let)
+  callee +22:7 PgConnection.prepare -> @nish.PgConnection.prepare
+  local +27:9 leads: i32 (let)
+  callee +32:10 PgPoolSlot.push -> @nish.PgPoolSlot.push
 function PgPool.send(this: PgPool): boolean -> @nish.PgPool.send [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PgConnection.sync nish.PgPool.connection nish_panic_index nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
+  calls: nish.PgConnection.sync nish.PgPool.connection nish.PgPool.slotAt
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.slotAt#0 nish.PgPool.connection#0
   stackSites=0 stackLocals=0
   local -7:11 s: i32 (const)
-  local -3:11 slot: PgPoolSlot (const)
-  local -2:11 conn: PgConnection (const)
-  callee -2:32 PgPool.connection -> @nish.PgPool.connection
-  callee -1:9 PgConnection.sync -> @nish.PgConnection.sync
+  local -3:11 slot: PgPoolSlot | null (const)
+  callee -3:37 PgPool.slotAt -> @nish.PgPool.slotAt
+  local +3:11 conn: PgConnection (const)
+  callee +3:32 PgPool.connection -> @nish.PgPool.connection
+  callee +4:9 PgConnection.sync -> @nish.PgConnection.sync
+  local +8:11 count: i32 (const)
 function PgPool.wanted(this: PgPool): i32 -> @nish.PgPool.wanted [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:14 s: i32 (let)
+  local +0:11 slots: PgPoolSlot[] (const)
+  local +1:14 s: i32 (let)
 function PgPool.connect(this: PgPool, slot: i32, nonce: u8[]): void -> @nish.PgPool.connect [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: slot
-  calls: nish.PgConnection.constructor nish_alloc_struct nish_panic nish_panic_index
-  pointer this: size=96 writesThrough=true captured=false
+  calls: nish.PgConnection.constructor nish.PgPool.slotAt nish_alloc_struct nish_panic
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.slotAt#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.PgConnection.constructor#3
   stackSites=0 stackLocals=0
-  local -5:11 carried: PgConfig | null (const)
-  local -1:11 s: PgPoolSlot (const)
+  local -11:11 s: PgPoolSlot | null (const)
+  callee -11:34 PgPool.slotAt -> @nish.PgPool.slotAt
+  local -4:11 carried: PgConfig | null (const)
   callee +0:14 new PgConnection -> @nish.PgConnection.constructor
 function PgPool.connection(this: PgPool, slot: i32): PgConnection -> @nish.PgPool.connection [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=216
   escaping: slot
-  calls: nish_panic nish_panic_index
-  pointer this: size=96 writesThrough=false captured=false
+  calls: nish.PgPool.slotAt nish_panic
+  pointer this: size=96 writesThrough=false captured=false passedTo=nish.PgPool.slotAt#0
   stackSites=0 stackLocals=0
-  local +0:11 conn: PgConnection | null (const)
+  local +0:11 s: PgPoolSlot | null (const)
+  callee +0:34 PgPool.slotAt -> @nish.PgPool.slotAt
+  local +1:11 conn: PgConnection | null (const)
 function PgPool.next(this: PgPool, slot: i32): i32 -> @nish.PgPool.next [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: slot
-  calls: nish.PgConnection.next nish.PgPool.anyReady nish.PgPool.connection nish.PgPoolSlot.pop nish.PgPoolSlot.push nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0 nish.PgPool.anyReady#0
+  calls: nish.PgConnection.next nish.PgPool.anyReady nish.PgPool.connection nish.PgPool.dequeue nish.PgPool.slotAt nish.PgPoolSlot.leading nish.PgPoolSlot.oldest nish.PgPoolSlot.pop nish.PgPoolSlot.push nish.PgPoolSlot.setLeading
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0 nish.PgPool.slotAt#0 nish.PgPool.anyReady#0 nish.PgPool.dequeue#0
   stackSites=0 stackLocals=0
-  local -3:11 conn: PgConnection (const)
-  callee -3:32 PgPool.connection -> @nish.PgPool.connection
-  local -2:11 s: PgPoolSlot (const)
+  local -4:11 conn: PgConnection (const)
+  callee -4:32 PgPool.connection -> @nish.PgPool.connection
+  local -3:11 s: PgPoolSlot | null (const)
+  callee -3:34 PgPool.slotAt -> @nish.PgPool.slotAt
+  callee +4:21 PgPoolSlot.oldest -> @nish.PgPoolSlot.oldest
   local +5:13 event: i32 (const)
   callee +5:26 PgConnection.next -> @nish.PgConnection.next
-  callee +17:9 PgPoolSlot.pop -> @nish.PgPoolSlot.pop
-  callee +19:69 PgPool.anyReady -> @nish.PgPool.anyReady
-  callee +20:11 PgPoolSlot.push -> @nish.PgPoolSlot.push
-  callee +34:7 PgPoolSlot.pop -> @nish.PgPoolSlot.pop
+  local +10:15 lead: i32 (const)
+  callee +10:27 PgPoolSlot.leading -> @nish.PgPoolSlot.leading
+  callee +12:11 PgPoolSlot.setLeading -> @nish.PgPoolSlot.setLeading
+  local +13:17 described: i32 (const)
+  callee +23:11 PgPoolSlot.setLeading -> @nish.PgPoolSlot.setLeading
+  callee +27:9 PgPoolSlot.pop -> @nish.PgPoolSlot.pop
+  callee +29:69 PgPool.anyReady -> @nish.PgPool.anyReady
+  local +31:17 ticket: i32 (const)
+  callee +31:31 PgPool.dequeue -> @nish.PgPool.dequeue
+  callee +33:13 PgPoolSlot.push -> @nish.PgPoolSlot.push
+  callee +45:21 PgPoolSlot.oldest -> @nish.PgPoolSlot.oldest
+  callee +46:7 PgPoolSlot.pop -> @nish.PgPoolSlot.pop
+function PgPool.slotAt(this: PgPool, slot: i32): PgPoolSlot | null -> @nish.PgPool.slotAt [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: slot
+  pointer this: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 slots: PgPoolSlot[] (const)
+function PgPool.dequeue(this: PgPool): i32 -> @nish.PgPool.dequeue [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -9:11 queue: i32[] (const)
+  local -8:11 head: i32 (const)
+  local -7:11 count: i32 (const)
+  local -2:11 ticket: i32 (const)
+  local -1:11 after: i32 (const)
 function PgPool.anyReady(this: PgPool): boolean -> @nish.PgPool.anyReady [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
@@ -2132,13 +2293,13 @@ function pgIntHash(key: i64): i32 -> @nish.pgIntHash
   local +2:7 h: u32 (let)
 function PgBatchRun.constructor(this: PgBatchRun): void -> @nish.PgBatchRun.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=80 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatchRun.reset(this: PgBatchRun, keys: i32): void -> @nish.PgBatchRun.reset [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: keys
-  pointer this: size=80 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +8:14 k: i32 (let)
 function PgBatcher.constructor(this: PgBatcher, config: PgBatchConfig): void -> @nish.PgBatcher.constructor [exported constructor]
@@ -2167,75 +2328,93 @@ function PgBatcher.waiting(this: PgBatcher): i32 -> @nish.PgBatcher.waiting [exp
   pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgBatcher.shed(this: PgBatcher): i32 -> @nish.PgBatcher.shed [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_div nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -8:11 count: i32 (const)
+  local -7:11 tags: i32[] (const)
+  local -6:11 head: i32 (const)
   local -1:11 tag: i32 (const)
 function PgBatcher.addInt(this: PgBatcher, key: i64, tag: i32): boolean -> @nish.PgBatcher.addInt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: key tag
-  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.pgDecimalLength nish.pgIntHash nish_panic nish_panic_index
+  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.pgDecimalLength nish.pgIntHash nish_panic
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
   stackSites=0 stackLocals=0
-  local -4:11 q: i32 (const)
-  callee -4:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
-  callee +1:5 PgBatcher.added -> @nish.PgBatcher.added
-  callee +1:24 pgIntHash -> @nish.pgIntHash
-  callee +1:40 pgDecimalLength -> @nish.pgDecimalLength
+  local -6:11 q: i32 (const)
+  callee -6:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
+  local -5:11 ints: i64[] (const)
+  callee +1:12 PgBatcher.added -> @nish.PgBatcher.added
+  callee +1:31 pgIntHash -> @nish.pgIntHash
+  callee +1:47 pgDecimalLength -> @nish.pgDecimalLength
 function PgBatcher.addText(this: PgBatcher, bytes: u8[], start: i32, length: i32, tag: i32): boolean -> @nish.PgBatcher.addText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  sharedWrite: +0:11
   escaping: length start tag
-  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.copyBytes nish.pgIsText nish_panic nish_panic_div nish_panic_index nish_panic_overflow
+  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.copyBytes nish.pgIsText nish_panic
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.pgIsText#0 nish.copyBytes#2
   stackSites=0 stackLocals=0
-  local -33:11 end: i32 (const)
-  callee -32:10 pgIsText -> @nish.pgIsText
-  local -27:9 size: i64 (let)
-  local -26:9 h: u32 (let)
-  local -25:14 i: i32 (let)
-  local -24:13 c: u8 (const)
-  local -15:11 q: i32 (const)
-  callee -15:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
-  local -11:9 at: i32 (let)
-  local -7:13 from: i32 (const)
-  callee -3:7 copyBytes -> @nish.copyBytes
-  local -2:16 i: i32 (let)
-  local -1:15 w: i32 (const)
-  callee +5:5 copyBytes -> @nish.copyBytes
-  callee +9:5 PgBatcher.added -> @nish.PgBatcher.added
+  local -55:11 end: i32 (const)
+  callee -54:10 pgIsText -> @nish.pgIsText
+  local -49:9 escapes: i32 (let)
+  local -48:9 h: u32 (let)
+  local -47:14 i: i32 (let)
+  local -46:13 c: u8 (const)
+  local -36:11 size: i32 (const)
+  local -35:11 q: i32 (const)
+  callee -35:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
+  local -31:11 store: u8[] (const)
+  local -30:11 starts: i32[] (const)
+  local -29:11 lengths: i32[] (const)
+  local -28:11 cap: i32 (const)
+  local -27:9 at: i32 (let)
+  local -18:13 head: i32 (const)
+  local -17:11 from: i32 (let)
+  callee -9:7 copyBytes -> @nish.copyBytes
+  local -8:11 w: i32 (let)
+  local -7:16 i: i32 (let)
+  local -2:15 s: i32 (const)
+  callee +10:5 copyBytes -> @nish.copyBytes
+  callee +15:12 PgBatcher.added -> @nish.PgBatcher.added
 function PgBatcher.slotToAdd(this: PgBatcher): i32 -> @nish.PgBatcher.slotToAdd [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_div nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 size: i32 (const)
-function PgBatcher.added(this: PgBatcher, q: i32, tag: i32, hash: i32, size: i32): void -> @nish.PgBatcher.added [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +1:11 head: i32 (const)
+  local +2:11 count: i32 (const)
+  local +8:11 at: i64 (const)
+function PgBatcher.added(this: PgBatcher, q: i32, tag: i32, hash: i32, size: i32): boolean -> @nish.PgBatcher.added [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: hash q size tag
-  calls: nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -15:11 tags: i32[] (const)
+  local -14:11 hashes: i32[] (const)
+  local -13:11 sizes: i32[] (const)
+  local -12:11 count: i32 (const)
 function PgBatcher.sameKey(this: PgBatcher, a: i32, b: i32): boolean -> @nish.PgBatcher.sameKey [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
-  calls: nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 n: i32 (const)
-  local +4:11 x: i32 (const)
-  local +5:11 y: i32 (const)
-  local +6:14 i: i32 (let)
+  local +0:13 ints: i64[] (const)
+  local +6:11 starts: i32[] (const)
+  local +7:11 lengths: i32[] (const)
+  local +8:11 store: u8[] (const)
+  local +15:11 n: i32 (const)
+  local +19:9 x: i32 (let)
+  local +20:9 y: i32 (let)
+  local +21:14 i: i32 (let)
 function PgBatcher.takeDue(this: PgBatcher, conn: PgConnection, clock: PgBatchClock, nowUs: i64, inFlight: i32): i32 -> @nish.PgBatcher.takeDue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgBatchClock.check
   escaping: inFlight nowUs
-  calls: nish.PgBatchClock.check nish.PgBatchClock.started nish.PgBatchClock.waiting nish.PgBatcher.take nish_panic nish_panic_overflow
+  calls: nish.PgBatchClock.check nish.PgBatchClock.started nish.PgBatchClock.waiting nish.PgBatcher.take nish_panic
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.take#0
   pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgBatcher.take#1
   pointer clock: size=120 writesThrough=true captured=false passedTo=nish.PgBatchClock.waiting#0 nish.PgBatchClock.check#0 nish.PgBatchClock.started#0
@@ -2245,90 +2424,123 @@ function PgBatcher.takeDue(this: PgBatcher, conn: PgConnection, clock: PgBatchCl
   local +6:11 before: i32 (const)
   local +7:11 r: i32 (const)
   callee +7:20 PgBatcher.take -> @nish.PgBatcher.take
-  callee +9:7 PgBatchClock.started -> @nish.PgBatchClock.started
+  local +8:11 after: i32 (const)
+  callee +10:7 PgBatchClock.started -> @nish.PgBatchClock.started
 function PgBatcher.take(this: PgBatcher, conn: PgConnection): i32 -> @nish.PgBatcher.take [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:11
-  calls: nish.PgBatchRun.reset nish.PgBatcher.bindKey nish.PgBatcher.grow nish.PgBatcher.sameKey nish.PgConnection.arrayEnd nish.PgConnection.arrayStart nish.PgConnection.bindCancel nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.bindStartBinary nish_panic nish_panic_div nish_panic_index nish_panic_overflow
+  sharedWrite: +0:9
+  calls: nish.PgBatchRun.reset nish.PgBatcher.bindKey nish.PgBatcher.grow nish.PgBatcher.sameKey nish.PgConnection.arrayEnd nish.PgConnection.arrayStart nish.PgConnection.bindCancel nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.bindStartBinary nish_panic
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.grow#0 nish.PgBatcher.sameKey#0 nish.PgBatcher.bindKey#0
-  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.bindStartBinary#0 nish.PgConnection.bindStart#0 nish.PgConnection.arrayStart#0 nish.PgConnection.bindCancel#0 nish.PgBatcher.bindKey#1 nish.PgConnection.bindCancel#0 nish.PgConnection.arrayEnd#0 nish.PgConnection.bindEnd#0
+  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.bindStartBinary#0 nish.PgConnection.bindStart#0 nish.PgConnection.arrayStart#0 nish.PgConnection.bindCancel#0 nish.PgBatcher.bindKey#1 nish.PgConnection.bindCancel#0 nish.PgConnection.bindCancel#0 nish.PgConnection.arrayEnd#0 nish.PgConnection.bindEnd#0
   stackSites=0 stackLocals=0
-  local -51:9 r: i32 (let)
-  local -50:14 i: i32 (let)
-  callee -44:34 PgConnection.bindStartBinary -> @nish.PgConnection.bindStartBinary
-  callee -44:68 PgConnection.bindStart -> @nish.PgConnection.bindStart
-  callee -41:10 PgConnection.arrayStart -> @nish.PgConnection.arrayStart
-  callee -40:7 PgConnection.bindCancel -> @nish.PgConnection.bindCancel
-  local -37:11 ring: i32 (const)
-  callee -36:5 PgBatcher.grow -> @nish.PgBatcher.grow
-  local -35:11 mask: i32 (const)
-  local -34:9 keys: i32 (let)
-  local -33:9 taken: i32 (let)
-  local -32:9 bytes: i32 (let)
-  local -30:13 q: i32 (const)
-  local -26:11 slot: i32 (let)
-  local -25:11 k: i32 (let)
-  local -24:11 probes: i32 (let)
-  local -22:15 seen: i32 (const)
-  local -21:15 e: i32 (const)
-  callee -20:52 PgBatcher.sameKey -> @nish.PgBatcher.sameKey
-  local -8:15 cost: i32 (const)
-  callee -7:46 PgBatcher.bindKey -> @nish.PgBatcher.bindKey
-  local +10:14 k: i32 (let)
-  local +11:13 slot: i32 (const)
-  callee +17:7 PgConnection.bindCancel -> @nish.PgConnection.bindCancel
-  callee +20:5 PgConnection.arrayEnd -> @nish.PgConnection.arrayEnd
-  callee +21:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
-  local +23:11 run: PgBatchRun (const)
-  local +33:14 k: i32 (let)
-  local +37:14 i: i32 (let)
-  local +38:13 k: i32 (const)
-  callee +42:5 PgBatchRun.reset -> @nish.PgBatchRun.reset
+  local -96:11 count: i32 (const)
+  local -92:11 runs: PgBatchRun[] (const)
+  local -91:9 r: i32 (let)
+  local -90:14 i: i32 (let)
+  local -81:11 run: PgBatchRun (const)
+  callee -80:25 PgConnection.bindStartBinary -> @nish.PgConnection.bindStartBinary
+  callee -80:59 PgConnection.bindStart -> @nish.PgConnection.bindStart
+  callee -77:10 PgConnection.arrayStart -> @nish.PgConnection.arrayStart
+  callee -76:7 PgConnection.bindCancel -> @nish.PgConnection.bindCancel
+  local -73:11 tags: i32[] (const)
+  local -72:11 hashes: i32[] (const)
+  local -71:11 sizes: i32[] (const)
+  local -70:11 maxRequests: i32 (const)
+  local -69:11 maxBytes: i32 (const)
+  callee -68:5 PgBatcher.grow -> @nish.PgBatcher.grow
+  local -67:11 table: i32[] (const)
+  local -66:11 keySlots: i32[] (const)
+  local -65:11 keyEntries: i32[] (const)
+  local -64:11 keyCounts: i32[] (const)
+  local -63:11 takenKeys: i32[] (const)
+  local -61:11 mask: i32 (const)
+  local -60:9 keys: i32 (let)
+  local -59:9 taken: i32 (let)
+  local -58:9 bytes: i32 (let)
+  local -55:9 q: i32 (let)
+  local -47:13 hash: i32 (const)
+  local -46:11 slot: i32 (let)
+  local -45:11 k: i32 (let)
+  local -44:11 probes: i32 (let)
+  local -38:15 held: i32 (const)
+  local -34:15 seen: i32 (const)
+  local -29:15 e: i32 (const)
+  callee -28:73 PgBatcher.sameKey -> @nish.PgBatcher.sameKey
+  local -17:13 comma: i32 (let)
+  local -13:15 size: i32 (const)
+  local -12:15 added: i32 (const)
+  callee +3:14 PgBatcher.bindKey -> @nish.PgBatcher.bindKey
+  local +18:13 kc: i32 (const)
+  local +30:14 k: i32 (let)
+  local +31:13 slot: i32 (const)
+  callee +37:7 PgConnection.bindCancel -> @nish.PgConnection.bindCancel
+  local +50:11 first: i32[] (const)
+  local +51:11 runTags: i32[] (const)
+  local +52:11 uses: i32 (const)
+  local +53:11 n: i32 (const)
+  callee +65:7 PgConnection.bindCancel -> @nish.PgConnection.bindCancel
+  local +69:9 f: i32 (let)
+  local +70:14 k: i32 (let)
+  local +74:13 c: i32 (const)
+  local +80:9 p: i32 (let)
+  local +81:14 i: i32 (let)
+  local +86:13 k: i32 (const)
+  local +90:13 at: i32 (const)
+  callee +101:5 PgConnection.arrayEnd -> @nish.PgConnection.arrayEnd
+  callee +102:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
+  callee +103:5 PgBatchRun.reset -> @nish.PgBatchRun.reset
 function PgBatcher.grow(this: PgBatcher, need: i32): void -> @nish.PgBatcher.grow [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic nish_panic_overflow
+  calls: nish_panic
   pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:9 size: i32 (let)
+  local -12:9 size: i32 (let)
   local -4:9 tableSize: i32 (let)
 function PgBatcher.bindKey(this: PgBatcher, conn: PgConnection, q: i32): boolean -> @nish.PgBatcher.bindKey [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.arrayInt
   escaping: q
-  calls: nish.PgConnection.arrayElement nish.PgConnection.arrayInt nish_panic_index
+  calls: nish.PgConnection.arrayElement nish.PgConnection.arrayInt
   pointer this: size=160 writesThrough=false captured=false
   pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.arrayInt#0 nish.PgConnection.arrayElement#0
   stackSites=0 stackLocals=0
-  callee +0:14 PgConnection.arrayInt -> @nish.PgConnection.arrayInt
-  callee +2:12 PgConnection.arrayElement -> @nish.PgConnection.arrayElement
+  local +0:13 ints: i64[] (const)
+  callee +4:14 PgConnection.arrayInt -> @nish.PgConnection.arrayInt
+  local +6:11 starts: i32[] (const)
+  local +7:11 lengths: i32[] (const)
+  callee +11:12 PgConnection.arrayElement -> @nish.PgConnection.arrayElement
 function PgBatcher.run(this: PgBatcher, h: i32): PgBatchRun | null -> @nish.PgBatcher.run [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_div nish_panic_index nish_panic_overflow
+  calls: nish_panic
   pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 n: i32 (const)
-  local +4:11 run: PgBatchRun (const)
+  local +0:11 runs: PgBatchRun[] (const)
+  local +1:11 n: i32 (const)
+  local +6:11 at: i32 (const)
+  local +11:11 run: PgBatchRun (const)
 function PgBatcher.quietRun(this: PgBatcher, h: i32, what: string): PgBatchRun | null -> @nish.PgBatcher.quietRun [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: h
-  calls: nish.PgBatcher.run nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat
+  calls: nish.PgBatcher.run nish_arena_mark nish_arena_release nish_panic nish_str_concat
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.run#0
   stackSites=0 stackLocals=0
-  local -3:11 run: PgBatchRun | null (const)
-  callee -3:36 PgBatcher.run -> @nish.PgBatcher.run
+  local -4:11 run: PgBatchRun | null (const)
+  callee -4:36 PgBatcher.run -> @nish.PgBatcher.run
+  local -2:13 stray: i32 (const)
 function PgBatcher.row(this: PgBatcher, r: i32, conn: PgConnection): boolean -> @nish.PgBatcher.row [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: r
-  calls: nish.PgBatcher.quietRun nish.PgConnection.binaryInt nish.PgConnection.int nish.PgConnection.isNull nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
+  calls: nish.PgBatcher.quietRun nish.PgConnection.binaryInt nish.PgConnection.int nish.PgConnection.isNull nish_arena_mark nish_arena_release
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.quietRun#0
   pointer conn: size=216 writesThrough=false captured=false passedTo=nish.PgConnection.isNull#0 nish.PgConnection.binaryInt#0 nish.PgConnection.int#0
   stackSites=0 stackLocals=0
-  local -13:11 run: PgBatchRun | null (const)
-  callee -13:36 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
-  local -6:11 last: i32 (const)
+  local -17:11 run: PgBatchRun | null (const)
+  callee -17:36 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
+  local -10:11 columns: i32 (const)
+  local -9:9 last: i32 (let)
   local -5:9 ordinal: i64 (let)
   local -4:9 bad: boolean (let)
   callee -4:36 PgConnection.isNull -> @nish.PgConnection.isNull
@@ -2336,7 +2548,11 @@ function PgBatcher.row(this: PgBatcher, r: i32, conn: PgConnection): boolean -> 
   callee +1:17 PgConnection.binaryInt -> @nish.PgConnection.binaryInt
   local +6:13 failed: boolean (const)
   callee +8:17 PgConnection.int -> @nish.PgConnection.int
-  local +13:11 least: i64 (const)
+  local +13:9 least: i64 (let)
+  local +15:13 cur: i32 (const)
+  local +19:13 refused: i32 (const)
+  local +27:11 target: i32 (const)
+  local +29:11 had: boolean[] (const)
 function PgBatcher.end(this: PgBatcher, r: i32): void -> @nish.PgBatcher.end [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2355,19 +2571,24 @@ function PgBatcher.fail(this: PgBatcher, r: i32): void -> @nish.PgBatcher.fail [
   stackSites=0 stackLocals=0
   local -2:11 run: PgBatchRun | null (const)
   callee -2:36 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
-function PgBatcher.emit(this: PgBatcher, run: PgBatchRun): boolean -> @nish.PgBatcher.emit [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function PgBatcher.emit(this: PgBatcher, run: PgBatchRun, key: i32): boolean -> @nish.PgBatcher.emit [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
+  escaping: key
   pointer this: size=160 writesThrough=true captured=false
-  pointer run: size=80 writesThrough=true captured=false
+  pointer run: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -16:11 first: i32[] (const)
+  local -15:11 tags: i32[] (const)
+  local -14:11 a: i32 (const)
+  local -10:11 from: i32 (const)
+  local -9:11 to: i32 (const)
   local -4:11 at: i32 (const)
 function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: r
-  calls: nish.PgBatcher.emit nish.PgBatcher.nextUnsorted nish.PgBatcher.run nish_panic_overflow
+  calls: nish.PgBatcher.emit nish.PgBatcher.nextUnsorted nish.PgBatcher.run
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.run#0 nish.PgBatcher.nextUnsorted#0 nish.PgBatcher.emit#0 nish.PgBatcher.emit#0
   stackSites=0 stackLocals=0
   local -1:11 found: PgBatchRun | null (const)
@@ -2375,17 +2596,20 @@ function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [e
   local +4:11 run: PgBatchRun (const)
   callee +6:14 PgBatcher.nextUnsorted -> @nish.PgBatcher.nextUnsorted
   local +9:9 limit: i32 (let)
-  callee +16:11 PgBatcher.emit -> @nish.PgBatcher.emit
-  callee +28:11 PgBatcher.emit -> @nish.PgBatcher.emit
+  local +15:9 cur: i32 (let)
+  callee +17:11 PgBatcher.emit -> @nish.PgBatcher.emit
+  callee +30:11 PgBatcher.emit -> @nish.PgBatcher.emit
 function PgBatcher.nextUnsorted(this: PgBatcher, run: PgBatchRun): i32 -> @nish.PgBatcher.nextUnsorted [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
-  calls: nish.PgBatcher.emit nish_panic_index nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.emit#0
-  pointer run: size=80 writesThrough=true captured=false passedTo=nish.PgBatcher.emit#1
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.PgBatcher.emit
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.emit#0 nish.PgBatcher.emit#0
+  pointer run: size=56 writesThrough=true captured=false passedTo=nish.PgBatcher.emit#1 nish.PgBatcher.emit#1
   stackSites=0 stackLocals=0
-  local -2:13 at: i32 (const)
-  callee +11:11 PgBatcher.emit -> @nish.PgBatcher.emit
+  callee -3:11 PgBatcher.emit -> @nish.PgBatcher.emit
+  local +6:11 had: boolean[] (const)
+  local +7:9 cur: i32 (let)
+  callee +9:11 PgBatcher.emit -> @nish.PgBatcher.emit
 function PgBatchClock.constructor(this: PgBatchClock, config: PgBatchClockConfig): void -> @nish.PgBatchClock.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish_panic
@@ -2399,15 +2623,26 @@ function PgBatchClock.waiting(this: PgBatchClock): i32 -> @nish.PgBatchClock.wai
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgBatchClock.arrived(this: PgBatchClock, nowUs: i64): boolean -> @nish.PgBatchClock.arrived [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: nowUs
-  calls: nish_panic_div nish_panic_index nish_panic_overflow
+  calls: nish.pgClockTime
   pointer this: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -5:11 ring: i32 (const)
+  local -10:11 times: i64[] (const)
+  local -9:11 ring: i32 (const)
+  local -8:11 head: i32 (const)
+  local -7:11 count: i32 (const)
+  local -2:11 last: i64 (const)
   local -1:11 now: i64 (const)
-  local +3:11 lights: i32 (const)
+  callee -1:22 pgClockTime -> @nish.pgClockTime
+  local +2:11 sum: i64 (const)
+  local +3:11 at: i32 (const)
+  local +10:11 light: i64[] (const)
+  local +11:11 lights: i32 (const)
+  local +12:11 lightAt: i32 (const)
+  local +17:13 after: i32 (const)
+  local +19:13 seen: i32 (const)
 function PgBatchClock.target(this: PgBatchClock): i32 -> @nish.PgBatchClock.target [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i32.f64 nish_ceil
@@ -2416,79 +2651,123 @@ function PgBatchClock.target(this: PgBatchClock): i32 -> @nish.PgBatchClock.targ
   local +0:11 scaled: f64 (const)
   local +1:9 target: i32 (let)
 function PgBatchClock.check(this: PgBatchClock, nowUs: i64, inFlight: i32): i32 -> @nish.PgBatchClock.check [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: nowUs
-  calls: nish.PgBatchClock.quiet nish.PgBatchClock.target nish_panic_index nish_panic_overflow
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.PgBatchClock.target#0 nish.PgBatchClock.quiet#0
+  calls: nish.PgBatchClock.quiet nish.PgBatchClock.target nish.PgBatchClock.waited
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.PgBatchClock.target#0 nish.PgBatchClock.waited#0 nish.PgBatchClock.quiet#0
   stackSites=0 stackLocals=0
   local -11:9 reason: i32 (let)
   local -9:13 target: i32 (const)
   callee -9:27 PgBatchClock.target -> @nish.PgBatchClock.target
+  callee -6:18 PgBatchClock.waited -> @nish.PgBatchClock.waited
   callee -4:35 PgBatchClock.quiet -> @nish.PgBatchClock.quiet
 function PgBatchClock.deadline(this: PgBatchClock): i64 -> @nish.PgBatchClock.deadline [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
-  pointer this: size=120 writesThrough=false captured=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.PgBatchClock.oldest
+  pointer this: size=120 writesThrough=false captured=false passedTo=nish.PgBatchClock.oldest#0
   stackSites=0 stackLocals=0
+  local +0:11 oldest: i64 (const)
+  callee +0:25 PgBatchClock.oldest -> @nish.PgBatchClock.oldest
+  local +1:11 wait: i64 (const)
 function PgBatchClock.started(this: PgBatchClock, size: i32, nowUs: i64): void -> @nish.PgBatchClock.started [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: size
-  calls: nish_panic nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=120 writesThrough=true captured=false
+  escaping: nowUs size
+  calls: nish.PgBatchClock.waited nish_panic
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.PgBatchClock.waited#0
   stackSites=0 stackLocals=0
-  local +6:11 n: f64 (const)
+  local -17:11 count: i32 (const)
+  local -12:11 waited: i64 (const)
+  callee -12:25 PgBatchClock.waited -> @nish.PgBatchClock.waited
+  local -11:11 ring: i32 (const)
+  local -10:11 head: i32 (const)
+  local -9:11 starts: i64[] (const)
+  local -8:11 due: i32 (const)
+  local -1:11 sum: i64 (const)
+  local +3:11 n: f64 (const)
+  local +7:11 started: i64 (const)
 function PgBatchClock.startsFor(this: PgBatchClock, reason: i32): i64 -> @nish.PgBatchClock.startsFor [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: reason
-  calls: nish_panic nish_panic_index
+  calls: nish_panic
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:11 starts: i64[] (const)
 function PgBatchClock.quiet(this: PgBatchClock, nowUs: i64): boolean -> @nish.PgBatchClock.quiet [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: nowUs
+  calls: nish.pgClockTime
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 lights: i32 (const)
+  local +8:11 light: i64[] (const)
+  local +9:11 lightAt: i32 (const)
+  local +15:11 then: i64 (const)
+  local +16:11 now: i64 (const)
+  callee +16:22 pgClockTime -> @nish.pgClockTime
+function PgBatchClock.oldest(this: PgBatchClock): i64 -> @nish.PgBatchClock.oldest [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 times: i64[] (const)
+  local +1:11 head: i32 (const)
+function PgBatchClock.waited(this: PgBatchClock, nowUs: i64): i64 -> @nish.PgBatchClock.waited [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: nowUs
+  calls: nish.PgBatchClock.oldest nish.pgClockTime
+  pointer this: size=120 writesThrough=false captured=false passedTo=nish.PgBatchClock.oldest#0
+  stackSites=0 stackLocals=0
+  local +0:11 oldest: i64 (const)
+  callee +0:25 PgBatchClock.oldest -> @nish.PgBatchClock.oldest
+  local +1:11 now: i64 (const)
+  callee +1:22 pgClockTime -> @nish.pgClockTime
+function pgCountUp(count: i32): i32 -> @nish.pgCountUp
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: count
+  stackSites=0 stackLocals=0
+function pgClockTime(t: i64): i64 -> @nish.pgClockTime
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  stackSites=0 stackLocals=0
 function PgBatchTurns.constructor(this: PgBatchTurns, clock: PgBatchClock, size: i32): void -> @nish.PgBatchTurns.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: clock size
   calls: nish_panic
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   pointer clock: size=120 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PgBatchTurns.collector(this: PgBatchTurns): i32 -> @nish.PgBatchTurns.collector [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer this: size=32 writesThrough=false captured=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:14 i: i32 (let)
+  local +0:11 busy: boolean[] (const)
+  local +1:14 i: i32 (let)
 function PgBatchTurns.inFlight(this: PgBatchTurns): i32 -> @nish.PgBatchTurns.inFlight [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgBatchTurns.deadline(this: PgBatchTurns): i64 -> @nish.PgBatchTurns.deadline [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.PgBatchClock.deadline
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 PgBatchClock.deadline -> @nish.PgBatchClock.deadline
 function PgBatchTurns.push(this: PgBatchTurns, nowUs: i64): i32 -> @nish.PgBatchTurns.push [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgBatchClock.arrived
   escaping: nowUs
   calls: nish.PgBatchClock.arrived nish.PgBatchTurns.poll
-  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.poll#0
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.PgBatchTurns.poll#0
   stackSites=0 stackLocals=0
   callee +0:10 PgBatchClock.arrived -> @nish.PgBatchClock.arrived
   callee +3:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
 function PgBatchTurns.poll(this: PgBatchTurns, nowUs: i64): i32 -> @nish.PgBatchTurns.poll [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: nowUs
   calls: nish.PgBatchClock.check nish.PgBatchTurns.collector
-  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.collector#0
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.PgBatchTurns.collector#0
   stackSites=0 stackLocals=0
   local -4:11 slot: i32 (const)
   callee -4:23 PgBatchTurns.collector -> @nish.PgBatchTurns.collector
@@ -2497,34 +2776,39 @@ function PgBatchTurns.started(this: PgBatchTurns, slot: i32, size: i32, nowUs: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: nowUs size slot
-  calls: nish.PgBatchClock.started nish.PgBatchTurns.free nish.PgBatchTurns.poll nish_panic_index nish_panic_overflow
-  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.free#0 nish.PgBatchTurns.poll#0
+  calls: nish.PgBatchClock.started nish.PgBatchTurns.free nish.PgBatchTurns.poll
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.PgBatchTurns.free#0 nish.PgBatchTurns.poll#0
   stackSites=0 stackLocals=0
-  callee -2:5 PgBatchTurns.free -> @nish.PgBatchTurns.free
-  callee -1:5 PgBatchClock.started -> @nish.PgBatchClock.started
+  callee -9:5 PgBatchTurns.free -> @nish.PgBatchTurns.free
+  callee -8:5 PgBatchClock.started -> @nish.PgBatchClock.started
+  local -7:11 busy: boolean[] (const)
+  local -6:11 running: i32 (const)
   callee +5:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
 function PgBatchTurns.finished(this: PgBatchTurns, slot: i32, nowUs: i64): i32 -> @nish.PgBatchTurns.finished [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: nowUs slot
-  calls: nish.PgBatchTurns.poll nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.poll#0
+  calls: nish.PgBatchTurns.poll nish_panic
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.PgBatchTurns.poll#0
   stackSites=0 stackLocals=0
-  callee +2:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
+  local -4:11 busy: boolean[] (const)
+  local +1:11 running: i32 (const)
+  callee +6:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
 function PgBatchTurns.release(this: PgBatchTurns, slot: i32): void -> @nish.PgBatchTurns.release [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: slot
   calls: nish.PgBatchTurns.free
-  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.free#0
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.PgBatchTurns.free#0
   stackSites=0 stackLocals=0
   callee -2:5 PgBatchTurns.free -> @nish.PgBatchTurns.free
 function PgBatchTurns.free(this: PgBatchTurns, slot: i32): void -> @nish.PgBatchTurns.free [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
-  calls: nish_panic nish_panic_index
-  pointer this: size=32 writesThrough=false captured=false
+  calls: nish_panic
+  pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:11 busy: boolean[] (const)
 function pgTargetFailed(failure: i32): PgTarget -> @nish.pgTargetFailed
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
   escaping: failure
@@ -2532,29 +2816,28 @@ function pgTargetFailed(failure: i32): PgTarget -> @nish.pgTargetFailed
   stackSites=0 stackLocals=0
   local +0:9 t: PgTarget (const)
 function pgTarget(host: string, port: i32): PgTarget -> @nish.pgTarget [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
   escaping: host port
-  calls: nish.pgTargetFailed nish_alloc_struct nish_panic_index nish_str_concat nish_str_from_i32
+  calls: nish.pgTargetFailed nish_alloc_struct nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   callee +0:12 pgTargetFailed -> @nish.pgTargetFailed
-  local +2:9 n: i32 (const)
   callee +4:12 pgTargetFailed -> @nish.pgTargetFailed
-  local +6:12 i: i32 (let)
-  local +7:11 c: i32 (const)
-  callee +9:14 pgTargetFailed -> @nish.pgTargetFailed
-  local +12:9 t: PgTarget (const)
-  local +15:9 first: i32 (const)
-  local +17:11 path: string (const)
-  local +19:11 limit: i32 (const)
-  callee +21:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +6:9 n: i32 (const)
+  local +7:9 first: i32 (const)
+  local +8:12 i: i32 (let)
+  local +9:11 c: i32 (const)
+  callee +11:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +14:9 t: PgTarget (const)
+  local +18:11 path: string (const)
+  local +20:11 limit: i32 (const)
+  callee +22:14 pgTargetFailed -> @nish.pgTargetFailed
 function pgDecoded(text: string, start: i32, end: i32): string | null -> @nish.pgDecoded
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.urlDecode nish_str_new
   stackSites=0 stackLocals=0
   callee +0:3 urlDecode -> @nish.urlDecode
 function pgPortValue(text: string): i32 -> @nish.pgPortValue
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:7 v: i32 (let)
@@ -2563,7 +2846,7 @@ function pgPortValue(text: string): i32 -> @nish.pgPortValue
 function pgTargetUrl(url: string): PgTarget -> @nish.pgTargetUrl [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
   escaping: url
-  calls: nish.pgDecoded nish.pgPortValue nish.pgTarget nish.pgTargetFailed nish_panic_index nish_panic_overflow nish_str_at nish_str_eq
+  calls: nish.pgDecoded nish.pgPortValue nish.pgTarget nish.pgTargetFailed nish_str_at nish_str_eq
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   callee +6:12 pgTargetFailed -> @nish.pgTargetFailed
@@ -2586,33 +2869,35 @@ function pgTargetUrl(url: string): PgTarget -> @nish.pgTargetUrl [exported]
   local +60:7 hostEnd: i32 (let)
   local +61:7 portStart: i32 (let)
   local +62:7 bracketed: boolean (let)
-  local +64:9 close: i32 (let)
-  callee +69:14 pgTargetFailed -> @nish.pgTargetFailed
-  callee +75:16 pgTargetFailed -> @nish.pgTargetFailed
-  local +80:14 i: i32 (let)
-  local +88:9 decodedHost: string | null (const)
-  callee +89:7 pgDecoded -> @nish.pgDecoded
-  callee +90:7 pgDecoded -> @nish.pgDecoded
-  callee +92:12 pgTargetFailed -> @nish.pgTargetFailed
-  local +94:7 host: string (let)
-  local +95:7 port: i32 (let)
-  local +97:11 decodedPort: string | null (const)
-  callee +97:40 pgDecoded -> @nish.pgDecoded
-  callee +99:14 pgTargetFailed -> @nish.pgTargetFailed
-  callee +101:12 pgPortValue -> @nish.pgPortValue
-  callee +103:14 pgTargetFailed -> @nish.pgTargetFailed
-  local +107:7 i: i32 (let)
-  local +109:9 end: i32 (let)
-  local +110:9 eq: i32 (let)
-  callee +119:16 pgTargetFailed -> @nish.pgTargetFailed
-  local +121:13 key: string | null (const)
-  callee +121:34 pgDecoded -> @nish.pgDecoded
-  local +122:13 value: string | null (const)
-  callee +122:36 pgDecoded -> @nish.pgDecoded
-  callee +124:16 pgTargetFailed -> @nish.pgTargetFailed
-  callee +129:16 pgPortValue -> @nish.pgPortValue
-  callee +131:18 pgTargetFailed -> @nish.pgTargetFailed
-  callee +137:10 pgTarget -> @nish.pgTarget
+  local +64:7 nameStart: i32 (let)
+  local +65:7 nameEnd: i32 (let)
+  local +72:9 close: i32 (let)
+  callee +79:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +88:16 pgTargetFailed -> @nish.pgTargetFailed
+  local +93:14 i: i32 (let)
+  local +101:9 decodedHost: string | null (const)
+  callee +102:7 pgDecoded -> @nish.pgDecoded
+  callee +103:7 pgDecoded -> @nish.pgDecoded
+  callee +105:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +107:7 host: string (let)
+  local +108:7 port: i32 (let)
+  local +110:11 decodedPort: string | null (const)
+  callee +110:40 pgDecoded -> @nish.pgDecoded
+  callee +112:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +114:12 pgPortValue -> @nish.pgPortValue
+  callee +116:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +120:7 i: i32 (let)
+  local +125:9 end: i32 (let)
+  local +126:9 eq: i32 (let)
+  callee +136:16 pgTargetFailed -> @nish.pgTargetFailed
+  local +138:13 key: string | null (const)
+  callee +138:34 pgDecoded -> @nish.pgDecoded
+  local +139:13 value: string | null (const)
+  callee +139:36 pgDecoded -> @nish.pgDecoded
+  callee +141:16 pgTargetFailed -> @nish.pgTargetFailed
+  callee +146:16 pgPortValue -> @nish.pgPortValue
+  callee +148:18 pgTargetFailed -> @nish.pgTargetFailed
+  callee +157:10 pgTarget -> @nish.pgTarget
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9
@@ -5068,7 +5353,7 @@ function Secret<u64[]>.constructor(this: Secret<u64[]>, value: u64[]): void -> @
   pointer value: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function expose<u8[], u8[], pgCopyBytes>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.16.nish.pgCopyBytes [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pgCopyBytes
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
