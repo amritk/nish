@@ -6,45 +6,43 @@ import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
 unsafe import 36:10 uncheckedGet from "nish:unsafe"
 unsafe import 36:24 uncheckedSet from "nish:unsafe"
-unsafe call 66:9 uncheckedGet (node 78)
-unsafe call 67:10 uncheckedGet (node 89)
-unsafe call 68:10 uncheckedGet (node 109)
-unsafe call 69:10 uncheckedGet (node 129)
-unsafe call 70:10 uncheckedGet (node 149)
-unsafe call 71:10 uncheckedGet (node 169)
-unsafe call 72:10 uncheckedGet (node 189)
-unsafe call 73:10 uncheckedGet (node 209)
-unsafe call 83:5 uncheckedGet (node 276)
-unsafe call 84:5 uncheckedGet (node 290)
-unsafe call 85:5 uncheckedGet (node 308)
-unsafe call 86:5 uncheckedGet (node 326)
-unsafe call 87:5 uncheckedGet (node 341)
-unsafe call 88:5 uncheckedGet (node 356)
-unsafe call 89:5 uncheckedGet (node 374)
-unsafe call 90:5 uncheckedGet (node 392)
-unsafe call 123:7 uncheckedSet (node 560)
-unsafe call 126:25 uncheckedGet (node 588)
-unsafe call 127:7 uncheckedSet (node 597)
-unsafe call 127:41 uncheckedGet (node 607)
-unsafe call 136:22 uncheckedGet (node 691)
-unsafe call 138:27 uncheckedGet (node 735)
-unsafe call 142:7 uncheckedSet (node 755)
-unsafe call 146:11 uncheckedSet (node 818)
-unsafe call 146:44 uncheckedGet (node 828)
-unsafe call 261:9 uncheckedGet (node 1414)
-unsafe call 261:42 uncheckedGet (node 1429)
-unsafe call 317:19 uncheckedGet (node 1624)
-unsafe call 319:19 uncheckedGet (node 1641)
-unsafe call 321:19 uncheckedGet (node 1660)
-unsafe call 323:19 uncheckedGet (node 1679)
-unsafe call 328:19 uncheckedGet (node 1707)
+unsafe call 60:9 uncheckedGet (node 64)
+unsafe call 61:10 uncheckedGet (node 75)
+unsafe call 62:10 uncheckedGet (node 95)
+unsafe call 63:10 uncheckedGet (node 115)
+unsafe call 64:10 uncheckedGet (node 135)
+unsafe call 65:10 uncheckedGet (node 155)
+unsafe call 66:10 uncheckedGet (node 175)
+unsafe call 67:10 uncheckedGet (node 195)
+unsafe call 77:5 uncheckedGet (node 262)
+unsafe call 78:5 uncheckedGet (node 276)
+unsafe call 79:5 uncheckedGet (node 294)
+unsafe call 80:5 uncheckedGet (node 312)
+unsafe call 81:5 uncheckedGet (node 327)
+unsafe call 82:5 uncheckedGet (node 342)
+unsafe call 83:5 uncheckedGet (node 360)
+unsafe call 84:5 uncheckedGet (node 378)
+unsafe call 117:7 uncheckedSet (node 546)
+unsafe call 120:25 uncheckedGet (node 574)
+unsafe call 121:7 uncheckedSet (node 583)
+unsafe call 121:41 uncheckedGet (node 593)
+unsafe call 130:22 uncheckedGet (node 677)
+unsafe call 132:27 uncheckedGet (node 724)
+unsafe call 136:7 uncheckedSet (node 744)
+unsafe call 140:11 uncheckedSet (node 807)
+unsafe call 140:44 uncheckedGet (node 817)
+unsafe call 256:9 uncheckedGet (node 1427)
+unsafe call 256:42 uncheckedGet (node 1442)
+unsafe call 311:19 uncheckedGet (node 1671)
+unsafe call 313:19 uncheckedGet (node 1688)
+unsafe call 315:19 uncheckedGet (node 1707)
+unsafe call 317:19 uncheckedGet (node 1726)
+unsafe call 322:19 uncheckedGet (node 1754)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
 const CRC32_BLOCK: i32 = 40
-const CRC32_BRAID_MIN: i32 = 80
 const ADLER32_NMAX: i32 = 5552
-const ADLER32_BASE: i32 = 65521
 struct Crc32 (class) size=16 align=8 exported
   field table: u32[] index=0 offset=0 readonly
   field braid: u32[] index=1 offset=8 readonly
@@ -66,8 +64,8 @@ function checksumWindow(what: string, buf: u8[], off: i32, len: i32): void -> @n
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: llvm.ctlz.i32 nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: llvm.ctlz.i32
   pointer this: size=16 writesThrough=true captured=false
   stackSites=1 stackLocals=1
   local +0:11 t: u32[] (const)
@@ -87,58 +85,56 @@ function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [export
 function Crc32.update(this: Crc32, crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.Crc32.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: crc len off
-  calls: nish.checksumWindow nish.crc32Walk nish_panic
+  calls: nish.checksumWindow nish.crc32Walk
   pointer this: size=16 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.crc32Walk#3
   stackSites=0 stackLocals=0
   callee +0:5 checksumWindow -> @nish.checksumWindow
-  local +1:11 t: u32[] (const)
-  local +2:11 bt: u32[] (const)
-  callee +6:12 crc32Walk -> @nish.crc32Walk
+  callee +1:12 crc32Walk -> @nish.crc32Walk
 function crc32Walk(t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.crc32Walk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.checksumLoad64 nish.crc32Step nish_panic_overflow
+  calls: nish.checksumLoad64 nish.crc32Step
   pointer t: size=0 writesThrough=false captured=false passedTo=nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0
   pointer bt: size=0 writesThrough=false captured=false passedTo=nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0
   stackSites=0 stackLocals=0
   local +0:7 c: u32 (let)
   local +1:7 p: i32 (let)
-  local +2:9 end: i32 (const)
-  local +12:11 blocks: i32 (const)
-  local +13:11 lastBlock: i32 (const)
-  local +14:9 c1: u32 (let)
-  local +15:9 c2: u32 (let)
-  local +16:9 c3: u32 (let)
-  local +17:9 c4: u32 (let)
-  local +20:9 p1: i32 (let)
-  local +21:9 p2: i32 (let)
-  local +22:9 p3: i32 (let)
-  local +23:9 p4: i32 (let)
-  callee +37:11 crc32Step -> @nish.crc32Step
-  callee +37:28 checksumLoad64 -> @nish.checksumLoad64
-  callee +38:12 crc32Step -> @nish.crc32Step
-  callee +38:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +39:12 crc32Step -> @nish.crc32Step
-  callee +39:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +40:12 crc32Step -> @nish.crc32Step
-  callee +40:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +41:12 crc32Step -> @nish.crc32Step
-  callee +41:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +60:11 crc32Step -> @nish.crc32Step
-  callee +60:27 checksumLoad64 -> @nish.checksumLoad64
-  callee +61:11 crc32Step -> @nish.crc32Step
-  callee +61:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +62:11 crc32Step -> @nish.crc32Step
-  callee +62:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +63:11 crc32Step -> @nish.crc32Step
-  callee +63:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +64:11 crc32Step -> @nish.crc32Step
-  callee +64:32 checksumLoad64 -> @nish.checksumLoad64
-  local +68:9 whole: i32 (const)
-  callee +70:9 crc32Step -> @nish.crc32Step
-  callee +70:25 checksumLoad64 -> @nish.checksumLoad64
+  local +4:9 end: i32 (const)
+  local +17:11 blocks: i32 (const)
+  local +18:11 lastBlock: i32 (const)
+  local +19:9 c1: u32 (let)
+  local +20:9 c2: u32 (let)
+  local +21:9 c3: u32 (let)
+  local +22:9 c4: u32 (let)
+  local +25:9 p1: i32 (let)
+  local +26:9 p2: i32 (let)
+  local +27:9 p3: i32 (let)
+  local +28:9 p4: i32 (let)
+  callee +42:11 crc32Step -> @nish.crc32Step
+  callee +42:28 checksumLoad64 -> @nish.checksumLoad64
+  callee +43:12 crc32Step -> @nish.crc32Step
+  callee +43:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +44:12 crc32Step -> @nish.crc32Step
+  callee +44:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +45:12 crc32Step -> @nish.crc32Step
+  callee +45:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +46:12 crc32Step -> @nish.crc32Step
+  callee +46:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +65:11 crc32Step -> @nish.crc32Step
+  callee +65:27 checksumLoad64 -> @nish.checksumLoad64
+  callee +66:11 crc32Step -> @nish.crc32Step
+  callee +66:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +67:11 crc32Step -> @nish.crc32Step
+  callee +67:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +68:11 crc32Step -> @nish.crc32Step
+  callee +68:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +69:11 crc32Step -> @nish.crc32Step
+  callee +69:32 checksumLoad64 -> @nish.checksumLoad64
+  local +73:9 whole: i32 (const)
+  callee +75:9 crc32Step -> @nish.crc32Step
+  callee +75:25 checksumLoad64 -> @nish.checksumLoad64
 function crc32(buf: u8[], off: i32, len: i32): u32 -> @nish.crc32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
@@ -156,16 +152,16 @@ function adler32Update(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.
   callee +0:3 checksumWindow -> @nish.checksumWindow
   callee +1:10 adler32Walk -> @nish.adler32Walk
 function adler32Walk(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.adler32Walk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_div nish_panic_overflow
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 s1: u32 (let)
   local +1:7 s2: u32 (let)
   local +2:7 p: i32 (let)
-  local +3:9 end: i32 (const)
-  local +5:9 stop: i32 (let)
+  local +4:9 end: i32 (const)
+  local +6:11 reach: i64 (const)
+  local +7:11 stop: i32 (const)
 function adler32(buf: u8[], off: i32, len: i32): u32 -> @nish.adler32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
