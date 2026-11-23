@@ -7,7 +7,7 @@ import { compressBound, deflateBound, Deflater, fixedDeflateBound } from "nish/c
 import { gzipFixedBound } from "nish/compress/gzip"
 
 console.log(`deflateBound: ${deflateBound(-1)} ${deflateBound(0)} ${deflateBound(2146664744)} ${deflateBound(2146664745)}`)
-console.log(`compressBound: ${compressBound(2146664726)} ${compressBound(2146664727)}`)
+console.log(`compressBound: ${compressBound(-1)} ${compressBound(2146664726)} ${compressBound(2146664727)}`)
 console.log(`fixedDeflateBound: ${fixedDeflateBound(-1)} ${fixedDeflateBound(0)} ${fixedDeflateBound(1908874339)} ${fixedDeflateBound(1908874340)}`)
 // GzipWriter's own guards sit inside these: 65,536 + 2,145,000,000 and
 // gzipFixedBound's 1,908,874,323 both answer a real bound.
