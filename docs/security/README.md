@@ -393,13 +393,13 @@ the record that found it. The notes below the table name each such finding.
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
     were found by a review of the first version and fixed. COMP-19 (Low),
     `GzipWriter.bound`, `gzipFixedBound` and a `GzipWriter` used after
-    `finish` panicking, was found by WP84's panic-site work and fixed. COMP-8 (Low), COMP-9
-    (Medium) and COMP-17 (Low), a stream of small dynamic blocks rebuilding the decoder's
-    tables, the BREACH class of length leaks and deflate with `identity;q=0`
-    answered as identity, are accepted, with the reason
-    in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
-    COMP-16 (the Adler-32 kernels' window and sums) are properties checked
-    and found to hold. The Total moves by COMP-19: fixed +1 Low.
+    `finish` panicking, was found by WP84's panic-site work and fixed. COMP-8
+    (Low), COMP-9 (Medium) and COMP-17 (Low), a stream of small dynamic blocks
+    rebuilding the decoder's tables, the BREACH class of length leaks and
+    deflate with `identity;q=0` answered as identity, are accepted, with the
+    reason in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
+    COMP-16 (the Adler-32 kernels' window and sums) are properties checked and
+    found to hold. The Total moves by COMP-19: fixed +1 Low.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
 21. PKI-R6 to PKI-R8 (Low) are accepted, with the reason in their record, and

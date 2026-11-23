@@ -1,8 +1,8 @@
 // Truncated and corrupt zlib and gzip streams answer errors, and a
-// `GzipWriter` used after `finish` answers `GZIP_ERR_FINISHED`. Every prefix of a valid stream is
-// fed to `ZlibDecompressor`, `GzipDecompressor` and `GzipReader`, each byte
-// of the stream is flipped in turn, and every output window shorter than the
-// stream is offered to the compressors and the writer.
+// `GzipWriter` used after `finish` answers `GZIP_ERR_FINISHED`. Every prefix
+// of a valid stream is fed to `ZlibDecompressor`, `GzipDecompressor` and
+// `GzipReader`, each byte of the stream is flipped in turn, and every output
+// window shorter than the stream is offered to the compressors and the writer.
 import { DEFLATE_ERR_TRAILING, DEFLATE_ERR_TRUNCATED, DEFLATE_NO_ROOM } from "nish/compress/deflate"
 import {
   GZIP_END,
