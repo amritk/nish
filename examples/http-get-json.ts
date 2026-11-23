@@ -1,9 +1,11 @@
-// Opt-out (`--allow-panics`): `FetchSyncClient.fetch` and `close` reach an
-// overflow site in `std/net/tls/record-client`, the request write reaches the
-// range check of the `netWrite` builtin and `HttpBodyReader.readAll` that of
-// `netRead`, both in `std/net/fetch`, which the checker cannot yet discharge.
-// Follow-up: make the record layer panic-free and teach the prover the
-// `netRead` and `netWrite` bounds, then build this file
+// Opt-out (`--allow-panics`): `FetchSyncClient.fetch` reaches the
+// `array-length` site in `std/net/url.ts`'s `urlBytesOf` and, on an `https:`
+// URL, the exit of `crypto.getRandomValues` in `std/net/fetch`'s TLS start;
+// the request write and `close` reach the range check of the `netWrite`
+// builtin and `HttpBodyReader.readAll` that of `netRead`, both in
+// `std/net/fetch`, which no proof discharges yet.
+// Follow-up: a non-exiting entropy draw, a proof of the `netRead` and
+// `netWrite` windows, and a bounded `urlBytesOf`, then build this file
 // without `--allow-panics`.
 //
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and

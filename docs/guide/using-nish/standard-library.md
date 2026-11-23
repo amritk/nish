@@ -3852,7 +3852,7 @@ until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
 with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
 datagrams, so a flood on the port cannot keep your loop inside the client.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts`, `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";

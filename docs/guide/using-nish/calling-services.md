@@ -146,7 +146,7 @@ policy checks the host name before the lookup and every address after it.
 The pool connects only to an address the policy passed. A service on a
 private address must be permitted by name or by range:
 
-<!-- allow-panics: calls `std/net/outbound.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/outbound.ts` code that reaches `std/net/dns-config.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { OutboundPolicy } from "nish/net/outbound";

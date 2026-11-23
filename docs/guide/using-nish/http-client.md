@@ -13,14 +13,14 @@ library module ([`export` and `import`](https://github.com/amritk/nish/blob/main
 ## Fetching a URL
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): the TLS record
-layer under an `https:` fetch keeps panic sites no proof removes yet, and so
-do the range checks of the `netRead` and `netWrite` builtins a body read and
-a request write reach and the URL parser `fetch` calls, so those calls are refused by default for now. The
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): the range checks
+of the `netRead` and `netWrite` builtins a body read and a request write
+reach, and the URL parser `fetch` calls, keep panic sites no proof removes
+yet, so those calls are refused by default for now. The
 sums and the `panic` call in your own code build under the default once a
 guard bounds each sum and the `panic` becomes an error answer.
 
-<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
@@ -76,7 +76,7 @@ parse is not echoed at all. The URL is named as it parses: in
 `http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
 path, which is echoed, so put credentials in a header, not in a URL:
 
-<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/tls/record-client.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/fetch";
@@ -285,7 +285,7 @@ credentials in it; `http://127.0.0.1:6379/` reaches a database that trusts
 local callers; a name that resolves to either does the same. Give such a
 client an `OutboundPolicy`, from `nish/net/outbound`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP_E_BLOCKED, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch";

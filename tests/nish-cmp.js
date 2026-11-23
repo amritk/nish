@@ -15439,6 +15439,129 @@ const DECLARED = [
     changelog: "reaches its spawner's state and awaits the async Postgres pool",
     why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 8)",
   },
+  // WP82 S9 masks the DNS query deadline in dnsResolverSend, so the overflow
+  // check and its panic block leave dns-resolver.ll in every program that
+  // reaches it. Listed before #1304's lines so this PR's entry is reported.
+  {
+    program: "examples/http-get-json.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_deadline/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_dns_slow/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_flat/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_https/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_https_flat/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_overlap/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_fetch_async_policy/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_http_fetch/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_http_fetch_f64/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_http_fetch_tls/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_outbound/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_outbound_f64/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_upstream/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/net_upstream_release/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/std_dns/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/std_dns_caps/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/std_dns_resolver/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
+  {
+    program: "tests/link/std_dns_soak/main.ts",
+    file: "dns-resolver.ll",
+    changelog: "bound the DNS query deadline",
+    why: "dnsResolverDeadline masks the query deadline, so dnsResolverSend's overflow check and panic block leave the module (WP82 S9)",
+  },
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
   // program that reaches them. These come first: dns.ll also carries this
