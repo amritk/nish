@@ -6874,6 +6874,8 @@ const DNS_L_RUNNING: i32 = 1
 const DNS_L_DONE: i32 = 2
 const DNS_RESOLVER_ANSWER_BYTES: i32 = 144
 const DNS_RESOLVER_LOOKUP_BYTES: i32 = 288
+const DNS_RESOLVER_FAR: i64 = 4611686018427387903
+const DNS_RESOLVER_NEVER: i64 = 9223372036854775807
 struct DnsResolver (class) size=320 align=8 exported
   field config: DnsConfig index=0 offset=0
   field hosts: DnsHosts | null index=1 offset=8
@@ -7378,10 +7380,10 @@ function dnsResolverAsk(r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void
   callee +5:3 setU16BE -> @nish.setU16BE
   callee +11:3 dnsResolverSend -> @nish.dnsResolverSend
 function dnsResolverSend(r: DnsResolver, q: i32, how: i32, nowNanos: i64): void -> @nish.dnsResolverSend
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  escaping: how q
-  calls: nish_panic_overflow
+  escaping: how nowNanos q
+  calls: nish.dnsResolverDeadline
   pointer r: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -16:9 state: i32[] (const)
@@ -7389,6 +7391,11 @@ function dnsResolverSend(r: DnsResolver, q: i32, how: i32, nowNanos: i64): void 
   local -14:9 streamHave: i32[] (const)
   local -13:9 streamWant: i32[] (const)
   local -12:9 deadline: i64[] (const)
+  callee +4:17 dnsResolverDeadline -> @nish.dnsResolverDeadline
+function dnsResolverDeadline(nowNanos: i64, timeout: i32): i64 -> @nish.dnsResolverDeadline
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: nowNanos
+  stackSites=0 stackLocals=0
 function dnsResolverServerFailed(r: DnsResolver, q: i32, nowNanos: i64): void -> @nish.dnsResolverServerFailed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 4245,
+  "total": 4244,
   "explicit": {
-    "kept": 356,
-    "toFix": 57
+    "kept": 357,
+    "toFix": 56
   },
   "modules": {
     "std/base64.ts": {
@@ -190,7 +190,6 @@
       "panic": 4
     },
     "std/net/dns-resolver.ts": {
-      "overflow": 1,
       "panic": 11
     },
     "std/net/dns.ts": {
@@ -1568,6 +1567,11 @@
       "module": "std/net/tls/schedule.ts",
       "function": "tlsHeldCheck",
       "reason": "hash length must be 32 or 48 and the secret exactly that long; fixed by the caller's cipher-suite choice"
+    },
+    {
+      "module": "std/net/tls/schedule.ts",
+      "function": "tlsHeldWindow",
+      "reason": "the transcript hash's window must lie inside transcriptHash; the caller's own hash offset, a contract tlsDeriveSecretHeld and tlsFinishedVerifyDataHeld document"
     },
     {
       "module": "std/net/tls/ticket.ts",
