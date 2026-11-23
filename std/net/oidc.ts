@@ -242,9 +242,11 @@ export class OidcKeySet {
    * @returns The key, or null when no key has that `kid`.
    */
   find(kid: string): JwtKey | null {
-    for (let i: i32 = 0; i < toI32(this.keys.length); i += 1) {
-      if (kid !== "" && this.kids[i] === kid) {
-        return this.keys[i]
+    const keys: JwtKey[] = this.keys
+    const kids: string[] = this.kids
+    for (let i: i32 = 0; i < toI32(keys.length) && i < toI32(kids.length); i += 1) {
+      if (kid !== "" && kids[i] === kid) {
+        return keys[i]
       }
     }
     return null
@@ -298,7 +300,7 @@ export const oidcIssuerAllowed = (issuer: string, options: OidcOptions): boolean
  * @returns The discovery URL.
  */
 export const oidcDiscoveryUrl = (issuer: string): string => {
-  const base: string = issuer.endsWith("/") ? issuer.slice(0, toI32(issuer.length) - 1) : issuer
+  const base: string = issuer.endsWith("/") ? issuer.substring(0, toI32(issuer.length) - 1) : issuer
   return `${base}${OIDC_WELL_KNOWN}`
 }
 
@@ -716,8 +718,9 @@ export const oidcParseJwks = (doc: u8[]): OidcKeySet => {
     }
     const key: JwtKey | null = entry.key
     if (key !== null) {
-      for (let j: i32 = 0; j < set.count(); j += 1) {
-        if (set.kids[j] === entry.kid) {
+      const kids: string[] = set.kids
+      for (let j: i32 = 0; j < toI32(kids.length); j += 1) {
+        if (kids[j] === entry.kid) {
           return oidcRefused(OIDC_ERR_DUPLICATE_KID)
         }
       }
@@ -734,26 +737,33 @@ export const oidcParseJwks = (doc: u8[]): OidcKeySet => {
 /** The seconds of one `max-age=<digits>` directive, or -1 when `directive` is not one. */
 const oidcMaxAge = (directive: string): i64 => {
   const eq: i32 = toI32(directive.indexOf(String.fromCharCode(OIDC_CH_EQUALS)))
-  if (eq < 1 || asciiLower(trim(directive.slice(0, eq))) !== "max-age") {
+  const end: i32 = toI32(directive.length)
+  if (eq < 1 || eq >= end || asciiLower(trim(directive.substring(0, eq))) !== "max-age") {
     return toI64(-1)
   }
-  const value: string = trim(directive.slice(eq + 1, toI32(directive.length)))
+  const value: string = trim(directive.substring(eq + 1, end))
   const n: i32 = toI32(value.length)
   if (n < 1) {
     return toI64(-1)
   }
-  let age: i64 = toI64(0)
+  let age: i32 = 0
   for (let i: i32 = 0; i < n; i += 1) {
     const c: i32 = toI32(value.charCodeAt(i))
     if (c < OIDC_CH_0 || c > OIDC_CH_9) {
       return toI64(-1)
     }
-    // Saturate rather than overflow (RFC 9111 §1.2.2): the clamp caps it anyway.
-    if (age <= OIDC_MAX_LIFETIME) {
-      age = age * toI64(10) + toI64(c - OIDC_CH_0)
+    // Saturate rather than overflow (RFC 9111 §1.2.2): the clamp caps it
+    // anyway. 86400 is `OIDC_MAX_LIFETIME`, written as an `i32` the bound
+    // proofs read.
+    let d: i32 = 0
+    if (c >= OIDC_CH_0 && c <= OIDC_CH_9) {
+      d = c - OIDC_CH_0
+    }
+    if (age >= 0 && age <= 86400 && d >= 0 && d <= 9) {
+      age = age * 10 + d
     }
   }
-  return age
+  return toI64(age)
 }
 
 /**
@@ -772,19 +782,41 @@ export const oidcLifetime = (cacheControl: string | null): i64 => {
   }
   const n: i32 = toI32(cacheControl.length)
   let from: i32 = 0
-  for (let i: i32 = 0; i <= n; i += 1) {
-    if (i === n || toI32(cacheControl.charCodeAt(i)) === OIDC_CH_COMMA) {
-      const age: i64 = oidcMaxAge(trim(cacheControl.slice(from, i)))
+  const text: string = cacheControl
+  for (let i: i32 = 0; i >= 0 && i < toI32(text.length); i += 1) {
+    if (toI32(text.charCodeAt(i)) === OIDC_CH_COMMA) {
+      const age: i64 = oidcMaxAge(trim(text.substring(from, i)))
       if (age >= toI64(0)) {
-        if (age < OIDC_MIN_LIFETIME) {
-          return OIDC_MIN_LIFETIME
-        }
-        return age > OIDC_MAX_LIFETIME ? OIDC_MAX_LIFETIME : age
+        return oidcClamp(age)
       }
       from = i + 1
     }
   }
-  return OIDC_DEFAULT_LIFETIME
+  const last: i64 = oidcMaxAge(trim(cacheControl.substring(from, n)))
+  return last >= toI64(0) ? oidcClamp(last) : OIDC_DEFAULT_LIFETIME
+}
+
+/** `n` zero bytes, or none when `n` is negative. */
+const oidcZeroes = (n: i32): u8[] => {
+  if (n < 0) {
+    return []
+  }
+  if (n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/** A `max-age` of `age` seconds, clamped to `[OIDC_MIN_LIFETIME, OIDC_MAX_LIFETIME]`. */
+const oidcClamp = (age: i64): i64 => {
+  if (age < OIDC_MIN_LIFETIME) {
+    return OIDC_MIN_LIFETIME
+  }
+  return age > OIDC_MAX_LIFETIME ? OIDC_MAX_LIFETIME : age
 }
 
 /**
@@ -843,7 +875,8 @@ export class OidcKeys {
     this.hardUntil = toI64(0)
     this.triedAt = toI64(0)
     this.verifier = new JwtVerifier(options.maxToken)
-    this.text = new Array<u8>(options.maxToken)
+    // A negative `maxToken` holds no token: `load` refuses every one.
+    this.text = oidcZeroes(options.maxToken)
     this.kidBytes = new Array<u8>(OIDC_MAX_KID)
   }
 
@@ -1093,10 +1126,11 @@ const oidcPick = (keys: OidcKeys, token: string, audience: string, now: i64): i3
   const kid: string | null = keys.peekKid(n)
   let key: JwtKey | null = null
   if (kid === null) {
-    if (set.count() !== 1) {
+    const only: JwtKey[] = set.keys
+    if (toI32(only.length) !== 1) {
       return OIDC_ERR_KID_REQUIRED
     }
-    key = set.keys[0]
+    key = only[0]
   } else {
     key = keys.key(kid, now)
   }
