@@ -1,0 +1,5 @@
+bytes 3 to 5 of 4: null
+size of -7: WS_REFUSED
+4 bytes into a buffer of 3: WS_NO_ROOM
+a 3-byte mask: WS_REFUSED
+4 bytes into a buffer of 6: 6

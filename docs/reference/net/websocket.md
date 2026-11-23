@@ -107,7 +107,7 @@ The payload of a close frame (§5.5.1): `code` in two bytes, then `reason`.
 
 <scalar-card title="websocket​Frame" icon="phosphor/regular/function" href="#websocketframe">
 
-One frame, as `websocketWriteFrame` writes it, in an array of its own; the same refusals answer `null`.
+One frame, as `websocketWriteFrame` writes it, in an array of its own; the same refusals, a window outside `payload` among them, answer `null`.
 
 </scalar-card>
 
@@ -411,7 +411,7 @@ The payload for a `WS_OP_CLOSE` frame, the code big-endian and then the reason's
 ### websocketFrame
 
 One frame, as `websocketWriteFrame` writes it, in an array of its own; the
-same refusals answer `null`. A window outside `payload` panics.
+same refusals, a window outside `payload` among them, answer `null`.
 
 ```ts
 const websocketFrame: (
@@ -489,7 +489,7 @@ Whether the frame carries a 4-byte mask key, as every frame a client sends does.
 
 <scalar-field name="returns" type="i32">
 
-The frame's size in bytes: 2 to 14 bytes of header, then `len`.
+The frame's size in bytes: 2 to 14 bytes of header, then `len`; `WS_REFUSED` for a negative `len` or one past 2^31 - 15, whose frame `websocketWriteFrame` refuses.
 
 </scalar-field>
 
@@ -764,12 +764,12 @@ Writes one frame (§5.2) into `out` at `at`: FIN, the opcode, the payload
 shortest of its three forms.
 
 Answers where the frame ends, `WS_NO_ROOM` when it does not fit, or
-`WS_REFUSED` for an opcode RFC 6455 does not define, a control frame that is
-not FIN or is longer than 125 bytes, and a mask that is not 4 bytes; on
-either refusal `out` is untouched. A window outside `payload` panics, and so
-does a payload longer than 2^31 - 15 bytes. A text frame's payload is not
-checked here, because a fragment may end inside a character;
-`websocketIsUtf8` checks a whole message.
+`WS_REFUSED` for a window outside `payload`, a payload longer than
+2^31 - 15 bytes, an opcode RFC 6455 does not define, a control frame that
+is not FIN or is longer than 125 bytes, and a mask that is not 4 bytes; on
+either refusal `out` is untouched. A text frame's payload is not checked
+here, because a fragment may end inside a character; `websocketIsUtf8`
+checks a whole message.
 
 ```ts
 const websocketWriteFrame: (

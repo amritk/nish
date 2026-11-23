@@ -42,6 +42,8 @@ import {
   B_PKCS,
   B_PSS,
   B_PSS_HIGH,
+  B_PSS_SHORT_MSG,
+  B_PSS_SHORT_SIG,
   C_PKCS,
   D_N,
   D_PKCS,
@@ -164,6 +166,15 @@ export const runSuite = (): i32 => {
   const keyB: RsaPublicKey | null = rsaParsePublicKey(fromHex(KEY_B));
   t.ok("PSS verifies under a 2049-bit key", pss(keyB, RSA_HASH_SHA256, 32, B_PSS));
   t.ok("a 2049-bit key's signature of 2^2048 plus a block is refused", !pss(keyB, RSA_HASH_SHA256, 32, B_PSS_HIGH));
+  const shortMsg: u8[] = fromHex(B_PSS_SHORT_MSG);
+  t.ok(
+    "a 2049-bit key's PSS signature that starts with a zero byte verifies",
+    keyB !== null && rsaVerifyPss(keyB, RSA_HASH_SHA256, 32, shortMsg, fromHex(B_PSS_SHORT_SIG)),
+  );
+  t.ok(
+    "that signature without its zero byte, as long as the block, is refused",
+    !(keyB !== null && rsaVerifyPss(keyB, RSA_HASH_SHA256, 32, shortMsg, fromHex(B_PSS_SHORT_SIG.slice(2)))),
+  );
   const keyE: RsaPublicKey | null = rsaParsePublicKey(fromHex(KEY_E));
   t.ok("PSS SHA-512 verifies under a 1024-bit key", pss(keyE, RSA_HASH_SHA512, 0, E_PSS_SHA512));
   t.ok("a salt too long for a 1024-bit key and SHA-512 is refused", !pss(keyE, RSA_HASH_SHA512, 100, E_PSS_SHA512));

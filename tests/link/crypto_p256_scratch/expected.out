@@ -1,0 +1,15 @@
+fresh scratch: true, signature written, k v kM zero
+block emptied: false, signature unwritten, k v kM zero
+tail shortened: false, signature unwritten, k v kM zero
+round constants shortened: false, signature unwritten, k v kM zero
+nonce message shortened: false, signature unwritten, k v kM zero
+digest bytes shortened: false, signature unwritten, k v kM zero
+digest scalar shortened: false, signature unwritten, k v kM zero
+nonce shortened: false, signature unwritten, k v kM zero
+nonce limbs shortened: false, signature unwritten, k v kM zero
+signature half shortened: false, signature unwritten, k v kM zero
+affine x shortened: false, signature unwritten, k v kM zero
+Montgomery constant zeroed: false, signature unwritten, k v kM zero
+comb digits shortened: false, signature unwritten, k v kM zero
+table shortened: false, signature unwritten, k v kM zero
+put right: true, signature written, k v kM zero

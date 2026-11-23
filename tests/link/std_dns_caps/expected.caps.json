@@ -963,7 +963,6 @@
                 { "kind": "index", "at": "std/net/dns-resolver.ts:643:61", "proven": true },
                 { "kind": "index", "at": "std/net/dns-resolver.ts:643:77", "proven": true },
                 { "kind": "call", "at": "std/net/dns-resolver.ts:649:7", "callee": "dnsResolverServerFailed", "via": "index" },
-                { "kind": "call", "at": "std/net/dns-resolver.ts:654:7", "callee": "dnsResolverSend", "via": "overflow" },
                 { "kind": "call", "at": "std/net/dns-resolver.ts:656:7", "callee": "dnsResolverAnswer", "via": "index" }
               ]
             },

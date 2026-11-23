@@ -6,6 +6,15 @@
 // reference, so tests/link/crypto_p256_inverse can
 // hold them to each other without the module growing a public API for it.
 
+/** `p256EncodePoint`, panicking where it refuses: a refusal here fails the check. */
+const p256SeamEncode = (p: P256ProjectivePoint): u8[] => {
+  const encoded: u8[] | null = p256EncodePoint(p)
+  if (encoded === null) {
+    panic("p256 seam: p256EncodePoint refused a point")
+  }
+  return encoded
+}
+
 /**
  * `out = 1 / a` mod n as `a^(n - 2)`, square-and-multiply with the scalar
  * Montgomery multiply on the public exponent: the Fermat ladder the module
@@ -120,7 +129,7 @@ const p256SeamDoubleMultWith = (u1: u8[], u2: u8[], k: u8[], wnaf: boolean): u8[
     p256ScalarMult(b, u2, q, s)
     p256PointAdd(sum, a, b, s)
   }
-  return p256EncodePoint(sum)
+  return p256SeamEncode(sum)
 }
 
 /** `u1 G + u2 (k G)` by the wNAF pass `p256Verify` takes. */

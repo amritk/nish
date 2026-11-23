@@ -130,6 +130,8 @@ export const H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS: i64 = 0xc671706a
 
 /** How many identifiers `Http3Settings` keeps that it does not understand. */
 export const H3_SETTINGS_KEEP: i32 = 8
+/** `h3Greased` values are `0x1f * N + 0x21`, so each is 2 more than a multiple of this (`0x21 % 0x1f`). */
+const H3_GREASE_STEP: i64 = 0x1f
 
 // ---- Error codes (§8.1) ---------------------------------------------------------
 
@@ -265,9 +267,11 @@ export class Http3Settings {
    *   identifiers this module understands, which are never kept.
    */
   unknown(id: i64): i64 {
-    for (let k: i32 = 0; k < this.unknownCount && k < H3_SETTINGS_KEEP; k++) {
-      if (this.unknownIds[k] === id) {
-        return this.unknownValues[k]
+    const ids: i64[] = this.unknownIds
+    const values: i64[] = this.unknownValues
+    for (let k: i32 = 0; k < this.unknownCount && k < toI32(ids.length) && k < toI32(values.length); k++) {
+      if (ids[k] === id) {
+        return values[k]
       }
     }
     return H3_FRAME_NONE
@@ -325,12 +329,17 @@ export class Http3Settings {
       return H3_SETTINGS_ERROR
     }
     const at: i32 = this.unknownCount
-    if (at >= 0 && at < H3_SETTINGS_KEEP) {
-      this.unknownIds[at] = id
-      this.unknownValues[at] = value
+    const ids: i64[] = this.unknownIds
+    const values: i64[] = this.unknownValues
+    if (at >= 0 && at < H3_SETTINGS_KEEP && at < toI32(ids.length) && at < toI32(values.length)) {
+      ids[at] = id
+      values[at] = value
       this.unknownCount = at + 1
-    } else if (this.dropped < 2147483647) {
-      this.dropped = this.dropped + 1
+    } else {
+      const dropped: i32 = this.dropped
+      if (dropped < 2147483647) {
+        this.dropped = dropped + 1
+      }
     }
     return H3_SETTINGS_OK
   }
@@ -347,6 +356,24 @@ export const h3CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void
   if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
     panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
   }
+}
+
+/**
+ * `off + len`, after `h3CheckWindow` has panicked unless the window lies inside `buf`: the sum is then at
+ * most `buf.length`, so the `i64` it is taken in always narrows back exactly.
+ */
+const h3WindowEnd = (what: string, buf: u8[], off: i32, len: i32): i32 => {
+  h3CheckWindow(what, buf, off, len)
+  return toI32(toI64(off) + toI64(len))
+}
+
+/**
+ * The offset just past the varint at `buf[at]`, or -1 when it does not end at or before `end` (or `at` is
+ * outside `buf`). Taken in `i64`, so it narrows back exactly whenever it is at most `end`.
+ */
+const h3VarintEnd = (buf: u8[], at: i32, end: i32): i32 => {
+  const past: i64 = toI64(at) + toI64(quicVarintLength(buf, at))
+  return at >= 0 && past > toI64(at) && past <= toI64(end) ? toI32(past) : -1
 }
 
 /**
@@ -394,7 +421,7 @@ export const h3VarintLength = (buf: u8[], at: i32): i32 => quicVarintLength(buf,
  */
 export const h3PutVarint = (buf: u8[], at: i32, end: i32, value: i64): i32 => {
   const size: i32 = quicVarintSize(value)
-  if (size === 0 || !h3FrameRoom(buf, at, end) || at > end - size) {
+  if (size === 0 || !h3FrameRoom(buf, at, end) || toI64(at) > toI64(end) - toI64(size)) {
     return -1
   }
   return quicVarintPut(buf, at, value, size)
@@ -409,7 +436,8 @@ export const h3PutVarint = (buf: u8[], at: i32, end: i32, value: i64): i32 => {
 export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
   const a: i32 = quicVarintSize(type)
   const b: i32 = quicVarintSize(length)
-  return a === 0 || b === 0 ? H3_FRAME_ZERO : a + b
+  // `quicVarintSize` answers 0, 1, 2, 4 or 8.
+  return a <= 0 || b <= 0 || a > 8 || b > 8 ? H3_FRAME_ZERO : a + b
 }
 
 /**
@@ -424,20 +452,20 @@ export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
  * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
  */
 export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 => {
-  h3CheckWindow("h3ReadFrameHeader", buf, off, len)
-  const end: i32 = off + len
+  const end: i32 = h3WindowEnd("h3ReadFrameHeader", buf, off, len)
   const type: i64 = quicVarintRead(buf, off, end)
-  if (type < 0) {
+  const at: i32 = h3VarintEnd(buf, off, end)
+  if (type < 0 || at < 0) {
     return 0
   }
-  const at: i32 = off + quicVarintLength(buf, off)
   const length: i64 = quicVarintRead(buf, at, end)
-  if (length < 0) {
+  const past: i32 = h3VarintEnd(buf, at, end)
+  if (length < 0 || past < 0) {
     return 0
   }
   h.type = type
   h.length = length
-  return at + quicVarintLength(buf, at) - off
+  return toI32(toI64(past) - toI64(off))
 }
 
 /**
@@ -452,7 +480,7 @@ export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len:
  */
 export const h3PutFrameHeader = (buf: u8[], at: i32, end: i32, type: i64, length: i64): i32 => {
   const size: i32 = h3FrameHeaderSize(type, length)
-  if (size === 0 || !h3FrameRoom(buf, at, end) || at > end - size) {
+  if (size === 0 || !h3FrameRoom(buf, at, end) || toI64(at) > toI64(end) - toI64(size)) {
     return -1
   }
   return h3PutVarint(buf, h3PutVarint(buf, at, end, type), end, length)
@@ -473,7 +501,7 @@ export const h3ReservedHttp2Frame = (type: i64): boolean =>
  * @returns True when `value` is 0x21 or above and 0x21 more than a multiple of 0x1f; false otherwise,
  *   negatives included.
  */
-export const h3Greased = (value: i64): boolean => value >= 0x21 && (value - 0x21) % 0x1f === 0
+export const h3Greased = (value: i64): boolean => value >= 0x21 && value % H3_GREASE_STEP === 2
 
 /**
  * Reads a whole SETTINGS payload, `buf[off, off + len)`, into `s` (which it
@@ -491,21 +519,21 @@ export const h3Greased = (value: i64): boolean => value >= 0x21 && (value - 0x21
  *   error.
  */
 export const h3ReadSettings = (s: Http3Settings, buf: u8[], off: i32, len: i32): i64 => {
-  h3CheckWindow("h3ReadSettings", buf, off, len)
+  const end: i32 = h3WindowEnd("h3ReadSettings", buf, off, len)
   s.reset()
-  const end: i32 = off + len
   let at: i32 = off
   while (at < end) {
     const id: i64 = quicVarintRead(buf, at, end)
-    if (id < 0) {
+    const idEnd: i32 = h3VarintEnd(buf, at, end)
+    if (id < 0 || idEnd < 0) {
       return H3_FRAME_ERROR
     }
-    at = at + quicVarintLength(buf, at)
-    const value: i64 = quicVarintRead(buf, at, end)
-    if (value < 0) {
+    const value: i64 = quicVarintRead(buf, idEnd, end)
+    const valueEnd: i32 = h3VarintEnd(buf, idEnd, end)
+    if (value < 0 || valueEnd < 0) {
       return H3_FRAME_ERROR
     }
-    at = at + quicVarintLength(buf, at)
+    at = valueEnd
     const result: i64 = s.take(id, value)
     if (result !== H3_SETTINGS_OK) {
       return result
@@ -534,17 +562,24 @@ export const h3PutSettings = (buf: u8[], at: i32, end: i32, ids: i64[], values: 
   if (n !== toI32(values.length)) {
     return -1
   }
-  let length: i64 = 0
+  let length: i32 = 0
   for (let k: i32 = 0; k < n && k < toI32(ids.length) && k < toI32(values.length); k++) {
     const a: i32 = quicVarintSize(ids[k])
     const b: i32 = quicVarintSize(values[k])
-    if (a === 0 || b === 0) {
+    // `quicVarintSize` answers 0 for no varint, else 1, 2, 4 or 8.
+    if (a <= 0 || b <= 0 || a > 8 || b > 8) {
       return -1
     }
-    length = length + toI64(a + b)
+    // A payload past 2^31 - 10 bytes takes a 9-byte header, so no such frame fits before an `end` that is
+    // at most `buf.length`.
+    const next: i64 = toI64(length) + toI64(a + b)
+    if (next > 2147483638) {
+      return -1
+    }
+    length = toI32(next)
   }
-  let p: i32 = h3PutFrameHeader(buf, at, end, H3_FRAME_SETTINGS, length)
-  if (p < 0 || toI64(p) + length > toI64(end)) {
+  let p: i32 = h3PutFrameHeader(buf, at, end, H3_FRAME_SETTINGS, toI64(length))
+  if (p < 0 || toI64(p) + toI64(length) > toI64(end)) {
     return -1
   }
   for (let k: i32 = 0; k < n && k < toI32(ids.length) && k < toI32(values.length); k++) {
@@ -589,7 +624,7 @@ export const h3PutIdFrame = (buf: u8[], at: i32, end: i32, type: i64, id: i64): 
  *   bytes after it.
  */
 export const h3ReadIdPayload = (buf: u8[], off: i32, len: i32): i64 => {
-  h3CheckWindow("h3ReadIdPayload", buf, off, len)
-  const id: i64 = quicVarintRead(buf, off, off + len)
-  return id >= 0 && quicVarintLength(buf, off) === len ? id : H3_FRAME_NONE
+  const end: i32 = h3WindowEnd("h3ReadIdPayload", buf, off, len)
+  const id: i64 = quicVarintRead(buf, off, end)
+  return id >= 0 && h3VarintEnd(buf, off, end) === end ? id : H3_FRAME_NONE
 }

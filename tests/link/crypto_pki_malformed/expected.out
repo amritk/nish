@@ -1,0 +1,35 @@
+PASS  the unedited chain is accepted
+PASS  the leaf cut at each of 509 lengths
+PASS  the intermediate cut at each of 458 lengths
+PASS  the leaf: its length one past its buffer
+PASS  the leaf: its length 65535
+PASS  the leaf: tbsCertificate's length past the certificate
+PASS  the leaf: a five-octet length
+PASS  the leaf: an indefinite length
+PASS  the leaf: a SET for its SEQUENCE
+PASS  the leaf: an OCTET STRING for tbsCertificate
+PASS  the leaf: a zero tag
+PASS  the leaf: a high-tag-number tag
+PASS  the intermediate: its length one past its buffer
+PASS  the intermediate: its length 65535
+PASS  the intermediate: tbsCertificate's length past the certificate
+PASS  the intermediate: a five-octet length
+PASS  the intermediate: an indefinite length
+PASS  the intermediate: a SET for its SEQUENCE
+PASS  the intermediate: an OCTET STRING for tbsCertificate
+PASS  the intermediate: a zero tag
+PASS  the intermediate: a high-tag-number tag
+PASS  the host 192.0.2.1 is accepted
+PASS  the host 2001:db8::1 is accepted
+PASS  the host 2001:0db8:0:0:0:0:0:1 is accepted
+PASS  the host a.example.org is accepted
+PASS  the host EXAMPLE.COM is accepted
+PASS  the host example.com. is accepted
+PASS  each of 28 malformed or unnamed hosts is refused as a host-name mismatch
+PASS  the name-constrained chain is accepted
+PASS  the name constraint: its dNSName one octet past its subtree
+PASS  the name constraint: its dNSName empty, the name's octets left over
+PASS  the name constraint: its subtree ending inside its dNSName
+PASS  the name constraint: a [0] base for its dNSName
+PASS  the name constraint: a SET for its subtree
+pki malformed: 34 passed, 0 failed, 0 skipped

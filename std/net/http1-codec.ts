@@ -81,7 +81,7 @@
  *
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { urlIsHostPort } from "nish/net/url"
 import {
   and,
@@ -456,20 +456,45 @@ export class Http1Parser {
    * @param len how many bytes from `off` to append
    */
   feed(data: u8[], off: i32, len: i32): void {
-    const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
+    if (!this.tryFeed(data, off, len)) {
       panic("Http1Parser: the window is outside the buffer")
     }
-    if (this.state === HTTP1_S_CLOSED || this.state === HTTP1_S_ERROR) {
-      return
+  }
+
+  /**
+   * `feed` that answers false, taking nothing and leaving the parser as it
+   * was, where `feed` panics: a window outside `data`. A caller a strict
+   * module reaches uses this one.
+   *
+   * @param data the bytes the socket gave, which the parser copies and does not keep
+   * @param off where in `data` the new bytes start
+   * @param len how many bytes from `off` to append
+   * @returns false when the window lies outside `data`; true otherwise, the
+   *   bytes taken, dropped (a closed or refused parser) or refused with a 413
+   */
+  tryFeed(data: u8[], off: i32, len: i32): boolean {
+    const size: i32 = toI32(data.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return false
     }
-    http1Reserve(this, len)
+    if (this.state === HTTP1_S_CLOSED || this.state === HTTP1_S_ERROR) {
+      return true
+    }
+    if (!http1Reserve(this, len)) {
+      return true
+    }
     const buf: u8[] = this.buf
     const at: i32 = this.end
     // One move: http1Reserve made room for `len` bytes at `at`, and the
-    // window was checked above.
-    copyBytes(buf, at, data, off, len)
-    this.end = at + len
+    // window was checked above, so it always succeeds; were it to fail, the
+    // parser refuses rather than drop the bytes.
+    if (!tryCopyBytes(buf, at, data, off, len)) {
+      http1Fail(this, 413, "the buffer could not take the input")
+      return true
+    }
+    // In range, because the move fit: `at + len` is at most `buf.length`.
+    this.end = toI32(toU32(at) + toU32(len))
+    return true
   }
 
   /**
@@ -489,19 +514,16 @@ export class Http1Parser {
    * @returns the first such field's value with its surrounding whitespace trimmed, or `null` when the request has none
    */
   header(name: string): string | null {
-    const i: i32 = this.headerIndex(name)
-    if (i < 0) {
+    const spans: i32[] = this.spans
+    const k: i32 = http1FieldSpans(this, name)
+    if (k < 0 || k >= toI32(spans.length) - 3) {
       return null
     }
+    const i: i32 = k >>> 2
     if (this.keepText && i < toI32(this.values.length)) {
       return this.values[i]
     }
-    const spans: i32[] = this.spans
-    const at: i32 = 4 * i
-    if (at + 3 >= toI32(spans.length)) {
-      return null
-    }
-    return http1Text(this.head, spans[at + 2], spans[at + 3], false)
+    return http1Text(this.head, spans[k + 2], spans[k + 3], false)
   }
 
   /**
@@ -510,14 +532,8 @@ export class Http1Parser {
    * @returns which field it is, so its spans are `spans[4 * i ..]`, or -1 when the request has none
    */
   headerIndex(name: string): i32 {
-    const spans: i32[] = this.spans
-    const count: i32 = this.headerCount
-    for (let i: i32 = 0; i < count && 4 * i + 1 < toI32(spans.length); i += 1) {
-      if (http1HeadIs(this.head, spans[4 * i], spans[4 * i + 1], name, true)) {
-        return i
-      }
-    }
-    return -1
+    const k: i32 = http1FieldSpans(this, name)
+    return k < 0 ? -1 : k >>> 2
   }
 
   /**
@@ -527,12 +543,12 @@ export class Http1Parser {
    * @returns true when that field exists and its trimmed value is `value`, with nothing allocated
    */
   headerIs(name: string, value: string): boolean {
-    const i: i32 = this.headerIndex(name)
     const spans: i32[] = this.spans
-    if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+    const k: i32 = http1FieldSpans(this, name)
+    if (k < 0 || k >= toI32(spans.length) - 3) {
       return false
     }
-    return http1HeadIs(this.head, spans[4 * i + 2], spans[4 * i + 3], value, false)
+    return http1HeadIs(this.head, spans[k + 2], spans[k + 3], value, false)
   }
 
   /**
@@ -565,19 +581,23 @@ export class Http1Parser {
       return false
     }
     const spans: i32[] = this.spans
+    const n: i32 = toI32(spans.length)
     let found: i32 = -1
-    for (let i: i32 = 0; i < this.headerCount && 4 * i + 1 < toI32(spans.length); i += 1) {
-      if (http1HeadIs(this.head, spans[4 * i], spans[4 * i + 1], "upgrade", false)) {
+    // Field `i` has its spans at `spans[k ..]`, `k` four times `i`.
+    let k: i32 = 0
+    for (let i: i32 = 0; i < this.headerCount && k < n - 3; i += 1) {
+      if (http1HeadIs(this.head, spans[k], spans[k + 1], "upgrade", false)) {
         if (found >= 0) {
           return false
         }
-        found = i
+        found = k
       }
+      k += 4
     }
-    if (found < 0 || 4 * found + 3 >= toI32(spans.length)) {
+    if (found < 0 || found >= n - 3) {
       return false
     }
-    return http1HeadIs(this.head, spans[4 * found + 2], spans[4 * found + 3], protocol, true)
+    return http1HeadIs(this.head, spans[found + 2], spans[found + 3], protocol, true)
   }
 
   /**
@@ -597,7 +617,8 @@ export class Http1Parser {
    * @returns the count of unread input bytes, at `buf[start ..]`
    */
   buffered(): i32 {
-    return this.end - this.start
+    // `start` never passes `end`, and both are offsets into `buf`.
+    return toI32(toU32(this.end) - toU32(this.start))
   }
 
   /**
@@ -605,16 +626,12 @@ export class Http1Parser {
    * @returns a copy the caller owns of the bytes that belong to the next protocol, empty when none arrived yet
    */
   upgradeBytes(): u8[] {
-    let n: i32 = this.end - this.start
-    if (n < 0) {
-      n = 0
-    }
-    const out: u8[] = new Array<u8>(n)
-    const outLength: i32 = toI32(out.length)
     const buf: u8[] = this.buf
-    const from: i32 = this.start
-    for (let k: i32 = 0; k < outLength; k += 1) {
-      out[k] = buf[from + k]
+    const to: i32 = this.end
+    // Built by `push`, so no length is computed for `new Array`.
+    const out: u8[] = []
+    for (let k: i32 = this.start; k >= 0 && k < toI32(buf.length) && k < to; k += 1) {
+      out.push(buf[k])
     }
     return out
   }
@@ -656,35 +673,94 @@ export const HTTP1_FIRST_HEAD: i32 = 256
 /** The spans a parser makes at its first field line: four per field, room for sixteen. */
 const HTTP1_FIRST_SPANS: i32 = 64
 
-/** Makes room for `len` more bytes at `p.end`, moving the live bytes down first. */
-const http1Reserve = (p: Http1Parser, len: i32): void => {
+/** The largest input buffer a parser grows to: 2^30 bytes. */
+const HTTP1_MOST_INPUT: i32 = 1073741824
+
+/**
+ * Makes room for `len` more bytes at `p.end`, moving the live bytes down
+ * first. False, with the parser refused, when that would take a buffer past
+ * `HTTP1_MOST_INPUT` (a 413) or the live bytes are not a window of `buf` (a
+ * 400).
+ */
+const http1Reserve = (p: Http1Parser, len: i32): boolean => {
   const old: u8[] = p.buf
-  const capacity: i32 = toI32(old.length)
-  if (len <= capacity - p.end) {
-    return
+  const capacity: u32 = toU32(old.length)
+  const from: i32 = p.start
+  if (len < 0 || from < 0 || p.end < from || p.end > toI32(capacity)) {
+    // The parser keeps `0 <= start <= end <= buf.length`. The fields are
+    // public, so a caller may have moved them: such a parser is refused with
+    // a 400 rather than read outside `buf`.
+    http1Fail(p, 400, "the input window is out of order")
+    return false
   }
-  const live: i32 = p.end - p.start
-  let size: i32 = capacity < HTTP1_FIRST_INPUT ? HTTP1_FIRST_INPUT : capacity
-  while (size - live < len) {
-    if (size > 1073741823) {
-      panic("Http1Parser: more than 2^31 - 1 bytes buffered")
-    }
+  // `len` is non-negative and `start <= end <= buf.length`, checked above, so
+  // these unsigned counts are the real ones and add up without wrapping in u32.
+  const want: u32 = toU32(len)
+  const end: u32 = toU32(p.end)
+  if (want <= capacity - end) {
+    return true
+  }
+  const live: u32 = end - toU32(from)
+  if (want > toU32(HTTP1_MOST_INPUT) - live) {
+    http1Fail(p, 413, "more than 2^30 bytes buffered")
+    return false
+  }
+  let size: u32 = capacity < toU32(HTTP1_FIRST_INPUT) ? toU32(HTTP1_FIRST_INPUT) : capacity
+  while (size - live < want) {
     size = size * 2
   }
   // A fresh array when it has to grow, and the same one otherwise: either way
   // the live bytes move to the front, and every index into them moves too.
-  const buf: u8[] = size === capacity ? old : new Array<u8>(size)
-  const from: i32 = p.start
-  if (live > 0) {
-    // One move, overlapping when the buffer is the same one.
-    copyBytes(buf, 0, old, from, live)
+  // One move, overlapping when the buffer is the same one; the offsets keep it
+  // in range.
+  const buf: u8[] = size === capacity ? old : http1Grown(old, from, live, size)
+  if (size === capacity && !tryCopyBytes(buf, 0, old, from, toI32(live))) {
+    // Never false: the window was checked above. Were it, the parser is
+    // refused rather than left with bytes it did not move.
+    http1Fail(p, 400, "the input window is out of order")
+    return false
   }
   p.buf = buf
-  p.lineStart -= from
-  p.lineEnd -= from
-  p.scan -= from
+  p.lineStart = toI32(toU32(p.lineStart) - toU32(from))
+  p.lineEnd = toI32(toU32(p.lineEnd) - toU32(from))
+  p.scan = toI32(toU32(p.scan) - toU32(from))
   p.start = 0
-  p.end = live
+  p.end = toI32(live)
+  return true
+}
+
+/**
+ * A buffer of `size` bytes whose first `live` are `old[from ..]`. A size past
+ * a `u16` is built by `push`, so no unchecked length reaches `new Array`; the
+ * first input buffer, `HTTP1_FIRST_INPUT` bytes, is the common one and copies
+ * nothing.
+ */
+const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
+  if (old.length === 0 && size === toU32(HTTP1_FIRST_INPUT)) {
+    return new Array<u8>(HTTP1_FIRST_INPUT)
+  }
+  if (old.length === 0 && size === toU32(HTTP1_FIRST_HEAD)) {
+    return new Array<u8>(HTTP1_FIRST_HEAD)
+  }
+  const to: i32 = toI32(toU32(from) + live)
+  if (size <= toU32(65535)) {
+    // A size that fits a `u16` is one allocation whose length needs no check.
+    const sized: u8[] = new Array<u8>(toU16(toI32(size)))
+    let at: i32 = 0
+    for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to && at < toI32(sized.length); k += 1) {
+      sized[at] = old[k]
+      at += 1
+    }
+    return sized
+  }
+  const buf: u8[] = []
+  for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to; k += 1) {
+    buf.push(old[k])
+  }
+  while (toU32(buf.length) < size) {
+    buf.push(0)
+  }
+  return buf
 }
 
 /** Refuses the input with `status`. Answers `HTTP1_ERROR`, so a caller can `return` it. */
@@ -694,6 +770,25 @@ const http1Fail = (p: Http1Parser, status: i32, reason: string): i32 => {
   p.reason = reason
   p.keepAlive = false
   return HTTP1_ERROR
+}
+
+/**
+ * Where the first field named `name` (any case) has its spans: `k` such that
+ * the field is `spans[k .. k + 4)`, four times its index, or -1 when the
+ * request has none.
+ */
+const http1FieldSpans = (p: Http1Parser, name: string): i32 => {
+  const spans: i32[] = p.spans
+  const count: i32 = p.headerCount
+  const n: i32 = toI32(spans.length)
+  let k: i32 = 0
+  for (let i: i32 = 0; i < count && k < n - 3; i += 1) {
+    if (http1HeadIs(p.head, spans[k], spans[k + 1], name, true)) {
+      return k
+    }
+    k += 4
+  }
+  return -1
 }
 
 /** Clears the per-request fields and waits for a request line. */
@@ -746,27 +841,35 @@ const HTTP1_LINE: i32 = -1
 const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
   const buf: u8[] = p.buf
   const end: i32 = p.end
-  let i: i32 = p.start
-  if (p.scan > p.start) {
+  const from: i32 = p.start
+  if (from < 0 || end < from) {
+    // The parser keeps `0 <= start <= end`. The fields are public, so a caller may
+    // have moved them: such a parser is refused with a 400 rather than read
+    // outside `buf`.
+    return http1Fail(p, 400, "the input window is out of order")
+  }
+  let i: i32 = from
+  if (p.scan > from) {
     i = p.scan
   } else {
     p.lineControl = false
   }
   const stop: i32 = end < toI32(buf.length) ? end : toI32(buf.length)
-  if (i < 0) {
-    i = 0
-  }
-  while (i < stop) {
+  while (i >= 0 && i < stop && i < toI32(buf.length)) {
     // Most bytes are printable: sixteen at a time while a whole vector is,
     // and the vector that is not answers where its first control byte is.
     // The bytes after a control byte, and a tail shorter than a vector, go
     // one at a time.
     let found: boolean = false
-    while (!found && i >= 0 && i <= stop - 16 && i <= toI32(buf.length) - 16) {
+    while (!found && i >= 0 && i <= toI32(buf.length) - 16 && i + 16 <= stop) {
       const v: u8x16 = loadU8x16(buf, i)
-      const bad: i32 = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
+      const bad: u32 = toU32(bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127)))))
       if (bad !== 0) {
-        i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+        // The lowest set lane, 0 to 15: sixteen lanes set at most bit 15.
+        const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+        if (lane >= 0 && lane < 16) {
+          i += lane
+        }
         found = true
       } else {
         i += 16
@@ -778,38 +881,39 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
     if (i < 0 || i >= stop || i >= toI32(buf.length)) {
       break
     }
-    let c: i32 = toI32(buf[i])
-    if (c === 13 && i + 1 < stop && i + 1 < toI32(buf.length) && buf[i + 1] === 10) {
+    const c: i32 = toI32(buf[i])
+    if (c === 13 && i + 1 < stop && i < toI32(buf.length) - 1 && buf[i + 1] === 10) {
       // CRLF, the end of almost every line: its LF is the next byte, so it
       // is taken here rather than by another trip through the scan.
-      i += 1
-      c = 10
-    }
-    if (c === 10) {
-      if (i === p.start || buf[i - 1] !== 13) {
-        return http1Fail(p, 400, "a line ended in a bare LF")
-      }
-      if (i - 1 - p.start > limit) {
+      if (i - from > limit) {
         return http1Fail(p, overStatus, "a line over its limit")
       }
-      p.lineStart = p.start
-      p.lineEnd = i - 1
-      p.start = i + 1
-      p.scan = i + 1
+      p.lineStart = from
+      p.lineEnd = i
+      p.start = i + 2
+      p.scan = i + 2
       return HTTP1_LINE
+    }
+    if (c === 10) {
+      // A CR before it would have ended the line above, or waited at the end
+      // of the bytes for this one.
+      return http1Fail(p, 400, "a line ended in a bare LF")
     }
     if (c === 13 && i + 1 >= stop) {
       // A CR at the end of the bytes so far: whether it ends the line is
       // the next byte's to say, so the next call looks at it again.
       break
     }
-    if (c !== 9 && !(c === 13 && i + 1 < toI32(buf.length) && buf[i + 1] === 10)) {
+    if (c !== 9) {
+      // A control byte, or a CR with no LF after it.
       p.lineControl = true
     }
     i += 1
   }
   p.scan = i
-  if (end - p.start > limit + 1) {
+  // `0 <= from <= end`, checked above, so the u32 difference is the count
+  // held; the limits are small constants.
+  if (toU32(end) - toU32(from) > toU32(limit) + toU32(1)) {
     return http1Fail(p, overStatus, "a line over its limit")
   }
   return HTTP1_NEED_MORE
@@ -874,20 +978,24 @@ const http1LowerName = (head: u8[], k0: i32, stop: i32): i32 => {
   let k: i32 = k0
   while (k >= 0 && k < stop && k <= toI32(head.length) - 16) {
     const v: u8x16 = loadU8x16(head, k)
-    const bad: i32 = http1NonTokenLanes(v)
+    const bad: u32 = toU32(http1NonTokenLanes(v))
     let run: i32 = 16
     if (bad !== 0) {
-      run = toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+      // The lowest set lane, 0 to 15.
+      run = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
     }
-    if (run > stop - k) {
-      run = stop - k
+    // `0 <= k < stop`, so the u32 difference is the bytes left.
+    const left: i32 = toI32(toU32(stop) - toU32(k))
+    if (run > left) {
+      run = left
     }
     const upper: mask8x16 = and(
       lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)),
       lt(lanes, splatU8x16(toU8(run)))
     )
     store(select(upper, or(v, splatU8x16(32)), v), head, k)
-    k += run
+    // `run` is at most the bytes left before `stop`, so the sum fits.
+    k = toI32(toU32(k) + toU32(run))
     if (run < 16) {
       return k
     }
@@ -947,11 +1055,14 @@ export const http1IsOws = (c: i32): boolean => c === 32 || c === 9
  */
 export const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  if (a < 0 || b - a !== n || b > toI32(text.length)) {
+  // `0 <= a <= b`, so the u32 difference is the slice's length.
+  if (a < 0 || b < a || b > toI32(text.length) || toI32(toU32(b) - toU32(a)) !== n) {
     return false
   }
-  for (let k: i32 = 0; k < n; k += 1) {
-    let c: i32 = toI32(text.charCodeAt(a + k))
+  let j: i32 = a
+  for (let k: i32 = 0; k < n && j >= 0 && j < b; k += 1) {
+    let c: i32 = toI32(text.charCodeAt(j))
+    j += 1
     if (c >= 65 && c <= 90) {
       c += 32
     }
@@ -969,20 +1080,25 @@ export const http1SameWord = (text: string, a: i32, b: i32, word: string): boole
  */
 const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): boolean => {
   const n: i32 = toI32(word.length)
-  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+  // `0 <= a <= b`, so the u32 difference is the slice's length.
+  if (a < 0 || b < a || b > toI32(bytes.length) || toI32(toU32(b) - toU32(a)) !== n) {
     return false
   }
+  // `j` walks `bytes[a .. b)` beside `k`: the lengths are equal.
+  let j: i32 = a
   if (!fold) {
-    for (let k: i32 = 0; k < n; k += 1) {
-      if (toI32(word.charCodeAt(k)) !== toI32(bytes[a + k])) {
+    for (let k: i32 = 0; k < n && j >= 0 && j < toI32(bytes.length); k += 1) {
+      if (toI32(word.charCodeAt(k)) !== toI32(bytes[j])) {
         return false
       }
+      j += 1
     }
     return true
   }
-  for (let k: i32 = 0; k < n; k += 1) {
+  for (let k: i32 = 0; k < n && j >= 0 && j < toI32(bytes.length); k += 1) {
     let c: i32 = toI32(word.charCodeAt(k))
-    let d: i32 = toI32(bytes[a + k])
+    let d: i32 = toI32(bytes[j])
+    j += 1
     if (c >= 65 && c <= 90) {
       c += 32
     }
@@ -1001,27 +1117,28 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
  * `p.headLength`, keeping every byte already there, those `http1Section` has
  * copied past `headLength` for a line not yet whole included: the rare path
  * of `http1HeadAppend` and of the section scan's copy, apart so that the
- * common one stays small enough to inline.
+ * common one stays small enough to inline. It answers false, and grows
+ * nothing, when the head would pass 2^30 bytes: the caller refuses it.
  */
-const http1HeadGrow = (p: Http1Parser, n: i32): void => {
-  const at: i32 = p.headLength
-  let size: i32 = toI32(p.head.length)
-  if (size < HTTP1_FIRST_HEAD) {
-    size = HTTP1_FIRST_HEAD
+const http1HeadGrow = (p: Http1Parser, n: i32): boolean => {
+  const old: u8[] = p.head
+  const capacity: u32 = toU32(old.length)
+  // u32 throughout: each term is at most 2^30 once checked, so no sum wraps.
+  const at: u32 = toU32(p.headLength)
+  const more: u32 = n < 0 ? toU32(0) : toU32(n)
+  const most: u32 = toU32(HTTP1_MOST_INPUT) - toU32(16)
+  if (at > most || more > most - at) {
+    return false
   }
-  while (size - at - 16 < n) {
-    if (size > 1073741823) {
-      panic("Http1Parser: a head of more than 2^31 - 1 bytes")
-    }
+  const want: u32 = at + more + toU32(16)
+  let size: u32 = capacity < toU32(HTTP1_FIRST_HEAD) ? toU32(HTTP1_FIRST_HEAD) : capacity
+  while (size < want) {
     size = size * 2
   }
-  const grown: u8[] = new Array<u8>(size)
-  const old: u8[] = p.head
-  const kept: i32 = toI32(old.length) < size ? toI32(old.length) : size
-  if (kept > 0) {
-    copyBytes(grown, 0, old, 0, kept)
+  if (size !== capacity) {
+    p.head = http1Grown(old, 0, capacity, size)
   }
-  p.head = grown
+  return true
 }
 
 /**
@@ -1033,26 +1150,38 @@ const http1HeadGrow = (p: Http1Parser, n: i32): void => {
  * last line, so a short line is copied as whole vectors and a vector load at
  * any byte of the head is in bounds: the name and value compares read one. A
  * vector's lanes past the line write bytes past `headLength`, which nothing
- * reads until the section scan overwrites them.
+ * reads until the section scan overwrites them. It answers -1, with the
+ * parser refused, when the line or the head's length is out of order or the
+ * line does not fit: the caller returns `HTTP1_ERROR` then.
  */
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
-  const n: i32 = to - from
   const at: i32 = p.headLength
+  if (from < 0 || to < from || at < 0) {
+    // `http1RequestLine` checks the line and grows the head first, so this
+    // refuses only a parser whose public fields were moved out of order.
+    http1Fail(p, 400, "the request line is outside the buffer")
+    return -1
+  }
+  // `0 <= from <= to`, so the u32 difference is the line's length.
+  const n: i32 = toI32(toU32(to) - toU32(from))
   const head: u8[] = p.head
   const buf: u8[] = p.buf
   // A line of up to 32 bytes is one or two vector stores; a longer one, or
   // one that ends within a vector of `buf`'s end, is one `copyBytes`, which
   // outruns a loop of stores at a Cookie or User-Agent line's length.
-  const room: i32 = n <= 16 ? 16 : 32
-  if (n <= 32 && from >= 0 && from <= toI32(buf.length) - room && at <= toI32(head.length) - room) {
+  if (n <= 16 && from <= toI32(buf.length) - 16 && at <= toI32(head.length) - 16) {
     store(loadU8x16(buf, from), head, at)
-    if (n > 16) {
-      store(loadU8x16(buf, from + 16), head, at + 16)
-    }
-  } else if (n > 0 && from >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
-    copyBytes(head, at, buf, from, n)
+  } else if (n <= 32 && from <= toI32(buf.length) - 32 && at <= toI32(head.length) - 32) {
+    store(loadU8x16(buf, from), head, at)
+    store(loadU8x16(buf, from + 16), head, at + 16)
+  } else if (!tryCopyBytes(head, at, buf, from, n)) {
+    // `http1HeadGrow` left room for the line, so this refuses only a head
+    // moved by hand.
+    http1Fail(p, 400, "the request line does not fit the head")
+    return -1
   }
-  p.headLength = at + n
+  // Both are at most 2^30, so the u32 sum fits.
+  p.headLength = toI32(toU32(at) + toU32(n))
   return at
 }
 
@@ -1060,9 +1189,15 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
 const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
   if (at >= toI32(p.spans.length)) {
     const old: i32[] = p.spans
-    const grown: i32[] = new Array<i32>(at < HTTP1_FIRST_SPANS ? HTTP1_FIRST_SPANS : 2 * at + 4)
-    for (let k: i32 = 0; k < toI32(old.length) && k < toI32(grown.length); k += 1) {
-      grown[k] = old[k]
+    // Built by `push`, so no length is computed for `new Array`; `at` counts
+    // four spans a field, far below 2^31, so the u32 size does not wrap.
+    const size: u32 = at < HTTP1_FIRST_SPANS ? toU32(HTTP1_FIRST_SPANS) : toU32(at) * toU32(2) + toU32(4)
+    const grown: i32[] = []
+    for (let k: i32 = 0; k < toI32(old.length); k += 1) {
+      grown.push(old[k])
+    }
+    while (toU32(grown.length) < size) {
+      grown.push(0)
     }
     p.spans = grown
   }
@@ -1080,26 +1215,35 @@ const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
  */
 const http1TallyRun = (tally: Http1ListTally, head: u8[], from: i32, to: i32, word: string): void => {
   let start: i32 = from
-  for (let k: i32 = from; k <= to; k += 1) {
-    const c: i32 = k < to && k >= 0 && k < toI32(head.length) ? toI32(head[k]) : 44
-    if (c === 44) {
-      let a: i32 = start
-      let b: i32 = k
-      while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
-        a += 1
-      }
-      while (b > a && b - 1 >= 0 && b - 1 < toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
-        b -= 1
-      }
-      if (b > a) {
-        tally.elements += 1
-        tally.lastMatches = http1HeadIs(head, a, b, word, true)
-        if (tally.lastMatches) {
-          tally.matches += 1
-        }
-      }
-      start = k + 1
+  while (start >= 0 && start <= to && start <= toI32(head.length)) {
+    // The element runs to the next comma, or to the value's end.
+    let end: i32 = start
+    while (end >= 0 && end < to && end < toI32(head.length) && head[end] !== 44) {
+      end += 1
     }
+    let a: i32 = start
+    let b: i32 = end
+    while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
+      a += 1
+    }
+    while (b > a && b > 0 && b <= toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
+      b -= 1
+    }
+    // Each element holds a byte of a head under 2^30 bytes, so the counts
+    // stay below it.
+    const elements: i32 = tally.elements
+    if (b > a && elements < HTTP1_MOST_INPUT) {
+      tally.elements = elements + 1
+      tally.lastMatches = http1HeadIs(head, a, b, word, true)
+      const matches: i32 = tally.matches
+      if (tally.lastMatches && matches < HTTP1_MOST_INPUT) {
+        tally.matches = matches + 1
+      }
+    }
+    if (end < 0 || end >= to || end >= toI32(head.length)) {
+      break
+    }
+    start = end + 1
   }
 }
 
@@ -1113,10 +1257,13 @@ const http1Tally = (p: Http1Parser, name: string, word: string): Http1ListTally 
   tally.matches = 0
   tally.lastMatches = false
   const spans: i32[] = p.spans
-  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
-    if (http1HeadIs(p.head, spans[4 * i], spans[4 * i + 1], name, false)) {
-      http1TallyRun(tally, p.head, spans[4 * i + 2], spans[4 * i + 3], word)
+  const n: i32 = toI32(spans.length)
+  let k: i32 = 0
+  for (let i: i32 = 0; i < p.headerCount && k < n - 3; i += 1) {
+    if (http1HeadIs(p.head, spans[k], spans[k + 1], name, false)) {
+      http1TallyRun(tally, p.head, spans[k + 2], spans[k + 3], word)
     }
+    k += 4
   }
   return tally
 }
@@ -1145,14 +1292,19 @@ const http1HeadIsVector = (
   text: string,
   fold: boolean
 ): boolean => {
-  if (at < 0 || at > toI32(head.length) - 16 || n > 16) {
-    return http1HeadIs(head, at, at + n, text, fold)
+  if (at < 0 || n < 0 || n > 16) {
+    // No word compared here is longer than a vector, so nothing matches.
+    return false
+  }
+  if (at > toI32(head.length) - 16) {
+    // An offset into the head and a length of at most 16: the u32 sum fits.
+    return http1HeadIs(head, at, toI32(toU32(at) + toU32(n)), text, fold)
   }
   let v: u8x16 = loadU8x16(head, at)
   if (fold) {
     v = select(lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)), or(v, splatU8x16(32)), v)
   }
-  const want: i32 = n >= 16 ? 65535 : (1 << n) - 1
+  const want: i32 = n >= 16 ? 65535 : toI32((toU32(1) << toU32(n)) - toU32(1))
   return (bitmask(eq(v, word)) & want) === want
 }
 
@@ -1183,7 +1335,7 @@ const http1FramingField = (head: u8[], at: i32, n: i32): i32 => {
   if (n === 17) {
     // "transfer-encodin" in the vector, and the "g" after it.
     const coding: u8x16 = u8x16(116, 114, 97, 110, 115, 102, 101, 114, 45, 101, 110, 99, 111, 100, 105, 110)
-    const g: boolean = at >= 0 && at + 16 < toI32(head.length) && head[at + 16] === 103
+    const g: boolean = at >= 0 && at < toI32(head.length) - 16 && head[at + 16] === 103
     return g && http1HeadIsVector(head, at, 16, coding, "transfer-encodin", false) ? HTTP1_FIELD_CODING : 0
   }
   return 0
@@ -1210,20 +1362,24 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
   const length: i32 = toI32(head.length)
   let found: i32 = 0
   let start: i32 = from
-  while (start >= 0 && start <= to) {
+  while (start >= 0 && start <= to && start <= length) {
     // The element runs to the next comma, or to the value's end.
     let end: i32 = start
     let seeking: boolean = true
-    while (seeking && end < to) {
+    while (seeking && end >= 0 && end < to) {
       if (end <= length - 16) {
-        const commas: i32 = bitmask(eq(loadU8x16(head, end), splatU8x16(44)))
+        const commas: u32 = toU32(bitmask(eq(loadU8x16(head, end), splatU8x16(44))))
         if (commas !== 0) {
-          end += toI32(31) - toI32(Math.clz32(toU32(commas & -commas)))
+          // The lowest set lane, 0 to 15.
+          const lane: i32 = toI32(31) - toI32(Math.clz32(commas & (toU32(0) - commas)))
+          if (lane >= 0 && lane < 16) {
+            end += lane
+          }
           seeking = false
         } else {
           end += 16
         }
-      } else if (end >= 0 && end < toI32(head.length) && head[end] !== 44) {
+      } else if (end < length && head[end] !== 44) {
         end += 1
       } else {
         seeking = false
@@ -1234,19 +1390,23 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
     }
     let a: i32 = start
     let b: i32 = end
-    while (a < b && a >= 0 && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
+    while (a < b && a >= 0 && a < length && http1IsOws(toI32(head[a]))) {
       a += 1
     }
-    while (b > a && b - 1 < length && http1IsOws(toI32(head[b - 1]))) {
+    while (b > a && b > 0 && b <= toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
       b -= 1
     }
-    const n: i32 = b - a
+    // `0 <= a <= b`, so the u32 difference is the element's length.
+    const n: i32 = a >= 0 && b >= a ? toI32(toU32(b) - toU32(a)) : 0
     if (n === 5 && http1HeadIsVector(head, a, n, close, "close", true)) {
       found = found | HTTP1_CONNECTION_CLOSE
     } else if (n === 10 && http1HeadIsVector(head, a, n, keepAlive, "keep-alive", true)) {
       found = found | HTTP1_CONNECTION_KEEP_ALIVE
     } else if (n === 7 && http1HeadIsVector(head, a, n, upgrade, "upgrade", true)) {
       found = found | HTTP1_CONNECTION_UPGRADE
+    }
+    if (end < 0 || end >= to || end >= length) {
+      break
     }
     start = end + 1
   }
@@ -1260,7 +1420,14 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
 const http1MethodOverrun = (p: Http1Parser): boolean => {
   // Bytes up to `scan` were seen by an earlier call, which found a space
   // in time if there were more than `HTTP1_MAX_METHOD` of them.
-  if (p.scan - p.start > HTTP1_MAX_METHOD) {
+  const from: i32 = p.start
+  if (from < 0 || p.scan < from) {
+    // The parser keeps `0 <= start <= scan`. The fields are public, so a
+    // caller may have moved them: such a window says nothing about the
+    // method, and `http1TakeLine` refuses the parser with a 400.
+    return false
+  }
+  if (toU32(p.scan) - toU32(from) > toU32(HTTP1_MAX_METHOD)) {
     return false
   }
   const buf: u8[] = p.buf
@@ -1268,14 +1435,15 @@ const http1MethodOverrun = (p: Http1Parser): boolean => {
   // A space, CR or LF in the first sixteen bytes, buffered or not, is
   // before `HTTP1_MAX_METHOD`: the loop below would answer false at it, or
   // at `end` before it.
-  if (p.start >= 0 && p.start <= n - 16) {
-    const v: u8x16 = loadU8x16(buf, p.start)
+  if (from <= n - 16) {
+    const v: u8x16 = loadU8x16(buf, from)
     if (any(or(or(eq(v, splatU8x16(32)), eq(v, splatU8x16(13))), eq(v, splatU8x16(10))))) {
       return false
     }
   }
-  const stop: i32 = p.start + HTTP1_MAX_METHOD
-  for (let k: i32 = p.start; k >= 0 && k < p.end && k < toI32(buf.length); k += 1) {
+  // `start` is within a buffer under 2^30 bytes, so the sum is an i32.
+  const stop: i32 = toI32(toU32(from) + toU32(HTTP1_MAX_METHOD))
+  for (let k: i32 = from; k >= 0 && k < p.end && k < toI32(buf.length); k += 1) {
     if (buf[k] === 32 || buf[k] === 13 || buf[k] === 10) {
       return false
     }
@@ -1295,14 +1463,24 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   const n: i32 = toI32(buf.length)
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
+  if (a < 0 || b < a) {
+    // `http1TakeLine` hands out a line inside `buf`. The fields are public, so a
+    // caller may have moved them: such a parser is refused with a 400 rather than
+    // read outside `buf`.
+    return http1Fail(p, 400, "the request line is out of order")
+  }
   // The method is tchars, sixteen at a time as a field name is read; the
   // line's CR, a control byte, ends the run if no space or other byte does.
   let i: i32 = a
   let ended: boolean = false
   while (!ended && i >= 0 && i < b && i <= toI32(buf.length) - 16) {
-    const bad: i32 = http1NonTokenLanes(loadU8x16(buf, i))
+    const bad: u32 = toU32(http1NonTokenLanes(loadU8x16(buf, i)))
     if (bad !== 0) {
-      i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+      // The lowest set lane, 0 to 15.
+      const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+      if (lane >= 0 && lane < 16) {
+        i += lane
+      }
       ended = true
     } else {
       i += 16
@@ -1314,7 +1492,15 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   while (!ended && i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
     i += 1
   }
-  if (i === a || i - a > HTTP1_MAX_METHOD || i >= b || buf[i] !== 32) {
+  // `a <= i`, so the u32 difference is the method's length.
+  if (
+    i === a ||
+    toU32(i) - toU32(a) > toU32(HTTP1_MAX_METHOD) ||
+    i >= b ||
+    i < 0 ||
+    i >= toI32(buf.length) ||
+    buf[i] !== 32
+  ) {
     return http1Fail(p, 400, "a malformed method")
   }
   const methodEnd: i32 = i
@@ -1325,9 +1511,13 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   // tail shorter than a vector before `buf`'s end.
   let found: boolean = false
   while (!found && i >= 0 && i < b && i <= toI32(buf.length) - 16) {
-    const bad: i32 = bitmask(gt(subWrapping(loadU8x16(buf, i), splatU8x16(33)), splatU8x16(93)))
+    const bad: u32 = toU32(bitmask(gt(subWrapping(loadU8x16(buf, i), splatU8x16(33)), splatU8x16(93))))
     if (bad !== 0) {
-      i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+      // The lowest set lane, 0 to 15.
+      const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+      if (lane >= 0 && lane < 16) {
+        i += lane
+      }
       found = true
     } else {
       i += 16
@@ -1339,10 +1529,11 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   while (!found && i >= 0 && i < b && i < toI32(buf.length) && buf[i] > 32 && buf[i] < 127) {
     i += 1
   }
-  if (i - targetStart > p.maxTarget) {
+  // `targetStart <= i`, so the u32 difference is the target's length.
+  if (toU32(i) - toU32(targetStart) > toU32(p.maxTarget)) {
     return http1Fail(p, 414, "the request target is over the limit")
   }
-  if (i === targetStart || i >= b || buf[i] !== 32) {
+  if (i === targetStart || i >= b || i < 0 || i >= toI32(buf.length) || buf[i] !== 32) {
     return http1Fail(p, 400, "a malformed request target")
   }
   const targetEnd: i32 = i
@@ -1351,12 +1542,14 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   // with sixteen bytes to load, one compare for the five letters and the dot
   // and one range test for the two digits, else a byte at a time.
   let version: boolean = false
-  if (b - i === 8 && i >= 0 && i <= toI32(buf.length) - 16) {
+  // `i < b` here, so the u32 difference is what is left of the line.
+  const eight: boolean = i >= 0 && i <= b && toU32(b) - toU32(i) === toU32(8)
+  if (eight && i <= toI32(buf.length) - 16) {
     const v: u8x16 = loadU8x16(buf, i)
     const fixed: i32 = bitmask(eq(v, u8x16(72, 84, 84, 80, 47, 0, 46, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
     const digits: i32 = bitmask(lt(subWrapping(v, splatU8x16(48)), splatU8x16(10)))
     version = (fixed & 95) === 95 && (digits & 160) === 160
-  } else if (b - i === 8) {
+  } else if (eight && i <= toI32(buf.length) - 8) {
     version =
       buf[i] === 72 &&
       buf[i + 1] === 84 &&
@@ -1369,21 +1562,29 @@ const http1RequestLine = (p: Http1Parser): i32 => {
       buf[i + 7] >= 48 &&
       buf[i + 7] <= 57
   }
-  if (!version) {
+  if (!version || i < 0 || i > toI32(buf.length) - 8) {
     return http1Fail(p, 400, "a malformed HTTP version")
   }
   if (buf[i + 5] !== 49) {
     return http1Fail(p, 505, "an HTTP major version other than 1")
   }
   p.minor = buf[i + 7] === 48 ? 0 : 1
-  if (b - a > toI32(p.head.length) - p.headLength - 16) {
-    http1HeadGrow(p, b - a)
+  // `a <= b`, checked above.
+  const lineLength: i32 = toI32(toU32(b) - toU32(a))
+  if (p.headLength < 0 || toU64(p.headLength) + toU64(lineLength) + toU64(16) > toU64(p.head.length)) {
+    if (!http1HeadGrow(p, lineLength)) {
+      return http1Fail(p, 431, "a head of more than 2^30 bytes")
+    }
   }
   const at: i32 = http1HeadAppend(p, a, b)
+  if (at < 0) {
+    return HTTP1_ERROR
+  }
   p.methodStart = at
-  p.methodEnd = at + (methodEnd - a)
-  p.targetStart = at + (targetStart - a)
-  p.targetEnd = at + (targetEnd - a)
+  // Each mark is within the line, `a` to `b`, and the line is in the head.
+  p.methodEnd = http1Past(at, toI32(toU32(methodEnd) - toU32(a)))
+  p.targetStart = http1Past(at, toI32(toU32(targetStart) - toU32(a)))
+  p.targetEnd = http1Past(at, toI32(toU32(targetEnd) - toU32(a)))
   if (p.keepText) {
     p.method = http1Text(buf, a, methodEnd, false)
     p.target = http1Text(buf, targetStart, targetEnd, false)
@@ -1403,6 +1604,15 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   const n: i32 = toI32(buf.length)
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
+  if (a < 0 || b < a) {
+    // `http1Section` hands out a line inside `buf`. The fields are public, so a
+    // caller may have moved them: such a parser is refused with a 400 rather than
+    // read outside `buf`.
+    return http1Fail(p, 400, "a field line out of order")
+  }
+  // Every offset below is in the line, `a` to `b`, or its copy in the head,
+  // both under 2^31 bytes, so they are added with `http1Past` and
+  // subtracted with `http1Less`, which do not check what cannot wrap.
   // A kept line's name is read in the head's copy, each upper-case letter
   // lowered as the scan passes it: one walk over the name, not a check of
   // `buf` and then a second walk of the copy. The copy of a line refused
@@ -1410,17 +1620,17 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   let at: i32 = 0
   let i: i32 = a
   if (keep) {
-    at = a + delta
-    i = a + (http1LowerName(p.head, at, at + (b - a)) - at)
+    at = http1Past(a, delta)
+    i = http1Past(a, http1Less(http1LowerName(p.head, at, http1Past(at, http1Less(b, a))), at))
   } else {
     while (i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
       i += 1
     }
   }
-  if (i === a || i >= b || buf[i] !== 58) {
+  if (i === a || i >= b || i < 0 || i >= toI32(buf.length) || buf[i] !== 58) {
     // Whitespace is no tchar, so an obs-fold line has an empty name: its
     // own refusal is told apart here, off the path every field takes.
-    if (i === a && a >= 0 && a < b && (buf[a] === 32 || buf[a] === 9)) {
+    if (i === a && a >= 0 && a < b && a < toI32(buf.length) && (buf[a] === 32 || buf[a] === 9)) {
       return http1Fail(p, 400, "a field line that starts with whitespace (obs-fold)")
     }
     return http1Fail(p, 400, "a malformed field name")
@@ -1431,13 +1641,14 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   if (p.lineControl) {
     return http1Fail(p, 400, "a control character in a field value")
   }
-  p.fieldCount += 1
+  // The count is at most `maxHeaders` before it, checked below each time.
+  p.fieldCount = http1Past(p.fieldCount, 1)
   if (p.fieldCount > p.maxHeaders) {
     return http1Fail(p, 431, "more fields than the limit")
   }
   // A trailer is checked and counted, but not kept: nothing here reads one.
   if (keep) {
-    let valueStart: i32 = nameEnd + 1
+    let valueStart: i32 = http1Past(nameEnd, 1)
     let valueEnd: i32 = b
     while (
       valueStart >= 0 &&
@@ -1447,43 +1658,69 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
     ) {
       valueStart += 1
     }
-    while (valueEnd > valueStart && (buf[valueEnd - 1] === 32 || buf[valueEnd - 1] === 9)) {
+    while (
+      valueEnd >= 1 &&
+      valueEnd > valueStart &&
+      valueEnd <= toI32(buf.length) &&
+      (buf[valueEnd - 1] === 32 || buf[valueEnd - 1] === 9)
+    ) {
       valueEnd -= 1
     }
     // The fields that frame the message are counted here, as their names
     // are read, for `http1EndOfHead`: every kept field asks the same question.
-    const kind: i32 = http1FramingField(p.head, at, nameEnd - a)
+    // Each count is at most `fieldCount`, and the value bytes at most the
+    // head's.
+    const kind: i32 = http1FramingField(p.head, at, http1Less(nameEnd, a))
     if (kind === HTTP1_FIELD_HOST) {
-      p.hostFields += 1
+      p.hostFields = http1Past(p.hostFields, 1)
       p.hostField = p.headerCount
     } else if (kind === HTTP1_FIELD_LENGTH) {
-      p.lengthFields += 1
+      p.lengthFields = http1Past(p.lengthFields, 1)
       p.lengthField = p.headerCount
     } else if (kind === HTTP1_FIELD_CODING) {
-      p.codingFields += 1
+      p.codingFields = http1Past(p.codingFields, 1)
     } else if (kind === HTTP1_FIELD_CONNECTION) {
       p.connectionOptions =
-        p.connectionOptions | http1ConnectionList(p.head, at + (valueStart - a), at + (valueEnd - a))
+        p.connectionOptions |
+        http1ConnectionList(
+          p.head,
+          http1Past(at, http1Less(valueStart, a)),
+          http1Past(at, http1Less(valueEnd, a))
+        )
     } else if (kind === HTTP1_FIELD_UPGRADE) {
-      p.upgradeFields += 1
-      p.upgradeValueBytes += valueEnd - valueStart
+      p.upgradeFields = http1Past(p.upgradeFields, 1)
+      p.upgradeValueBytes = http1Past(p.upgradeValueBytes, http1Less(valueEnd, valueStart))
     }
-    const base: i32 = 4 * p.headerCount
-    http1SpanSet(p, base + 3, at + (valueEnd - a))
+    // Four spans a field, and fields are at most `maxHeaders`.
+    const base: i32 = toI32(toU32(4) * toU32(p.headerCount))
+    http1SpanSet(p, http1Past(base, 3), http1Past(at, http1Less(valueEnd, a)))
     // The last of the four is set first, so the array has room for them all.
     const spans: i32[] = p.spans
-    if (base >= 0 && base + 2 < toI32(spans.length)) {
+    if (base >= 0 && base < toI32(spans.length) - 2) {
       spans[base] = at
-      spans[base + 1] = at + (nameEnd - a)
-      spans[base + 2] = at + (valueStart - a)
+      spans[base + 1] = http1Past(at, http1Less(nameEnd, a))
+      spans[base + 2] = http1Past(at, http1Less(valueStart, a))
     }
-    p.headerCount += 1
+    p.headerCount = http1Past(p.headerCount, 1)
     if (p.keepText) {
       p.names.push(http1Text(buf, a, nameEnd, true))
       p.values.push(http1Text(buf, valueStart, valueEnd, false))
     }
   }
   return HTTP1_NEED_MORE
+}
+
+/**
+ * Where field `field`'s four spans start in `spans`: `4 * field`, or -1 when
+ * no such field is recorded.
+ */
+const http1FieldBase = (spans: i32[], field: i32): i32 => {
+  if (field < 0 || field > 536870911) {
+    return -1
+  }
+  // `field < 2^29`, so the shifted index is below 2^31.
+  const k: i32 = toI32(toU32(field) << toU32(2))
+  return k < toI32(spans.length) - 3 ? k : -1
 }
 
 /**
@@ -1497,19 +1734,19 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
   const head: u8[] = p.head
   const hosts: i32 = p.hostFields
   const lengths: i32 = p.lengthFields
-  const lengthField: i32 = p.lengthField
+  const lengthAt: i32 = http1FieldBase(spans, p.lengthField)
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return http1Fail(p, 400, "a request without exactly one Host")
   }
   // The one Host must be a host and an optional port (§3.2): a value such as
   // `a@b`, `a/b` or `a, b` is read one way by this program and another by a
   // proxy or a virtual-host table in front of it. An empty Host is allowed.
-  const hostField: i32 = p.hostField
+  const hostAt: i32 = http1FieldBase(spans, p.hostField)
   if (
     hosts === 1 &&
-    hostField >= 0 &&
-    4 * hostField + 3 < toI32(spans.length) &&
-    !urlIsHostPort(head, spans[4 * hostField + 2], spans[4 * hostField + 3])
+    hostAt >= 0 &&
+    hostAt < toI32(spans.length) - 3 &&
+    !urlIsHostPort(head, spans[hostAt + 2], spans[hostAt + 3])
   ) {
     return http1Fail(p, 400, "a Host that is not a host and port")
   }
@@ -1533,13 +1770,8 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     p.chunked = true
   } else if (lengths > 1) {
     return http1Fail(p, 400, "Content-Length given twice")
-  } else if (lengths === 1 && 4 * lengthField + 3 < toI32(spans.length) && lengthField >= 0) {
-    const size: i32 = http1ContentLength(
-      head,
-      spans[4 * lengthField + 2],
-      spans[4 * lengthField + 3],
-      p.maxBody
-    )
+  } else if (lengths === 1 && lengthAt >= 0 && lengthAt < toI32(spans.length) - 3) {
+    const size: i32 = http1ContentLength(head, spans[lengthAt + 2], spans[lengthAt + 3], p.maxBody)
     if (size === -1) {
       return http1Fail(p, 400, "a Content-Length that is not a run of digits")
     }
@@ -1587,24 +1819,27 @@ const http1ContentLength = (bytes: u8[], from: i32, to: i32, limit: i32): i32 =>
   if (to <= from) {
     return -1
   }
-  let value: i32 = 0
-  let over: boolean = false
+  // In 32 unsigned bits: `value` never passes `limit`, an i32, so it
+  // neither wraps nor fails to fit back.
+  let value: u32 = 0
+  let over: boolean = limit < 0
+  const most: u32 = toU32(limit)
   for (let k: i32 = from; k < to && k >= 0 && k < toI32(bytes.length); k += 1) {
     const c: i32 = toI32(bytes[k])
     if (c < 48 || c > 57) {
       return -1
     }
     if (!over) {
-      // `limit - digit` may be negative, and its division truncates toward
-      // zero, so the digit is compared on its own first.
-      if (c - 48 > limit || value > (limit - (c - 48)) / 10) {
+      // The digit is compared on its own first, so `most - digit` does not wrap.
+      const digit: u32 = toU32(c) - toU32(48)
+      if (digit > most || value > (most - digit) / toU32(10)) {
         over = true
       } else {
-        value = value * 10 + (c - 48)
+        value = value * toU32(10) + digit
       }
     }
   }
-  return over ? -2 : value
+  return over ? -2 : toI32(value)
 }
 
 /**
@@ -1731,20 +1966,24 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
   const n: i32 = toI32(buf.length)
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
-  const room: i32 = p.maxBody - p.bodyTotal
-  let size: i32 = 0
+  // Never more than `maxBody` is counted, so `room` is not negative.
+  const total: i32 = p.bodyTotal
+  const room: u32 = total >= 0 && total <= p.maxBody ? toU32(p.maxBody) - toU32(total) : toU32(0)
+  // In 32 unsigned bits: `size` never passes `room`, an i32.
+  let size: u32 = 0
   let over: boolean = false
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(buf.length)) {
-    const digit: i32 = http1HexValue(toI32(buf[i]))
-    if (digit < 0) {
+    const hex: i32 = http1HexValue(toI32(buf[i]))
+    if (hex < 0) {
       break
     }
     if (!over) {
-      if (digit > room || size > (room - digit) / 16) {
+      const digit: u32 = toU32(hex)
+      if (digit > room || size > (room - digit) / toU32(16)) {
         over = true
       } else {
-        size = size * 16 + digit
+        size = size * toU32(16) + digit
       }
     }
     i += 1
@@ -1761,7 +2000,7 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
   if (i >= b && i > digitsEnd) {
     return http1Fail(p, 400, "a malformed chunk size")
   }
-  if (i >= 0 && i < b) {
+  if (i >= 0 && i < b && i < toI32(buf.length)) {
     if (buf[i] !== 59) {
       return http1Fail(p, 400, "a malformed chunk size")
     }
@@ -1777,7 +2016,7 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
   if (over) {
     return http1Fail(p, 413, "a chunked body over the limit")
   }
-  p.left = size
+  p.left = toI32(size)
   p.state = size === 0 ? HTTP1_S_TRAILERS : HTTP1_S_CHUNK_DATA
   p.sectionBytes = 0
   return HTTP1_NEED_MORE
@@ -1788,21 +2027,32 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
  * `after` once the last of them is handed out.
  */
 const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
-  const ready: i32 = p.end - p.start
-  if (ready <= 0) {
+  const from: i32 = p.start
+  const to: i32 = p.end
+  if (from < 0 || to <= from) {
     return HTTP1_NEED_MORE
   }
+  const ready: i32 = toI32(toU32(to) - toU32(from))
   let take: i32 = ready < p.left ? ready : p.left
   if (take > p.maxChunk && p.maxChunk > 0) {
     take = p.maxChunk
   }
+  const total: i32 = p.bodyTotal
+  if (take < 0 || total < 0) {
+    // The parser keeps `left` and the body's total 0 or more. The fields are
+    // public, so a caller may have moved them: such a parser is refused with a 400
+    // rather than read outside `buf`.
+    return http1Fail(p, 400, "the body window is out of order")
+  }
   p.body = p.buf
-  p.bodyOff = p.start
+  p.bodyOff = from
   p.bodyLen = take
-  p.start += take
+  // `take` is at most `end - start`, and at most `left`, which was counted
+  // within `maxBody`: none of the three wraps.
+  p.start = http1Past(from, take)
   p.scan = p.start
-  p.left -= take
-  p.bodyTotal += take
+  p.left = toI32(toU32(p.left) - toU32(take))
+  p.bodyTotal = http1Past(total, take)
   if (p.left === 0) {
     p.state = after
   }
@@ -1841,47 +2091,64 @@ const http1Section = (p: Http1Parser): i32 => {
   // Nothing past `copyStop` is copied: a line reaching it is over its limit
   // (see the 431 below; what is left of `maxHeaderBytes` is the same at every
   // line), so the copy, and the head, stay within the limit.
+  //
+  // Every offset here is a position in `buf` or the head, both under 2^31
+  // bytes, and `delta` moves one to the other, so the sums below are taken
+  // with `http1Past` and `http1Less`, which do not check what cannot pass.
   const copy: boolean = !trailer
-  const delta: i32 = p.headLength - p.start
-  const room: i32 = p.maxHeaderBytes - p.sectionBytes + 2
-  const copyStop: i32 = p.start > 2147483647 - room ? 2147483647 : p.start + room
+  const delta: i32 = http1Less(p.headLength, p.start)
+  const wideStop: i64 = toI64(p.start) + toI64(p.maxHeaderBytes) - toI64(p.sectionBytes) + toI64(2)
+  let copyStop: i32 = 2147483647
+  if (wideStop >= toI64(-2147483647) && wideStop < toI64(2147483647)) {
+    copyStop = toI32(wideStop)
+  }
   // A vector at `q` is copied when `q < copyEnd`; the head is grown when `q`
   // passes `growAt`, so most vectors pay one compare for each.
   const copyEnd: i32 = copy ? copyStop : -2147483647
   let head: u8[] = p.head
-  let growAt: i32 = toI32(head.length) - 32 - delta
+  let growAt: i32 = http1Less(http1Less(toI32(head.length), 32), delta)
   // Bit `k` of `bits` is set when `buf[base + k]` is a control byte or DEL
   // at or past `i`: the vector last loaded, its lanes before `i` cleared.
-  let base: i32 = i - 16
-  let bits: i32 = 0
+  let base: i32 = http1Less(i, 16)
+  let bits: u32 = 0
   while (true) {
     // The next control byte at or past `i`, or the end of the bytes so far.
     let j: i32 = stop
     let seeking: boolean = true
     while (seeking) {
       if (bits !== 0) {
-        j = base + (toI32(31) - toI32(Math.clz32(toU32(bits & -bits))))
+        // The lowest set bit, 0 to 15.
+        j = http1Past(base, toI32(31) - toI32(Math.clz32(bits & (toU32(0) - bits))))
         seeking = false
       } else {
-        const q: i32 = base + 16 > i ? base + 16 : i
+        const next: i32 = http1Past(base, 16)
+        const q: i32 = next > i ? next : i
         if (q >= stop) {
           seeking = false
-        } else if (q >= 0 && q <= length - 16) {
+        } else if (q >= 0 && q <= toI32(buf.length) - 16) {
           // The vector may run past `stop` into bytes not yet fed: its lanes
           // there are dropped from `bits`, and its copy of them is
           // overwritten when they arrive.
           const v: u8x16 = loadU8x16(buf, q)
           if (q < copyEnd) {
             if (q > growAt) {
-              http1HeadGrow(p, q + delta + 16 - p.headLength)
+              if (!http1HeadGrow(p, http1Less(http1Past(http1Past(q, delta), 16), p.headLength))) {
+                return http1Fail(p, 431, "a head of more than 2^30 bytes")
+              }
               head = p.head
-              growAt = toI32(head.length) - 32 - delta
+              growAt = http1Less(http1Less(toI32(head.length), 32), delta)
             }
-            store(v, head, q + delta)
+            // `q <= growAt` here, so the vector fits in the head.
+            const to: i32 = http1Past(q, delta)
+            if (to >= 0 && to <= toI32(head.length) - 16) {
+              store(v, head, to)
+            }
           }
-          bits = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
-          if (q > stop - 16) {
-            bits = bits & ((toI32(1) << (stop - q)) - 1)
+          bits = toU32(bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127)))))
+          // `q < stop` here: keep the lanes before `stop`, 1 to 15 of them.
+          const keep: i32 = http1Less(stop, q)
+          if (keep < 16) {
+            bits = bits & ((toU32(1) << toU32(keep)) - toU32(1))
           }
           base = q
         } else {
@@ -1890,18 +2157,25 @@ const http1Section = (p: Http1Parser): i32 => {
           while (k >= 0 && k < stop && k < toI32(buf.length) && buf[k] >= 32 && buf[k] !== 127) {
             k += 1
           }
-          const last: i32 = k < stop ? k + 1 : stop
+          const last: i32 = k < stop ? http1Past(k, 1) : stop
           const end: i32 = last < copyStop ? last : copyStop
           if (copy && q < end) {
-            if (end + delta > toI32(p.head.length) - 16) {
-              http1HeadGrow(p, end + delta - p.headLength)
+            const endAt: i32 = http1Past(end, delta)
+            if (endAt > toI32(p.head.length) - 16) {
+              if (!http1HeadGrow(p, http1Less(endAt, p.headLength))) {
+                return http1Fail(p, 431, "a head of more than 2^30 bytes")
+              }
             }
-            copyBytes(p.head, q + delta, buf, q, end - q)
+            if (!tryCopyBytes(p.head, http1Past(q, delta), buf, q, http1Less(end, q))) {
+              // The head was grown past `endAt` just above, so this refuses
+              // only a head moved by hand.
+              return http1Fail(p, 431, "a head of more than 2^30 bytes")
+            }
             head = p.head
-            growAt = toI32(head.length) - 32 - delta
+            growAt = http1Less(http1Less(toI32(head.length), 32), delta)
           }
           j = k
-          base = k + 1 - 16
+          base = http1Less(k, 15)
           seeking = false
         }
       }
@@ -1919,29 +2193,31 @@ const http1Section = (p: Http1Parser): i32 => {
     }
     if (lf >= 0) {
       const start: i32 = p.start
-      if (lf === start || buf[lf - 1] !== 13) {
+      if (lf === start || lf < 1 || lf > toI32(buf.length) || buf[lf - 1] !== 13) {
         return http1Fail(p, 400, "a line ended in a bare LF")
       }
-      const sectionBytes: i32 = p.sectionBytes + (lf + 1 - start)
-      if (sectionBytes - 2 > p.maxHeaderBytes) {
+      // The line, `start` to `lf`, is in `buf`.
+      const after: i32 = http1Past(lf, 1)
+      const sectionBytes: i32 = http1Past(p.sectionBytes, http1Less(after, start))
+      if (toI64(sectionBytes) - toI64(2) > toI64(p.maxHeaderBytes)) {
         return http1Fail(p, 431, "a line over its limit")
       }
       // The scan stops at the CR, so the LF after it may be in no vector
       // or tail copied: store it, and the head holds each line's CRLF.
-      const at: i32 = lf + delta
+      const at: i32 = http1Past(lf, delta)
       if (copy && at >= 0 && at < toI32(head.length)) {
         head[at] = 10
       }
       p.lineStart = start
       p.lineEnd = lf - 1
-      p.start = lf + 1
-      p.scan = lf + 1
-      i = lf + 1
+      p.start = after
+      p.scan = after
+      i = after
       // The lowest bit is the line's end at `j`, and a CR's LF is the next
       // one when it is in this vector, as a control byte: drop them both.
-      bits = bits & (bits - 1)
+      bits = bits & (bits - toU32(1))
       if (c === 13) {
-        bits = bits & (bits - 1)
+        bits = bits & (bits - toU32(1))
       }
       p.sectionBytes = sectionBytes
       if (sectionBytes > p.maxHeaderBytes) {
@@ -1952,7 +2228,7 @@ const http1Section = (p: Http1Parser): i32 => {
           p.state = HTTP1_S_MESSAGE_END
           return HTTP1_LINE
         }
-        p.headLength = p.start + delta
+        p.headLength = http1Past(p.start, delta)
         return http1EndOfHead(p)
       }
       if (http1FieldLine(p, copy, delta) === HTTP1_ERROR) {
@@ -1968,15 +2244,15 @@ const http1Section = (p: Http1Parser): i32 => {
       if (c !== 9) {
         p.lineControl = true
       }
-      i = j + 1
-      bits = bits & (bits - 1)
+      i = http1Past(j, 1)
+      bits = bits & (bits - toU32(1))
     }
   }
   p.scan = i
   if (copy) {
-    p.headLength = p.start + delta
+    p.headLength = http1Past(p.start, delta)
   }
-  if (p.end - p.start > p.maxHeaderBytes - p.sectionBytes + 1) {
+  if (toI64(p.end) - toI64(p.start) > toI64(p.maxHeaderBytes) - toI64(p.sectionBytes) + toI64(1)) {
     return http1Fail(p, 431, "a line over its limit")
   }
   return HTTP1_NEED_MORE
@@ -1999,7 +2275,8 @@ const http1Next = (p: Http1Parser): i32 => {
         }
         // The longest well-formed request line: the method, the target, two
         // spaces and "HTTP/1.1".
-        const got: i32 = http1TakeLine(p, HTTP1_MAX_METHOD + p.maxTarget + 10, 414)
+        // `maxTarget` is clamped to 2^30, so the sum is an i32.
+        const got: i32 = http1TakeLine(p, http1Past(p.maxTarget, HTTP1_MAX_METHOD + 10), 414)
         if (got !== HTTP1_LINE) {
           return got
         }
@@ -2070,10 +2347,9 @@ const http1Next = (p: Http1Parser): i32 => {
 /** The bytes of `text`, as the language holds a string. */
 const http1BytesOf = (text: string): u8[] => {
   const n: i32 = toI32(text.length)
-  const out: u8[] = new Array<u8>(n)
-  const outLength: i32 = toI32(out.length)
-  for (let k: i32 = 0; k < outLength && k < n; k += 1) {
-    out[k] = toU8(text.charCodeAt(k))
+  const out: u8[] = []
+  for (let k: i32 = 0; k < n; k += 1) {
+    out.push(toU8(text.charCodeAt(k)))
   }
   return out
 }
@@ -2210,33 +2486,58 @@ const http1HexDigits = (len: i32): i32 => {
  * @returns the offset in `out` just past the chunk, or `HTTP1_NO_ROOM` when it does not fit
  */
 export const http1WriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 => {
-  const size: i32 = toI32(data.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
+  const end: i32 = http1TryWriteChunk(out, at, data, off, len)
+  if (end === HTTP1_BAD_WINDOW) {
     panic("http1WriteChunk: the window is outside the buffer")
+  }
+  return end
+}
+
+/**
+ * `http1WriteChunk` that answers `HTTP1_BAD_WINDOW`, with `out` untouched,
+ * where `http1WriteChunk` panics: a window outside `data`. A caller a strict
+ * module reaches uses this one.
+ *
+ * @param out the caller's buffer the chunk is written into
+ * @param at where in `out` the chunk starts
+ * @param data the body bytes to send
+ * @param off where in `data` the chunk's bytes start
+ * @param len how many bytes of `data` the chunk carries
+ * @returns the offset in `out` just past the chunk, `HTTP1_NO_ROOM` when it
+ *   does not fit, or `HTTP1_BAD_WINDOW` when the window lies outside `data`
+ */
+export const http1TryWriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 => {
+  const size: i32 = toI32(data.length)
+  if (off < 0 || len < 0 || off > size || toU32(len) > toU32(size) - toU32(off)) {
+    return HTTP1_BAD_WINDOW
   }
   if (len === 0) {
     return at
   }
   const digits: i32 = http1HexDigits(len)
   const outLength: i32 = toI32(out.length)
-  if (at < 0 || at > outLength || len > outLength - at - digits - 4) {
+  // The chunk's size, in 64 bits so that it cannot wrap.
+  const need: u64 = toU64(digits) + toU64(len) + toU64(4)
+  if (at < 0 || at > outLength || need > toU64(toU32(outLength) - toU32(at))) {
+    return HTTP1_NO_ROOM
+  }
+  // It fits, so none of the offsets below passes `outLength`.
+  const end: i32 = http1Past(at, digits)
+  const headEnd: i32 = http1Past(end, 2)
+  // The bytes go first, so a copy that fails leaves `out` untouched. It
+  // cannot: the window is inside `data` and the chunk fits, both checked.
+  if (!tryCopyBytes(out, headEnd, data, off, len)) {
     return HTTP1_NO_ROOM
   }
   let v: i32 = len
-  for (let k: i32 = at + digits - 1; k >= at && k >= 0 && k < outLength; k -= 1) {
+  // The digits are written last first, `out[k - 1]` each time.
+  for (let k: i32 = end; k > 0 && k > at && k <= toI32(out.length); k -= 1) {
     const d: i32 = v & 15
-    out[k] = toU8(d < 10 ? 48 + d : 87 + d)
+    out[k - 1] = toU8(d < 10 ? 48 + d : 87 + d)
     v = v >> 4
   }
-  const headEnd: i32 = at + digits + 2
-  out[headEnd - 2] = 13
-  out[headEnd - 1] = 10
-  for (let k: i32 = 0; k < len && headEnd + k < outLength; k += 1) {
-    out[headEnd + k] = data[off + k]
-  }
-  out[headEnd + len] = 13
-  out[headEnd + len + 1] = 10
-  return headEnd + len + 2
+  http1PutCrlf(out, end)
+  return http1PutCrlf(out, http1Past(headEnd, len))
 }
 
 /**
@@ -2253,14 +2554,27 @@ export const http1WriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i3
  */
 export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
   const size: i32 = toI32(data.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
+  if (off < 0 || len < 0 || off > size || toU32(len) > toU32(size) - toU32(off)) {
     panic("http1Chunk: the window is outside the buffer")
   }
   if (len === 0) {
     return []
   }
-  const out: u8[] = new Array<u8>(http1HexDigits(len) + len + 4)
-  http1WriteChunk(out, 0, data, off, len)
+  // Built by `push`, as `http1WriteChunk` would write it.
+  const out: u8[] = []
+  for (let d: i32 = http1HexDigits(len); d > 0; d -= 1) {
+    const nibble: u32 = (toU32(len) >> (toU32(d - 1) * toU32(4))) & toU32(15)
+    out.push(toU8(nibble < 10 ? toU32(48) + nibble : toU32(87) + nibble))
+  }
+  out.push(13)
+  out.push(10)
+  // The window is inside `data`, checked above, so the sum is an i32.
+  const stop: i32 = http1Past(off, len)
+  for (let k: i32 = off; k >= 0 && k < toI32(data.length) && k < stop; k += 1) {
+    out.push(data[k])
+  }
+  out.push(13)
+  out.push(10)
   return out
 }
 
@@ -2289,6 +2603,8 @@ export const http1WriteLastChunk = (out: u8[], at: i32): i32 => {
 export const HTTP1_NO_ROOM: i32 = -1
 /** `http1WriteResponseHead`: a head the writer refuses to write. */
 export const HTTP1_REFUSED: i32 = -2
+/** `http1TryWriteChunk`: the window lies outside the body bytes; nothing is written. */
+export const HTTP1_BAD_WINDOW: i32 = -3
 
 /** Whether `bytes` is a non-empty run of tchars. */
 const http1BytesAreToken = (bytes: u8[]): boolean => {
@@ -2332,7 +2648,11 @@ const http1BytesAreFieldText = (bytes: u8[]): boolean => {
     }
     k += 16
   }
-  return k === n || http1LanesAreFieldText(loadU8x16(bytes, n - 16))
+  const last: i32 = toI32(bytes.length) - 16
+  return (
+    k === n ||
+    (last >= 0 && last <= toI32(bytes.length) - 16 && http1LanesAreFieldText(loadU8x16(bytes, last)))
+  )
 }
 
 /**
@@ -2357,7 +2677,8 @@ const http1DecimalDigits = (n: i32): i32 => {
   }
   let digits: i32 = 4
   let v: i32 = n / 10000
-  while (v > 0) {
+  // An i32 has at most ten digits, so the second test always holds.
+  while (v > 0 && digits < 10) {
     v = v / 10
     digits += 1
   }
@@ -2373,21 +2694,33 @@ const http1DecimalDigits = (n: i32): i32 => {
  */
 export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   const n: i32 = toI32(text.length)
-  if (at >= 0 && at <= toI32(out.length) - n) {
-    // It fits, the case every caller makes sure of: one test, then a loop
-    // with no bounds check in it.
-    for (let k: i32 = 0; k < n; k += 1) {
-      out[at + k] = toU8(text.charCodeAt(k))
-    }
-    return at + n
+  // Every caller has made sure it fits; outside `out` nothing is written.
+  // Before its start the text is skipped, so a negative `at` writes the tail.
+  let k: i32 = 0
+  if (at < 0) {
+    k = at > -n ? http1Less(0, at) : n
   }
-  for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
-    if (at + k >= 0) {
-      out[at + k] = toU8(text.charCodeAt(k))
-    }
+  let j: i32 = http1Past(at, k)
+  while (k >= 0 && k < n && j >= 0 && j < toI32(out.length)) {
+    out[j] = toU8(text.charCodeAt(k))
+    j += 1
+    k += 1
   }
-  return at + n
+  return http1Past(at, n)
 }
+
+/**
+ * `at + n` for an `n` that is not negative, wrapping as an i32 where the sum
+ * would pass 2^31: the writers' callers measure the head first, so it never
+ * does for them.
+ */
+const http1Past = (at: i32, n: i32): i32 => toI32(toU32(at) + toU32(n))
+
+/**
+ * `at - n`, wrapping as an i32 where the difference would leave its range:
+ * the parser takes it only between offsets in one buffer, so it never does.
+ */
+const http1Less = (at: i32, n: i32): i32 => toI32(toU32(at) - toU32(n))
 
 /** Writes CR LF at `out[at ..)`, likewise: two stores, where `http1PutText` walks a string. */
 const http1PutCrlf = (out: u8[], at: i32): i32 => {
@@ -2395,7 +2728,7 @@ const http1PutCrlf = (out: u8[], at: i32): i32 => {
     out[at] = 13
     out[at + 1] = 10
   }
-  return at + 2
+  return http1Past(at, 2)
 }
 
 /** Writes `: ` at `out[at ..)`, likewise. */
@@ -2404,22 +2737,20 @@ const http1PutColonSpace = (out: u8[], at: i32): i32 => {
     out[at] = 58
     out[at + 1] = 32
   }
-  return at + 2
+  return http1Past(at, 2)
 }
 
 /** Writes `bytes` at `out[at ..)`, likewise, as one copy when it fits. */
 const http1PutBytes = (out: u8[], at: i32, bytes: u8[]): i32 => {
   const n: i32 = toI32(bytes.length)
-  if (at >= 0 && at <= toI32(out.length) - n) {
-    copyBytes(out, at, bytes, 0, n)
-    return at + n
-  }
-  for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
-    if (at + k >= 0) {
-      out[at + k] = bytes[k]
+  if (!tryCopyBytes(out, at, bytes, 0, n)) {
+    let j: i32 = at
+    for (let k: i32 = 0; k < n && k < toI32(bytes.length) && j >= 0 && j < toI32(out.length); k += 1) {
+      out[j] = bytes[k]
+      j += 1
     }
   }
-  return at + n
+  return http1Past(at, n)
 }
 
 /**
@@ -2430,9 +2761,9 @@ const http1PutBytes = (out: u8[], at: i32, bytes: u8[]): i32 => {
  * `text` are overwritten before the head is done. Byte by byte otherwise.
  */
 const http1PutFixed = (out: u8[], at: i32, limit: i32, v: u8x16, text: string): i32 => {
-  if (at >= 0 && at <= limit - 16 && limit <= toI32(out.length)) {
+  if (at >= 0 && limit >= 16 && at <= limit - 16 && at <= toI32(out.length) - 16) {
     store(v, out, at)
-    return at + toI32(text.length)
+    return http1Past(at, toI32(text.length))
   }
   return http1PutText(out, at, text)
 }
@@ -2446,7 +2777,7 @@ const http1PutStatusLine = (out: u8[], at: i32, limit: i32, status: i32): i32 =>
   const hundreds: i32 = status / 100
   const tens: i32 = (status / 10) % 10
   const ones: i32 = status % 10
-  if (at >= 0 && at <= limit - 16 && limit <= toI32(out.length)) {
+  if (at >= 0 && limit >= 16 && at <= limit - 16 && at <= toI32(out.length) - 16) {
     // "HTTP/1.1 000 ", and three lanes the head's next bytes overwrite.
     const line: u8x16 = u8x16(72, 84, 84, 80, 47, 49, 46, 49, 32, 48, 48, 48, 32, 32, 32, 32)
     store(
@@ -2454,7 +2785,7 @@ const http1PutStatusLine = (out: u8[], at: i32, limit: i32, status: i32): i32 =>
       out,
       at
     )
-    return at + 13
+    return http1Past(at, 13)
   }
   const end: i32 = http1PutText(out, at, "HTTP/1.1 ")
   if (end >= 0 && end < toI32(out.length) - 3) {
@@ -2463,19 +2794,21 @@ const http1PutStatusLine = (out: u8[], at: i32, limit: i32, status: i32): i32 =>
     out[end + 2] = toU8(48 + ones)
     out[end + 3] = 32
   }
-  return end + 4
+  return http1Past(end, 4)
 }
 
 /** Writes the decimal digits of `n`, which is not negative, at `out[at ..)`, likewise. */
 const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
   const digits: i32 = http1DecimalDigits(n)
+  const end: i32 = http1Past(at, digits)
   let v: i32 = n
-  for (let k: i32 = at + digits - 1; k >= at && k >= 0 && k < toI32(out.length); k -= 1) {
+  // The digits are written last first, `out[k - 1]` each time.
+  for (let k: i32 = end; k > 0 && k > at && k <= toI32(out.length); k -= 1) {
     const digit: i32 = v % 10
-    out[k] = toU8(48 + digit)
+    out[k - 1] = toU8(48 + digit)
     v = v / 10
   }
-  return at + digits
+  return end
 }
 
 /**
@@ -2533,7 +2866,7 @@ export const http1WriteResponseHead = (
   // "HTTP/1.1 " status SP reason CRLF, then each field, then the framing
   // field, the connection field and the empty line: counted before anything
   // is written, in 64 bits so that no caller's lengths can wrap the sum.
-  let need: i64 = toI64(17) + toI64(reason.length)
+  let need: u64 = toU64(17) + toU64(reason.length)
   let dated: boolean = false
   for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
     const name: u8[] = names[i]
@@ -2554,26 +2887,27 @@ export const http1WriteResponseHead = (
       }
       dated = true
     }
-    need = need + toI64(name.length) + toI64(value.length) + toI64(4)
+    need = need + toU64(name.length) + toU64(value.length) + toU64(4)
   }
   const sendDate: boolean = status >= 200 && toI32(date.length) > 0 && !dated
   if (sendDate) {
     // "Date: " value CRLF: 37 bytes for an IMF-fixdate.
-    need = need + toI64(8) + toI64(date.length)
+    need = need + toU64(8) + toU64(date.length)
   }
   if (bodyLength >= 0) {
-    need = need + toI64(18 + http1DecimalDigits(bodyLength))
+    need = need + toU64(18) + toU64(http1DecimalDigits(bodyLength))
   } else if (bodyLength === HTTP1_CHUNKED) {
-    need = need + toI64(28)
+    need = need + toU64(28)
   }
   if (toI32(connection.length) > 0) {
-    need = need + toI64(14) + toI64(connection.length)
+    need = need + toU64(14) + toU64(connection.length)
   }
-  if (at < 0 || at > toI32(out.length) || need > toI64(toI32(out.length) - at)) {
+  if (at < 0 || at > toI32(out.length) || need > toU64(toI32(out.length) - at)) {
     return HTTP1_NO_ROOM
   }
   // A status is three digits, checked above: no division loop for them.
-  const limit: i32 = at + toI32(need)
+  // `need` fits in the room past `at`, so the end is an i32.
+  const limit: i32 = http1Past(at, toI32(need))
   let end: i32 = http1PutStatusLine(out, at, limit, status)
   end = http1PutText(out, end, reason)
   end = http1PutCrlf(out, end)

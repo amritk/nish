@@ -900,7 +900,7 @@ it opens, and answers each lookup with the 18-byte addresses `tcpConnect` and
 tokens it owns and the time; it never waits and never reads the clock itself,
 so a slow lookup costs your other sockets nothing.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts`, `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";

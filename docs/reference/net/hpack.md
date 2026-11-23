@@ -82,7 +82,7 @@ Appends `value` as a §5.1 integer with a `prefixBits`-bit prefix, the first byt
 
 <scalar-card title="hpack​Encode​String" icon="phosphor/regular/function" href="#hpackencodestring">
 
-Appends `data` as a §5.2 string literal: Huffman-coded when `huffman` is true, else raw.
+Appends `data` as a §5.2 string literal: Huffman-coded when `huffman` is true and the coded length fits below 2^31 - 1, else raw.
 
 </scalar-card>
 
@@ -342,7 +342,7 @@ The integer, 0 to 2^31 - 1.
 ### hpackEncodeString
 
 Appends `data` as a §5.2 string literal: Huffman-coded when `huffman` is
-true, else raw. A caller who wants the shorter of the two compares
+true and the coded length fits below 2^31 - 1, else raw. A caller who wants the shorter of the two compares
 `hpackHuffmanLength` with the raw length.
 
 ```ts
@@ -436,7 +436,8 @@ Where the decoded octets go, appended after what it holds: at most `len * 8 / 5`
 
 `HPACK_OK` when the window decoded whole and ended in valid padding; `HPACK_ERR_HUFFMAN_EOS` when
   a complete code was the EOS symbol, at the point it was read; `HPACK_ERR_HUFFMAN_PADDING` when the bits
-  left after the last symbol are more than seven or not all ones.
+  left after the last symbol are more than seven or not all ones, and when thirty bits match no code,
+  which only a table cut short (by writing its internal fields) allows.
 
 </scalar-field>
 
@@ -447,7 +448,8 @@ with the most significant bits of EOS, which are all ones (§5.2).
 
 The accumulator holds fewer than eight waiting bits between symbols, and a
 code is at most 30, so it never needs more than 37 bits.
-A window outside `src` panics.
+A window outside `src` panics. A table cut short (only by writing its
+internal fields) ends the coding at the first octet it has no code for.
 
 ```ts
 const hpackHuffmanEncode: (
@@ -492,7 +494,8 @@ Where the coded bytes go: appended after what it holds, `hpackHuffmanLength` of 
 ### hpackHuffmanLength
 
 The length of `src[off, off + len)` once Huffman-coded, in bytes, padding included. A window outside
-`src` panics, as does a coded length past 2^31 - 1 bytes.
+`src` panics. A coded length past 2^31 - 1 bytes answers 2^31 - 1, which is never shorter than the raw
+window, so a caller comparing the two keeps the octets raw.
 
 ```ts
 const hpackHuffmanLength: (
@@ -529,7 +532,9 @@ How many octets from `off` on to measure.
 
 <scalar-field name="returns" type="i32">
 
-The number of bytes `hpackHuffmanEncode` would append for the same window, 0 for an empty one.
+The number of bytes `hpackHuffmanEncode` would append for the same window, 0 for an empty one;
+  2^31 - 1 when that does not fit an `i32`, or when `h`'s tables were cut short (only by writing their
+  internal fields).
 
 </scalar-field>
 

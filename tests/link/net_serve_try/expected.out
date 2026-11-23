@@ -1,0 +1,11 @@
+param 0 = 42
+number 0 = 42
+malformed 1 = true
+malformed 0 = false
+err HttpRequest.param: the route has 2 parameter(s), not one at 2
+err HttpRequest.param: the route has 2 parameter(s), not one at -1
+err HttpRequest.param: the route has 2 parameter(s), not one at 5
+err Response.bytes: [2, 4) is outside a buffer of 3
+length after err = 0
+err Response.bytes: [-1, 0) is outside a buffer of 3
+set 2 bytes of text/plain: i!

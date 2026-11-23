@@ -1,0 +1,46 @@
+PASS  a well-formed token verifies
+PASS  header: one character past a group is refused
+PASS  header: a character outside base64url is refused
+PASS  header: an empty part is refused
+PASS  header: stray bits after the last byte are refused
+PASS  signature: stray bits after the last byte are refused
+PASS  signature: a character outside base64url is refused
+PASS  signature: one character past a group is refused
+PASS  signature: one byte too many is refused
+PASS  signature: an empty one is refused
+PASS  signature: text that decodes past the 1024-byte buffer is refused
+PASS  signature: text longer than any signature is refused
+PASS  payload: one character past a group is refused
+PASS  payload: a character outside base64url is refused
+PASS  payload: stray bits after the last byte are refused
+PASS  a refused payload leaves no claims
+PASS  header JSON: an unclosed object is refused
+PASS  header JSON: a trailing comma is refused
+PASS  header JSON: text after the object is refused
+PASS  header JSON: an array is refused
+PASS  header JSON: an unterminated string is refused
+PASS  claims JSON: an unclosed object is refused
+PASS  claims JSON: a trailing comma is refused
+PASS  claims JSON: text after the object is refused
+PASS  claims JSON: an empty payload is refused
+PASS  claims JSON: a leading zero is refused
+PASS  claims JSON: a bare minus is refused
+PASS  claims JSON: a misspelt literal is refused
+PASS  claims JSON: an unknown escape is refused
+PASS  claims JSON: a \u escape with a non-hex digit is refused
+PASS  claims JSON: a raw control character in a string is refused
+PASS  claims JSON: a missing colon is refused
+PASS  claims JSON: a mismatched close is refused
+PASS  claims JSON: 32 nested arrays are taken
+PASS  claims JSON: 33 nested arrays are refused
+PASS  the well-formed token still verifies after every refusal
+PASS  the ES256 and EdDSA signing keys load
+PASS  public key: a token two bytes into a larger array verifies
+PASS  public key: the window one byte longer takes a third dot and is refused
+PASS  public key: a signature three bytes too long is refused
+PASS  public key: an empty signature is refused
+PASS  public key: a token two bytes into a larger array verifies
+PASS  public key: the window one byte longer takes a third dot and is refused
+PASS  public key: a signature three bytes too long is refused
+PASS  public key: an empty signature is refused
+nish/crypto/jwt refusals: 45 passed, 0 failed, 0 skipped

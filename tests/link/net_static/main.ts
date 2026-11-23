@@ -27,7 +27,7 @@ import { Suite } from "nish/testing"
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame"
 import { H3_FRAME_HEADERS, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame"
 import { QpackEncoder } from "nish/net/qpack"
-import { StaticFiles, StaticLimits } from "nish/net/static"
+import { STATIC_NOT_FOUND, StaticFiles, StaticLimits } from "nish/net/static"
 import { n32, n64 } from "../net_quic_frame/typed"
 import { leafPrivate } from "../net_tls_common/server"
 import { Wire, getOf } from "../net_http2/peer"
@@ -428,6 +428,16 @@ const handlerChecks = (t: Suite, rig: StaticRig, key: Secret<u8[]>, etag: string
   t.ok("handler: a traversal, 404 and refused", statusOf(r) === "404" && rig.files.refused && r.indexOf("outside") < 0)
   const big: string = h1(rig, key, port, "GET", "/static/big.bin", "")
   t.ok("handler: a file past the cache streams whole", statusOf(big) === "200" && toI32(bodyOf(big).length) === BIG)
+  rig.tryMode = true
+  expect(t, "tryServeHandler: a GET of site.css, Ok and 200", h1(rig, key, port, "GET", "/static/site.css", ""), "200", "body{color:red}\n", ["etag", etag])
+  t.eqStr("tryServeHandler: a second answer to it is an Err", rig.again, "HttpHandler.start: the request is not one taken and unanswered (state 0)")
+  rig.again = ""
+  expect(t, "tryServeHandler: a range, Ok and 206", h1(rig, key, port, "GET", "/static/site.css", "Range: bytes=5-9\r\n"), "206", "color", ["content-range", "bytes 5-9/16"])
+  t.eqStr("tryServeHandler: a second answer to the range is an Err", rig.again, "HttpHandler.start: the request is not one taken and unanswered (state 0)")
+  rig.again = ""
+  const missing: string = h1(rig, key, port, "GET", "/static/nothing-here.txt", "")
+  t.eqStr("tryServeHandler: a file that is not there, Ok(STATIC_NOT_FOUND) and refused", `${statusOf(missing)} ${rig.last === STATIC_NOT_FOUND} [${rig.again}]`, "404 true []")
+  rig.tryMode = false
 }
 
 /** Limits out of range leave the root empty, so nothing is served, rather than panicking. */

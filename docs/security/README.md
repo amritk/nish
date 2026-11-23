@@ -64,7 +64,7 @@ the record that found it. The notes below the table name each such finding.
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
 | A package's C link | [package-link.md](package-link.md) | `src/manifest.ts` (`manifestNish`'s `link` key, `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem`), `src/compile.ts` (`readLinkSet`, `linkPackages`, `refuseUngranted`, `addLinkRequest`, `readLinkIncludes`, `linkProgram`), `src/run-cache.ts` (`LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey`), `scripts/build.sh` (`--link-lib`, `--link-source`, `--link-depends`) | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ³⁰ |
 | PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts`, `std/crypto/scram.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
-| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
+| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
@@ -386,6 +386,8 @@ the record that found it. The notes below the table name each such finding.
     (Low), accepted when found, is superseded, since the kernel is now as
     wide as the lanes given; BCRYPT-9 was a limitation of the language, since
     lifted. BCRYPT-5 is a property checked and found to hold, not a finding.
+    BCRYPT-12 (Medium), the login batcher's ticket counter overflowing at
+    the 2^31st request, was found by WP83's panic-site work and fixed.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
@@ -398,9 +400,10 @@ the record that found it. The notes below the table name each such finding.
     and found to hold.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
-21. PKI-R6 and PKI-R7 (Low) are accepted, with the reason in their record, and
+21. PKI-R6 to PKI-R8 (Low) are accepted, with the reason in their record, and
     are not counted: the size cap and file-type check that a descriptor-based
-    builtin would tighten, and the macOS Keychain the loader does not read.
+    builtin would tighten, the macOS Keychain the loader does not read, and
+    the overflow check the uncapped `skipped` count keeps.
     PKI-R1 to PKI-R5 are properties checked and found to hold.
 22. DNS-1 to DNS-4 (Low) are accepted, with the reason in their record, and
     are not counted: DNS-1 to DNS-3 are the trust a stub resolver places in

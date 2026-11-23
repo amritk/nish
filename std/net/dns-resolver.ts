@@ -1495,7 +1495,34 @@ const dnsResolverSend = (r: DnsResolver, q: i32, how: i32, nowNanos: i64): void 
   pending[q] = how === DNS_Q_TCP ? DNS_SEND_TCP : DNS_SEND_UDP
   streamHave[q] = 0
   streamWant[q] = 0
-  deadline[q] = nowNanos + toI64(r.config.timeout) * toI64(1000000000)
+  deadline[q] = dnsResolverDeadline(nowNanos, r.config.timeout)
+}
+
+/** 2^62 - 1 nanoseconds, about 146 years: as far from 0 as a clock `dnsResolverDeadline` adds to. */
+const DNS_RESOLVER_FAR: i64 = 1073741824 * 4294967296 - 1
+
+/** The last nanosecond an `i64` clock holds, 2^63 - 1: a deadline no clock reaches. */
+const DNS_RESOLVER_NEVER: i64 = DNS_RESOLVER_FAR * 2 + 1
+
+/**
+ * `timeout` seconds after `nowNanos`. `timeout * 10^9` is below 2^62 from 0
+ * for any `i32`, so the sum fits wherever `nowNanos` is within 2^62 of 0,
+ * which the masks below say without changing it. A clock later than that
+ * gives `DNS_RESOLVER_NEVER`, a deadline no clock reaches, and one earlier,
+ * which no monotonic clock reads, gives itself: a deadline already passed.
+ */
+const dnsResolverDeadline = (nowNanos: i64, timeout: i32): i64 => {
+  if (nowNanos > DNS_RESOLVER_FAR) {
+    return DNS_RESOLVER_NEVER
+  }
+  if (nowNanos >= 0) {
+    return (nowNanos & DNS_RESOLVER_FAR) + toI64(timeout) * 1000000000
+  }
+  if (nowNanos < -DNS_RESOLVER_FAR - 1) {
+    return nowNanos
+  }
+  // `-1 - nowNanos` is `nowNanos`'s bitwise complement, at most 2^62 - 1 here, so the mask keeps it.
+  return toI64(timeout) * 1000000000 - ((-1 - nowNanos) & DNS_RESOLVER_FAR) - 1
 }
 
 /**

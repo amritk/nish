@@ -187,6 +187,17 @@ was added for each.
   empty: the bytes of `verifier.claims` past it still hold the refused
   token's payload and are not wiped. Claims are not secret material, and
   every reader in the module goes through `claimsLen`.
+- No byte a discovery document, a JWK Set or a token carries reaches a
+  panic site: every index and length the module reads from them is checked
+  against its array first. Five sites are left, all reached only through the
+  program's own values: `now - triedAt` in `due` is the difference of two
+  of the program's clock readings in seconds, and the two freshness sums in
+  `take` add at most `OIDC_MAX_LIFETIME` plus `OIDC_STALE_GRACE` (two days)
+  to one, so each overflows only for readings near 2^63 seconds; and
+  `claimsText` and `peekKid` slice
+  `verifier.claims` and `kidBytes` by a length the verifier wrote into
+  them. A new site fails
+  `std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`.
 
 ## Findings
 

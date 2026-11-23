@@ -182,6 +182,20 @@ outside 1 to 16 panic with a message that names them. Every index `call`,
 `timeout` and `framing` take from the request is checked against the head or
 the body first.
 
+**Panic sites: the program's mistakes and the clock.** Every index, divide
+and array-length site in `grpc.ts` is proven by a guard on the head or body
+it reads; a call's state is one object reached through a lookup that answers
+null for a request it does not hold. What is left are the kept panics, each
+an entry with its reason in `tests/std-panics.json`: the constructor's two
+limit checks, `call` on a request whose body comes in pieces, `send`'s and
+`reply`'s window checks, `finish`'s and `fail`'s status checks, and `held`
+(a request that neither `call` nor `open` read); and two `i64` differences of
+`monotonicNanos()` and the request's arrival time, itself a `monotonicNanos()`
+reading, in `expired` and `admit`, which overflow only for readings 2^63
+nanoseconds apart. A new site fails
+`std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`
+and a kept one that goes fails `std-panics: every kept panic in tests/std-panics.json`.
+
 **A streaming call's messages are the client's bytes, however they were
 split.** `next` reads a message whole in the current piece in place, and
 copies one split across pieces into the call's buffer, handing each piece

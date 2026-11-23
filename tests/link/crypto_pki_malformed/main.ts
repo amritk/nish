@@ -1,0 +1,184 @@
+// A malformed certificate is a refusal, never a panic, for both the X.509
+// parser and path validation: OpenSSL's leaf and intermediate from
+// `crypto_pki`, cut short at every length, with an outer or inner length that
+// runs past its buffer, and with a tag that is not a SEQUENCE. Each comes back
+// from `x509ParseCertificate` as `null`, and a chain holding it comes back
+// from `pkiVerifyServer` as PKI_ERR_MALFORMED, whichever position it holds.
+// So does an intermediate whose dNSName name constraint is malformed, which
+// must never be read as an empty base that permits every name.
+// The process reaching its summary is the proof that none of them panicked.
+import { Suite } from "nish/testing"
+import { PKI_ERR_HOSTNAME, PKI_ERR_MALFORMED, PKI_OK, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki"
+import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509"
+import { fromHex } from "../crypto_x25519/hex"
+import { INT, LEAF, NOW_MS, ROOT } from "../crypto_pki/fixtures"
+import { NC_INT, NC_LEAF, NC_NOW_MS, NC_ROOT, NC_SUBTREE_AT } from "./nc"
+
+const parsed = (der: u8[]): X509Certificate => {
+  const c: X509Certificate | null = x509ParseCertificate(der)
+  if (c === null) {
+    return new X509Certificate()
+  }
+  return c
+}
+
+/** The first `n` bytes of `der`. */
+const cut = (der: u8[], n: i32): u8[] => {
+  const out: u8[] = []
+  for (let i: i32 = 0; i < n && i < toI32(der.length); i++) {
+    out.push(der[i])
+  }
+  return out
+}
+
+/** `der` with the byte at `at` set to `v`. */
+const edit = (der: u8[], at: i32, v: i32): u8[] => {
+  const out: u8[] = cut(der, toI32(der.length))
+  if (at >= 0 && at < toI32(out.length)) {
+    out[at] = toU8(v)
+  }
+  return out
+}
+
+/** `der` with the two-octet long-form length at `at` set to `n`. */
+const lengthAt = (der: u8[], at: i32, n: i32): u8[] => edit(edit(der, at, n >> 8), at + 1, n & 255)
+
+/** Whether `bad` is refused by the parser, and as leaf and as intermediate. */
+const refused = (s: Suite, store: PkiTrustStore, name: string, bad: u8[], leaf: u8[], int: u8[]): boolean => {
+  const asLeaf: i32 = pkiVerifyServer([bad, int], "example.com", NOW_MS, store).code
+  const asInt: i32 = pkiVerifyServer([leaf, bad], "example.com", NOW_MS, store).code
+  if (x509ParseCertificate(bad) !== null) {
+    return s.fail(name, "the parser accepted it")
+  }
+  if (asLeaf !== PKI_ERR_MALFORMED || asInt !== PKI_ERR_MALFORMED) {
+    return s.fail(name, `as leaf ${pkiReason(asLeaf)}, as intermediate ${pkiReason(asInt)}`)
+  }
+  return s.pass(name)
+}
+
+/** Every cut of `der` short of its whole length; the name of the first that is not refused, or "". */
+/**
+ * Passes `the name constraint: <what>` when the parser refuses `badInt`, the
+ * name-constrained intermediate with one subtree octet edited, and the chain
+ * through it answers PKI_ERR_MALFORMED.
+ */
+const ncRefused = (s: Suite, store: PkiTrustStore, leaf: u8[], what: string, badInt: u8[]): void => {
+  const name: string = `the name constraint: ${what}`
+  const code: i32 = pkiVerifyServer([leaf, badInt], "foo.example.com", NC_NOW_MS, store).code
+  if (x509ParseCertificate(badInt) !== null) {
+    s.fail(name, "the parser accepted it")
+  } else if (code !== PKI_ERR_MALFORMED) {
+    s.fail(name, pkiReason(code))
+  } else {
+    s.pass(name)
+  }
+}
+
+const everyCut = (store: PkiTrustStore, der: u8[], leaf: u8[], int: u8[], asLeaf: boolean): string => {
+  for (let n: i32 = 0; n < toI32(der.length); n++) {
+    const bad: u8[] = cut(der, n)
+    const chain: u8[][] = asLeaf ? [bad, int] : [leaf, bad]
+    if (
+      x509ParseCertificate(bad) !== null ||
+      pkiVerifyServer(chain, "example.com", NOW_MS, store).code !== PKI_ERR_MALFORMED
+    ) {
+      return `${n} bytes`
+    }
+  }
+  return ""
+}
+
+export const main = (): i32 => {
+  const s = new Suite("pki malformed")
+  const store: PkiTrustStore = pkiTrustStore([parsed(fromHex(ROOT))])
+  const leaf: u8[] = fromHex(LEAF)
+  const int: u8[] = fromHex(INT)
+  const ok: i32 = pkiVerifyServer([leaf, int], "example.com", NOW_MS, store).code
+  if (ok === PKI_OK) {
+    s.pass("the unedited chain is accepted")
+  } else {
+    s.fail("the unedited chain is accepted", pkiReason(ok))
+  }
+
+  const leafCut: string = everyCut(store, leaf, leaf, int, true)
+  if (leafCut === "") {
+    s.pass(`the leaf cut at each of ${leaf.length} lengths`)
+  } else {
+    s.fail("the leaf cut short", leafCut)
+  }
+  const intCut: string = everyCut(store, int, leaf, int, false)
+  if (intCut === "") {
+    s.pass(`the intermediate cut at each of ${int.length} lengths`)
+  } else {
+    s.fail("the intermediate cut short", intCut)
+  }
+
+  // Both certificates open `30 82 hh ll` (the certificate) and
+  // `30 82 hh ll` again at offset 4 (tbsCertificate).
+  for (const which of ["leaf", "intermediate"]) {
+    const der: u8[] = which === "leaf" ? leaf : int
+    refused(s, store, `the ${which}: its length one past its buffer`, lengthAt(der, 2, toI32(der.length) - 3), leaf, int)
+    refused(s, store, `the ${which}: its length 65535`, lengthAt(der, 2, 65535), leaf, int)
+    refused(s, store, `the ${which}: tbsCertificate's length past the certificate`, lengthAt(der, 6, toI32(der.length)), leaf, int)
+    refused(s, store, `the ${which}: a five-octet length`, edit(der, 1, 0x85), leaf, int)
+    refused(s, store, `the ${which}: an indefinite length`, edit(der, 1, 0x80), leaf, int)
+    refused(s, store, `the ${which}: a SET for its SEQUENCE`, edit(der, 0, 0x31), leaf, int)
+    refused(s, store, `the ${which}: an OCTET STRING for tbsCertificate`, edit(der, 4, 0x04), leaf, int)
+    refused(s, store, `the ${which}: a zero tag`, edit(der, 0, 0x00), leaf, int)
+    refused(s, store, `the ${which}: a high-tag-number tag`, edit(der, 0, 0x1f), leaf, int)
+  }
+
+  // The leaf names DNS:example.com, DNS:*.example.org, IP:192.0.2.1 and
+  // IP:2001:db8::1. Each malformed host name below reaches the IPv4, IPv6 and
+  // DNS readers with the chain otherwise valid, and is answered
+  // PKI_ERR_HOSTNAME; each spelling of a name the leaf holds is accepted.
+  const matched: string[] = ["192.0.2.1", "2001:db8::1", "2001:0db8:0:0:0:0:0:1", "a.example.org", "EXAMPLE.COM", "example.com."]
+  for (const host of matched) {
+    const code: i32 = pkiVerifyServer([leaf, int], host, NOW_MS, store).code
+    if (code === PKI_OK) {
+      s.pass(`the host ${host} is accepted`)
+    } else {
+      s.fail(`the host ${host} is accepted`, pkiReason(code))
+    }
+  }
+  const unmatched: string[] = [
+    "", ".", "*.", "*.example.org", "a..example.org", "a.b.example.org", "example.com..",
+    "256.1.1.1", "192.0.2.01", "192.0.2", "192.0.2.1.5", "1.2.3.4294967297",
+    "192.000.002.001", "0192.0.2.1", "192.0.2.001", "192.0.02.1", "0300.0.2.1", "0xc0.0.2.1",
+    "1:2:3:4:5:6:7:8:9", "2001:db8::1::", "2001:db8:::1", "12345::1", "[::]", "::",
+    "::ffff:1.2.3.4", "2001:db8::g", ":2001:db8::1", "2001:db8::1:"
+  ]
+  let wrong: string = ""
+  for (const host of unmatched) {
+    const code: i32 = pkiVerifyServer([leaf, int], host, NOW_MS, store).code
+    if (code !== PKI_ERR_HOSTNAME) {
+      wrong = `${wrong} "${host}": ${pkiReason(code)};`
+    }
+  }
+  if (wrong === "") {
+    s.pass(`each of ${unmatched.length} malformed or unnamed hosts is refused as a host-name mismatch`)
+  } else {
+    s.fail("each malformed or unnamed host is refused as a host-name mismatch", wrong)
+  }
+
+  // The intermediate's nameConstraints hold one permitted GeneralSubtree,
+  // `30 0d 82 0b example.com` at NC_SUBTREE_AT. Each edit leaves the DER's
+  // outer lengths whole and breaks only that subtree, so the parser refuses
+  // the intermediate and path validation answers PKI_ERR_MALFORMED, never
+  // PKI_OK through a constraint read as permitting everything.
+  const ncStore: PkiTrustStore = pkiTrustStore([parsed(fromHex(NC_ROOT))])
+  const ncLeaf: u8[] = fromHex(NC_LEAF)
+  const ncInt: u8[] = fromHex(NC_INT)
+  const ncOk: i32 = pkiVerifyServer([ncLeaf, ncInt], "foo.example.com", NC_NOW_MS, ncStore).code
+  if (ncOk === PKI_OK) {
+    s.pass("the name-constrained chain is accepted")
+  } else {
+    s.fail("the name-constrained chain is accepted", pkiReason(ncOk))
+  }
+  ncRefused(s, ncStore, ncLeaf, "its dNSName one octet past its subtree", edit(ncInt, NC_SUBTREE_AT + 3, 0x0c))
+  ncRefused(s, ncStore, ncLeaf, "its dNSName empty, the name's octets left over", edit(ncInt, NC_SUBTREE_AT + 3, 0x00))
+  ncRefused(s, ncStore, ncLeaf, "its subtree ending inside its dNSName", edit(ncInt, NC_SUBTREE_AT + 1, 0x0c))
+  ncRefused(s, ncStore, ncLeaf, "a [0] base for its dNSName", edit(ncInt, NC_SUBTREE_AT + 2, 0x80))
+  ncRefused(s, ncStore, ncLeaf, "a SET for its subtree", edit(ncInt, NC_SUBTREE_AT, 0x31))
+  return s.done()
+}

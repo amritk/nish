@@ -522,13 +522,15 @@ const qpackSameText = (buf: u8[], off: i32, len: i32, text: string): boolean => 
   if (len !== toI32(text.length)) {
     return false
   }
-  for (let i: i32 = 0; i < len && i < toI32(text.length); i += 1) {
-    const at: i32 = off + i
-    if (at < 0 || at >= toI32(buf.length) || toI32(buf[at]) !== toI32(text.charCodeAt(i))) {
+  // `i` counts the characters compared and `at` walks the buffer beside it, so neither is a sum.
+  let i: i32 = 0
+  for (let at: i32 = off; at >= 0 && at < toI32(buf.length) && i < len && i < toI32(text.length); at += 1) {
+    if (toI32(buf[at]) !== toI32(text.charCodeAt(i))) {
       return false
     }
+    i += 1
   }
-  return true
+  return i === len
 }
 
 /** Appends the bytes of `text`, which is ASCII. */
@@ -541,9 +543,10 @@ const qpackPushText = (out: u8[], text: string): void => {
 
 /** Appends `src[off, off + len)` to `out`. */
 const qpackPushBytes = (out: u8[], src: u8[], off: i32, len: i32): void => {
-  const end: i32 = off + len
-  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
+  let left: i32 = len
+  for (let i: i32 = off; i >= 0 && left > 0 && i < toI32(src.length); i += 1) {
     out.push(src[i])
+    left -= 1
   }
 }
 
@@ -556,7 +559,7 @@ const qpackPushInteger = (out: u8[], flags: i32, prefixBits: i32, value: i64): v
   if (prefixBits < 1 || prefixBits > 8 || value < 0 || value > QPACK_MAX_INTEGER) {
     panic(`qpackPushInteger: a value of ${value} with a ${prefixBits}-bit prefix`)
   }
-  const max: i32 = (1 << prefixBits) - 1
+  const max: i32 = (toI32(255) >> (toI32(8) - prefixBits)) & toI32(255)
   if (value < toI64(max)) {
     out.push(toU8(flags | toI32(value)))
     return
@@ -610,77 +613,107 @@ export const qpackPushStreamCancellation = (out: u8[], streamId: i64): void => {
   qpackPushInteger(out, 64, 6, streamId)
 }
 
-/** Whether the section being decoded has a byte left at `d.at`. */
-const qpackHasByte = (d: QpackDecoder, src: u8[]): boolean =>
-  d.at >= 0 && d.at < d.end && d.at < toI32(src.length)
+/** The byte at `d.at` of the section being decoded, or -1 when the section has none left there. */
+const qpackPeekByte = (d: QpackDecoder, src: u8[]): i32 => {
+  const at: i32 = d.at
+  return at >= 0 && at < d.end && at < toI32(src.length) ? toI32(src[at]) : -1
+}
+
+/** Like `qpackPeekByte`, and moves `d.at` past the byte it answers. */
+const qpackNextByte = (d: QpackDecoder, src: u8[]): i32 => {
+  const at: i32 = d.at
+  if (at < 0 || at >= d.end || at >= toI32(src.length)) {
+    return -1
+  }
+  d.at = at + 1
+  return toI32(src[at])
+}
 
 /** The `QPACK_REASON_*` for a negative `qpackReadInteger` answer. */
 const qpackIntegerReason = (status: i64): i32 =>
   status === QPACK_INTEGER_TRUNCATED ? QPACK_REASON_TRUNCATED : QPACK_REASON_INTEGER
 
 /**
- * Reads a §4.1.1 integer whose prefix is the low `prefixBits` bits of the
- * byte at `d.at`, and answers it, or `QPACK_INTEGER_TRUNCATED` or
- * `QPACK_INTEGER_OVERFLOW`. Nine continuation bytes carry 63 bits, so a
- * tenth is refused even when its bits are zero.
+ * Reads a §4.1.1 integer whose prefix is the low bits of the byte at `d.at`
+ * that `max` (2^N - 1 for an N-bit prefix) covers, and answers it, or
+ * `QPACK_INTEGER_TRUNCATED` or `QPACK_INTEGER_OVERFLOW`. Nine continuation
+ * bytes carry 63 bits, so a tenth is refused even when its bits are zero.
  */
-const qpackReadInteger = (d: QpackDecoder, src: u8[], prefixBits: i32): i64 => {
-  if (!qpackHasByte(d, src)) {
+const qpackReadInteger = (d: QpackDecoder, src: u8[], max: i32): i64 => {
+  const head: i32 = qpackNextByte(d, src)
+  if (head < 0) {
     return QPACK_INTEGER_TRUNCATED
   }
-  const max: i32 = (1 << prefixBits) - 1
-  const first: i32 = toI32(src[d.at]) & max
-  d.at += 1
+  const first: i32 = head & max
   if (first < max) {
     return toI64(first)
   }
-  let value: i64 = toI64(max)
+  // The continuation bytes' 7-bit groups never overlap, so they are gathered with `|`, and the
+  // prefix's all-ones value, at most 255, is added once at the end; `spare` is what the integer
+  // may still grow by before it passes `QPACK_MAX_INTEGER`.
+  let rest: i64 = 0
   for (let shift: i32 = 0; shift <= 56; shift += 7) {
-    if (!qpackHasByte(d, src)) {
+    const b: i32 = qpackNextByte(d, src)
+    if (b < 0) {
       return QPACK_INTEGER_TRUNCATED
     }
-    const b: i32 = toI32(src[d.at])
-    d.at += 1
-    const digit: i64 = toI64(b & 127)
-    if (digit > (QPACK_MAX_INTEGER - value) >> toI64(shift)) {
+    rest = rest | (toI64(b & 127) << toI64(shift))
+    // Never taken: the ninth group, at shift 56, ends at bit 62, so `rest` stays positive, and
+    // `spare` below refuses whatever passes the limit. The test tells the prover the sign.
+    if (rest < 0) {
       return QPACK_INTEGER_OVERFLOW
     }
-    value += digit << toI64(shift)
+    const spare: i64 = QPACK_MAX_INTEGER - toI64(first) - rest
+    if (spare < 0) {
+      return QPACK_INTEGER_OVERFLOW
+    }
     if ((b & 128) === 0) {
-      return value
+      return QPACK_MAX_INTEGER - spare
     }
   }
   return QPACK_INTEGER_OVERFLOW
 }
 
 /**
- * How many symbols the Huffman code in `src[off, off + len)` spells, found by
- * walking `h`'s canonical tables the way `hpackHuffmanDecode` does but writing
- * nothing. An EOS inside the string is counted as a symbol, so the answer is
- * never below what the decode will write; whether the string is well formed
- * is the decode's to say.
+ * Whether the Huffman code in `src[off, off + len)` spells at most `room`
+ * symbols, found by walking `h`'s canonical tables the way `hpackHuffmanDecode`
+ * does but writing nothing, and stopping at the first symbol past `room`. An
+ * EOS inside the string is counted as a symbol, so a string that fits never
+ * decodes to more than `room` octets; whether it is well formed is the
+ * decode's to say.
  */
-const qpackHuffmanSymbols = (h: HpackHuffman, src: u8[], off: i32, len: i32): i64 => {
+const qpackHuffmanFits = (h: HpackHuffman, src: u8[], off: i32, len: i32, room: i64): boolean => {
   let code: i32 = 0
   let bits: i32 = 0
-  let count: i64 = 0
-  const end: i32 = off + len
-  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
+  let left: i64 = room
+  const firstCode: i32[] = h.firstCode
+  const countAt: i32[] = h.countAt
+  let bytes: i32 = len
+  for (let i: i32 = off; i >= 0 && bytes > 0 && i < toI32(src.length); i += 1) {
+    bytes -= 1
     const byte: i32 = toI32(src[i])
     for (let k: i32 = 7; k >= 0; k -= 1) {
+      // A code longer than the tables' longest matches nothing, however many bits follow, so the
+      // symbols counted so far are all the string has.
+      if (bits < 0 || bits >= toI32(firstCode.length) - 1) {
+        return true
+      }
       code = (code << 1) | ((byte >> k) & 1)
       bits += 1
-      if (bits >= 5 && bits < toI32(h.firstCode.length)) {
-        const at: i32 = code - h.firstCode[bits]
-        if (at >= 0 && at < h.countAt[bits]) {
-          count += toI64(1)
+      if (bits >= 5 && bits < toI32(firstCode.length) && bits < toI32(countAt.length)) {
+        const at: i64 = toI64(code) - toI64(firstCode[bits])
+        if (at >= 0 && at < toI64(countAt[bits])) {
+          if (left <= 0) {
+            return false
+          }
+          left -= toI64(1)
           code = 0
           bits = 0
         }
       }
     }
   }
-  return count
+  return true
 }
 
 /**
@@ -689,33 +722,35 @@ const qpackHuffmanSymbols = (h: HpackHuffman, src: u8[], off: i32, len: i32): i6
  * it read one, or `QPACK_STRING_PAST_LIMIT`. The length is checked against
  * what the section has left, and the octets against `d.room`, before anything
  * is appended: a Huffman string decodes to at most 8/5 of its length, and only
- * one that could pass the room is counted first, so `bytes` never grows past
+ * one that could pass the room is walked first, so `bytes` never grows past
  * the field-section limit however a peer spells its strings.
  */
-const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
-  if (!qpackHasByte(d, src)) {
+const qpackReadString = (d: QpackDecoder, src: u8[], huffmanBit: i32, lengthMax: i32): i32 => {
+  const head: i32 = qpackPeekByte(d, src)
+  if (head < 0) {
     return QPACK_REASON_TRUNCATED
   }
-  const lengthBits: i32 = prefixBits - 1
-  const huffman: boolean = (toI32(src[d.at]) & (1 << lengthBits)) !== 0
-  const n: i64 = qpackReadInteger(d, src, lengthBits)
+  const huffman: boolean = (head & huffmanBit) !== 0
+  const n: i64 = qpackReadInteger(d, src, lengthMax)
   if (n < 0) {
     return qpackIntegerReason(n)
   }
-  if (n > toI64(d.end - d.at)) {
+  const start: i32 = d.at
+  if (n > toI64(d.end) - toI64(start)) {
     return QPACK_REASON_TRUNCATED
   }
-  const start: i32 = d.at
+  // At most `end - start`, so the `i32` holds it exactly.
   const length: i32 = toI32(n)
-  d.at = start + length
-  let octets: i64 = n
-  if (huffman) {
-    octets = (n * toI64(8)) / toI64(5)
-    if (octets > d.room) {
-      octets = qpackHuffmanSymbols(d.huffman, src, start, length)
-    }
+  d.at = toI32(toI64(start) + toI64(length))
+  // `room` never passes the limit it starts at; one that did would be refused like a string past it.
+  const room: i64 = d.room
+  if (room < 0 || room > toI64(d.maxFieldSectionSize)) {
+    return QPACK_STRING_PAST_LIMIT
   }
-  if (octets > d.room) {
+  // At most the `i32` limit, so the `i32` holds it exactly.
+  const left: i32 = toI32(room)
+  const most: i64 = huffman ? (toI64(length) * toI64(8)) / toI64(5) : toI64(length)
+  if (most > toI64(left) && (!huffman || !qpackHuffmanFits(d.huffman, src, start, length, toI64(left)))) {
     return QPACK_STRING_PAST_LIMIT
   }
   const before: i32 = toI32(d.bytes.length)
@@ -726,7 +761,7 @@ const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
   } else {
     qpackPushBytes(d.bytes, src, start, length)
   }
-  d.room -= toI64(d.bytes.length) - toI64(before)
+  d.room = toI64(left) - (toI64(d.bytes.length) - toI64(before))
   return QPACK_REASON_NONE
 }
 
@@ -781,16 +816,17 @@ export class QpackDecoder {
    * What the section being decoded may still add to `bytes` and its fields'
    * overhead before it is past `maxFieldSectionSize`: every append is checked
    * against it first, so a section past the limit never grows `bytes`.
-   * @internal Read and lowered by this module's `qpackReadString`; not for callers.
+   * @internal Read and lowered by this module's `qpackReadString`, which refuses a string once it
+   *   is negative or past `maxFieldSectionSize`; not for callers.
    */
   room: i64
   /**
    * @internal Where the next read of the section being decoded starts; read and advanced by this
-   * module's `qpackHasByte`, `qpackReadInteger` and `qpackReadString`.
+   * module's `qpackPeekByte`, `qpackNextByte` and `qpackReadString`.
    */
   at: i32
   /**
-   * @internal Where the section being decoded ends; read by this module's `qpackHasByte` and
+   * @internal Where the section being decoded ends; read by this module's `qpackPeekByte`, `qpackNextByte` and
    * `qpackReadString`.
    */
   end: i32
@@ -842,7 +878,8 @@ export class QpackDecoder {
       return this.failed
     }
     this.at = off
-    this.end = off + len
+    // The window was checked against `section`, so its end is at most `section.length`.
+    this.end = toI32(toI64(off) + toI64(len))
     const result: i64 = this.decodeLines(section)
     if (result !== QPACK_OK) {
       this.clear()
@@ -872,12 +909,14 @@ export class QpackDecoder {
     if (this.failed !== QPACK_OK) {
       return this.failed
     }
-    const end: i32 = off + len
-    for (let i: i32 = off; i >= 0 && i < end && i < toI32(buf.length); i += 1) {
+    let left: i32 = len
+    for (let i: i32 = off; i >= 0 && left > 0 && i < toI32(buf.length); i += 1) {
+      left -= 1
       const b: i32 = toI32(buf[i])
       if (b === 32) {
-        if (this.capacityInstructions < QPACK_COUNT_MAX) {
-          this.capacityInstructions += 1
+        const seen: i32 = this.capacityInstructions
+        if (seen < QPACK_COUNT_MAX) {
+          this.capacityInstructions = seen + 1
         }
       } else {
         if ((b & 192) !== 0) {
@@ -922,10 +961,11 @@ export class QpackDecoder {
    * answers false and takes nothing when the section would pass its limit.
    */
   private take(cost: i64): boolean {
-    if (cost > this.room) {
+    const room: i64 = this.room
+    if (cost < 0 || room < 0 || cost > room) {
       return false
     }
-    this.room -= cost
+    this.room = room - cost
     return true
   }
 
@@ -950,12 +990,13 @@ export class QpackDecoder {
 
   /** Records a field whose name and value end where `bytes` ends now. */
   private addField(nameStart: i32, valueStart: i32, neverIndexed: boolean): void {
+    // Both starts and the end lie in `bytes`, from 0 to its length, so each difference fits an `i32`.
     this.nameStart.push(nameStart)
-    this.nameLength.push(valueStart - nameStart)
+    this.nameLength.push(toI32(toI64(valueStart) - toI64(nameStart)))
     this.valueStart.push(valueStart)
-    this.valueLength.push(toI32(this.bytes.length) - valueStart)
+    this.valueLength.push(toI32(toI64(this.bytes.length) - toI64(valueStart)))
     this.neverIndexed.push(neverIndexed)
-    this.count += 1
+    this.count = toI32(this.nameStart.length)
   }
 
   /**
@@ -963,21 +1004,22 @@ export class QpackDecoder {
    * each told apart by its first byte's pattern (§4.5.2 to §4.5.6).
    */
   private decodeLines(src: u8[]): i64 {
-    const insertCount: i64 = qpackReadInteger(this, src, 8)
+    const insertCount: i64 = qpackReadInteger(this, src, 255)
     if (insertCount < 0) {
       return this.refuseInteger(insertCount)
     }
     if (insertCount !== toI64(0)) {
       return this.refuse(QPACK_REASON_INSERT_COUNT)
     }
-    if (!qpackHasByte(this, src)) {
+    const sign: i32 = qpackPeekByte(this, src)
+    if (sign < 0) {
       return this.refuse(QPACK_REASON_TRUNCATED)
     }
     // With a Required Insert Count of 0, a Sign bit of 1 makes the Base
     // 0 - Delta Base - 1, which is negative whatever Delta Base is. A Base of
     // 0 or more is accepted at any value, since nothing may use it (§4.5.1.2).
-    const negative: boolean = (toI32(src[this.at]) & 128) !== 0
-    const deltaBase: i64 = qpackReadInteger(this, src, 7)
+    const negative: boolean = (sign & 128) !== 0
+    const deltaBase: i64 = qpackReadInteger(this, src, 127)
     if (deltaBase < 0) {
       return this.refuseInteger(deltaBase)
     }
@@ -985,8 +1027,7 @@ export class QpackDecoder {
       return this.refuse(QPACK_REASON_BASE)
     }
     this.room = toI64(this.maxFieldSectionSize)
-    while (qpackHasByte(this, src)) {
-      const b: i32 = toI32(src[this.at])
+    for (let b: i32 = qpackPeekByte(this, src); b >= 0; b = qpackPeekByte(this, src)) {
       let neverIndexed: boolean = false
       const nameStart: i32 = toI32(this.bytes.length)
       // Where the value starts once it is in `bytes`; -1 while it is still to
@@ -997,7 +1038,7 @@ export class QpackDecoder {
         if ((b & 64) === 0) {
           return this.refuse(QPACK_REASON_DYNAMIC)
         }
-        const index: i64 = qpackReadInteger(this, src, 6)
+        const index: i64 = qpackReadInteger(this, src, 63)
         if (index < 0) {
           return this.refuseInteger(index)
         }
@@ -1018,7 +1059,7 @@ export class QpackDecoder {
           return this.refuse(QPACK_REASON_DYNAMIC)
         }
         neverIndexed = (b & 32) !== 0
-        const index: i64 = qpackReadInteger(this, src, 4)
+        const index: i64 = qpackReadInteger(this, src, 15)
         if (index < 0) {
           return this.refuseInteger(index)
         }
@@ -1036,7 +1077,7 @@ export class QpackDecoder {
         if (!this.take(toI64(QPACK_FIELD_OVERHEAD))) {
           return QPACK_SECTION_TOO_LARGE
         }
-        const name: i64 = this.stringResult(qpackReadString(this, src, 4))
+        const name: i64 = this.stringResult(qpackReadString(this, src, 8, 7))
         if (name !== QPACK_OK) {
           return name
         }
@@ -1048,7 +1089,7 @@ export class QpackDecoder {
       }
       if (valueStart < 0) {
         valueStart = toI32(this.bytes.length)
-        const value: i64 = this.stringResult(qpackReadString(this, src, 8))
+        const value: i64 = this.stringResult(qpackReadString(this, src, 128, 127))
         if (value !== QPACK_OK) {
           return value
         }
@@ -1198,8 +1239,9 @@ export class QpackEncoder {
     if (this.failed !== QPACK_OK) {
       return this.failed
     }
-    const end: i32 = off + len
-    for (let i: i32 = off; i >= 0 && i < end && i < toI32(buf.length); i += 1) {
+    let left: i32 = len
+    for (let i: i32 = off; i >= 0 && left > 0 && i < toI32(buf.length); i += 1) {
+      left -= 1
       const b: i32 = toI32(buf[i])
       if (this.pendingShift < 0) {
         if ((b & 128) !== 0) {
@@ -1215,19 +1257,27 @@ export class QpackEncoder {
           this.pendingShift = 0
         }
       } else {
-        const digit: i64 = toI64(b & 127)
-        if (
-          this.pendingShift > 56 ||
-          digit > (QPACK_MAX_INTEGER - this.pendingId) >> toI64(this.pendingShift)
-        ) {
+        const shift: i32 = this.pendingShift
+        const id: i64 = this.pendingId
+        // `spare` is how far the ID may still grow before it passes `QPACK_MAX_INTEGER`; the
+        // ID read so far never does, so a negative one is refused, and so is a tenth group.
+        const spare: i64 = id < 0 ? -1 : QPACK_MAX_INTEGER - id
+        if (shift > 56 || spare < 0) {
           return this.refuse(QPACK_REASON_INTEGER)
         }
-        this.pendingId += digit << toI64(this.pendingShift)
+        // At most shift 56, a group ends at bit 62, so `grown` is never negative; the test
+        // tells the prover the sign.
+        const grown: i64 = toI64(b & 127) << toI64(shift)
+        const room: i64 = grown < 0 ? -1 : spare - grown
+        if (room < 0) {
+          return this.refuse(QPACK_REASON_INTEGER)
+        }
+        this.pendingId = QPACK_MAX_INTEGER - room
         if ((b & 128) === 0) {
           this.cancelled(this.pendingId)
           this.pendingShift = -1
         } else {
-          this.pendingShift += 7
+          this.pendingShift = shift + 7
         }
       }
     }
@@ -1236,8 +1286,9 @@ export class QpackEncoder {
 
   /** Counts a Stream Cancellation for `streamId`. */
   private cancelled(streamId: i64): void {
-    if (this.cancellations < QPACK_COUNT_MAX) {
-      this.cancellations += 1
+    const seen: i32 = this.cancellations
+    if (seen < QPACK_COUNT_MAX) {
+      this.cancellations = seen + 1
     }
     this.lastCancelled = streamId
   }
