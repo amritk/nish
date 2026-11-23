@@ -1541,56 +1541,66 @@ export class Deflater {
   }
 
   /**
-   * The bits a stored rendering of `n` bytes takes from a bit buffer holding
-   * `pending` bits: each piece of up to 65,535 bytes has three header bits,
-   * the padding to a byte and four bytes of `LEN` / `NLEN`.
+   * The bytes a stored rendering of `n` bytes adds to them, counted from the
+   * start of a bit buffer holding `pending` bits (under 64): each piece of
+   * up to 65,535 bytes has three header bits, the padding to a byte and four
+   * bytes of `LEN` / `NLEN`. The answer is under 2^18.
    */
-  private storedBits(n: i32, pending: i32): i32 {
-    let bits: i32 = 0
-    let left: i32 = n
-    let bc: i32 = pending
-    let first: boolean = true
-    while (first || left > 0) {
-      first = false
-      const take: i32 = left < DEFLATE_STORED_MAX ? left : DEFLATE_STORED_MAX
-      const header: i32 = ((bc + 3 + 7) & ~7) - bc
-      bits += header + 32 + 8 * take
-      bc = 0
-      left -= take
+  private storedExtra(n: i32, pending: i32): i32 {
+    let more: i32 = 0
+    // `n` is below 2^31, so there are at most 32,768 pieces after the first:
+    // the bound on `more` never stops the loop.
+    for (let left: i32 = n; left > 65535 && more < 32768; left -= 65535) {
+      more += 1
     }
-    return bits
+    // The masks keep every bit, and tell the bounds prover so.
+    return ((((pending & 63) + 10) >> 3) & 15) + 4 + (more & 0x7fff) * 5
   }
 
   /**
    * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Writes `src[start .. end)` as stored blocks, the last BFINAL when
    * `final`; answers the new position, or -1 without writing when it does
-   * not fit in `out[op .. oe)`.
+   * not fit in `out[op .. oe)` or the ranges are backwards or negative.
    */
   writeStored(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32 {
-    const bits: i32 = this.storedBits(end - start, toI32(this.bitCount))
-    if ((toI32(this.bitCount) + bits + 7) >> 3 > oe - op) {
+    if (start < 0 || end < start || op < 0 || oe < op) {
+      return -1
+    }
+    // Cannot wrap: `start <= end` and `op <= oe`, both from zero up.
+    const n: i32 = toI32(toU32(end) - toU32(start))
+    const room: i32 = toI32(toU32(oe) - toU32(op))
+    // Under 2^18, as `storedExtra` says: the mask keeps every bit.
+    const extra: i32 = this.storedExtra(n, toI32(this.bitCount)) & 0x3ffff
+    // Cannot wrap: `extra <= room` by the first test.
+    if (room < extra || n > toI32(toU32(room) - toU32(extra))) {
       return -1
     }
     let p: i32 = start
+    let left: i32 = n
     let o: i32 = op
     let first: boolean = true
-    while (first || p < end) {
+    while (first || left > 0) {
       first = false
-      const take: i32 = end - p < DEFLATE_STORED_MAX ? end - p : DEFLATE_STORED_MAX
-      const last: boolean = p + take === end
-      o = this.putBits(out, o, toI32(final && last ? 1 : 0), toI32(3))
+      // At most `DEFLATE_STORED_MAX`, 65,535, spelled out for the bounds
+      // prover; `left` is never negative, so the mask keeps every bit.
+      const take: i32 = (left < 65535 ? left : toI32(65535)) & 0xffff
+      o = this.putBits(out, o, toI32(final && take === left ? 1 : 0), toI32(3))
       o = this.alignBits(out, o)
       if (o >= 0 && o <= toI32(out.length) - 4 && tryCopyBytes(out, o + 4, src, p, take)) {
         uncheckedSet(out, o, toU8(take & 255))
         uncheckedSet(out, o + 1, toU8(take >> 8))
         uncheckedSet(out, o + 2, toU8(~take & 255))
         uncheckedSet(out, o + 3, toU8((~take >> 8) & 255))
+        // Cannot wrap: the copy put `take` bytes after `o + 4` inside `out`.
+        o = toI32(toU32(o) + toU32(4 + take))
       } else {
         this.overrun = true
       }
-      o += 4 + take
-      p += take
+      // Cannot wrap: `p + take` is at most `end`.
+      p = toI32(toU32(p) + toU32(take))
+      // Cannot wrap: `take <= left` on the branch that subtracts.
+      left = left > take ? toI32(toU32(left) - toU32(take)) : 0
     }
     return this.settle(o)
   }
@@ -1607,57 +1617,73 @@ export class Deflater {
     const freq: i32[] = this.clFreq
     const ll: i32[] = this.litLens
     const dl: i32[] = this.distLens
-    if (toI32(rle.length) < 320 || toI32(freq.length) < 19 || hlit > 288 || hdist > 32) {
+    freq.fill(0)
+    if (
+      toI32(rle.length) < 320 ||
+      toI32(freq.length) < 19 ||
+      hlit < 0 ||
+      hlit > 288 ||
+      hdist < 0 ||
+      hdist > 32
+    ) {
       return false
     }
-    freq.fill(0)
+    // At most 320 lengths, each giving at most one entry: the masks on `n`
+    // and the counts keep every bit, and tell the bounds prover so, and the
+    // bound on `run` restates `i + run < total`.
     const total: i32 = hlit + hdist
     let n: i32 = 0
     let i: i32 = 0
-    while (i < total) {
+    // `i` is never negative: the second test never stops the loop.
+    while (i < total && i >= 0) {
       const l: i32 = i < hlit ? uncheckedGet(ll, i) : uncheckedGet(dl, i - hlit)
       let run: i32 = 1
       while (
+        run < 320 &&
         i + run < total &&
         (i + run < hlit ? uncheckedGet(ll, i + run) : uncheckedGet(dl, i + run - hlit)) === l
       ) {
         run += 1
       }
-      i += run
+      // Cannot wrap: `i + run` is at most `total`, at most 320.
+      i = toI32(toU32(i) + toU32(run))
       if (l === 0) {
-        while (run >= 11) {
-          const r: i32 = run < 138 ? run : 138
+        // `run` is at most 320, the bound on the scan above: the second test
+        // never stops the loop, and the mask keeps every bit of `r`.
+        while (run >= 11 && run <= 320) {
+          const r: i32 = (run < 138 ? run : toI32(138)) & 255
           uncheckedSet(rle, n, ((r - 11) << 8) | 18)
-          n += 1
-          freq[18] += 1
+          n = (n + 1) & 511
+          freq[18] = (freq[18] & 511) + 1
           run -= r
         }
         if (run >= 3) {
           uncheckedSet(rle, n, ((run - 3) << 8) | 17)
-          n += 1
-          freq[17] += 1
+          n = (n + 1) & 511
+          freq[17] = (freq[17] & 511) + 1
           run = 0
         }
       } else {
         uncheckedSet(rle, n, l)
-        n += 1
+        n = (n + 1) & 511
         if (l >= 0 && l < 19) {
-          uncheckedSet(freq, l, uncheckedGet(freq, l) + 1)
+          uncheckedSet(freq, l, (uncheckedGet(freq, l) & 511) + 1)
         }
         run -= 1
-        while (run >= 3) {
-          const r: i32 = run < 6 ? run : 6
+        // As above, the second test never stops the loop.
+        while (run >= 3 && run <= 320) {
+          const r: i32 = (run < 6 ? run : toI32(6)) & 7
           uncheckedSet(rle, n, ((r - 3) << 8) | 16)
-          n += 1
-          freq[16] += 1
+          n = (n + 1) & 511
+          freq[16] = (freq[16] & 511) + 1
           run -= r
         }
       }
       while (run > 0) {
         uncheckedSet(rle, n, l)
-        n += 1
+        n = (n + 1) & 511
         if (l >= 0 && l < 19) {
-          uncheckedSet(freq, l, uncheckedGet(freq, l) + 1)
+          uncheckedSet(freq, l, (uncheckedGet(freq, l) & 511) + 1)
         }
         run -= 1
       }
@@ -1670,92 +1696,147 @@ export class Deflater {
    * Writes the block's symbols, `src[start .. end)`'s, as the smallest of a
    * dynamic, a fixed and a stored block; answers the new position, or -1
    * without writing when that does not fit in `out[op .. oe)`. Answers -1
-   * too, the stream then unusable, when a table is not its size or the header holds a code-length
-   * symbol past 18, which the constructor and `buildRle` rule out.
+   * too, the stream then unusable, when a table is not its size, a range is
+   * backwards or negative, or the header holds a code-length symbol past 18,
+   * which the constructor, `compressRange` and `buildRle` rule out.
    */
   private writeBlock(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32 {
     const lf: i32[] = this.litFreq
     const df: i32[] = this.distFreq
-    lf[256] = 1
+    const ll: i32[] = this.litLens
+    const dl: i32[] = this.distLens
+    const cf: i32[] = this.clFreq
+    const cl: i32[] = this.clLens
+    const cc: i32[] = this.clCodes
     if (
-      !deflateLengths(lf, 286, 15, this.litLens, this.scratch) ||
-      !deflateLengths(df, 30, 15, this.distLens, this.scratch)
+      toI32(lf.length) < 288 ||
+      toI32(ll.length) < 288 ||
+      toI32(dl.length) < 32 ||
+      toI32(cf.length) < 19 ||
+      toI32(cl.length) < 19 ||
+      toI32(cc.length) < 19 ||
+      start < 0 ||
+      end < start ||
+      op < 0 ||
+      oe < op
     ) {
       return -1
     }
-    this.litLens[286] = 0
-    this.litLens[287] = 0
-    this.distLens[30] = 0
-    this.distLens[31] = 0
+    lf[256] = 1
+    if (!deflateLengths(lf, 286, 15, ll, this.scratch) || !deflateLengths(df, 30, 15, dl, this.scratch)) {
+      return -1
+    }
+    ll[286] = 0
+    ll[287] = 0
+    dl[30] = 0
+    dl[31] = 0
     if (
-      !deflateCanonical(this.litLens, 286, this.litCodes, this.countScratch, this.nextScratch) ||
-      !deflateCanonical(this.distLens, 30, this.distCodes, this.countScratch, this.nextScratch)
+      !deflateCanonical(ll, 286, this.litCodes, this.countScratch, this.nextScratch) ||
+      !deflateCanonical(dl, 30, this.distCodes, this.countScratch, this.nextScratch)
     ) {
       return -1
     }
     let hlit: i32 = 286
-    while (hlit > 257 && this.litLens[hlit - 1] === 0) {
+    while (hlit > 257 && ll[hlit - 1] === 0) {
       hlit -= 1
     }
     let hdist: i32 = 30
-    while (hdist > 1 && this.distLens[hdist - 1] === 0) {
+    while (hdist > 1 && dl[hdist - 1] === 0) {
       hdist -= 1
     }
-    if (!this.buildRle(hlit, hdist)) {
+    // The call may move any of `this`'s tables, as far as the bounds prover
+    // knows, so their sizes are checked again.
+    if (
+      !this.buildRle(hlit, hdist) ||
+      toI32(cf.length) < 19 ||
+      toI32(cl.length) < 19 ||
+      toI32(cc.length) < 19
+    ) {
       return -1
     }
     if (
-      !deflateLengths(this.clFreq, 19, 7, this.clLens, this.scratch) ||
-      !deflateCanonical(this.clLens, 19, this.clCodes, this.countScratch, this.nextScratch)
+      !deflateLengths(cf, 19, 7, cl, this.scratch) ||
+      !deflateCanonical(cl, 19, cc, this.countScratch, this.nextScratch)
     ) {
       return -1
     }
     let hclen: i32 = 19
-    while (hclen > 4 && this.clLens[deflateClOrder(hclen - 1)] === 0) {
+    while (hclen > 4) {
+      const k: i32 = deflateClOrder(hclen - 1)
+      if (k < 0 || k >= 19) {
+        return -1
+      }
+      if (cl[k] !== 0) {
+        break
+      }
       hclen -= 1
     }
-    // The three sizes, exactly. Extra bits are the same in both codes.
+    // The three sizes, exactly. Extra bits are the same in both codes. A
+    // block holds at most 16,385 symbols of at most 15 bits and 13 extra
+    // bits, so every frequency is below 2^16, every length below 16, every
+    // extra below 16 and every sum below 2^24: the masks keep every bit, and
+    // tell the bounds prover so.
     let extra: i32 = 0
-    let dynBits: i32 = hclen * 3 + 17
+    let dynBits: i32 = (hclen & 31) * 3 + 17
     let fixBits: i32 = 3
     for (let s: i32 = 0; s < 286; s += 1) {
-      const f: i32 = uncheckedGet(lf, s)
-      dynBits += f * uncheckedGet(this.litLens, s)
-      fixBits += f * uncheckedGet(this.fixedLitLens, s)
+      const f: i32 = uncheckedGet(lf, s) & 0xffff
+      dynBits = (dynBits + f * (uncheckedGet(this.litLens, s) & 15)) & 0xffffff
+      fixBits = (fixBits + f * (uncheckedGet(this.fixedLitLens, s) & 15)) & 0xffffff
       if (s >= 257) {
-        extra += f * uncheckedGet(this.lengthExtra, s - 257)
+        extra = (extra + f * (uncheckedGet(this.lengthExtra, s - 257) & 15)) & 0xffffff
       }
     }
     for (let d: i32 = 0; d < 30; d += 1) {
-      const f: i32 = uncheckedGet(df, d)
-      dynBits += f * uncheckedGet(this.distLens, d)
-      fixBits += f * 5
-      extra += f * uncheckedGet(this.distExtra, d)
+      const f: i32 = uncheckedGet(df, d) & 0xffff
+      dynBits = (dynBits + f * (uncheckedGet(this.distLens, d) & 15)) & 0xffffff
+      fixBits = (fixBits + f * 5) & 0xffffff
+      extra = (extra + f * (uncheckedGet(this.distExtra, d) & 15)) & 0xffffff
     }
     for (let s: i32 = 0; s < 19; s += 1) {
-      dynBits += this.clFreq[s] * this.clLens[s]
+      dynBits = (dynBits + (cf[s] & 0xffff) * (cl[s] & 15)) & 0xffffff
     }
-    dynBits += 2 * this.clFreq[16] + 3 * this.clFreq[17] + 7 * this.clFreq[18]
-    dynBits += extra
-    fixBits += extra
-    const storedBits: i32 = this.storedBits(end - start, toI32(this.bitCount))
-    if (storedBits <= dynBits && storedBits <= fixBits) {
+    dynBits = (dynBits + (cf[16] & 0xffff) * 2 + (cf[17] & 0xffff) * 3 + (cf[18] & 0xffff) * 7) & 0xffffff
+    dynBits = (dynBits + extra) & 0xffffff
+    fixBits = (fixBits + extra) & 0xffffff
+    const bc: i32 = toI32(this.bitCount) & 63
+    // The stored size, `8 * (n + storedExtra) - bc` bits, is at most a size
+    // `b` exactly when `n + storedExtra` is at most `(b + bc) >> 3` bytes.
+    // Cannot wrap: `start <= end`, both from zero up.
+    const n: i32 = toI32(toU32(end) - toU32(start))
+    // Under 2^18, as `storedExtra` says: the mask keeps every bit.
+    const storedExtra: i32 = this.storedExtra(n, bc) & 0x3ffff
+    const dynBytes: i32 = (dynBits + bc) >> 3
+    const fixBytes: i32 = (fixBits + bc) >> 3
+    if (n <= dynBytes - storedExtra && n <= fixBytes - storedExtra) {
       return this.writeStored(src, start, end, final, out, op, oe)
     }
     const dynamic: boolean = dynBits < fixBits
-    const bits: i32 = dynamic ? dynBits : fixBits
-    if ((toI32(this.bitCount) + bits + 7) >> 3 > oe - op) {
+    const bits: i32 = (dynamic ? dynBits : fixBits) & 0xffffff
+    // Cannot wrap: `op <= oe`, both from zero up.
+    if ((bc + bits + 7) >> 3 > toI32(toU32(oe) - toU32(op))) {
       return -1
     }
-    let header: i32 = dynamic ? toI32(4) : toI32(2)
-    if (final) {
-      header += 1
-    }
-    let o: i32 = this.putBits(out, op, header, toI32(3))
+    let o: i32 = this.putBits(
+      out,
+      op,
+      (dynamic ? toI32(4) : toI32(2)) | (final ? toI32(1) : toI32(0)),
+      toI32(3)
+    )
     if (dynamic) {
-      o = this.putBits(out, o, (hlit - 257) | ((hdist - 1) << 5) | ((hclen - 4) << 10), toI32(14))
+      // `hlit`, `hdist` and `hclen` are at least 257, 1 and 4.
+      o = this.putBits(
+        out,
+        o,
+        ((hlit & 511) - 257) | (((hdist & 63) - 1) << 5) | (((hclen & 31) - 4) << 10),
+        toI32(14)
+      )
       for (let i: i32 = 0; i < hclen; i += 1) {
-        o = this.putBits(out, o, this.clLens[deflateClOrder(i)], toI32(3))
+        const k: i32 = deflateClOrder(i)
+        if (k < 0 || k >= 19) {
+          return -1
+        }
+        o = this.putBits(out, o, cl[k], toI32(3))
       }
       const rle: i32[] = this.rle
       const n: i32 = this.rleCount
@@ -1765,7 +1846,7 @@ export class Deflater {
         if (sym < 0 || sym >= 19) {
           return -1
         }
-        o = this.putBits(out, o, this.clCodes[sym], this.clLens[sym])
+        o = this.putBits(out, o, cc[sym], cl[sym])
         if (sym === 16) {
           o = this.putBits(out, o, e >> 8, toI32(2))
         } else if (sym === 17) {
