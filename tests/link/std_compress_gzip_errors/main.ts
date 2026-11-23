@@ -210,7 +210,8 @@ export const main = (): number => {
       }
     }
     t.eqI32("gzip fixed: every room shorter than the stream has none", fixedSmall, flen)
-    t.eqI32("gzip fixed: a bound past the largest", gzipFixedBound(1908874323), DEFLATE_NO_ROOM)
+    t.eqI32("gzip fixed: a bound past the largest", gzipFixedBound(1908874324), DEFLATE_NO_ROOM)
+    t.eqI32("gzip fixed: the largest bound is 2^31 - 1", gzipFixedBound(1908874323), 2147483647)
   }
 
   // --- GzipWriter -------------------------------------------------------------

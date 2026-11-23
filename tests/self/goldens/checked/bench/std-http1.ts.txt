@@ -6845,12 +6845,12 @@ function ZlibCompressor.compress(this: ZlibCompressor, src: u8[], off: i32, len:
   local -2:9 flg: i32 (let)
   local +2:11 end: i32 (const)
   callee +2:22 Deflater.compress -> @nish.Deflater.compress
-  local +6:11 a: u32 (const)
-  callee +6:20 adler32 -> @nish.adler32
-  local +7:11 e1: i32 (const)
-  local +8:11 e2: i32 (const)
-  local +9:11 e3: i32 (const)
-  local +10:11 m: i32 (const)
+  local +9:11 a: u32 (const)
+  callee +9:20 adler32 -> @nish.adler32
+  local +10:11 e1: i32 (const)
+  local +11:11 e2: i32 (const)
+  local +12:11 e3: i32 (const)
+  local +13:11 m: i32 (const)
 function ZlibDecompressor.constructor(this: ZlibDecompressor): void -> @nish.ZlibDecompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Inflater.constructor nish_alloc_struct

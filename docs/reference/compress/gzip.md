@@ -264,7 +264,7 @@ The length of the input, in bytes; a negative `n` answers the
 <scalar-field name="returns" type="i32">
 
 A size in bytes, not a position: a `room` of this many always
-  holds the member. Or `DEFLATE_NO_ROOM` when `n` is over 1,908,874,322,
+  holds the member. Or `DEFLATE_NO_ROOM` when `n` is over 1,908,874,323,
   where the size is more than 2^31 - 1 and no array holds it.
 
 </scalar-field>

@@ -109,9 +109,12 @@ export class ZlibCompressor {
     out[at] = toU8(cmf)
     out[second] = toU8(flg)
     const end: i32 = this.deflater.compress(src, off, len, out, toI32(toI64(at) + 2))
-    // Checksummed before `out`'s length is read again for the trailer: the
-    // prover forgets an array's length across a call, as it did across
-    // `this.deflater.compress`.
+    // A trailer that cannot fit is refused before the input is checksummed.
+    if (end < 0 || toI64(end) + 4 > toI64(out.length)) {
+      return DEFLATE_NO_ROOM
+    }
+    // `out`'s length is read again after the checksum for the trailer's
+    // stores: the prover forgets an array's length across a call.
     const a: u32 = adler32(src, off, len)
     const e1: i32 = toI32(toI64(end) + 1)
     const e2: i32 = toI32(toI64(end) + 2)

@@ -142,8 +142,12 @@ export const main = (): i32 => {
         packed[w + k] = piece[k]
       }
       w += o
-      if (p === CORPUS_BYTES / 2) {
+      if (p < CORPUS_BYTES / 2 && p + len >= CORPUS_BYTES / 2) {
         const f: i32 = writer.flush(piece, 0)
+        if (f < 0) {
+          console.log(`GzipWriter.flush failed: ${f}`)
+          return 1
+        }
         for (let k: i32 = 0; k < f; k++) {
           packed[w + k] = piece[k]
         }
@@ -151,6 +155,10 @@ export const main = (): i32 => {
       }
     }
     const tail: i32 = writer.finish(piece, 0)
+    if (tail < 0) {
+      console.log(`GzipWriter.finish failed: ${tail}`)
+      return 1
+    }
     for (let k: i32 = 0; k < tail; k++) {
       packed[w + k] = piece[k]
     }

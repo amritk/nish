@@ -308,13 +308,13 @@ export class GzipCompressor {
  * @param n The length of the input, in bytes; a negative `n` answers the
  *   bound of 0.
  * @returns A size in bytes, not a position: a `room` of this many always
- *   holds the member. Or `DEFLATE_NO_ROOM` when `n` is over 1,908,874,322,
+ *   holds the member. Or `DEFLATE_NO_ROOM` when `n` is over 1,908,874,323,
  *   where the size is more than 2^31 - 1 and no array holds it.
  */
 export const gzipFixedBound = (n: i32): i32 => {
   // Past this `n`, `fixedDeflateBound(n) + 18` (n + n / 8 + 34) is more
   // than 2^31 - 1.
-  if (n > 1908874322) {
+  if (n > 1908874323) {
     return DEFLATE_NO_ROOM
   }
   return toI32(toI64(fixedDeflateBound(n)) + toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE))

@@ -2603,12 +2603,12 @@ function ZlibCompressor.compress(this: ZlibCompressor, src: u8[], off: i32, len:
   local -2:9 flg: i32 (let)
   local +2:11 end: i32 (const)
   callee +2:22 Deflater.compress -> @nish.Deflater.compress
-  local +6:11 a: u32 (const)
-  callee +6:20 adler32 -> @nish.adler32
-  local +7:11 e1: i32 (const)
-  local +8:11 e2: i32 (const)
-  local +9:11 e3: i32 (const)
-  local +10:11 m: i32 (const)
+  local +9:11 a: u32 (const)
+  callee +9:20 adler32 -> @nish.adler32
+  local +10:11 e1: i32 (const)
+  local +11:11 e2: i32 (const)
+  local +12:11 e3: i32 (const)
+  local +13:11 m: i32 (const)
 function ZlibDecompressor.constructor(this: ZlibDecompressor): void -> @nish.ZlibDecompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Inflater.constructor nish_alloc_struct
@@ -2731,14 +2731,14 @@ function main(): i32 -> @nish_main [exported entry]
   local +37:16 k: i32 (let)
   local +42:15 f: i32 (const)
   callee +42:24 GzipWriter.flush -> @nish.GzipWriter.flush
-  local +43:18 k: i32 (let)
-  local +49:11 tail: i32 (const)
-  callee +49:23 GzipWriter.finish -> @nish.GzipWriter.finish
-  local +50:14 k: i32 (let)
-  callee +54:5 GzipReader.start -> @nish.GzipReader.start
-  local +55:9 fed: i32 (let)
-  local +56:9 at: i32 (let)
-  local +57:9 r: i32 (let)
-  callee +59:11 GzipReader.read -> @nish.GzipReader.read
-  callee +62:11 GzipReader.endInput -> @nish.GzipReader.endInput
-  callee +64:18 GzipReader.feed -> @nish.GzipReader.feed
+  local +47:18 k: i32 (let)
+  local +53:11 tail: i32 (const)
+  callee +53:23 GzipWriter.finish -> @nish.GzipWriter.finish
+  local +58:14 k: i32 (let)
+  callee +62:5 GzipReader.start -> @nish.GzipReader.start
+  local +63:9 fed: i32 (let)
+  local +64:9 at: i32 (let)
+  local +65:9 r: i32 (let)
+  callee +67:11 GzipReader.read -> @nish.GzipReader.read
+  callee +70:11 GzipReader.endInput -> @nish.GzipReader.endInput
+  callee +72:18 GzipReader.feed -> @nish.GzipReader.feed
