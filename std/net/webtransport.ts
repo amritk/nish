@@ -1467,7 +1467,7 @@ export class WebTransport {
 
   /** `idleTimeout` in nanoseconds: at most a day's, so worked exactly in `f64`. */
   private idleNanos(): i64 {
-    return toI64(toF64(this.config.idleTimeout) * 1000000.0)
+    return toI64(toF64(this.config.idleTimeout) * toF64(WT_MILLI))
   }
 
   /**

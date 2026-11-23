@@ -1580,6 +1580,8 @@ const s5PanicFreeDeclared = () => [
 ]
 /** The changelog words of WP82 S7: the HTTP/2 frame, connection, h2c and TLS carriers and HPACK answer malformed input without a panic. */
 const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
+/** The changelog words of WP82 S8: WebTransport, WebSocket, gRPC and OIDC answer malformed input without a panic. */
+const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -20411,6 +20413,24 @@ const DECLARED = [
     changelog: S7_HTTP2_PANIC_FREE,
     why: "the HTTP/2 frame and HPACK code returns an error code where it panicked and its proven checks leave the IR, so the module and the callers that inline it move",
   })),
+  // WP82 S8: the WebSocket frame writers answer a bad window, length or mask
+  // with a code, so the checks and panic blocks leave the IR and a caller's
+  // declarations renumber their attribute groups.
+  ...[
+    ["tests/link/net_websocket_frame_window/main.ts", "main.ll"],
+    ["tests/link/net_websocket_malformed_strict/main.ts", "main.ll"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: S8_REALTIME_PANIC_FREE,
+    why: "websocketFrameSize no longer panics, so its declaration takes a different attribute group and the groups after it renumber",
+  })),
+  {
+    program: "tests/link/net_websocket_malformed_strict/main.ts",
+    file: "bytes.ll",
+    changelog: S8_REALTIME_PANIC_FREE,
+    why: "std/net/websocket.ts copies payload octets with `tryCopyBytes` from nish/bytes, so the program now reaches the checked copies and bytes.ll carries them",
+  },
   // WP82 S5: the QUIC engine's recovery rings and stream tables prove or
   // guard every index instead of panicking, so the modules they compile to move.
   ...[
