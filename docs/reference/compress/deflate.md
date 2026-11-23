@@ -191,7 +191,8 @@ The length of the input, in bytes.
 <scalar-field name="returns" type="i32">
 
 A size in bytes, not a position: an `out` with this many bytes
-  from `at` always holds the raw, zlib or gzip stream.
+  from `at` always holds the raw, zlib or gzip stream; or -1 for an `n`
+  past 2,146,664,726, the largest whose bound with the 18 bytes fits.
 
 </scalar-field>
 
@@ -199,8 +200,9 @@ A size in bytes, not a position: an `out` with this many bytes
 
 The most bytes `Deflater.compress` writes for `n` bytes of input, at any
 level: the input stored, five bytes of framing for every 65,535 and for
-every block, and slack for the last partial byte. `n` is at most
-2^31 - 1 less the framing; a negative `n` answers 0.
+every block, and slack for the last partial byte. A negative `n`
+answers 0, and an `n` past 2,146,664,744, the largest whose bound fits,
+answers -1: its bound would pass 2^31 - 1.
 
 ```ts
 const deflateBound: (n: i32) => i32
@@ -215,7 +217,7 @@ The length of the input, in bytes.
 <scalar-field name="returns" type="i32">
 
 A size in bytes, not a position: an `out` with this many bytes
-  from `at` always holds the stream.
+  from `at` always holds the stream; or -1 for an `n` past 2,146,664,744.
 
 </scalar-field>
 
@@ -342,7 +344,8 @@ The index in `out` one past the data's last byte, or a negative
 The most bytes `FixedDeflater.compress` writes for `n` bytes of input: nine
 bits a byte, the block's header and end code, and the eight bytes of slack
 its word-wide bit writer stores past the last whole byte. A negative `n`
-answers the bound of 0.
+answers the bound of 0, and an `n` past 1,908,874,339, the largest whose
+bound fits, answers -1: its bound would pass 2^31 - 1.
 
 ```ts
 const fixedDeflateBound: (n: i32) => i32
@@ -357,7 +360,7 @@ The length of the input, in bytes.
 <scalar-field name="returns" type="i32">
 
 A size in bytes, not a position: a `room` of this many always
-  holds the block.
+  holds the block; or -1 for an `n` past 1,908,874,339.
 
 </scalar-field>
 
@@ -407,7 +410,7 @@ class FixedDeflater
 | Member | |
 | --- | --- |
 | `new FixedDeflater()` | The tables, once. |
-| `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32` | Compresses `src[off .. off + len)` as one final fixed-Huffman block into `out[at .. at + room)`, and answers where it ends, or `DEFLATE_NO_ROOM` as soon as it would need more than `room` bytes: a caller that only wants the output when it is smaller passes the most it will take, and an input that does not compress is abandoned part way. `fixedDeflateBound(len)` always fits. A window outside its array panics. Allocates nothing. |
+| `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32` | Compresses `src[off .. off + len)` as one final fixed-Huffman block into `out[at .. at + room)`, and answers where it ends, or `DEFLATE_NO_ROOM` as soon as it would need more than `room` bytes: a caller that only wants the output when it is smaller passes the most it will take, and an input that does not compress is abandoned part way. `fixedDeflateBound(len)` always fits. A window outside its array panics. Answers `DEFLATE_NO_ROOM` too, writing nothing, when a table is not its size, which the constructor rules out. Allocates nothing. |
 
 ### InflateTable
 

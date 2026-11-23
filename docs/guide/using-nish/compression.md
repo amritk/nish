@@ -14,9 +14,10 @@ read.
 
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do):
-`nish/compress/deflate` and `nish/compress/gzip` keep panic sites no proof
-removes yet, so a call to them is refused by default until the standard library
-is made panic-free. In your own code, an array whose length is a literal, an
+`nish/compress/gzip` keeps panic sites no proof removes yet, and
+`nish/compress/deflate` keeps the panics of its contract (a window outside its
+buffer, a level outside 0 to 9, a negative `limit`), so a call to them is
+refused by default. In your own code, an array whose length is a literal, an
 index tested against `length`, a sum a guard bounds and an error answer in
 place of `panic` each build under the default.
 
@@ -25,7 +26,7 @@ len)`, the output goes into `out` from `at`, and the answer is where the output
 ends. Build the compressor once and keep it — it holds its tables, about
 330 KB — and a call allocates nothing:
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `std/compress/deflate.ts`, `std/compress/gzip.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `std/compress/gzip.ts` code that keeps panic sites no proof removes yet, and `std/compress/deflate.ts` code that keeps its contract's panics -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST, compressBound } from "nish/compress/deflate";
@@ -91,7 +92,7 @@ negative error code and never panics:
 | `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE` | gzip's header, CRC-32 or length is wrong, or something other than another gzip member follows one |
 | `ZLIB_ERR_HEADER`, `ZLIB_ERR_ADLER`, `ZLIB_ERR_DICTIONARY` | zlib's header or Adler-32 is wrong, or the stream needs a preset dictionary |
 
-<!-- allow-panics: calls `std/compress/deflate.ts`, `std/compress/gzip.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/compress/gzip.ts` code that keeps panic sites no proof removes yet, and `std/compress/deflate.ts` code that keeps its contract's panics -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_ERR_OUTPUT_LIMIT, DEFLATE_FAST } from "nish/compress/deflate";
@@ -128,7 +129,7 @@ for a `len` over 2,145,000,000, as `gzipFixedBound(n)` is for an `n` over
 `finish` answer `GZIP_ERR_FINISHED` and take nothing, until `start` begins
 another body.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/compress/deflate.ts`, `std/compress/gzip.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/compress/gzip.ts` code that keeps panic sites no proof removes yet, and `std/compress/deflate.ts` code that keeps its contract's panics -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { GzipReader, GzipWriter, GZIP_END, GZIP_NEED_INPUT } from "nish/compress/gzip";
