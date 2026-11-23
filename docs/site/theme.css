@@ -448,6 +448,13 @@ table.t-editor__table tbody tr:hover {
   border-radius: 12px;
 }
 
+/* Scalar spaces only `.t-prose`'s own children, so inside a step or a
+   detail a code block touches the paragraph after it. */
+.t-editor__detail-content > * + *,
+.t-editor__step-content > * + * {
+  margin-top: var(--scalar-block-spacing);
+}
+
 /* A heading is text, not a row: Scalar lays it out as a flex row to put the
    copy-link button beside it, which makes each run of text and each inline
    `code` a flex item, and on a narrow column those shrink side by side,
