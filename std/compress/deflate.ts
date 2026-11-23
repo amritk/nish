@@ -1229,12 +1229,12 @@ export class Deflater {
     const head: i32[] = this.head
     const prev: i32[] = this.prev
     for (let i: i32 = 0; i < toI32(head.length); i += 1) {
-      const v: i32 = (head[i] & 0x7fffffff) - shift
-      head[i] = v > 0 ? v : 0
+      const h: i32 = (head[i] & 0x7fffffff) - shift
+      head[i] = h > 0 ? h : 0
     }
     for (let i: i32 = 0; i < toI32(prev.length); i += 1) {
-      const v: i32 = (prev[i] & 0x7fffffff) - shift
-      prev[i] = v > 0 ? v : 0
+      const h: i32 = (prev[i] & 0x7fffffff) - shift
+      prev[i] = h > 0 ? h : 0
     }
     this.delta = 32769 - p // DEFLATE_WINDOW + 1 - p
     this.base = (this.base & 0x7fffffff) - shift
@@ -1632,9 +1632,9 @@ export class Deflater {
     let first: boolean = true
     while (first || left > 0) {
       first = false
-      // At most `DEFLATE_STORED_MAX`, 65,535, spelled out for the bounds
-      // prover; `left` is never negative, so the mask keeps every bit.
-      const take: i32 = (left < 65535 ? left : toI32(65535)) & 0xffff
+      // `left` is never negative, so the mask keeps every bit; it tells the
+      // bounds prover `take` fits a stored block's 16-bit length.
+      const take: i32 = (left < DEFLATE_STORED_MAX ? left : DEFLATE_STORED_MAX) & 0xffff
       o = this.putBits(out, o, toI32(final && take === left ? 1 : 0), toI32(3))
       o = this.alignBits(out, o)
       if (o >= 0 && o <= toI32(out.length) - 4 && tryCopyBytes(out, o + 4, src, p, take)) {
@@ -1889,8 +1889,8 @@ export class Deflater {
         o = this.putBits(out, o, cl[k], toI32(3))
       }
       const rle: i32[] = this.rle
-      const n: i32 = this.rleCount
-      for (let i: i32 = 0; i < n && i < toI32(rle.length); i += 1) {
+      const runs: i32 = this.rleCount
+      for (let i: i32 = 0; i < runs && i < toI32(rle.length); i += 1) {
         const e: i32 = rle[i]
         const sym: i32 = e & 255
         if (sym < 0 || sym >= 19) {
