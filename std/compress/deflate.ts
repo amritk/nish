@@ -440,12 +440,13 @@ const deflateFixedLitCode = (s: i32): i32 => {
  * Fills `codes[0 .. n)` with the canonical code (§3.2.2) of the lengths
  * `lens[0 .. n)`, each already bit-reversed for the LSB-first stream. `count`
  * and `next` are scratch of at least 16 entries. A length of 0 gets code 0.
- * Answers false, filling nothing, when a table is smaller than that, which
- * every caller's tables rule out.
+ * Answers false, filling nothing, when a table is smaller than that or `n`
+ * is past 288, the largest alphabet, which every caller's tables rule out.
  */
 const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next: i32[]): boolean => {
   if (
     n < 0 ||
+    n > 288 ||
     n > toI32(lens.length) ||
     n > toI32(codes.length) ||
     toI32(count.length) < 16 ||
@@ -459,13 +460,17 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
   for (let s: i32 = 0; s < n; s += 1) {
     const l: i32 = lens[s]
     if (l >= 0 && l < 16) {
-      count[l] += 1
+      // A count is at most n <= 288: the mask keeps every bit, and tells
+      // the bounds prover so.
+      count[l] = (count[l] & 511) + 1
     }
   }
   count[0] = 0
   let code: i32 = 0
   for (let l: i32 = 1; l < 16; l += 1) {
-    code = (code + count[l - 1]) << 1
+    // Only a code's low `l` bits are written, and they depend only on the
+    // low bits of the sum: the mask keeps 16 of them.
+    code = ((code + (count[l - 1] & 511)) << 1) & 0xffff
     next[l] = code
   }
   // Each length's next code is kept bit-reversed, as it is written, and
@@ -478,9 +483,11 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
     if (l > 0 && l < 16) {
       const r: i32 = next[l]
       codes[s] = r
-      const top: i32 = (toI32(1) << l) - 1
+      // `l` is below 16, so `r` and `top` are below 2^16 and the masks keep
+      // every bit.
+      const top: i32 = ((toI32(1) << l) & 0xffff) - 1
       if (r !== top) {
-        const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(r ^ top))))
+        const bit: i32 = (toI32(1) << (31 - toI32(Math.clz32(toU32(r ^ top))))) & 0xffff
         next[l] = (r & (bit - 1)) | bit
       }
     } else {
@@ -526,9 +533,11 @@ export class DeflateHuffmanScratch {
  * then, if a length passed `limit`, the counts per length repaired until the
  * Kraft sum is exactly 1 again. A symbol of frequency 0 gets length 0. With
  * fewer than two used symbols, symbols are given length 1 until two have
- * one, so the code is always complete. Frequencies are below 2^16. Answers
- * false, setting nothing, when the alphabet or `limit` is outside the
- * scratch's sizes, which every caller's tables rule out.
+ * one, so the code is always complete. Answers false, setting nothing, when
+ * the alphabet or `limit` is outside the scratch's sizes or a frequency is
+ * 2^16 or more, which every caller's tables and blocks rule out. Those
+ * bounds keep every weight below 2^25 and every count below 2^9, which the
+ * masks below keep whole and tell the bounds prover.
  */
 const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: DeflateHuffmanScratch): boolean => {
   const syms: i32[] = w.syms
@@ -556,13 +565,18 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   // The used symbols, by a two-pass radix sort on the 16-bit frequency.
   let used: i32 = 0
   for (let s: i32 = 0; s < n; s += 1) {
-    lens[s] = 0
     const f: i32 = freq[s]
+    if (f > 65535) {
+      return false
+    }
     if (f > 0) {
       uncheckedSet(tsyms, used, s)
       uncheckedSet(tkeys, used, f)
       used += 1
     }
+  }
+  for (let s: i32 = 0; s < n; s += 1) {
+    lens[s] = 0
   }
   if (used < 2) {
     // One code or none: every decoder wants a complete code, so give two
@@ -593,18 +607,18 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
     const toKeys: i32[] = pass === 0 ? keys : tkeys
     for (let i: i32 = 0; i < used; i += 1) {
       const b: i32 = (uncheckedGet(fromKeys, i) >> shift) & 255
-      uncheckedSet(buckets, b, uncheckedGet(buckets, b) + 1)
+      uncheckedSet(buckets, b, (uncheckedGet(buckets, b) & 511) + 1)
     }
     let sum: i32 = 0
     for (let b: i32 = 0; b < 256; b += 1) {
-      const c: i32 = uncheckedGet(buckets, b)
+      const c: i32 = uncheckedGet(buckets, b) & 511
       uncheckedSet(buckets, b, sum)
-      sum += c
+      sum = (sum + c) & 511
     }
     for (let i: i32 = 0; i < used; i += 1) {
       const k: i32 = uncheckedGet(fromKeys, i)
       const b: i32 = (k >> shift) & 255
-      const at: i32 = uncheckedGet(buckets, b)
+      const at: i32 = uncheckedGet(buckets, b) & 511
       uncheckedSet(buckets, b, at + 1)
       uncheckedSet(toSyms, at, uncheckedGet(fromSyms, i))
       uncheckedSet(toKeys, at, k)
@@ -617,31 +631,39 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   }
   // Moffat and Katajainen, phase 1: each internal node's weight, and each
   // node's parent, in place over the ascending weights.
-  uncheckedSet(keys, 0, uncheckedGet(keys, 0) + uncheckedGet(keys, 1))
+  uncheckedSet(keys, 0, (uncheckedGet(keys, 0) & 0x1ffffff) + (uncheckedGet(keys, 1) & 0x1ffffff))
   let root: i32 = 0
   let leaf: i32 = 2
   for (let next: i32 = 1; next < used - 1; next += 1) {
     if (leaf >= used || uncheckedGet(keys, root) < uncheckedGet(keys, leaf)) {
       uncheckedSet(keys, next, uncheckedGet(keys, root))
       uncheckedSet(keys, root, next)
-      root += 1
+      root = (root + 1) & 511
     } else {
       uncheckedSet(keys, next, uncheckedGet(keys, leaf))
       leaf += 1
     }
     if (leaf >= used || (root < next && uncheckedGet(keys, root) < uncheckedGet(keys, leaf))) {
-      uncheckedSet(keys, next, uncheckedGet(keys, next) + uncheckedGet(keys, root))
+      uncheckedSet(
+        keys,
+        next,
+        (uncheckedGet(keys, next) & 0x1ffffff) + (uncheckedGet(keys, root) & 0x1ffffff)
+      )
       uncheckedSet(keys, root, next)
-      root += 1
+      root = (root + 1) & 511
     } else {
-      uncheckedSet(keys, next, uncheckedGet(keys, next) + uncheckedGet(keys, leaf))
+      uncheckedSet(
+        keys,
+        next,
+        (uncheckedGet(keys, next) & 0x1ffffff) + (uncheckedGet(keys, leaf) & 0x1ffffff)
+      )
       leaf += 1
     }
   }
   // Phase 2: each internal node's depth.
   uncheckedSet(keys, used - 2, 0)
   for (let next: i32 = used - 3; next >= 0; next -= 1) {
-    uncheckedSet(keys, next, uncheckedGet(keys, uncheckedGet(keys, next)) + 1)
+    uncheckedSet(keys, next, (uncheckedGet(keys, uncheckedGet(keys, next)) & 511) + 1)
   }
   // Phase 3: how many leaves sit at each depth.
   for (let l: i32 = 0; l < 33; l += 1) {
@@ -651,18 +673,21 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   let usedHere: i32 = 0
   let depth: i32 = 0
   root = used - 2
-  while (avail > 0) {
-    while (root >= 0 && uncheckedGet(keys, root) === depth) {
+  // A tree of at most 288 leaves is under 288 deep and has under 288
+  // internal nodes, so the bounds on `depth` and `usedHere` never stop a loop.
+  while (avail > 0 && depth < 288) {
+    while (root >= 0 && usedHere < 288 && uncheckedGet(keys, root) === depth) {
       usedHere += 1
       root -= 1
     }
-    while (avail > usedHere) {
+    // `usedHere` is never negative, so `avail > 0` only restates the first test.
+    while (avail > usedHere && avail > 0) {
       if (depth < 33) {
-        per[depth] += 1
+        per[depth] = (per[depth] & 511) + 1
       }
       avail -= 1
     }
-    avail = 2 * usedHere
+    avail = usedHere << 1
     depth += 1
     usedHere = 0
   }
@@ -670,19 +695,22 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   // shorter codes until the Kraft sum is exactly 2^limit again.
   if (per[limit + 1] > 0 || depth > limit + 1) {
     for (let l: i32 = limit + 1; l < 33; l += 1) {
-      per[limit] += per[l]
+      per[limit] = (per[limit] & 511) + (per[l] & 511)
       per[l] = 0
     }
+    // At most 288 codes of at most 15 bits: the Kraft sum is below 2^23.
     let total: i32 = 0
     for (let l: i32 = limit; l > 0; l -= 1) {
-      total += per[l] << (limit - l)
+      total = (total + (((per[l] & 511) << (limit - l)) & 0x7fffff)) & 0x7fffff
     }
-    while (total !== 1 << limit) {
-      per[limit] -= 1
+    // Each pass takes one off a sum above 2^limit, so it stays positive.
+    while (total !== 1 << limit && total > 0) {
+      per[limit] = (per[limit] & 511) - 1
       for (let l: i32 = limit - 1; l > 0; l -= 1) {
-        if (per[l] !== 0) {
-          per[l] -= 1
-          per[l + 1] += 2
+        const c: i32 = per[l] & 511
+        if (c !== 0) {
+          per[l] = c - 1
+          per[l + 1] = (per[l + 1] & 511) + 2
           break
         }
       }
@@ -692,13 +720,11 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   // The most frequent symbols take the shortest lengths.
   let j: i32 = used
   for (let l: i32 = 1; l <= limit; l += 1) {
-    for (let c: i32 = per[l]; c > 0; c -= 1) {
+    for (let c: i32 = per[l]; c > 0 && j > 0; c -= 1) {
       j -= 1
-      if (j >= 0) {
-        const s: i32 = uncheckedGet(syms, j)
-        if (s >= 0 && s < n) {
-          lens[s] = l
-        }
+      const s: i32 = uncheckedGet(syms, j)
+      if (s >= 0 && s < n) {
+        lens[s] = l
       }
     }
   }
