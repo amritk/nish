@@ -1051,6 +1051,9 @@ export class Deflater {
         this.level >= 4
           ? this.collectLazy(src, p, end, histStart)
           : this.collectGreedy(src, p, end, histStart)
+      if (q < 0) {
+        return this.settle(toI32(-1))
+      }
       o = this.writeBlock(src, p, q, final && q === end, out, o, oe)
       if (o < 0) {
         return this.settle(toI32(-1))
@@ -1096,7 +1099,9 @@ export class Deflater {
   /**
    * The best match at `p`, after recording `p` in the chains: answers
    * `len << 16 | dist`, or 0 for none at least `minMatch` long. `p + 4 <=
-   * end`, which the caller checks.
+   * end`, which the caller checks. Answers -1, recording nothing, when a
+   * table is not its size or `p` is outside that bound; the constructor and
+   * the caller rule both out.
    */
   private longest(src: u8[], p: i32, end: i32, histStart: i32): i32 {
     const head: i32[] = this.head
@@ -1108,7 +1113,7 @@ export class Deflater {
       p > end - 4 ||
       end > toI32(src.length)
     ) {
-      panic("Deflater.longest: a table is not its size")
+      return -1
     }
     const delta: i32 = this.delta
     const minMatch: i32 = this.minMatch
@@ -1173,23 +1178,6 @@ export class Deflater {
     return (best << 16) | bestDist
   }
 
-  /** Records `p` in the chains without searching; `p + 4 <= src.length`. */
-  private insert(src: u8[], p: i32): void {
-    const head: i32[] = this.head
-    const prev: i32[] = this.prev
-    if (toI32(head.length) !== DEFLATE_HASH_SIZE || toI32(prev.length) !== DEFLATE_WINDOW) {
-      panic("Deflater.insert: a table is not its size")
-    }
-    const word: u32 = deflateLoad32(src, p)
-    const h: i32 =
-      this.minMatch === 3
-        ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
-        : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
-    const v: i32 = p + this.delta
-    uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), uncheckedGet(head, h))
-    uncheckedSet(head, h, v)
-  }
-
   /** Clears the block's symbols and frequencies. */
   private startBlock(): void {
     this.litFreq.fill(0)
@@ -1197,44 +1185,12 @@ export class Deflater {
     this.count = 0
   }
 
-  /** Records the match `len`, `dist` as the block's next symbol. */
-  private addMatch(len: i32, dist: i32): void {
-    const tokens: i32[] = this.tokens
-    const n: i32 = this.count
-    if (n < 0 || n >= toI32(tokens.length) || len < 3 || len > 258 || dist < 1 || dist > DEFLATE_WINDOW) {
-      panic("Deflater.addMatch: a match outside the format")
-    }
-    uncheckedSet(tokens, n, (dist << 9) | (253 + len))
-    this.count = n + 1
-    const ls: i32 = uncheckedGet(this.lengthSymbol, len - 3)
-    const lf: i32[] = this.litFreq
-    uncheckedSet(lf, 257 + ls, uncheckedGet(lf, 257 + ls) + 1)
-    const ds: i32 =
-      dist <= 256
-        ? uncheckedGet(this.distSymbol, dist - 1)
-        : uncheckedGet(this.distSymbol, ((dist - 1) >> 7) + 256)
-    const df: i32[] = this.distFreq
-    uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
-  }
-
-  /** Records the literal `b` as the block's next symbol. */
-  private addLiteral(b: i32): void {
-    const tokens: i32[] = this.tokens
-    const n: i32 = this.count
-    if (n < 0 || n >= toI32(tokens.length) || b < 0 || b > 255) {
-      panic("Deflater.addLiteral: a literal outside the format")
-    }
-    uncheckedSet(tokens, n, b)
-    this.count = n + 1
-    const lf: i32[] = this.litFreq
-    uncheckedSet(lf, b, uncheckedGet(lf, b) + 1)
-  }
-
   /**
    * Fills the block's symbols greedily from `start`, and answers where the
-   * block ends: at `end`, or where the symbol buffer filled. The match
-   * finder, the chains and the symbol bookkeeping are written out in this one
-   * loop over locals, because this is the fast level's whole cost.
+   * block ends: at `end`, or where the symbol buffer filled; -1 when a table
+   * is not its size, which the constructor rules out. The match finder, the
+   * chains and the symbol bookkeeping are written out in this one loop over
+   * locals, because this is the fast level's whole cost.
    */
   private collectGreedy(src: u8[], start: i32, end: i32, histStart: i32): i32 {
     this.startBlock()
@@ -1254,7 +1210,7 @@ export class Deflater {
       toI32(lsym.length) < 256 ||
       toI32(dsym.length) < 512
     ) {
-      panic("Deflater.collectGreedy: a table is not its size")
+      return -1
     }
     const delta: i32 = this.delta
     const lo: i32 = histStart + delta
@@ -1342,27 +1298,64 @@ export class Deflater {
 
   /**
    * Fills the block's symbols from `p`, deferring each match by a position
-   * while the next one finds a longer one; answers where the block ends.
+   * while the next one finds a longer one; answers where the block ends, or
+   * -1 when a table is not its size or the match finder answers a match
+   * outside the format, which the constructor and `longest` rule out. The
+   * symbol bookkeeping and the chain inserts are written out over locals, as
+   * in `collectGreedy`.
    */
   private collectLazy(src: u8[], start: i32, end: i32, histStart: i32): i32 {
     this.startBlock()
-    let p: i32 = start
+    const head: i32[] = this.head
+    const prev: i32[] = this.prev
+    const tokens: i32[] = this.tokens
+    const lf: i32[] = this.litFreq
+    const df: i32[] = this.distFreq
+    const lsym: i32[] = this.lengthSymbol
+    const dsym: i32[] = this.distSymbol
+    if (
+      toI32(head.length) !== DEFLATE_HASH_SIZE ||
+      toI32(prev.length) !== DEFLATE_WINDOW ||
+      toI32(tokens.length) !== DEFLATE_BLOCK_TOKENS ||
+      toI32(lf.length) < 288 ||
+      toI32(df.length) < 32 ||
+      toI32(lsym.length) < 256 ||
+      toI32(dsym.length) < 512
+    ) {
+      return -1
+    }
+    const three: boolean = this.minMatch === 3
+    const lazyLength: i32 = this.lazyLength
     const room: i32 = DEFLATE_BLOCK_TOKENS - 2
-    while (p < end && this.count < room) {
+    let n: i32 = 0
+    let p: i32 = start
+    while (p < end && n < room) {
       let m: i32 = 0
       if (p + 4 <= end) {
         m = this.longest(src, p, end, histStart)
       }
+      if (m < 0) {
+        return -1
+      }
       if (m === 0) {
-        this.addLiteral(toI32(uncheckedGet(src, p)))
+        const b: i32 = toI32(uncheckedGet(src, p))
+        uncheckedSet(tokens, n, b)
+        n += 1
+        uncheckedSet(lf, b, uncheckedGet(lf, b) + 1)
         p += 1
       } else {
         let inserted: i32 = p + 1
-        while (m >> 16 < this.lazyLength && p + 5 <= end && this.count < room) {
+        while (m >> 16 < lazyLength && p + 5 <= end && n < room) {
           const m2: i32 = this.longest(src, p + 1, end, histStart)
+          if (m2 < 0) {
+            return -1
+          }
           inserted = p + 2
           if (m2 >> 16 > m >> 16) {
-            this.addLiteral(toI32(uncheckedGet(src, p)))
+            const b: i32 = toI32(uncheckedGet(src, p))
+            uncheckedSet(tokens, n, b)
+            n += 1
+            uncheckedSet(lf, b, uncheckedGet(lf, b) + 1)
             p += 1
             m = m2
           } else {
@@ -1370,17 +1363,35 @@ export class Deflater {
           }
         }
         const len: i32 = m >> 16
-        this.addMatch(len, m & 0xffff)
+        const dist: i32 = m & 0xffff
+        if (len < 3 || len > DEFLATE_MAX_MATCH || dist < 1 || dist > DEFLATE_WINDOW) {
+          return -1
+        }
+        uncheckedSet(tokens, n, (dist << 9) | (253 + len))
+        n += 1
+        const ls: i32 = 257 + uncheckedGet(lsym, len - 3)
+        uncheckedSet(lf, ls, uncheckedGet(lf, ls) + 1)
+        const ds: i32 = dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
+        uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
+        // The positions the match covers that `longest` did not record go
+        // into the chains.
         const stop: i32 = p + len
-        let q: i32 = inserted
         const last: i32 = end - 4
-        while (q < stop && q <= last) {
-          this.insert(src, q)
-          q += 1
+        const insertEnd: i32 = stop <= last ? stop : last + 1
+        for (let q: i32 = inserted; q < insertEnd && q >= 0 && q <= 2147483639; q += 1) {
+          const qa: integer<0, 2147483639> = q
+          const word: u32 = deflateLoad32(src, qa)
+          const hq: i32 = three
+            ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
+            : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
+          const vq: i32 = wrappingAdd(q, this.delta)
+          uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
+          uncheckedSet(head, hq, vq)
         }
         p = stop
       }
     }
+    this.count = n
     return p
   }
 
