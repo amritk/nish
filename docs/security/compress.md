@@ -25,10 +25,12 @@ nothing. A request body is decoded under a limit its caller sets, and a
 decompression bomb costs fewer than three times that limit in bytes inflated
 to refuse (COMP-18).
 
-Two findings were fixed after the record was first written, each with a test
+Three findings were fixed after the record was first written, each with a test
 that failed before the fix: `respondEncoded` could queue stale bytes for the
-wire after `H1_AGAIN` (COMP-11), and `GzipWriter` could panic on incompressible
-input written into exactly `bound(len)` (COMP-12).
+wire after `H1_AGAIN` (COMP-11), `GzipWriter` could panic on incompressible
+input written into exactly `bound(len)` (COMP-12), and `GzipWriter.bound`,
+`gzipFixedBound` and a `GzipWriter` used after `finish` panicked where they now
+answer an error code (COMP-19).
 
 The CRC-32 kernels read only the window `Crc32.update` checked
 and answer what the tables answer; a review of their first version found the
@@ -86,8 +88,9 @@ a negative `limit` or a level outside 0 to 9 panics, as caller misuse.
 COMP-1 to COMP-7, COMP-10, COMP-14, COMP-15 and COMP-16 are the shapes an attacker's input can take,
 each checked and found to hold; they are recorded so that an audit can see
 what was tried. COMP-8, COMP-9 and COMP-17 are accepted. COMP-11, COMP-12 and COMP-13 were
-found by a review of the first version and fixed; they are the three counted
-as fixed in the index, and none is open.
+found by a review of the first version and fixed, and COMP-19 by WP84's sweep
+of the panic sites in `checksum.ts`, `zlib.ts` and `gzip.ts`; they are the four
+counted as fixed in the index, and none is open.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -104,6 +107,7 @@ as fixed in the index, and none is open.
 | COMP-12 | Medium | `GzipWriter.bound`, `write`, `flush`, `finish` | A program that sizes each call's output by `bound(len)`, as the guide shows, must never be refused or panic. `bound` assumed at most 64 KB pending, but the writer compressed its first window only once 96 KB were pending, and one call over many 64 KB windows needs each window's framing; incompressible input written 1,000 bytes at a time panicked on about the 98th write (`GzipWriter.write: a block larger than its bound`), and `flush` and `finish` went on with the failed drain's -1. A server streaming an attacker's body through a `GzipWriter` could be stopped. | **Fixed.** The writer compresses whenever 64 KB are pending, the first window too; `bound` adds the framing of every compression one call makes; `flush` and `finish` check the drain. Before the fix, `writer: noise at level 0 into exactly bound` (and 1, 6, 9) panicked; after it, they and `writer: noise at level 6 comes back` pass. |
 | COMP-13 | Medium | `runtime/runtime-checksum.c` `nish_crc32_insn` | The kernels take `Crc32.update`'s window after `checksumWindow` has checked it, and must read no byte outside it: a read past the end of an array's storage can fault, or fold a neighbouring allocation's bytes into nothing the caller sees but the timing. The x86-64 path loads 16 bytes only while 16 remain and its tail is byte at a time. The AArch64 CRC32 path folded a 4-byte tail with a masked 8-byte load, reading up to four bytes past the window. The answer was right, so every agreement test passed. Nothing a CRC-32 covers is secret, so the kernels are not wiped or held to constant time. | **Fixed.** The tail loads exactly four bytes. `simd: crc32 native ${arch}` now runs every path on every length 0..256 ending against a no-access page; an over-read by one byte in the x86-64 tail made it fail (`the agreement driver`), and it passes on the fixed file. The AArch64 path before the fix was found by review and not run on ARM64 hardware; CI's `simd-arm64` job runs the test there on every push. |
 | COMP-16 | Medium if it failed | `runtime/runtime-checksum.c` `nish_adler32_update`, `nish_adler32_ssse3`, `nish_adler32_neon`, `nish_adler32_tail` | The Adler-32 kernels take `adler32Update`'s window after `checksumWindow` has checked it, read it without bounds checks, and keep 32-bit sums that must not overflow before they are reduced. A read past the window can fault or fold in a neighbour's bytes; an overflow answers a wrong checksum, which a zlib stream would then refuse or, worse, accept. | **Holds.** Both kernels load 32 bytes only while 32 remain, and the tail reads byte at a time. Each stretch is at most 173 blocks (5,536 bytes, under zlib's NMAX of 5,552), so s2 stays under 2^32 even from an unreduced start of 65,535 in each half. An empty window returns the start as it came, as the walk does. Nothing an Adler-32 covers is secret, so nothing is wiped or held to constant time. |
+| COMP-19 | Low | `GzipWriter.bound`, `write`, `flush`, `finish`; `gzipFixedBound` | A length or a call order must be answered, not panic: a program streaming a body sizes its output by `bound(len)` for whatever `len` it was handed, and may call the writer again after `finish` on an error path. `bound` added `len` to its window and framing in checked `i32`, so a `len` over 2,146,009,977 overflowed and panicked; `gzipFixedBound` did the same for an `n` over 1,908,874,323; and `write`, `flush` and `finish` after `finish` panicked (`GzipWriter.write: the body has been finished`). | **Fixed.** Both bounds widen to `i64` and answer `DEFLATE_NO_ROOM` past the largest size an `i32` holds (`bound` from a `len` over 2,145,000,000, a little below its overflow, `gzipFixedBound` exactly at it); the writer answers `GZIP_ERR_FINISHED` (-20) after `finish`, takes and writes nothing, and `start` begins another body. The drain that could not fit its bound, unreachable since COMP-12, ends the body with `GZIP_ERR_FINISHED` instead of panicking. The `GzipReader` and decompressor panics that remain are the caller-misuse ones the threat model names: a window outside its array, a negative `limit`, a `GzipReader.commit` of an `n` outside `0 .. inputRoom()` and a `GzipReader.read` of a `max` under 1. |
 | COMP-10 | Medium if it failed | `httpAcceptEncoding`, `Http1Connection.acceptEncoding` | A field value must not pick a coding the client refused, nor panic or allocate on any bytes. | **Holds.** `gzip;q=0`, `*;q=0` and `identity;q=0` are honoured; a malformed q-value or parameter skips its element only; the answer for a client that takes nothing offered and refuses identity is `HTTP_CODING_NONE`. One pass over the window, no allocation. A missing field answers identity. |
 | COMP-14 | High if it failed | `FixedDeflater.compress`, `GzipFixedCompressor.compress` | The small-body encoder writes and reads without bounds checks, and is handed incompressible bodies on purpose, with a room smaller than they are, to be abandoned part way. | **Holds.** Every store is a four-byte flush made only after `o <= at + room - 4` is checked, or one of the last bytes made only after they are checked to fit; `room` is inside `out` (`deflateWindow`). An output that does not fit answers `DEFLATE_NO_ROOM` and leaves nothing past `at + room` written; one that fits exactly is accepted. Input loads read eight bytes only at positions up to `off + len - 8`, a candidate is used only when it lies in `[off, p)` within the 16 KB window, and a match is measured to at most `off + len`. The hash table is cleared before each call, so nothing of one body reaches the next. |
 | COMP-15 | Medium if it failed | `Http1Connection.respondEncoded`, `unrespond`, `HttpCompressor.compressAnyway`, `HttpCompressor.oneSegment` | The policy must not send gzip or deflate to a client that refused it, nor identity, for a body within `maxLength`, to a request answered gzip that refused identity, nor leave the output half-changed when segment mode takes a compressed head back, nor send gzip or deflate without the fields that say so. | **Holds.** Every path sends gzip or deflate only when the coding passed is that one, as `httpAcceptEncoding` chose it, and `addFields` names the coding of the body last sent (a deflate body is the gzip encoders' member reframed in place as zlib, a 2-byte header and an Adler-32 trailer, so `http1IdentityHead` subtracts that coding's field length, not gzip's). `respondEncoded` sets `required` when the coding passed is gzip and the request refuses identity (`coding === HTTP_CODING_GZIP && identityRefused()`), and only then: with it set, the one-segment skip and segment mode's withdrawal are both off, and the body goes through `compressAnyway`, which answers gzip whatever the saving or segment count. `compressAnyway` still answers -1 for a body over `maxLength` (`HTTP_COMPRESS_TOO_LARGE`), and that body goes out as identity: RFC 9110 §12.5.3 lets a server send identity when it does not compress, and `maxLength` is the bound on the encoder's work and output buffer, so forcing past it is not offered. `required` is gzip's alone; deflate with identity refused takes every path below (COMP-17). Segment mode withdraws the compressed head, gzip or deflate, with `unrespond`, which restores the `outputEnd` and `closeAfter` saved after `room()` (so, as for COMP-11, nothing moved under them), and writes the identity head in its place before any body byte is queued. `Vary` follows whether the request decided the form, never the body's contents alone. The one-segment skip (`HttpCompressor.oneSegment`) runs only when `required` is not set, so never for gzip with identity refused; it sends identity without running the encoder when the coding is gzip or deflate, the body is within `minLength` and `maxLength`, and the identity head and body together, as written, fit one segment. `oneSegment` checks no identity flag of its own. A head that turns out longer is withdrawn with `unrespond` the same way and the response goes through the compress-then-compare path. Whether it skips depends on lengths alone, never on the body's bytes. |
@@ -170,6 +174,20 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
 - **COMP-12** (`std_compress`): `writer: noise at level ${level} into exactly
   bound` and `writer: noise at level ${level} comes back`, at levels 0, 1, 6
   and 9.
+- **COMP-19** (`link/std_compress_gzip_errors: exits with 0 and stdout
+  matches expected.out`): `gzip fixed: a bound past the largest`, `writer: a
+  bound past the largest`, `writer: the largest bound is a size`, `writer:
+  write after finish`, `writer: flush after finish`, `writer: finish after
+  finish`, `writer: start begins a new body` and `writer: the new body
+  decodes`; each of the first, second and the three after-finish lines
+  panicked before the fix. The same program pins the answers the sweep left
+  in place for truncated and corrupted streams: `zlib: every prefix is
+  truncated`, `gzip: every prefix is an error`, `gzip: every prefix ended by
+  endInput is an error to the reader`, `zlib: every flipped byte is an error
+  or a decode whose Adler-32 matched` (one flip in its stream is a genuine
+  Adler-32 collision, so the check allows a decode that returns the whole
+  length) and `gzip: every checked byte flipped is an error or the data
+  itself`.
 - **COMP-13** (`tests/simd/crc32.c`, through `tests/run.js`): `simd: crc32
   native ${arch}: N cases agree across <paths>`, which holds every kernel to a
   bit-at-a-time reference on the check value, the empty input, lengths

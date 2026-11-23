@@ -48,14 +48,8 @@ const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
 const CRC32_BLOCK: i32 = 40
 
-/** The shortest input `Crc32.update` braids: two blocks, one braided and the last joined. */
-const CRC32_BRAID_MIN: i32 = 80
-
 /** zlib's `NMAX`: the most bytes Adler-32's sums take before they must be reduced. */
 const ADLER32_NMAX: i32 = 5552
-
-/** The Adler-32 modulus, the largest prime below 2^16 (RFC 1950 §9). */
-const ADLER32_BASE: i32 = 65521
 
 /**
  * The little-endian 64-bit word at `buf[p .. p + 8)`, which the caller has
@@ -133,7 +127,7 @@ export class Crc32 {
     const bits: u32[] = new Array<u32>(8)
     for (let k: i32 = 0; k < 8; k += 1) {
       for (let i: i32 = 0; i < 8; i += 1) {
-        let c: u32 = uncheckedGet(t, k * 256 + (toI32(1) << i))
+        let c: u32 = uncheckedGet(t, k * 256 + ((toI32(1) << i) & 255))
         for (let z: i32 = 0; z < (CRC32_BRAIDS - 1) * 8; z += 1) {
           c = (c >>> 8) ^ uncheckedGet(t, toI32(c & 255))
         }
@@ -165,19 +159,15 @@ export class Crc32 {
    */
   update(crc: u32, buf: u8[], off: i32, len: i32): u32 {
     checksumWindow("Crc32.update", buf, off, len)
-    const t: u32[] = this.table
-    const bt: u32[] = this.braid
-    if (toI32(t.length) !== CRC32_TABLE_SIZE || toI32(bt.length) !== CRC32_TABLE_SIZE) {
-      panic("Crc32.update: the table is not its size")
-    }
-    return crc32Walk(t, bt, crc, buf, off, len)
+    return crc32Walk(this.table, this.braid, crc, buf, off, len)
   }
 }
 
 /**
  * `Crc32.update`'s loop: the CRC-32 of the bytes `crc` was the CRC of,
  * followed by `buf[off .. off + len)`, a window its one caller has checked,
- * as it has checked both tables' length. Natively the compiler puts the call
+ * over the two tables `Crc32`'s constructor built at their full size and
+ * nothing replaces. Natively the compiler puts the call
  * behind a branch on `nish_crc32_hw` and hands the same window to the
  * runtime's `nish_crc32_update`, which runs it on PCLMULQDQ or the ARMv8
  * CRC32 instructions (`src/kernels.ts`); a machine without them, a process
@@ -186,8 +176,13 @@ export class Crc32 {
 const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32): u32 => {
   let c: u32 = ~crc
   let p: i32 = off
-  const end: i32 = off + len
-  if (len >= CRC32_BRAID_MIN) {
+  // The caller checked the window, so its end fits an i32; adding in i64
+  // says so to the prover, which does not carry that check across the call.
+  const end: i32 = toI32(toI64(off) + toI64(len))
+  // The shortest input braided is two blocks (80 bytes), one braided and
+  // the last joined; the guard and the divisor of `blocks` are literals, not
+  // `CRC32_BLOCK`, since the prover bounds `blocks` only when both are.
+  if (len >= 80) {
     // Braided (Kadatch and Jenkins, "Everything we know about CRC but
     // afraid to forget", 2010): five chains, each over every fifth 8-byte
     // word, so a step's table reads overlap the other four's instead of
@@ -196,18 +191,18 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
     // its own word's place. The last block is taken one word at a time
     // with the plain table, each braid's register joining as its word
     // comes, which adds them into one.
-    const blocks: i32 = len / CRC32_BLOCK
-    const lastBlock: i32 = off + (blocks - 1) * CRC32_BLOCK
+    const blocks: i32 = len / 40
+    const lastBlock: i32 = toI32(toI64(off) + toI64(blocks - 1) * 40)
     let c1: u32 = 0
     let c2: u32 = 0
     let c3: u32 = 0
     let c4: u32 = 0
     // Each word's position is a local the loop condition bounds, which
     // is what lets it enter the loader's range without a check.
-    let p1: i32 = p + 8
-    let p2: i32 = p + 16
-    let p3: i32 = p + 24
-    let p4: i32 = p + 32
+    let p1: i32 = toI32(toI64(p) + 8)
+    let p2: i32 = toI32(toI64(p) + 16)
+    let p3: i32 = toI32(toI64(p) + 24)
+    let p4: i32 = toI32(toI64(p) + 32)
     while (
       p < lastBlock &&
       p >= 0 &&
@@ -215,11 +210,11 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
       p2 >= 0 &&
       p3 >= 0 &&
       p4 >= 0 &&
-      p4 <= 2147483639 &&
-      p3 <= 2147483639 &&
-      p2 <= 2147483639 &&
-      p1 <= 2147483639 &&
-      p <= 2147483639
+      p4 <= 2147483607 &&
+      p3 <= 2147483607 &&
+      p2 <= 2147483607 &&
+      p1 <= 2147483607 &&
+      p <= 2147483607
     ) {
       c = crc32Step(bt, c, checksumLoad64(buf, p))
       c1 = crc32Step(bt, c1, checksumLoad64(buf, p1))
@@ -242,7 +237,7 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
       p3 <= 2147483639 &&
       p2 <= 2147483639 &&
       p1 <= 2147483639 &&
-      p <= 2147483639
+      p <= 2147483607
     ) {
       c = crc32Step(t, c, checksumLoad64(buf, p))
       c = crc32Step(t, c ^ c1, checksumLoad64(buf, p1))
@@ -252,7 +247,7 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
       p += CRC32_BLOCK
     }
   }
-  const whole: i32 = end - (len & 7)
+  const whole: i32 = toI32(toI64(end) - toI64(len & 7))
   while (p < whole && p >= 0 && p <= 2147483639) {
     c = crc32Step(t, c, checksumLoad64(buf, p))
     p += 8
@@ -307,13 +302,12 @@ const adler32Walk = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
   let s1: u32 = adler & 0xffff
   let s2: u32 = adler >>> 16
   let p: i32 = off
-  const end: i32 = off + len
+  // As in `crc32Walk`: the checked window's end, added in i64.
+  const end: i32 = toI32(toI64(off) + toI64(len))
   while (p < end) {
-    let stop: i32 = p + ADLER32_NMAX
-    if (stop > end) {
-      stop = end
-    }
-    while (p + 4 <= stop) {
+    const reach: i64 = toI64(p) + toI64(ADLER32_NMAX)
+    const stop: i32 = reach < toI64(end) ? toI32(reach) : end
+    while (p <= 2147483643 && p + 4 <= stop) {
       s1 += toU32(uncheckedGet(buf, p))
       s2 += s1
       s1 += toU32(uncheckedGet(buf, p + 1))
@@ -329,8 +323,9 @@ const adler32Walk = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
       s2 += s1
       p += 1
     }
-    s1 = s1 % toU32(ADLER32_BASE)
-    s2 = s2 % toU32(ADLER32_BASE)
+    // 65521, the Adler-32 modulus: the largest prime below 2^16 (RFC 1950 §9).
+    s1 = s1 % 65521
+    s2 = s2 % 65521
   }
   return (s2 << 16) | s1
 }

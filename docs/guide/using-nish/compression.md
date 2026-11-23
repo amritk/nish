@@ -122,7 +122,12 @@ pieces and `GzipReader` decompresses it in pieces. A writer takes `write(src,
 off, len, out, at)` calls and answers where the output it produced ends — often
 nothing yet, since it compresses 64 KB at a time — then `flush` (everything so
 far becomes decodable) and `finish` (the last block and the trailer). Give each
-call at least `bound(len)` bytes of output room.
+call at least `bound(len)` bytes of output room; a call given less answers
+`DEFLATE_NO_ROOM` and takes nothing. `bound(len)` is itself `DEFLATE_NO_ROOM`
+for a `len` over 2,145,000,000, as `gzipFixedBound(n)` is for an `n` over
+1,908,874,323: no `i32` size holds the output, so split such a piece. After `finish`, `write`, `flush` and
+`finish` answer `GZIP_ERR_FINISHED` and take nothing, until `start` begins
+another body.
 
 <!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/compress/gzip.ts` code that keeps panic sites no proof removes yet, and `std/compress/deflate.ts` code that keeps its contract's panics -->
 <!-- nish:ok --allow-panics -->

@@ -339,6 +339,20 @@ const malformed = (t: Suite): void => {
   const desc: u8[] = [];
   pushI16(desc, 1);
   t.eqStr("a RowDescription field cut short", feed(inGroup(), msg("T", cat(desc, z("id|abc")))), frame);
+  const fields: u8[] = [];
+  pushI16(fields, 3);
+  pushI32(fields, 1);
+  t.eqStr("a DataRow whose column count runs past its frame", feed(inGroup(), msg("D", cat(fields, z("a")))), frame);
+  t.eqStr("a DataRow cut inside its column count", feed(inGroup(), msg("D", [toU8(0)])), frame);
+  const word: u8[] = [];
+  pushI16(word, 1);
+  t.eqStr("a DataRow cut inside a column's length", feed(inGroup(), msg("D", cat(word, [toU8(0), toU8(0)]))), frame);
+  const described: u8[] = [];
+  pushI16(described, 3);
+  t.eqStr("a RowDescription whose field count runs past its frame", feed(inGroup(), msg("T", described)), frame);
+  const cut: u8[] = [toU8(68)];
+  pushI32(cut, 2);
+  t.eqStr("a message length that cannot hold itself", feed(inGroup(), cut), frame);
 
   const c = config();
   c.maxColumns = 2;

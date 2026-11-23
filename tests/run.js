@@ -5183,6 +5183,7 @@ if (dealtHere("diagnostics")) {
   )
 
   const synSrc = path.join(buildDir, "diag_syntax.ts")
+  // nish-function: a syntax-error source the parser must refuse
   fs.writeFileSync(synSrc, "function f( ; {\n  return 1;\n}\n")
   const syn = spawnNish([synSrc, "-o", path.join(buildDir, "diag_syntax.ll")], { cwd: root })
   const synErr = String(syn.stderr)
@@ -22850,6 +22851,7 @@ if (dealtHere("cliChecks")) {
     const stringsDts = fs.existsSync(sidecar("strings", "d.ts"))
       ? fs.readFileSync(sidecar("strings", "d.ts"), "utf8")
       : ""
+    // nish-function: the wasm interop's .d.ts text, not a Nish program
     check(
       "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
       addDts.includes("  add(a: number, b: number): number;") &&
@@ -27454,7 +27456,7 @@ if (dealtHere("cliChecks")) {
         fs.mkdirSync(libApp, { recursive: true })
         fs.writeFileSync(
           path.join(libApp, "lib.ts"),
-          "declare function pkg_link_triple(x: i32): i32\n\nexport function triple(x: i32): i32 {\n  return pkg_link_triple(x)\n}\n"
+          "declare function pkg_link_triple(x: i32): i32\n\nexport const triple = (x: i32): i32 => {\n  return pkg_link_triple(x)\n};\n"
         )
         fs.writeFileSync(
           path.join(libApp, "main.ts"),
@@ -37423,6 +37425,7 @@ if (!only || "vite".includes(only)) {
     // generated module imports the host file whole and passes it as `host`, so the
     // page passes nothing, and Node's type stripping runs the host file as it is.
     const hostFile = path.join(app, "src", "page.ts")
+    // nish-function: a host module: src/host-module.ts reads `export function`
     fs.writeFileSync(
       hostFile,
       'import type { f64 } from "nish"\nexport function twice(x: f64): f64 {\n  return x * 2\n}\n'
@@ -38192,12 +38195,15 @@ if (!only || "host-import".includes(only)) {
         { cwd: root, encoding: "utf8" }
       )
     }
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const marked = read("bom", "\uFEFFexport function first(x: i32): i32 {\n  return x\n}\n")
     check("host-import: a host module that starts with a byte order mark keeps its first export", marked.status === 0, shown(marked))
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const braced = read(
       "constraint",
       "export function first<T extends { id: i32 }>(x: T): T { return x }\n"
     )
+    // nish-function: the host module's text, quoted in the parser's refusal
     check(
       "host-import: a brace in a host function's type parameter is read as a type, and the parser's refusal quotes the page's text",
       braced.status === 1 &&
@@ -38208,6 +38214,7 @@ if (!only || "host-import".includes(only)) {
 
     // The build reads only the host exports a Nish module imports: a page's file
     // may export what the page alone calls, in types no wasm import carries.
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const object = read(
       "object",
       "export function area(r: { w: i32 }): i32 {\n  return r.w\n}\nexport function first(x: i32): i32 {\n  return x\n}\n"
@@ -38303,6 +38310,7 @@ if (!only || "host-import".includes(only)) {
     }
     const whole = typeCheckEntry("whole", hostText)
     check("host-import: the entry and its host module type-check under tsc --strict", whole.ok, whole.output)
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const dropped = typeCheckEntry("dropped", hostText.replace("export function hU16(x: u16): u16 {\n  return x + 70000\n}\n", ""))
     check(
       "host-import: tsc fails the entry when the host module drops an export it imports (TS2305)",
@@ -41807,6 +41815,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // a corrupted source file. That is the same mistake as the `declare` rule above, one
   // node deeper, so each row is parsed back rather than string-matched: a rewrite whose
   // output does not re-parse is the failure this is watching for.
+  // nish-function: arrowify's own unit cases
   for (const [what, source] of [
     ["an object literal", "function mk(): Pair {\n  return { first: 1, second: 2 };\n}\n"],
     ["an object literal in a cast", "function mk(): Pair {\n  return { first: 1, second: 2 } as Pair;\n}\n"],
@@ -41833,6 +41842,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // reading line by line. Where the comment sits in the one region the rewrite discards
   // -- between `function` and the parameter list, which becomes `const NAME = ` -- there
   // is nowhere to put it, so the declaration is refused instead of quietly losing it.
+  // nish-function: arrowify's own unit cases
   for (const [what, source, expected] of [
     [
       "the keyword inside a leading comment",
@@ -41878,6 +41888,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // a corpus file as the subject would take this check red exactly when the migration
   // succeeds.
   const oneFunction = path.join(buildDir, "arrow-flags.ts")
+  // nish-function: arrowify's own unit cases
   fs.writeFileSync(oneFunction, "export function twice(n: i32): i32 {\n  return n * 2;\n}\n")
   check(
     "WP22: the codemod refuses a flag it does not have, and a pair of flags it cannot answer both of",
@@ -47835,8 +47846,10 @@ if (selects("arrow-corpus")) {
       fs.mkdirSync(path.dirname(path.join(scratch, file)), { recursive: true })
       fs.writeFileSync(path.join(scratch, file), text)
     }
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/kept.ts", "function kept(): number {\n  return 1\n}\n")
     put("tests/cases/arrow.ts", "const arrow = (): number => {\n  return 1\n};\n")
+    // nish-function: the arrow-corpus proof's fixtures
     put(
       "tests/cases/declared.ts",
       "declare function puts(s: string): number\nasync function later(): Promise<void> {}\nfunction sig(): number;\n"
@@ -47844,14 +47857,17 @@ if (selects("arrow-corpus")) {
     const list = "tests/cases/kept.ts  # the subject\n"
     const base = ["tests/cases/kept.ts", "tests/cases/arrow.ts", "tests/cases/declared.ts"]
     const clean = arrowCorpusProblems(scratch, base, list)
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/probe.ts", "function probe(): number {\n  return 2\n}\n")
     const added = arrowCorpusProblems(scratch, [...base, "tests/cases/probe.ts"], list)
     fs.rmSync(path.join(scratch, "tests/cases/probe.ts"))
     const removed = arrowCorpusProblems(scratch, base, list)
     put("tests/cases/kept.ts", "const kept = (): number => {\n  return 1\n};\n")
     const stale = arrowCorpusProblems(scratch, base, list)
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/unparsed.ts", "function catch(x: number): number {\n  return x\n}\n")
     const unparsed = arrowCorpusProblems(scratch, [...base, "tests/cases/unparsed.ts"], list)
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/misread.ts", "function made(): keyof {\n  return new keyof()\n}\n")
     const misread = arrowCorpusProblems(scratch, [...base, "tests/cases/misread.ts"], list)
     const noReason = arrowCorpusProblems(scratch, base, "tests/cases/kept.ts\n")
@@ -47875,6 +47891,80 @@ if (selects("arrow-corpus")) {
     )
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true })
+  }
+
+  // The Nish programs the harnesses carry as string literals are not
+  // tests/**/*.ts files, so the check above cannot see them (#1743 and #1748
+  // spelled such programs as arrows by hand). `scripts/inline-functions.mjs`
+  // reads every tests/**/*.{js,mjs,cjs} file and refuses a top-level
+  // `function` definition in a literal's text unless a
+  // `// nish-function: <reason>` comment leads the literal or its statement.
+  const inlineScript = path.join(root, "scripts/inline-functions.mjs")
+  const inline = spawnSync(process.execPath, [inlineScript], { cwd: root, encoding: "utf8" })
+  check(
+    "WP22 arrow-corpus: no unmarked inline `function` program in the test harnesses",
+    inline.status === 0 && /in \d+ harness files/.test(inline.stdout),
+    `${inline.stdout}${inline.stderr}`
+  )
+
+  // Its negative proof, on a scratch repository holding a copy of one harness:
+  // it passes, fails on an inline `function` program and names the file, the
+  // line and the fix, passes again once the program is gone, and fails on a
+  // marker with no reason, a marker that covers nothing, and a file the parser
+  // cannot read. A marked program passes.
+  const inlineScratch = fs.mkdtempSync(path.join(buildDir, "inline-functions-"))
+  try {
+    fs.mkdirSync(path.join(inlineScratch, "scripts"), { recursive: true })
+    fs.mkdirSync(path.join(inlineScratch, "tests"), { recursive: true })
+    fs.copyFileSync(inlineScript, path.join(inlineScratch, "scripts/inline-functions.mjs"))
+    fs.symlinkSync(path.join(root, "node_modules"), path.join(inlineScratch, "node_modules"))
+    const harness = path.join(inlineScratch, "tests/ffi-string.js")
+    const original = fs.readFileSync(path.join(root, "tests/ffi-string.js"), "utf8")
+    fs.writeFileSync(harness, original)
+    // The scratch's own repository, so the script's `git ls-files` lists the
+    // copy and never the checkout this suite runs in.
+    const init = spawnSync("git", ["init", "-q", inlineScratch], { encoding: "utf8" })
+    const run = (text) => {
+      fs.writeFileSync(harness, text)
+      return spawnSync(process.execPath, [path.join(inlineScratch, "scripts/inline-functions.mjs")], {
+        cwd: inlineScratch,
+        encoding: "utf8",
+      })
+    }
+    const probeLine = original.split("\n").length + (original.endsWith("\n") ? 0 : 1)
+    const sep = original.endsWith("\n") ? "" : "\n"
+    const probe = 'const probe = "export function probe(): i32 {\\n  return 1\\n}\\n"\n'
+    const clean = run(original)
+    const added = run(`${original}${sep}${probe}`)
+    const removed = run(original)
+    const marked = run(`${original}${sep}// nish-function: the probe's reason\n${probe}`)
+    const noReason = run(`${original}${sep}// nish-function:\n${probe}`)
+    const stale = run(`${original}${sep}// nish-function: covers nothing\nconst arrow = "const f = (): i32 => 1"\n`)
+    const unparsed = run(`${original}${sep}const = \n`)
+    check(
+      "WP22 arrow-corpus: an inline `function` program fails, naming the file, the line and the fix; removing it passes",
+      init.status === 0 &&
+        clean.status === 0 &&
+        added.status === 1 &&
+        added.stderr.includes(`tests/ffi-string.js:${probeLine}: `) &&
+        added.stderr.includes("const name = (...): T =>") &&
+        added.stderr.includes("// nish-function: <reason>") &&
+        removed.status === 0 &&
+        marked.status === 0,
+      JSON.stringify({ init: init.stderr, clean, added, removed, marked }, null, 2)
+    )
+    check(
+      "WP22 arrow-corpus: a reasonless marker, a stale marker and an unparsable harness each fail the inline check",
+      noReason.status === 1 &&
+        noReason.stderr.includes("gives no reason") &&
+        stale.status === 1 &&
+        stale.stderr.includes("covers no inline `function` definition") &&
+        unparsed.status === 1 &&
+        unparsed.stderr.includes("the parser cannot read it"),
+      JSON.stringify({ noReason, stale, unparsed }, null, 2)
+    )
+  } finally {
+    fs.rmSync(inlineScratch, { recursive: true, force: true })
   }
 
   // The re-key's refusal path and its positive control, on a scratch copy of
@@ -48280,7 +48370,7 @@ if (!only || "c-import".includes(only)) {
     fs.writeFileSync(
       sqliteModule,
       `${sqliteText}
-export function main(): i32 {
+export const main = (): i32 => {
   const out = new OutPtr()
   if (sqlite3_open(":memory:", out) !== SQLITE_OK) {
     return 1
@@ -48293,7 +48383,7 @@ export function main(): i32 {
   console.log(v === null ? "none" : v === SQLITE_VERSION ? "version matches" : "version differs")
   console.log(\`close \${sqlite3_close(db)}\`)
   return 0
-}
+};
 `
     )
     const sqliteRun = spawnNish(["run", sqliteModule], { encoding: "utf8" })
@@ -48687,7 +48777,7 @@ export function main(): i32 {
     fs.writeFileSync(
       tripTs,
       `${tripText}
-export function main(): i32 {
+export const main = (): i32 => {
   const c = conn_open(42)
   if (c === null) {
     return 1
@@ -48701,7 +48791,7 @@ export function main(): i32 {
   const bytes: u8[] = [1, 2, 3, 250]
   console.log(\`sum \${sum_bytes(4, bytes)}\`)
   return 0
-}
+};
 `
     )
     const tripLl = path.join(cImportDir, "trip.ll")
@@ -48762,7 +48852,7 @@ export function main(): i32 {
     fs.writeFileSync(
       outTs,
       `${outText}
-export function main(): i32 {
+export const main = (): i32 => {
   const small: u8[] = [0, 0, 0, 0]
   const n8 = new OutU8()
   n8.value = 4
@@ -48774,7 +48864,7 @@ export function main(): i32 {
   const r32 = fill_u32(big, n32)
   console.log(\`u32 \${r32} got \${n32.value} \${big[0]} \${big[4]} \${big[5]}\`)
   return 0
-}
+};
 `
     )
     const outLl = path.join(cImportDir, "outcount.ll")
@@ -48826,7 +48916,7 @@ export function main(): i32 {
     const modelDir = path.join(cImportDir, "model")
     fs.mkdirSync(modelDir, { recursive: true })
     const modelMain = path.join(modelDir, "main.ts")
-    fs.writeFileSync(modelMain, 'import { LIMIT } from "./limits"\n\nexport function main(): i32 {\n  return LIMIT\n}\n')
+    fs.writeFileSync(modelMain, 'import { LIMIT } from "./limits"\n\nexport const main = (): i32 => {\n  return LIMIT\n};\n')
     const modelModule = (model) =>
       `// Generated by nish c-import from limits.h. Do not edit; regenerate it.\r\n` +
       `// Target: x\r\n// Data model: ${model}\r\n\r\nexport const LIMIT: i32 = 7\r\n`

@@ -1,0 +1,38 @@
+PASS  zlib: the stream compresses (1409 bytes)
+PASS  zlib: the whole stream decodes
+PASS  zlib: every prefix is truncated
+PASS  zlib: every flipped byte is an error or a decode whose Adler-32 matched
+PASS  zlib: a wrong Adler-32
+PASS  zlib: a byte after the trailer
+PASS  zlib: a preset dictionary
+PASS  zlib: a method other than 8
+PASS  zlib: every window shorter than the stream has no room
+PASS  zlib: a window that ends short of the trailer
+PASS  gzip: the stream compresses (1421 bytes)
+PASS  gzip: the whole stream decodes
+PASS  gzip: the reader gives the whole stream
+PASS  gzip: every prefix is an error
+PASS  gzip: every prefix ended by endInput is an error to the reader
+PASS  gzip: every checked byte flipped is an error or the data itself
+PASS  gzip: every checked byte flipped is an error to the reader or the data itself
+PASS  gzip: a wrong CRC-32
+PASS  gzip: a wrong ISIZE
+PASS  gzip: every window shorter than the stream has no room
+PASS  gzip fixed: the stream decodes
+PASS  gzip fixed: every room shorter than the stream has none
+PASS  gzip fixed: a bound past the largest
+PASS  gzip fixed: the largest bound is 2^31 - 1
+PASS  writer: a bound past the largest
+PASS  writer: the largest bound is a size
+PASS  writer: write into less than bound
+PASS  writer: flush into less than bound
+PASS  writer: finish into less than bound
+PASS  writer: write after a refusal
+PASS  writer: finish
+PASS  writer: the body decodes
+PASS  writer: write after finish
+PASS  writer: flush after finish
+PASS  writer: finish after finish
+PASS  writer: start begins a new body
+PASS  writer: the new body decodes
+compress errors: 37 passed, 0 failed, 0 skipped
