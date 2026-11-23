@@ -2031,11 +2031,11 @@ export class InflateTable {
 /**
  * Copies `entries[0 .. end)` to `entries[end .. 2 * end)`: a table for codes
  * one bit longer, each shorter code repeated under both values of the new
- * bit. Panics unless `2 * end` is within the table.
+ * bit. Answers false, copying nothing, unless `2 * end` is within the table.
  */
-const inflateDouble = (entries: i32[], end: i32): void => {
+const inflateDouble = (entries: i32[], end: i32): boolean => {
   if (end < 0 || end > toI32(entries.length) - end) {
-    panic("Inflater.build: a table doubled past its length")
+    return false
   }
   // A counter below a bound needs no overflow check, and the loop without
   // one is a vector copy.
@@ -2043,6 +2043,7 @@ const inflateDouble = (entries: i32[], end: i32): void => {
   for (let j: i32 = end; j < twice; j += 1) {
     uncheckedSet(entries, j, uncheckedGet(entries, j - end))
   }
+  return true
 }
 
 /** The kind of table `inflateBuild` builds: what each symbol decodes to. */
@@ -2081,6 +2082,11 @@ export class Inflater {
   private last: boolean
   /** Whether the Huffman block uses the fixed code. */
   private fixed: boolean
+  /**
+   * What building the fixed code answered: 0, or the error a fixed block
+   * then answers, which the fixed lengths rule out.
+   */
+  private fixedStatus: i32
   /** Bytes of the current stored block still to copy. */
   private storedLeft: i32
   /** Bits read but not consumed, low bit first, and how many. */
@@ -2130,6 +2136,7 @@ export class Inflater {
     this.inPos = 0
     this.outPos = 0
     this.consumed = 0
+    this.fixedStatus = 0
     for (let s: i32 = 0; s < 288; s += 1) {
       this.litEntries[s] = this.entryOf(INF_TABLE_LITLEN, s, toI32(0))
     }
@@ -2149,9 +2156,7 @@ export class Inflater {
       this.lens[d] = 5
     }
     const fd: i32 = this.build(this.fixedDist, this.lens, toI32(0), toI32(32), INF_TABLE_DIST)
-    if (fl !== 0 || fd !== 0) {
-      panic("Inflater: the fixed code did not build")
-    }
+    this.fixedStatus = fl !== 0 ? fl : fd
   }
 
   /**
@@ -2198,7 +2203,10 @@ export class Inflater {
    * Builds `t` from the code lengths `lens[from .. from + n)`; answers 0, or
    * `DEFLATE_ERR_HUFFMAN` for an over-subscribed set or an incomplete one
    * (an incomplete set of a single one-bit code is allowed, as RFC 1951
-   * §3.2.7 allows one distance code).
+   * §3.2.7 allows one distance code). Answers `DEFLATE_ERR_HUFFMAN` too,
+   * the table then unusable, when `lens[from .. from + n)` is outside `lens`
+   * or a table is not its size, which the callers and `InflateTable` rule
+   * out.
    */
   private build(t: InflateTable, lens: i32[], from: i32, n: i32, kind: i32): i32 {
     const count: i32[] = t.count
@@ -2215,7 +2223,7 @@ export class Inflater {
       toI32(offs.length) < 16 ||
       toI32(entries.length) < 1 << bits
     ) {
-      panic("Inflater.build: a table outside its scratch")
+      return DEFLATE_ERR_HUFFMAN
     }
     for (let l: i32 = 0; l < 16; l += 1) {
       count[l] = 0
@@ -2316,14 +2324,16 @@ export class Inflater {
       here = count[len]
       while (here > 0) {
         if (k < 0 || k >= toI32(syms.length) || code < 0 || code >= end || end > size) {
-          panic("Inflater.build: a code outside its table")
+          return DEFLATE_ERR_HUFFMAN
         }
         uncheckedSet(entries, code, tmpl[syms[k]] | len)
         k += 1
         if (code === end - 1) {
           // The last code, all ones: the code is complete within the table.
           while (end < size) {
-            inflateDouble(entries, end)
+            if (!inflateDouble(entries, end)) {
+              return DEFLATE_ERR_HUFFMAN
+            }
             end = end << 1
           }
           return 0
@@ -2337,7 +2347,9 @@ export class Inflater {
         len += 1
       }
       while (end < size && end < 1 << len) {
-        inflateDouble(entries, end)
+        if (!inflateDouble(entries, end)) {
+          return DEFLATE_ERR_HUFFMAN
+        }
         end = end << 1
       }
     }
@@ -2354,7 +2366,7 @@ export class Inflater {
     let subEnd: i32 = size
     while (true) {
       if (len < bits || len > 15) {
-        panic("Inflater.build: a code outside its table")
+        return DEFLATE_ERR_HUFFMAN
       }
       if ((code & (size - 1)) !== prefix) {
         prefix = code & (size - 1)
@@ -2367,12 +2379,12 @@ export class Inflater {
         }
         subEnd = start + (1 << subBits)
         if (subEnd > limit || prefix < 0) {
-          panic("Inflater.build: a subtable past the table's room")
+          return DEFLATE_ERR_HUFFMAN
         }
         uncheckedSet(entries, prefix, (start << 16) | (INF_SUB << 8) | (subBits << 11) | bits)
       }
       if (k < 0 || k >= toI32(syms.length)) {
-        panic("Inflater.build: a code outside its table")
+        return DEFLATE_ERR_HUFFMAN
       }
       const e: i32 = tmpl[syms[k]] | (len - bits)
       k += 1
@@ -2433,13 +2445,17 @@ export class Inflater {
     return -2
   }
 
-  /** Reads bytes of `src` into the bit buffer from `inPos` while it has room and `end` allows. */
-  private fill(src: u8[], end: i32): void {
+  /**
+   * Reads bytes of `src` into the bit buffer from `inPos` while it has room
+   * and `end` allows. Answers false, reading nothing, when `inPos` is
+   * negative or `end` past `src`, which `inflate` rules out.
+   */
+  private fill(src: u8[], end: i32): boolean {
     let bb: u64 = this.bitBuf
     let bc: i32 = this.bitCount
     let ip: i32 = this.inPos
     if (ip < 0 || end > toI32(src.length)) {
-      panic("Inflater.fill: a window outside its input")
+      return false
     }
     if (ip <= end - 8) {
       // A word at once, whole bytes of it counted, as the fast loop does.
@@ -2457,6 +2473,7 @@ export class Inflater {
     this.bitBuf = bb
     this.bitCount = bc
     this.inPos = ip
+    return true
   }
 
   /** The low `n` bits of the bit buffer, consumed; the caller has checked that `n` are there. */
@@ -2484,7 +2501,10 @@ export class Inflater {
   /**
    * Reads a dynamic block's header (§3.2.7) from the bit buffer and `src`,
    * and builds its tables. Answers 0, `INFLATE_NEED_INPUT` when the input ran
-   * out first (nothing is consumed then: the caller rewinds), or an error.
+   * out first (nothing is consumed then: the caller rewinds), or an error:
+   * `DEFLATE_ERR_TRUNCATED` too when `inPos` is negative or `end` past
+   * `src`, and `DEFLATE_ERR_HUFFMAN` when the code-length table is not its
+   * size, which `inflate` and the constructor rule out.
    */
   private readDynamic(src: u8[], end: i32): i32 {
     // The bit buffer in locals: the lengths are stored into an `i32[]`,
@@ -2493,7 +2513,7 @@ export class Inflater {
     let bc: i32 = this.bitCount
     let ip: i32 = this.inPos
     if (ip < 0 || end > toI32(src.length)) {
-      panic("Inflater.readDynamic: a window outside its input")
+      return DEFLATE_ERR_TRUNCATED
     }
     if (ip <= end - 8) {
       const at: integer<0, 2147483639> = ip
@@ -2551,7 +2571,7 @@ export class Inflater {
     const lens: i32[] = this.lens
     const entries: i32[] = this.codeLengths.entries
     if (toI32(entries.length) < 128) {
-      panic("Inflater.readDynamic: the code-length table is not its size")
+      return DEFLATE_ERR_HUFFMAN
     }
     const total: i32 = hlit + hdist
     let i: i32 = 0
@@ -2709,7 +2729,9 @@ export class Inflater {
         const saveBuf: u64 = this.bitBuf
         const saveCount: i32 = this.bitCount
         const savePos: i32 = this.inPos
-        this.fill(src, inEnd)
+        if (!this.fill(src, inEnd)) {
+          return DEFLATE_ERR_TRUNCATED
+        }
         if (this.bitCount < 3) {
           this.bitBuf = saveBuf
           this.bitCount = saveCount
@@ -2737,6 +2759,9 @@ export class Inflater {
           this.last = (header & 1) !== 0
           this.state = INF_S_STORED
         } else if (type === 1) {
+          if (this.fixedStatus !== 0) {
+            return this.fixedStatus
+          }
           this.last = (header & 1) !== 0
           this.fixed = true
           this.state = INF_S_HUFF
@@ -2791,6 +2816,8 @@ export class Inflater {
    * The Huffman block loop: decodes symbols until the end of the block
    * (answers 0, the state back at a block header), or until the input or
    * the output runs short or the stream is malformed (answers that code).
+   * Answers `DEFLATE_ERR_HUFFMAN` when a table is not its size, which the
+   * constructor rules out.
    */
   private huffman(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 {
     const lt: InflateTable = this.fixed ? this.fixedLit : this.lit
@@ -2798,7 +2825,7 @@ export class Inflater {
     const le: i32[] = lt.entries
     const de: i32[] = dt.entries
     if (toI32(le.length) !== INF_LIT_ENOUGH || toI32(de.length) !== INF_DIST_ENOUGH) {
-      panic("Inflater.huffman: a table is not its size")
+      return DEFLATE_ERR_HUFFMAN
     }
     const litMask: u64 = toU64((1 << INF_LIT_BITS) - 1)
     const distMask: u64 = toU64((1 << INF_DIST_BITS) - 1)
