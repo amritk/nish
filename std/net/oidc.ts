@@ -780,11 +780,10 @@ export const oidcLifetime = (cacheControl: string | null): i64 => {
   if (cacheControl === null) {
     return OIDC_DEFAULT_LIFETIME
   }
-  const n: i32 = toI32(cacheControl.length)
   let from: i32 = 0
   const text: string = cacheControl
   for (let i: i32 = 0; i >= 0 && i < toI32(text.length); i += 1) {
-    if (toI32(text.charCodeAt(i)) === OIDC_CH_COMMA) {
+    if (toI32(text.charCodeAt(i)) === OIDC_CH_COMMA && from >= 0 && from <= toI32(text.length)) {
       const age: i64 = oidcMaxAge(trim(text.substring(from, i)))
       if (age >= toI64(0)) {
         return oidcClamp(age)
@@ -792,8 +791,14 @@ export const oidcLifetime = (cacheControl: string | null): i64 => {
       from = i + 1
     }
   }
-  const last: i64 = oidcMaxAge(trim(cacheControl.substring(from, n)))
-  return last >= toI64(0) ? oidcClamp(last) : OIDC_DEFAULT_LIFETIME
+  const n: i32 = toI32(text.length)
+  if (from >= 0 && from <= n) {
+    const last: i64 = oidcMaxAge(trim(text.substring(from, n)))
+    if (last >= toI64(0)) {
+      return oidcClamp(last)
+    }
+  }
+  return OIDC_DEFAULT_LIFETIME
 }
 
 /** `n` zero bytes, or none when `n` is negative. */

@@ -339,14 +339,7 @@ const wtBytes = (n: i32): u8[] => {
   if (n < 0) {
     return []
   }
-  if (n <= 65535) {
-    return new Array<u8>(toU16(n))
-  }
-  const out: u8[] = new Array<u8>(65535)
-  for (let k: i32 = 65535; k < n; k += 1) {
-    out.push(0)
-  }
-  return out
+  return new Array<u8>(toU32(n))
 }
 
 /** A zeroed array of `n` `i32`s, made as `wtBytes` makes one. */
@@ -354,14 +347,7 @@ const wtI32s = (n: i32): i32[] => {
   if (n < 0) {
     return []
   }
-  if (n <= 65535) {
-    return new Array<i32>(toU16(n))
-  }
-  const out: i32[] = new Array<i32>(65535)
-  for (let k: i32 = 65535; k < n; k += 1) {
-    out.push(0)
-  }
-  return out
+  return new Array<i32>(toU32(n))
 }
 
 /** A zeroed array of `n` `i64`s, made as `wtBytes` makes one. */
@@ -369,14 +355,7 @@ const wtI64s = (n: i32): i64[] => {
   if (n < 0) {
     return []
   }
-  if (n <= 65535) {
-    return new Array<i64>(toU16(n))
-  }
-  const out: i64[] = new Array<i64>(65535)
-  for (let k: i32 = 65535; k < n; k += 1) {
-    out.push(0)
-  }
-  return out
+  return new Array<i64>(toU32(n))
 }
 
 /** The bucket count for `n` waiting streams: the least power of two at least `2 * n`, and at least 2. */
@@ -573,42 +552,42 @@ export class WebTransportWaiting {
 
 /** One session index's state, kept by `WebTransport` in its table. */
 class WebTransportSession {
+  /** The session's ID, its CONNECT stream's ID; -1 while free. */
+  id: i64 = -1
+  /** The type of the capsule being read. */
+  capType: i64 = -1
+  /** What is left of the capsule's payload, or -1 between capsules. */
+  capLeft: i64 = -1
+  /** A capsule header being read, which may be split across DATA frames. */
+  capHead: u8[]
+  /** When it was last active (`monotonicNanos`). */
+  lastActive: i64 = 0
+  /** When its datagram second began (`monotonicNanos`). */
+  rateSince: i64 = 0
+  /** Its CLOSE payload as it arrives: the 32-bit code, then the reason, `WT_REASON_MAX + 4` bytes. */
+  reason: u8[]
   /** Its index in the table, the `session` of its events. */
   index: i32 = 0
   /** WT_FREE, WT_ASKED, WT_OPEN or WT_GONE. */
   state: i32 = 0
-  /** The session's ID, its CONNECT stream's ID; -1 while free. */
-  id: i64 = -1
   /** The CONNECT stream's QUIC slot. */
   slot: i32 = -1
   /** The first of its streams, a QUIC slot threaded through each stream's `next`, or -1. */
   firstStream: i32 = -1
   /** How many streams it holds, up to `maxStreams`. */
   streams: i32 = 0
-  /** The type of the capsule being read. */
-  capType: i64 = -1
-  /** What is left of the capsule's payload, or -1 between capsules. */
-  capLeft: i64 = -1
-  /** Whether the client's CLOSE has been read: nothing may follow it. */
-  closeRead: boolean = false
   /** How many bytes of a capsule header `capHead` holds. */
   capHeadLen: i32 = 0
-  /** A capsule header being read, which may be split across DATA frames. */
-  capHead: u8[]
   /** How much of `reason` the CLOSE payload has filled. */
   capFill: i32 = 0
   /** Datagrams in, saturating. */
   datagramsIn: i32 = 0
   /** Datagrams out, saturating. */
   datagramsOut: i32 = 0
-  /** When it was last active (`monotonicNanos`). */
-  lastActive: i64 = 0
-  /** When its datagram second began (`monotonicNanos`). */
-  rateSince: i64 = 0
   /** How many datagrams its second has taken. */
   rateCount: i32 = 0
-  /** Its CLOSE payload as it arrives: the 32-bit code, then the reason, `WT_REASON_MAX + 4` bytes. */
-  reason: u8[]
+  /** Whether the client's CLOSE has been read: nothing may follow it. */
+  closeRead: boolean = false
 
   /**
    * A free session.
@@ -662,19 +641,21 @@ export class WebTransport {
   private acceptNames: u8[][]
   private acceptValues: u8[][]
   private none: u8[][]
-  // Per session.
+  // Per session. The four public arrays below are a read-only view of each
+  // session's own state, copied after every event that changes it: a write to
+  // one is overwritten at that session's next event.
   /** Each session's state, by session index. */
   private table: WebTransportSession[]
-  /** Each session's ID, its CONNECT stream's ID, by session index; -1 for a free index. */
+  /** Each session's ID, its CONNECT stream's ID, by session index; -1 for a free index. Read-only: copied from the session at each event. */
   sessionIds: i64[]
   /**
    * How many streams each session holds, the client's and this side's together, up to `maxStreams`;
-   * a stream stops counting once both of its sides are over.
+   * a stream stops counting once both of its sides are over. Read-only: copied from the session at each event.
    */
   streamCount: i32[]
-  /** Counters for a log or a rate cap, each saturating: datagrams in and out. */
+  /** Counters for a log or a rate cap, each saturating: datagrams in and out. Read-only: copied from the session at each event. */
   datagramsIn: i32[]
-  /** How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. */
+  /** How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. Read-only: copied from the session at each event. */
   datagramsOut: i32[]
   /** The free sessions, a stack. */
   private free: i32[]
