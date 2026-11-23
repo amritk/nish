@@ -52,38 +52,26 @@
       "panic": 2
     },
     "std/crypto/aes.ts": {
-      "array-length": 4,
-      "divide": 1,
-      "index": 62,
-      "overflow": 27
+      "array-length": 2,
+      "index": 15,
+      "overflow": 7
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
       "panic": 7
     },
     "std/crypto/bcrypt-batch.ts": {
-      "array-length": 1,
-      "divide": 2,
-      "index": 13,
-      "overflow": 24,
-      "slice": 2,
-      "spawn-slot": 1
+      "index": 1,
+      "overflow": 4
     },
     "std/crypto/bcrypt.ts": {
-      "array-length": 4,
-      "index": 52,
-      "overflow": 74,
-      "slice": 2
+      "index": 8,
+      "overflow": 8
     },
     "std/crypto/chacha20poly1305.ts": {
       "array-length": 4,
-      "index": 61,
-      "overflow": 22
-    },
-    "std/crypto/ed25519.ts": {
-      "array-length": 1,
-      "index": 19,
-      "panic": 2
+      "index": 16,
+      "overflow": 19
     },
     "std/crypto/hkdf.ts": {
       "panic": 14
@@ -93,37 +81,14 @@
       "panic": 10
     },
     "std/crypto/jwt.ts": {
-      "array-length": 7,
-      "index": 7,
-      "overflow": 74,
+      "array-length": 3,
       "panic": 1
     },
     "std/crypto/p256.ts": {
-      "array-length": 7,
-      "index": 22,
-      "overflow": 32,
-      "panic": 3
-    },
-    "std/crypto/p384.ts": {
-      "index": 4,
-      "overflow": 3
+      "panic": 2
     },
     "std/crypto/pki-roots.ts": {
-      "index": 6,
-      "overflow": 14,
-      "slice": 4
-    },
-    "std/crypto/pki.ts": {
-      "array-length": 1,
-      "index": 21,
-      "overflow": 31,
-      "pop": 1,
-      "slice": 7
-    },
-    "std/crypto/rsa.ts": {
-      "array-length": 10,
-      "index": 23,
-      "overflow": 32
+      "overflow": 1
     },
     "std/crypto/sha256.ts": {
       "panic": 2
@@ -135,15 +100,10 @@
       "overflow": 4
     },
     "std/crypto/x509-random.ts": {
-      "index": 1,
       "io-exit": 2
     },
     "std/crypto/x509.ts": {
-      "array-length": 2,
-      "divide": 1,
-      "index": 34,
-      "overflow": 68,
-      "slice": 2
+      "slice": 1
     },
     "std/host/game.ts": {
       "index": 7
@@ -190,7 +150,6 @@
       "panic": 4
     },
     "std/net/dns-resolver.ts": {
-      "overflow": 1,
       "panic": 11
     },
     "std/net/dns.ts": {
@@ -292,9 +251,6 @@
       "panic": 1
     },
     "std/net/router.ts": {
-      "array-length": 7,
-      "index": 72,
-      "overflow": 51,
       "panic": 6
     },
     "std/net/serve.ts": {
@@ -631,16 +587,6 @@
       "module": "std/crypto/base64url.ts",
       "function": "base64urlEncode",
       "reason": "input array must be at most 2^31 - 1 bytes, as documented; the length is the caller's own data bound"
-    },
-    {
-      "module": "std/crypto/ed25519.ts",
-      "function": "ed25519Sign",
-      "reason": "message must be at most 2^31 - 1 bytes, as documented, so the signature is never of a silent prefix; the caller bounds it"
-    },
-    {
-      "module": "std/crypto/ed25519.ts",
-      "function": "ed25519Verify",
-      "reason": "message must be at most 2^31 - 1 bytes, as documented; a wrong-length key or signature returns false instead"
     },
     {
       "module": "std/crypto/hkdf.ts",
@@ -1556,6 +1502,11 @@
       "module": "std/net/tls/schedule.ts",
       "function": "tlsHeldCheck",
       "reason": "hash length must be 32 or 48 and the secret exactly that long; fixed by the caller's cipher-suite choice"
+    },
+    {
+      "module": "std/net/tls/schedule.ts",
+      "function": "tlsHeldWindow",
+      "reason": "the transcript hash's window must lie inside transcriptHash; the caller's own hash offset, a contract tlsDeriveSecretHeld and tlsFinishedVerifyDataHeld document"
     },
     {
       "module": "std/net/tls/ticket.ts",

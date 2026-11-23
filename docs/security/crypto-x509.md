@@ -12,7 +12,7 @@ bytes an attacker supplies:
 
 | Surface | Functions |
 | --- | --- |
-| DER reading | `x509DerRead`, `x509DerReadInto`, `x509DerExpect`, `x509DerExpectInto`, `x509DerText`, `x509DerPeek`, `x509DerIntegerMinimal`, `x509DerSmallInteger`, `x509DerBitStringOctets`, `x509DerTime`, `x509DerIsAlgorithm`, `x509DerIsAlgorithmNull`, `x509DerUnsignedInto`, `x509DerSignatureRS` (exported since #361) and `x509DerSignatureRSWidth` (P-384's 48 octets), `x509DerBitStringSound`, `x509DerOidSound`, `x509DerNonNegative`, `x509DerIsTrue` |
+| DER reading | `x509DerRead`, `x509DerReadInto`, `x509DerExpect`, `x509DerExpectInto`, `x509DerText`, `x509DerPeek`, `x509DerIntegerMinimal`, `x509DerSmallInteger`, `x509DerBitStringOctets`, `x509DerTime`, `x509DerIsAlgorithm`, `x509DerIsAlgorithmNull`, `x509DerUnsignedPadded`, `x509DerSignatureRS` (exported since #361) and `x509DerSignatureRSWidth` (P-384's 48 octets), `x509DerBitStringSound`, `x509DerOidSound`, `x509DerNonNegative`, `x509DerIsTrue` |
 | Algorithms | the `X509SigAlg` result, `x509SignatureAlgorithm`, `x509PssParams`, `x509DerHashAlgorithm`, `x509KeyType` (X509-13) |
 | Extensions | `x509ReadExtensions` (which replaced `x509DerExtensionsSound`), `x509ExtensionArc`, `x509ReadExtension` and the readers it calls: `x509ReadSubjectAltName`, `x509GeneralNameKind`, `x509DerIa5Name`, `x509ReadBasicConstraints`, `x509ReadKeyUsage`, `x509ReadExtKeyUsage`, `x509ReadNameConstraints`, `x509ReadSubtrees`, `x509DerBoundSound`, `x509MaskContiguous`, `x509ReadSubjectKeyId`, `x509GeneralNamesSound`, `x509ReadAuthorityKeyId` (X509-10, X509-11), and the `X509_MAX_EXTENSIONS` cap (X509-14); `x509AuthorityInfoAccessSound`, `x509NoteCritical` and the critical and presence flags on `X509Certificate` (X509-15) |
 | Names | `x509DerNameSound`, `x509NameEqual`, `x509NameIsPrefix` (X509-12, X509-13) |
@@ -63,8 +63,9 @@ or a signature check that passes for bytes nobody signed.
 - **Arithmetic.** Every length and offset is `i32`, in either number mode,
   because the module spells its types. `x509DerRead` takes at most four length
   octets, refuses a first octet of 0 (non-minimal) or, with four octets, of
-  `0x80` or more (past 2^31 − 1), and compares `length > limit - start` rather
-  than adding, so no sum can wrap. Every other offset is an element's `start`
+  `0x80` or more (past 2^31 − 1), and compares the length with
+  `limit - start` as `u32` rather than adding, so no sum can wrap; the end it
+  then takes, `start + length`, is a `u32` sum that comparison bounds. Every other offset is an element's `start`
   or `end`, each already inside its parent.
 - **Loops and allocation.** No function recurses; nesting depth is the fixed
   shape of a certificate or key, so a deeply nested input costs nothing extra.
@@ -232,6 +233,28 @@ accepts a GeneralizedTime before 2050, which RFC 5280 §4.1.2.5 asks issuers not
 to write but which is a different certificate (and hash), not a second spelling
 of the same one; and a negative or zero serial, which §4.1.2.2 asks verifiers to
 handle gracefully. Both were documented already.
+
+## Panic sites
+
+Since #2150 (WP83 S4) the DER reader, the extension readers, the mint and the
+signature checks keep one panic site between them under the no-panic check,
+and `nish/crypto/x509-random` two. Every other index is proven in range by a
+check beside it. Every sum of a length and an offset is taken as a `u32` sum
+whose operands a comparison just before it bounds, so it cannot wrap, and is
+refused past the buffer before it is used; the other sums add a constant of at
+most 64 to an offset that is 0 to 4 (`x509DerTime`), below `limit - 2`
+(`x509DerReadInto`) or below `n - 64` (`derToPem`).
+`tests/std-panics.json` counts the three that stay:
+
+| Site | Kind | Why it stays |
+| --- | --- | --- |
+| `std/crypto/x509.ts`, `x509DerText` | `slice` | `String.fromBytes` keeps its own range check, which no proof removes yet. The range is an element `x509DerRead` gave, and it is checked against the buffer just before the call. Outside it the function answers `null`, never an invented `""`: a `""` dNSName would read, in a name constraint, as the subtree that permits every name, so its callers (`x509ReadSubjectAltName`, `x509ReadSubtrees`) refuse the certificate on `null`. The check is never reached. |
+| `std/crypto/x509-random.ts`, `x509DrawP256Key` | `io-exit` | `crypto.getRandomValues` exits the process when the operating system cannot give randomness. A key drawn from anything else would be a made-up value, so failing closed is the contract. |
+| `std/crypto/x509-random.ts`, `x509DrawSerial` | `io-exit` | The same call, for the serial. |
+
+`tests/link/crypto_x509_malformed` reaches its summary on every edited input
+(the "No malformed certificate … panics" row of the table above), and `tests/link/crypto_pki_malformed` does the same through
+path validation (`crypto-pki.md`, PKI-2).
 
 ## Doc corrections for the security-policy stage
 

@@ -275,12 +275,24 @@ export class Router {
     this.methodStart = []
     this.methodEnd = []
     this.methodKey = []
-    this.segStart = new Array<i32>(limits.maxSegments + 1)
-    this.segEnd = new Array<i32>(limits.maxSegments + 1)
-    this.found = new Array<i32>(2 * limits.maxParams)
-    this.patKind = new Array<i32>(limits.maxSegments)
-    this.patStart = new Array<i32>(limits.maxSegments)
-    this.patEnd = new Array<i32>(limits.maxSegments)
+    // routerLimit holds both to at most 256; the clamps restate that where the
+    // prover reads it, so each length fits a `u16` and its sum cannot overflow.
+    let maxSegments: i32 = limits.maxSegments
+    if (maxSegments > 256) {
+      maxSegments = 256
+    }
+    let maxParams: i32 = limits.maxParams
+    if (maxParams < 0 || maxParams > 256) {
+      maxParams = 0
+    }
+    const keep: u16 = toU16(maxSegments + 1)
+    const segments: u16 = toU16(maxSegments)
+    this.segStart = new Array<i32>(keep)
+    this.segEnd = new Array<i32>(keep)
+    this.found = new Array<i32>(toU16(maxParams + maxParams))
+    this.patKind = new Array<i32>(segments)
+    this.patStart = new Array<i32>(segments)
+    this.patEnd = new Array<i32>(segments)
   }
 
   /** How many routes the table holds; the next `add` answers this index. */
@@ -302,10 +314,12 @@ export class Router {
    * @returns how many pairs `match` writes to `params` for that route, so half the slots it needs
    */
   paramCount(route: i32): i32 {
-    if (route < 0 || route >= this.routes()) {
-      routerNoRoute(route, this.routes())
+    if (route >= 0 && route < this.routes() && route < toI32(this.routeParams.length)) {
+      return this.routeParams[route]
     }
-    return this.routeParams[route]
+    routerNoRoute(route, this.routes())
+    // Not reached: the helper panics.
+    return 0
   }
 
   /**
@@ -333,11 +347,11 @@ export class Router {
    * @returns the new step's id, or `ROUTER_FULL`
    */
   step(): i32 {
-    if (this.stepCount >= ROUTER_MAX_STEPS) {
+    const id: i32 = this.stepCount
+    if (id >= ROUTER_MAX_STEPS) {
       return ROUTER_FULL
     }
-    const id: i32 = this.stepCount
-    this.stepCount += 1
+    this.stepCount = id + 1
     return id
   }
 
@@ -360,7 +374,7 @@ export class Router {
     } else if (route === ROUTER_METHOD_NOT_ALLOWED) {
       this.refusedSteps = this.refusedSteps | bit
     } else {
-      if (route < 0 || route >= this.routes()) {
+      if (route < 0 || route >= this.routes() || route >= toI32(this.routeSteps.length)) {
         panic(`Router.use: route ${route} is not in a table of ${this.routes()}`)
       }
       this.routeSteps[route] = this.routeSteps[route] | bit
@@ -374,7 +388,7 @@ export class Router {
    */
   steps(route: i32): i32 {
     if (route >= 0) {
-      return route < this.routes() ? this.routeSteps[route] : 0
+      return route < toI32(this.routeSteps.length) ? this.routeSteps[route] : 0
     }
     return route === ROUTER_METHOD_NOT_ALLOWED ? this.refusedSteps : this.missSteps
   }
@@ -401,7 +415,7 @@ export class Router {
     if (length > this.maxPatternBytes) {
       return ROUTER_TOO_LONG
     }
-    if (length === 0 || toI32(pattern.charCodeAt(0)) !== 47) {
+    if (toI32(pattern.length) < 1 || toI32(pattern.charCodeAt(0)) !== 47) {
       return ROUTER_BAD_PATTERN
     }
     const count: i32 = this.splitPattern(pattern)
@@ -409,9 +423,14 @@ export class Router {
       return count
     }
     let params: i32 = 0
-    for (let k: i32 = 0; k < count; k++) {
+    for (let k: i32 = 0; k < count && k < toI32(this.patKind.length); k++) {
       if (this.patKind[k] !== ROUTER_LITERAL) {
-        params += 1
+        // Never true, `params` counting at most one per segment; a proof
+        // does not follow a loop, and the count needs this bound.
+        if (params < 0 || params > 1073741822) {
+          return ROUTER_TOO_LONG
+        }
+        params = params + 1
       }
     }
     if (params > this.maxParams) {
@@ -426,37 +445,54 @@ export class Router {
       depth += 1
     }
     const known: i32 = this.methodIndex(method)
-    if (node >= 0 && known >= 0) {
-      for (let e: i32 = this.firstEndpoint[node]; e >= 0; e = this.endpointNext[e]) {
+    if (node >= 0 && node < toI32(this.firstEndpoint.length) && known >= 0) {
+      let e: i32 = this.firstEndpoint[node]
+      while (e >= 0 && e < toI32(this.endpointNext.length) && e < toI32(this.routeMethod.length)) {
         if (this.routeMethod[e] === known) {
           return ROUTER_DUPLICATE
         }
+        e = this.endpointNext[e]
       }
     }
     if (this.routes() >= this.maxRoutes || (known < 0 && toI32(this.methodStart.length) >= this.maxMethods)) {
       return ROUTER_FULL
     }
+    // The statics are among the routes, which the constructor caps at 1048576
+    // and the test above keeps below `maxRoutes`, so this is never true; it is
+    // the bound the count below needs, read before anything is added.
+    const statics: i32 = this.statics
+    if (statics < 0 || statics > 1048575) {
+      return ROUTER_FULL
+    }
     let methodId: i32 = known
     if (methodId < 0) {
       methodId = toI32(this.methodStart.length)
-      this.methodStart.push(toI32(this.methodBytes.length))
+      const methodAt: i32 = toI32(this.methodBytes.length)
+      this.methodStart.push(methodAt)
       for (let k: i32 = 0; k < methodLength; k++) {
         this.methodBytes.push(toU8(toI32(method.charCodeAt(k))))
       }
       this.methodEnd.push(toI32(this.methodBytes.length))
-      this.methodKey.push(routerMethodKey(this.methodBytes, this.methodStart[methodId], methodLength))
+      this.methodKey.push(routerMethodKey(this.methodBytes, methodAt, methodLength))
     }
     node = 0
     for (let k: i32 = 0; k < count; k++) {
       const next: i32 = this.childFor(node, pattern, k)
       node = next >= 0 ? next : this.addChild(node, pattern, k)
     }
+    // Never true: `childFor` and `addChild` answer a node the tree holds. The
+    // test is what proves the endpoint reads below.
+    if (node < 0 || node >= toI32(this.firstEndpoint.length)) {
+      return ROUTER_FULL
+    }
     const route: i32 = this.routes()
+    // The new route heads its node's endpoints; its next is the old head.
+    const head: i32 = this.firstEndpoint[node]
+    this.firstEndpoint[node] = route
     this.routeMethod.push(methodId)
     this.routeParams.push(params)
     this.routeSteps.push(toI32(0))
-    this.endpointNext.push(this.firstEndpoint[node])
-    this.firstEndpoint[node] = route
+    this.endpointNext.push(head)
     if (count > this.deepest) {
       this.deepest = count
     }
@@ -472,11 +508,12 @@ export class Router {
     this.routePathEnd.push(toI32(this.staticPaths.length))
     this.routeHash.push(hash)
     if (params === 0) {
-      this.statics += 1
+      const held: i32 = statics + 1
+      this.statics = held
       if (length > this.staticLongest) {
         this.staticLongest = length
       }
-      if (4 * this.statics > toI32(this.staticSlots.length)) {
+      if (4 * held > toI32(this.staticSlots.length)) {
         this.growStatic()
       } else {
         this.fileStatic(route)
@@ -487,13 +524,21 @@ export class Router {
 
   /** Doubles the exact-path table and files every static route again, in the order they were added. */
   private growStatic(): void {
-    const slots: i32 = 2 * toI32(this.staticSlots.length)
-    this.staticSlots = new Array<i32>(slots)
-    for (let k: i32 = 0; k < slots; k++) {
-      this.staticSlots[k] = ROUTER_NONE
+    const now: i32 = toI32(this.staticSlots.length)
+    // The table grows at a quarter full and holds at most maxRoutes (2^20), so
+    // it never nears 2^30; past it, it stays as it is rather than overflow.
+    if (now > 1073741823) {
+      return
     }
+    const slots: i32 = 2 * now
+    // Built by pushes: the length can pass what a `u16` holds.
+    const table: i32[] = []
+    for (let k: i32 = 0; k < slots; k++) {
+      table.push(ROUTER_NONE)
+    }
+    this.staticSlots = table
     this.staticHeld = 0
-    for (let r: i32 = 0; r < this.routes(); r++) {
+    for (let r: i32 = 0; r < this.routes() && r < toI32(this.routeParams.length); r++) {
       if (this.routeParams[r] === 0) {
         this.fileStatic(r)
       }
@@ -506,12 +551,26 @@ export class Router {
    * holds every route, so one the table lacks is still answered.
    */
   private fileStatic(route: i32): void {
+    if (route < 0 || route >= toI32(this.routeHash.length)) {
+      return
+    }
     const mask: i32 = toI32(this.staticSlots.length) - 1
     let slot: i32 = routerSlot(this.routeHash[route], mask)
     for (let probe: i32 = 0; probe < ROUTER_PROBES; probe++) {
+      // Never true, the mask keeping the slot inside the table; the test is the
+      // proof the reads need.
+      if (slot < 0 || slot >= toI32(this.staticSlots.length)) {
+        return
+      }
       if (this.staticSlots[slot] < 0) {
+        // Never true: a free slot means fewer are held than the table has.
+        // The test bounds the count below, and on it the route goes unfiled.
+        const held: i32 = this.staticHeld
+        if (held < 0 || held >= toI32(this.staticSlots.length)) {
+          return
+        }
         this.staticSlots[slot] = route
-        this.staticHeld += 1
+        this.staticHeld = held + 1
         return
       }
       slot = (slot + 1) & mask
@@ -524,6 +583,11 @@ export class Router {
    */
   private splitPattern(pattern: string): i32 {
     const length: i32 = toI32(pattern.length)
+    // `add` refuses a pattern past `maxPatternBytes`, at most 65536, before
+    // this; the bound is what keeps the cursor below from overflowing.
+    if (length > 65536) {
+      return ROUTER_TOO_LONG
+    }
     let count: i32 = 0
     let start: i32 = 1
     for (let i: i32 = 1; i <= length; i++) {
@@ -534,7 +598,14 @@ export class Router {
       if (c !== 47) {
         continue
       }
-      if (count === this.maxSegments) {
+      // The segment arrays are `maxSegments` long, so the last three tests
+      // never hold before the first does; they are what proves the writes.
+      if (
+        count >= this.maxSegments ||
+        count >= toI32(this.patKind.length) ||
+        count >= toI32(this.patStart.length) ||
+        count >= toI32(this.patEnd.length)
+      ) {
         return ROUTER_TOO_LONG
       }
       if (count > 0 && this.patKind[count - 1] === ROUTER_WILD) {
@@ -545,13 +616,18 @@ export class Router {
         return kind
       }
       this.patKind[count] = kind
-      this.patStart[count] = kind === ROUTER_PARAM ? start + 1 : start
+      // Never true, `start` lying inside the pattern; the count needs the bound.
+      if (start < 0 || start > 1073741822) {
+        return ROUTER_BAD_PATTERN
+      }
+      const name: i32 = start + 1
+      this.patStart[count] = kind === ROUTER_PARAM ? name : start
       this.patEnd[count] = i
       if (kind === ROUTER_PARAM) {
         for (let k: i32 = 0; k < count; k++) {
           if (
             this.patKind[k] === ROUTER_PARAM &&
-            routerSameName(pattern, this.patStart[k], this.patEnd[k], start + 1, i)
+            routerSameName(pattern, this.patStart[k], this.patEnd[k], name, i)
           ) {
             return ROUTER_BAD_PATTERN
           }
@@ -565,6 +641,19 @@ export class Router {
 
   /** The child of `node` that pattern segment `k` leads to, or -1. */
   private childFor(node: i32, pattern: string, k: i32): i32 {
+    // Never true for what `add` passes; the tests are the proof the reads need.
+    if (
+      k < 0 ||
+      k >= toI32(this.patKind.length) ||
+      k >= toI32(this.patStart.length) ||
+      k >= toI32(this.patEnd.length) ||
+      node < 0 ||
+      node >= toI32(this.firstChild.length) ||
+      node >= toI32(this.paramChild.length) ||
+      node >= toI32(this.wildChild.length)
+    ) {
+      return -1
+    }
     const kind: i32 = this.patKind[k]
     if (kind === ROUTER_PARAM) {
       return this.paramChild[node]
@@ -573,38 +662,77 @@ export class Router {
       return this.wildChild[node]
     }
     const start: i32 = this.patStart[k]
-    const length: i32 = this.patEnd[k] - start
-    for (let c: i32 = this.firstChild[node]; c >= 0; c = this.nextSibling[c]) {
+    const end: i32 = this.patEnd[k]
+    // `splitPattern` writes ranges inside the pattern, so this never holds.
+    if (start < 0 || end < 0) {
+      return -1
+    }
+    const length: i32 = end - start
+    let c: i32 = this.firstChild[node]
+    while (
+      c >= 0 &&
+      c < toI32(this.nextSibling.length) &&
+      c < toI32(this.labelStart.length) &&
+      c < toI32(this.labelEnd.length)
+    ) {
       const at: i32 = this.labelStart[c]
-      if (this.labelEnd[c] - at === length && routerLabelIsText(this.labels, at, pattern, start, length)) {
+      const last: i32 = this.labelEnd[c]
+      if (
+        at >= 0 &&
+        last >= 0 &&
+        last - at === length &&
+        routerLabelIsText(this.labels, at, pattern, start, length)
+      ) {
         return c
       }
+      c = this.nextSibling[c]
     }
     return -1
   }
 
   /** Adds the child of `node` that pattern segment `k` leads to, and answers it. */
   private addChild(node: i32, pattern: string, k: i32): i32 {
+    // Never true for what `add` passes, as in `childFor`; -1 adds nothing.
+    if (
+      k < 0 ||
+      k >= toI32(this.patKind.length) ||
+      k >= toI32(this.patStart.length) ||
+      k >= toI32(this.patEnd.length) ||
+      node < 0 ||
+      node >= toI32(this.firstChild.length) ||
+      node >= toI32(this.paramChild.length) ||
+      node >= toI32(this.wildChild.length)
+    ) {
+      return -1
+    }
     const child: i32 = this.nodeCount()
     const kind: i32 = this.patKind[k]
+    const from: i32 = this.patStart[k]
+    const end: i32 = this.patEnd[k]
     const at: i32 = toI32(this.labels.length)
+    // The parent's link is written first, while `node` is known to be inside
+    // its arrays; a literal child goes first among its siblings, its next the
+    // old first.
+    let sibling: i32 = ROUTER_NONE
+    if (kind === ROUTER_LITERAL) {
+      sibling = this.firstChild[node]
+      this.firstChild[node] = child
+    } else if (kind === ROUTER_PARAM) {
+      this.paramChild[node] = child
+    } else {
+      this.wildChild[node] = child
+    }
     this.firstChild.push(ROUTER_NONE)
-    this.nextSibling.push(ROUTER_NONE)
+    this.nextSibling.push(sibling)
     this.paramChild.push(ROUTER_NONE)
     this.wildChild.push(ROUTER_NONE)
     this.firstEndpoint.push(ROUTER_NONE)
     this.labelStart.push(at)
     if (kind === ROUTER_LITERAL) {
       const n: i32 = toI32(pattern.length)
-      for (let i: i32 = this.patStart[k]; i >= 0 && i < this.patEnd[k] && i < n; i++) {
+      for (let i: i32 = from; i >= 0 && i < end && i < n; i++) {
         this.labels.push(toU8(toI32(pattern.charCodeAt(i))))
       }
-      this.nextSibling[child] = this.firstChild[node]
-      this.firstChild[node] = child
-    } else if (kind === ROUTER_PARAM) {
-      this.paramChild[node] = child
-    } else {
-      this.wildChild[node] = child
     }
     this.labelEnd.push(toI32(this.labels.length))
     return child
@@ -616,9 +744,15 @@ export class Router {
    */
   methodIndex(method: string): i32 {
     const length: i32 = toI32(method.length)
-    for (let m: i32 = 0; m < toI32(this.methodStart.length); m++) {
+    for (let m: i32 = 0; m < toI32(this.methodStart.length) && m < toI32(this.methodEnd.length); m++) {
       const at: i32 = this.methodStart[m]
-      if (this.methodEnd[m] - at === length && routerLabelIsText(this.methodBytes, at, method, 0, length)) {
+      const last: i32 = this.methodEnd[m]
+      if (
+        at >= 0 &&
+        last >= 0 &&
+        last - at === length &&
+        routerLabelIsText(this.methodBytes, at, method, 0, length)
+      ) {
         return m
       }
     }
@@ -646,6 +780,11 @@ export class Router {
     }
     // A static route's path is never longer than the longest one: a target
     // past that, query and all, is the tree's without a byte of it read here.
+    // `enter` panics on a range outside `target`, so this never holds; a proof
+    // does not cross a call.
+    if (tStart < 0 || tEnd < 0) {
+      return ROUTER_NOT_FOUND
+    }
     if (tEnd - tStart <= this.staticLongest) {
       const route: i32 = this.staticRoute(target, tStart, tEnd)
       if (route !== ROUTER_NONE) {
@@ -684,8 +823,10 @@ export class Router {
    * that is not `/`-rooted, which is `ROUTER_NOT_FOUND` with `pathEnd` set.
    */
   private enter(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32): boolean {
-    if (mStart < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
+    if (mStart < 0 || mEnd < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
       routerOutside("method", mStart, mEnd, toI32(method.length))
+      // Not reached, as below.
+      return false
     }
     if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
       routerOutside("target", tStart, tEnd, toI32(target.length))
@@ -694,9 +835,9 @@ export class Router {
       return false
     }
     this.visited = 0
-    if (tStart === tEnd || toI32(target[tStart]) !== 47) {
+    if (tStart === tEnd || tStart >= toI32(target.length) || toI32(target[tStart]) !== 47) {
       let end: i32 = tStart
-      while (end < tEnd && toI32(target[end]) !== 63) {
+      while (end < tEnd && end < toI32(target.length) && toI32(target[end]) !== 63) {
         end += 1
       }
       this.pathEnd = end
@@ -715,13 +856,16 @@ export class Router {
       return true
     }
     // A method too long for a key is compared byte by byte with each known one.
-    for (let m: i32 = 0; m < toI32(this.methodStart.length); m++) {
+    for (let m: i32 = 0; m < toI32(this.methodStart.length) && m < toI32(this.methodEnd.length); m++) {
       const at: i32 = this.methodStart[m]
       // Checked, the compare's ranges included: `methodBytes`, `methodStart`
       // and `methodEnd` are public, so nothing here can rely on `add` being
       // the only writer.
+      const last: i32 = this.methodEnd[m]
       if (
-        this.methodEnd[m] - at === methodLength &&
+        at >= 0 &&
+        last >= 0 &&
+        last - at === methodLength &&
         routerSameBytes(this.methodBytes, at, method, mStart, methodLength)
       ) {
         this.wanted = m
@@ -736,12 +880,18 @@ export class Router {
   private descend(target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
     // `enter` took this range, so this is never true; it is here because a
     // proof does not cross a call, and the reads below need this one.
-    if (tStart < 0 || tEnd > toI32(target.length)) {
+    if (tStart < 0 || tStart >= tEnd || tEnd > toI32(target.length)) {
       return ROUTER_NOT_FOUND
     }
     // One pass over the path: where it ends, and each segment's span up to one
     // past the deepest route, which is as far as any edge can reach.
-    const keep: i32 = this.deepest + 1
+    // `deepest` counts a route's segments, which the constructor caps at 512,
+    // so this is never true; it is the bound the count below needs.
+    const deepest: i32 = this.deepest
+    if (deepest < 0 || deepest > 1073741822) {
+      return ROUTER_NOT_FOUND
+    }
+    const keep: i32 = deepest + 1
     let segments: i32 = 0
     let start: i32 = tStart + 1
     let end: i32 = start
@@ -751,22 +901,38 @@ export class Router {
         break
       }
       if (c === 47) {
-        if (segments < keep) {
-          this.segStart[segments] = start
-          this.segEnd[segments] = end
+        this.span(segments, keep, start, end)
+        // Never true, a path holding fewer slashes than bytes; the count
+        // needs the bound, and a proof does not follow a loop.
+        if (segments < 0 || segments > 1073741821) {
+          return ROUTER_NOT_FOUND
         }
-        segments += 1
+        segments = segments + 1
         start = end + 1
       }
       end += 1
     }
-    if (segments < keep) {
-      this.segStart[segments] = start
-      this.segEnd[segments] = end
+    if (segments < 0 || segments > 1073741822) {
+      return ROUTER_NOT_FOUND
     }
+    this.span(segments, keep, start, end)
     this.segments = segments + 1
     this.pathEnd = end
     return this.answer(target, params)
+  }
+
+  /**
+   * Records `[start, end)` as segment `k`'s span when `k` is below `keep`, one
+   * past the deepest route: no edge reads a span deeper than that.
+   */
+  private span(k: i32, keep: i32, start: i32, end: i32): void {
+    // `keep` is at most `maxSegments + 1`, the arrays' length, so the last
+    // two tests never decide; they are what proves the writes.
+    if (k < 0 || k >= keep || k >= toI32(this.segStart.length) || k >= toI32(this.segEnd.length)) {
+      return
+    }
+    this.segStart[k] = start
+    this.segEnd[k] = end
   }
 
   /** The tree's answer for a path already split into `segStart`/`segEnd`: the walk and the pairs. */
@@ -777,11 +943,16 @@ export class Router {
     if (route < 0) {
       return this.otherMethod ? ROUTER_METHOD_NOT_ALLOWED : ROUTER_NOT_FOUND
     }
-    const pairs: i32 = this.foundCount
-    if (2 * pairs > toI32(params.length)) {
+    const count: i32 = this.foundCount
+    // `pushPair` keeps the count below `found`'s length, so this never holds.
+    if (count < 0 || count > 1073741823) {
       return ROUTER_TOO_MANY_PARAMS
     }
-    for (let k: i32 = 0; k < 2 * pairs && k < toI32(params.length); k++) {
+    const slots: i32 = count + count
+    if (slots > toI32(params.length)) {
+      return ROUTER_TOO_MANY_PARAMS
+    }
+    for (let k: i32 = 0; k < slots && k < toI32(params.length) && k < toI32(this.found.length); k++) {
       params[k] = this.found[k]
     }
     return route
@@ -805,13 +976,19 @@ export class Router {
   private staticRoute(target: u8[], tStart: i32, tEnd: i32): i32 {
     // Never true, as in `descend`: the guard is the proof the loop's reads
     // need. It answers as `descend`'s does, so no split is left for `answer`.
-    if (tStart < 0 || tEnd > toI32(target.length)) {
+    if (tStart < 0 || tStart >= tEnd || tEnd > toI32(target.length)) {
       return ROUTER_NOT_FOUND
     }
     // The first byte is the `/` `enter` found; each later one is hashed, and
     // a `/` among them also closes a segment, as in `descend`.
     let hash: u32 = routerHashWith(routerHashOf(this.wanted), 47)
-    const keep: i32 = this.deepest + 1
+    // `deepest` counts a route's segments, which the constructor caps at 512,
+    // so this is never true; it is the bound the count below needs.
+    const deepest: i32 = this.deepest
+    if (deepest < 0 || deepest > 1073741822) {
+      return ROUTER_NONE
+    }
+    const keep: i32 = deepest + 1
     let segments: i32 = 0
     let start: i32 = tStart + 1
     let end: i32 = start
@@ -821,34 +998,52 @@ export class Router {
         break
       }
       if (c === 47) {
-        if (segments < keep) {
-          this.segStart[segments] = start
-          this.segEnd[segments] = end
+        this.span(segments, keep, start, end)
+        // Never true, a path holding fewer slashes than bytes; the count
+        // needs the bound, and a proof does not follow a loop.
+        if (segments < 0 || segments > 1073741821) {
+          return ROUTER_NONE
         }
-        segments += 1
+        segments = segments + 1
         start = end + 1
       }
       hash = routerHashWith(hash, c)
       end += 1
     }
-    if (segments < keep) {
-      this.segStart[segments] = start
-      this.segEnd[segments] = end
+    if (segments < 0 || segments > 1073741822) {
+      return ROUTER_NONE
     }
+    this.span(segments, keep, start, end)
     this.segments = segments + 1
     this.pathEnd = end
+    // `end` only grows from `tStart + 1`; a proof does not follow a loop.
+    if (end < 0) {
+      return ROUTER_NONE
+    }
     const length: i32 = end - tStart
     const mask: i32 = toI32(this.staticSlots.length) - 1
     let slot: i32 = routerSlot(hash, mask)
     for (let probe: i32 = 0; probe < ROUTER_PROBES; probe++) {
+      // Never true, as in `fileStatic`; the tests are the proof the reads need.
+      if (slot < 0 || slot >= toI32(this.staticSlots.length)) {
+        return ROUTER_NONE
+      }
       const route: i32 = this.staticSlots[slot]
-      if (route < 0) {
+      if (
+        route < 0 ||
+        route >= toI32(this.routePathStart.length) ||
+        route >= toI32(this.routePathEnd.length) ||
+        route >= toI32(this.routeMethod.length)
+      ) {
         return ROUTER_NONE
       }
       const at: i32 = this.routePathStart[route]
+      const last: i32 = this.routePathEnd[route]
       if (
         this.routeMethod[route] === this.wanted &&
-        this.routePathEnd[route] - at === length &&
+        at >= 0 &&
+        last >= 0 &&
+        last - at === length &&
         routerSameBytes(this.staticPaths, at, target, tStart, length)
       ) {
         return route
@@ -870,12 +1065,41 @@ export class Router {
     if (depth === this.segments) {
       return this.endpointFor(node)
     }
+    // Never true: the split keeps a span for every depth up to the deepest
+    // route, and every node is the tree's. The tests are the proof the reads need.
+    if (
+      depth < 0 ||
+      depth >= toI32(this.segStart.length) ||
+      depth >= toI32(this.segEnd.length) ||
+      node < 0 ||
+      node >= toI32(this.firstChild.length) ||
+      node >= toI32(this.paramChild.length) ||
+      node >= toI32(this.wildChild.length)
+    ) {
+      return -1
+    }
     const start: i32 = this.segStart[depth]
     const end: i32 = this.segEnd[depth]
+    // The split writes spans inside the target, so this never holds.
+    if (start < 0 || end < 0) {
+      return -1
+    }
     const length: i32 = end - start
-    for (let c: i32 = this.firstChild[node]; c >= 0; c = this.nextSibling[c]) {
+    let c: i32 = this.firstChild[node]
+    while (
+      c >= 0 &&
+      c < toI32(this.nextSibling.length) &&
+      c < toI32(this.labelStart.length) &&
+      c < toI32(this.labelEnd.length)
+    ) {
       const at: i32 = this.labelStart[c]
-      if (this.labelEnd[c] - at === length && routerSameBytes(this.labels, at, target, start, length)) {
+      const last: i32 = this.labelEnd[c]
+      if (
+        at >= 0 &&
+        last >= 0 &&
+        last - at === length &&
+        routerSameBytes(this.labels, at, target, start, length)
+      ) {
         const route: i32 = this.walk(target, c, depth + 1)
         if (route >= 0) {
           return route
@@ -883,41 +1107,64 @@ export class Router {
         // Labels under one node are distinct, so no other literal child can match.
         break
       }
+      c = this.nextSibling[c]
     }
     const param: i32 = this.paramChild[node]
     if (param >= 0 && length > 0) {
       const top: i32 = this.foundCount
-      this.found[2 * top] = start
-      this.found[2 * top + 1] = end
-      this.foundCount = top + 1
-      const route: i32 = this.walk(target, param, depth + 1)
-      if (route >= 0) {
-        return route
+      if (this.pushPair(start, end)) {
+        const route: i32 = this.walk(target, param, depth + 1)
+        if (route >= 0) {
+          return route
+        }
+        this.foundCount = top
       }
-      this.foundCount = top
     }
     const wild: i32 = this.wildChild[node]
     if (wild >= 0) {
       this.visited = wrappingAdd(this.visited, toI32(1))
       const route: i32 = this.endpointFor(wild)
-      if (route >= 0) {
-        const top: i32 = this.foundCount
-        this.found[2 * top] = start
-        this.found[2 * top + 1] = this.pathEnd
-        this.foundCount = top + 1
+      if (route >= 0 && this.pushPair(start, this.pathEnd)) {
         return route
       }
     }
     return -1
   }
 
+  /**
+   * Pushes the pair `[start, end)` onto `found`, or answers false when it has
+   * no room. A route's pattern holds at most `maxParams` parameters and `*`s,
+   * and `found` has two slots for each, so a walk always has room.
+   */
+  private pushPair(start: i32, end: i32): boolean {
+    const top: i32 = this.foundCount
+    // `found` holds fewer than 1025 slots, so this is no room by a wider margin.
+    if (top < 0 || top > 1073741822) {
+      return false
+    }
+    const first: i32 = top + top
+    const second: i32 = first + 1
+    if (first < 0 || first >= toI32(this.found.length) || second < 0 || second >= toI32(this.found.length)) {
+      return false
+    }
+    this.found[first] = start
+    this.found[second] = end
+    this.foundCount = top + 1
+    return true
+  }
+
   /** The route of the wanted method ending at `node`, or -1, noting a route of another method there. */
   private endpointFor(node: i32): i32 {
-    for (let e: i32 = this.firstEndpoint[node]; e >= 0; e = this.endpointNext[e]) {
+    if (node < 0 || node >= toI32(this.firstEndpoint.length)) {
+      return -1
+    }
+    let e: i32 = this.firstEndpoint[node]
+    while (e >= 0 && e < toI32(this.endpointNext.length) && e < toI32(this.routeMethod.length)) {
       if (this.routeMethod[e] === this.wanted) {
         return e
       }
       this.otherMethod = true
+      e = this.endpointNext[e]
     }
     return -1
   }
@@ -938,21 +1185,33 @@ export class Router {
  * @returns how many decoded bytes were written, or `ROUTER_BAD_ESCAPE` or `ROUTER_NO_ROOM`
  */
 export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32 => {
-  if (start < 0 || end < start || end > toI32(target.length)) {
+  if (start < 0 || end < 0 || end < start || end > toI32(target.length)) {
     panic(`routerDecode: the range ${start} to ${end} is outside its ${target.length} bytes`)
   }
+  const n: i32 = toI32(target.length)
   let length: i32 = 0
   let i: i32 = start
   while (i < end) {
     if (toI32(target[i]) === 37) {
-      if (i + 2 >= end || routerHex(toI32(target[i + 1])) < 0 || routerHex(toI32(target[i + 2])) < 0) {
+      // `end` is at most `n`, so the second test never decides; it is what
+      // proves the two reads.
+      if (
+        i >= end - 2 ||
+        i >= n - 2 ||
+        routerHex(toI32(target[i + 1])) < 0 ||
+        routerHex(toI32(target[i + 2])) < 0
+      ) {
         return ROUTER_BAD_ESCAPE
       }
       i += 3
     } else {
       i += 1
     }
-    length += 1
+    // One decoded byte per raw byte at most, so this never holds.
+    if (length >= n) {
+      return ROUTER_NO_ROOM
+    }
+    length = length + 1
   }
   if (length > toI32(out.length)) {
     return ROUTER_NO_ROOM
@@ -960,10 +1219,9 @@ export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32
   let at: i32 = 0
   i = start
   const room: i32 = toI32(out.length)
-  const n: i32 = toI32(target.length)
   while (i >= 0 && i < end && i < n && at >= 0 && at < room) {
     const c: i32 = toI32(target[i])
-    if (c === 37 && i + 2 < n) {
+    if (c === 37 && i < n - 2) {
       out[at] = toU8(routerHex(toI32(target[i + 1])) * 16 + routerHex(toI32(target[i + 2])))
       i += 3
     } else {
@@ -979,7 +1237,7 @@ export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32
  * Where the hash the exact-path table files a static route under begins: at
  * the method's index, so that two methods of one path do not share a slot.
  */
-const routerHashOf = (method: i32): u32 => toU32(method + 1)
+const routerHashOf = (method: i32): u32 => toU32(method) + toU32(1)
 
 /**
  * `bytes[at .. at + length)` packed into one word, its first byte lowest and
@@ -1046,7 +1304,6 @@ const routerLimit = (field: string, value: i32, low: i32, high: i32): void => {
     panic(`RouterLimits.${field}: ${value} is outside ${low} to ${high}`)
   }
 }
-
 /** Whether `c` is a token character (RFC 9110 §5.6.2), what a method is made of. */
 const routerTchar = (c: i32): boolean => {
   if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {
@@ -1077,14 +1334,20 @@ const routerTchar = (c: i32): boolean => {
  * `_`; `*` is the whole segment or nowhere in it; anything else is a literal.
  */
 const routerSegmentKind = (pattern: string, start: i32, end: i32): i32 => {
-  if (end - start === 1 && toI32(pattern.charCodeAt(start)) === 42) {
-    return ROUTER_WILD
-  }
-  const param: boolean = end > start && toI32(pattern.charCodeAt(start)) === 58
-  if (param && end - start === 1) {
+  const n: i32 = toI32(pattern.length)
+  // `splitPattern` passes a range inside `pattern`, so this never holds.
+  if (start < 0 || end < 0 || end < start || end > n) {
     return ROUTER_BAD_PATTERN
   }
-  const n: i32 = toI32(pattern.length)
+  const width: i32 = end - start
+  const first: i32 = start < n ? toI32(pattern.charCodeAt(start)) : -1
+  if (width === 1 && first === 42) {
+    return ROUTER_WILD
+  }
+  const param: boolean = width > 0 && first === 58
+  if (param && width === 1) {
+    return ROUTER_BAD_PATTERN
+  }
   for (let i: i32 = start; i >= 0 && i < end && i < n; i++) {
     const c: i32 = toI32(pattern.charCodeAt(i))
     if (c === 42) {
@@ -1101,23 +1364,37 @@ const routerSegmentKind = (pattern: string, start: i32, end: i32): i32 => {
 
 /** Whether the names `pattern[a .. aEnd)` and `pattern[b .. bEnd)` are the same. */
 const routerSameName = (pattern: string, a: i32, aEnd: i32, b: i32, bEnd: i32): boolean => {
-  if (aEnd - a !== bEnd - b) {
+  if (a < 0 || aEnd < 0 || b < 0 || bEnd < 0 || aEnd - a !== bEnd - b) {
     return false
   }
-  for (let k: i32 = 0; k < aEnd - a; k++) {
-    if (pattern.charCodeAt(a + k) !== pattern.charCodeAt(b + k)) {
+  // Two cursors, each held inside `pattern`: `splitPattern` passes ranges
+  // inside it, so the bound never ends the walk early.
+  const n: i32 = toI32(pattern.length)
+  let i: i32 = a
+  let j: i32 = b
+  while (i < aEnd) {
+    if (i < 0 || i >= n || j < 0 || j >= n || pattern.charCodeAt(i) !== pattern.charCodeAt(j)) {
       return false
     }
+    i += 1
+    j += 1
   }
   return true
 }
 
 /** Whether `bytes[at .. at + length)` spells `text[from .. from + length)`. */
 const routerLabelIsText = (bytes: u8[], at: i32, text: string, from: i32, length: i32): boolean => {
+  // A range outside either one, which no caller passes, does not spell it.
+  const nb: i32 = toI32(bytes.length)
+  const nt: i32 = toI32(text.length)
+  let i: i32 = at
+  let j: i32 = from
   for (let k: i32 = 0; k < length; k++) {
-    if (toI32(bytes[at + k]) !== toI32(text.charCodeAt(from + k))) {
+    if (i < 0 || i >= nb || j < 0 || j >= nt || toI32(bytes[i]) !== toI32(text.charCodeAt(j))) {
       return false
     }
+    i += 1
+    j += 1
   }
   return true
 }

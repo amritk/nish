@@ -40,7 +40,7 @@ The fallback-and-timeout stage fixed two Low findings, DNS-6 and DNS-7.
 | File | Functions |
 | --- | --- |
 | `std/net/dns-message.ts` | `dnsBuildQuery`, `dnsParseReply`; `DnsReply`; the helpers `dnsCheckLength`, `dnsLower`, `dnsReadName`, `dnsSameName`, `dnsCopyName`, `dnsKeepAddress` |
-| `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `settle`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone`, `dnsResolverCount`, `dnsResolverFirstPending`, `dnsResolverServerAddress`, `dnsResolverSameServer`, `dnsResolverZeroTtls`, `dnsResolverSetResult` |
+| `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `settle`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverDeadline`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone`, `dnsResolverCount`, `dnsResolverFirstPending`, `dnsResolverServerAddress`, `dnsResolverSameServer`, `dnsResolverZeroTtls`, `dnsResolverSetResult` |
 | `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `settle`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`, `dnsLoadSystem`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream`, `dnsClientCount`, `dnsClientTake`, `dnsClientWatch` |
 | `std/net/dns-config.ts` | `dnsParseAddress`, `dnsParseResolvConf`, `dnsParseHosts`, `dnsHostsFind`; `DnsConfig`, `DnsHosts`; the helpers `dnsConfigCheckWindow`, `dnsIsBlank`, `dnsHexValue`, `dnsParseIpv4`, `dnsParseIpv6`, `dnsParseAddressVia`, `dnsCommentCut`, `dnsWordIs`, `dnsOption`, `dnsAddSearch`, `dnsResolvLine`, `dnsAddHostName`, `dnsHostsLine`, `dnsHostNameIs`, `dnsFallbackServers`, `dnsCount` |
 
@@ -385,7 +385,7 @@ sites the prover discharges:
 | --- | --- | --- | --- |
 | `std/net/dns-message.ts` | 80 | 4 | the four explicit panics on the caller's arguments |
 | `std/net/dns.ts` | 55 | 9 | four explicit panics; `crypto.getRandomValues`'s exit; four windows the socket builtins check at run time |
-| `std/net/dns-resolver.ts` | 232 | 12 | eleven explicit panics; one overflow |
+| `std/net/dns-resolver.ts` | 232 | 12 | eleven explicit panics; one overflow, gone since WP82 S9 (below) |
 | `std/net/dns-config.ts` | 117 | 21 | explicit panics on the caller's arguments |
 
 Each index the prover could not discharge got a guard on the line before it,
@@ -398,12 +398,15 @@ cannot, it returns the answer the code already gave (`BUSY`, `-1`,
 or 16, and the resolver's and client's counters saturate instead of
 overflowing. No public signature changed.
 
-The overflow left is the query's deadline in `dnsResolverSend`,
-`nowNanos + toI64(r.config.timeout) * toI64(1000000000)` in `i64`: it
-needs a clock within
-`timeout` seconds of `i64`'s maximum, about 292 years of nanoseconds, and a
-wrapping deadline would change what `fail`, `tick` and `nextDeadlineNanos`
-report.
+The overflow this pass left, the query's deadline in `dnsResolverSend`
+(`nowNanos + timeout * 10^9` in `i64`), is gone since WP82 S9:
+`dnsResolverDeadline` adds the timeout only to a clock within 2^62
+nanoseconds (about 146 years) of 0, which masks with `2^62 - 1` say to the
+prover without changing the value. A later clock gets `2^63 - 1`, a
+deadline no clock reaches, and an earlier one, which no monotonic clock
+reads, gets itself, a deadline already passed. Neither wraps, so `fail`,
+`tick` and `nextDeadlineNanos` report what they did for every clock a
+monotonic source gives.
 
 Explicit panics go from 14 to 21 in `dns-config.ts` and from 3 to 4 in
 `dns.ts`, 17 to 25 across the two; `dns-message.ts` and `dns-resolver.ts`

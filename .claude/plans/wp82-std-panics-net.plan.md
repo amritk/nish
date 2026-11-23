@@ -158,6 +158,27 @@ stages:
       - id: s8-ratchet
         content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body — see WP82 S8
         status: pending
+  - id: s9-fixup
+    title: "WP82 S9 — fix-up: S1–S7 io-exit and slice sites, tlsHeldWindow, http-get-json, guide markers"
+    goal: The io-exit and slice sites S1–S7 left in ticket, dns, dns-resolver, tls, tls-tcp, fetch, upstream, http3-server and http2-cleartext are removed or proved, tlsHeldWindow is proved or kept with its caller contract, examples/http-get-json.ts builds without --allow-panics, and the guide's stale allow-panics markers are gone.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js && node scripts/security-scope.mjs
+    issue: 2205
+    todos:
+      - id: s9-fix
+        content: Remove or prove the io-exit, slice and overflow sites #2202's AC1 table lists, the way #2103 did (no nish:unsafe, no made-up-value guards, a Result where the failure is real, a proof where unreachable) — see WP82 S9
+        status: pending
+      - id: s9-held-window
+        content: Prove tlsHeldWindow's panic away or add it to tests/std-panics.json kept with the caller contract tlsDeriveSecretHeld and tlsFinishedVerifyDataHeld document — see WP82 S9
+        status: pending
+      - id: s9-example
+        content: Build examples/http-get-json.ts without --allow-panics and drop its smoke opt-out and header, or keep them with a header naming each site left — see WP82 S9
+        status: pending
+      - id: s9-guide
+        content: Drop or correct the stale allow-panics markers and record-layer prose in docs/guide/using-nish (http-client, calling-services, networking, standard-library, tls-client) — see WP82 S9
+        status: pending
+      - id: s9-pins
+        content: Update the docs/security records where a finding moved, regenerate the pinned std line numbers, the checked goldens and docs/reference, and add the nish-cmp DECLARED entries the IR moves need — see WP82 S9
+        status: pending
 ---
 
 # WP82 — std panic-free for QUIC, HTTP/3, TLS, DNS and the rest of std/net
@@ -166,7 +187,7 @@ stages:
 
 Every std/net module outside the HTTP/1 server stack (WP80) and PostgreSQL (WP81) holds 3579 distinct unproven, non-OOM, non-call, non-unchecked panic sites as of 071ed014: DNS 484, TLS record and handshake 472, the TLS and fetch client side 580, QUIC 808, HTTP/3 and QPACK 460, HTTP/2 and HPACK 348, WebTransport, WebSocket, gRPC and OIDC 427. This package removes or proves them, unblocking http-get-json (tls/record-client.ts:802, fetch.ts:431 and 1550, plus one slice in the example itself) and relay (tls/codec.ts:1093, quic-packet.ts:642, plus relay's own grant.ts and main.ts sites). Its first todo adds instruction-count benches for QUIC packet parse, a TLS record seal and open, and a DNS message encode and decode, baselined before any site changes; no PR may raise a count. This is attacker-facing code: update the docs/security record of the area whenever a finding's code moves.
 
-Examples unblocked: http-get-json (S2, S3), relay (S2, S4, S5). The diagnostic names only the first site per call, so more can appear after a fix.
+Examples unblocked: http-get-json (S2, S3, S9), and relay's sites in WP82 modules only (tls/codec.ts, quic-packet.ts; S2, S4, S5): relay's own grant.ts and main.ts sites are outside this package (AC4 as restated by S9, #2202). The diagnostic names only the first site per call, so more can appear after a fix.
 
 ## Rules every stage of this package follows
 
@@ -234,3 +255,23 @@ WebTransport, WebSocket, gRPC and OIDC sites are cleared.
 Sites as of 071ed014 (427): net/webtransport 214, net/websocket 165, net/grpc 30, net/oidc 18. Kinds: index 196, overflow 162, array-length 45, panic 13, slice 7, divide 3, io-exit 1.
 
 Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `websocketFrame`, `websocketWriteFrame`.
+
+### S9 — fix-up: S1–S7 io-exit and slice sites, tlsHeldWindow, http-get-json, guide markers
+
+The owner's decision on #2202 (option 1, via /decide, 2026-11-22) adds this stage: S1–S7 closed with these sites still standing, and the example and guide pages they were meant to unblock still opt out.
+
+Sites from #2202's AC1 table:
+
+- `std/net/tls/ticket.ts`: io-exit (`crypto.getRandomValues`) in `tlsTicketKeyDraw` and the ticket seal's nonce.
+- `std/net/dns.ts`: io-exit in `nextOutgoing`'s query id; slice at the `udpSendTo`, `udpRecvFrom`, `netWrite` and `netRead` windows.
+- `std/net/dns-resolver.ts`: the overflow of the query deadline in `dnsResolverSend`.
+- `std/net/tls.ts`: io-exit in the ticket age-add draw.
+- `std/net/tls-tcp.ts`: io-exit in the key-share draws; slice at five `netRead`/`netWrite` windows.
+- `std/net/fetch.ts`: io-exit in `httpClientTlsStart`'s draws; slice at eight `netRead`/`netWrite` windows (900 and 1894 among them).
+- `std/net/upstream.ts`: slice at three `netRead`/`netWrite` windows.
+- `std/net/http3-server.ts`: io-exit in `build` and slot reuse; slice at four `udpSendTo`/`udpRecvFrom` windows.
+- `std/net/http2-cleartext.ts`: slice at three `netRead`/`netWrite` windows.
+- `std/net/tls/schedule.ts`: the explicit panic in `tlsHeldWindow`.
+
+What no std change can do: every io-exit site is `crypto.getRandomValues`, which exits on a failed draw and has no non-exiting twin, and every slice site is the range check `emitNetCall` always emits for a `netRead`, `netWrite`, `udpSendTo` or `udpRecvFrom` window, which no prover marks proven. Each needs compiler work (a fallible entropy builtin; a net-window proof in `src/bounds.ts` that the emitter and `noteBuiltinSite` honour), so this stage clears what std can and records the rest on its PR. `examples/http-get-json.ts` keeps its opt-out until both land, and `std/net/url.ts:678` (outside WP82) is a third site it reaches.
+

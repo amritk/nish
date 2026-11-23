@@ -246,8 +246,10 @@ itself. `nish/crypto/bcrypt-batch` holds them until it can:
   `availableParallelism()` cores.
 - `verify(password, hash, now)` and `hash(password, salt, now)` queue a
   request that arrived at `now` (`monotonicNanos()`) and answer its ticket.
-  The batcher keeps its own copy of the password; wipe yours as you would
-  after `bcryptVerify`.
+  Tickets count up from 0 and wrap back to 0 after 2^31 − 1, so match an
+  answer to its request by ticket, but do not assume a later request has
+  a larger one. The batcher keeps its own copy of the password; wipe yours
+  as you would after `bcryptVerify`.
 - `waitNanos(now)` is how long the server may wait for more logins before a
   run is due: 0 when one is, -1 when nothing is queued.
 - `run(now)` sends the work that is due, as `bcryptVerifyN` and `bcryptHashN`

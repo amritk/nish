@@ -95,6 +95,27 @@ stages:
       - id: s5-ratchet
         content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body — see WP80 S5
         status: pending
+  - id: s6-fixup
+    title: WP80 S6 — fix-up, remaining std sites, fallen bench counts, the six example opt-outs
+    goal: the WP80 modules carry only kept explicit panics, the instruction counts that fell are lowered to CI's figures, and the six examples build without --allow-panics.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js --no-sidecars
+    issue: 2209
+    todos:
+      - id: s6-router
+        content: Land the router rework so std/net/router.ts keeps only its kept explicit panics (std-router +4.3% accepted on #2204) — see WP80 S6
+        status: in_progress
+      - id: s6-sites
+        content: Clear the std sites outside the prover gaps (the shm ffi-nul site, prefork.ts:1170 slice, bytes.ts:592) — see WP80 S6
+        status: pending
+      - id: s6-twins
+        content: Route constructor and contract panics through checked twins (http1-server.ts:498/:506, handler.ts:908, routerOutside, routerNoRoute) and clear respondEncoded, HttpHandler.put and HttpServer.carry — see WP80 S6
+        status: pending
+      - id: s6-bench
+        content: Lower each instruction count that fell to CI's printed figure, with the before and after table in the PR body — see WP80 S6
+        status: pending
+      - id: s6-optout
+        content: After #2206, #2207 and #2208, drop the opt-out headers and smoke args of histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server and http-app, and the guide markers and sentences about them — see WP80 S6
+        status: pending
 ---
 
 # WP80 — std panic-free for threads, CLI, sync and the HTTP/1 server stack
@@ -149,3 +170,9 @@ Explicit panics to fix, not kept (their reasons were internal invariants or unre
 handler, serve and router are cleared, so http-app builds without --allow-panics.
 
 Sites as of 071ed014 (442): net/handler 171, net/serve 140, net/router 131. Kinds: index 209, overflow 154, array-length 40, panic 25, slice 9, divide 4, pop 1.
+
+### S6 — fix-up: remaining std sites, fallen bench counts, the six example opt-outs
+
+Added on the owner's decision on #2204: the `src/` prover gaps the earlier stages hit are their own work (#2206 atomic element index, #2207 type-only `new Array<T>(n)` length, #2208 `String.fromBytes`/`netRead` slices), and this stage follows them. It clears what S1–S5 left outside those gaps, lowers the instruction counts that fell during the package to CI's figures, and drops the six opt-outs (histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server, http-app) once the prover proves their sites.
+
+One exception to rule 6, accepted on #2204: the router rework (plain guards and clamps in place of wrap helpers, so router.ts keeps only its six kept explicit panics) raises std-router by about 4.3% of instructions. Its count is written from the run that measured it and replaced with CI's printed figure once the bench shard prints it.
