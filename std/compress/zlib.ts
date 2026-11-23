@@ -117,16 +117,7 @@ export class ZlibCompressor {
     const e2: i32 = toI32(toI64(end) + 2)
     const e3: i32 = toI32(toI64(end) + 3)
     const m: i32 = toI32(out.length)
-    if (
-      end < 0 ||
-      end >= m ||
-      e1 < 0 ||
-      e1 >= m ||
-      e2 < 0 ||
-      e2 >= m ||
-      e3 < 0 ||
-      e3 >= m
-    ) {
+    if (end < 0 || end >= m || e1 < 0 || e1 >= m || e2 < 0 || e2 >= m || e3 < 0 || e3 >= m) {
       return DEFLATE_NO_ROOM
     }
     out[end] = toU8(a >>> 24)

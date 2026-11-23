@@ -4777,8 +4777,8 @@ function GzipCompressor.compress(this: GzipCompressor, src: u8[], off: i32, len:
   callee +5:23 gzipWriteHeader -> @nish.gzipWriteHeader
   local +9:11 end: i32 (const)
   callee +9:22 Deflater.compress -> @nish.Deflater.compress
-  callee +10:40 gzipTrailer -> @nish.gzipTrailer
-  callee +10:62 Crc32.update -> @nish.Crc32.update
+  callee +12:9 gzipTrailer -> @nish.gzipTrailer
+  callee +12:31 Crc32.update -> @nish.Crc32.update
 function gzipFixedBound(n: i32): i32 -> @nish.gzipFixedBound [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -4807,8 +4807,8 @@ function GzipFixedCompressor.compress(this: GzipFixedCompressor, src: u8[], off:
   callee +5:23 gzipWriteHeader -> @nish.gzipWriteHeader
   local +9:11 end: i32 (const)
   callee +9:22 FixedDeflater.compress -> @nish.FixedDeflater.compress
-  callee +17:40 gzipTrailer -> @nish.gzipTrailer
-  callee +17:62 Crc32.update -> @nish.Crc32.update
+  callee +19:9 gzipTrailer -> @nish.gzipTrailer
+  callee +19:31 Crc32.update -> @nish.Crc32.update
 function GzipDecompressor.constructor(this: GzipDecompressor): void -> @nish.GzipDecompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Crc32.constructor nish.Inflater.constructor nish_alloc_struct
@@ -4890,7 +4890,7 @@ function GzipWriter.bound(this: GzipWriter, len: i32): i32 -> @nish.GzipWriter.b
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
-  callee +1:24 deflateBound -> @nish.deflateBound
+  callee +2:13 deflateBound -> @nish.deflateBound
 function GzipWriter.hasRoom(this: GzipWriter, out: u8[], at: i32, len: i32): boolean -> @nish.GzipWriter.hasRoom [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: len

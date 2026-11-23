@@ -65,7 +65,7 @@ the record that found it. The notes below the table name each such finding.
 | A package's C link | [package-link.md](package-link.md) | `src/manifest.ts` (`manifestNish`'s `link` key, `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem`), `src/compile.ts` (`readLinkSet`, `linkPackages`, `refuseUngranted`, `addLinkRequest`, `readLinkIncludes`, `linkProgram`), `src/run-cache.ts` (`LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey`), `scripts/build.sh` (`--link-lib`, `--link-source`, `--link-depends`) | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ³⁰ |
 | PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts`, `std/crypto/scram.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
-| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
+| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 6 | 0 / 0 / 1 / 8 ²⁴ |
@@ -82,7 +82,7 @@ the record that found it. The notes below the table name each such finding.
 | Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts`; `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-emit.ts`, `src/proto-cli.ts` and the `decode` methods they write | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC calls, unary and streaming | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ³³ |
-| **Total** ⁸ | | | **3 / 19 / 109 / 228** | **0 / 0 / 2 / 46** |
+| **Total** ⁸ | | | **3 / 19 / 109 / 229** | **0 / 0 / 2 / 46** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -391,13 +391,15 @@ the record that found it. The notes below the table name each such finding.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
-    were found by a review of the first version and fixed. COMP-8 (Low), COMP-9
+    were found by a review of the first version and fixed. COMP-19 (Low),
+    `GzipWriter.bound`, `gzipFixedBound` and a `GzipWriter` used after
+    `finish` panicking, was found by WP84's panic-site work and fixed. COMP-8 (Low), COMP-9
     (Medium) and COMP-17 (Low), a stream of small dynamic blocks rebuilding the decoder's
     tables, the BREACH class of length leaks and deflate with `identity;q=0`
     answered as identity, are accepted, with the reason
     in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
     COMP-16 (the Adler-32 kernels' window and sums) are properties checked
-    and found to hold.
+    and found to hold. The Total moves by COMP-19: fixed +1 Low.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
 21. PKI-R6 to PKI-R8 (Low) are accepted, with the reason in their record, and

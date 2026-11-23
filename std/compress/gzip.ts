@@ -296,7 +296,9 @@ export class GzipCompressor {
       return DEFLATE_NO_ROOM
     }
     const end: i32 = this.deflater.compress(src, off, len, out, body)
-    return end < 0 ? DEFLATE_NO_ROOM : gzipTrailer(out, end, this.crc.update(toU32(0), src, off, len), toU32(len))
+    return end < 0
+      ? DEFLATE_NO_ROOM
+      : gzipTrailer(out, end, this.crc.update(toU32(0), src, off, len), toU32(len))
   }
 }
 
@@ -371,7 +373,9 @@ export class GzipFixedCompressor {
       body,
       toI32(toI64(room) - toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE))
     )
-    return end < 0 ? DEFLATE_NO_ROOM : gzipTrailer(out, end, this.crc.update(toU32(0), src, off, len), toU32(len))
+    return end < 0
+      ? DEFLATE_NO_ROOM
+      : gzipTrailer(out, end, this.crc.update(toU32(0), src, off, len), toU32(len))
   }
 }
 
@@ -587,7 +591,9 @@ export class GzipWriter {
     // One deflateBound constant (18) per 64 KB the call compresses, then
     // the header, the trailer and 10 bytes of slack.
     const n: i32 = toI32(toI64(len) + toI64(GZIP_WRITER_INPUT))
-    return toI32(toI64(deflateBound(n)) + toI64((len >> 16) + 1) * 18 + toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 10))
+    return toI32(
+      toI64(deflateBound(n)) + toI64((len >> 16) + 1) * 18 + toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 10)
+    )
   }
 
   /** Whether `out` has `bound(len)` bytes from `at`. */
