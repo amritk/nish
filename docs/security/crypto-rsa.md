@@ -190,8 +190,10 @@ The run on commit c288673f9 printed "29 of 52 rules caught" and "every rule
 caught except those listed, each missed", and exited 0. It was rerun on
 3a3c0a5ab, the branch after main's 401a85e9 was merged in, with the same
 `std/crypto/rsa.ts` and `mutate.py`: it printed the same two lines and the
-same 23 uncaught rules, and exited 0. `git diff std/crypto/rsa.ts` was empty
-after each run.
+same 23 uncaught rules, and exited 0. It was run a third time on 1ca886e8,
+the branch head, whose `std/crypto/rsa.ts` and `mutate.py` are those of
+3a3c0a5ab: it printed the same two lines and the same 23 uncaught rules, and
+exited 0. `git diff std/crypto/rsa.ts` was empty after each run.
 
 These 29 rules were each caught, by a failing check or by a panic in the debug
 profile ("index out of range", or "attempt to add with overflow"):
