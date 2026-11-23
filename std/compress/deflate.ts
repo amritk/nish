@@ -2455,6 +2455,8 @@ export class Inflater {
     const offs: i32[] = this.offsets
     const bits: i32 = t.bits
     if (
+      bits < 1 ||
+      bits > 15 ||
       from < 0 ||
       n < 0 ||
       from > toI32(lens.length) - n ||
@@ -2470,7 +2472,8 @@ export class Inflater {
     }
     // `lens[from .. from + n)` was checked above. A length outside 0 to 15
     // shows in the OR of them all, tested once after the loop.
-    const hi: i32 = from + n
+    // Cannot wrap: `from + n` is at most `lens.length`, checked above.
+    const hi: i32 = toI32(toU32(from) + toU32(n))
     let seen: i32 = 0
     for (let i: i32 = from; i < hi; i += 1) {
       const l: i32 = uncheckedGet(lens, i)
@@ -2484,11 +2487,15 @@ export class Inflater {
     count[0] = 0
     // The Kraft sum: over-subscribed is an error; incomplete is allowed for
     // one one-bit code only.
+    // A count, and so `codes`, is at most `n`, which the `u16` alphabet
+    // size bounds, and `left` stays at most 2^15: the masks keep every bit,
+    // and tell the bounds prover so.
     let left: i32 = 1
     let codes: i32 = 0
     for (let l: i32 = 1; l < 16; l += 1) {
-      left = (left << 1) - count[l]
-      codes += count[l]
+      const c: i32 = count[l] & 0xffff
+      left = (left & 0xffff) * 2 - c
+      codes = (codes & 0xffff) + c
       if (left < 0) {
         return DEFLATE_ERR_HUFFMAN
       }
@@ -2500,7 +2507,8 @@ export class Inflater {
     // symbols (length 0) go after the rest, where nothing reads them.
     offs[1] = 0
     for (let l: i32 = 1; l < 15; l += 1) {
-      offs[l + 1] = offs[l] + count[l]
+      // At most `codes`, as above.
+      offs[l + 1] = (offs[l] & 0xffff) + (count[l] & 0xffff)
     }
     offs[0] = codes
     for (let i: i32 = from; i < hi; i += 1) {
@@ -2511,7 +2519,9 @@ export class Inflater {
       }
       offs[l] = wrappingAdd(at, 1)
     }
-    const size: i32 = 1 << bits
+    // `bits` is at most 15: the mask keeps every bit, and tells the bounds
+    // prover so.
+    const size: i32 = (1 << bits) & 0xffff
     const slow: i32 = INF_SLOW << 8
     let tmpl: i32[] = this.clEntries
     if (kind === INF_TABLE_LITLEN) {
@@ -2536,14 +2546,22 @@ export class Inflater {
         const codesHere: i32 = uncheckedGet(count, l)
         for (let c: i32 = 0; c < codesHere; c += 1) {
           if (k >= 0 && k < toI32(syms.length)) {
-            const e: i32 = tmpl[syms[k]] | l
+            const s: i32 = syms[k]
+            if (s < 0 || s >= toI32(tmpl.length)) {
+              return DEFLATE_ERR_HUFFMAN
+            }
+            const e: i32 = tmpl[s] | l
             const step: i32 = 1 << l
-            for (let r: i32 = deflateReverse(code, l); r < size; r += step) {
+            // Cannot wrap: `r` is under `size` and `step` at most 2^15.
+            for (let r: i32 = deflateReverse(code, l); r < size; r = toI32(toU32(r) + toU32(step))) {
               uncheckedSet(entries, r, e)
             }
           }
-          k += 1
-          code += 1
+          // `k` is under `codes`, and `code` under 2^l (the set is not
+          // over-subscribed): the masks keep every bit, and tell the bounds
+          // prover so.
+          k = (k & 0xffff) + 1
+          code = (code & 0x7fff) + 1
         }
         code = code << 1
       }
@@ -2563,10 +2581,14 @@ export class Inflater {
     while (len <= bits && len >= 0 && len < toI32(count.length)) {
       here = count[len]
       while (here > 0) {
-        if (k < 0 || k >= toI32(syms.length) || code < 0 || code >= end || end > size) {
+        if (k < 0 || k >= toI32(syms.length) || code < 0 || code >= end || end < 1 || end > size) {
           return DEFLATE_ERR_HUFFMAN
         }
-        uncheckedSet(entries, code, tmpl[syms[k]] | len)
+        const s: i32 = syms[k]
+        if (s < 0 || s >= toI32(tmpl.length)) {
+          return DEFLATE_ERR_HUFFMAN
+        }
+        uncheckedSet(entries, code, tmpl[s] | len)
         k += 1
         if (code === end - 1) {
           // The last code, all ones: the code is complete within the table.
@@ -2578,8 +2600,10 @@ export class Inflater {
           }
           return 0
         }
-        const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(code ^ (end - 1)))))
-        code = (code & (bit - 1)) | bit
+        // `code` differs from `end - 1`, so the count of leading zeros is
+        // under 32: the mask keeps every bit, and tells the bounds prover so.
+        const bit: u32 = toU32(1) << toU32(toI32(31) - (toI32(Math.clz32(toU32(code ^ (end - 1)))) & 31))
+        code = toI32((toU32(code) & (bit - toU32(1))) | bit)
         here -= 1
       }
       len += 1
@@ -2605,7 +2629,7 @@ export class Inflater {
     let start: i32 = 0
     let subEnd: i32 = size
     while (true) {
-      if (len < bits || len > 15) {
+      if (len < bits || len < 1 || len > 15) {
         return DEFLATE_ERR_HUFFMAN
       }
       if ((code & (size - 1)) !== prefix) {
@@ -2613,11 +2637,17 @@ export class Inflater {
         start = subEnd
         let subBits: i32 = len - bits
         let used: i32 = here
-        while (used < 1 << subBits && bits + subBits < 15) {
+        // `used` is under 2^subBits when it doubles, and `bits + subBits` at
+        // most 15 after the step: the masks keep every bit, and tell the
+        // bounds prover so.
+        while (subBits < 14 && bits + subBits < 15 && used < 1 << subBits) {
           subBits += 1
-          used = (used << 1) + count[bits + subBits]
+          const at: i32 = (bits + (subBits & 15)) & 15
+          used = (used & 0xffff) * 2 + (count[at] & 0xffff)
         }
-        subEnd = start + (1 << subBits)
+        // Cannot wrap: `start` is at most the table's length, a `u16`, and
+        // the width at most 2^14.
+        subEnd = toI32(toU32(start) + (toU32(1) << toU32(subBits)))
         if (subEnd > limit || prefix < 0) {
           return DEFLATE_ERR_HUFFMAN
         }
@@ -2626,20 +2656,33 @@ export class Inflater {
       if (k < 0 || k >= toI32(syms.length)) {
         return DEFLATE_ERR_HUFFMAN
       }
-      const e: i32 = tmpl[syms[k]] | (len - bits)
+      const s: i32 = syms[k]
+      if (s < 0 || s >= toI32(tmpl.length)) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      const e: i32 = tmpl[s] | (len - bits)
       k += 1
       const stride: i32 = toI32(1) << (len - bits)
-      let i: i32 = start + (code >> bits)
+      // Cannot wrap: `start` and `subEnd` are at most the table's length, a
+      // `u16`, and the code past the main table's bits and the stride under
+      // 2^15.
+      let i: i32 = toI32(toU32(start) + (toU32(code) >> toU32(bits)))
       while (i < subEnd && i >= 0) {
         uncheckedSet(entries, i, e)
-        i += stride
+        i = toI32(toU32(i) + toU32(stride))
       }
-      if (code === (1 << len) - 1) {
+      // `len` is at most 15: the mask keeps every bit, and tells the bounds
+      // prover so.
+      const full: i32 = ((1 << len) & 0xffff) - 1
+      if (code === full) {
         return 0
       }
-      const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(code ^ ((toI32(1) << len) - 1)))))
-      code = (code & (bit - 1)) | bit
-      here -= 1
+      // As above: `code` is not `full`, so the leading zeros are under 32.
+      const bit: u32 = toU32(1) << toU32(toI32(31) - (toI32(Math.clz32(toU32(code ^ full))) & 31))
+      code = toI32((toU32(code) & (bit - toU32(1))) | bit)
+      // At least one code of this length remains, and at most `n`: the mask
+      // keeps every bit, and tells the bounds prover so.
+      here = (here & 0xffff) - 1
       while (here === 0 && len < 15) {
         const next: i32 = len + 1
         if (next < 0 || next >= toI32(count.length)) {
@@ -2757,15 +2800,17 @@ export class Inflater {
     // The bit buffer in locals: the lengths are stored into an `i32[]`,
     // which the fields could alias, and every symbol would reload them.
     let bb: u64 = this.bitBuf
-    let bc: i32 = this.bitCount
+    // The buffer holds under 64 bits: the mask keeps every bit, and tells
+    // the bounds prover so.
+    let bc: i32 = this.bitCount & 63
     let ip: i32 = this.inPos
     if (ip < 0 || end > toI32(src.length)) {
       return DEFLATE_ERR_TRUNCATED
     }
-    if (ip <= end - 8) {
+    if (end >= 8 && ip < end - 7 && ip <= 2147483639) {
       const at: integer<0, 2147483639> = ip
       bb = bb | (deflateLoad64(src, at) << toU64(bc))
-      ip += (63 - bc) >> 3
+      ip += ((63 - bc) >> 3) & 7
       bc = bc | 56
     } else {
       while (bc <= 56 && ip < end) {
@@ -2786,15 +2831,24 @@ export class Inflater {
       return DEFLATE_ERR_HUFFMAN
     }
     const cl: i32[] = this.clLens
+    if (toI32(cl.length) < 19) {
+      return DEFLATE_ERR_HUFFMAN
+    }
     for (let i: i32 = 0; i < 19; i += 1) {
-      cl[deflateClOrder(i)] = 0
+      const k: i32 = deflateClOrder(i)
+      if (k < 0 || k >= 19) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      cl[k] = 0
     }
     for (let i: i32 = 0; i < hclen; i += 1) {
+      // Under 64 bits, as above.
+      bc = bc & 63
       if (bc < 3) {
-        if (ip >= 0 && ip <= end - 8 && ip <= 2147483639) {
+        if (ip >= 0 && end >= 8 && ip < end - 7 && ip <= 2147483639) {
           const at: integer<0, 2147483639> = ip
           bb = bb | (deflateLoad64(src, at) << toU64(bc))
-          ip += (63 - bc) >> 3
+          ip += ((63 - bc) >> 3) & 7
           bc = bc | 56
         } else {
           while (bc <= 56 && ip < end) {
@@ -2807,7 +2861,11 @@ export class Inflater {
           return INFLATE_NEED_INPUT
         }
       }
-      cl[deflateClOrder(i)] = toI32(bb & toU64(7))
+      const k: i32 = deflateClOrder(i)
+      if (k < 0 || k >= 19) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      cl[k] = toI32(bb & toU64(7))
       bb = bb >> toU64(3)
       bc -= 3
     }
@@ -2823,12 +2881,14 @@ export class Inflater {
     const total: i32 = hlit + hdist
     let i: i32 = 0
     while (i < total) {
+      // Under 64 bits, as above.
+      bc = bc & 63
       // A code-length code is at most 7 bits and its repeat count at most 7.
       if (bc < 14) {
-        if (ip >= 0 && ip <= end - 8 && ip <= 2147483639) {
+        if (ip >= 0 && end >= 8 && ip < end - 7 && ip <= 2147483639) {
           const at: integer<0, 2147483639> = ip
           bb = bb | (deflateLoad64(src, at) << toU64(bc))
-          ip += (63 - bc) >> 3
+          ip += ((63 - bc) >> 3) & 7
           bc = bc | 56
         } else {
           while (bc <= 56 && ip < end) {
@@ -2848,7 +2908,8 @@ export class Inflater {
         return INFLATE_NEED_INPUT
       }
       bb = bb >> toU64(l)
-      bc -= l
+      // Cannot wrap: `l` is at most `bc`, checked above.
+      bc = toI32(toU32(bc) - toU32(l))
       const sym: i32 = e >> 16
       if (sym < 16) {
         if (i < 0 || i >= toI32(lens.length)) {
@@ -2861,7 +2922,7 @@ export class Inflater {
         let value: i32 = 0
         let x: i32 = 0
         if (sym === 16) {
-          if (i === 0) {
+          if (i <= 0 || i > toI32(lens.length)) {
             return DEFLATE_ERR_HUFFMAN
           }
           value = lens[i - 1]
@@ -2877,10 +2938,13 @@ export class Inflater {
         if (bc < x) {
           return INFLATE_NEED_INPUT
         }
-        rep += toI32(bb & ((toU64(1) << toU64(x)) - toU64(1)))
+        // At most 7 bits: the mask keeps every bit, and tells the bounds
+        // prover so.
+        rep += toI32(bb & ((toU64(1) << toU64(x)) - toU64(1))) & 127
         bb = bb >> toU64(x)
-        bc -= x
-        if (i + rep > total) {
+        // Cannot wrap: `x` is at most `bc`, checked above.
+        bc = toI32(toU32(bc) - toU32(x))
+        if (i < 0 || rep > total - i) {
           return DEFLATE_ERR_HUFFMAN
         }
         for (let k: i32 = 0; k < rep && i < toI32(lens.length); k += 1) {
@@ -2889,7 +2953,7 @@ export class Inflater {
         }
       }
     }
-    if (lens[256] === 0) {
+    if (toI32(lens.length) <= 256 || lens[256] === 0) {
       return DEFLATE_ERR_HUFFMAN
     }
     const rl: i32 = this.build(this.lit, lens, toI32(0), hlit, INF_TABLE_LITLEN)
