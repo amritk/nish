@@ -420,7 +420,7 @@ where your program can answer differently under Node.
 Seven kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
-```text
+```log
 app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
@@ -773,7 +773,7 @@ leaves the IR unchanged.
   Without it the build stops with exit code 1, and the error names the
   grant to add and the calls that reach the capability:
 
-  ```text
+  ```log
   node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
   ```
 
@@ -786,7 +786,7 @@ leaves the IR unchanged.
   something new stops the build with exit code 1, naming the dependency, the
   capability and the calls, until you read the chain and run the flag again:
 
-  ```text
+  ```log
   node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
   ```
 
@@ -811,7 +811,7 @@ leaves the IR unchanged.
   refused, because those answer differently on every run. Exit code 1, naming
   the call:
 
-  ```text
+  ```log
   main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
   ```
 

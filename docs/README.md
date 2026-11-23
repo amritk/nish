@@ -198,8 +198,10 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   structured data) are renders of it, so a new mark re-renders them all.
   Google shows a site's favicon in its results only at 48×48 or larger, so
   `favicon.ico` carries a 48px image and `favicon-48.png` and
-  `favicon-192.png` are linked beside it. The theme's violets and cyan are
-  its colours.
+  `favicon-192.png` are linked beside it, largest first. Scalar renders a
+  `head.links` entry with only its `rel`, `type` and `href`, so the `sizes`
+  in `scalar.config.json` do not reach the page and a reader of the HTML
+  has only the order to go on. The theme's violets and cyan are its colours.
 
 - [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
   gradient behind every page, and every animation — a page's entrance, blocks

@@ -304,7 +304,7 @@ export const main = (): i32 => {
   it upstream rather than look in your own code; under `--json` the object
   carries the package's name in `package`:
 
-  ```text
+  ```log
   node_modules/pkg_broken/src/index.ts:2:39: error: Return type mismatch: function returns i32 but expression is string
     2 | export const twice = (n: i32): i32 => `${n * 2}`;
       |                                       ^~~~~~~~~~
