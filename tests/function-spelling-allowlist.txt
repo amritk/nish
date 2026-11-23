@@ -8,6 +8,11 @@
 # Forms the codemod refuses by design (`declare function`, `async`,
 # `function*`, `export default`, a bodiless signature ending in `;`) are not
 # definitions here.
+#
+# This list covers files. A Nish program written as a string literal inside a
+# tests/**/*.js harness is checked by `node scripts/inline-functions.mjs`
+# instead, and keeps `function` only under a `// nish-function: <reason>`
+# comment at the literal or its statement.
 
 # Pinned positions: plain programs whose spelling is not the subject, but whose
 # rewrite would move a position something else pins: a `-g` golden's
