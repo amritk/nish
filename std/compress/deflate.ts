@@ -1254,13 +1254,16 @@ export class Deflater {
       toI32(head.length) !== DEFLATE_HASH_SIZE ||
       toI32(prev.length) !== DEFLATE_WINDOW ||
       p < 0 ||
+      p > 2147483639 ||
+      end < 4 ||
       p > end - 4 ||
       end > toI32(src.length)
     ) {
       return -1
     }
     const delta: i32 = this.delta
-    const minMatch: i32 = this.minMatch
+    // The mask keeps every bit (3 or 4), and tells the bounds prover so.
+    const minMatch: i32 = this.minMatch & 7
     const at: integer<0, 2147483639> = p
     const word: u32 = deflateLoad32(src, at)
     const h: i32 =
@@ -1277,33 +1280,42 @@ export class Deflater {
     const maxLen: i32 = roomy ? DEFLATE_MAX_MATCH : end - p
     let best: i32 = minMatch - 1
     let bestDist: i32 = 0
-    const limit: i32 = v - DEFLATE_WINDOW
-    const floor: i32 = limit > histStart + delta ? limit : histStart + delta
+    // Cannot wrap: `v` and `histStart + delta` are positions in the
+    // chains' numbering, which `rebase` keeps between 0 and 2^31 - 1.
+    const limit: i32 = toI32(toU32(v) - toU32(DEFLATE_WINDOW))
+    const hd: i32 = toI32(toU32(histStart) + toU32(delta))
+    const floor: i32 = limit > hd ? limit : hd
     const nice: i32 = this.niceLength < maxLen ? this.niceLength : maxLen
     const mask: u32 = minMatch === 3 ? toU32(0xffffff) : ~toU32(0)
     let chain: i32 = this.maxChain
     while (cand >= floor && cand < v && chain > 0) {
-      const cd: i32 = cand - delta
+      // Cannot wrap: `cand` lies in [histStart + delta, p + delta).
+      const cd: i32 = toI32(toU32(cand) - toU32(delta))
       if (cd < 0 || cd > 2147483639) {
         break
       }
       const ci: integer<0, 2147483639> = cd
       // The byte that would make this match the longest yet, first: most
       // candidates fail on it.
-      if (uncheckedGet(src, ci + best) === uncheckedGet(src, p + best)) {
+      // Cannot wrap: `ci` is below `p` and `best` below `maxLen`, so both
+      // sums stay under `end`; a match length is at most 258.
+      if (
+        uncheckedGet(src, toI32(toU32(ci) + toU32(best))) === uncheckedGet(src, toI32(toU32(p) + toU32(best)))
+      ) {
         let l: i32 = 0
         if (roomy) {
           const x: u64 = deflateLoad64(src, ci) ^ deflateLoad64(src, at)
           l =
             x !== toU64(0)
               ? deflateCtz64(x) >> 3
-              : toI32(8) + deflateMatchLength(src, ci + 8, p + 8, maxLen - 8)
+              : toI32(toU32(8) + toU32(deflateMatchLength(src, ci + 8, p + 8, DEFLATE_MAX_MATCH - 8)))
         } else if (((deflateLoad32(src, ci) ^ word) & mask) === 0) {
           l = deflateMatchLength(src, ci, p, maxLen)
         }
         if (l > best) {
           best = l
-          bestDist = v - cand
+          // Cannot wrap: `cand` is below `v`, by at most the window.
+          bestDist = toI32(toU32(v) - toU32(cand))
           if (l >= nice) {
             break
           }
@@ -1357,11 +1369,14 @@ export class Deflater {
       return -1
     }
     const delta: i32 = this.delta
-    const lo: i32 = histStart + delta
+    // Cannot wrap: positions in the chains' numbering, input positions and
+    // `end` are never negative, and `rebase` keeps the first under 2^31.
+    const lo: i32 = toI32(toU32(histStart) + toU32(delta))
     const maxChain: i32 = this.maxChain
     const niceLength: i32 = this.niceLength
     const room: i32 = DEFLATE_BLOCK_TOKENS - 1
-    const last: i32 = end - 4
+    const last: i32 = toI32(toU32(end) - toU32(4))
+    const full: i32 = toI32(toU32(end) - toU32(DEFLATE_MAX_MATCH))
     let n: i32 = 0
     let p: i32 = start
     while (p < end && n < room) {
@@ -1370,35 +1385,52 @@ export class Deflater {
       if (p >= 0 && p <= last && p <= 2147483639) {
         const word: u32 = deflateLoad32(src, p)
         const h: i32 = toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
-        const v: i32 = p + delta
+        const v: i32 = toI32(toU32(p) + toU32(delta))
         let cand: i32 = uncheckedGet(head, h)
         uncheckedSet(head, h, v)
         uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
-        const maxLen: i32 = p <= end - DEFLATE_MAX_MATCH ? DEFLATE_MAX_MATCH : end - p
+        // Cannot wrap: `p` is at most `last`, below `end`.
+        const maxLen: i32 = p <= full ? DEFLATE_MAX_MATCH : toI32(toU32(end) - toU32(p))
         const nice: i32 = niceLength < maxLen ? niceLength : maxLen
-        const limit: i32 = v - DEFLATE_WINDOW
+        const limit: i32 = toI32(toU32(v) - toU32(DEFLATE_WINDOW))
         let chain: i32 = maxChain
         while (cand >= limit && cand >= lo && cand < v && chain > 0) {
-          const ci: i32 = cand - delta
+          // Cannot wrap: `cand` lies in [histStart + delta, p + delta).
+          const ci: i32 = toI32(toU32(cand) - toU32(delta))
           if (ci >= 0 && ci <= 2147483639 && deflateLoad32(src, ci) === word) {
             let l: i32 = 0
-            if (p <= end - DEFLATE_MAX_MATCH && ci <= 2147483627) {
+            if (p <= full && ci <= 2147483627) {
               const a4: i32 = ci + 4
               const b4: i32 = p + 4
               let x: u64 = toU64(1)
               if (a4 >= 0 && a4 <= 2147483639 && b4 >= 0 && b4 <= 2147483639) {
                 x = deflateLoad64(src, a4) ^ deflateLoad64(src, b4)
               }
+              // Cannot wrap: `p` is at most `end - 258`, `maxLen` is at least
+              // 4 (`p` is at most `last`), and a match length is at most 258.
               l =
                 x !== toU64(0)
                   ? toI32(4) + (deflateCtz64(x) >> 3)
-                  : toI32(12) + deflateMatchLength(src, ci + 12, p + 12, maxLen - 12)
+                  : toI32(
+                      toU32(12) +
+                        toU32(
+                          deflateMatchLength(
+                            src,
+                            ci + 12,
+                            toI32(toU32(p) + toU32(12)),
+                            DEFLATE_MAX_MATCH - 12
+                          )
+                        )
+                    )
             } else {
-              l = 4 + deflateMatchLength(src, ci + 4, p + 4, maxLen - 4)
+              l = toI32(
+                toU32(4) + toU32(deflateMatchLength(src, ci + 4, p + 4, toI32(toU32(maxLen) - toU32(4))))
+              )
             }
             if (l > best) {
               best = l
-              bestDist = v - cand
+              // Cannot wrap: `cand` is below `v`, by at most the window.
+              bestDist = toI32(toU32(v) - toU32(cand))
               if (l >= nice) {
                 break
               }
@@ -1409,15 +1441,18 @@ export class Deflater {
         }
       }
       if (best >= 4) {
-        uncheckedSet(tokens, n, (bestDist << 9) | (253 + best))
+        // Cannot wrap: a match is 4 to 258 bytes at a distance of 1 to the
+        // window, a length symbol is under 29, a count is at most the
+        // block's token count, and the match ends by `end`.
+        uncheckedSet(tokens, n, (bestDist << 9) | toI32(toU32(253) + toU32(best)))
         n += 1
-        const ls: i32 = 257 + uncheckedGet(lsym, best - 3)
-        uncheckedSet(lf, ls, uncheckedGet(lf, ls) + 1)
-        const ds: i32 =
-          bestDist <= 256 ? uncheckedGet(dsym, bestDist - 1) : uncheckedGet(dsym, ((bestDist - 1) >> 7) + 256)
-        uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
+        const ls: i32 = toI32(toU32(257) + toU32(uncheckedGet(lsym, best - 3)))
+        uncheckedSet(lf, ls, toI32(toU32(uncheckedGet(lf, ls)) + toU32(1)))
+        const bd: i32 = toI32(toU32(bestDist) - toU32(1))
+        const ds: i32 = bestDist <= 256 ? uncheckedGet(dsym, bd) : uncheckedGet(dsym, (bd >> 7) + 256)
+        uncheckedSet(df, ds, toI32(toU32(uncheckedGet(df, ds)) + toU32(1)))
         // Every position the match covers goes into the chains.
-        const stop: i32 = p + best
+        const stop: i32 = toI32(toU32(p) + toU32(best))
         const insertEnd: i32 = stop <= last ? stop : last + 1
         let vq: i32 = wrappingAdd(p, delta)
         for (let q: i32 = p + 1; q < insertEnd && q >= 0 && q <= 2147483639; q += 1) {
@@ -1432,7 +1467,8 @@ export class Deflater {
         const b: i32 = toI32(uncheckedGet(src, p))
         uncheckedSet(tokens, n, b)
         n += 1
-        uncheckedSet(lf, b, uncheckedGet(lf, b) + 1)
+        // Cannot wrap, as for the counts above.
+        uncheckedSet(lf, b, toI32(toU32(uncheckedGet(lf, b)) + toU32(1)))
         p += 1
       }
     }
@@ -1471,11 +1507,13 @@ export class Deflater {
     const three: boolean = this.minMatch === 3
     const lazyLength: i32 = this.lazyLength
     const room: i32 = DEFLATE_BLOCK_TOKENS - 2
+    // Cannot wrap: `end` is never negative.
+    const last: i32 = toI32(toU32(end) - toU32(4))
     let n: i32 = 0
     let p: i32 = start
     while (p < end && n < room) {
       let m: i32 = 0
-      if (p + 4 <= end) {
+      if (p <= last) {
         m = this.longest(src, p, end, histStart)
       }
       if (m < 0) {
@@ -1485,22 +1523,25 @@ export class Deflater {
         const b: i32 = toI32(uncheckedGet(src, p))
         uncheckedSet(tokens, n, b)
         n += 1
-        uncheckedSet(lf, b, uncheckedGet(lf, b) + 1)
+        // Cannot wrap: a count is at most the block's token count.
+        uncheckedSet(lf, b, toI32(toU32(uncheckedGet(lf, b)) + toU32(1)))
         p += 1
       } else {
         let inserted: i32 = p + 1
-        while (m >> 16 < lazyLength && p + 5 <= end && n < room) {
-          const m2: i32 = this.longest(src, p + 1, end, histStart)
+        while (m >> 16 < lazyLength && p < last && n < room) {
+          // Cannot wrap: `p` is below `last`, so `p + 2` is at most `end - 3`.
+          const p1: i32 = toI32(toU32(p) + toU32(1))
+          const m2: i32 = this.longest(src, p1, end, histStart)
           if (m2 < 0) {
             return -1
           }
-          inserted = p + 2
+          inserted = toI32(toU32(p) + toU32(2))
           if (m2 >> 16 > m >> 16) {
             const b: i32 = toI32(uncheckedGet(src, p))
             uncheckedSet(tokens, n, b)
             n += 1
-            uncheckedSet(lf, b, uncheckedGet(lf, b) + 1)
-            p += 1
+            uncheckedSet(lf, b, toI32(toU32(uncheckedGet(lf, b)) + toU32(1)))
+            p = p1
             m = m2
           } else {
             break
@@ -1512,16 +1553,18 @@ export class Deflater {
           return -1
         }
         uncheckedSet(tokens, n, (dist << 9) | (253 + len))
-        n += 1
-        const ls: i32 = 257 + uncheckedGet(lsym, len - 3)
-        uncheckedSet(lf, ls, uncheckedGet(lf, ls) + 1)
+        // Cannot wrap: `n` is at most `room`, a length symbol is under 29,
+        // a count is at most the block's token count, and `longest` answers
+        // only a match that ends by `end`.
+        n = toI32(toU32(n) + toU32(1))
+        const ls: i32 = toI32(toU32(257) + toU32(uncheckedGet(lsym, len - 3)))
+        uncheckedSet(lf, ls, toI32(toU32(uncheckedGet(lf, ls)) + toU32(1)))
         const ds: i32 =
           dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
-        uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
+        uncheckedSet(df, ds, toI32(toU32(uncheckedGet(df, ds)) + toU32(1)))
         // The positions the match covers that `longest` did not record go
         // into the chains.
-        const stop: i32 = p + len
-        const last: i32 = end - 4
+        const stop: i32 = toI32(toU32(p) + toU32(len))
         const insertEnd: i32 = stop <= last ? stop : last + 1
         for (let q: i32 = inserted; q < insertEnd && q >= 0 && q <= 2147483639; q += 1) {
           const qa: integer<0, 2147483639> = q
@@ -1911,9 +1954,12 @@ export class Deflater {
         const len3: i32 = (t & 511) - 256
         const dist: i32 = t >> 9
         const s: i32 = uncheckedGet(lsym, len3)
-        bb = bb | (toU64(toU32(uncheckedGet(lc, 257 + s))) << toU64(bc))
-        bc += toU32(uncheckedGet(ll, 257 + s))
-        bb = bb | (toU64(toU32(len3 + 3 - uncheckedGet(lbase, s))) << toU64(bc))
+        // Cannot wrap: a length symbol is under 29. The extra bits' values
+        // are worked in u32, which gives the same bits as i32 would.
+        const ls: i32 = toI32(toU32(257) + toU32(s))
+        bb = bb | (toU64(toU32(uncheckedGet(lc, ls))) << toU64(bc))
+        bc += toU32(uncheckedGet(ll, ls))
+        bb = bb | (toU64(toU32(len3) + toU32(3) - toU32(uncheckedGet(lbase, s))) << toU64(bc))
         bc += toU32(uncheckedGet(lextra, s))
         if (bc >= toU32(32)) {
           if (o >= 0 && o <= toI32(out.length) - 4) {
@@ -1932,7 +1978,7 @@ export class Deflater {
           dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         bb = bb | (toU64(toU32(uncheckedGet(dc, d))) << toU64(bc))
         bc += toU32(uncheckedGet(dl, d))
-        bb = bb | (toU64(toU32(dist - uncheckedGet(dbase, d))) << toU64(bc))
+        bb = bb | (toU64(toU32(dist) - toU32(uncheckedGet(dbase, d))) << toU64(bc))
         bc += toU32(uncheckedGet(dextra, d))
       }
       if (bc >= toU32(32)) {
@@ -2118,12 +2164,15 @@ export class FixedDeflater {
     }
     head.fill(0, 0, 1 << bits)
     const shift: u32 = toU32(32 - bits)
-    const end: i32 = off + len
+    // Cannot wrap: `deflateWindow` has checked that both windows lie inside
+    // their arrays, so every position below is between 0 and 2^31 - 1.
+    const end: i32 = toI32(toU32(off) + toU32(len))
+    const outEnd: i32 = toI32(toU32(at) + toU32(room))
     // Matches start where eight bytes can be read; the last few are literals.
-    const last: i32 = end - 8
+    const last: i32 = toI32(toU32(end) - toU32(8))
     // A flush writes four bytes of the final output, so one that would pass
     // the room's end means the whole cannot fit.
-    const oe: i32 = at + room - 4
+    const oe: i32 = toI32(toU32(outEnd) - toU32(4))
     // BFINAL = 1, BTYPE = 01.
     let bb: u64 = toU64(3)
     let bc: i32 = 3
@@ -2136,79 +2185,96 @@ export class FixedDeflater {
         const pi: integer<0, 2147483639> = p
         const w: u64 = deflateLoad64(src, pi)
         const h: i32 = toI32((toU32(w) * toU32(DEFLATE_HASH_MUL)) >>> shift)
-        const c: i32 = uncheckedGet(head, h) - 1 + off
-        uncheckedSet(head, h, p - off + 1)
-        dist = p - c
+        // Cannot wrap: the table holds 0 or `q - off + 1` for an earlier
+        // position `q`, so `c` lies in [off - 1, p).
+        const c: i32 = toI32(toU32(uncheckedGet(head, h)) - toU32(1) + toU32(off))
+        uncheckedSet(head, h, toI32(toU32(p) - toU32(off) + toU32(1)))
+        dist = toI32(toU32(p) - toU32(c))
         if (c >= off && c >= 0 && c <= 2147483639 && dist <= FIXED_WINDOW) {
           const ci: integer<0, 2147483639> = c
           const x: u64 = deflateLoad64(src, ci) ^ w
           if (toU32(x) === toU32(0)) {
-            const max: i32 = end - p < DEFLATE_MAX_MATCH ? end - p : DEFLATE_MAX_MATCH
+            // Cannot wrap: `p` is at most `end - 8`, so `max` is at least 8;
+            // a match length is at most 258.
+            const left: i32 = toI32(toU32(end) - toU32(p))
+            const max: i32 = left < DEFLATE_MAX_MATCH ? left : DEFLATE_MAX_MATCH
             matched =
               x !== toU64(0)
                 ? deflateCtz64(x) >> 3
-                : toI32(8) + deflateMatchLength(src, c + 8, p + 8, max - 8)
+                : toI32(toU32(8) + toU32(deflateMatchLength(src, c + 8, p + 8, toI32(toU32(max) - toU32(8)))))
           }
         }
       }
       if (matched === 0) {
         const lc: i32 = uncheckedGet(literal, toI32(uncheckedGet(src, p)))
         bb = bb | (toU64(toU32(lc & 0xffff)) << toU64(bc))
-        bc += lc >> 16
+        // Cannot wrap: `bc` is under 32 between flushes and a code is at
+        // most 9 bits.
+        bc = toI32(toU32(bc) + toU32(lc >> 16))
         p += 1
       } else {
-        const lc: i32 = uncheckedGet(length, matched - 3)
+        // Cannot wrap: the first four bytes agree, so a match is at least 4.
+        const lc: i32 = uncheckedGet(length, toI32(toU32(matched) - toU32(3)))
         bb = bb | (toU64(toU32(lc & 0xffff)) << toU64(bc))
-        bc += lc >> 16
+        bc = toI32(toU32(bc) + toU32(lc >> 16))
         if (bc >= 32) {
           if (o > oe) {
             return DEFLATE_NO_ROOM
           }
           uncheckedSet(out, o, toU8(bb))
-          uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
-          uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
-          uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+          // Cannot wrap: `o` is at most `outEnd - 4`.
+          uncheckedSet(out, toI32(toU32(o) + toU32(1)), toU8(bb >> toU64(8)))
+          uncheckedSet(out, toI32(toU32(o) + toU32(2)), toU8(bb >> toU64(16)))
+          uncheckedSet(out, toI32(toU32(o) + toU32(3)), toU8(bb >> toU64(24)))
           bb = bb >> toU64(32)
           bc -= 32
-          o += 4
+          o = toI32(toU32(o) + toU32(4))
         }
-        const d: i32 =
-          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
-        bb = bb | (toU64(toU32(uncheckedGet(dcode, d) | ((dist - uncheckedGet(dbase, d)) << 5))) << toU64(bc))
-        bc += 5 + uncheckedGet(dextra, d)
+        // Cannot wrap: a distance is 1 to the window and at least its
+        // base, a distance code with its extra bits is at most 18 bits,
+        // `bc` is under 32 here, and the match ends by `end`.
+        const d1: i32 = toI32(toU32(dist) - toU32(1))
+        const d: i32 = dist <= 256 ? uncheckedGet(dsym, d1) : uncheckedGet(dsym, (d1 >> 7) + 256)
+        const dx: i32 = toI32(toU32(dist) - toU32(uncheckedGet(dbase, d)))
+        bb = bb | (toU64(toU32(uncheckedGet(dcode, d) | (dx << 5))) << toU64(bc))
+        bc = toI32(toU32(bc) + toU32(5) + toU32(uncheckedGet(dextra, d)))
         // One position near the match's end goes into the table, for the
         // next repeat of what follows it; the rest are skipped.
-        const q: i32 = p + matched - 2
+        const q: i32 = toI32(toU32(p) + toU32(matched) - toU32(2))
         if (q >= 0 && q <= last && q <= 2147483639) {
           const qi: integer<0, 2147483639> = q
           const hq: i32 = toI32((deflateLoad32(src, qi) * toU32(DEFLATE_HASH_MUL)) >>> shift)
-          uncheckedSet(head, hq, q - off + 1)
+          uncheckedSet(head, hq, toI32(toU32(q) - toU32(off) + toU32(1)))
         }
-        p += matched
+        p = toI32(toU32(p) + toU32(matched))
       }
       if (bc >= 32) {
         if (o > oe) {
           return DEFLATE_NO_ROOM
         }
         uncheckedSet(out, o, toU8(bb))
-        uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
-        uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
-        uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+        // Cannot wrap: `o` is at most `outEnd - 4`.
+        uncheckedSet(out, toI32(toU32(o) + toU32(1)), toU8(bb >> toU64(8)))
+        uncheckedSet(out, toI32(toU32(o) + toU32(2)), toU8(bb >> toU64(16)))
+        uncheckedSet(out, toI32(toU32(o) + toU32(3)), toU8(bb >> toU64(24)))
         bb = bb >> toU64(32)
         bc -= 32
-        o += 4
+        o = toI32(toU32(o) + toU32(4))
       }
     }
     // The end-of-block code, 256: seven zero bits.
-    bc += 7
+    // The mask keeps every bit (`bc` is under 32 after the last flush), and
+    // tells the bounds prover so.
+    bc = (bc & 31) + 7
     const bytes: i32 = (bc + 7) >> 3
-    if (o > at + room - bytes) {
+    // Cannot wrap: `bytes` is at most 5, and `o` at most `outEnd - bytes`.
+    if (o > toI32(toU32(outEnd) - toU32(bytes))) {
       return DEFLATE_NO_ROOM
     }
     for (let i: i32 = 0; i < bytes; i += 1) {
-      uncheckedSet(out, o + i, toU8(bb >> toU64(8 * i)))
+      uncheckedSet(out, toI32(toU32(o) + toU32(i)), toU8(bb >> toU64(8 * i)))
     }
-    return o + bytes
+    return toI32(toU32(o) + toU32(bytes))
   }
 }
 
