@@ -71,7 +71,7 @@
  *
  * The record of what this module refuses and why is `docs/security/grpc.md`.
  */
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { HANDLER_ABSENT, HANDLER_DROPPED, HANDLER_SENT } from "nish/net/handler"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { HTTP1_CHUNKED } from "nish/net/http1-codec"
@@ -159,6 +159,100 @@ export class GrpcLimits {
 }
 
 /**
+ * `a + b`, worked in `i64` and held to `i32`. Every caller adds an offset
+ * and a length that lie inside one array, so the sum is an index into it or
+ * just past it and always fits.
+ */
+const grpcAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+
+/** `a - b`, worked as `grpcAdd` is, for offsets and lengths inside one array. */
+const grpcSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
+
+/**
+ * A zeroed array of `n` bytes, or of none when `n` is below zero. Up to
+ * 65535 bytes is one allocation; past that the array grows a byte at a time
+ * from a 65535-byte start, which an `i32` length cannot make fail.
+ */
+const grpcBytes = (n: i32): u8[] => {
+  if (n < 0) {
+    return []
+  }
+  if (n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/** The answer `grpcPrefixLength` gives for a compressed message. */
+const GRPC_COMPRESSED: i64 = -2
+
+/**
+ * The length the 5-byte message prefix at `body[at]` declares: 0 to 2^32 - 1
+ * for an uncompressed message, `GRPC_COMPRESSED` for a compressed one, and
+ * -1 for a flag byte that is neither, or a prefix not wholly inside `body`.
+ */
+const grpcPrefixLength = (body: u8[], at: i32): i64 => {
+  // 5 is `GRPC_PREFIX`, written as the literal the bound proofs read.
+  if (at < 0 || at > toI32(body.length) - 5) {
+    return -1
+  }
+  const flag: i32 = toI32(body[at])
+  if (flag === 1) {
+    return GRPC_COMPRESSED
+  }
+  if (flag !== 0) {
+    return -1
+  }
+  return (
+    (toI64(body[at + 1]) << 24) |
+    (toI64(body[at + 2]) << 16) |
+    (toI64(body[at + 3]) << 8) |
+    toI64(body[at + 4])
+  )
+}
+
+/** `len`'s uncompressed length prefix, fresh: the server may hold it until it is sent. */
+const grpcPrefix = (len: i32): u8[] => [
+  toU8(0),
+  toU8((len >> 24) & 255),
+  toU8((len >> 16) & 255),
+  toU8((len >> 8) & 255),
+  toU8(len & 255),
+]
+
+/** What a `GrpcServer` keeps for the call at one request index. */
+class GrpcCall {
+  /** `GRPC_IDLE` (0), `GRPC_OPEN`, `GRPC_BEGUN` or `GRPC_OVER`. */
+  state: i32 = 0
+  /** How many bytes at the front of `body` `next` has read and not yet handed back with `consume`. */
+  readAt: i32 = 0
+  /** The length of the message `next` is copying into `buf`, or -1 for none. */
+  want: i32 = -1
+  /** How many of that message's bytes are copied. */
+  have: i32 = 0
+  /** The buffer a message split across pieces is copied into. */
+  buf: u8[]
+  /** Whether the last message is in `buf`, not `body`. */
+  inBuf: boolean = false
+  /** Where the last message starts. */
+  start: i32 = 0
+  /** Where the last message ends. */
+  end: i32 = 0
+  /** The `since` of the request the call was opened for. */
+  since: i64 = 0
+  /** The `stream` of the request the call was opened for. */
+  stream: i64 = 0
+
+  constructor() {
+    this.buf = []
+  }
+}
+
+/**
  * Reads gRPC calls from an `HttpServer`'s HTTP/2 requests and answers them:
  * unary calls (`call`, `reply`, `fail`) and streaming ones (`open`, `next`,
  * `begin`, `send`, `finish`). What it keeps per call is indexed by the
@@ -170,38 +264,17 @@ export class GrpcServer {
   private maxTimeout: i64
   private contentType: u8[][]
   private grpcType: u8[][]
+  /** `application/grpc`, the `content-type` of every answer. */
+  private grpcTypeBytes: u8[]
   private okNames: u8[][]
   private okValues: u8[][]
   private onlyNames: u8[][]
-  /** `onlyValues[s]` is `[application/grpc, "<s>"]`, the Trailers-Only fields for status `s`. */
-  private onlyValues: u8[][][]
   private statusName: u8[]
   private messageName: u8[]
-  private prefix: u8[]
   /** `[grpc-status]`, the trailer names of a status with no message. */
   private statusNames: u8[][]
-  /** `statusValues[s]` is `["<s>"]`, the trailer values of status `s` with no message. */
-  private statusValues: u8[][][]
-  /** Per request index: `GRPC_IDLE`, `GRPC_OPEN`, `GRPC_BEGUN` or `GRPC_OVER`. */
-  private states: i32[]
-  /** Per request index: how many bytes at the front of `body` `next` has read and not yet handed back with `consume`. */
-  private readAt: i32[]
-  /** Per request index: the length of the message `next` is copying into `bufs`, or -1 for none. */
-  private want: i32[]
-  /** Per request index: how many of that message's bytes are copied. */
-  private have: i32[]
-  /** Per request index: the buffer a message split across pieces is copied into. */
-  private bufs: u8[][]
-  /** Per request index: whether the last message is in `bufs`, not `body`. */
-  private inBuf: boolean[]
-  /** Per request index: where the last message starts. */
-  private starts: i32[]
-  /** Per request index: where the last message ends. */
-  private ends: i32[]
-  /** Per request index: the `since` of the request the call there was opened for. */
-  private sinces: i64[]
-  /** Per request index: the `stream` of the request the call there was opened for. */
-  private streams: i64[]
+  /** Per request index: the call there, idle until `call` or `open` reads one. */
+  private calls: GrpcCall[]
 
   /**
    * A gRPC reader and answerer over `server`. Panics on a limit outside its range.
@@ -219,33 +292,17 @@ export class GrpcServer {
     this.maxMessage = limits.maxMessage
     this.maxTimeout = toI64(limits.maxTimeout) * GRPC_NANOS_PER_MS
     const grpcType: u8[] = httpFieldBytes("application/grpc")
-    this.contentType = [httpFieldBytes("content-type")]
+    const contentType: u8[] = httpFieldBytes("content-type")
+    this.contentType = [contentType]
     this.grpcType = [grpcType]
+    this.grpcTypeBytes = grpcType
     this.statusName = httpFieldBytes("grpc-status")
     this.messageName = httpFieldBytes("grpc-message")
     this.okNames = [this.statusName]
     this.okValues = [httpFieldBytes("0")]
-    this.onlyNames = [this.contentType[0], this.statusName]
-    this.onlyValues = []
-    for (let s: i32 = 0; s <= GRPC_UNAUTHENTICATED; s++) {
-      this.onlyValues.push([grpcType, httpFieldBytes(`${s}`)])
-    }
-    this.prefix = [toU8(0), toU8(0), toU8(0), toU8(0), toU8(0)]
+    this.onlyNames = [contentType, this.statusName]
     this.statusNames = [this.statusName]
-    this.statusValues = []
-    for (let s: i32 = 0; s <= GRPC_UNAUTHENTICATED; s++) {
-      this.statusValues.push([this.onlyValues[s][1]])
-    }
-    this.states = []
-    this.readAt = []
-    this.want = []
-    this.have = []
-    this.bufs = []
-    this.inBuf = []
-    this.starts = []
-    this.ends = []
-    this.sinces = []
-    this.streams = []
+    this.calls = []
   }
 
   /**
@@ -271,9 +328,13 @@ export class GrpcServer {
       this.only(r, status)
       return GRPC_ANSWERED
     }
-    const i: i32 = this.slot(r)
-    this.starts[i] = GRPC_PREFIX
-    this.ends[i] = r.bodyLength
+    const c: GrpcCall | null = this.slot(r)
+    if (c === null) {
+      this.only(r, GRPC_INTERNAL)
+      return GRPC_ANSWERED
+    }
+    c.start = GRPC_PREFIX
+    c.end = r.bodyLength
     return GRPC_CALL
   }
 
@@ -291,7 +352,10 @@ export class GrpcServer {
     if (!this.admit(r)) {
       return GRPC_ANSWERED
     }
-    this.slot(r)
+    if (this.slot(r) === null) {
+      this.only(r, GRPC_INTERNAL)
+      return GRPC_ANSWERED
+    }
     return GRPC_CALL
   }
 
@@ -314,8 +378,8 @@ export class GrpcServer {
    * @returns `GRPC_MESSAGE` for a message, valid until the next call of `next`; `GRPC_MORE` to wait until `take` hands `r` over again; `GRPC_END` when the client's stream ended; `GRPC_ANSWERED` when `r` is the server's again
    */
   next(r: HttpServerRequest): i32 {
-    const i: i32 = this.held(r, "next")
-    if (this.states[i] === GRPC_OVER) {
+    const c: GrpcCall = this.held(r, "next")
+    if (c.state === GRPC_OVER) {
       return GRPC_ANSWERED
     }
     if (this.server.hungUp(r)) {
@@ -327,9 +391,15 @@ export class GrpcServer {
       return GRPC_ANSWERED
     }
     const body: u8[] = r.body
-    let at: i32 = this.readAt[i]
-    if (this.want[i] < 0) {
-      const left: i32 = r.bodyLength - at
+    const total: i32 = r.bodyLength
+    let at: i32 = c.readAt
+    if (at < 0 || total < 0 || total < at || total > toI32(body.length)) {
+      // A body length the request's own bytes do not hold: nothing here reads as a message.
+      this.close(r, GRPC_INTERNAL, "")
+      return GRPC_ANSWERED
+    }
+    if (c.want < 0) {
+      const left: i32 = total - at
       if (left < GRPC_PREFIX) {
         if (r.bodyEnded) {
           if (left === 0) {
@@ -340,34 +410,29 @@ export class GrpcServer {
         }
         // A prefix not yet whole waits where it is: fewer than 5 bytes never fill the window.
         this.server.consume(r, at)
-        this.readAt[i] = 0
+        c.readAt = 0
         return GRPC_MORE
       }
-      const flag: i32 = toI32(body[at])
-      if (flag === 1) {
+      const length: i64 = grpcPrefixLength(body, at)
+      if (length === GRPC_COMPRESSED) {
         this.close(r, GRPC_UNIMPLEMENTED, "")
         return GRPC_ANSWERED
       }
-      if (flag !== 0) {
+      if (length < 0) {
         this.close(r, GRPC_INTERNAL, "")
         return GRPC_ANSWERED
       }
-      const length: i64 =
-        (toI64(body[at + 1]) << 24) |
-        (toI64(body[at + 2]) << 16) |
-        (toI64(body[at + 3]) << 8) |
-        toI64(body[at + 4])
       if (length > toI64(this.maxMessage)) {
         this.close(r, GRPC_RESOURCE_EXHAUSTED, "")
         return GRPC_ANSWERED
       }
       const n: i32 = toI32(length)
-      at += GRPC_PREFIX
-      if (left - GRPC_PREFIX >= n) {
-        this.readAt[i] = at + n
-        this.inBuf[i] = false
-        this.starts[i] = at
-        this.ends[i] = at + n
+      at = grpcAdd(at, GRPC_PREFIX)
+      if (grpcSub(left, GRPC_PREFIX) >= n) {
+        c.readAt = grpcAdd(at, n)
+        c.inBuf = false
+        c.start = at
+        c.end = c.readAt
         return GRPC_MESSAGE
       }
       if (r.bodyEnded) {
@@ -375,26 +440,29 @@ export class GrpcServer {
         this.close(r, GRPC_INTERNAL, "")
         return GRPC_ANSWERED
       }
-      this.want[i] = n
-      this.have[i] = 0
+      c.want = n
+      c.have = 0
     }
-    const need: i32 = this.want[i] - this.have[i]
-    const avail: i32 = r.bodyLength - at
+    const need: i32 = grpcSub(c.want, c.have)
+    const avail: i32 = grpcSub(total, at)
     const piece: i32 = avail < need ? avail : need
-    this.grow(i, this.have[i] + piece)
-    copyBytes(this.bufs[i], this.have[i], body, at, piece)
-    this.have[i] += piece
-    at += piece
-    if (this.have[i] === this.want[i]) {
-      this.readAt[i] = at
-      this.inBuf[i] = true
-      this.starts[i] = 0
-      this.ends[i] = this.want[i]
-      this.want[i] = -1
+    if (!this.grow(c, grpcAdd(c.have, piece)) || !tryCopyBytes(c.buf, c.have, body, at, piece)) {
+      // A piece the call's buffer cannot take: its counts no longer describe the message.
+      this.close(r, GRPC_INTERNAL, "")
+      return GRPC_ANSWERED
+    }
+    c.have = grpcAdd(c.have, piece)
+    at = grpcAdd(at, piece)
+    if (c.have === c.want) {
+      c.readAt = at
+      c.inBuf = true
+      c.start = 0
+      c.end = c.want
+      c.want = -1
       return GRPC_MESSAGE
     }
     this.server.consume(r, at)
-    this.readAt[i] = 0
+    c.readAt = 0
     if (r.bodyEnded) {
       this.close(r, GRPC_INTERNAL, "")
       return GRPC_ANSWERED
@@ -409,8 +477,8 @@ export class GrpcServer {
    * @returns the array whose `[messageStart(r) .. messageEnd(r))` is the message
    */
   messageBytes(r: HttpServerRequest): u8[] {
-    const i: i32 = this.at(r)
-    return i >= 0 && this.inBuf[i] ? this.bufs[i] : r.body
+    const c: GrpcCall | null = this.at(r)
+    return c !== null && c.inBuf ? c.buf : r.body
   }
 
   /**
@@ -420,9 +488,9 @@ export class GrpcServer {
    * @returns the offset of the message's first byte
    */
   messageStart(r: HttpServerRequest): i32 {
-    const i: i32 = this.at(r)
-    if (i >= 0) {
-      return this.starts[i]
+    const c: GrpcCall | null = this.at(r)
+    if (c !== null) {
+      return c.start
     }
     return r.bodyLength < GRPC_PREFIX ? r.bodyLength : GRPC_PREFIX
   }
@@ -434,8 +502,8 @@ export class GrpcServer {
    * @returns the offset just past the message's last byte
    */
   messageEnd(r: HttpServerRequest): i32 {
-    const i: i32 = this.at(r)
-    return i >= 0 ? this.ends[i] : r.bodyLength
+    const c: GrpcCall | null = this.at(r)
+    return c !== null ? c.end : r.bodyLength
   }
 
   /**
@@ -459,11 +527,11 @@ export class GrpcServer {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the stream closed first and `r` is the server's again
    */
   begin(r: HttpServerRequest): i32 {
-    const i: i32 = this.held(r, "begin")
-    if (this.states[i] === GRPC_BEGUN) {
+    const c: GrpcCall = this.held(r, "begin")
+    if (c.state === GRPC_BEGUN) {
       return HANDLER_SENT
     }
-    if (this.states[i] === GRPC_OVER) {
+    if (c.state === GRPC_OVER) {
       return HANDLER_DROPPED
     }
     const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, HTTP1_CHUNKED)
@@ -471,7 +539,7 @@ export class GrpcServer {
       this.gone(r)
       return sent
     }
-    this.states[i] = GRPC_BEGUN
+    c.state = GRPC_BEGUN
     return HANDLER_SENT
   }
 
@@ -493,8 +561,8 @@ export class GrpcServer {
     if (off < 0 || len < 0 || len > 1073741819 || off > toI32(buf.length) - len) {
       panic(`GrpcServer.send: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
-    const i: i32 = this.held(r, "send")
-    if (this.states[i] === GRPC_OVER) {
+    const c: GrpcCall = this.held(r, "send")
+    if (c.state === GRPC_OVER) {
       return GRPC_ENDED
     }
     if (this.expired(r)) {
@@ -504,9 +572,8 @@ export class GrpcServer {
     if (this.begin(r) !== HANDLER_SENT) {
       return GRPC_ENDED
     }
-    this.setPrefix(len)
     if (
-      this.server.write(r, this.prefix, toI32(0), GRPC_PREFIX) !== HANDLER_SENT ||
+      this.server.write(r, grpcPrefix(len), toI32(0), GRPC_PREFIX) !== HANDLER_SENT ||
       this.server.write(r, buf, off, len) !== HANDLER_SENT
     ) {
       this.gone(r)
@@ -531,8 +598,8 @@ export class GrpcServer {
     if (status < GRPC_OK || status > GRPC_UNAUTHENTICATED) {
       panic(`GrpcServer.finish: status ${status} is outside 0 to 16`)
     }
-    const i: i32 = this.held(r, "finish")
-    if (this.states[i] === GRPC_OVER) {
+    const c: GrpcCall = this.held(r, "finish")
+    if (c.state === GRPC_OVER) {
       return HANDLER_DROPPED
     }
     if (this.expired(r)) {
@@ -557,11 +624,11 @@ export class GrpcServer {
     if (off < 0 || len < 0 || len > 1073741819 || off > toI32(buf.length) - len) {
       panic(`GrpcServer.reply: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
-    const i: i32 = this.at(r)
-    if (i >= 0 && this.states[i] === GRPC_BEGUN) {
+    const c: GrpcCall | null = this.at(r)
+    if (c !== null && c.state === GRPC_BEGUN) {
       panic("GrpcServer.reply: the call's answer has begun; end it with finish")
     }
-    if (i >= 0 && this.states[i] === GRPC_OVER) {
+    if (c !== null && c.state === GRPC_OVER) {
       return HANDLER_DROPPED
     }
     this.over(r)
@@ -573,9 +640,8 @@ export class GrpcServer {
       this.server.end(r)
       return sent
     }
-    this.setPrefix(len)
     if (
-      this.server.write(r, this.prefix, toI32(0), GRPC_PREFIX) !== HANDLER_SENT ||
+      this.server.write(r, grpcPrefix(len), toI32(0), GRPC_PREFIX) !== HANDLER_SENT ||
       this.server.write(r, buf, off, len) !== HANDLER_SENT
     ) {
       this.server.end(r)
@@ -600,8 +666,8 @@ export class GrpcServer {
     if (status < GRPC_CANCELLED || status > GRPC_UNAUTHENTICATED) {
       panic(`GrpcServer.fail: status ${status} is outside 1 to 16`)
     }
-    const i: i32 = this.at(r)
-    if (i >= 0 && this.states[i] === GRPC_OVER) {
+    const c: GrpcCall | null = this.at(r)
+    if (c !== null && c.state === GRPC_OVER) {
       return HANDLER_DROPPED
     }
     if (this.expired(r)) {
@@ -611,27 +677,31 @@ export class GrpcServer {
   }
 
   /**
-   * Grows index `i`'s message buffer to hold at least `size` bytes, keeping
-   * the `have[i]` already copied: doubled from 1 KiB, and never past the
+   * Grows the call's message buffer to hold at least `size` bytes, keeping
+   * the `have` already copied: doubled from 1 KiB, and never past the
    * message's declared length, so what the call holds tracks what the client
-   * sent rather than what its prefix declared.
+   * sent rather than what its prefix declared. False when the bytes already
+   * copied do not fit the grown buffer.
    */
-  private grow(i: i32, size: i32): void {
-    const held: i32 = toI32(this.bufs[i].length)
+  private grow(c: GrpcCall, size: i32): boolean {
+    const held: i32 = toI32(c.buf.length)
     if (held >= size) {
-      return
+      return true
     }
-    const want: i32 = this.want[i]
+    const want: i32 = c.want
     let grown: i32 = held < GRPC_GROW_FROM ? GRPC_GROW_FROM : held
     while (grown < size) {
-      grown = grown >= want - grown ? want : grown * 2
+      grown = grown >= grpcSub(want, grown) ? want : grpcAdd(grown, grown)
     }
     if (grown > want) {
       grown = want
     }
-    const bigger: u8[] = new Array<u8>(grown)
-    copyBytes(bigger, 0, this.bufs[i], 0, this.have[i])
-    this.bufs[i] = bigger
+    const bigger: u8[] = grpcBytes(grown)
+    if (!tryCopyBytes(bigger, 0, c.buf, 0, c.have)) {
+      return false
+    }
+    c.buf = bigger
+    return true
   }
 
   /** The version, `content-type`, `grpc-timeout` and deadline checks `call` and `open` share; false once it answered `r` itself. */
@@ -659,66 +729,70 @@ export class GrpcServer {
     return true
   }
 
-  /** Makes room for `r`'s index in the per-call state and opens a call there; the index. */
-  private slot(r: HttpServerRequest): i32 {
+  /**
+   * Makes room for `r`'s index in the per-call state and opens a call there;
+   * null for a request with no index (below zero), which holds no call.
+   */
+  private slot(r: HttpServerRequest): GrpcCall | null {
     const i: i32 = r.index
-    while (toI32(this.states.length) <= i) {
-      this.states.push(GRPC_IDLE)
-      this.readAt.push(toI32(0))
-      this.want.push(toI32(-1))
-      this.have.push(toI32(0))
-      this.bufs.push(new Array<u8>(0))
-      this.inBuf.push(false)
-      this.starts.push(toI32(0))
-      this.ends.push(toI32(0))
-      this.sinces.push(toI64(0))
-      this.streams.push(toI64(0))
+    const calls: GrpcCall[] = this.calls
+    while (i >= 0 && toI32(calls.length) <= i) {
+      calls.push(new GrpcCall())
     }
-    this.states[i] = GRPC_OPEN
-    this.readAt[i] = 0
-    this.want[i] = -1
-    this.have[i] = 0
-    this.inBuf[i] = false
-    this.starts[i] = 0
-    this.ends[i] = 0
-    this.sinces[i] = r.since
-    this.streams[i] = r.stream
-    return i
+    if (i < 0 || i >= toI32(calls.length)) {
+      return null
+    }
+    const c: GrpcCall = calls[i]
+    c.state = GRPC_OPEN
+    c.readAt = 0
+    c.want = -1
+    c.have = 0
+    c.inBuf = false
+    c.start = 0
+    c.end = 0
+    c.since = r.since
+    c.stream = r.stream
+    return c
   }
 
   /**
-   * `r`'s index when a call is open, begun or over there for this request, or -1.
+   * `r`'s call when one is open, begun or over there for this request, or null.
    * The façade reuses a request object and its index for a later request, so a
    * call left there by an earlier one, told apart by its head's turn and its
    * stream, is not `r`'s.
    */
-  private at(r: HttpServerRequest): i32 {
+  private at(r: HttpServerRequest): GrpcCall | null {
     const i: i32 = r.index
-    if (i < 0 || i >= toI32(this.states.length) || this.states[i] === GRPC_IDLE) {
-      return -1
+    const calls: GrpcCall[] = this.calls
+    if (i < 0 || i >= toI32(calls.length)) {
+      return null
     }
-    return this.sinces[i] === r.since && this.streams[i] === r.stream ? i : -1
+    const c: GrpcCall = calls[i]
+    if (c.state === GRPC_IDLE || c.since !== r.since || c.stream !== r.stream) {
+      return null
+    }
+    return c
   }
 
-  /** `r`'s index once `call` or `open` read it; panics, naming `who`, on a request neither did. */
-  private held(r: HttpServerRequest, who: string): i32 {
-    const i: i32 = this.at(r)
-    if (i < 0) {
+  /** `r`'s call once `call` or `open` read it; panics, naming `who`, on a request neither did. */
+  private held(r: HttpServerRequest, who: string): GrpcCall {
+    const c: GrpcCall | null = this.at(r)
+    if (c === null) {
       panic(`GrpcServer.${who}: the request is not a call that open or call read`)
     }
-    return i
+    return c
   }
 
   /** Marks `r`'s call over, if it has one, and lets go of a large message buffer. */
   private over(r: HttpServerRequest): void {
-    const i: i32 = this.at(r)
-    if (i < 0) {
+    const c: GrpcCall | null = this.at(r)
+    if (c === null) {
       return
     }
-    this.states[i] = GRPC_OVER
-    this.want[i] = -1
-    if (toI32(this.bufs[i].length) > GRPC_KEEP) {
-      this.bufs[i] = new Array<u8>(0)
+    c.state = GRPC_OVER
+    c.want = -1
+    if (toI32(c.buf.length) > GRPC_KEEP) {
+      c.buf = []
     }
   }
 
@@ -734,8 +808,8 @@ export class GrpcServer {
    * is empty, and otherwise a head and then trailers.
    */
   private close(r: HttpServerRequest, status: i32, message: string): i32 {
-    const i: i32 = this.at(r)
-    const begun: boolean = i >= 0 && this.states[i] === GRPC_BEGUN
+    const c: GrpcCall | null = this.at(r)
+    const begun: boolean = c !== null && c.state === GRPC_BEGUN
     this.over(r)
     if (!begun) {
       if (message.length === 0) {
@@ -747,21 +821,12 @@ export class GrpcServer {
         return sent
       }
     }
-    if (message.length === 0) {
-      return this.server.trailers(r, this.statusNames, this.statusValues[status])
-    }
     // Fresh arrays, never written again: the server reads them until the trailers are sent.
-    const values: u8[][] = [this.statusValue(status), grpcPercentEncode(message)]
+    if (message.length === 0) {
+      return this.server.trailers(r, this.statusNames, [grpcStatusValue(status)])
+    }
+    const values: u8[][] = [grpcStatusValue(status), grpcPercentEncode(message)]
     return this.server.trailers(r, [this.statusName, this.messageName], values)
-  }
-
-  /** Writes `len`'s uncompressed length prefix into `prefix`. */
-  private setPrefix(len: i32): void {
-    this.prefix[0] = toU8(0)
-    this.prefix[1] = toU8((len >> 24) & 255)
-    this.prefix[2] = toU8((len >> 16) & 255)
-    this.prefix[3] = toU8((len >> 8) & 255)
-    this.prefix[4] = toU8(len & 255)
   }
 
   /**
@@ -771,14 +836,10 @@ export class GrpcServer {
    * the request the program's until `end`.
    */
   private only(r: HttpServerRequest, status: i32): i32 {
-    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.onlyNames, this.onlyValues[status], toI32(0))
+    const values: u8[][] = [this.grpcTypeBytes, grpcStatusValue(status)]
+    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.onlyNames, values, toI32(0))
     const ended: i32 = this.server.end(r)
     return sent === HANDLER_SENT ? ended : sent
-  }
-
-  /** The decimal bytes of `status`, from the Trailers-Only table. */
-  private statusValue(status: i32): u8[] {
-    return this.onlyValues[status][1]
   }
 
   /**
@@ -791,22 +852,30 @@ export class GrpcServer {
     if (i === HANDLER_ABSENT) {
       return this.maxTimeout
     }
+    const head: u8[] = r.head
     const start: i32 = r.valueStart(i)
     const end: i32 = r.valueEnd(i)
-    const digits: i32 = end - start - 1
-    if (digits < 1 || digits > GRPC_TIMEOUT_DIGITS || start < 0 || end > toI32(r.head.length)) {
+    if (start < 0 || end < 1 || end < start || end > toI32(head.length)) {
       return -1
     }
-    let value: i64 = 0
-    for (let k: i32 = start; k < end - 1; k++) {
-      const c: i32 = toI32(r.head[k])
+    const last: i32 = end - 1
+    const digits: i32 = last - start
+    if (digits < 1 || digits > GRPC_TIMEOUT_DIGITS) {
+      return -1
+    }
+    let value: i32 = 0
+    for (let k: i32 = start; k >= 0 && k < last; k++) {
+      const c: i32 = toI32(head[k])
       if (c < 48 || c > 57) {
         return -1
       }
-      value = value * 10 + toI64(c - 48)
+      // At most 8 digits: `value` stays below 10^8, so the step never wraps.
+      if (value >= 0 && value <= 99999999) {
+        value = value * 10 + (c - 48)
+      }
     }
-    const unit: i32 = toI32(r.head[end - 1])
-    let scale: i64 = 0
+    const unit: i32 = toI32(head[last])
+    let scale: f64 = 0
     if (unit === 72) {
       scale = 3600000000000 // H
     } else if (unit === 77) {
@@ -822,12 +891,11 @@ export class GrpcServer {
     } else {
       return -1
     }
-    // Compare before multiplying: 99999999 hours is past what an i64 holds in nanoseconds.
-    if (value > this.maxTimeout / scale) {
-      return this.maxTimeout
-    }
-    const nanos: i64 = value * scale
-    return nanos < this.maxTimeout ? nanos : this.maxTimeout
+    // Worked in f64: 99999999 hours is past what an i64 holds in nanoseconds.
+    // Below `maxTimeout` (under 2^53) the product of two whole numbers is exact.
+    const nanos: f64 = toF64(value) * scale
+    const max: i64 = this.maxTimeout
+    return nanos < toF64(max) ? toI64(nanos) : max
   }
 
   /** `GRPC_OK` when `r.body` is exactly one uncompressed length-prefixed message within `maxMessage`; otherwise the status to answer. */
@@ -837,35 +905,41 @@ export class GrpcServer {
     if (n < GRPC_PREFIX || n > toI32(body.length)) {
       return GRPC_INTERNAL
     }
-    const flag: i32 = toI32(body[0])
-    if (flag === 1) {
+    const length: i64 = grpcPrefixLength(body, 0)
+    if (length === GRPC_COMPRESSED) {
       return GRPC_UNIMPLEMENTED
     }
-    if (flag !== 0) {
+    if (length < 0) {
       return GRPC_INTERNAL
     }
-    const length: i64 =
-      (toI64(body[1]) << 24) | (toI64(body[2]) << 16) | (toI64(body[3]) << 8) | toI64(body[4])
     if (length > toI64(this.maxMessage)) {
       return GRPC_RESOURCE_EXHAUSTED
     }
-    if (length !== toI64(n - GRPC_PREFIX)) {
+    if (length !== toI64(grpcSub(n, GRPC_PREFIX))) {
       return GRPC_INTERNAL
     }
     return GRPC_OK
   }
 }
 
+/** The decimal bytes of `status`, as `grpc-status` carries it. */
+const grpcStatusValue = (status: i32): u8[] => httpFieldBytes(`${status}`)
+
+/** The uppercase hex digit of `v`, 0 to 15. */
+const grpcHex = (v: i32): u8 => {
+  const d: i32 = v & 15
+  return toU8(d < 10 ? 48 + d : 55 + d)
+}
+
 /** `message` as UTF-8, with every byte outside `0x20 .. 0x7e`, and `%`, written `%XX` (uppercase hex), as `grpc-message` carries it. */
 const grpcPercentEncode = (message: string): u8[] => {
   const out: u8[] = []
-  const hex: string = "0123456789ABCDEF"
   for (let k: i32 = 0; k < toI32(message.length); k++) {
     const b: i32 = toI32(message.charCodeAt(k)) & toI32(255)
     if (b < 32 || b > 126 || b === 37) {
       out.push(toU8(37))
-      out.push(toU8(hex.charCodeAt(b >> 4)))
-      out.push(toU8(hex.charCodeAt(b & 15)))
+      out.push(grpcHex(b >> 4))
+      out.push(grpcHex(b & 15))
     } else {
       out.push(toU8(b))
     }
