@@ -13861,9 +13861,10 @@ if (dealtHere("cryptoChecks")) {
   // `--number-mode f64`, so both would hash a prefix and a signature would verify
   // for a longer message that shares it. A 2 GiB test is impractical, so this
   // reads the f64 IR instead: each function must compare the length against
-  // 2^31 - 1 and panic. Deleting either guard fails it.
+  // 2^31 - 1 and refuse, `ed25519Sign` with `null` and `ed25519Verify` with
+  // `false`. Deleting either guard fails it.
   {
-    const name = "crypto: ed25519Sign and ed25519Verify panic on a message longer than 2^31 - 1 bytes (--number-mode f64)"
+    const name = "crypto: ed25519Sign answers null and ed25519Verify false on a message longer than 2^31 - 1 bytes (--number-mode f64)"
     if (!only || [name, "crypto_ed25519"].some((selector) => selector.includes(only))) {
       const dir = path.join(buildDir, "ed25519-length-guard")
       fs.rmSync(dir, { recursive: true, force: true })
@@ -13873,10 +13874,12 @@ if (dealtHere("cryptoChecks")) {
         { cwd: root, encoding: "utf8" }
       )
       const ir = c.status === 0 ? fs.readFileSync(path.join(dir, "ed25519.ll"), "utf8") : ""
-      const missing = ["ed25519Sign", "ed25519Verify"].filter((fn) => {
+      const refusals = { ed25519Sign: "%struct\\.nish_array\\* null", ed25519Verify: "i1 false" }
+      const missing = Object.entries(refusals).filter(([fn, ret]) => {
         const body = (ir.match(new RegExp(`^define [^\\n]*@"?nish\\.${fn}"?\\([\\s\\S]*?\\n\\}`, "m")) ?? [""])[0]
-        return !/fcmp ogt double %\d+, 0x41DFFFFFFFC00000\n\s+br i1 %\d+, label %if\.then[\s\S]*?call void @nish_panic/.test(body)
-      })
+        const guard = new RegExp(`fcmp ogt double %\\d+, 0x41DFFFFFFFC00000\\n\\s+br i1 %\\d+, label %(if\\.then[\\w.]*), label[^\\n]*\\n\\n\\1:\\n\\s+ret ${ret}\\n`)
+        return !guard.test(body)
+      }).map(([fn]) => fn)
       check(name, c.status === 0 && missing.length === 0, c.status === 0 ? `no guard in: ${missing.join(", ")}` : c.stderr)
     }
   }
