@@ -83,7 +83,12 @@ export class ZlibCompressor {
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     zlibWindow("ZlibCompressor.compress", src, off, len)
     zlibWindow("ZlibCompressor.compress", out, at, 0)
-    if (toI32(out.length) - at < 6) {
+    // The header's two bytes, and room for at least the trailer's four
+    // after them. Positions are added in i64: the window was checked in
+    // `zlibWindow`, but the prover does not carry that across the call.
+    const n: i32 = toI32(out.length)
+    const second: i32 = toI32(toI64(at) + 1)
+    if (at < 0 || at >= n || second < 0 || second >= n || toI64(n) - toI64(at) < 6) {
       return DEFLATE_NO_ROOM
     }
     const level: i32 = this.deflater.level
@@ -97,20 +102,38 @@ export class ZlibCompressor {
       flevel = 2
     }
     const cmf: i32 = 0x78
-    let flg: i32 = flevel << 6
-    flg += (toI32(31) - ((cmf * 256 + flg) % 31)) % 31
+    // FLEVEL is two bits, so the mask changes nothing and bounds `flg`;
+    // FCHECK makes `cmf * 256 + flg` (0x7800 + flg) a multiple of 31.
+    let flg: i32 = (flevel & 3) * 64
+    flg += (toI32(31) - ((0x7800 + flg) % 31)) % 31
     out[at] = toU8(cmf)
-    out[at + 1] = toU8(flg)
-    const end: i32 = this.deflater.compress(src, off, len, out, at + 2)
-    if (end < 0 || toI32(out.length) - end < 4) {
+    out[second] = toU8(flg)
+    const end: i32 = this.deflater.compress(src, off, len, out, toI32(toI64(at) + 2))
+    // Checksummed before `out`'s length is read again for the trailer: the
+    // prover forgets an array's length across a call, as it did across
+    // `this.deflater.compress`.
+    const a: u32 = adler32(src, off, len)
+    const e1: i32 = toI32(toI64(end) + 1)
+    const e2: i32 = toI32(toI64(end) + 2)
+    const e3: i32 = toI32(toI64(end) + 3)
+    const m: i32 = toI32(out.length)
+    if (
+      end < 0 ||
+      end >= m ||
+      e1 < 0 ||
+      e1 >= m ||
+      e2 < 0 ||
+      e2 >= m ||
+      e3 < 0 ||
+      e3 >= m
+    ) {
       return DEFLATE_NO_ROOM
     }
-    const a: u32 = adler32(src, off, len)
     out[end] = toU8(a >>> 24)
-    out[end + 1] = toU8((a >>> 16) & 255)
-    out[end + 2] = toU8((a >>> 8) & 255)
-    out[end + 3] = toU8(a & 255)
-    return end + 4
+    out[e1] = toU8((a >>> 16) & 255)
+    out[e2] = toU8((a >>> 8) & 255)
+    out[e3] = toU8(a & 255)
+    return toI32(toI64(end) + 4)
   }
 }
 
@@ -152,23 +175,30 @@ export class ZlibDecompressor {
     if (limit < 0) {
       panic("ZlibDecompressor.decompress: a negative limit")
     }
-    if (len < 2) {
+    // The window was checked in `zlibWindow`; the prover does not carry
+    // that across the call, so the header's bytes are checked again here
+    // and positions are added in i64.
+    const n: i32 = toI32(src.length)
+    const second: i32 = toI32(toI64(off) + 1)
+    if (len < 2 || off < 0 || off >= n || second < 0 || second >= n) {
       return DEFLATE_ERR_TRUNCATED
     }
     const cmf: i32 = toI32(src[off])
-    const flg: i32 = toI32(src[off + 1])
+    const flg: i32 = toI32(src[second])
     if ((cmf & 15) !== 8 || cmf >> 4 > 7 || (cmf * 256 + flg) % 31 !== 0) {
       return ZLIB_ERR_HEADER
     }
     if ((flg & 0x20) !== 0) {
       return ZLIB_ERR_DICTIONARY
     }
-    const room: i32 = toI32(out.length) - at
-    const outEnd: i32 = at + (limit < room ? limit : room)
+    let outEnd: i32 = toI32(out.length)
+    if (toI64(limit) < toI64(outEnd) - toI64(at)) {
+      outEnd = toI32(toI64(at) + toI64(limit))
+    }
     const inf: Inflater = this.inflater
     inf.reset()
-    const end: i32 = off + len
-    const r: i32 = inf.inflate(src, off + 2, end, false, out, at, outEnd, at)
+    const end: i32 = toI32(toI64(off) + toI64(len))
+    const r: i32 = inf.inflate(src, toI32(toI64(off) + 2), end, false, out, at, outEnd, at)
     if (r === INFLATE_NEED_OUTPUT) {
       return DEFLATE_ERR_OUTPUT_LIMIT
     }
@@ -176,15 +206,27 @@ export class ZlibDecompressor {
       return r
     }
     const q: i32 = inf.inPos
-    if (end - q < 4) {
+    const q1: i32 = toI32(toI64(q) + 1)
+    const q2: i32 = toI32(toI64(q) + 2)
+    const q3: i32 = toI32(toI64(q) + 3)
+    if (
+      toI64(end) - toI64(q) < 4 ||
+      q < 0 ||
+      q >= n ||
+      q1 < 0 ||
+      q1 >= n ||
+      q2 < 0 ||
+      q2 >= n ||
+      q3 < 0 ||
+      q3 >= n
+    ) {
       return DEFLATE_ERR_TRUNCATED
     }
-    const want: u32 =
-      (toU32(src[q]) << 24) | (toU32(src[q + 1]) << 16) | (toU32(src[q + 2]) << 8) | toU32(src[q + 3])
-    if (adler32(out, at, inf.outPos - at) !== want) {
+    const want: u32 = (toU32(src[q]) << 24) | (toU32(src[q1]) << 16) | (toU32(src[q2]) << 8) | toU32(src[q3])
+    if (adler32(out, at, toI32(toI64(inf.outPos) - toI64(at))) !== want) {
       return ZLIB_ERR_ADLER
     }
-    if (q + 4 !== end) {
+    if (toI64(q) + 4 !== toI64(end)) {
       return DEFLATE_ERR_TRAILING
     }
     return inf.outPos
