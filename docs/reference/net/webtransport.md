@@ -295,7 +295,7 @@ class WebTransport
 | `bidirectional: boolean` | WT_STREAM's kind, and whether WT_CLOSED came from the client. |
 | `closedByPeer: boolean` | Whether the last WT_CLOSED came from the client: its CLOSE capsule, its FIN, or a reset the client sent; false when this side ended the session, including when it reset the stream for a malformed capsule or a FIN inside one. |
 | `config: WebTransportConfig` | The caps this layer was made with; the arrays they size are made by the constructor. |
-| `data: u8[]` | The buffer the window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED lies in: this layer's own datagram buffer, the `Http3Connection`'s `data`, or this layer's store of CLOSE reasons. Valid until the next call. |
+| `data: u8[]` | The buffer the window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED lies in: this layer's own datagram buffer, the `Http3Connection`'s `data`, or the session's own store of its CLOSE reason. Valid until the next call. |
 | `datagramsDropped: i32` | Counters for a log or a test, each saturating: datagrams dropped, sessions refused here, streams refused. |
 | `datagramsIn: i32[]` | Counters for a log or a rate cap, each saturating: datagrams in and out. |
 | `datagramsOut: i32[]` | How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. |
