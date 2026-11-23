@@ -1019,7 +1019,7 @@ export class Deflater {
    * Compresses `src[start .. end)` as blocks into `out[op .. oe)`, matching
    * back as far as `histStart`; `final` marks the last block BFINAL. Answers
    * the new output position, with up to 31 bits still in the bit buffer, or
-   * -1 when a block does not fit.
+   * -1 when a range lies outside its array or a block does not fit.
    */
   compressRange(
     src: u8[],
@@ -1032,10 +1032,10 @@ export class Deflater {
     oe: i32
   ): i32 {
     if (start < 0 || histStart < 0 || histStart > start || start > end || end > toI32(src.length)) {
-      panic("Deflater.compressRange: a range outside its input")
+      return -1
     }
     if (op < 0 || oe > toI32(out.length) || op > oe) {
-      panic("Deflater.compressRange: a range outside its output")
+      return -1
     }
     let p: i32 = start
     let o: i32 = op
