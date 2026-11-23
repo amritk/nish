@@ -198,7 +198,14 @@ const websocketBytes = (n: i32): u8[] => {
   if (n < 0) {
     return []
   }
-  return new Array<u8>(toU32(n))
+  if (n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
 }
 
 /**

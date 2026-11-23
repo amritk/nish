@@ -339,7 +339,14 @@ const wtBytes = (n: i32): u8[] => {
   if (n < 0) {
     return []
   }
-  return new Array<u8>(toU32(n))
+  if (n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
 }
 
 /** A zeroed array of `n` `i32`s, made as `wtBytes` makes one. */
@@ -347,7 +354,14 @@ const wtI32s = (n: i32): i32[] => {
   if (n < 0) {
     return []
   }
-  return new Array<i32>(toU32(n))
+  if (n <= 65535) {
+    return new Array<i32>(toU16(n))
+  }
+  const out: i32[] = new Array<i32>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
 }
 
 /** A zeroed array of `n` `i64`s, made as `wtBytes` makes one. */
@@ -355,7 +369,14 @@ const wtI64s = (n: i32): i64[] => {
   if (n < 0) {
     return []
   }
-  return new Array<i64>(toU32(n))
+  if (n <= 65535) {
+    return new Array<i64>(toU16(n))
+  }
+  const out: i64[] = new Array<i64>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
 }
 
 /** The bucket count for `n` waiting streams: the least power of two at least `2 * n`, and at least 2. */
