@@ -180,8 +180,8 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
   // says so to the prover, which does not carry that check across the call.
   const end: i32 = toI32(toI64(off) + toI64(len))
   // The shortest input braided is two blocks (80 bytes), one braided and
-  // the last joined; it and `CRC32_BLOCK` are written as literals, since
-  // the prover bounds `blocks` from this guard only when both are.
+  // the last joined; the guard and the divisor of `blocks` are literals, not
+  // `CRC32_BLOCK`, since the prover bounds `blocks` only when both are.
   if (len >= 80) {
     // Braided (Kadatch and Jenkins, "Everything we know about CRC but
     // afraid to forget", 2010): five chains, each over every fifth 8-byte
