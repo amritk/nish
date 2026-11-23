@@ -50,6 +50,10 @@
     "std-net-dns-message": { "n": 5000, "instructions": 96298847 },
     "std-net-http2-frame": { "n": 1000, "instructions": 181527148 },
     "pg-codec": { "n": 2000, "instructions": 186746194 },
-    "pg-carrier": { "n": 1500, "instructions": 85797412 }
+    "pg-carrier": { "n": 1500, "instructions": 85797412 },
+    "std-compress-deflate": { "n": 2, "instructions": 100000000 },
+    "std-compress-inflate": { "n": 40, "instructions": 100000000 },
+    "std-compress-checksum": { "n": 60, "instructions": 100000000 },
+    "std-compress-gzip": { "n": 3, "instructions": 100000000 }
   }
 }

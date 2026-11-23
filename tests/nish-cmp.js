@@ -1610,6 +1610,8 @@ const s5PanicFreeDeclared = () => [
 const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
 /** The changelog words of WP82 S8: WebTransport, WebSocket, gRPC and OIDC answer malformed input without a panic. */
 const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC panic-free"
+/** The changelog words of WP84 S1: std/compress's checksums, zlib and gzip answer an error where they panicked. */
+const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -22072,6 +22074,14 @@ const DECLARED = [
     changelog: QUIC_ENGINE_PANIC_FREE,
     why: "the test lays out `QuicSentPackets`, whose capacity field is now a u8, and declares recovery methods whose attribute groups renumber (WP82 S5)",
   })),
+  ...byFinding(COMPRESS_PANIC_FREE)(
+    "the nish/compress instruction-count program is new to the corpus (WP84 S1); the seed's std/bytes.ts, std/compress/gzip.ts and std/compress/zlib.ts are older than main's, and the program's own module inlines what they declare, so those files differ",
+    {
+      "bench/std-compress-deflate.ts": ["bytes.ll"],
+      "bench/std-compress-inflate.ts": ["bytes.ll", "std-compress-inflate.ll"],
+      "bench/std-compress-gzip.ts": ["bytes.ll", "gzip.ll", "std-compress-gzip.ll", "zlib.ll"],
+    }
+  ),
 ]
 
 /**
