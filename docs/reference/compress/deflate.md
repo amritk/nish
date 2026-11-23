@@ -424,7 +424,7 @@ class InflateTable
 
 | Member | |
 | --- | --- |
-| `new InflateTable(bits: i32, symbols: u16, capacity: u16)` | A table indexing `bits` bits, for an alphabet of up to `symbols` symbols, with room for `capacity` entries: the main table and its subtables. The arrays are allocated here and filled by `Inflater`. |
+| `new InflateTable(bits: i32, symbols: i32, capacity: i32)` | A table indexing `bits` bits, for an alphabet of up to `symbols` symbols, with room for `capacity` entries: the main table and its subtables. The arrays are allocated here and filled by `Inflater`. |
 
 ### Inflater
 

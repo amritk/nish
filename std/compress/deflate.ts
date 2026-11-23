@@ -291,20 +291,27 @@ const deflateCtz64 = (x: u64): i32 => {
  * caller has checked.
  */
 const deflateMatchLength = (src: u8[], a: i32, b: i32, max: i32): i32 => {
-  // The conjuncts past `k`'s are the caller's checks restated as bounds the
-  // prover reads, so that each sum is in range; none is false for a caller.
+  // `k`'s caps are no-ops for a caller, whose `max` is at most 258; they let
+  // the prover bound the answer. Each sum adds two non-negative i32s, so it
+  // cannot wrap a u32, and a sum past what `src` can hold ends the match
+  // where the caller's checks would have stopped it.
   let k: i32 = 0
-  while (k >= 0 && k <= 250 && k + 8 <= max && a >= 0 && a <= 2147483381 && b >= 0 && b <= 2147483381) {
-    const pa: i32 = a + k
-    const pb: i32 = b + k
+  while (k >= 0 && k <= 250 && k + 8 <= max && a >= 0 && b >= 0) {
+    const pa: i32 = toI32(toU32(a) + toU32(k))
+    const pb: i32 = toI32(toU32(b) + toU32(k))
+    if (pa < 0 || pa > 2147483639 || pb < 0 || pb > 2147483639) {
+      return k
+    }
     const x: u64 = deflateLoad64(src, pa) ^ deflateLoad64(src, pb)
     if (x !== toU64(0)) {
       return k + (deflateCtz64(x) >> 3)
     }
     k += 8
   }
-  while (k >= 0 && k < 258 && k < max && a >= 0 && a <= 2147483381 && b >= 0 && b <= 2147483381) {
-    if (uncheckedGet(src, a + k) !== uncheckedGet(src, b + k)) {
+  while (k >= 0 && k < 258 && k < max && a >= 0 && b >= 0) {
+    const pa: i32 = toI32(toU32(a) + toU32(k))
+    const pb: i32 = toI32(toU32(b) + toU32(k))
+    if (pa < 0 || pb < 0 || uncheckedGet(src, pa) !== uncheckedGet(src, pb)) {
       return k
     }
     k += 1
@@ -2312,15 +2319,19 @@ export class InflateTable {
    * @param bits How many bits of the next code the main table indexes at
    *   once; a longer code goes through a subtable.
    * @param symbols The size of the alphabet the table decodes, such as 288
-   *   for literal/length codes or 32 for distances.
+   *   for literal/length codes or 32 for distances. Only its low 16 bits are
+   *   read.
    * @param capacity How many entries to allocate for the main table and
-   *   all its subtables; `Inflater` passes zlib's `enough` figures.
+   *   all its subtables; `Inflater` passes zlib's `enough` figures. Only its
+   *   low 16 bits are read.
    */
-  constructor(bits: i32, symbols: u16, capacity: u16) {
+  constructor(bits: i32, symbols: i32, capacity: i32) {
     this.bits = bits
-    this.entries = new Array<i32>(capacity)
+    // Every figure `Inflater` passes is under 65536, so `toU16` keeps every
+    // bit; a u16 length can never be negative, so it needs no check.
+    this.entries = new Array<i32>(toU16(capacity))
     this.count = new Array<i32>(16)
-    this.symbols = new Array<i32>(symbols)
+    this.symbols = new Array<i32>(toU16(symbols))
   }
 }
 
@@ -2401,11 +2412,11 @@ export class Inflater {
 
   /** Builds the tables, the fixed code's among them. */
   constructor() {
-    this.lit = new InflateTable(INF_LIT_BITS, 288, toU16(INF_LIT_ENOUGH))
-    this.dist = new InflateTable(INF_DIST_BITS, 32, toU16(INF_DIST_ENOUGH))
-    this.codeLengths = new InflateTable(INF_CL_BITS, 19, toU16(1 << INF_CL_BITS))
-    this.fixedLit = new InflateTable(INF_LIT_BITS, 288, toU16(INF_LIT_ENOUGH))
-    this.fixedDist = new InflateTable(INF_DIST_BITS, 32, toU16(INF_DIST_ENOUGH))
+    this.lit = new InflateTable(INF_LIT_BITS, 288, INF_LIT_ENOUGH)
+    this.dist = new InflateTable(INF_DIST_BITS, 32, INF_DIST_ENOUGH)
+    this.codeLengths = new InflateTable(INF_CL_BITS, 19, 1 << INF_CL_BITS)
+    this.fixedLit = new InflateTable(INF_LIT_BITS, 288, INF_LIT_ENOUGH)
+    this.fixedDist = new InflateTable(INF_DIST_BITS, 32, INF_DIST_ENOUGH)
     this.lens = new Array<i32>(320)
     this.clLens = new Array<i32>(19)
     this.offsets = new Array<i32>(16)
