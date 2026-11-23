@@ -11153,7 +11153,7 @@ const DECLARED = [
   },
   ...stdCipherPanicFree(
     "aes.ll",
-    "std/crypto/aes.ts proves the indices of its key schedule, block walk and GHASH lengths, and refuses a short key, nonce or buffer with an error, so the AES-GCM code changes",
+    "std/crypto/aes.ts proves the indices of its key schedule, block walk and GHASH lengths, and still answers null or false for a key, nonce or buffer of the wrong size, so the AES-GCM code changes",
     [
       "bench/aes-gcm.ts",
       "bench/http-app-carrier.ts",
@@ -11456,7 +11456,7 @@ const DECLARED = [
   ),
   ...stdCipherPanicFree(
     "chacha20poly1305.ll",
-    "std/crypto/chacha20poly1305.ts proves the indices of its block, Poly1305 and tag walks, and refuses a short key, nonce or buffer with an error, so the ChaCha20-Poly1305 code changes",
+    "std/crypto/chacha20poly1305.ts proves the indices of its block, Poly1305 and tag walks, and still answers null or false for a key, nonce or buffer of the wrong size, so the ChaCha20-Poly1305 code changes",
     [
       "bench/aes-gcm.ts",
       "bench/chacha20.ts",
