@@ -133,6 +133,8 @@ const FIXED_WINDOW: i32 = 16384
 
 /** `FixedDeflater`'s largest hash table, 2^14 entries; a call clears only as much as its input needs. */
 const FIXED_HASH_BITS: i32 = 14
+/** `FixedDeflater`'s hash table size, `1 << FIXED_HASH_BITS`. */
+const FIXED_HASH_SIZE: i32 = 16384
 
 /** Decoder table entry kinds, in bits 8 to 10 of an entry. */
 const INF_LITERAL: i32 = 0
@@ -172,16 +174,20 @@ const INF_S_DONE: i32 = 3
 /**
  * The most bytes `Deflater.compress` writes for `n` bytes of input, at any
  * level: the input stored, five bytes of framing for every 65,535 and for
- * every block, and slack for the last partial byte. `n` is at most
- * 2^31 - 1 less the framing; a negative `n` answers 0.
+ * every block, and slack for the last partial byte. A negative `n`
+ * answers 0, and an `n` past 2,146,000,000 answers -1: its bound, with
+ * gzip's framing, would pass 2^31 - 1.
  *
  * @param n The length of the input, in bytes.
  * @returns A size in bytes, not a position: an `out` with this many bytes
- *   from `at` always holds the stream.
+ *   from `at` always holds the stream; or -1 for an `n` past 2,146,000,000.
  */
 export const deflateBound = (n: i32): i32 => {
   if (n < 0) {
     return 0
+  }
+  if (n > 2146000000) {
+    return -1
   }
   return n + ((n >> 16) + (n >> 14) + 2) * 5 + 8
 }
@@ -193,9 +199,16 @@ export const deflateBound = (n: i32): i32 => {
  *
  * @param n The length of the input, in bytes.
  * @returns A size in bytes, not a position: an `out` with this many bytes
- *   from `at` always holds the raw, zlib or gzip stream.
+ *   from `at` always holds the raw, zlib or gzip stream; or -1 for an `n`
+ *   past 2,146,000,000, as `deflateBound` answers.
  */
-export const compressBound = (n: i32): i32 => deflateBound(n) + 18
+export const compressBound = (n: i32): i32 => {
+  const b: i32 = deflateBound(n)
+  if (b < 0 || b > 2147483629) {
+    return -1
+  }
+  return b + 18
+}
 
 /**
  * Copies `b[from .. from + 16)` to `b[to .. to + 16)` eight bytes at a time,
@@ -203,14 +216,17 @@ export const compressBound = (n: i32): i32 => deflateBound(n) + 18
  * meaning when `to - from` is at least 8. The caller has checked the range.
  */
 const inflateCopy16 = (b: u8[], to: integer<0, 2147483631>, from: integer<0, 2147483631>): void => {
+  const to8: i32 = to + 8
+  const from8: i32 = from + 8
   deflateStore64(b, to, deflateLoad64(b, from))
-  deflateStore64(b, to + 8, deflateLoad64(b, from + 8))
+  deflateStore64(b, to8, deflateLoad64(b, from8))
 }
 
 /** Stores `w` twice into `b[to .. to + 16)`; the caller has checked the range. */
 const inflateFill16 = (b: u8[], to: integer<0, 2147483631>, w: u64): void => {
+  const to8: i32 = to + 8
   deflateStore64(b, to, w)
-  deflateStore64(b, to + 8, w)
+  deflateStore64(b, to8, w)
 }
 
 /** Panics unless `buf[off .. off + len)` lies inside `buf`. */
@@ -307,27 +323,38 @@ const deflateReverse = (code: i32, len: i32): i32 => {
   return r
 }
 
-/** The base length of each length symbol 257 + s (§3.2.5). */
+/**
+ * The base length of each length symbol 257 + s (§3.2.5); every `s` past 27
+ * answers symbol 28's, 258.
+ */
 const deflateLengthBase = (s: i32): i32 => {
   if (s < 8) {
     return 3 + s
   }
-  if (s === 28) {
+  if (s >= 28) {
     return 258
   }
-  return ((toI32(4) + (s & 3)) << ((s >> 2) - 1)) + 3
+  // At most 7 << 5, so the mask keeps every bit; it bounds the sum.
+  return (((toI32(4) + (s & 3)) << ((s >> 2) - 1)) & 255) + 3
 }
 
 /** The extra bits of each length symbol 257 + s (§3.2.5). */
 const deflateLengthExtra = (s: i32): i32 => (s < 8 || s === 28 ? 0 : (s >> 2) - 1)
 
-/** The base distance of each distance symbol (§3.2.5). */
+/**
+ * The base distance of each distance symbol (§3.2.5); every `d` past 29
+ * answers symbol 29's, 24577.
+ */
 const deflateDistBase = (d: i32): i32 => {
   if (d < 4) {
     return 1 + d
   }
+  if (d >= 29) {
+    return 24577
+  }
   const extra: i32 = (d >> 1) - 1
-  return ((toI32(2) + (d & 1)) << extra) + 1
+  // At most 3 << 13, so the mask keeps every bit; it bounds the sum.
+  return (((toI32(2) + (d & 1)) << extra) & 32767) + 1
 }
 
 /** The extra bits of each distance symbol (§3.2.5). */
@@ -847,11 +874,12 @@ export class Deflater {
       this.lengthExtra[s] = deflateLengthExtra(s)
     }
     for (let s: i32 = 0; s < 29; s += 1) {
-      const lo: i32 = this.lengthBase[s] - 3
+      const lo: i32 = deflateLengthBase(s) - 3
       // Symbol 27 stops short of 258, which has symbol 28 to itself.
       let hi: i32 = 256
       if (s < 27) {
-        hi = this.lengthBase[s + 1] - 3
+        const next: i32 = s + 1
+        hi = deflateLengthBase(next) - 3
       } else if (s === 27) {
         hi = 255
       }
@@ -865,9 +893,13 @@ export class Deflater {
     }
     // Distances 1 to 256 directly; above, by (distance - 1) >> 7 from 256 on.
     for (let d: i32 = 0; d < 30; d += 1) {
-      const lo: i32 = this.distBase[d]
-      const hi: i32 = d === 29 ? 32769 : this.distBase[d + 1]
-      for (let dist: i32 = lo; dist < hi; dist += 1) {
+      const lo: i32 = deflateDistBase(d)
+      let hi: i32 = 32769
+      if (d < 29) {
+        const next: i32 = d + 1
+        hi = deflateDistBase(next)
+      }
+      for (let dist: i32 = lo; dist < hi && dist >= 1 && dist <= 32768; dist += 1) {
         if (dist <= 256) {
           this.distSymbol[dist - 1] = d
         } else {
@@ -1761,15 +1793,19 @@ export class Deflater {
  * The most bytes `FixedDeflater.compress` writes for `n` bytes of input: nine
  * bits a byte, the block's header and end code, and the eight bytes of slack
  * its word-wide bit writer stores past the last whole byte. A negative `n`
- * answers the bound of 0.
+ * answers the bound of 0, and an `n` past 1,908,000,000 answers -1: its
+ * bound would pass 2^31 - 1.
  *
  * @param n The length of the input, in bytes.
  * @returns A size in bytes, not a position: a `room` of this many always
- *   holds the block.
+ *   holds the block; or -1 for an `n` past 1,908,000,000.
  */
 export const fixedDeflateBound = (n: i32): i32 => {
   if (n < 0) {
     return 16
+  }
+  if (n > 1908000000) {
+    return -1
   }
   return n + (n >> 3) + 16
 }
@@ -1798,7 +1834,7 @@ export class FixedDeflater {
 
   /** The tables, once. */
   constructor() {
-    this.head = new Array<i32>(1 << FIXED_HASH_BITS)
+    this.head = new Array<i32>(FIXED_HASH_SIZE)
     this.literal = new Array<i32>(256)
     this.length = new Array<i32>(256)
     this.distSymbol = new Array<i32>(512)
@@ -1816,9 +1852,27 @@ export class FixedDeflater {
       const base: i32 = deflateLengthBase(s)
       const extra: i32 = deflateLengthExtra(s)
       // Symbol 27 stops short of 258, which has symbol 28 to itself.
-      const top: i32 = s === 28 ? 259 : deflateLengthBase(s + 1)
-      for (let l: i32 = base; l < top && l >= 3 && l <= 258; l += 1) {
-        const n: i32 = lens[257 + s]
+      let top: i32 = 259
+      if (s < 28) {
+        const next: i32 = s + 1
+        top = deflateLengthBase(next)
+      }
+      const n: i32 = deflateFixedLitLength(257 + s)
+      // The bounds on `base`, `n` and `extra` hold for every symbol; they
+      // let the prover see the entry's sums fit.
+      for (
+        let l: i32 = base;
+        l < top &&
+        l >= 3 &&
+        l <= 258 &&
+        base >= 3 &&
+        base <= 258 &&
+        n >= 0 &&
+        n <= 9 &&
+        extra >= 0 &&
+        extra <= 5;
+        l += 1
+      ) {
         this.length[l - 3] = deflateFixedLitCode(257 + s) | ((l - base) << n) | ((n + extra) << 16)
       }
     }
@@ -1830,8 +1884,11 @@ export class FixedDeflater {
     // Distances 1 to 256 directly; above, by (distance - 1) >> 7 from 256 on.
     for (let d: i32 = 0; d < 30; d += 1) {
       const lo: i32 = this.distBase[d]
-      const hi: i32 = d === 29 ? 32769 : this.distBase[d + 1]
-      for (let dist: i32 = lo; dist < hi; dist += 1) {
+      let hi: i32 = 32769
+      if (d < 29) {
+        hi = this.distBase[d + 1]
+      }
+      for (let dist: i32 = lo; dist < hi && dist >= 1 && dist <= 32768; dist += 1) {
         if (dist <= 256) {
           this.distSymbol[dist - 1] = d
         } else {
@@ -2020,7 +2077,7 @@ export class InflateTable {
    * @param capacity How many entries to allocate for the main table and
    *   all its subtables; `Inflater` passes zlib's `enough` figures.
    */
-  constructor(bits: i32, symbols: i32, capacity: i32) {
+  constructor(bits: i32, symbols: u16, capacity: u16) {
     this.bits = bits
     this.entries = new Array<i32>(capacity)
     this.count = new Array<i32>(16)
@@ -2104,11 +2161,11 @@ export class Inflater {
 
   /** Builds the tables, the fixed code's among them. */
   constructor() {
-    this.lit = new InflateTable(INF_LIT_BITS, 288, INF_LIT_ENOUGH)
-    this.dist = new InflateTable(INF_DIST_BITS, 32, INF_DIST_ENOUGH)
-    this.codeLengths = new InflateTable(INF_CL_BITS, 19, 1 << INF_CL_BITS)
-    this.fixedLit = new InflateTable(INF_LIT_BITS, 288, INF_LIT_ENOUGH)
-    this.fixedDist = new InflateTable(INF_DIST_BITS, 32, INF_DIST_ENOUGH)
+    this.lit = new InflateTable(INF_LIT_BITS, 288, toU16(INF_LIT_ENOUGH))
+    this.dist = new InflateTable(INF_DIST_BITS, 32, toU16(INF_DIST_ENOUGH))
+    this.codeLengths = new InflateTable(INF_CL_BITS, 19, toU16(1 << INF_CL_BITS))
+    this.fixedLit = new InflateTable(INF_LIT_BITS, 288, toU16(INF_LIT_ENOUGH))
+    this.fixedDist = new InflateTable(INF_DIST_BITS, 32, toU16(INF_DIST_ENOUGH))
     this.lens = new Array<i32>(320)
     this.clLens = new Array<i32>(19)
     this.offsets = new Array<i32>(16)
