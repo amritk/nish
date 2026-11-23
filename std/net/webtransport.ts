@@ -169,7 +169,8 @@ import {
   Http3Connection,
 } from "nish/net/http3"
 import { QUIC_DATAGRAM_ERR_FULL, QUIC_DATAGRAM_NONE, QUIC_DATAGRAM_OK, QuicConnection } from "nish/net/quic"
-import { quicPacketCopy, quicVarintSize } from "nish/net/quic-packet"
+import { tryCopyBytes } from "nish/bytes"
+import { quicVarintSize } from "nish/net/quic-packet"
 import { quicStreamIsUni } from "nish/net/quic-stream"
 import { monotonicNanos } from "nish:process"
 
@@ -251,8 +252,13 @@ const WT_ONE: i32 = 1
 const WT_NONE: i32 = -1
 const WT_NONE64: i64 = -1
 const WT_U32: i64 = 0xffffffff
-/** Knuth's multiplicative constant, 2^32 over the golden ratio: odd, so the product keeps every bit of the salted number. */
-const WT_HASH_MULTIPLIER: i64 = 2654435761
+/**
+ * The golden ratio's fractional part: the fraction of a salted session
+ * number times it, scaled to the bucket count, is its bucket (Knuth's
+ * multiplicative hashing, worked in `f64`, which holds the 31-bit number's
+ * product exactly enough for the 14 bits a bucket takes).
+ */
+const WT_GOLDEN: f64 = 0.6180339887498949
 
 /** The caps of a WebTransport layer, fixed when it is made. */
 export class WebTransportConfig {
@@ -285,8 +291,9 @@ export class WebTransportConfig {
  *   value.
  */
 export const wtCodeToHttp3 = (code: i64): i64 => {
-  const n: i64 = code & WT_U32
-  return WT_FIRST_APP_CODE + n + n / toI64(0x1e)
+  // Worked in `f64`, which holds every value here exactly: the largest is under 2^47.
+  const n: f64 = toF64(code & WT_U32)
+  return toI64(toF64(WT_FIRST_APP_CODE) + n + Math.floor(n / 30.0))
 }
 
 /**
@@ -301,8 +308,9 @@ export const wtCodeFromHttp3 = (code: i64): i64 => {
   if (code < WT_FIRST_APP_CODE || code > last || h3Greased(code)) {
     return WT_NONE64
   }
-  const shifted: i64 = code - WT_FIRST_APP_CODE
-  return shifted - shifted / toI64(0x1f)
+  // `code` lies in the range checked above, under 2^47, so `f64` holds every value exactly.
+  const shifted: f64 = toF64(code) - toF64(WT_FIRST_APP_CODE)
+  return toI64(shifted - Math.floor(shifted / 31.0))
 }
 
 /** Panics unless `value` lies in `[low, high]`: a cap out of range is the program's mistake. */
@@ -310,6 +318,76 @@ const webtransportCheckCap = (what: string, value: i32, low: i32, high: i32): vo
   if (value < low || value > high) {
     panic(`WebTransport: ${what} of ${value}, outside ${low} to ${high}`)
   }
+}
+
+/**
+ * `a + b`, worked in `i64` and held to `i32`. Every caller adds an offset
+ * and a length, or a count and one, that lie inside one array or one cap,
+ * so the sum is an index into it or just past it and always fits.
+ */
+const wtAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+
+/** `a - b`, worked as `wtAdd` is, for offsets and lengths inside one array. */
+const wtSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
+
+/**
+ * A zeroed array of `n` bytes, or of none when `n` is below zero. Up to
+ * 65535 bytes is one allocation; past that the array grows a byte at a time
+ * from a 65535-byte start, which an `i32` length cannot make fail.
+ */
+const wtBytes = (n: i32): u8[] => {
+  if (n < 0) {
+    return []
+  }
+  if (n <= 65535) {
+    return new Array<u8>(toU16(n))
+  }
+  const out: u8[] = new Array<u8>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/** A zeroed array of `n` `i32`s, made as `wtBytes` makes one. */
+const wtI32s = (n: i32): i32[] => {
+  if (n < 0) {
+    return []
+  }
+  if (n <= 65535) {
+    return new Array<i32>(toU16(n))
+  }
+  const out: i32[] = new Array<i32>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/** A zeroed array of `n` `i64`s, made as `wtBytes` makes one. */
+const wtI64s = (n: i32): i64[] => {
+  if (n < 0) {
+    return []
+  }
+  if (n <= 65535) {
+    return new Array<i64>(toU16(n))
+  }
+  const out: i64[] = new Array<i64>(65535)
+  for (let k: i32 = 65535; k < n; k += 1) {
+    out.push(0)
+  }
+  return out
+}
+
+/** The bucket count for `n` waiting streams: the least power of two at least `2 * n`, and at least 2. */
+const wtBuckets = (n: i32): i32 => {
+  for (let shift: i32 = 0; shift < 30; shift++) {
+    const size: i32 = 1 << shift
+    if (size >= n) {
+      return 2 << shift
+    }
+  }
+  return 1073741824
 }
 
 /**
@@ -340,17 +418,14 @@ export class WebTransportWaiting {
    */
   constructor(size: i32) {
     const n: i32 = size > 0 ? size : WT_ONE
-    this.streams = new Array<i64>(n)
-    this.sessions = new Array<i64>(n)
-    this.next = new Array<i32>(n)
-    this.prev = new Array<i32>(n)
-    let buckets: i32 = 2
-    while (buckets < n * 2) {
-      buckets = buckets * 2
-    }
-    this.heads = new Array<i32>(buckets)
-    this.tails = new Array<i32>(buckets)
-    const entropy: u8[] = new Array<u8>(4)
+    this.streams = wtI64s(n)
+    this.sessions = wtI64s(n)
+    this.next = wtI32s(n)
+    this.prev = wtI32s(n)
+    const buckets: i32 = wtBuckets(n)
+    this.heads = wtI32s(buckets)
+    this.tails = wtI32s(buckets)
+    const entropy: u8[] = wtBytes(4)
     crypto.getRandomValues(entropy)
     for (let j: i32 = 0; j < toI32(entropy.length); j++) {
       this.salt = (this.salt << toI64(8)) | toI64(toI32(entropy[j]))
@@ -370,11 +445,11 @@ export class WebTransportWaiting {
     this.count = 0
   }
 
-  /** The bucket of session ID `session`: its stream number, salted, times an odd constant, high bits. */
+  /** The bucket of session ID `session`: its stream number, salted, hashed by `WT_GOLDEN`. */
   private bucket(session: i64): i32 {
     const x: i64 = ((session >> toI64(2)) ^ this.salt) & toI64(0x7fffffff)
-    const mixed: i64 = (x * WT_HASH_MULTIPLIER) >> toI64(16)
-    return toI32(mixed & toI64(toI32(this.heads.length) - 1))
+    const scaled: f64 = toF64(x) * WT_GOLDEN
+    return toI32((scaled - Math.floor(scaled)) * toF64(toI32(this.heads.length)))
   }
 
   /**
@@ -382,24 +457,43 @@ export class WebTransportWaiting {
    * @internal Called by `WebTransport` in this module; not for callers.
    */
   add(stream: i64, session: i64): boolean {
+    const next: i32[] = this.next
+    const prev: i32[] = this.prev
+    const heads: i32[] = this.heads
+    const tails: i32[] = this.tails
+    const streams: i64[] = this.streams
+    const sessions: i64[] = this.sessions
     const e: i32 = this.freeHead
-    if (e < 0 || e >= toI32(this.next.length)) {
+    const b: i32 = this.bucket(session)
+    // Every entry array has the room's size and both bucket arrays the bucket count, so only a full room fails here.
+    if (
+      e < 0 ||
+      e >= toI32(next.length) ||
+      e >= toI32(prev.length) ||
+      e >= toI32(streams.length) ||
+      e >= toI32(sessions.length) ||
+      b < 0 ||
+      b >= toI32(heads.length) ||
+      b >= toI32(tails.length)
+    ) {
       return false
     }
-    this.freeHead = this.next[e]
-    const b: i32 = this.bucket(session)
-    const tail: i32 = this.tails[b]
-    this.streams[e] = stream
-    this.sessions[e] = session
-    this.next[e] = -1
-    this.prev[e] = tail
-    if (tail >= 0 && tail < toI32(this.next.length)) {
-      this.next[tail] = e
+    this.freeHead = next[e]
+    const tail: i32 = tails[b]
+    streams[e] = stream
+    sessions[e] = session
+    next[e] = -1
+    prev[e] = tail
+    if (tail >= 0 && tail < toI32(next.length)) {
+      next[tail] = e
     } else {
-      this.heads[b] = e
+      heads[b] = e
     }
-    this.tails[b] = e
-    this.count = this.count + 1
+    tails[b] = e
+    const count: i32 = this.count
+    if (count >= 0 && count < toI32(next.length)) {
+      this.count = count + 1
+    }
     return true
   }
 
@@ -408,44 +502,137 @@ export class WebTransportWaiting {
    * @internal Called by `WebTransport` in this module; not for callers.
    */
   first(session: i64): i32 {
-    let e: i32 = this.heads[this.bucket(session)]
+    const heads: i32[] = this.heads
+    const next: i32[] = this.next
+    const sessions: i64[] = this.sessions
+    const b: i32 = this.bucket(session)
+    if (b < 0 || b >= toI32(heads.length)) {
+      return WT_NONE
+    }
+    let e: i32 = heads[b]
     for (
       let guard: i32 = 0;
-      guard < toI32(this.next.length) && e >= 0 && e < toI32(this.next.length);
+      guard < toI32(next.length) && e >= 0 && e < toI32(next.length) && e < toI32(sessions.length);
       guard++
     ) {
-      if (this.sessions[e] === session) {
+      if (sessions[e] === session) {
         return e
       }
-      e = this.next[e]
+      e = next[e]
     }
     return WT_NONE
   }
 
   /**
-   * Takes entry `e` out of the room and answers its stream.
+   * Takes entry `e`, one `first` answered, out of the room and answers its
+   * stream, or -1 for an `e` that is not an entry of the room.
    * @internal Called by `WebTransport` in this module; not for callers.
    */
   take(e: i32): i64 {
-    const stream: i64 = this.streams[e]
-    const b: i32 = this.bucket(this.sessions[e])
-    const before: i32 = this.prev[e]
-    const after: i32 = this.next[e]
-    if (before >= 0 && before < toI32(this.next.length)) {
-      this.next[before] = after
-    } else {
-      this.heads[b] = after
+    const next: i32[] = this.next
+    const prev: i32[] = this.prev
+    const heads: i32[] = this.heads
+    const tails: i32[] = this.tails
+    const streams: i64[] = this.streams
+    const sessions: i64[] = this.sessions
+    if (
+      e < 0 ||
+      e >= toI32(next.length) ||
+      e >= toI32(prev.length) ||
+      e >= toI32(streams.length) ||
+      e >= toI32(sessions.length)
+    ) {
+      return WT_NONE64
     }
-    if (after >= 0 && after < toI32(this.prev.length)) {
-      this.prev[after] = before
-    } else {
-      this.tails[b] = before
+    const b: i32 = this.bucket(sessions[e])
+    if (b < 0 || b >= toI32(heads.length) || b >= toI32(tails.length)) {
+      return WT_NONE64
     }
-    this.next[e] = this.freeHead
+    const stream: i64 = streams[e]
+    const before: i32 = prev[e]
+    const after: i32 = next[e]
+    if (before >= 0 && before < toI32(next.length)) {
+      next[before] = after
+    } else {
+      heads[b] = after
+    }
+    if (after >= 0 && after < toI32(prev.length)) {
+      prev[after] = before
+    } else {
+      tails[b] = before
+    }
+    next[e] = this.freeHead
     this.freeHead = e
-    this.count = this.count - 1
+    const count: i32 = this.count
+    if (count > 0) {
+      this.count = count - 1
+    }
     return stream
   }
+}
+
+/** One session index's state, kept by `WebTransport` in its table. */
+class WebTransportSession {
+  /** Its index in the table, the `session` of its events. */
+  index: i32 = 0
+  /** WT_FREE, WT_ASKED, WT_OPEN or WT_GONE. */
+  state: i32 = 0
+  /** The session's ID, its CONNECT stream's ID; -1 while free. */
+  id: i64 = -1
+  /** The CONNECT stream's QUIC slot. */
+  slot: i32 = -1
+  /** The first of its streams, a QUIC slot threaded through each stream's `next`, or -1. */
+  firstStream: i32 = -1
+  /** How many streams it holds, up to `maxStreams`. */
+  streams: i32 = 0
+  /** The type of the capsule being read. */
+  capType: i64 = -1
+  /** What is left of the capsule's payload, or -1 between capsules. */
+  capLeft: i64 = -1
+  /** Whether the client's CLOSE has been read: nothing may follow it. */
+  closeRead: boolean = false
+  /** How many bytes of a capsule header `capHead` holds. */
+  capHeadLen: i32 = 0
+  /** A capsule header being read, which may be split across DATA frames. */
+  capHead: u8[]
+  /** How much of `reason` the CLOSE payload has filled. */
+  capFill: i32 = 0
+  /** Datagrams in, saturating. */
+  datagramsIn: i32 = 0
+  /** Datagrams out, saturating. */
+  datagramsOut: i32 = 0
+  /** When it was last active (`monotonicNanos`). */
+  lastActive: i64 = 0
+  /** When its datagram second began (`monotonicNanos`). */
+  rateSince: i64 = 0
+  /** How many datagrams its second has taken. */
+  rateCount: i32 = 0
+  /** Its CLOSE payload as it arrives: the 32-bit code, then the reason, `WT_REASON_MAX + 4` bytes. */
+  reason: u8[]
+
+  /**
+   * A free session.
+   * @param index Its index in the table.
+   */
+  constructor(index: i32) {
+    this.index = index
+    this.capHead = wtBytes(WT_HEAD)
+    this.reason = wtBytes(WT_REASON_STRIDE)
+  }
+}
+
+/** One QUIC stream slot's state, kept by `WebTransport` for a session's stream. */
+class WebTransportStream {
+  /** The stream this slot's state is for, or -1. */
+  id: i64 = -1
+  /** Its session's index, or -1. */
+  session: i32 = -1
+  /** The next stream in its session's list, a QUIC slot, or -1. */
+  next: i32 = -1
+  /** The stream before it in its session's list, a QUIC slot, or -1. */
+  prev: i32 = -1
+  /** WT_SENT and WT_RECEIVED, once each side is done. */
+  bits: i32 = 0
 }
 
 /**
@@ -467,46 +654,28 @@ export class WebTransport {
   private capsuleOut: u8[]
   /**
    * The buffer the window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED lies in: this layer's own
-   * datagram buffer, the `Http3Connection`'s `data`, or this layer's store of CLOSE reasons. Valid
-   * until the next call.
+   * datagram buffer, the `Http3Connection`'s `data`, or the session's own store of its CLOSE
+   * reason. Valid until the next call.
    */
   data: u8[]
-  /** Each session's CLOSE payload as it arrives, `WT_REASON_MAX + 4` bytes a session. */
-  private reason: u8[]
   /** The response fields of an accepted session, and of a refusal. */
   private acceptNames: u8[][]
   private acceptValues: u8[][]
   private none: u8[][]
   // Per session.
+  /** Each session's state, by session index. */
+  private table: WebTransportSession[]
   /** Each session's ID, its CONNECT stream's ID, by session index; -1 for a free index. */
   sessionIds: i64[]
-  /** The capsule being read: its type, and what is left of its payload (-1 between capsules). */
-  private capType: i64[]
-  private capLeft: i64[]
-  private states: i32[]
-  /** The CONNECT stream's QUIC slot. */
-  private sessionSlot: i32[]
-  /** The first of its streams (a QUIC slot, threaded through `nextStream`), and how many. */
-  private firstStream: i32[]
   /**
    * How many streams each session holds, the client's and this side's together, up to `maxStreams`;
    * a stream stops counting once both of its sides are over.
    */
   streamCount: i32[]
-  /** Whether the client's CLOSE has been read: nothing may follow it. */
-  private closeRead: boolean[]
-  /** A capsule header being read, `capHeadLen[s]` bytes of `capHead[s * 16 ..]`, and the CLOSE payload's fill. */
-  private capHeadLen: i32[]
-  private capHead: u8[]
-  private capFill: i32[]
   /** Counters for a log or a rate cap, each saturating: datagrams in and out. */
   datagramsIn: i32[]
   /** How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. */
   datagramsOut: i32[]
-  /** When each session was last active, and when its datagram second began and how many it took (`monotonicNanos`). */
-  private lastActive: i64[]
-  private rateSince: i64[]
-  private rateCount: i32[]
   /** The free sessions, a stack. */
   private free: i32[]
   /** Sessions `expire` ended that `next` has not yet reported, `expiredCount` of them, with their IDs. */
@@ -518,12 +687,8 @@ export class WebTransport {
   // Per QUIC stream slot.
   /** The session whose CONNECT stream the slot holds, or -1. */
   sessionAt: i32[]
-  /** The stream the slot's stream state is for, its session, its neighbours in that session's list, and its bits. */
-  private streamIds: i64[]
-  private streamSession: i32[]
-  private nextStream: i32[]
-  private prevStream: i32[]
-  private streamBits: i32[]
+  /** The state of the session stream each slot holds. */
+  private slots: WebTransportStream[]
   /** The streams waiting for a session. */
   waiting: WebTransportWaiting
   /** Sessions accepted while streams waited for them, `adoptCount` of them: `next` takes those streams first. */
@@ -600,60 +765,65 @@ export class WebTransport {
     this.fields = h3.fields
     this.header = new Http3FrameHeader()
     const entry: i32 = h3.quic.datagramsIn.entrySize
-    this.datagram = new Array<u8>(entry > 0 ? entry : WT_ONE)
-    this.outgoing = new Array<u8>(h3.quic.datagramsOut.entrySize + 8)
-    this.capsuleOut = new Array<u8>(WT_REASON_MAX + 4 + WT_HEAD)
+    this.datagram = wtBytes(entry > 0 ? entry : WT_ONE)
+    this.outgoing = wtBytes(wtAdd(h3.quic.datagramsOut.entrySize, 8))
+    this.capsuleOut = wtBytes(WT_REASON_MAX + 4 + WT_HEAD)
     this.data = this.datagram
-    this.reason = new Array<u8>(sessions * WT_REASON_STRIDE)
     this.acceptNames = [httpFieldBytes("sec-webtransport-http3-draft")]
     this.acceptValues = [httpFieldBytes("draft02")]
     this.none = []
-    this.sessionIds = new Array<i64>(sessions)
-    this.capType = new Array<i64>(sessions)
-    this.capLeft = new Array<i64>(sessions)
-    this.states = new Array<i32>(sessions)
-    this.sessionSlot = new Array<i32>(sessions)
-    this.firstStream = new Array<i32>(sessions)
-    this.streamCount = new Array<i32>(sessions)
-    this.closeRead = new Array<boolean>(sessions)
-    this.capHeadLen = new Array<i32>(sessions)
-    this.capHead = new Array<u8>(sessions * WT_HEAD)
-    this.capFill = new Array<i32>(sessions)
-    this.datagramsIn = new Array<i32>(sessions)
-    this.datagramsOut = new Array<i32>(sessions)
-    this.lastActive = new Array<i64>(sessions)
-    this.rateSince = new Array<i64>(sessions)
-    this.rateCount = new Array<i32>(sessions)
-    this.free = new Array<i32>(sessions)
-    this.expiredSessions = new Array<i32>(sessions)
-    this.expiredIds = new Array<i64>(sessions)
+    const table: WebTransportSession[] = []
+    for (let s: i32 = 0; s < sessions; s++) {
+      table.push(new WebTransportSession(s))
+    }
+    this.table = table
+    this.sessionIds = wtI64s(sessions)
+    this.streamCount = wtI32s(sessions)
+    this.datagramsIn = wtI32s(sessions)
+    this.datagramsOut = wtI32s(sessions)
+    this.free = wtI32s(sessions)
+    this.expiredSessions = wtI32s(sessions)
+    this.expiredIds = wtI64s(sessions)
     this.now = monotonicNanos()
     const n: i32 = toI32(h3.quic.streams.slots.length)
-    const slots: i32 = n > 0 ? n : WT_ONE
-    this.sessionAt = new Array<i32>(slots)
-    this.streamIds = new Array<i64>(slots)
-    this.streamSession = new Array<i32>(slots)
-    this.nextStream = new Array<i32>(slots)
-    this.prevStream = new Array<i32>(slots)
-    this.streamBits = new Array<i32>(slots)
+    const count: i32 = n > 0 ? n : WT_ONE
+    this.sessionAt = wtI32s(count)
+    const slots: WebTransportStream[] = []
+    for (let k: i32 = 0; k < count; k++) {
+      slots.push(new WebTransportStream())
+    }
+    this.slots = slots
     this.waiting = new WebTransportWaiting(config.maxPending)
-    this.adoptions = new Array<i32>(sessions)
+    this.adoptions = wtI32s(sessions)
     this.restart()
   }
 
   /** Forgets every session and stream, for the connection's next peer; `next` calls it when `h3` restarted. */
   private restart(): void {
     this.generation = this.h3.generation
-    this.sessionIds.fill(WT_NONE64)
-    this.states.fill(WT_FREE)
-    this.sessionAt.fill(WT_NONE)
-    this.streamIds.fill(WT_NONE64)
-    this.streamSession.fill(WT_NONE)
-    this.freeCount = 0
-    for (let s: i32 = toI32(this.free.length) - 1; s >= 0; s--) {
-      this.free[this.freeCount] = s
-      this.freeCount = this.freeCount + 1
+    const table: WebTransportSession[] = this.table
+    for (let s: i32 = 0; s < toI32(table.length); s++) {
+      const w: WebTransportSession = table[s]
+      w.state = WT_FREE
+      w.id = -1
+      this.publish(w)
     }
+    this.sessionAt.fill(WT_NONE)
+    const slots: WebTransportStream[] = this.slots
+    for (let k: i32 = 0; k < toI32(slots.length); k++) {
+      const t: WebTransportStream = slots[k]
+      t.id = -1
+      t.session = -1
+    }
+    const free: i32[] = this.free
+    let count: i32 = 0
+    for (let s: i32 = toI32(free.length) - 1; s >= 0; s--) {
+      if (count >= 0 && count < toI32(free.length)) {
+        free[count] = s
+        count = count + 1
+      }
+    }
+    this.freeCount = count
     this.waiting.reset()
     this.adoptCount = 0
     this.expiredCount = 0
@@ -684,30 +854,76 @@ export class WebTransport {
 
   // ---- Lookups ---------------------------------------------------------------------
 
-  /** The index of the session whose CONNECT stream is `id`, or -1: one probe of QUIC's stream index. */
-  private sessionOf(id: i64): i32 {
-    const k: i32 = this.quic.streams.slotOf(id)
-    if (k < 0 || k >= toI32(this.sessionAt.length)) {
-      return WT_NONE
+  /** Session index `s`, or null for one out of range. */
+  private at(s: i32): WebTransportSession | null {
+    const table: WebTransportSession[] = this.table
+    if (s >= 0 && s < toI32(table.length)) {
+      return table[s]
     }
-    const s: i32 = this.sessionAt[k]
-    return s >= 0 && s < toI32(this.sessionIds.length) && this.sessionIds[s] === id ? s : WT_NONE
+    return null
   }
 
-  /** The QUIC slot of a session's stream `id` that this layer tracks, or -1. */
-  private streamSlot(id: i64): i32 {
-    const k: i32 = this.quic.streams.slotOf(id)
-    if (k < 0 || k >= toI32(this.streamIds.length) || this.streamIds[k] !== id) {
-      return WT_NONE
+  /** The stream state of QUIC slot `k`, or null for one out of range. */
+  private slotAt(k: i32): WebTransportStream | null {
+    const slots: WebTransportStream[] = this.slots
+    if (k >= 0 && k < toI32(slots.length)) {
+      return slots[k]
     }
-    return k
+    return null
   }
 
-  /** The session of `id` when it is accepted and not gone, else -1. */
-  private openSession(id: i64): i32 {
+  /** Copies session `w`'s ID and counters into the public per-session arrays. */
+  private publish(w: WebTransportSession): void {
+    const s: i32 = w.index
+    const ids: i64[] = this.sessionIds
+    if (s >= 0 && s < toI32(ids.length)) {
+      ids[s] = w.id
+    }
+    const streams: i32[] = this.streamCount
+    if (s >= 0 && s < toI32(streams.length)) {
+      streams[s] = w.streams
+    }
+    const into: i32[] = this.datagramsIn
+    if (s >= 0 && s < toI32(into.length)) {
+      into[s] = w.datagramsIn
+    }
+    const out: i32[] = this.datagramsOut
+    if (s >= 0 && s < toI32(out.length)) {
+      out[s] = w.datagramsOut
+    }
+  }
+
+  /** The session whose CONNECT stream is `id`, or null: one probe of QUIC's stream index. */
+  private sessionOf(id: i64): WebTransportSession | null {
+    const k: i32 = this.quic.streams.slotOf(id)
+    const at: i32[] = this.sessionAt
+    if (k < 0 || k >= toI32(at.length)) {
+      return null
+    }
+    const w: WebTransportSession | null = this.at(at[k])
+    if (w === null || w.id !== id) {
+      return null
+    }
+    return w
+  }
+
+  /** The state of a session's stream `id` that this layer tracks, or null. */
+  private streamOf(id: i64): WebTransportStream | null {
+    const t: WebTransportStream | null = this.slotAt(this.quic.streams.slotOf(id))
+    if (t === null || t.id !== id) {
+      return null
+    }
+    return t
+  }
+
+  /** The session of `id` when it is accepted and not gone, else null. */
+  private openSession(id: i64): WebTransportSession | null {
     this.current()
-    const s: i32 = this.sessionOf(id)
-    return s >= 0 && this.states[s] === WT_OPEN ? s : WT_NONE
+    const w: WebTransportSession | null = this.sessionOf(id)
+    if (w === null || w.state !== WT_OPEN) {
+      return null
+    }
+    return w
   }
 
   // ---- Events ----------------------------------------------------------------------
@@ -725,12 +941,21 @@ export class WebTransport {
     const clock: i64 = monotonicNanos()
     // The clock never runs back, so a session's deadline only moves later.
     this.now = clock > this.now ? clock : this.now
-    if (this.expiredCount > 0) {
-      this.expiredCount = this.expiredCount - 1
-      const id: i64 = this.expiredIds[this.expiredCount]
-      this.sessionId = id
-      this.stream = id
-      return this.closedEvent(this.expiredSessions[this.expiredCount], WT_ZERO64, WT_ZERO, false)
+    const expired: i32 = this.expiredCount
+    if (expired > 0) {
+      const i: i32 = expired - 1
+      this.expiredCount = i
+      const ids: i64[] = this.expiredIds
+      const sessions: i32[] = this.expiredSessions
+      if (i < toI32(ids.length) && i < toI32(sessions.length)) {
+        const w: WebTransportSession | null = this.at(sessions[i])
+        if (w !== null) {
+          const id: i64 = ids[i]
+          this.sessionId = id
+          this.stream = id
+          return this.closedEvent(w, WT_ZERO64, WT_ZERO, false)
+        }
+      }
     }
     for (let guard: i32 = 0; guard < 1000000; guard++) {
       if (this.adoptCount > 0) {
@@ -774,40 +999,47 @@ export class WebTransport {
    * of an accepted session, 1 for one dropped, or 0 when none is there.
    */
   private receiveDatagram(): i32 {
-    const n: i32 = this.quic.readDatagram(this.datagram, WT_ZERO, toI32(this.datagram.length))
+    const buf: u8[] = this.datagram
+    const n: i32 = this.quic.readDatagram(buf, WT_ZERO, toI32(buf.length))
     if (n === QUIC_DATAGRAM_NONE || n < 0) {
       return WT_ZERO
     }
-    const quarter: i64 = h3ReadVarint(this.datagram, WT_ZERO, n)
+    const quarter: i64 = h3ReadVarint(buf, WT_ZERO, n)
     if (quarter < 0 || quarter > WT_QUARTER_MAX) {
       // RFC 9297 §2.1: a quarter stream ID that does not parse, or is too large.
       this.h3.fail(H3_DATAGRAM_ERROR)
       return WT_ONE
     }
-    const s: i32 = this.sessionOf(quarter * 4)
-    if (s < 0 || this.states[s] !== WT_OPEN) {
+    // Under 2^60, so the stream ID it names is under 2^62.
+    const w: WebTransportSession | null = this.sessionOf(quarter << toI64(2))
+    if (w === null || w.state !== WT_OPEN) {
       // §2.1.1: no session to take it; dropped.
       this.datagramsDropped = h3Count(this.datagramsDropped)
       return WT_ONE
     }
-    if (this.now - this.rateSince[s] >= WT_SECOND) {
-      this.rateSince[s] = this.now
-      this.rateCount[s] = 0
+    const now: i64 = this.now
+    const since: i64 = w.rateSince
+    // `rateSince` is a reading of the same clock as `now`, which never runs back.
+    if (now < 0 || since < 0 || since > now || now - since >= WT_SECOND) {
+      w.rateSince = now
+      w.rateCount = 0
     }
-    if (this.rateCount[s] >= this.config.maxDatagramsPerSecond) {
+    const taken: i32 = w.rateCount
+    if (taken < 0 || taken >= this.config.maxDatagramsPerSecond) {
       // Past the session's datagrams a second: dropped, as one QUIC could not queue would be.
       this.datagramsDropped = h3Count(this.datagramsDropped)
       return WT_ONE
     }
-    this.rateCount[s] = this.rateCount[s] + 1
-    this.lastActive[s] = this.now
-    const at: i32 = h3VarintLength(this.datagram, WT_ZERO)
-    this.datagramsIn[s] = h3Count(this.datagramsIn[s])
-    this.session = s
-    this.sessionId = this.sessionIds[s]
-    this.data = this.datagram
+    w.rateCount = wtAdd(taken, 1)
+    w.lastActive = now
+    const at: i32 = h3VarintLength(buf, WT_ZERO)
+    w.datagramsIn = h3Count(w.datagramsIn)
+    this.publish(w)
+    this.session = w.index
+    this.sessionId = w.id
+    this.data = buf
     this.dataStart = at
-    this.dataLength = n - at
+    this.dataLength = wtSub(n, at)
     return WT_DATAGRAM
   }
 
@@ -835,20 +1067,24 @@ export class WebTransport {
       return event
     }
     // The slot the event's stream was in: QUIC may have freed it with the read that ended it.
-    const k: i32 = h3.slot >= 0 && h3.slot < toI32(this.streamIds.length) ? h3.slot : WT_NONE
-    const s: i32 = k >= 0 ? this.sessionAt[k] : WT_NONE
-    if (s >= 0 && s < toI32(this.sessionIds.length) && this.sessionIds[s] === id) {
-      return this.connectEvent(s, event)
+    const k: i32 = h3.slot
+    const at: i32[] = this.sessionAt
+    if (k >= 0 && k < toI32(at.length)) {
+      const w: WebTransportSession | null = this.at(at[k])
+      if (w !== null && w.id === id) {
+        return this.connectEvent(w, event)
+      }
     }
-    if (k < 0 || this.streamIds[k] !== id) {
+    const t: WebTransportStream | null = this.slotAt(k)
+    if (t === null || t.id !== id) {
       // A plain request's, or one about a stream this layer refused or let go of.
       return event === H3_STOPPED ? H3_NEED_MORE : event
     }
-    const t: i32 = this.streamSession[k]
-    this.touch(k)
+    const owner: WebTransportSession | null = this.at(t.session)
+    this.touch(t)
     this.stream = id
-    this.session = t
-    this.sessionId = t >= 0 && t < toI32(this.sessionIds.length) ? this.sessionIds[t] : WT_NONE64
+    this.session = t.session
+    this.sessionId = owner !== null ? owner.id : WT_NONE64
     if (event === H3_DATA) {
       this.data = h3.data
       this.dataStart = h3.dataStart
@@ -856,17 +1092,17 @@ export class WebTransport {
       return WT_STREAM_DATA
     }
     if (event === H3_END) {
-      this.settle(k, WT_RECEIVED)
+      this.settle(t, WT_RECEIVED)
       return WT_STREAM_END
     }
     if (event === H3_RESET) {
       this.codes(h3.errorCode)
-      this.settle(k, WT_RECEIVED)
+      this.settle(t, WT_RECEIVED)
       return WT_STREAM_RESET
     }
     if (event === H3_STOPPED) {
       this.codes(h3.errorCode)
-      this.settle(k, WT_SENT)
+      this.settle(t, WT_SENT)
       return WT_STREAM_STOPPED
     }
     return event === H3_WRITABLE ? WT_WRITABLE : H3_NEED_MORE
@@ -878,44 +1114,44 @@ export class WebTransport {
     this.appCode = wtCodeFromHttp3(code)
   }
 
-  /** An event of session `s`'s CONNECT stream. */
-  private connectEvent(s: i32, event: i32): i32 {
+  /** An event of session `w`'s CONNECT stream. */
+  private connectEvent(w: WebTransportSession, event: i32): i32 {
     const h3: Http3Connection = this.h3
-    this.lastActive[s] = this.now
-    this.session = s
-    this.sessionId = this.sessionIds[s]
-    this.stream = this.sessionIds[s]
+    w.lastActive = this.now
+    this.session = w.index
+    this.sessionId = w.id
+    this.stream = w.id
     if (event === H3_DATA) {
-      if (this.states[s] === WT_GONE && !this.closeRead[s]) {
+      if (w.state === WT_GONE && !w.closeRead) {
         // This side closed it: what the client still sends is not read.
         return H3_NEED_MORE
       }
-      this.capSession = s
+      this.capSession = w.index
       this.capAt = h3.dataStart
-      this.capEnd = h3.dataStart + h3.dataLength
+      this.capEnd = wtAdd(h3.dataStart, h3.dataLength)
       return this.capsules()
     }
     if (event === H3_END || event === H3_RESET) {
       // The client's half is over, and the session with it (draft-02 §5).
-      const id: i64 = this.sessionIds[s]
-      const wasGone: boolean = this.states[s] === WT_GONE
-      const inside: boolean = this.capLeft[s] >= 0 || this.capHeadLen[s] > 0
-      this.release(s)
+      const id: i64 = w.id
+      const wasGone: boolean = w.state === WT_GONE
+      const inside: boolean = w.capLeft >= 0 || w.capHeadLen > 0
+      this.release(w)
       if (wasGone) {
         // This side's half is finished already.
         return H3_NEED_MORE
       }
       if (event === H3_RESET) {
         // `nish/net/http3` abandoned this side's half with the reset, the client's or its own.
-        return this.closedEvent(s, WT_ZERO64, WT_ZERO, h3.resetByPeer)
+        return this.closedEvent(w, WT_ZERO64, WT_ZERO, h3.resetByPeer)
       }
       if (inside) {
         // RFC 9297 §3.3: the stream ended inside a capsule.
         h3.reset(id, H3_DATAGRAM_ERROR)
-        return this.closedEvent(s, WT_ZERO64, WT_ZERO, false)
+        return this.closedEvent(w, WT_ZERO64, WT_ZERO, false)
       }
       this.finish(id)
-      return this.closedEvent(s, WT_ZERO64, WT_ZERO, true)
+      return this.closedEvent(w, WT_ZERO64, WT_ZERO, true)
     }
     // Trailers on a CONNECT stream mean nothing to a session.
     return event === H3_WRITABLE ? WT_WRITABLE : H3_NEED_MORE
@@ -928,21 +1164,21 @@ export class WebTransport {
    * the stream is dropped unread, so no event will end the session later.
    */
   private finish(id: i64): boolean {
-    if (this.h3.writeData(id, this.reason, WT_ZERO, WT_ZERO, true) >= 0) {
+    if (this.h3.writeData(id, this.capsuleOut, WT_ZERO, WT_ZERO, true) >= 0) {
       return true
     }
     this.h3.reset(id, H3_NO_ERROR)
     return false
   }
 
-  /** WT_CLOSED for session `s` with `code` and the reason `reason[s * 1028 + 4 ..][0 .. length)`. */
-  private closedEvent(s: i32, code: i64, length: i32, byPeer: boolean): i32 {
-    this.session = s
+  /** WT_CLOSED for session `w` with `code` and the reason `w.reason[4 .. 4 + length)`. */
+  private closedEvent(w: WebTransportSession, code: i64, length: i32, byPeer: boolean): i32 {
+    this.session = w.index
     this.errorCode = code & WT_U32
     this.appCode = this.errorCode
     this.closedByPeer = byPeer
-    this.data = this.reason
-    this.dataStart = s * WT_REASON_STRIDE + 4
+    this.data = w.reason
+    this.dataStart = 4
     this.dataLength = length
     return WT_CLOSED
   }
@@ -957,9 +1193,10 @@ export class WebTransport {
     const h3: Http3Connection = this.h3
     const f: HttpFields = h3.fields
     const k: i32 = this.quic.streams.slotOf(id)
-    if (k >= 0 && k < toI32(this.sessionAt.length)) {
-      const stale: i32 = this.sessionAt[k]
-      if (stale >= 0 && stale < toI32(this.sessionIds.length) && this.sessionIds[stale] >= 0) {
+    const at: i32[] = this.sessionAt
+    if (k >= 0 && k < toI32(at.length)) {
+      const stale: WebTransportSession | null = this.at(at[k])
+      if (stale !== null && stale.id >= 0) {
         // QUIC freed this slot under a session's CONNECT stream with no event to say so: let go of
         // that session now, before the cap below counts it.
         this.release(stale)
@@ -983,28 +1220,37 @@ export class WebTransport {
       this.dropPending(id)
       return H3_NEED_MORE
     }
-    if (k < 0 || k >= toI32(this.sessionAt.length)) {
+    if (k < 0 || k >= toI32(at.length)) {
       return H3_NEED_MORE
     }
-    this.freeCount = this.freeCount - 1
-    const s: i32 = this.free[this.freeCount]
-    this.sessionIds[s] = id
-    this.states[s] = WT_ASKED
-    this.sessionSlot[s] = k
-    this.firstStream[s] = -1
-    this.streamCount[s] = 0
-    this.capType[s] = -1
-    this.capLeft[s] = -1
-    this.closeRead[s] = false
-    this.capHeadLen[s] = 0
-    this.capFill[s] = 0
-    this.datagramsIn[s] = 0
-    this.datagramsOut[s] = 0
-    this.lastActive[s] = this.now
-    this.rateSince[s] = this.now
-    this.rateCount[s] = 0
-    this.sessionAt[k] = s
-    this.session = s
+    const free: i32[] = this.free
+    const i: i32 = wtSub(this.freeCount, 1)
+    if (i < 0 || i >= toI32(free.length)) {
+      return H3_NEED_MORE
+    }
+    const w: WebTransportSession | null = this.at(free[i])
+    if (w === null) {
+      return H3_NEED_MORE
+    }
+    this.freeCount = i
+    w.id = id
+    w.state = WT_ASKED
+    w.slot = k
+    w.firstStream = -1
+    w.streams = 0
+    w.capType = -1
+    w.capLeft = -1
+    w.closeRead = false
+    w.capHeadLen = 0
+    w.capFill = 0
+    w.datagramsIn = 0
+    w.datagramsOut = 0
+    w.lastActive = this.now
+    w.rateSince = this.now
+    w.rateCount = 0
+    this.publish(w)
+    at[k] = w.index
+    this.session = w.index
     this.sessionId = id
     this.stream = id
     return WT_SESSION
@@ -1032,20 +1278,22 @@ export class WebTransport {
    */
   accept(id: i64): i32 {
     this.current()
-    const s: i32 = this.sessionOf(id)
-    if (s < 0 || this.states[s] !== WT_ASKED) {
+    const w: WebTransportSession | null = this.sessionOf(id)
+    if (w === null || w.state !== WT_ASKED) {
       return H3_CLOSED
     }
     const result: i32 = this.h3.respond(id, WT_STATUS_OK, this.acceptNames, this.acceptValues, false)
     if (result !== 0) {
       return result
     }
-    this.states[s] = WT_OPEN
-    this.lastActive[s] = this.now
+    w.state = WT_OPEN
+    w.lastActive = this.now
     // The streams that waited for it are taken by the next calls of `next`, each with its WT_STREAM.
-    if (this.waiting.first(id) >= 0 && this.adoptCount < toI32(this.adoptions.length)) {
-      this.adoptions[this.adoptCount] = s
-      this.adoptCount = this.adoptCount + 1
+    const list: i32[] = this.adoptions
+    const c: i32 = this.adoptCount
+    if (this.waiting.first(id) >= 0 && c >= 0 && c < toI32(list.length)) {
+      list[c] = w.index
+      this.adoptCount = c + 1
     }
     return 0
   }
@@ -1061,58 +1309,67 @@ export class WebTransport {
    */
   refuse(id: i64, status: i32): i32 {
     this.current()
-    const s: i32 = this.sessionOf(id)
-    if (s < 0 || this.states[s] !== WT_ASKED) {
+    const w: WebTransportSession | null = this.sessionOf(id)
+    if (w === null || w.state !== WT_ASKED) {
       return H3_CLOSED
     }
     if (status < 400 || status > 599) {
       return H3_INVALID
     }
     this.answer(id, status)
-    this.release(s)
+    this.release(w)
     return 0
   }
 
   /**
-   * Ends session `s` here: every stream reset with WT_SESSION_GONE and asked
+   * Ends session `w` here: every stream reset with WT_SESSION_GONE and asked
    * to stop, the streams waiting for it refused, and its slot freed.
    */
-  private release(s: i32): void {
-    this.end(s)
-    const k: i32 = this.sessionSlot[s]
-    if (k >= 0 && k < toI32(this.sessionAt.length) && this.sessionAt[k] === s) {
-      this.sessionAt[k] = -1
+  private release(w: WebTransportSession): void {
+    this.end(w)
+    const k: i32 = w.slot
+    const at: i32[] = this.sessionAt
+    if (k >= 0 && k < toI32(at.length) && at[k] === w.index) {
+      at[k] = -1
     }
-    this.sessionIds[s] = -1
-    this.states[s] = WT_FREE
-    if (this.capSession === s) {
+    w.id = -1
+    w.state = WT_FREE
+    this.publish(w)
+    if (this.capSession === w.index) {
       this.capSession = -1
     }
-    if (this.freeCount < toI32(this.free.length)) {
-      this.free[this.freeCount] = s
-      this.freeCount = this.freeCount + 1
+    const free: i32[] = this.free
+    const c: i32 = this.freeCount
+    if (c >= 0 && c < toI32(free.length)) {
+      free[c] = w.index
+      this.freeCount = c + 1
     }
   }
 
-  /** Resets every stream of session `s` and refuses those waiting for it; the session is gone. */
-  private end(s: i32): void {
-    if (this.states[s] === WT_FREE) {
+  /** Resets every stream of session `w` and refuses those waiting for it; the session is gone. */
+  private end(w: WebTransportSession): void {
+    if (w.state === WT_FREE) {
       return
     }
-    let k: i32 = this.firstStream[s]
-    for (let guard: i32 = 0; guard < WT_MAX_CAP && k >= 0 && k < toI32(this.streamIds.length); guard++) {
-      const following: i32 = this.nextStream[k]
-      this.h3.refuseStream(this.streamIds[k], WT_SESSION_GONE)
-      this.streamIds[k] = -1
-      this.streamSession[k] = -1
+    let k: i32 = w.firstStream
+    for (let guard: i32 = 0; guard < WT_MAX_CAP; guard++) {
+      const t: WebTransportStream | null = this.slotAt(k)
+      if (t === null) {
+        break
+      }
+      const following: i32 = t.next
+      this.h3.refuseStream(t.id, WT_SESSION_GONE)
+      t.id = -1
+      t.session = -1
       k = following
     }
-    this.firstStream[s] = -1
-    this.streamCount[s] = 0
-    this.dropPending(this.sessionIds[s])
-    this.states[s] = WT_GONE
+    w.firstStream = -1
+    w.streams = 0
+    this.publish(w)
+    this.dropPending(w.id)
+    w.state = WT_GONE
     // A closed session's clock restarts: the client has `idleTimeout` to finish its half.
-    this.lastActive[s] = this.now
+    w.lastActive = this.now
   }
 
   /** Refuses with WT_SESSION_GONE every stream waiting for session `id`. */
@@ -1122,7 +1379,11 @@ export class WebTransport {
     }
     let e: i32 = this.waiting.first(id)
     for (let guard: i32 = 0; guard < WT_MAX_CAP && e >= 0; guard++) {
-      this.refuseStream(this.waiting.take(e), WT_SESSION_GONE)
+      const stream: i64 = this.waiting.take(e)
+      if (stream < 0) {
+        return
+      }
+      this.refuseStream(stream, WT_SESSION_GONE)
       e = this.waiting.first(id)
     }
   }
@@ -1147,28 +1408,32 @@ export class WebTransport {
    */
   close(id: i64, code: i64, buf: u8[], off: i32, len: i32): i32 {
     h3CheckWindow("WebTransport.close", buf, off, len)
-    const s: i32 = this.openSession(id)
-    if (s < 0) {
+    const w: WebTransportSession | null = this.openSession(id)
+    if (w === null) {
       return H3_CLOSED
     }
-    if (len > WT_REASON_MAX) {
+    if (len < 0 || len > 1024) {
       return H3_INVALID
     }
     const out: u8[] = this.capsuleOut
     const end: i32 = toI32(out.length)
-    let p: i32 = h3PutFrameHeader(out, WT_ZERO, end, WT_CAPSULE_CLOSE, toI64(4 + len))
+    const p: i32 = h3PutFrameHeader(out, WT_ZERO, end, WT_CAPSULE_CLOSE, toI64(len + 4))
     const value: i64 = code & WT_U32
-    out[p] = toU8(toI32((value >> toI64(24)) & toI64(255)))
-    out[p + 1] = toU8(toI32((value >> toI64(16)) & toI64(255)))
-    out[p + 2] = toU8(toI32((value >> toI64(8)) & toI64(255)))
-    out[p + 3] = toU8(toI32(value & toI64(255)))
-    p = p + 4
-    quicPacketCopy(out, p, buf, off, len)
-    const result: i32 = this.h3.writeDataWhole(id, out, WT_ZERO, p + len, true)
+    const head: u8[] = [
+      toU8(toI32((value >> toI64(24)) & toI64(255))),
+      toU8(toI32((value >> toI64(16)) & toI64(255))),
+      toU8(toI32((value >> toI64(8)) & toI64(255))),
+      toU8(toI32(value & toI64(255))),
+    ]
+    const at: i32 = wtAdd(p, 4)
+    if (p < 0 || !tryCopyBytes(out, p, head, WT_ZERO, 4) || !tryCopyBytes(out, at, buf, off, len)) {
+      return H3_TOO_LARGE
+    }
+    const result: i32 = this.h3.writeDataWhole(id, out, WT_ZERO, wtAdd(at, len), true)
     if (result !== 0) {
       return result
     }
-    this.end(s)
+    this.end(w)
     return 0
   }
 
@@ -1181,8 +1446,7 @@ export class WebTransport {
    *   written.
    */
   drain(id: i64): i32 {
-    const s: i32 = this.openSession(id)
-    if (s < 0) {
+    if (this.openSession(id) === null) {
       return H3_CLOSED
     }
     const out: u8[] = this.capsuleOut
@@ -1191,15 +1455,20 @@ export class WebTransport {
     return this.h3.writeDataWhole(id, out, WT_ZERO, p, false)
   }
 
-  /** Stamps the session of the stream in QUIC slot `k` as active now. */
-  private touch(k: i32): void {
-    const t: i32 = this.streamSession[k]
-    if (t >= 0 && t < toI32(this.lastActive.length)) {
-      this.lastActive[t] = this.now
+  /** Stamps the session of stream `t` as active now. */
+  private touch(t: WebTransportStream): void {
+    const w: WebTransportSession | null = this.at(t.session)
+    if (w !== null) {
+      w.lastActive = this.now
     }
   }
 
   // ---- The clock -------------------------------------------------------------------
+
+  /** `idleTimeout` in nanoseconds: at most a day's, so worked exactly in `f64`. */
+  private idleNanos(): i64 {
+    return toI64(toF64(this.config.idleTimeout) * 1000000.0)
+  }
 
   /**
    * Ends every session quiet for longer than `idleTimeout` at `now` (see
@@ -1208,31 +1477,37 @@ export class WebTransport {
    * never finished its half let go. Call it from the program's loop; it
    * returns at once before the soonest deadline it last saw. The next calls
    * of `next` report each session the program held as WT_CLOSED.
-   * @param now The current time, from `monotonicNanos`.
+   * @param now The current time, from `monotonicNanos`; a negative one ends none.
    * @returns How many sessions it ended.
    */
   expire(now: i64): i32 {
     this.current()
-    if (now < this.expireAfter) {
+    const idle: i64 = this.idleNanos()
+    if (now < 0 || idle < 0 || now < this.expireAfter) {
       return 0
     }
     this.now = now > this.now ? now : this.now
-    const idle: i64 = toI64(this.config.idleTimeout) * WT_MILLI
-    let soonest: i64 = now + idle
+    // The least time left to any session, from `now`.
+    let wait: i64 = idle
     let n: i32 = 0
-    for (let s: i32 = 0; s < toI32(this.states.length); s++) {
-      const state: i32 = this.states[s]
+    const table: WebTransportSession[] = this.table
+    for (let s: i32 = 0; s < toI32(table.length); s++) {
+      const w: WebTransportSession = table[s]
+      const state: i32 = w.state
       if (state !== WT_FREE) {
-        const deadline: i64 = this.lastActive[s] + idle
-        if (now > deadline) {
-          this.timeOut(s, state)
-          n = n + 1
-        } else if (deadline < soonest) {
-          soonest = deadline
+        const last: i64 = w.lastActive
+        // Activity stamped after `now` (by a later `next`) is no quiet at all.
+        const quiet: i64 = last >= 0 && last <= now ? now - last : WT_ZERO64
+        if (quiet > idle) {
+          this.timeOut(w, state)
+          n = wtAdd(n, 1)
+        } else if (quiet >= 0 && idle - quiet < wait) {
+          wait = idle - quiet
         }
       }
     }
-    this.expireAfter = soonest
+    // A clock reading plus at most a day: under 2^63 for 290 years of uptime.
+    this.expireAfter = now + wait
     return n
   }
 
@@ -1241,41 +1516,57 @@ export class WebTransport {
    * only moves a session's deadline later.
    * @param now The current time, from `monotonicNanos`.
    * @returns The earliest `monotonicNanos` instant at which `expire` could end a session; `now` plus
-   *   `idleTimeout` when no session is held.
+   *   `idleTimeout` when no session is held, and `now` itself for a negative `now`.
    */
   expiresNoSooner(now: i64): i64 {
-    const idle: i64 = toI64(this.config.idleTimeout) * WT_MILLI
-    let soonest: i64 = now + idle
-    for (let s: i32 = 0; s < toI32(this.states.length); s++) {
-      if (this.states[s] !== WT_FREE && this.lastActive[s] + idle < soonest) {
-        soonest = this.lastActive[s] + idle
+    const idle: i64 = this.idleNanos()
+    if (now < 0 || idle < 0) {
+      return now
+    }
+    let wait: i64 = idle
+    const table: WebTransportSession[] = this.table
+    for (let s: i32 = 0; s < toI32(table.length); s++) {
+      const w: WebTransportSession = table[s]
+      if (w.state !== WT_FREE) {
+        const last: i64 = w.lastActive
+        const quiet: i64 = last >= 0 && last <= now ? now - last : WT_ZERO64
+        if (quiet >= idle) {
+          return now
+        }
+        if (quiet >= 0 && idle - quiet < wait) {
+          wait = idle - quiet
+        }
       }
     }
-    return soonest > now ? soonest : now
+    // As in `expire`: a clock reading plus at most a day.
+    return now + wait
   }
 
-  /** Ends session `s`, in `state`, for its idleness, and queues its WT_CLOSED unless the program let go of it already. */
-  private timeOut(s: i32, state: i32): void {
-    const id: i64 = this.sessionIds[s]
+  /** Ends session `w`, in `state`, for its idleness, and queues its WT_CLOSED unless the program let go of it already. */
+  private timeOut(w: WebTransportSession, state: i32): void {
+    const id: i64 = w.id
     if (state === WT_ASKED) {
       this.answer(id, WT_STATUS_UNANSWERED)
-      this.release(s)
+      this.release(w)
     } else if (state === WT_OPEN) {
-      if (this.close(id, WT_ZERO64, this.reason, WT_ZERO, WT_ZERO) !== 0) {
+      if (this.close(id, WT_ZERO64, this.capsuleOut, WT_ZERO, WT_ZERO) !== 0) {
         // No room for the capsule: reset the CONNECT stream both ways, after which no event ends the session.
         this.h3.reset(id, H3_NO_ERROR)
-        this.release(s)
+        this.release(w)
       }
     } else {
       // Closed here, or by the client's CLOSE, and the client never finished its half: stop reading it.
       this.h3.discardRequest(id, H3_NO_ERROR)
-      this.release(s)
+      this.release(w)
       return
     }
-    if (this.expiredCount < toI32(this.expiredSessions.length)) {
-      this.expiredSessions[this.expiredCount] = s
-      this.expiredIds[this.expiredCount] = id
-      this.expiredCount = this.expiredCount + 1
+    const sessions: i32[] = this.expiredSessions
+    const ids: i64[] = this.expiredIds
+    const c: i32 = this.expiredCount
+    if (c >= 0 && c < toI32(sessions.length) && c < toI32(ids.length)) {
+      sessions[c] = w.index
+      ids[c] = id
+      this.expiredCount = c + 1
     }
   }
 
@@ -1287,51 +1578,63 @@ export class WebTransport {
    * make, or H3_NEED_MORE once the window is read.
    */
   private capsules(): i32 {
-    const s: i32 = this.capSession
+    const w: WebTransportSession | null = this.at(this.capSession)
+    if (w === null) {
+      this.capSession = -1
+      return H3_NEED_MORE
+    }
     const bytes: u8[] = this.h3.data
-    const base: i32 = s * WT_HEAD
     while (this.capAt < this.capEnd && this.capAt >= 0 && this.capAt < toI32(bytes.length)) {
-      if (this.closeRead[s]) {
+      const at: i32 = this.capAt
+      if (w.closeRead) {
         // §5: nothing may follow a CLOSE.
-        return this.malformed(s, H3_MESSAGE_ERROR)
+        return this.malformed(w, H3_MESSAGE_ERROR)
       }
-      if (this.capLeft[s] < 0) {
+      const left: i64 = w.capLeft
+      if (left < 0) {
         // The header, a byte at a time into the session's own buffer: it may be split across DATA frames.
-        const have: i32 = this.capHeadLen[s]
-        if (have >= WT_HEAD || base + have >= toI32(this.capHead.length)) {
-          return this.malformed(s, H3_DATAGRAM_ERROR)
+        const have: i32 = w.capHeadLen
+        const head: u8[] = w.capHead
+        if (have < 0 || have >= toI32(head.length) || at < 0 || at >= toI32(bytes.length)) {
+          return this.malformed(w, H3_DATAGRAM_ERROR)
         }
-        this.capHead[base + have] = bytes[this.capAt]
-        this.capAt = this.capAt + 1
-        this.capHeadLen[s] = have + 1
-        if (h3ReadFrameHeader(this.header, this.capHead, base, have + 1) === 0) {
+        head[have] = bytes[at]
+        this.capAt = wtAdd(at, 1)
+        w.capHeadLen = have + 1
+        if (h3ReadFrameHeader(this.header, head, WT_ZERO, have + 1) === 0) {
           continue
         }
-        this.capHeadLen[s] = 0
+        w.capHeadLen = 0
         const type: i64 = this.header.type
         const length: i64 = this.header.length
-        if (type === WT_CAPSULE_CLOSE && (length < 4 || length > toI64(WT_REASON_MAX + 4))) {
-          return this.malformed(s, H3_DATAGRAM_ERROR)
+        if (type === WT_CAPSULE_CLOSE && (length < 4 || length > toI64(WT_REASON_STRIDE))) {
+          return this.malformed(w, H3_DATAGRAM_ERROR)
         }
         if (type === WT_CAPSULE_DRAIN && length !== toI64(0)) {
-          return this.malformed(s, H3_DATAGRAM_ERROR)
+          return this.malformed(w, H3_DATAGRAM_ERROR)
         }
-        this.capType[s] = type
-        this.capLeft[s] = length
-        this.capFill[s] = 0
+        w.capType = type
+        w.capLeft = length
+        w.capFill = 0
       } else {
-        const want: i64 = toI64(this.capEnd - this.capAt)
-        const take: i32 = toI32(this.capLeft[s] < want ? this.capLeft[s] : want)
-        if (this.capType[s] === WT_CAPSULE_CLOSE) {
-          quicPacketCopy(this.reason, s * WT_REASON_STRIDE + this.capFill[s], bytes, this.capAt, take)
-          this.capFill[s] = this.capFill[s] + take
+        const want: i64 = toI64(wtSub(this.capEnd, at))
+        const take: i32 = toI32(left < want ? left : want)
+        if (take < 0) {
+          return this.malformed(w, H3_DATAGRAM_ERROR)
         }
-        this.capAt = this.capAt + take
-        this.capLeft[s] = this.capLeft[s] - toI64(take)
+        // The CLOSE's length was held to `reason`'s size above, so the copy fits.
+        if (w.capType === WT_CAPSULE_CLOSE && !tryCopyBytes(w.reason, w.capFill, bytes, at, take)) {
+          return this.malformed(w, H3_DATAGRAM_ERROR)
+        }
+        if (w.capType === WT_CAPSULE_CLOSE) {
+          w.capFill = wtAdd(w.capFill, take)
+        }
+        this.capAt = wtAdd(at, take)
+        w.capLeft = left - toI64(take)
       }
-      if (this.capLeft[s] === toI64(0)) {
-        this.capLeft[s] = -1
-        const event: i32 = this.capsule(s, this.capType[s])
+      if (w.capLeft === toI64(0)) {
+        w.capLeft = -1
+        const event: i32 = this.capsule(w, w.capType)
         if (event !== H3_NEED_MORE) {
           return event
         }
@@ -1341,59 +1644,61 @@ export class WebTransport {
     return H3_NEED_MORE
   }
 
-  /** A whole capsule of `type` on session `s`'s CONNECT stream. */
-  private capsule(s: i32, type: i64): i32 {
-    this.session = s
-    this.sessionId = this.sessionIds[s]
-    this.stream = this.sessionIds[s]
+  /** A whole capsule of `type` on session `w`'s CONNECT stream. */
+  private capsule(w: WebTransportSession, type: i64): i32 {
+    this.session = w.index
+    this.sessionId = w.id
+    this.stream = w.id
     if (type === WT_CAPSULE_DRAIN) {
-      return this.states[s] === WT_GONE ? H3_NEED_MORE : WT_DRAIN
+      return w.state === WT_GONE ? H3_NEED_MORE : WT_DRAIN
     }
     if (type !== WT_CAPSULE_CLOSE) {
       // RFC 9297 §3.2: a capsule type this side does not know is skipped.
       return H3_NEED_MORE
     }
-    this.closeRead[s] = true
-    if (this.states[s] === WT_GONE) {
+    w.closeRead = true
+    if (w.state === WT_GONE) {
       // This side closed it first, and finished its half then.
       return H3_NEED_MORE
     }
-    const at: i32 = s * WT_REASON_STRIDE
+    const reason: u8[] = w.reason
     let code: i64 = 0
-    for (let j: i32 = 0; j < 4 && at + j < toI32(this.reason.length); j++) {
-      code = (code << toI64(8)) | toI64(toI32(this.reason[at + j]))
+    for (let j: i32 = 0; j < 4 && j < toI32(reason.length); j++) {
+      code = (code << toI64(8)) | toI64(toI32(reason[j]))
     }
-    this.end(s)
-    const length: i32 = this.capFill[s] - 4
+    this.end(w)
+    // A CLOSE's payload is its 4-byte code and then the reason, 1028 bytes at most.
+    const fill: i32 = w.capFill
+    const length: i32 = fill >= 4 && fill <= 1028 ? fill - 4 : WT_ZERO
     // §5: the CLOSE is answered by finishing this side's half; when that cannot go, the session is over here and now.
-    if (!this.finish(this.sessionIds[s])) {
-      this.release(s)
+    if (!this.finish(w.id)) {
+      this.release(w)
     }
-    return this.closedEvent(s, code, length, true)
+    return this.closedEvent(w, code, length, true)
   }
 
-  /** A capsule that breaks a rule on session `s`: its CONNECT stream reset both ways with `code`, and the session over. */
-  private malformed(s: i32, code: i64): i32 {
-    const id: i64 = this.sessionIds[s]
-    const wasGone: boolean = this.states[s] === WT_GONE
+  /** A capsule that breaks a rule on session `w`: its CONNECT stream reset both ways with `code`, and the session over. */
+  private malformed(w: WebTransportSession, code: i64): i32 {
+    const id: i64 = w.id
+    const wasGone: boolean = w.state === WT_GONE
     this.capSession = -1
-    this.release(s)
+    this.release(w)
     this.h3.reset(id, code)
     this.h3.discardRequest(id, code)
     this.stream = id
     this.sessionId = id
-    return wasGone ? H3_NEED_MORE : this.closedEvent(s, WT_ZERO64, WT_ZERO, false)
+    return wasGone ? H3_NEED_MORE : this.closedEvent(w, WT_ZERO64, WT_ZERO, false)
   }
 
   // ---- Streams ---------------------------------------------------------------------
 
   /** A stream named session `session` in its first bytes (H3_STREAM): taken, kept waiting or refused. */
   private arrived(id: i64, session: i64): i32 {
-    const s: i32 = this.sessionOf(session)
-    if (s >= 0 && this.states[s] === WT_OPEN) {
-      return this.adopt(s, id)
+    const w: WebTransportSession | null = this.sessionOf(session)
+    if (w !== null && w.state === WT_OPEN) {
+      return this.adopt(w, id)
     }
-    if ((s >= 0 && this.states[s] === WT_ASKED) || (s < 0 && this.h3.awaitsRequest(session))) {
+    if ((w !== null && w.state === WT_ASKED) || (w === null && this.h3.awaitsRequest(session))) {
       // draft-02 §4.5: it waits, unread, for its session.
       if (this.waiting.count < this.config.maxPending && this.waiting.add(id, session)) {
         return H3_NEED_MORE
@@ -1411,14 +1716,21 @@ export class WebTransport {
    * session has none left (or is gone), when the next session's turn comes.
    */
   private adoptWaiting(): i32 {
-    const s: i32 = this.adoptions[this.adoptCount - 1]
-    if (s >= 0 && s < toI32(this.states.length) && this.states[s] === WT_OPEN) {
-      const e: i32 = this.waiting.first(this.sessionIds[s])
-      if (e >= 0) {
-        return this.adopt(s, this.waiting.take(e))
+    const list: i32[] = this.adoptions
+    const i: i32 = wtSub(this.adoptCount, 1)
+    if (i < 0 || i >= toI32(list.length)) {
+      this.adoptCount = 0
+      return H3_NEED_MORE
+    }
+    const w: WebTransportSession | null = this.at(list[i])
+    if (w !== null && w.state === WT_OPEN) {
+      const e: i32 = this.waiting.first(w.id)
+      const stream: i64 = e >= 0 ? this.waiting.take(e) : WT_NONE64
+      if (stream >= 0) {
+        return this.adopt(w, stream)
       }
     }
-    this.adoptCount = this.adoptCount - 1
+    this.adoptCount = i
     return H3_NEED_MORE
   }
 
@@ -1429,76 +1741,81 @@ export class WebTransport {
   }
 
   /**
-   * Takes the client's stream `id` into session `s`, unless the session
+   * Takes the client's stream `id` into session `w`, unless the session
    * holds `maxStreams` already: answers WT_STREAM, or H3_NEED_MORE for one
    * refused with H3_REQUEST_REJECTED.
    */
-  private adopt(s: i32, id: i64): i32 {
-    if (this.streamCount[s] >= this.config.maxStreams) {
+  private adopt(w: WebTransportSession, id: i64): i32 {
+    if (w.streams >= this.config.maxStreams) {
       this.refuseStream(id, H3_REQUEST_REJECTED)
       return H3_NEED_MORE
     }
     const bidi: boolean = !quicStreamIsUni(id)
-    if (this.h3.acceptStream(id) !== 0 || this.link(s, id, bidi ? WT_ZERO : WT_SENT) < 0) {
+    if (this.h3.acceptStream(id) !== 0 || this.link(w, id, bidi ? WT_ZERO : WT_SENT) < 0) {
       return H3_NEED_MORE
     }
-    this.session = s
-    this.sessionId = this.sessionIds[s]
+    this.session = w.index
+    this.sessionId = w.id
     this.stream = id
     this.bidirectional = bidi
     return WT_STREAM
   }
 
-  /** Puts stream `id` at the head of session `s`'s list with `bits`; answers its slot, or -1. */
-  private link(s: i32, id: i64, bits: i32): i32 {
+  /** Puts stream `id` at the head of session `w`'s list with `bits`; answers its slot, or -1. */
+  private link(w: WebTransportSession, id: i64, bits: i32): i32 {
     const k: i32 = this.quic.streams.slotOf(id)
-    if (k < 0 || k >= toI32(this.streamIds.length)) {
+    const t: WebTransportStream | null = this.slotAt(k)
+    if (t === null) {
       return WT_NONE
     }
-    if (this.streamIds[k] >= 0) {
+    if (t.id >= 0) {
       // QUIC freed this slot under a stream whose end no event told (a STOP_SENDING it answered and saw acknowledged): let go of it now.
-      this.unlink(k)
+      this.unlink(t)
     }
-    const head: i32 = this.firstStream[s]
-    this.streamIds[k] = id
-    this.streamSession[k] = s
-    this.streamBits[k] = bits
-    this.prevStream[k] = -1
-    this.nextStream[k] = head
-    if (head >= 0 && head < toI32(this.prevStream.length)) {
-      this.prevStream[head] = k
+    const head: i32 = w.firstStream
+    t.id = id
+    t.session = w.index
+    t.bits = bits
+    t.prev = -1
+    t.next = head
+    const first: WebTransportStream | null = this.slotAt(head)
+    if (first !== null) {
+      first.prev = k
     }
-    this.firstStream[s] = k
-    this.streamCount[s] = this.streamCount[s] + 1
+    w.firstStream = k
+    // At most `maxStreams`, 4096: `adopt` and `openStream` check it first.
+    w.streams = wtAdd(w.streams, 1)
+    this.publish(w)
     return k
   }
 
-  /** Marks `bits` done on the stream in slot `k`, and takes it off its session once both sides are. */
-  private settle(k: i32, bits: i32): void {
-    this.streamBits[k] = this.streamBits[k] | bits
-    if ((this.streamBits[k] & (WT_SENT | WT_RECEIVED)) === (WT_SENT | WT_RECEIVED)) {
-      this.unlink(k)
+  /** Marks `bits` done on stream `t`, and takes it off its session once both sides are. */
+  private settle(t: WebTransportStream, bits: i32): void {
+    t.bits = t.bits | bits
+    if ((t.bits & (WT_SENT | WT_RECEIVED)) === (WT_SENT | WT_RECEIVED)) {
+      this.unlink(t)
     }
   }
 
-  /** Takes the stream in slot `k` off its session's list. */
-  private unlink(k: i32): void {
-    const s: i32 = this.streamSession[k]
-    const before: i32 = this.prevStream[k]
-    const after: i32 = this.nextStream[k]
-    if (before >= 0 && before < toI32(this.nextStream.length)) {
-      this.nextStream[before] = after
-    } else if (s >= 0 && s < toI32(this.firstStream.length)) {
-      this.firstStream[s] = after
+  /** Takes stream `t` off its session's list. */
+  private unlink(t: WebTransportStream): void {
+    const w: WebTransportSession | null = this.at(t.session)
+    const before: WebTransportStream | null = this.slotAt(t.prev)
+    const after: WebTransportStream | null = this.slotAt(t.next)
+    if (before !== null) {
+      before.next = t.next
+    } else if (w !== null) {
+      w.firstStream = t.next
     }
-    if (after >= 0 && after < toI32(this.prevStream.length)) {
-      this.prevStream[after] = before
+    if (after !== null) {
+      after.prev = t.prev
     }
-    if (s >= 0 && s < toI32(this.streamCount.length)) {
-      this.streamCount[s] = this.streamCount[s] - 1
+    if (w !== null) {
+      w.streams = wtSub(w.streams, 1)
+      this.publish(w)
     }
-    this.streamIds[k] = -1
-    this.streamSession[k] = -1
+    t.id = -1
+    t.session = -1
   }
 
   /**
@@ -1513,18 +1830,18 @@ export class WebTransport {
    *   gone.
    */
   openStream(id: i64, bidirectional: boolean): i64 {
-    const s: i32 = this.openSession(id)
-    if (s < 0) {
+    const w: WebTransportSession | null = this.openSession(id)
+    if (w === null) {
       return toI64(H3_CLOSED)
     }
-    if (this.streamCount[s] >= this.config.maxStreams) {
+    if (w.streams >= this.config.maxStreams) {
       return toI64(WT_LIMIT)
     }
     const stream: i64 = this.h3.openStream(id, bidirectional)
     if (stream < 0) {
       return stream
     }
-    this.link(s, stream, bidirectional ? WT_ZERO : WT_RECEIVED)
+    this.link(w, stream, bidirectional ? WT_ZERO : WT_RECEIVED)
     return stream
   }
 
@@ -1543,16 +1860,16 @@ export class WebTransport {
    */
   write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
     this.current()
-    const k: i32 = this.streamSlot(id)
-    if (k < 0) {
+    const t: WebTransportStream | null = this.streamOf(id)
+    if (t === null) {
       return H3_CLOSED
     }
     const n: i32 = this.h3.writeStream(id, buf, off, len, fin)
     if (n >= 0) {
-      this.touch(k)
+      this.touch(t)
     }
     if (fin && n === len) {
-      this.settle(k, WT_SENT)
+      this.settle(t, WT_SENT)
     }
     return n
   }
@@ -1565,15 +1882,15 @@ export class WebTransport {
    */
   resetStream(id: i64, code: i64): i32 {
     this.current()
-    const k: i32 = this.streamSlot(id)
-    if (k < 0) {
+    const t: WebTransportStream | null = this.streamOf(id)
+    if (t === null) {
       return H3_CLOSED
     }
     const result: i32 = this.h3.resetStream(id, wtCodeToHttp3(code))
     if (result !== 0) {
       return result
     }
-    this.settle(k, WT_SENT)
+    this.settle(t, WT_SENT)
     return 0
   }
 
@@ -1587,15 +1904,15 @@ export class WebTransport {
    */
   stopSending(id: i64, code: i64): i32 {
     this.current()
-    const k: i32 = this.streamSlot(id)
-    if (k < 0 || (this.streamBits[k] & WT_RECEIVED) !== 0) {
+    const t: WebTransportStream | null = this.streamOf(id)
+    if (t === null || (t.bits & WT_RECEIVED) !== 0) {
       return H3_CLOSED
     }
     const result: i32 = this.h3.stopStream(id, wtCodeToHttp3(code))
     if (result !== 0) {
       return result
     }
-    this.settle(k, WT_RECEIVED)
+    this.settle(t, WT_RECEIVED)
     return 0
   }
 
@@ -1609,10 +1926,10 @@ export class WebTransport {
    * @returns The most payload bytes one datagram may carry now, 0 or more.
    */
   maxDatagramPayload(id: i64): i32 {
-    if (this.openSession(id) < 0) {
+    if (this.openSession(id) === null) {
       return WT_ZERO
     }
-    const room: i32 = this.quic.maxDatagramPayload() - quicVarintSize(id >> toI64(2))
+    const room: i32 = wtSub(this.quic.maxDatagramPayload(), quicVarintSize(id >> toI64(2)))
     return room > 0 ? room : WT_ZERO
   }
 
@@ -1633,21 +1950,21 @@ export class WebTransport {
    */
   sendDatagram(id: i64, buf: u8[], off: i32, len: i32): i32 {
     h3CheckWindow("WebTransport.sendDatagram", buf, off, len)
-    const s: i32 = this.openSession(id)
-    if (s < 0) {
+    const w: WebTransportSession | null = this.openSession(id)
+    if (w === null) {
       return H3_CLOSED
     }
     const out: u8[] = this.outgoing
     const p: i32 = h3PutVarint(out, WT_ZERO, toI32(out.length), id >> toI64(2))
     // The quarter stream ID and the payload must fit what QUIC sends now (`maxDatagramPayload`, without the ID's room).
-    if (p < 0 || len > this.quic.maxDatagramPayload() - p || p + len > toI32(out.length)) {
+    if (p < 0 || len > wtSub(this.quic.maxDatagramPayload(), p) || !tryCopyBytes(out, p, buf, off, len)) {
       return H3_TOO_LARGE
     }
-    quicPacketCopy(out, p, buf, off, len)
-    const result: i32 = this.quic.sendDatagram(out, WT_ZERO, p + len)
+    const result: i32 = this.quic.sendDatagram(out, WT_ZERO, wtAdd(p, len))
     if (result === QUIC_DATAGRAM_OK) {
-      this.lastActive[s] = this.now
-      this.datagramsOut[s] = h3Count(this.datagramsOut[s])
+      w.lastActive = this.now
+      w.datagramsOut = h3Count(w.datagramsOut)
+      this.publish(w)
       return 0
     }
     return result === QUIC_DATAGRAM_ERR_FULL ? H3_AGAIN : H3_TOO_LARGE
