@@ -53,7 +53,7 @@
  * ported from another implementation.
  */
 import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub } from "nish:unsafe"
-import { copyBytes } from "nish/bytes"
+import { copyBytes, tryCopyBytes } from "nish/bytes"
 
 /** Level 0: stored blocks only, the input copied with five bytes of framing per 65,535. */
 export const DEFLATE_STORE: i32 = 0
@@ -217,17 +217,6 @@ const inflateFill16 = (b: u8[], to: integer<0, 2147483631>, w: u64): void => {
 const deflateWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
   if (off < 0 || len < 0 || off > toI32(buf.length) - len) {
     panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
-  }
-}
-
-/**
- * Panics unless `out[p .. p + n)` lies inside `out`: the check every store of
- * the bit writer makes before its unchecked stores. A block's exact size was
- * checked against the room before it was written, so this never fires.
- */
-const deflateRoom = (out: u8[], p: i32, n: i32): void => {
-  if (p < 0 || p > toI32(out.length) - n) {
-    panic("Deflater: a write past the room its block was sized for")
   }
 }
 
@@ -710,7 +699,9 @@ export class Deflater {
   private readonly scratch: DeflateHuffmanScratch
   /** Bits written but not yet stored, low bit first, and how many. */
   private bitBuf: u64
-  private bitCount: i32
+  private bitCount: u32
+  /** Set when a store would have run past `out`: the call answers `DEFLATE_NO_ROOM`. */
+  private overrun: boolean
   /** @internal Used by `GzipCompressor`, `GzipWriter` (std/compress/gzip.ts) and `ZlibCompressor` (std/compress/zlib.ts). The level, 0 to 9. */
   readonly level: i32
   /** Candidates tried per position. */
@@ -827,6 +818,7 @@ export class Deflater {
     this.scratch = new DeflateHuffmanScratch()
     this.bitBuf = 0
     this.bitCount = 0
+    this.overrun = false
     for (let s: i32 = 0; s < 29; s += 1) {
       this.lengthBase[s] = deflateLengthBase(s)
       this.lengthExtra[s] = deflateLengthExtra(s)
@@ -881,6 +873,7 @@ export class Deflater {
   reset(): void {
     this.bitBuf = 0
     this.bitCount = 0
+    this.overrun = false
   }
 
   /**
@@ -904,6 +897,7 @@ export class Deflater {
     deflateWindow("Deflater.compress", out, at, 0)
     this.bitBuf = 0
     this.bitCount = 0
+    this.overrun = false
     this.begin(off)
     const end: i32 = this.compressRange(src, off, off + len, off, true, out, at, toI32(out.length))
     this.finish(off + len)
@@ -953,13 +947,13 @@ export class Deflater {
    * `DEFLATE_NO_ROOM`.
    */
   flushBits(out: u8[], op: i32, oe: i32): i32 {
-    const bytes: i32 = (this.bitCount + 7) >> 3
-    if (op < 0 || oe > toI32(out.length) || bytes > oe - op) {
+    const bytes: i32 = toI32((this.bitCount + 7) >> 3)
+    if (op < 0 || oe > toI32(out.length) || op > oe - bytes) {
       return DEFLATE_NO_ROOM
     }
     let p: i32 = op
     let bb: u64 = this.bitBuf
-    for (let i: i32 = 0; i < bytes; i += 1) {
+    while (p < op + bytes) {
       uncheckedSet(out, p, toU8(bb & toU64(255)))
       bb = bb >> toU64(8)
       p += 1
@@ -976,17 +970,20 @@ export class Deflater {
    */
   private putBits(out: u8[], op: i32, v: i32, n: i32): i32 {
     let bb: u64 = this.bitBuf | (toU64(toU32(v)) << toU64(this.bitCount))
-    let bc: i32 = this.bitCount + n
+    let bc: u32 = this.bitCount + toU32(n)
     let p: i32 = op
-    if (bc >= 32) {
-      deflateRoom(out, p, 4)
-      uncheckedSet(out, p, toU8(bb & toU64(255)))
-      uncheckedSet(out, p + 1, toU8((bb >> toU64(8)) & toU64(255)))
-      uncheckedSet(out, p + 2, toU8((bb >> toU64(16)) & toU64(255)))
-      uncheckedSet(out, p + 3, toU8((bb >> toU64(24)) & toU64(255)))
+    if (bc >= toU32(32)) {
+      if (p >= 0 && p <= toI32(out.length) - 4) {
+        uncheckedSet(out, p, toU8(bb & toU64(255)))
+        uncheckedSet(out, p + 1, toU8((bb >> toU64(8)) & toU64(255)))
+        uncheckedSet(out, p + 2, toU8((bb >> toU64(16)) & toU64(255)))
+        uncheckedSet(out, p + 3, toU8((bb >> toU64(24)) & toU64(255)))
+        p += 4
+      } else {
+        this.overrun = true
+      }
       bb = bb >> toU64(32)
-      bc -= 32
-      p += 4
+      bc -= toU32(32)
     }
     this.bitBuf = bb
     this.bitCount = bc
@@ -999,20 +996,14 @@ export class Deflater {
    * starts at. Answers the new `op`; the caller has checked the room.
    */
   private alignBits(out: u8[], op: i32): i32 {
-    let p: i32 = op
-    let bb: u64 = this.bitBuf
-    let bc: i32 = this.bitCount
-    deflateRoom(out, p, (bc + 7) >> 3)
-    while (bc > 0) {
-      uncheckedSet(out, p, toU8(bb & toU64(255)))
-      bb = bb >> toU64(8)
-      bc -= 8
-      p += 1
+    const p: i32 = this.flushBits(out, op, toI32(out.length))
+    if (p < 0) {
+      this.overrun = true
+      return op
     }
-    this.bitBuf = 0
-    this.bitCount = 0
     return p
   }
+
 
   /**
    * @internal Called by `GzipWriter` (std/compress/gzip.ts).
@@ -1044,11 +1035,11 @@ export class Deflater {
         return o
       }
       // An empty final block, in the fixed code: ten bits.
-      if ((this.bitCount + 10 + 7) >> 3 > oe - o) {
+      if (toI32((this.bitCount + toU32(17)) >> 3) > oe - o) {
         return -1
       }
       o = this.putBits(out, o, toI32(3), toI32(3))
-      return this.putBits(out, o, this.fixedLitCodes[256], this.fixedLitLens[256])
+      return this.settle(this.putBits(out, o, this.fixedLitCodes[256], this.fixedLitLens[256]))
     }
     if (this.level === 0) {
       return this.writeStored(src, start, end, final, out, o, oe)
@@ -1063,9 +1054,21 @@ export class Deflater {
           : this.collectGreedy(src, p, end, histStart)
       o = this.writeBlock(src, p, q, final && q === end, out, o, oe)
       if (o < 0) {
-        return -1
+        return this.settle(toI32(-1))
       }
       p = q
+    }
+    return this.settle(o)
+  }
+
+  /**
+   * Answers `o`, or -1 when a store since the last call would have run past
+   * `out` (`overrun`), which it clears: the end of every writing entry point.
+   */
+  private settle(o: i32): i32 {
+    if (this.overrun) {
+      this.overrun = false
+      return -1
     }
     return o
   }
@@ -1410,8 +1413,8 @@ export class Deflater {
    * not fit in `out[op .. oe)`.
    */
   writeStored(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32 {
-    const bits: i32 = this.storedBits(end - start, this.bitCount)
-    if ((this.bitCount + bits + 7) >> 3 > oe - op) {
+    const bits: i32 = this.storedBits(end - start, toI32(this.bitCount))
+    if ((toI32(this.bitCount) + bits + 7) >> 3 > oe - op) {
       return -1
     }
     let p: i32 = start
@@ -1423,17 +1426,18 @@ export class Deflater {
       const last: boolean = p + take === end
       o = this.putBits(out, o, toI32(final && last ? 1 : 0), toI32(3))
       o = this.alignBits(out, o)
-      deflateRoom(out, o, 4)
-      uncheckedSet(out, o, toU8(take & 255))
-      uncheckedSet(out, o + 1, toU8(take >> 8))
-      uncheckedSet(out, o + 2, toU8(~take & 255))
-      uncheckedSet(out, o + 3, toU8((~take >> 8) & 255))
-      o += 4
-      copyBytes(out, o, src, p, take)
-      o += take
+      if (o >= 0 && o <= toI32(out.length) - 4 && tryCopyBytes(out, o + 4, src, p, take)) {
+        uncheckedSet(out, o, toU8(take & 255))
+        uncheckedSet(out, o + 1, toU8(take >> 8))
+        uncheckedSet(out, o + 2, toU8(~take & 255))
+        uncheckedSet(out, o + 3, toU8((~take >> 8) & 255))
+      } else {
+        this.overrun = true
+      }
+      o += 4 + take
       p += take
     }
-    return o
+    return this.settle(o)
   }
 
   /**
@@ -1560,13 +1564,13 @@ export class Deflater {
     dynBits += 2 * this.clFreq[16] + 3 * this.clFreq[17] + 7 * this.clFreq[18]
     dynBits += extra
     fixBits += extra
-    const storedBits: i32 = this.storedBits(end - start, this.bitCount)
+    const storedBits: i32 = this.storedBits(end - start, toI32(this.bitCount))
     if (storedBits <= dynBits && storedBits <= fixBits) {
       return this.writeStored(src, start, end, final, out, op, oe)
     }
     const dynamic: boolean = dynBits < fixBits
     const bits: i32 = dynamic ? dynBits : fixBits
-    if ((this.bitCount + bits + 7) >> 3 > oe - op) {
+    if ((toI32(this.bitCount) + bits + 7) >> 3 > oe - op) {
       return -1
     }
     let header: i32 = dynamic ? toI32(4) : toI32(2)
@@ -1640,47 +1644,53 @@ export class Deflater {
       panic("Deflater.writeSymbols: a table is not its size")
     }
     let bb: u64 = this.bitBuf
-    let bc: i32 = this.bitCount
+    let bc: u32 = this.bitCount
     let o: i32 = op
     for (let i: i32 = 0; i < n; i += 1) {
       const t: i32 = uncheckedGet(tokens, i)
       if (t < 256) {
         bb = bb | (toU64(toU32(uncheckedGet(lc, t))) << toU64(bc))
-        bc += uncheckedGet(ll, t)
+        bc += toU32(uncheckedGet(ll, t))
       } else {
         const len3: i32 = (t & 511) - 256
         const dist: i32 = t >> 9
         const s: i32 = uncheckedGet(lsym, len3)
         bb = bb | (toU64(toU32(uncheckedGet(lc, 257 + s))) << toU64(bc))
-        bc += uncheckedGet(ll, 257 + s)
+        bc += toU32(uncheckedGet(ll, 257 + s))
         bb = bb | (toU64(toU32(len3 + 3 - uncheckedGet(lbase, s))) << toU64(bc))
-        bc += uncheckedGet(lextra, s)
-        if (bc >= 32) {
-          deflateRoom(out, o, 4)
-          uncheckedSet(out, o, toU8(bb))
-          uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
-          uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
-          uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+        bc += toU32(uncheckedGet(lextra, s))
+        if (bc >= toU32(32)) {
+          if (o >= 0 && o <= toI32(out.length) - 4) {
+            uncheckedSet(out, o, toU8(bb))
+            uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+            uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+            uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+            o += 4
+          } else {
+            this.overrun = true
+          }
           bb = bb >> toU64(32)
-          bc -= 32
-          o += 4
+          bc -= toU32(32)
         }
         const d: i32 =
           dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         bb = bb | (toU64(toU32(uncheckedGet(dc, d))) << toU64(bc))
-        bc += uncheckedGet(dl, d)
+        bc += toU32(uncheckedGet(dl, d))
         bb = bb | (toU64(toU32(dist - uncheckedGet(dbase, d))) << toU64(bc))
-        bc += uncheckedGet(dextra, d)
+        bc += toU32(uncheckedGet(dextra, d))
       }
-      if (bc >= 32) {
-        deflateRoom(out, o, 4)
-        uncheckedSet(out, o, toU8(bb))
-        uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
-        uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
-        uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+      if (bc >= toU32(32)) {
+        if (o >= 0 && o <= toI32(out.length) - 4) {
+          uncheckedSet(out, o, toU8(bb))
+          uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+          uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+          uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+          o += 4
+        } else {
+          this.overrun = true
+        }
         bb = bb >> toU64(32)
-        bc -= 32
-        o += 4
+        bc -= toU32(32)
       }
     }
     this.bitBuf = bb
