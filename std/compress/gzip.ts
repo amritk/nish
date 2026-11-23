@@ -61,6 +61,16 @@ export const GZIP_ERR_CRC: i32 = -10
 /** The trailer's length is not the data's length mod 2^32. */
 export const GZIP_ERR_SIZE: i32 = -11
 
+/**
+ * `GzipWriter`: the body is finished, so `write`, `flush` and `finish` take
+ * nothing more until `start` begins another. Answered after `finish` has
+ * returned the trailer, and from a call whose compression overran the room
+ * `bound` promised, which leaves the body cut short: its output so far is
+ * not a gzip member. Codes from -16 to -19 are left to
+ * `nish/compress/deflate`.
+ */
+export const GZIP_ERR_FINISHED: i32 = -20
+
 /** `GzipReader`: no more output yet; give it input. */
 export const GZIP_NEED_INPUT: i32 = 0
 
@@ -75,9 +85,8 @@ const GZIP_TRAILER_SIZE: i32 = 8
 const GZIP_WRITER_HISTORY: i32 = 32768
 const GZIP_WRITER_INPUT: i32 = 65536
 
-/** The bytes of decoded output a `GzipReader` keeps: the 32 KB window and 32 KB to hand out. */
+/** The 32 KB window of decoded output a `GzipReader` keeps behind what it hands out. */
 const GZIP_READER_WINDOW: i32 = 32768
-const GZIP_READER_OUTPUT: i32 = 65536
 
 /** The bytes a `GzipReader` buffers of input. */
 const GZIP_READER_INPUT: i32 = 16384
@@ -89,25 +98,45 @@ const gzipWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
   }
 }
 
-/** Writes `v` little-endian into `out[at .. at + 4)`; the caller has checked the room. */
-const gzipPut32 = (out: u8[], at: i32, v: u32): void => {
-  out[at] = toU8(v & 255)
-  out[at + 1] = toU8((v >>> 8) & 255)
-  out[at + 2] = toU8((v >>> 16) & 255)
-  out[at + 3] = toU8(v >>> 24)
+/** The byte at `b[i]`, or -1 when `i` is outside `b`. */
+const gzipByte = (b: u8[], i: i32): i32 => (i >= 0 && i < toI32(b.length) ? toI32(b[i]) : -1)
+
+/**
+ * Writes `v` little-endian into `out[at .. at + 4)` and answers whether
+ * those four bytes lie inside `out`; when they do not, it may have written
+ * the first of them.
+ */
+const gzipPut32 = (out: u8[], at: i32, v: u32): boolean => {
+  const n: i32 = toI32(out.length)
+  for (let k: i32 = 0; k < 4; k += 1) {
+    const i: i32 = toI32(toI64(at) + toI64(k))
+    if (i < 0 || i >= n) {
+      return false
+    }
+    out[i] = toU8((v >>> toU32(k * 8)) & 255)
+  }
+  return true
 }
 
-/** The little-endian word at `b[at .. at + 4)`; the caller has checked the range. */
-const gzipGet32 = (b: u8[], at: i32): u32 =>
-  toU32(b[at]) | (toU32(b[at + 1]) << 8) | (toU32(b[at + 2]) << 16) | (toU32(b[at + 3]) << 24)
+/** The little-endian word at `b[at .. at + 4)`, or -1 when those bytes are not all inside `b`. */
+const gzipGet32 = (b: u8[], at: i32): i64 => {
+  let v: i64 = 0
+  for (let k: i32 = 0; k < 4; k += 1) {
+    const c: i32 = gzipByte(b, toI32(toI64(at) + toI64(k)))
+    if (c < 0) {
+      return -1
+    }
+    v = v | (toI64(c & 255) << (toI64(k) * 8))
+  }
+  return v
+}
 
-/** Writes the ten-byte header for `level` at `out[at]`; the caller has checked the room. */
-const gzipWriteHeader = (out: u8[], at: i32, level: i32): void => {
-  out[at] = 0x1f
-  out[at + 1] = 0x8b
-  out[at + 2] = 8
-  out[at + 3] = 0
-  gzipPut32(out, at + 4, toU32(0))
+/**
+ * Writes the ten-byte header for `level` at `out[at]` and answers the
+ * position after it, or `DEFLATE_NO_ROOM` when the ten bytes do not lie
+ * inside `out`.
+ */
+const gzipWriteHeader = (out: u8[], at: i32, level: i32): i32 => {
   // XFL (§2.3.1): 2 for the slowest level, 4 for the fastest.
   let xfl: i32 = 0
   if (level === 1) {
@@ -115,8 +144,28 @@ const gzipWriteHeader = (out: u8[], at: i32, level: i32): void => {
   } else if (level === 9) {
     xfl = 2
   }
-  out[at + 8] = toU8(xfl)
-  out[at + 9] = 255
+  // ID1, ID2, CM (8, DEFLATE), FLG 0, MTIME 0, XFL, OS 255.
+  const n: i32 = toI32(out.length)
+  for (let k: i32 = 0; k < GZIP_HEADER_SIZE; k += 1) {
+    const i: i32 = toI32(toI64(at) + toI64(k))
+    if (i < 0 || i >= n) {
+      return DEFLATE_NO_ROOM
+    }
+    let b: i32 = 0
+    if (k === 0) {
+      b = 0x1f
+    } else if (k === 1) {
+      b = 0x8b
+    } else if (k === 2) {
+      b = 8
+    } else if (k === 8) {
+      b = xfl
+    } else if (k === 9) {
+      b = 255
+    }
+    out[i] = toU8(b)
+  }
+  return toI32(toI64(at) + toI64(GZIP_HEADER_SIZE))
 }
 
 /**
@@ -125,49 +174,80 @@ const gzipWriteHeader = (out: u8[], at: i32, level: i32): void => {
  * or `GZIP_ERR_HEADER`.
  */
 const gzipReadHeader = (crc: Crc32, src: u8[], p: i32, end: i32): i32 => {
-  if (end - p < GZIP_HEADER_SIZE) {
-    return end - p >= 2 && (src[p] !== 0x1f || src[p + 1] !== 0x8b) ? GZIP_ERR_HEADER : DEFLATE_ERR_TRUNCATED
+  // Positions are added in i64 and every byte is read through `gzipByte`:
+  // the callers' windows lie inside `src`, but the prover does not carry
+  // that into this function. Each step is checked against `end` before it
+  // is taken, so no sum leaves the i32 range.
+  const b0: i32 = gzipByte(src, p)
+  const b1: i32 = gzipByte(src, toI32(toI64(p) + 1))
+  if (toI64(end) - toI64(p) < toI64(GZIP_HEADER_SIZE)) {
+    return toI64(end) - toI64(p) >= 2 && b0 >= 0 && b1 >= 0 && (b0 !== 0x1f || b1 !== 0x8b)
+      ? GZIP_ERR_HEADER
+      : DEFLATE_ERR_TRUNCATED
   }
-  if (src[p] !== 0x1f || src[p + 1] !== 0x8b || src[p + 2] !== 8) {
+  const b2: i32 = gzipByte(src, toI32(toI64(p) + 2))
+  const flags: i32 = gzipByte(src, toI32(toI64(p) + 3))
+  if (b0 < 0 || b1 < 0 || b2 < 0 || flags < 0) {
+    return DEFLATE_ERR_TRUNCATED
+  }
+  if (b0 !== 0x1f || b1 !== 0x8b || b2 !== 8) {
     return GZIP_ERR_HEADER
   }
-  const flags: i32 = toI32(src[p + 3])
   if ((flags & 0xe0) !== 0) {
     return GZIP_ERR_HEADER
   }
-  let q: i32 = p + GZIP_HEADER_SIZE
+  let q: i32 = toI32(toI64(p) + toI64(GZIP_HEADER_SIZE))
   if ((flags & 4) !== 0) {
-    if (end - q < 2) {
+    const x0: i32 = gzipByte(src, q)
+    const x1: i32 = gzipByte(src, toI32(toI64(q) + 1))
+    if (toI64(end) - toI64(q) < 2 || x0 < 0 || x1 < 0) {
       return DEFLATE_ERR_TRUNCATED
     }
-    const xlen: i32 = toI32(src[q]) | (toI32(src[q + 1]) << 8)
-    if (end - q - 2 < xlen) {
+    const xlen: i32 = (x0 & 255) | ((x1 & 255) << 8)
+    if (toI64(end) - toI64(q) - 2 < toI64(xlen)) {
       return DEFLATE_ERR_TRUNCATED
     }
-    q += 2 + xlen
+    q = toI32(toI64(q) + toI64(xlen) + 2)
   }
   for (let field: i32 = 8; field <= 16; field += 8) {
     if ((flags & field) !== 0) {
-      while (q >= 0 && q < end && q < toI32(src.length) && src[q] !== 0) {
-        q += 1
+      // FNAME, then FCOMMENT: zero-terminated.
+      let c: i32 = gzipByte(src, q)
+      while (q < end && c > 0) {
+        q = toI32(toI64(q) + 1)
+        c = gzipByte(src, q)
       }
-      if (q >= end) {
+      if (q >= end || c < 0) {
         return DEFLATE_ERR_TRUNCATED
       }
-      q += 1
+      q = toI32(toI64(q) + 1)
     }
   }
   if ((flags & 2) !== 0) {
-    if (end - q < 2) {
+    const h0: i32 = gzipByte(src, q)
+    const h1: i32 = gzipByte(src, toI32(toI64(q) + 1))
+    if (toI64(end) - toI64(q) < 2 || h0 < 0 || h1 < 0) {
       return DEFLATE_ERR_TRUNCATED
     }
-    const want: i32 = toI32(src[q]) | (toI32(src[q + 1]) << 8)
-    if (toI32(crc.update(toU32(0), src, p, q - p) & 0xffff) !== want) {
+    const want: i32 = (h0 & 255) | ((h1 & 255) << 8)
+    if (toI32(crc.update(toU32(0), src, p, toI32(toI64(q) - toI64(p))) & 0xffff) !== want) {
       return GZIP_ERR_HEADER
     }
-    q += 2
+    q = toI32(toI64(q) + 2)
   }
   return q
+}
+
+/**
+ * Writes the trailer, `crc` then `size`, at `out[at]` and answers the
+ * position after it, or `DEFLATE_NO_ROOM` when its eight bytes do not lie
+ * inside `out`.
+ */
+const gzipTrailer = (out: u8[], at: i32, crc: u32, size: u32): i32 => {
+  if (!gzipPut32(out, at, crc) || !gzipPut32(out, toI32(toI64(at) + 4), size)) {
+    return DEFLATE_NO_ROOM
+  }
+  return toI32(toI64(at) + toI64(GZIP_TRAILER_SIZE))
 }
 
 /**
@@ -208,17 +288,17 @@ export class GzipCompressor {
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     gzipWindow("GzipCompressor.compress", src, off, len)
     gzipWindow("GzipCompressor.compress", out, at, 0)
-    if (toI32(out.length) - at < GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE) {
+    if (toI64(toI32(out.length)) - toI64(at) < toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE)) {
       return DEFLATE_NO_ROOM
     }
-    gzipWriteHeader(out, at, this.deflater.level)
-    const end: i32 = this.deflater.compress(src, off, len, out, at + GZIP_HEADER_SIZE)
-    if (end < 0 || toI32(out.length) - end < GZIP_TRAILER_SIZE) {
+    const body: i32 = gzipWriteHeader(out, at, this.deflater.level)
+    if (body < 0) {
       return DEFLATE_NO_ROOM
     }
-    gzipPut32(out, end, this.crc.update(toU32(0), src, off, len))
-    gzipPut32(out, end + 4, toU32(len))
-    return end + GZIP_TRAILER_SIZE
+    const end: i32 = this.deflater.compress(src, off, len, out, body)
+    return end < 0
+      ? DEFLATE_NO_ROOM
+      : gzipTrailer(out, end, this.crc.update(toU32(0), src, off, len), toU32(len))
   }
 }
 
@@ -228,9 +308,17 @@ export class GzipCompressor {
  * @param n The length of the input, in bytes; a negative `n` answers the
  *   bound of 0.
  * @returns A size in bytes, not a position: a `room` of this many always
- *   holds the member.
+ *   holds the member. Or `DEFLATE_NO_ROOM` when `n` is over 1,908,874,323,
+ *   where the size is more than 2^31 - 1 and no array holds it.
  */
-export const gzipFixedBound = (n: i32): i32 => fixedDeflateBound(n) + GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE
+export const gzipFixedBound = (n: i32): i32 => {
+  // Past this `n`, `fixedDeflateBound(n) + 18` (n + n / 8 + 34) is more
+  // than 2^31 - 1.
+  if (n > 1908874323) {
+    return DEFLATE_NO_ROOM
+  }
+  return toI32(toI64(fixedDeflateBound(n)) + toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE))
+}
 
 /**
  * A gzip compressor for short inputs: a `FixedDeflater` (one fixed-Huffman
@@ -273,21 +361,21 @@ export class GzipFixedCompressor {
     if (room < GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE) {
       return DEFLATE_NO_ROOM
     }
-    gzipWriteHeader(out, at, 1)
+    const body: i32 = gzipWriteHeader(out, at, 1)
+    if (body < 0) {
+      return DEFLATE_NO_ROOM
+    }
     const end: i32 = this.deflater.compress(
       src,
       off,
       len,
       out,
-      at + GZIP_HEADER_SIZE,
-      room - GZIP_HEADER_SIZE - GZIP_TRAILER_SIZE
+      body,
+      toI32(toI64(room) - toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE))
     )
-    if (end < 0) {
-      return DEFLATE_NO_ROOM
-    }
-    gzipPut32(out, end, this.crc.update(toU32(0), src, off, len))
-    gzipPut32(out, end + 4, toU32(len))
-    return end + GZIP_TRAILER_SIZE
+    return end < 0
+      ? DEFLATE_NO_ROOM
+      : gzipTrailer(out, end, this.crc.update(toU32(0), src, off, len), toU32(len))
   }
 }
 
@@ -338,9 +426,13 @@ export class GzipDecompressor {
     if (limit < 0) {
       panic("GzipDecompressor.decompress: a negative limit")
     }
-    const room: i32 = toI32(out.length) - at
-    const outEnd: i32 = at + (limit < room ? limit : room)
-    const end: i32 = off + len
+    // Positions are added in i64: the windows were checked in `gzipWindow`,
+    // but the prover does not carry that across the call.
+    let outEnd: i32 = toI32(out.length)
+    if (toI64(limit) < toI64(outEnd) - toI64(at)) {
+      outEnd = toI32(toI64(at) + toI64(limit))
+    }
+    const end: i32 = toI32(toI64(off) + toI64(len))
     let p: i32 = off
     let op: i32 = at
     let first: boolean = true
@@ -360,18 +452,20 @@ export class GzipDecompressor {
         return r
       }
       const q: i32 = inf.inPos
-      if (end - q < GZIP_TRAILER_SIZE) {
+      const wantCrc: i64 = gzipGet32(src, q)
+      const wantSize: i64 = gzipGet32(src, toI32(toI64(q) + 4))
+      if (toI64(end) - toI64(q) < toI64(GZIP_TRAILER_SIZE) || wantCrc < 0 || wantSize < 0) {
         return DEFLATE_ERR_TRUNCATED
       }
-      const n: i32 = inf.outPos - op
-      if (gzipGet32(src, q) !== this.crc.update(toU32(0), out, op, n)) {
+      const n: i32 = toI32(toI64(inf.outPos) - toI64(op))
+      if (wantCrc !== toI64(this.crc.update(toU32(0), out, op, n))) {
         return GZIP_ERR_CRC
       }
-      if (gzipGet32(src, q + 4) !== toU32(n)) {
+      if (wantSize !== toI64(toU32(n))) {
         return GZIP_ERR_SIZE
       }
       op = inf.outPos
-      p = q + GZIP_TRAILER_SIZE
+      p = toI32(toI64(q) + toI64(GZIP_TRAILER_SIZE))
     }
     return op
   }
@@ -417,8 +511,10 @@ export const gzipDecompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32
  * compressing whenever that fills, so output arrives in bursts. Every call
  * writes into a caller window and answers where its output ends, or
  * `DEFLATE_NO_ROOM` when the window is shorter than `bound(len)`, the most
- * that call can produce; nothing is consumed then. About 430 KB, allocated
- * once; `start` begins the next body.
+ * that call can produce; nothing is consumed then. After `finish`, and
+ * after a call whose output overran `bound`, every call answers
+ * `GZIP_ERR_FINISHED` until `start`. About 430 KB, allocated once; `start`
+ * begins the next body.
  */
 export class GzipWriter {
   private readonly deflater: Deflater
@@ -445,7 +541,8 @@ export class GzipWriter {
   constructor(level: i32) {
     this.deflater = new Deflater(level)
     this.crc = new Crc32()
-    this.window = new Array<u8>(GZIP_WRITER_HISTORY + GZIP_WRITER_INPUT)
+    // GZIP_WRITER_HISTORY + GZIP_WRITER_INPUT, as a literal the prover reads.
+    this.window = new Array<u8>(98304)
     this.pending = 0
     this.fill = 0
     this.checksum = 0
@@ -480,21 +577,47 @@ export class GzipWriter {
    * @param len The length of the next `write`, in bytes; 0 for a `flush` or
    *   `finish`.
    * @returns A size in bytes, not a position: the room `out` must have from
-   *   `at` for that call not to answer `DEFLATE_NO_ROOM`.
+   *   `at` for that call not to answer `DEFLATE_NO_ROOM`. Or
+   *   `DEFLATE_NO_ROOM` itself when `len` is over 2,145,000,000, where the
+   *   size comes near 2^31 - 1; a `write` of such a piece answers
+   *   `DEFLATE_NO_ROOM` whatever `out` is.
    */
   bound(len: i32): i32 {
-    const drains: i32 = (len >> 16) + 1
-    return deflateBound(GZIP_WRITER_INPUT + len) + drains * 18 + GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 10
+    // Up to this `len`, `deflateBound(65536 + len)` and the sum below stay
+    // under 2^31 - 1: 2,146,473,015 at the limit.
+    if (len > 2145000000) {
+      return DEFLATE_NO_ROOM
+    }
+    // One deflateBound constant (18) per 64 KB the call compresses, then
+    // the header, the trailer and 10 bytes of slack.
+    const n: i32 = toI32(toI64(len) + toI64(GZIP_WRITER_INPUT))
+    return toI32(
+      toI64(deflateBound(n)) + toI64((len >> 16) + 1) * 18 + toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 10)
+    )
   }
 
-  /** Writes the header into `out` at `at` if it has not been; answers the new position. */
+  /** Whether `out` has `bound(len)` bytes from `at`. */
+  private hasRoom(out: u8[], at: i32, len: i32): boolean {
+    const b: i32 = this.bound(len)
+    return b >= 0 && toI64(toI32(out.length)) - toI64(at) >= toI64(b)
+  }
+
+  /** Ends the body after an overrun of `bound`; answers `GZIP_ERR_FINISHED`. */
+  private fail(): i32 {
+    this.finished = true
+    return GZIP_ERR_FINISHED
+  }
+
+  /** Writes the header into `out` at `at` if it has not been; answers the new position, or -1. */
   private header(out: u8[], at: i32): i32 {
     if (this.started) {
       return at
     }
-    gzipWriteHeader(out, at, this.deflater.level)
-    this.started = true
-    return at + GZIP_HEADER_SIZE
+    const o: i32 = gzipWriteHeader(out, at, this.deflater.level)
+    if (o >= 0) {
+      this.started = true
+    }
+    return o
   }
 
   /**
@@ -519,7 +642,7 @@ export class GzipWriter {
     }
     this.pending = this.fill
     if (this.fill > GZIP_WRITER_HISTORY) {
-      const shift: i32 = this.fill - GZIP_WRITER_HISTORY
+      const shift: i32 = toI32(toI64(this.fill) - toI64(GZIP_WRITER_HISTORY))
       copyBytes(this.window, 0, this.window, shift, GZIP_WRITER_HISTORY)
       this.fill = GZIP_WRITER_HISTORY
       this.pending = GZIP_WRITER_HISTORY
@@ -532,8 +655,8 @@ export class GzipWriter {
    * Takes `src[off .. off + len)` and answers where the output it produced
    * in `out` from `at` ends (often `at`: input waits until 64 KB are
    * pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)`
-   * bytes from `at`. Writing after `finish` panics, as does a window outside
-   * its array.
+   * bytes from `at`. Writing after `finish` answers `GZIP_ERR_FINISHED`; a
+   * window outside its array panics.
    *
    * @param src The array that holds the next piece of the body; its bytes
    *   are copied, so the caller may reuse it once `write` returns.
@@ -543,36 +666,44 @@ export class GzipWriter {
    * @param at Where in `out` the output starts.
    * @returns The index in `out` one past the last byte written, so the
    *   caller sends `out[at .. result)`, which may be empty; or
-   *   `DEFLATE_NO_ROOM`, when nothing was taken and nothing written.
+   *   `DEFLATE_NO_ROOM`, when nothing was taken and nothing written; or
+   *   `GZIP_ERR_FINISHED`, after `finish` (nothing taken or written) or
+   *   when the output overran `bound(len)`, after which the bytes of `out`
+   *   from `at` mean nothing and the body cannot be completed.
    */
   write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     gzipWindow("GzipWriter.write", src, off, len)
     gzipWindow("GzipWriter.write", out, at, 0)
     if (this.finished) {
-      panic("GzipWriter.write: the body has been finished")
+      return GZIP_ERR_FINISHED
     }
-    if (toI32(out.length) - at < this.bound(len)) {
+    if (!this.hasRoom(out, at, len)) {
       return DEFLATE_NO_ROOM
     }
     let o: i32 = this.header(out, at)
+    if (o < 0) {
+      return this.fail()
+    }
     this.checksum = this.crc.update(this.checksum, src, off, len)
     this.size = this.size + toU32(len)
     let p: i32 = off
-    const end: i32 = off + len
+    const end: i32 = toI32(toI64(off) + toI64(len))
     // Compressed once 64 KB is pending, the first window too: `pending` is
     // at most `GZIP_WRITER_HISTORY` here, so the window always has the room.
+    // Fields are added in i64: the prover keeps no facts about them.
     while (p < end) {
-      let take: i32 = GZIP_WRITER_INPUT - (this.fill - this.pending)
-      if (take > end - p) {
-        take = end - p
+      let take: i64 = toI64(GZIP_WRITER_INPUT) - (toI64(this.fill) - toI64(this.pending))
+      if (take > toI64(end) - toI64(p)) {
+        take = toI64(end) - toI64(p)
       }
-      copyBytes(this.window, this.fill, src, p, take)
-      this.fill += take
-      p += take
-      if (this.fill - this.pending === GZIP_WRITER_INPUT) {
+      const t: i32 = toI32(take)
+      copyBytes(this.window, this.fill, src, p, t)
+      this.fill = toI32(toI64(this.fill) + toI64(t))
+      p = toI32(toI64(p) + toI64(t))
+      if (toI64(this.fill) - toI64(this.pending) === toI64(GZIP_WRITER_INPUT)) {
         o = this.drain(out, o, false)
         if (o < 0) {
-          panic("GzipWriter.write: a block larger than its bound")
+          return this.fail()
         }
       }
     }
@@ -583,67 +714,69 @@ export class GzipWriter {
    * Compresses everything pending and ends with an empty stored block, so a
    * reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`).
    * Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`.
-   * Flushing after `finish` panics, as does a window outside `out`.
+   * Flushing after `finish` answers `GZIP_ERR_FINISHED`; a window outside
+   * `out` panics.
    *
    * @param out The caller's array the output is written into.
    * @param at Where in `out` the output starts.
    * @returns The index in `out` one past the last byte written, so the
    *   caller sends `out[at .. result)`; or `DEFLATE_NO_ROOM`, when nothing
-   *   was written.
+   *   was written; or `GZIP_ERR_FINISHED`, after `finish` or when the
+   *   output overran `bound(0)`, as `write` answers it.
    */
   flush(out: u8[], at: i32): i32 {
     gzipWindow("GzipWriter.flush", out, at, 0)
     if (this.finished) {
-      panic("GzipWriter.flush: the body has been finished")
+      return GZIP_ERR_FINISHED
     }
-    if (toI32(out.length) - at < this.bound(toI32(0))) {
+    if (!this.hasRoom(out, at, toI32(0))) {
       return DEFLATE_NO_ROOM
     }
     let o: i32 = this.header(out, at)
-    if (this.fill > this.pending) {
+    if (o >= 0 && this.fill > this.pending) {
       o = this.drain(out, o, false)
-      if (o < 0) {
-        panic("GzipWriter.flush: a block larger than its bound")
-      }
     }
-    o = this.deflater.writeStored(this.window, toI32(0), toI32(0), false, out, o, toI32(out.length))
-    return o
+    if (o >= 0) {
+      o = this.deflater.writeStored(this.window, toI32(0), toI32(0), false, out, o, toI32(out.length))
+    }
+    return o < 0 ? this.fail() : o
   }
 
   /**
    * Compresses everything pending as the final block and writes the
    * trailer; answers the new end of `out`, or `DEFLATE_NO_ROOM` below
    * `bound(0)`. `start` begins another body; until then `write`, `flush`
-   * and `finish` panic, as does a window outside `out`.
+   * and `finish` answer `GZIP_ERR_FINISHED`. A window outside `out`
+   * panics.
    *
    * @param out The caller's array the output is written into.
    * @param at Where in `out` the output starts.
    * @returns The index in `out` one past the trailer's last byte, so the
    *   caller sends `out[at .. result)` as the end of the body; or
    *   `DEFLATE_NO_ROOM`, when nothing was written and the body is not yet
-   *   finished.
+   *   finished; or `GZIP_ERR_FINISHED`, after `finish` or when the output
+   *   overran `bound(0)`, as `write` answers it.
    */
   finish(out: u8[], at: i32): i32 {
     gzipWindow("GzipWriter.finish", out, at, 0)
     if (this.finished) {
-      panic("GzipWriter.finish: the body has been finished")
+      return GZIP_ERR_FINISHED
     }
-    if (toI32(out.length) - at < this.bound(toI32(0))) {
+    if (!this.hasRoom(out, at, toI32(0))) {
       return DEFLATE_NO_ROOM
     }
     let o: i32 = this.header(out, at)
-    o = this.drain(out, o, true)
-    if (o < 0) {
-      panic("GzipWriter.finish: a block larger than its bound")
+    if (o >= 0) {
+      o = this.drain(out, o, true)
     }
-    o = this.deflater.flushBits(out, o, toI32(out.length))
-    if (o < 0 || toI32(out.length) - o < GZIP_TRAILER_SIZE) {
-      panic("GzipWriter.finish: a block larger than its bound")
+    if (o >= 0) {
+      o = this.deflater.flushBits(out, o, toI32(out.length))
     }
-    gzipPut32(out, o, this.checksum)
-    gzipPut32(out, o + 4, this.size)
+    if (o >= 0) {
+      o = gzipTrailer(out, o, this.checksum, this.size)
+    }
     this.finished = true
-    return o + GZIP_TRAILER_SIZE
+    return o < 0 ? GZIP_ERR_FINISHED : o
   }
 }
 
@@ -678,14 +811,15 @@ export class GzipReader {
   private phase: i32
   /** Whether more input may come. */
   private more: boolean
-  /** The member's running CRC-32 and length, and the body's total length. */
+  /** Whether a member has been read; another may follow. */
+  private sawMember: boolean
+  /** The member's running CRC-32 and length. */
   private checksum: u32
   private size: u32
-  private total: i64
+  /** How many more decoded bytes the body may have, from `limit` down. */
+  private left: i64
   /** The most decoded bytes `read` hands out in all. */
   private readonly limit: i64
-  /** Whether a member has been read; another may follow. */
-  private members: i32
 
   /**
    * A reader that refuses more than `limit` decoded bytes in all; a negative
@@ -702,7 +836,9 @@ export class GzipReader {
     this.inflater = new Inflater()
     this.crc = new Crc32()
     this.input = new Array<u8>(GZIP_READER_INPUT)
-    this.output = new Array<u8>(GZIP_READER_WINDOW + GZIP_READER_OUTPUT)
+    // The window and 64 KB of output to hand out after it, as a literal the
+    // prover reads.
+    this.output = new Array<u8>(98304)
     this.limit = limit
     this.inStart = 0
     this.inEnd = 0
@@ -714,8 +850,8 @@ export class GzipReader {
     this.more = true
     this.checksum = 0
     this.size = 0
-    this.total = 0
-    this.members = 0
+    this.left = this.limit
+    this.sawMember = false
   }
 
   /** Begins a new body, dropping any input and output left over. */
@@ -730,8 +866,8 @@ export class GzipReader {
     this.more = true
     this.checksum = 0
     this.size = 0
-    this.total = 0
-    this.members = 0
+    this.left = this.limit
+    this.sawMember = false
   }
 
   /**
@@ -769,7 +905,7 @@ export class GzipReader {
    */
   inputRoom(): i32 {
     this.compact()
-    return toI32(this.input.length) - this.inEnd
+    return this.inputRoomRaw()
   }
 
   /**
@@ -780,10 +916,10 @@ export class GzipReader {
    *   negative `n` panics.
    */
   commit(n: i32): void {
-    if (n < 0 || n > toI32(this.input.length) - this.inEnd) {
+    if (n < 0 || n > this.inputRoomRaw()) {
       panic("GzipReader.commit: more bytes than the buffer has room for")
     }
-    this.inEnd += n
+    this.inEnd = toI32(toI64(this.inEnd) + toI64(n))
   }
 
   /**
@@ -802,7 +938,7 @@ export class GzipReader {
     const room: i32 = this.inputRoom()
     const take: i32 = len < room ? len : room
     copyBytes(this.input, this.inEnd, src, off, take)
-    this.inEnd += take
+    this.inEnd = toI32(toI64(this.inEnd) + toI64(take))
     return take
   }
 
@@ -814,7 +950,7 @@ export class GzipReader {
   /** Moves the undecoded input to the front of its buffer. */
   private compact(): void {
     if (this.inStart > 0) {
-      const n: i32 = this.inEnd - this.inStart
+      const n: i32 = toI32(toI64(this.inEnd) - toI64(this.inStart))
       copyBytes(this.input, 0, this.input, this.inStart, n)
       this.inStart = 0
       this.inEnd = n
@@ -823,7 +959,7 @@ export class GzipReader {
 
   /** Adds the decoded bytes not yet checksummed to the member's CRC-32 and length. */
   private sum(): void {
-    const n: i32 = this.writePos - this.crcPos
+    const n: i32 = toI32(toI64(this.writePos) - toI64(this.crcPos))
     if (n > 0) {
       this.checksum = this.crc.update(this.checksum, this.output, this.crcPos, n)
       this.size = this.size + toU32(n)
@@ -835,23 +971,24 @@ export class GzipReader {
   private slide(): void {
     if (this.readPos === this.writePos && this.writePos > GZIP_READER_WINDOW) {
       this.sum()
+      // Positions are moved in i64: the prover keeps no facts about fields.
       const keep: i32 = GZIP_READER_WINDOW
-      const shift: i32 = this.writePos - keep
+      const shift: i32 = toI32(toI64(this.writePos) - toI64(keep))
       copyBytes(this.output, 0, this.output, shift, keep)
-      this.readPos -= shift
-      this.writePos -= shift
-      this.crcPos -= shift
-      this.histStart = this.histStart > shift ? this.histStart - shift : 0
+      this.readPos = toI32(toI64(this.readPos) - toI64(shift))
+      this.writePos = toI32(toI64(this.writePos) - toI64(shift))
+      this.crcPos = toI32(toI64(this.crcPos) - toI64(shift))
+      this.histStart = this.histStart > shift ? toI32(toI64(this.histStart) - toI64(shift)) : 0
     }
   }
 
   /** Decodes as far as the input and the output buffer allow; answers 0 or a final code. */
   private advance(): i32 {
     while (true) {
-      const avail: i32 = this.inEnd - this.inStart
+      const avail: i64 = toI64(this.inEnd) - toI64(this.inStart)
       if (this.phase === 0) {
         if (avail === 0 && !this.more) {
-          if (this.members === 0) {
+          if (!this.sawMember) {
             return DEFLATE_ERR_TRUNCATED
           }
           this.phase = 3
@@ -894,12 +1031,15 @@ export class GzipReader {
           this.histStart
         )
         this.inStart = inf.inPos
-        const made: i32 = inf.outPos - this.writePos
+        const made: i64 = toI64(inf.outPos) - toI64(this.writePos)
         this.writePos = inf.outPos
-        this.total = this.total + toI64(made)
-        if (this.total > this.limit) {
+        // `left` never goes below 0 and `inflate` never moves `outPos`
+        // back; the first two tests say so to the prover.
+        const left: i64 = this.left
+        if (left < 0 || made < 0 || made > left) {
           return DEFLATE_ERR_OUTPUT_LIMIT
         }
+        this.left = left - made
         if (r === INFLATE_DONE) {
           this.sum()
           this.phase = 2
@@ -909,17 +1049,22 @@ export class GzipReader {
           return r
         }
       } else if (this.phase === 2) {
-        if (avail < GZIP_TRAILER_SIZE) {
+        if (avail < toI64(GZIP_TRAILER_SIZE)) {
           return this.more ? 0 : DEFLATE_ERR_TRUNCATED
         }
-        if (gzipGet32(this.input, this.inStart) !== this.checksum) {
+        const wantCrc: i64 = gzipGet32(this.input, this.inStart)
+        const wantSize: i64 = gzipGet32(this.input, toI32(toI64(this.inStart) + 4))
+        if (wantCrc < 0 || wantSize < 0) {
+          return DEFLATE_ERR_TRUNCATED
+        }
+        if (wantCrc !== toI64(this.checksum)) {
           return GZIP_ERR_CRC
         }
-        if (gzipGet32(this.input, this.inStart + 4) !== this.size) {
+        if (wantSize !== toI64(this.size)) {
           return GZIP_ERR_SIZE
         }
-        this.inStart += GZIP_TRAILER_SIZE
-        this.members += 1
+        this.inStart = toI32(toI64(this.inStart) + toI64(GZIP_TRAILER_SIZE))
+        this.sawMember = true
         this.phase = 0
       } else {
         return 0
@@ -929,7 +1074,7 @@ export class GzipReader {
 
   /** The room `input` has without compacting. */
   private inputRoomRaw(): i32 {
-    return toI32(this.input.length) - this.inEnd
+    return toI32(toI64(toI32(this.input.length)) - toI64(this.inEnd))
   }
 
   /**
@@ -962,7 +1107,7 @@ export class GzipReader {
         return r
       }
     }
-    const n0: i32 = this.writePos - this.readPos
+    const n0: i32 = toI32(toI64(this.writePos) - toI64(this.readPos))
     if (n0 === 0) {
       if (this.phase === 3) {
         return GZIP_END
@@ -971,7 +1116,7 @@ export class GzipReader {
     }
     const n: i32 = n0 < max ? n0 : max
     copyBytes(out, at, this.output, this.readPos, n)
-    this.readPos += n
+    this.readPos = toI32(toI64(this.readPos) + toI64(n))
     return n
   }
 }

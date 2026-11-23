@@ -6108,45 +6108,43 @@ import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
 unsafe import 36:10 uncheckedGet from "nish:unsafe"
 unsafe import 36:24 uncheckedSet from "nish:unsafe"
-unsafe call 66:9 uncheckedGet (node 78)
-unsafe call 67:10 uncheckedGet (node 89)
-unsafe call 68:10 uncheckedGet (node 109)
-unsafe call 69:10 uncheckedGet (node 129)
-unsafe call 70:10 uncheckedGet (node 149)
-unsafe call 71:10 uncheckedGet (node 169)
-unsafe call 72:10 uncheckedGet (node 189)
-unsafe call 73:10 uncheckedGet (node 209)
-unsafe call 83:5 uncheckedGet (node 276)
-unsafe call 84:5 uncheckedGet (node 290)
-unsafe call 85:5 uncheckedGet (node 308)
-unsafe call 86:5 uncheckedGet (node 326)
-unsafe call 87:5 uncheckedGet (node 341)
-unsafe call 88:5 uncheckedGet (node 356)
-unsafe call 89:5 uncheckedGet (node 374)
-unsafe call 90:5 uncheckedGet (node 392)
-unsafe call 123:7 uncheckedSet (node 560)
-unsafe call 126:25 uncheckedGet (node 588)
-unsafe call 127:7 uncheckedSet (node 597)
-unsafe call 127:41 uncheckedGet (node 607)
-unsafe call 136:22 uncheckedGet (node 691)
-unsafe call 138:27 uncheckedGet (node 735)
-unsafe call 142:7 uncheckedSet (node 755)
-unsafe call 146:11 uncheckedSet (node 818)
-unsafe call 146:44 uncheckedGet (node 828)
-unsafe call 261:9 uncheckedGet (node 1414)
-unsafe call 261:42 uncheckedGet (node 1429)
-unsafe call 317:19 uncheckedGet (node 1624)
-unsafe call 319:19 uncheckedGet (node 1641)
-unsafe call 321:19 uncheckedGet (node 1660)
-unsafe call 323:19 uncheckedGet (node 1679)
-unsafe call 328:19 uncheckedGet (node 1707)
+unsafe call 60:9 uncheckedGet (node 64)
+unsafe call 61:10 uncheckedGet (node 75)
+unsafe call 62:10 uncheckedGet (node 95)
+unsafe call 63:10 uncheckedGet (node 115)
+unsafe call 64:10 uncheckedGet (node 135)
+unsafe call 65:10 uncheckedGet (node 155)
+unsafe call 66:10 uncheckedGet (node 175)
+unsafe call 67:10 uncheckedGet (node 195)
+unsafe call 77:5 uncheckedGet (node 262)
+unsafe call 78:5 uncheckedGet (node 276)
+unsafe call 79:5 uncheckedGet (node 294)
+unsafe call 80:5 uncheckedGet (node 312)
+unsafe call 81:5 uncheckedGet (node 327)
+unsafe call 82:5 uncheckedGet (node 342)
+unsafe call 83:5 uncheckedGet (node 360)
+unsafe call 84:5 uncheckedGet (node 378)
+unsafe call 117:7 uncheckedSet (node 546)
+unsafe call 120:25 uncheckedGet (node 574)
+unsafe call 121:7 uncheckedSet (node 583)
+unsafe call 121:41 uncheckedGet (node 593)
+unsafe call 130:22 uncheckedGet (node 677)
+unsafe call 132:27 uncheckedGet (node 724)
+unsafe call 136:7 uncheckedSet (node 744)
+unsafe call 140:11 uncheckedSet (node 807)
+unsafe call 140:44 uncheckedGet (node 817)
+unsafe call 256:9 uncheckedGet (node 1427)
+unsafe call 256:42 uncheckedGet (node 1442)
+unsafe call 311:19 uncheckedGet (node 1671)
+unsafe call 313:19 uncheckedGet (node 1688)
+unsafe call 315:19 uncheckedGet (node 1707)
+unsafe call 317:19 uncheckedGet (node 1726)
+unsafe call 322:19 uncheckedGet (node 1754)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
 const CRC32_BLOCK: i32 = 40
-const CRC32_BRAID_MIN: i32 = 80
 const ADLER32_NMAX: i32 = 5552
-const ADLER32_BASE: i32 = 65521
 struct Crc32 (class) size=16 align=8 exported
   field table: u32[] index=0 offset=0 readonly
   field braid: u32[] index=1 offset=8 readonly
@@ -6168,8 +6166,8 @@ function checksumWindow(what: string, buf: u8[], off: i32, len: i32): void -> @n
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: llvm.ctlz.i32 nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: llvm.ctlz.i32
   pointer this: size=16 writesThrough=true captured=false
   stackSites=1 stackLocals=1
   local +0:11 t: u32[] (const)
@@ -6189,58 +6187,56 @@ function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [export
 function Crc32.update(this: Crc32, crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.Crc32.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: crc len off
-  calls: nish.checksumWindow nish.crc32Walk nish_panic
+  calls: nish.checksumWindow nish.crc32Walk
   pointer this: size=16 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.crc32Walk#3
   stackSites=0 stackLocals=0
   callee +0:5 checksumWindow -> @nish.checksumWindow
-  local +1:11 t: u32[] (const)
-  local +2:11 bt: u32[] (const)
-  callee +6:12 crc32Walk -> @nish.crc32Walk
+  callee +1:12 crc32Walk -> @nish.crc32Walk
 function crc32Walk(t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.crc32Walk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.checksumLoad64 nish.crc32Step nish_panic_overflow
+  calls: nish.checksumLoad64 nish.crc32Step
   pointer t: size=0 writesThrough=false captured=false passedTo=nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0
   pointer bt: size=0 writesThrough=false captured=false passedTo=nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0
   stackSites=0 stackLocals=0
   local +0:7 c: u32 (let)
   local +1:7 p: i32 (let)
-  local +2:9 end: i32 (const)
-  local +12:11 blocks: i32 (const)
-  local +13:11 lastBlock: i32 (const)
-  local +14:9 c1: u32 (let)
-  local +15:9 c2: u32 (let)
-  local +16:9 c3: u32 (let)
-  local +17:9 c4: u32 (let)
-  local +20:9 p1: i32 (let)
-  local +21:9 p2: i32 (let)
-  local +22:9 p3: i32 (let)
-  local +23:9 p4: i32 (let)
-  callee +37:11 crc32Step -> @nish.crc32Step
-  callee +37:28 checksumLoad64 -> @nish.checksumLoad64
-  callee +38:12 crc32Step -> @nish.crc32Step
-  callee +38:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +39:12 crc32Step -> @nish.crc32Step
-  callee +39:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +40:12 crc32Step -> @nish.crc32Step
-  callee +40:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +41:12 crc32Step -> @nish.crc32Step
-  callee +41:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +60:11 crc32Step -> @nish.crc32Step
-  callee +60:27 checksumLoad64 -> @nish.checksumLoad64
-  callee +61:11 crc32Step -> @nish.crc32Step
-  callee +61:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +62:11 crc32Step -> @nish.crc32Step
-  callee +62:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +63:11 crc32Step -> @nish.crc32Step
-  callee +63:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +64:11 crc32Step -> @nish.crc32Step
-  callee +64:32 checksumLoad64 -> @nish.checksumLoad64
-  local +68:9 whole: i32 (const)
-  callee +70:9 crc32Step -> @nish.crc32Step
-  callee +70:25 checksumLoad64 -> @nish.checksumLoad64
+  local +4:9 end: i32 (const)
+  local +17:11 blocks: i32 (const)
+  local +18:11 lastBlock: i32 (const)
+  local +19:9 c1: u32 (let)
+  local +20:9 c2: u32 (let)
+  local +21:9 c3: u32 (let)
+  local +22:9 c4: u32 (let)
+  local +25:9 p1: i32 (let)
+  local +26:9 p2: i32 (let)
+  local +27:9 p3: i32 (let)
+  local +28:9 p4: i32 (let)
+  callee +42:11 crc32Step -> @nish.crc32Step
+  callee +42:28 checksumLoad64 -> @nish.checksumLoad64
+  callee +43:12 crc32Step -> @nish.crc32Step
+  callee +43:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +44:12 crc32Step -> @nish.crc32Step
+  callee +44:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +45:12 crc32Step -> @nish.crc32Step
+  callee +45:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +46:12 crc32Step -> @nish.crc32Step
+  callee +46:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +65:11 crc32Step -> @nish.crc32Step
+  callee +65:27 checksumLoad64 -> @nish.checksumLoad64
+  callee +66:11 crc32Step -> @nish.crc32Step
+  callee +66:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +67:11 crc32Step -> @nish.crc32Step
+  callee +67:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +68:11 crc32Step -> @nish.crc32Step
+  callee +68:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +69:11 crc32Step -> @nish.crc32Step
+  callee +69:32 checksumLoad64 -> @nish.checksumLoad64
+  local +73:9 whole: i32 (const)
+  callee +75:9 crc32Step -> @nish.crc32Step
+  callee +75:25 checksumLoad64 -> @nish.checksumLoad64
 function crc32(buf: u8[], off: i32, len: i32): u32 -> @nish.crc32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
@@ -6258,16 +6254,16 @@ function adler32Update(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.
   callee +0:3 checksumWindow -> @nish.checksumWindow
   callee +1:10 adler32Walk -> @nish.adler32Walk
 function adler32Walk(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.adler32Walk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_div nish_panic_overflow
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 s1: u32 (let)
   local +1:7 s2: u32 (let)
   local +2:7 p: i32 (let)
-  local +3:9 end: i32 (const)
-  local +5:9 stop: i32 (let)
+  local +4:9 end: i32 (const)
+  local +6:11 reach: i64 (const)
+  local +7:11 stop: i32 (const)
 function adler32(buf: u8[], off: i32, len: i32): u32 -> @nish.adler32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
@@ -6292,6 +6288,7 @@ import copyBytes from "nish/bytes" -> function @nish.copyBytes
 const GZIP_ERR_HEADER: i32 = -9 [exported]
 const GZIP_ERR_CRC: i32 = -10 [exported]
 const GZIP_ERR_SIZE: i32 = -11 [exported]
+const GZIP_ERR_FINISHED: i32 = -20 [exported]
 const GZIP_NEED_INPUT: i32 = 0 [exported]
 const GZIP_END: i32 = -100 [exported]
 const GZIP_HEADER_SIZE: i32 = 10
@@ -6299,7 +6296,6 @@ const GZIP_TRAILER_SIZE: i32 = 8
 const GZIP_WRITER_HISTORY: i32 = 32768
 const GZIP_WRITER_INPUT: i32 = 65536
 const GZIP_READER_WINDOW: i32 = 32768
-const GZIP_READER_OUTPUT: i32 = 65536
 const GZIP_READER_INPUT: i32 = 16384
 struct GzipCompressor (class) size=16 align=8 exported
   field deflater: Deflater index=0 offset=0 readonly
@@ -6329,12 +6325,14 @@ struct GzipWriter (class) size=48 align=8 exported
   constructor -> @nish.GzipWriter.constructor
   method start -> @nish.GzipWriter.start
   method bound -> @nish.GzipWriter.bound
+  method hasRoom -> @nish.GzipWriter.hasRoom
+  method fail -> @nish.GzipWriter.fail
   method header -> @nish.GzipWriter.header
   method drain -> @nish.GzipWriter.drain
   method write -> @nish.GzipWriter.write
   method flush -> @nish.GzipWriter.flush
   method finish -> @nish.GzipWriter.finish
-struct GzipReader (class) size=96 align=8 exported
+struct GzipReader (class) size=88 align=8 exported
   field inflater: Inflater index=0 offset=0 readonly
   field crc: Crc32 index=1 offset=8 readonly
   field input: u8[] index=2 offset=16 readonly
@@ -6347,11 +6345,11 @@ struct GzipReader (class) size=96 align=8 exported
   field crcPos: i32 index=9 offset=52
   field phase: i32 index=10 offset=56
   field more: boolean index=11 offset=60
-  field checksum: u32 index=12 offset=64
-  field size: u32 index=13 offset=68
-  field total: i64 index=14 offset=72
-  field limit: i64 index=15 offset=80 readonly
-  field members: i32 index=16 offset=88
+  field sawMember: boolean index=12 offset=61
+  field checksum: u32 index=13 offset=64
+  field size: u32 index=14 offset=68
+  field left: i64 index=15 offset=72
+  field limit: i64 index=16 offset=80 readonly
   constructor -> @nish.GzipReader.constructor
   method start -> @nish.GzipReader.start
   method inputBuffer -> @nish.GzipReader.inputBuffer
@@ -6371,41 +6369,78 @@ function gzipWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function gzipPut32(out: u8[], at: i32, v: u32): void -> @nish.gzipPut32
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  escaping: at
-  calls: nish_panic_index
-  pointer out: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function gzipGet32(b: u8[], at: i32): u32 -> @nish.gzipGet32
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: at
-  calls: nish_panic_index
+function gzipByte(b: u8[], i: i32): i32 -> @nish.gzipByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function gzipWriteHeader(out: u8[], at: i32, level: i32): void -> @nish.gzipWriteHeader
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  escaping: at
-  calls: nish.gzipPut32 nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipPut32#0
+function gzipPut32(out: u8[], at: i32, v: u32): boolean -> @nish.gzipPut32
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +4:3 gzipPut32 -> @nish.gzipPut32
-  local +6:7 xfl: i32 (let)
+  local -6:9 n: i32 (const)
+  local -5:12 k: i32 (let)
+  local -4:11 i: i32 (const)
+function gzipGet32(b: u8[], at: i32): i64 -> @nish.gzipGet32
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.gzipByte
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.gzipByte#0
+  stackSites=0 stackLocals=0
+  local +0:7 v: i64 (let)
+  local +1:12 k: i32 (let)
+  local +2:11 c: i32 (const)
+  callee +2:20 gzipByte -> @nish.gzipByte
+function gzipWriteHeader(out: u8[], at: i32, level: i32): i32 -> @nish.gzipWriteHeader
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -25:7 xfl: i32 (let)
+  local -18:9 n: i32 (const)
+  local -17:12 k: i32 (let)
+  local -16:11 i: i32 (const)
+  local -12:9 b: i32 (let)
 function gzipReadHeader(crc: Crc32, src: u8[], p: i32, end: i32): i32 -> @nish.gzipReadHeader
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: p
-  calls: nish.Crc32.update nish_panic_index nish_panic_overflow
+  calls: nish.Crc32.update nish.gzipByte
   pointer crc: size=16 writesThrough=false captured=false passedTo=nish.Crc32.update#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Crc32.update#2
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.Crc32.update#2
   stackSites=0 stackLocals=0
-  local +0:9 flags: i32 (const)
-  local +4:7 q: i32 (let)
-  local +9:11 xlen: i32 (const)
-  local +15:12 field: i32 (let)
-  local +30:11 want: i32 (const)
-  callee +31:15 Crc32.update -> @nish.Crc32.update
+  local +0:9 b0: i32 (const)
+  callee +0:19 gzipByte -> @nish.gzipByte
+  local +1:9 b1: i32 (const)
+  callee +1:19 gzipByte -> @nish.gzipByte
+  local +7:9 b2: i32 (const)
+  callee +7:19 gzipByte -> @nish.gzipByte
+  local +8:9 flags: i32 (const)
+  callee +8:22 gzipByte -> @nish.gzipByte
+  local +18:7 q: i32 (let)
+  local +20:11 x0: i32 (const)
+  callee +20:21 gzipByte -> @nish.gzipByte
+  local +21:11 x1: i32 (const)
+  callee +21:21 gzipByte -> @nish.gzipByte
+  local +25:11 xlen: i32 (const)
+  local +31:12 field: i32 (let)
+  local +34:11 c: i32 (let)
+  callee +34:20 gzipByte -> @nish.gzipByte
+  callee +37:13 gzipByte -> @nish.gzipByte
+  local +46:11 h0: i32 (const)
+  callee +46:21 gzipByte -> @nish.gzipByte
+  local +47:11 h1: i32 (const)
+  callee +47:21 gzipByte -> @nish.gzipByte
+  local +51:11 want: i32 (const)
+  callee +52:15 Crc32.update -> @nish.Crc32.update
+function gzipTrailer(out: u8[], at: i32, crc: u32, size: u32): i32 -> @nish.gzipTrailer
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.gzipPut32
+  escaping: at crc size
+  calls: nish.gzipPut32
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipPut32#0 nish.gzipPut32#0
+  stackSites=0 stackLocals=0
+  callee +0:8 gzipPut32 -> @nish.gzipPut32
+  callee +0:36 gzipPut32 -> @nish.gzipPut32
 function GzipCompressor.constructor(this: GzipCompressor, level: i32): void -> @nish.GzipCompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: level
@@ -6418,25 +6453,25 @@ function GzipCompressor.compress(this: GzipCompressor, src: u8[], off: i32, len:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.gzipWriteHeader
   escaping: at len off
-  calls: nish.Crc32.update nish.Deflater.compress nish.gzipPut32 nish.gzipWindow nish.gzipWriteHeader nish_panic_overflow
+  calls: nish.Crc32.update nish.Deflater.compress nish.gzipTrailer nish.gzipWindow nish.gzipWriteHeader
   pointer this: size=16 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.Deflater.compress#1 nish.Crc32.update#2
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.gzipWriteHeader#0 nish.Deflater.compress#4 nish.gzipPut32#0 nish.gzipPut32#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.gzipWriteHeader#0 nish.Deflater.compress#4 nish.gzipTrailer#0
   stackSites=0 stackLocals=0
   callee +0:5 gzipWindow -> @nish.gzipWindow
   callee +1:5 gzipWindow -> @nish.gzipWindow
-  callee +5:5 gzipWriteHeader -> @nish.gzipWriteHeader
-  local +6:11 end: i32 (const)
-  callee +6:22 Deflater.compress -> @nish.Deflater.compress
-  callee +10:5 gzipPut32 -> @nish.gzipPut32
-  callee +10:25 Crc32.update -> @nish.Crc32.update
-  callee +11:5 gzipPut32 -> @nish.gzipPut32
+  local +5:11 body: i32 (const)
+  callee +5:23 gzipWriteHeader -> @nish.gzipWriteHeader
+  local +9:11 end: i32 (const)
+  callee +9:22 Deflater.compress -> @nish.Deflater.compress
+  callee +12:9 gzipTrailer -> @nish.gzipTrailer
+  callee +12:31 Crc32.update -> @nish.Crc32.update
 function gzipFixedBound(n: i32): i32 -> @nish.gzipFixedBound [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
-  calls: nish.fixedDeflateBound nish_panic_overflow
+  calls: nish.fixedDeflateBound
   stackSites=0 stackLocals=0
-  callee +0:48 fixedDeflateBound -> @nish.fixedDeflateBound
+  callee +0:22 fixedDeflateBound -> @nish.fixedDeflateBound
 function GzipFixedCompressor.constructor(this: GzipFixedCompressor): void -> @nish.GzipFixedCompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Crc32.constructor nish.FixedDeflater.constructor nish_alloc_struct
@@ -6448,19 +6483,19 @@ function GzipFixedCompressor.compress(this: GzipFixedCompressor, src: u8[], off:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.gzipWriteHeader
   escaping: at len off room
-  calls: nish.Crc32.update nish.FixedDeflater.compress nish.gzipPut32 nish.gzipWindow nish.gzipWriteHeader nish_panic_overflow
+  calls: nish.Crc32.update nish.FixedDeflater.compress nish.gzipTrailer nish.gzipWindow nish.gzipWriteHeader
   pointer this: size=16 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.FixedDeflater.compress#1 nish.Crc32.update#2
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.gzipWriteHeader#0 nish.FixedDeflater.compress#4 nish.gzipPut32#0 nish.gzipPut32#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.gzipWriteHeader#0 nish.FixedDeflater.compress#4 nish.gzipTrailer#0
   stackSites=0 stackLocals=0
   callee +0:5 gzipWindow -> @nish.gzipWindow
   callee +1:5 gzipWindow -> @nish.gzipWindow
-  callee +5:5 gzipWriteHeader -> @nish.gzipWriteHeader
-  local +6:11 end: i32 (const)
-  callee +6:22 FixedDeflater.compress -> @nish.FixedDeflater.compress
-  callee +17:5 gzipPut32 -> @nish.gzipPut32
-  callee +17:25 Crc32.update -> @nish.Crc32.update
-  callee +18:5 gzipPut32 -> @nish.gzipPut32
+  local +5:11 body: i32 (const)
+  callee +5:23 gzipWriteHeader -> @nish.gzipWriteHeader
+  local +9:11 end: i32 (const)
+  callee +9:22 FixedDeflater.compress -> @nish.FixedDeflater.compress
+  callee +19:9 gzipTrailer -> @nish.gzipTrailer
+  callee +19:31 Crc32.update -> @nish.Crc32.update
 function GzipDecompressor.constructor(this: GzipDecompressor): void -> @nish.GzipDecompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Crc32.constructor nish.Inflater.constructor nish_alloc_struct
@@ -6472,30 +6507,31 @@ function GzipDecompressor.decompress(this: GzipDecompressor, src: u8[], off: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Inflater.reset
   escaping: at len off
-  calls: nish.Crc32.update nish.Inflater.inflate nish.Inflater.reset nish.gzipGet32 nish.gzipReadHeader nish.gzipWindow nish_panic nish_panic_overflow
+  calls: nish.Crc32.update nish.Inflater.inflate nish.Inflater.reset nish.gzipGet32 nish.gzipReadHeader nish.gzipWindow nish_panic
   pointer this: size=16 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.gzipReadHeader#1 nish.Inflater.inflate#1 nish.gzipGet32#0 nish.gzipGet32#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.Inflater.inflate#5 nish.Crc32.update#2
   stackSites=0 stackLocals=0
   callee +0:5 gzipWindow -> @nish.gzipWindow
   callee +1:5 gzipWindow -> @nish.gzipWindow
-  local +5:11 room: i32 (const)
-  local +6:11 outEnd: i32 (const)
-  local +7:11 end: i32 (const)
-  local +8:9 p: i32 (let)
-  local +9:9 op: i32 (let)
-  local +10:9 first: boolean (let)
-  local +13:13 body: i32 (const)
-  callee +13:25 gzipReadHeader -> @nish.gzipReadHeader
-  local +17:13 inf: Inflater (const)
-  callee +18:7 Inflater.reset -> @nish.Inflater.reset
-  local +19:13 r: i32 (const)
-  callee +19:22 Inflater.inflate -> @nish.Inflater.inflate
-  local +26:13 q: i32 (const)
-  local +30:13 n: i32 (const)
-  callee +31:11 gzipGet32 -> @nish.gzipGet32
-  callee +31:33 Crc32.update -> @nish.Crc32.update
-  callee +34:11 gzipGet32 -> @nish.gzipGet32
+  local +7:9 outEnd: i32 (let)
+  local +11:11 end: i32 (const)
+  local +12:9 p: i32 (let)
+  local +13:9 op: i32 (let)
+  local +14:9 first: boolean (let)
+  local +17:13 body: i32 (const)
+  callee +17:25 gzipReadHeader -> @nish.gzipReadHeader
+  local +21:13 inf: Inflater (const)
+  callee +22:7 Inflater.reset -> @nish.Inflater.reset
+  local +23:13 r: i32 (const)
+  callee +23:22 Inflater.inflate -> @nish.Inflater.inflate
+  local +30:13 q: i32 (const)
+  local +31:13 wantCrc: i64 (const)
+  callee +31:28 gzipGet32 -> @nish.gzipGet32
+  local +32:13 wantSize: i64 (const)
+  callee +32:29 gzipGet32 -> @nish.gzipGet32
+  local +36:13 n: i32 (const)
+  callee +37:29 Crc32.update -> @nish.Crc32.update
 function gzipCompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 -> @nish.gzipCompress [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipCompressor.compress
@@ -6520,12 +6556,12 @@ function GzipWriter.constructor(this: GzipWriter, level: i32): void -> @nish.Gzi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.GzipWriter.start
   escaping: level
-  calls: nish.Crc32.constructor nish.Deflater.constructor nish.GzipWriter.start nish_alloc_struct nish_panic
+  calls: nish.Crc32.constructor nish.Deflater.constructor nish.GzipWriter.start nish_alloc_struct
   pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.start#0
   stackSites=0 stackLocals=0
   callee +0:21 new Deflater -> @nish.Deflater.constructor
   callee +1:16 new Crc32 -> @nish.Crc32.constructor
-  callee +9:5 GzipWriter.start -> @nish.GzipWriter.start
+  callee +10:5 GzipWriter.start -> @nish.GzipWriter.start
 function GzipWriter.start(this: GzipWriter): void -> @nish.GzipWriter.start [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -6537,25 +6573,40 @@ function GzipWriter.start(this: GzipWriter): void -> @nish.GzipWriter.start [exp
   callee -1:5 Deflater.begin -> @nish.Deflater.begin
 function GzipWriter.bound(this: GzipWriter, len: i32): i32 -> @nish.GzipWriter.bound [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.deflateBound nish_panic_overflow
+  calls: nish.deflateBound
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 drains: i32 (const)
-  callee +1:12 deflateBound -> @nish.deflateBound
-function GzipWriter.header(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.header [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +0:11 n: i32 (const)
+  callee +2:13 deflateBound -> @nish.deflateBound
+function GzipWriter.hasRoom(this: GzipWriter, out: u8[], at: i32, len: i32): boolean -> @nish.GzipWriter.hasRoom [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: len
+  calls: nish.GzipWriter.bound
+  pointer this: size=48 writesThrough=false captured=false passedTo=nish.GzipWriter.bound#0
+  pointer out: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 b: i32 (const)
+  callee +0:20 GzipWriter.bound -> @nish.GzipWriter.bound
+function GzipWriter.fail(this: GzipWriter): i32 -> @nish.GzipWriter.fail [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function GzipWriter.header(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.header [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: at
-  calls: nish.gzipWriteHeader nish_panic_overflow
+  calls: nish.gzipWriteHeader
   pointer this: size=48 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWriteHeader#0
   stackSites=0 stackLocals=0
-  callee -1:5 gzipWriteHeader -> @nish.gzipWriteHeader
+  local -2:11 o: i32 (const)
+  callee -2:20 gzipWriteHeader -> @nish.gzipWriteHeader
 function GzipWriter.drain(this: GzipWriter, out: u8[], at: i32, final: boolean): i32 -> @nish.GzipWriter.drain [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at final
-  calls: nish.Deflater.compressRange nish.Deflater.slide nish.copyBytes nish_panic_overflow
+  calls: nish.Deflater.compressRange nish.Deflater.slide nish.copyBytes
   pointer this: size=48 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.Deflater.compressRange#6
   stackSites=0 stackLocals=0
@@ -6569,96 +6620,100 @@ function GzipWriter.write(this: GzipWriter, src: u8[], off: i32, len: i32, out: 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.Crc32.update nish.GzipWriter.bound nish.GzipWriter.drain nish.GzipWriter.header nish.copyBytes nish.gzipWindow nish_panic nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.bound#0 nish.GzipWriter.header#0 nish.GzipWriter.drain#0
+  calls: nish.Crc32.update nish.GzipWriter.drain nish.GzipWriter.fail nish.GzipWriter.hasRoom nish.GzipWriter.header nish.copyBytes nish.gzipWindow
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.hasRoom#0 nish.GzipWriter.header#0 nish.GzipWriter.fail#0 nish.GzipWriter.drain#0 nish.GzipWriter.fail#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.Crc32.update#2 nish.copyBytes#2
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.hasRoom#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1
   stackSites=0 stackLocals=0
-  callee -9:5 gzipWindow -> @nish.gzipWindow
-  callee -8:5 gzipWindow -> @nish.gzipWindow
-  callee -4:34 GzipWriter.bound -> @nish.GzipWriter.bound
-  local -1:9 o: i32 (let)
-  callee -1:18 GzipWriter.header -> @nish.GzipWriter.header
+  callee -12:5 gzipWindow -> @nish.gzipWindow
+  callee -11:5 gzipWindow -> @nish.gzipWindow
+  callee -7:10 GzipWriter.hasRoom -> @nish.GzipWriter.hasRoom
+  local -4:9 o: i32 (let)
+  callee -4:18 GzipWriter.header -> @nish.GzipWriter.header
+  callee -2:14 GzipWriter.fail -> @nish.GzipWriter.fail
   callee +0:21 Crc32.update -> @nish.Crc32.update
   local +2:9 p: i32 (let)
   local +3:11 end: i32 (const)
-  local +7:11 take: i32 (let)
-  callee +11:7 copyBytes -> @nish.copyBytes
-  callee +15:13 GzipWriter.drain -> @nish.GzipWriter.drain
+  local +8:11 take: i64 (let)
+  local +12:13 t: i32 (const)
+  callee +13:7 copyBytes -> @nish.copyBytes
+  callee +17:13 GzipWriter.drain -> @nish.GzipWriter.drain
+  callee +19:18 GzipWriter.fail -> @nish.GzipWriter.fail
 function GzipWriter.flush(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.flush [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipWriter.header
   escaping: at
-  calls: nish.Deflater.writeStored nish.GzipWriter.bound nish.GzipWriter.drain nish.GzipWriter.header nish.gzipWindow nish_panic nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.bound#0 nish.GzipWriter.header#0 nish.GzipWriter.drain#0
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1 nish.Deflater.writeStored#5
+  calls: nish.Deflater.writeStored nish.GzipWriter.drain nish.GzipWriter.fail nish.GzipWriter.hasRoom nish.GzipWriter.header nish.gzipWindow
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.hasRoom#0 nish.GzipWriter.header#0 nish.GzipWriter.drain#0 nish.GzipWriter.fail#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.hasRoom#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1 nish.Deflater.writeStored#5
   stackSites=0 stackLocals=0
   callee +0:5 gzipWindow -> @nish.gzipWindow
-  callee +4:34 GzipWriter.bound -> @nish.GzipWriter.bound
+  callee +4:10 GzipWriter.hasRoom -> @nish.GzipWriter.hasRoom
   local +7:9 o: i32 (let)
   callee +7:18 GzipWriter.header -> @nish.GzipWriter.header
   callee +9:11 GzipWriter.drain -> @nish.GzipWriter.drain
-  callee +14:9 Deflater.writeStored -> @nish.Deflater.writeStored
+  callee +12:11 Deflater.writeStored -> @nish.Deflater.writeStored
+  callee +14:20 GzipWriter.fail -> @nish.GzipWriter.fail
 function GzipWriter.finish(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.finish [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish.Deflater.flushBits nish.GzipWriter.bound nish.GzipWriter.drain nish.GzipWriter.header nish.gzipPut32 nish.gzipWindow nish_panic nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.bound#0 nish.GzipWriter.header#0 nish.GzipWriter.drain#0
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1 nish.Deflater.flushBits#1 nish.gzipPut32#0 nish.gzipPut32#0
+  calls: nish.Deflater.flushBits nish.GzipWriter.drain nish.GzipWriter.hasRoom nish.GzipWriter.header nish.gzipTrailer nish.gzipWindow
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.hasRoom#0 nish.GzipWriter.header#0 nish.GzipWriter.drain#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.hasRoom#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1 nish.Deflater.flushBits#1 nish.gzipTrailer#0
   stackSites=0 stackLocals=0
-  callee -18:5 gzipWindow -> @nish.gzipWindow
-  callee -14:34 GzipWriter.bound -> @nish.GzipWriter.bound
-  local -11:9 o: i32 (let)
-  callee -11:18 GzipWriter.header -> @nish.GzipWriter.header
-  callee -10:9 GzipWriter.drain -> @nish.GzipWriter.drain
-  callee -6:9 Deflater.flushBits -> @nish.Deflater.flushBits
-  callee -2:5 gzipPut32 -> @nish.gzipPut32
-  callee -1:5 gzipPut32 -> @nish.gzipPut32
+  callee -17:5 gzipWindow -> @nish.gzipWindow
+  callee -13:10 GzipWriter.hasRoom -> @nish.GzipWriter.hasRoom
+  local -10:9 o: i32 (let)
+  callee -10:18 GzipWriter.header -> @nish.GzipWriter.header
+  callee -8:11 GzipWriter.drain -> @nish.GzipWriter.drain
+  callee -5:11 Deflater.flushBits -> @nish.Deflater.flushBits
+  callee -2:11 gzipTrailer -> @nish.gzipTrailer
 function GzipReader.constructor(this: GzipReader, limit: i64): void -> @nish.GzipReader.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: limit
   calls: nish.Crc32.constructor nish.Inflater.constructor nish_alloc_struct nish_panic
-  pointer this: size=96 writesThrough=true captured=false
+  pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 new Inflater -> @nish.Inflater.constructor
   callee +1:16 new Crc32 -> @nish.Crc32.constructor
 function GzipReader.start(this: GzipReader): void -> @nish.GzipReader.start [exported method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=96 writesThrough=true captured=false
+  pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function GzipReader.inputBuffer(this: GzipReader): u8[] -> @nish.GzipReader.inputBuffer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipReader.compact
   calls: nish.GzipReader.compact
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.GzipReader.compact#0
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.compact#0
   stackSites=0 stackLocals=0
   callee +0:5 GzipReader.compact -> @nish.GzipReader.compact
 function GzipReader.inputEnd(this: GzipReader): i32 -> @nish.GzipReader.inputEnd [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=96 writesThrough=false captured=false
+  pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function GzipReader.inputRoom(this: GzipReader): i32 -> @nish.GzipReader.inputRoom [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipReader.compact
-  calls: nish.GzipReader.compact nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.GzipReader.compact#0
+  calls: nish.GzipReader.compact nish.GzipReader.inputRoomRaw
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.compact#0 nish.GzipReader.inputRoomRaw#0
   stackSites=0 stackLocals=0
   callee +0:5 GzipReader.compact -> @nish.GzipReader.compact
+  callee +1:12 GzipReader.inputRoomRaw -> @nish.GzipReader.inputRoomRaw
 function GzipReader.commit(this: GzipReader, n: i32): void -> @nish.GzipReader.commit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: n
-  calls: nish_panic nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false
+  calls: nish.GzipReader.inputRoomRaw nish_panic
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.inputRoomRaw#0
   stackSites=0 stackLocals=0
+  callee -3:22 GzipReader.inputRoomRaw -> @nish.GzipReader.inputRoomRaw
 function GzipReader.feed(this: GzipReader, src: u8[], off: i32, len: i32): i32 -> @nish.GzipReader.feed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: len off
-  calls: nish.GzipReader.inputRoom nish.copyBytes nish.gzipWindow nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.GzipReader.inputRoom#0
+  calls: nish.GzipReader.inputRoom nish.copyBytes nish.gzipWindow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.inputRoom#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.copyBytes#2
   stackSites=0 stackLocals=0
   callee -4:5 gzipWindow -> @nish.gzipWindow
@@ -6669,41 +6724,41 @@ function GzipReader.feed(this: GzipReader, src: u8[], off: i32, len: i32): i32 -
 function GzipReader.endInput(this: GzipReader): void -> @nish.GzipReader.endInput [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=96 writesThrough=true captured=false
+  pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function GzipReader.compact(this: GzipReader): void -> @nish.GzipReader.compact [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.copyBytes nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false
+  calls: nish.copyBytes
+  pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:13 n: i32 (const)
   callee -1:7 copyBytes -> @nish.copyBytes
 function GzipReader.sum(this: GzipReader): void -> @nish.GzipReader.sum [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.Crc32.update nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false
+  calls: nish.Crc32.update
+  pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 n: i32 (const)
   callee +0:23 Crc32.update -> @nish.Crc32.update
 function GzipReader.slide(this: GzipReader): void -> @nish.GzipReader.slide [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.GzipReader.sum nish.copyBytes nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.GzipReader.sum#0
+  calls: nish.GzipReader.sum nish.copyBytes
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.sum#0
   stackSites=0 stackLocals=0
-  callee -4:7 GzipReader.sum -> @nish.GzipReader.sum
+  callee -5:7 GzipReader.sum -> @nish.GzipReader.sum
   local -3:13 keep: i32 (const)
   local -2:13 shift: i32 (const)
   callee -1:7 copyBytes -> @nish.copyBytes
 function GzipReader.advance(this: GzipReader): i32 -> @nish.GzipReader.advance [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
-  calls: nish.GzipReader.inputRoomRaw nish.GzipReader.slide nish.GzipReader.sum nish.Inflater.inflate nish.Inflater.reset nish.gzipGet32 nish.gzipReadHeader nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.GzipReader.inputRoomRaw#0 nish.GzipReader.slide#0 nish.GzipReader.sum#0
+  calls: nish.GzipReader.inputRoomRaw nish.GzipReader.slide nish.GzipReader.sum nish.Inflater.inflate nish.Inflater.reset nish.gzipGet32 nish.gzipReadHeader
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.inputRoomRaw#0 nish.GzipReader.slide#0 nish.GzipReader.sum#0
   stackSites=0 stackLocals=0
-  local -6:13 avail: i32 (const)
+  local -6:13 avail: i64 (const)
   local +3:15 body: i32 (const)
   callee +3:27 gzipReadHeader -> @nish.gzipReadHeader
   callee +6:17 GzipReader.inputRoomRaw -> @nish.GzipReader.inputRoomRaw
@@ -6713,21 +6768,23 @@ function GzipReader.advance(this: GzipReader): i32 -> @nish.GzipReader.advance [
   local +28:15 inf: Inflater (const)
   local +29:15 r: i32 (const)
   callee +29:24 Inflater.inflate -> @nish.Inflater.inflate
-  local +40:15 made: i32 (const)
-  callee +47:11 GzipReader.sum -> @nish.GzipReader.sum
-  callee +58:13 gzipGet32 -> @nish.gzipGet32
-  callee +61:13 gzipGet32 -> @nish.gzipGet32
+  local +40:15 made: i64 (const)
+  local +44:15 left: i64 (const)
+  callee +50:11 GzipReader.sum -> @nish.GzipReader.sum
+  local +61:15 wantCrc: i64 (const)
+  callee +61:30 gzipGet32 -> @nish.gzipGet32
+  local +62:15 wantSize: i64 (const)
+  callee +62:31 gzipGet32 -> @nish.gzipGet32
 function GzipReader.inputRoomRaw(this: GzipReader): i32 -> @nish.GzipReader.inputRoomRaw [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
-  pointer this: size=96 writesThrough=false captured=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function GzipReader.read(this: GzipReader, out: u8[], at: i32, max: i32): i32 -> @nish.GzipReader.read [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: at max
-  calls: nish.GzipReader.advance nish.copyBytes nish.gzipWindow nish_panic nish_panic_overflow
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.GzipReader.advance#0
+  calls: nish.GzipReader.advance nish.copyBytes nish.gzipWindow nish_panic
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.GzipReader.advance#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.copyBytes#0
   stackSites=0 stackLocals=0
   callee -10:5 gzipWindow -> @nish.gzipWindow
@@ -6773,21 +6830,27 @@ function ZlibCompressor.compress(this: ZlibCompressor, src: u8[], off: i32, len:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.Deflater.compress nish.adler32 nish.zlibWindow nish_panic_index nish_panic_overflow
+  calls: nish.Deflater.compress nish.adler32 nish.zlibWindow
   pointer this: size=8 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.zlibWindow#1 nish.Deflater.compress#1 nish.adler32#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.zlibWindow#1 nish.Deflater.compress#4
   stackSites=0 stackLocals=0
-  callee -18:5 zlibWindow -> @nish.zlibWindow
-  callee -17:5 zlibWindow -> @nish.zlibWindow
-  local -13:11 level: i32 (const)
-  local -11:9 flevel: i32 (let)
-  local -3:11 cmf: i32 (const)
+  callee -25:5 zlibWindow -> @nish.zlibWindow
+  callee -24:5 zlibWindow -> @nish.zlibWindow
+  local -20:11 n: i32 (const)
+  local -19:11 second: i32 (const)
+  local -15:11 level: i32 (const)
+  local -13:9 flevel: i32 (let)
+  local -5:11 cmf: i32 (const)
   local -2:9 flg: i32 (let)
   local +2:11 end: i32 (const)
   callee +2:22 Deflater.compress -> @nish.Deflater.compress
-  local +6:11 a: u32 (const)
-  callee +6:20 adler32 -> @nish.adler32
+  local +9:11 a: u32 (const)
+  callee +9:20 adler32 -> @nish.adler32
+  local +10:11 e1: i32 (const)
+  local +11:11 e2: i32 (const)
+  local +12:11 e3: i32 (const)
+  local +13:11 m: i32 (const)
 function ZlibDecompressor.constructor(this: ZlibDecompressor): void -> @nish.ZlibDecompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Inflater.constructor nish_alloc_struct
@@ -6798,25 +6861,29 @@ function ZlibDecompressor.decompress(this: ZlibDecompressor, src: u8[], off: i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Inflater.reset
   escaping: at len off
-  calls: nish.Inflater.inflate nish.Inflater.reset nish.adler32 nish.zlibWindow nish_panic nish_panic_index nish_panic_overflow
+  calls: nish.Inflater.inflate nish.Inflater.reset nish.adler32 nish.zlibWindow nish_panic
   pointer this: size=8 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.zlibWindow#1 nish.Inflater.inflate#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.zlibWindow#1 nish.Inflater.inflate#5 nish.adler32#0
   stackSites=0 stackLocals=0
   callee +0:5 zlibWindow -> @nish.zlibWindow
   callee +1:5 zlibWindow -> @nish.zlibWindow
-  local +8:11 cmf: i32 (const)
-  local +9:11 flg: i32 (const)
-  local +16:11 room: i32 (const)
-  local +17:11 outEnd: i32 (const)
-  local +18:11 inf: Inflater (const)
-  callee +19:5 Inflater.reset -> @nish.Inflater.reset
-  local +20:11 end: i32 (const)
-  local +21:11 r: i32 (const)
-  callee +21:20 Inflater.inflate -> @nish.Inflater.inflate
-  local +28:11 q: i32 (const)
-  local +32:11 want: u32 (const)
-  callee +34:9 adler32 -> @nish.adler32
+  local +8:11 n: i32 (const)
+  local +9:11 second: i32 (const)
+  local +13:11 cmf: i32 (const)
+  local +14:11 flg: i32 (const)
+  local +21:9 outEnd: i32 (let)
+  local +25:11 inf: Inflater (const)
+  callee +26:5 Inflater.reset -> @nish.Inflater.reset
+  local +27:11 end: i32 (const)
+  local +28:11 r: i32 (const)
+  callee +28:20 Inflater.inflate -> @nish.Inflater.inflate
+  local +35:11 q: i32 (const)
+  local +36:11 q1: i32 (const)
+  local +37:11 q2: i32 (const)
+  local +38:11 q3: i32 (const)
+  local +52:11 want: u32 (const)
+  callee +53:9 adler32 -> @nish.adler32
 function zlibCompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 -> @nish.zlibCompress [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ZlibCompressor.compress

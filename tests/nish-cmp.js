@@ -1610,6 +1610,8 @@ const s5PanicFreeDeclared = () => [
 const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
 /** The changelog words of WP82 S8: WebTransport, WebSocket, gRPC and OIDC answer malformed input without a panic. */
 const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC panic-free"
+/** The changelog words of WP84 S1: std/compress's checksums, zlib and gzip answer an error where they panicked. */
+const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -22180,6 +22182,38 @@ const DECLARED = [
     changelog: QUIC_ENGINE_PANIC_FREE,
     why: "the test lays out `QuicSentPackets`, whose capacity field is now a u8, and declares recovery methods whose attribute groups renumber (WP82 S5)",
   })),
+  ...byFinding(COMPRESS_PANIC_FREE)(
+    "the nish/compress instruction-count program is new to the corpus (WP84 S1); the seed's std/bytes.ts, std/compress/gzip.ts and std/compress/zlib.ts are older than main's, and the program's own module inlines what they declare, so those files differ",
+    {
+      "bench/std-compress-deflate.ts": ["bytes.ll"],
+      "bench/std-compress-inflate.ts": ["bytes.ll"],
+      "bench/std-compress-gzip.ts": ["bytes.ll", "gzip.ll", "std-compress-gzip.ll", "zlib.ll"],
+    }
+  ),
+  ...byFinding(COMPRESS_PANIC_FREE)(
+    "std/compress/gzip.ts answers `DEFLATE_NO_ROOM` or `GZIP_ERR_FINISHED` where `GzipWriter` panicked, and `GzipReader` keeps the room left under its limit and whether it saw a member in place of a running total and a member count (WP84 S1), so gzip.ll, and each module or header that lays out `GzipReader` or declares `GzipWriter`'s methods, move",
+    {
+      "bench/crc32.ts": ["crc32.h"],
+      "bench/gzip/main.ts": ["main.h"],
+      "bench/pg-carrier.ts": ["gzip.ll"],
+      "bench/std-compress-gzip.ts": ["std-compress-gzip.h"],
+      "bench/std-http1.ts": ["gzip.ll"],
+      "tests/link/net_handler_limits_panic/main.ts": ["gzip.ll"],
+      "tests/link/std_compress/main.ts": ["main.h"],
+      "tests/link/std_compress_crc_paths/main.ts": ["main.h"],
+      "tests/link/std_compress_f64/main.ts": ["main.ll"],
+      "tests/link/std_compress_gzip_files/main.ts": ["main.h"],
+      "tests/link/std_compress_node/main.ts": ["main.h"],
+      "tests/link/std_http1_encoded_window/main.ts": ["gzip.ll"],
+      "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
+    }
+  ),
+  {
+    program: "tests/link/std_compress_gzip_errors/main.ts",
+    file: "exit",
+    changelog: COMPRESS_PANIC_FREE,
+    why: "the program reads `GZIP_ERR_FINISHED`, which the seed's std/compress/gzip.ts does not export, so only the candidate compiles it",
+  },
 ]
 
 /**
