@@ -4629,10 +4629,8 @@ const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): voi
  * `new P256SignScratch()` gives them, since an importer can replace its
  * public fields.
  *
- * The part block's read, `data[k]`, is a kept index site: every caller has
- * checked the window, which the prover cannot relate to `off + len`, so a
- * window outside `data` stops the program rather than hash bytes it does not
- * hold.
+ * A window outside `data` is refused the same way, before any byte is read,
+ * so it never hashes bytes `data` does not hold.
  */
 const p256ShaInto = (data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[]): boolean => {
   if (
@@ -5124,9 +5122,10 @@ const p256WipeSignScratch = (sc: P256SignScratch): void => {
  * @param len The message's length in bytes.
  * @param out The array the signature is written into.
  * @param at Where the 64 bytes start in `out`.
- * @returns `true` once the signature is written, `false` for a refused key
- *   (or for a scratch whose arrays an HMAC step refuses, which
- *   `new P256SignScratch()` never builds).
+ * @returns `true` once the signature is written, `false` for a refused key,
+ *   for a scratch whose arrays a hashing step refuses (which
+ *   `new P256SignScratch()` never builds), or when RFC 6979 finds no usable
+ *   nonce within 64 rounds.
  */
 export const p256SignSha256Into = (
   sc: P256SignScratch,
