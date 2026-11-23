@@ -957,9 +957,11 @@ export class Deflater {
     this.bitBuf = 0
     this.bitCount = 0
     this.overrun = false
+    // Cannot wrap: deflateWindow checked off + len <= src.length.
+    const srcEnd: i32 = toI32(toU32(off) + toU32(len))
     this.begin(off)
-    const end: i32 = this.compressRange(src, off, off + len, off, true, out, at, toI32(out.length))
-    this.finish(off + len)
+    const end: i32 = this.compressRange(src, off, srcEnd, off, true, out, at, toI32(out.length))
+    this.finish(srcEnd)
     if (end < 0) {
       return DEFLATE_NO_ROOM
     }
@@ -972,12 +974,18 @@ export class Deflater {
    * every position the tables hold is pushed a window behind it.
    */
   begin(start: i32): void {
-    if (this.base > DEFLATE_REBASE) {
-      this.head.fill(0)
-      this.prev.fill(0)
-      this.base = DEFLATE_WINDOW + 1
+    let base: i32 = this.base
+    // 32769 is DEFLATE_WINDOW + 1, spelled out for the bounds prover.
+    if (base > DEFLATE_REBASE || base < 32769) {
+      this.forget()
+      base = DEFLATE_WINDOW + 1
     }
-    this.delta = this.base - start
+    if (start < 0) {
+      // No stream starts before its input; the next write answers -1.
+      this.overrun = true
+      return
+    }
+    this.delta = base - start
   }
 
   /**
@@ -986,7 +994,10 @@ export class Deflater {
    * positions start a window past every position the tables now hold.
    */
   finish(end: i32): void {
-    this.base = end + this.delta + DEFLATE_WINDOW + 1
+    const v: i32 = this.position(end)
+    // Past the rebase floor (DEFLATE_REBASE, spelled out for the bounds
+    // prover), the next `begin` clears the tables.
+    this.base = v < 0 || v > 1073741824 ? DEFLATE_REBASE + 1 : v + DEFLATE_WINDOW + 1
   }
 
   /**
@@ -996,7 +1007,42 @@ export class Deflater {
    * The streaming writer calls it when it slides its window.
    */
   slide(shift: i32): void {
-    this.delta = this.delta + shift
+    const delta: i32 = this.delta
+    // DEFLATE_REBASE - 1 and DEFLATE_REBASE, spelled out for the bounds prover.
+    if (shift < 0 || shift > 1073741823 || delta > 1073741824) {
+      // A slide no rebase can follow: drop the history instead.
+      this.forget()
+      this.delta = DEFLATE_WINDOW + 1
+      return
+    }
+    this.delta = delta + shift
+  }
+
+  /** Empties the tables, so that no position is a candidate. */
+  private forget(): void {
+    this.head.fill(0)
+    this.prev.fill(0)
+    this.base = DEFLATE_WINDOW + 1
+  }
+
+  /**
+   * The table position of input index `p`, `p + delta`, or -1 when that is
+   * negative or past the i32 range.
+   */
+  private position(p: i32): i32 {
+    const delta: i32 = this.delta
+    if (p < 0) {
+      return -1
+    }
+    if (delta <= 0) {
+      const v: i32 = p + delta
+      return v < 0 ? -1 : v
+    }
+    if (p > 2147483647 - delta) {
+      return -1
+    }
+    // Cannot wrap: p <= 2147483647 - delta was checked above.
+    return toI32(toU32(p) + toU32(delta))
   }
 
   /**
@@ -1006,13 +1052,17 @@ export class Deflater {
    * `DEFLATE_NO_ROOM`.
    */
   flushBits(out: u8[], op: i32, oe: i32): i32 {
-    const bytes: i32 = toI32((this.bitCount + 7) >> 3)
-    if (op < 0 || oe > toI32(out.length) || op > oe - bytes) {
+    // The buffer holds at most 64 bits: the mask keeps every bit of the
+    // count, and tells the prover so.
+    const bytes: i32 = toI32(((this.bitCount + 7) >> 3) & 15)
+    if (op < 0 || oe < 0 || oe > toI32(out.length) || bytes > oe - op) {
       return DEFLATE_NO_ROOM
     }
+    // Cannot wrap: op + bytes <= oe was checked above.
+    const end: i32 = toI32(toU32(op) + toU32(bytes))
     let p: i32 = op
     let bb: u64 = this.bitBuf
-    while (p < op + bytes) {
+    while (p < end) {
       uncheckedSet(out, p, toU8(bb & toU64(255)))
       bb = bb >> toU64(8)
       p += 1
@@ -1083,7 +1133,7 @@ export class Deflater {
     if (start < 0 || histStart < 0 || histStart > start || start > end || end > toI32(src.length)) {
       return -1
     }
-    if (op < 0 || oe > toI32(out.length) || op > oe) {
+    if (op < 0 || oe < 0 || oe > toI32(out.length) || op > oe) {
       return -1
     }
     let p: i32 = start
@@ -1097,14 +1147,18 @@ export class Deflater {
         return -1
       }
       o = this.putBits(out, o, toI32(3), toI32(3))
-      return this.settle(this.putBits(out, o, this.fixedLitCodes[256], this.fixedLitLens[256]))
+      return this.settle(this.putBits(out, o, deflateFixedLitCode(256), deflateFixedLitLength(256)))
     }
     if (this.level === 0) {
       return this.writeStored(src, start, end, final, out, o, oe)
     }
     while (p < end) {
-      if (p + this.delta > DEFLATE_REBASE) {
-        this.rebase(p)
+      const v: i32 = this.position(p)
+      if (v < 0) {
+        return this.settle(toI32(-1))
+      }
+      if (v > DEFLATE_REBASE) {
+        this.rebase(p, v)
       }
       const q: i32 =
         this.level >= 4
@@ -1137,22 +1191,27 @@ export class Deflater {
   /**
    * Slides every table position down so that index `p` of the input is a
    * window above the floor again; a position more than a window behind `p`
-   * becomes 0, which is never a candidate.
+   * becomes 0, which is never a candidate. `v` is `p`'s position.
    */
-  private rebase(p: i32): void {
-    const shift: i32 = p + this.delta - (DEFLATE_WINDOW + 1)
+  private rebase(p: i32, v: i32): void {
+    // 1073741824 is DEFLATE_REBASE, spelled out for the bounds prover.
+    if (p < 0 || v <= 1073741824) {
+      return
+    }
+    const shift: i32 = v - (DEFLATE_WINDOW + 1)
+    // A position is never negative; the masks below say so to the prover.
     const head: i32[] = this.head
     const prev: i32[] = this.prev
     for (let i: i32 = 0; i < toI32(head.length); i += 1) {
-      const v: i32 = head[i] - shift
+      const v: i32 = (head[i] & 0x7fffffff) - shift
       head[i] = v > 0 ? v : 0
     }
     for (let i: i32 = 0; i < toI32(prev.length); i += 1) {
-      const v: i32 = prev[i] - shift
+      const v: i32 = (prev[i] & 0x7fffffff) - shift
       prev[i] = v > 0 ? v : 0
     }
-    this.delta = this.delta - shift
-    this.base = this.base - shift
+    this.delta = 32769 - p // DEFLATE_WINDOW + 1 - p
+    this.base = (this.base & 0x7fffffff) - shift
   }
 
   /**
