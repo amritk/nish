@@ -9272,13 +9272,16 @@ if (dealtHere("selfHosting")) {
 
   // The steps after the suite that read the `simd` group's binaries
   // (build/test/simd/) or its kernels' lines run in the shard the group is
-  // pinned to, or they read a file no step there wrote.
+  // pinned to, or they read a file no step there wrote. Each also carries the
+  // test lane's gate (scripts/ci-scope.mjs), like every step of the job.
   const simdShard = DEALT_SECTIONS.simd.pinned
   const testJobText = ciJob(ciYmlText, "test")
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
-  const strayed = simdSteps.filter((step) => !step.includes(`if: matrix.shard == ${simdShard}\n`))
+  const strayed = simdSteps.filter(
+    (step) => !step.includes(`if: \${{ (matrix.shard == ${simdShard}) && needs.scope.outputs.test != 'false' }}\n`)
+  )
   check(
     `ci.yml: the \`test\` job's ${simdSteps.length} steps that read the simd group run in its shard, ${simdShard}`,
     simdSteps.length > 0 && strayed.length === 0,
@@ -42225,16 +42228,32 @@ if (selects("ci-scope", "ci.yml")) {
     `ran less than everything: ${notFull.join(", ")}`
   )
 
+  // The test shards check the guide and README prose, so a docs-only change
+  // runs them and skips every other lane; only agent notes, rfcs/ and specs/
+  // skip the shards too.
   const docsOnly = on(["docs/guide/index.md", "README.md"])
+  const notesOnly = on(["CLAUDE.md", ".claude/orientation.md", ".claude/plans/x.plan.md", "rfcs/x.md", "specs/x.md"])
   const srcChange = on(["src/compile.ts"])
-  const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
+  const inertRename = on([{ path: "rfcs/b.md", status: "renamed", previous: "rfcs/a.md" }])
+  const docsRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
   check(
-    "ci-scope: a docs-only change skips every lane, a src/ change runs every lane, an inert rename skips",
+    "ci-scope: a docs-only change skips every lane but the test shards, an agent-notes change skips every lane, a src/ change runs every lane, an inert rename skips",
     docsOnly.full === null &&
-      lanes.every((l) => docsOnly.lanes[l] === false) &&
+      lanes.every((l) => docsOnly.lanes[l] === (l === "test")) &&
+      notesOnly.full === null &&
+      lanes.every((l) => notesOnly.lanes[l] === false) &&
       lanes.every((l) => srcChange.lanes[l] === true) &&
-      lanes.every((l) => inertRename.lanes[l] === false),
-    JSON.stringify({ docsOnly, srcChange, inertRename })
+      lanes.every((l) => inertRename.lanes[l] === false) &&
+      lanes.every((l) => docsRename.lanes[l] === (l === "test")),
+    JSON.stringify({ docsOnly, notesOnly, srcChange, inertRename, docsRename })
+  )
+  // A hook or skill under .claude/ is run by the shards' tests: only the
+  // notes beside them are unread.
+  const hookChange = on([".claude/hooks/no-attribution.mjs", ".claude/settings.json"])
+  check(
+    "ci-scope: a change to a .claude/ hook or setting runs the test shards",
+    hookChange.lanes.test === true,
+    JSON.stringify(hookChange)
   )
   const unknownPath = on(["somewhere/new.txt"])
   check(
@@ -42296,7 +42315,9 @@ if (selects("ci-scope", "ci.yml")) {
     ["nish-cmp (aarch64-linux)", "nish_cmp"],
     ["the NEON path agrees (aarch64-linux)", "simd"],
     ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
-    ["test (ubuntu-latest, shard 1/9)", null],
+    ["test (ubuntu-latest, shard 1/9)", "test"],
+    ["test (macos-latest, shard 8/8)", "test"],
+    ["test-nish", null],
     ["lint", null],
     ["the golden cases, in Nish (shard 1/3)", null],
     ["nish-cmp", null],
@@ -42351,7 +42372,8 @@ if (selects("ci-scope", "ci.yml")) {
     return { ran, lines: fs.readFileSync(output, "utf8").split("\n").filter(Boolean) }
   }
   const badLabels = runScope(["docs/x.md"], { PR_LABELS: "[not json" })
-  const goodLabels = runScope(["docs/x.md"], { PR_LABELS: "[]" })
+  // An agent note is a path no lane reads, the test shards included.
+  const goodLabels = runScope(["rfcs/x.md"], { PR_LABELS: "[]" })
   const carriage = runScope([".github/a\rb.yml"], { PR_LABELS: "[]" })
   const laneLines = (lines) => lines.filter((l) => !l.startsWith("why="))
   check(
@@ -42376,11 +42398,11 @@ if (selects("ci-scope", "ci.yml")) {
   const unread = "every changed path of each is on its allowlist of paths it does not read"
   check(
     "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off",
-    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}`,
+    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap, examples; ${unread}`,
     JSON.stringify(someOff.lines)
   )
   check(
-    "ci-scope: the why= output of a docs-only change names every lane as off",
+    "ci-scope: the why= output of a change no lane reads names every lane as off",
     whyOf(goodLabels) === `why=lanes off: ${lanes.join(", ")}; ${unread}`,
     JSON.stringify(goodLabels.lines)
   )
@@ -42593,6 +42615,42 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
         "bench/techempower/async-db-main.ts",
       ],
     },
+    // The shards read everything (`reads: ["**"]`), so these only record that
+    // what `npm test` opens beyond tests/ is off TEST_UNREAD: the hook tests
+    // under .claude/hooks/ and the prose its checks compare.
+    test: {
+      "compiler-cache": compilerCache,
+      "npm test -- --shard N/9": [
+        ...importsOf("tests/run.js"),
+        ".claude/hooks/no-attribution.test.mjs",
+        ".claude/hooks/format-edited.test.mjs",
+        "README.md",
+        "CONTRIBUTING.md",
+        "llms.txt",
+        "docs/guide/using-nish/terminal.md",
+        "docs/security/README.md",
+        "docs/wp10-ci.md",
+        "docs/LANGUAGE.md",
+      ],
+      "node scripts/ci-test-summary.mjs": ["scripts/ci-test-summary.mjs"],
+      "node bench/crc32.mjs, adler32.mjs --check": ["bench/crc32.mjs", "bench/adler32.mjs"],
+    },
+    examples: {
+      "compiler-cache": compilerCache,
+      "bash scripts/smoke.sh": [
+        "scripts/smoke.sh",
+        "scripts/nish-compiler.sh",
+        "examples/hello.ts",
+        "examples/break-web/game.ts",
+        "tests/smoke/argv.stdout",
+      ],
+      "bash docs/cookbook/regen.sh --check": [
+        "docs/cookbook/regen.sh",
+        "docs/cookbook/arr-bounds-offset.ts",
+        "docs/IR_COOKBOOK.md",
+      ],
+      "bash scripts/size-report.sh": ["scripts/size-report.sh", "examples/add.ts", "examples/main.c", "tests/runtime-budgets.js"],
+    },
   }
   const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
     ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
@@ -42604,7 +42662,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   ])
   const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
   check(
-    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    `ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (${Object.values(laneCommands).reduce((n, c) => n + Object.keys(c).length, 0)}) of all ${ciScope.LANES.length} lanes`,
     commandGaps.length === 0 && uncoveredLanes.length === 0,
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
@@ -42623,13 +42681,13 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   )
   const ciScopeRead = ciScope.LANES.filter(
     (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
-  )
+  ).map((l) => l.name)
   check(
-    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
-    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.length === 0,
+    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/, and only the test shards for tests/ci-scope",
+    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.join() === "test",
     `lanes running tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
       `misses: ${runJsMisses.join(", ") || "none"}\n` +
-      `lanes a tests/ci-scope change turns on: ${ciScopeRead.map((l) => l.name).join(", ") || "none"}`
+      `lanes a tests/ci-scope change turns on (only the shards, which read everything, may): ${ciScopeRead.join(", ") || "none"}`
   )
 
   // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
@@ -42683,8 +42741,10 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // `--delegate-bench-timing` (DELEGATE_BENCH_TIMING): the crypto twins'
   // timed portable proofs run in the push-to-main run of this same job. That
   // holds while ci.yml runs on a push to main, the `test` job has no
-  // job-level `if:` and its Test step none either, and the flag is honoured
-  // on a `pull_request` event alone, so the push run times them.
+  // job-level `if:` and its Test step only the test lane's gate, which is on
+  // for every event but a pull request (scripts/ci-scope.mjs fails closed),
+  // and the flag is honoured on a `pull_request` event alone, so the push run
+  // times them.
   {
     const runSrc = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8")
     const honoured = /^const DELEGATE_BENCH_TIMING =\n(?:.*\n){0,3}?.*process\.env\.GITHUB_EVENT_NAME === "pull_request"$/m
@@ -42695,8 +42755,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
         (!testJob.includes("--delegate-bench-timing") ||
           (/^on:\n {2}push:\n {4}branches: \[main\]$/m.test(ciYmlText) &&
             !/^ {4}if:/m.test(testJob) &&
-            testStep !== "" &&
-            !/^ {8}(?:if|continue-on-error):/m.test(testStep) &&
+            binding(testJob, /npm test -- /, [gateOf("test")]) &&
             honoured.test(runSrc))),
       `Test step:\n${testStep || "(not found)"}`
     )
@@ -42811,7 +42870,7 @@ if (selects("ci.yml", "ci-test-summary")) {
   check(
     "ci.yml: the Test summary step follows the Test step in every shard, after a failure too",
     steps.indexOf(summaryStep) === steps.indexOf(testStep) + 1 &&
-      /^ {8}if: \$\{\{ !cancelled\(\) \}\}$/m.test(summaryStep) &&
+      /^ {8}if: \$\{\{ \(!cancelled\(\)\) && needs\.scope\.outputs\.test != 'false' \}\}$/m.test(summaryStep) &&
       (summaryStep.match(/^ {8}if:/gm) ?? []).length === 1 &&
       /^ {8}run: node scripts\/ci-test-summary\.mjs "\$RUNNER_TEMP\/test\.log" "\$RUNNER_TEMP\/test\.status"$/m.test(
         summaryStep

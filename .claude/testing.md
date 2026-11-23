@@ -168,8 +168,11 @@ test is **data, not code**: a source file next to the output it must produce.
   new file or tree, and is delegated, needs that path in its lane's `reads`;
   `node tests/run.js ci.yml` fails when the `bootstrap` or `fuzz` lane would
   skip a change to a file its check reads. A new top-level tree a lane reads
-  needs no edit: a path on no allowlist runs every lane. Run
-  `node tests/run.js ci-scope` after changing `scripts/ci-scope.mjs`.
+  needs no edit: a path on no allowlist runs every lane. The `test` shards
+  are a lane too, skipped only for the paths on `TEST_UNREAD` (agent notes,
+  `rfcs/`, `specs/`): a check that starts reading one of those takes it off
+  that list in the same PR. Run `node tests/run.js ci-scope` after changing
+  `scripts/ci-scope.mjs`.
 
 ## What every construct ships with
 

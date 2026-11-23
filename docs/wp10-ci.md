@@ -102,9 +102,10 @@ no `|| true` or `continue-on-error` (#1724).
 
 ### Scoped lanes
 
-A pull request that touches only the docs used to pay for every side job:
-about 42 of a run's ~119 runner-minutes go to seven jobs that read only the
-compiler and some test trees. Those jobs are now **lanes**. The `scope` job runs
+A pull request that touches only the docs used to pay for every job. About 44
+of a run's ~127 runner-minutes go to eight jobs that read only the compiler and
+some test trees, and the other 82 to the nine `test` shards, which read nearly
+the whole tree (run 45273242342). Those jobs and the shards are now **lanes**. The `scope` job runs
 `scripts/ci-scope.mjs`, which reads the pull request's changed files and labels
 from the API and writes `<lane>=true|false` and a one-line `why=`: the reason
 every lane runs (a `ci:full` label, a deleted file, a path that changes what CI
@@ -125,15 +126,31 @@ seconds, whatever runner its rows would otherwise take.
 | `sha256_macos`, `fuzz` | `sha256-macos`, `fuzz-smoke` | the compiler, any file under `tests/` but `tests/ci-scope/` (a `tests/run.js` section can open any fixture there), `bench/`, `examples/` |
 | `simd` | `simd-arm64` | the same as `sha256_macos`, and `docs/LANGUAGE.md` (the `crc32 kernel` section gzips it) |
 | `postgres` | `postgres-live` | the compiler, `tests/self/` (the compiler-cache action), `tests/postgres/`, `bench/techempower/` |
+| `examples` | `examples` | the compiler, `examples/`, `tests/smoke/`, `tests/self/`, `tests/allow-panics.js`, `tests/runtime-budgets.js`, `docs/cookbook/`, `docs/IR_COOKBOOK.md` |
+| `test` | `test` (all nine shards) | anything but the agent notes (`CLAUDE.md`, `AGENTS.md`, `SECURITY.md`, `.claude/*.md`, `.claude/plans/`) and `rfcs/` and `specs/` |
+
+The `test` lane is the other way round from the rest. `npm test` runs
+`tests/run.js`, which spawns `scripts/` and `bench/`, runs the hook tests under
+`.claude/hooks/`, packs the shipped files, and checks the guide, the security
+records, `README.md`, `llms.txt` and several design notes against the code, so
+its read set is everything and it is off only when every changed path is on
+its short list of paths it never reads (`TEST_UNREAD` in
+`scripts/ci-scope.mjs`). No file the suite runs opens one: `tests/`,
+`scripts/`, `bench/`, `bin/`, `src/`, `std/`, `runtime/` and `.claude/hooks/`
+name them only in comments, `npm pack` ships none of them, and the link check
+(`docs/check-links.mjs`, in the always-run `lint` job) is not part of the
+suite. That list was checked by grep, not by a trace. A guide, site or
+`docs/LANGUAGE.md` edit still runs every shard; an edit to agent notes alone,
+or to `rfcs/` or `specs/`, runs no lane at all.
 
 The rule fails closed. A lane is off only when **every** changed path is on that
 lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
 `.claude/`, the top-level prose files and the other lanes' test trees), and
 the read set wins over the allowlist. A path on neither list turns every lane
 on. Each list was read from the code of every command the lane runs, composite
-actions included (`node tests/run.js ci-scope` pins a file per command, 21
-commands across the seven lanes, the compiler-cache action counted once for
-each of the five lanes that run it). That check proves only that a change to a
+actions included (`node tests/run.js ci-scope` pins a file per command, 29
+commands across the nine lanes, the compiler-cache action counted once for
+each of the seven lanes that run it). That check proves only that a change to a
 listed file turns its lane on: it cannot find a read nobody listed. Some were also traced with `strace -f` on
 x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
 `soundness.js`, the `simd`, `float-corpus`, `sha256_hw` and five kernel
@@ -162,7 +179,10 @@ macOS. Every lane runs on:
 - a change to `.github/**`, any `package.json` or `package-lock.json`, or
   `scripts/ci-scope.mjs` itself.
 
-The `test` shards and `lint` are not lanes and do not wait for `scope`.
+`lint` is not a lane and does not wait for `scope`. When the `test` lane is
+off every other lane is too, since `TEST_UNREAD` is inert for all of them, so
+no lane that restores the compiler cache runs on a pull request whose shards
+did not save it.
 
 **`ci-gate`** needs every other job, runs `if: always()`, and fails unless each
 one succeeded or was skipped by its own `if:` on this run (`runtime-net`, and
@@ -176,13 +196,16 @@ from `pr-title.yml`. Branch protection is not changed by this workflow.
 `tests/ci-scope/backtest-prs.json` (60 of them, each with the jobs that failed
 on its runs) and fails on a **miss**: a lane it would have skipped whose job
 failed on that pull request. A failure recorded as an infrastructure flake, with
-its log line, is printed as excused. On those 60 it skips 17.5 of the lanes'
-41.6 runner-minutes per pull request run (14.7% of a ~119-minute run), with no
-miss and one excused flake (#1666's `fuzz-smoke`). That no-miss result is
-evidence only for `nish_cmp`, `fuzz` and the jobs that always run: the 60 hold
-no failure of `bootstrap`, `nish-cmp-elision`, `simd-arm64`, `sha256-macos` or
-`postgres-live`, so for those five lanes the replay shows what they skip, not
-that skipping is safe. `node tests/run.js ci-scope` runs the replay and
+its log line, is printed as excused. On those 60 it skips 22.87 of the lanes'
+126.0 runner-minutes per pull request run (18.0% of a ~127-minute run, at the
+job times of run 45273242342), with no miss and one excused flake (#1666's
+`fuzz-smoke`). The `test` lane skips 3 of the 60 and `examples` 35. That
+no-miss result is evidence only for `test` (16 of the 60 have a failed shard),
+`nish_cmp`, `fuzz` and `lint`, which always runs: the 60 hold no failure of
+`bootstrap`, `nish-cmp-elision`, `simd-arm64`, `sha256-macos`, `postgres-live`
+or `examples`, so for those six lanes the replay shows what they skip, not that
+skipping is safe. The backtest data names the shards `.../8`, as ci.yml did
+before the ninth; the lane's `formerNames` keeps those failures charged to it. `node tests/run.js ci-scope` runs the replay and
 pins every case that must run everything, and `node tests/run.js ci.yml` pins
 the lanes the `test` job delegates to.
 

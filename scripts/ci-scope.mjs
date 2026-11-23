@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Which of ci.yml's side jobs a pull request needs (docs/wp10-ci.md, "Scoped
-// lanes"). A lane is a side job, or a pair of them, that reads a known set of
-// paths; the `scope` job runs this script and writes one `<lane>=true|false`
+// Which of ci.yml's jobs a pull request needs (docs/wp10-ci.md, "Scoped
+// lanes"). A lane is a job, or a pair of them, that reads a known set of
+// paths: the side jobs, the `examples` job and the `test` shards; the `scope` job runs this script and writes one `<lane>=true|false`
 // line per lane to $GITHUB_OUTPUT, and each lane's job skips its steps on
 // `false`. The `ci-gate` job then fails unless every selected job succeeded.
 //
@@ -91,13 +91,35 @@ const RUN_JS = ["tests/**"]
 /** What a `tests/run.js` lane provably skips inside its read set. */
 const RUN_JS_UNREAD = ["tests/ci-scope/**"]
 
+/**
+ * What the `test` job provably skips. It runs all of `npm test` (tests/run.js,
+ * which spawns scripts/, bench/, .claude/hooks/*.test.mjs, npm pack over the
+ * shipped files, and the guide, security records and design notes it checks
+ * prose against), so its read set is everything and this list is the only way
+ * a change skips it. No file the job runs opens an entry: tests/, scripts/,
+ * bench/, bin/, src/, std/, runtime/ and .claude/hooks/ name them only in
+ * comments, and nothing walks the tree into them (docs/wp10-ci.md, "Scoped
+ * lanes").
+ */
+const TEST_UNREAD = [
+  ".claude/*.md",
+  ".claude/plans/**",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "SECURITY.md",
+  "rfcs/**",
+  "specs/**",
+]
+
 /** What every lane that builds a compiler from `src/` reads. */
 const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nish-capabilities.lock.json"]
 
 /**
  * The lanes. `jobs` are ci.yml job ids and `names` their `name:` templates,
- * verbatim (tests/run.js pins both against ci.yml); `minutes` is the runner time the
- * lane's rows took on run 44273081341 (the saving a skip buys); `reads` is
+ * verbatim (tests/run.js pins both against ci.yml), and `formerNames` (optional)
+ * the templates the job carried before, so the backtest still charges a
+ * recorded failure under an old name to its lane; `minutes` is the runner time
+ * the lane's rows took on run 45273242342 (the saving a skip buys); `reads` is
  * the lane's read set, which wins over `inert`; `unread` (optional) is what the
  * lane provably skips inside `reads`, and wins over both.
  */
@@ -107,7 +129,7 @@ export const LANES = [
     jobs: ["nish-cmp"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
     names: ["nish-cmp (${{ matrix.seed.asset }})"],
-    minutes: 14.2,
+    minutes: 13.6,
     // tests/nish-cmp.js, then fuzz.js --stage1 and --emit-ts over the corpus.
     reads: [...COMPILER, ...CORPUS],
     inert: [...INERT, "tests/**"],
@@ -117,7 +139,7 @@ export const LANES = [
     jobs: ["nish-cmp-elision"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
     names: ["nish-cmp elision (${{ matrix.seed.asset }})"],
-    minutes: 7.1,
+    minutes: 7.2,
     // tests/differential/soundness.js over tests/cases and the differential corpus.
     reads: [...COMPILER, ...CORPUS],
     inert: [...INERT, "tests/**"],
@@ -127,7 +149,7 @@ export const LANES = [
     jobs: ["bootstrap"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
     names: ["bootstrap (${{ matrix.seed.asset }})"],
-    minutes: 6.4,
+    minutes: 6.9,
     // scripts/bootstrap.sh --verify, scripts/check-hardening.mjs and the
     // tests/nish/cli.ts contract, whose built binary compiles fixtures from
     // tests/cases and tests/link. The `test` job's fixed point is delegated
@@ -147,7 +169,7 @@ export const LANES = [
     name: "simd",
     jobs: ["simd-arm64"],
     names: ["the NEON path agrees (aarch64-linux)"],
-    minutes: 5.5,
+    minutes: 5.3,
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
     // The `crc32 kernel` section's std_compress_gzip_files gzips docs/LANGUAGE.md.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**", "docs/LANGUAGE.md"],
@@ -158,7 +180,7 @@ export const LANES = [
     name: "sha256_macos",
     jobs: ["sha256-macos"],
     names: ["SHA-256 on Apple silicon (macos-latest)"],
-    minutes: 2.1,
+    minutes: 3.1,
     // tests/simd/sha256*.c, tests/run.js sha256_hw and bench/sha256/run.mjs.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
     unread: RUN_JS_UNREAD,
@@ -168,7 +190,7 @@ export const LANES = [
     name: "fuzz",
     jobs: ["fuzz-smoke"],
     names: ["fuzz-smoke"],
-    minutes: 4.5,
+    minutes: 4.0,
     // scripts/fuzz.sh --smoke (tests/fuzz/**) and tests/run.js runtime_sanitize,
     // which the `test` job delegates here (tests/run.js pins it).
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
@@ -179,7 +201,7 @@ export const LANES = [
     name: "postgres",
     jobs: ["postgres-live"],
     names: ["postgres-live"],
-    minutes: 1.8,
+    minutes: 2.0,
     // .github/actions/compiler-cache (tests/self/compiler-cache.js and
     // seed.js), tests/postgres/live/run.mjs, tls-certs.sh and the
     // bench/techempower servers.
@@ -192,7 +214,46 @@ export const LANES = [
     ],
     inert: [...INERT, "tests/**", "examples/**", "bench/**", "CHANGELOG.md", "changelog/**"],
   },
+  {
+    name: "test",
+    jobs: ["test"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    names: ["test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    formerNames: ["test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)"],
+    minutes: 82.2,
+    // `npm test` and the shard 1 and 2 steps after it read the whole tree but
+    // TEST_UNREAD: a guide page, a security record or a design note is checked
+    // by some section, so a docs-only change still runs the shards.
+    reads: ["**"],
+    unread: TEST_UNREAD,
+    inert: [],
+  },
+  {
+    name: "examples",
+    jobs: ["examples"],
+    names: ["examples"],
+    minutes: 1.7,
+    // .github/actions/compiler-cache, scripts/smoke.sh (examples/ and their
+    // tests/smoke pins), docs/cookbook/regen.sh --check, and the size report
+    // (examples/add.ts, examples/main.c, scripts/size-report.sh and the
+    // ceilings in tests/runtime-budgets.js).
+    reads: [
+      ...COMPILER,
+      "examples/**",
+      "tests/smoke/**",
+      "tests/self/**",
+      "tests/allow-panics.js",
+      "tests/runtime-budgets.js",
+      "docs/cookbook/**",
+      "docs/IR_COOKBOOK.md",
+    ],
+    inert: [...INERT, "tests/**", "bench/**", "CHANGELOG.md", "changelog/**"],
+  },
 ]
+
+/** The runner-minutes every job of run 45273242342 took together: what a skip is a share of. */
+const RUN_MINUTES = 127
 
 /** A changed path matching one of these turns every lane on. */
 const FULL = [
@@ -433,15 +494,15 @@ export const gate = (needs, expectSkip) => {
 
 /**
  * The lane a job's display name (as the API lists a run's jobs) belongs to,
- * matched exactly against each lane's `names`, a `${{ ... }}` standing for
- * one matrix value; null for a job no lane holds.
+ * matched exactly against each lane's `names` and `formerNames`, a `${{ ... }}`
+ * standing for one matrix value; null for a job no lane holds.
  *
  * @param {string} display the job's display name, e.g. `nish-cmp elision (x86_64-linux)`
  * @returns {(typeof LANES)[number] | null} the lane, or null
  */
 export const laneOf = (display) =>
   LANES.find((lane) =>
-    lane.names.some((name) => {
+    [...lane.names, ...(lane.formerNames ?? [])].some((name) => {
       const re = name
         .split(/\$\{\{.*?\}\}/)
         .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -506,7 +567,7 @@ const backtest = (file) => {
   const per = saved / prs.length
   console.log(
     `saved: ${per.toFixed(2)} runner-minutes per pull request run, of ${total.toFixed(1)} in the lanes ` +
-      `(${((100 * per) / 119).toFixed(1)}% of a ~119-minute run)`
+      `(${((100 * per) / RUN_MINUTES).toFixed(1)}% of a ~${RUN_MINUTES}-minute run)`
   )
   console.log(`misses: ${misses.length}`)
   for (const m of misses) {
