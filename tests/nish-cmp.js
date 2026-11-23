@@ -22078,10 +22078,34 @@ const DECLARED = [
     "the nish/compress instruction-count program is new to the corpus (WP84 S1); the seed's std/bytes.ts, std/compress/gzip.ts and std/compress/zlib.ts are older than main's, and the program's own module inlines what they declare, so those files differ",
     {
       "bench/std-compress-deflate.ts": ["bytes.ll"],
-      "bench/std-compress-inflate.ts": ["bytes.ll", "std-compress-inflate.ll"],
+      "bench/std-compress-inflate.ts": ["bytes.ll"],
       "bench/std-compress-gzip.ts": ["bytes.ll", "gzip.ll", "std-compress-gzip.ll", "zlib.ll"],
     }
   ),
+  ...byFinding(COMPRESS_PANIC_FREE)(
+    "std/compress/gzip.ts answers `DEFLATE_NO_ROOM` or `GZIP_ERR_FINISHED` where `GzipWriter` panicked, and `GzipReader` keeps the room left under its limit and whether it saw a member in place of a running total and a member count (WP84 S1), so gzip.ll, and each module or header that lays out `GzipReader` or declares `GzipWriter`'s methods, move",
+    {
+      "bench/crc32.ts": ["crc32.h"],
+      "bench/gzip/main.ts": ["main.h"],
+      "bench/pg-carrier.ts": ["gzip.ll"],
+      "bench/std-compress-gzip.ts": ["std-compress-gzip.h"],
+      "bench/std-http1.ts": ["gzip.ll"],
+      "tests/link/net_handler_limits_panic/main.ts": ["gzip.ll"],
+      "tests/link/std_compress/main.ts": ["main.h"],
+      "tests/link/std_compress_crc_paths/main.ts": ["main.h"],
+      "tests/link/std_compress_f64/main.ts": ["main.ll"],
+      "tests/link/std_compress_gzip_files/main.ts": ["main.h"],
+      "tests/link/std_compress_node/main.ts": ["main.h"],
+      "tests/link/std_http1_encoded_window/main.ts": ["gzip.ll"],
+      "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
+    }
+  ),
+  {
+    program: "tests/link/std_compress_gzip_errors/main.ts",
+    file: "exit",
+    changelog: COMPRESS_PANIC_FREE,
+    why: "the program reads `GZIP_ERR_FINISHED`, which the seed's std/compress/gzip.ts does not export, so only the candidate compiles it",
+  },
 ]
 
 /**
