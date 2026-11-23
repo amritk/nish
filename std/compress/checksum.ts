@@ -192,7 +192,7 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
     // with the plain table, each braid's register joining as its word
     // comes, which adds them into one.
     const blocks: i32 = len / 40
-    const lastBlock: i32 = toI32(toI64(off) + toI64((blocks - 1) * 40))
+    const lastBlock: i32 = toI32(toI64(off) + toI64(blocks - 1) * 40)
     let c1: u32 = 0
     let c2: u32 = 0
     let c3: u32 = 0
