@@ -13531,6 +13531,7 @@ const DECLARED = [
     "tests/link/crypto_pki/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/crypto_pki_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/crypto_pki_limbo/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/crypto_pki_malformed/main.ts": ["ct.ll", "main.h", "p384.ll"],
     "tests/link/crypto_pki_roots/main.ts": ["p256.ll"],
     "tests/link/crypto_rsa/main.ts": ["ct.ll", "main.h", "rsa.ll"],
     "tests/link/crypto_rsa_der_refusals/main.ts": ["ct.ll", "main.h", "rsa.ll"],
