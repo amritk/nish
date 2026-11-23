@@ -77,6 +77,11 @@
 //      one loop turn only because each done rings the turn lanes of the
 //      seats behind it in answer order: with one wake for all of them,
 //      epoll could wake the seat whose turn had come last, one a turn.
+//  14. An answer asked for before its turn: a second seat asks for its
+//      answer while the one ahead has its turn and has not read it. It
+//      fails with PG_ERR_CLOSED without reading, the one ahead is still
+//      answered, and the connection is then closed: no task reads past the
+//      unread answer, so it would sit in front of every later seat.
 import { cancel, sleep, spawn, taskId } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -588,6 +593,23 @@ export async function main(): Promise<i32> {
   // (`last - first < 5`) for a turn of slack; one a turn, they span nine.
   const span: string = last - first < 5 ? "at most 5" : `${last - first + 1}`
   console.log(`eight seats freed together: ${turns.seated} seated, over ${span} loop turns`)
+
+  // 14. An answer asked for before its turn: the seat ahead of it has its
+  // turn but has not read its answer yet. The early one fails without
+  // reading, the one ahead is still answered, and the connection then closes
+  // rather than leave the unread answer in front of every later seat.
+  const ahead: i32 = await pgAsyncSeat(pool, quick)
+  const aheadSent: i32 = await pgAsyncSend(pool, ahead, new PgAsyncParams())
+  const aheadTurn: i32 = await pgAsyncTurn(pool, ahead, aheadSent)
+  const early: i32 = await pgAsyncSeat(pool, quick)
+  const earlySent: i32 = await pgAsyncSend(pool, early, new PgAsyncParams())
+  const early14 = await pgAsyncAnswer(pool, early, earlySent)
+  pgAsyncDone(pool, early, earlySent, early14.reusable)
+  console.log(describe("before its turn", early14))
+  const ahead14 = await pgAsyncAnswer(pool, ahead, aheadTurn)
+  pgAsyncDone(pool, ahead, aheadTurn, ahead14.reusable)
+  console.log(describe("ahead of it", ahead14))
+  console.log(`live: ${pool.live()}`)
 
   pool.close()
   return 0

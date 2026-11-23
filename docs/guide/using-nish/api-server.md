@@ -17,12 +17,15 @@ of its own, in a task that may await, uses [an async server](async-server.md).
 ## A first server
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/handler`,
-`nish/net/router` and the JSON reads keep panic sites no proof removes yet, so
-a call to them is refused by default until the standard library is made
-panic-free.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): they answer through
+the handler's panicking calls (`send`, `sendJson`, `problem`, ...), which
+panic on a bug in your program by design, and `nish/net/router` and the
+HTTP/1.1 server under the handler keep panic sites no proof removes yet. A
+program held to no panics answers through the `try` calls below instead;
+the router and the server under it still need `--allow-panics` until they are
+made panic-free.
 
-<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/router.ts` and `std/net/http1-server.ts` keep panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
@@ -127,6 +130,15 @@ The handler writes `Content-Length`, `Transfer-Encoding`, `Connection` and
 599, more or less body than the length said, or `sendJson` with no `json()`
 before it, panics, as a bug in your program.
 
+Each answer has a twin that returns that bug as a `Result` instead:
+`trySend`, `trySendFields`, `tryEmpty`, `trySendJson`, `tryProblem`,
+`tryRefuse`, `tryStart`, `tryWrite` and `tryEnd` give `Err` with the message
+the panic would carry, and `Ok` with what the answer returns. A program held
+to no panics answers through them, opens its handler with
+`openHttpHandler(limits, listener, router)`, which gives `Err` for limits it
+cannot use or a failed `pollCreate`, watches with `h.tryWatch(fd, id)`, and
+takes requests with `h.next()`, which is `null` when none is ready.
+
 **A request may be answered later**, after a database answers, say: keep it
 and answer it in a later turn. If its client has gone in the meantime, the
 answer returns `HANDLER_DROPPED` and sends nothing, even when a new connection
@@ -148,7 +160,7 @@ to `req.route`, lowest id first, then `HANDLER_NEXT` once all have run, or
 on `HANDLER_NEXT`. Once the body has chosen its answer, `h.after(req)` hands
 out the steps that ran, highest id first, before you send it:
 
-<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/router.ts` and `std/net/http1-server.ts` keep panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HANDLER_ABSENT, HANDLER_NEXT, HandlerLimits, HttpHandler } from "nish/net/handler";
@@ -294,8 +306,10 @@ answer.
 
 `examples/http-app` is a JSON notes API on this page's pieces: command-line
 flags, a log line a request, problems for bad input, and the graceful stop
-above with a deadline. Build it with `nish examples/http-app/main.ts --allow-panics
---link http-app` (its header says which panic sites it keeps) and run `./http-app 8080`. Copy it and change it: logging and
+above with a deadline. It answers through the `try` calls, so of the handler's own panic sites it
+reaches only one its header names; build it with `nish examples/http-app/main.ts --allow-panics
+--link http-app` all the same, for the router, server and slice sites its
+header lists, and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
 

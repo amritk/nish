@@ -16,6 +16,7 @@ import {
   HandlerLimits,
   HttpHandler,
   HttpRequest,
+  openHttpHandler,
 } from "nish/net/handler";
 ```
 
@@ -44,6 +45,12 @@ while (true) {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="open​Http​Handler" icon="phosphor/regular/function" href="#openhttphandler">
+
+A handler as `new HttpHandler(limits, listener, router)` makes one, with what that constructor panics on answered as an `Err`: limits below their least, or a readiness loop `pollCreate` could not make.
+
+</scalar-card>
 
 <scalar-card title="Handler​Limits" icon="phosphor/regular/cube" href="#handlerlimits">
 
@@ -149,14 +156,57 @@ program as it arrived, with `decodedFrom` `HTTP_CODING_IDENTITY`.
 Misuse — a status outside 200 to 599, a reserved field (`Content-Length`,
 `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`), more body than
 the length said, a second `start` — panics: it is a bug in the program,
-never something a peer can cause. What a peer can cause answers a code the
-program may ignore, so no answer needs its result bound.
+never something a peer can cause. Each answering method has a `try` twin
+(`tryWrite`, `tryEnd`, `trySend`, ...) that answers the same misuse as an
+`Err` instead, for a program built without panics; the class doc says
+what each refusal leaves of the request. What a peer can cause answers a
+code the program may ignore, so no answer needs its result bound.
 
 Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
 Written from RFC 9110, RFC 9112 and RFC 9457, not ported from another
 implementation.
+
+## Functions
+
+### openHttpHandler
+
+A handler as `new HttpHandler(limits, listener, router)` makes one, with
+what that constructor panics on answered as an `Err`: limits below their
+least, or a readiness loop `pollCreate` could not make.
+
+```ts
+const openHttpHandler: (
+  limits: HandlerLimits,
+  listener: i32,
+  router: Router,
+) => Result<HttpHandler, string>
+```
+
+<scalar-field name="limits" type="HandlerLimits" required>
+
+the caps and timeouts, as the constructor reads them
+
+</scalar-field>
+
+<scalar-field name="listener" type="i32" required>
+
+the listening socket's descriptor, still the program's to close
+
+</scalar-field>
+
+<scalar-field name="router" type="Router" required>
+
+the routes, which the handler keeps and consults at each request head
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;HttpHandler, string&gt;">
+
+`Ok` with the handler, or `Err` saying which limit is below its least or how `pollCreate` failed
+
+</scalar-field>
 
 ## Classes
 
@@ -188,13 +238,30 @@ class HandlerLimits
 The HTTP/1.1 server: a carrier, its readiness loop, a router and a pool of
 requests. One per thread; nothing in it is shared.
 
+A `try` twin refuses a broken contract with an `Err`, and what it leaves
+depends on whether the response's head went out:
+
+- **Refused before the head** — a request not taken or already answered,
+  a status outside 200 to 599, a one-shot answer's body window outside its
+  buffer (`trySend`): nothing is sent and `r` is as it was, so a request
+  still owed an answer can be answered again (a bare 500, say).
+- **Abandoned after the head** — a head the carrier refuses (a reserved
+  field, a name or value that is not field text), a `tryWrite` window
+  outside its buffer or more body than the declared length (the head went
+  out with `tryStart`, so these fall here, not above), or a body short of
+  it (`tryEnd`): the response cannot be completed, so the connection is
+  closed and `r` is the handler's again. Nothing more is owed for `r`; a
+  further answer for it is refused too.
+
+The plain methods panic with the same message where their twins refuse.
+
 ```ts
 class HttpHandler
 ```
 
 | Member | |
 | --- | --- |
-| `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. `limits.ring` acts only through the listener: open it with `limits.listen`, since a listener from `tcpListen` stays on descriptors whatever `ring` says. |
+| `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. `limits.ring` acts only through the listener: open it with `limits.listen`, since a listener from `tcpListen` stays on descriptors whatever `ring` says. |
 | `scratch: u8[]` | `json` and `problem` write here. |
 | `after(r: HttpRequest): i32` | The next step to run after `r`'s route body has chosen its answer and before it sends it: the steps `before` handed out, highest id first, then `HANDLER_NEXT`; or `HANDLER_ANSWERED` once a step has answered `r`. A step here may still `field` or answer in the body's place. A request `before` was never called for runs no step here. |
 | `before(r: HttpRequest): i32` | The next step to run before `r`'s route body, lowest id first, or `HANDLER_NEXT` once every step `Router.use` bound to `r.route` has run, or `HANDLER_ANSWERED` once a step has answered `r`. A step reads `r`, and may answer it — `refuse`, `problem`, `empty` or any other answer — or add answer fields with `field`; call `before` again straight after each step, before the next `take`, until it answers a negative code. Only a request `take` handed over runs steps: what the handler answers itself, to a bad request, a timeout or a full pool, runs none.<br><br>`let s = handler.before(req)`<br>`while (s >= 0) { switch (s) { case AUTH: ... } s = handler.before(req) }`<br>`if (s === HANDLER_NEXT) { switch (req.route) { ... } }` |
@@ -208,6 +275,7 @@ class HttpHandler
 | `flush(): void` | Sends every answer whose send was put off, so the connection's answers to a pipelined burst go out in one write. `wait` calls it before it blocks; a program that blocks elsewhere, as `nish/net/serve` does, calls it first. |
 | `hungUp(r: HttpRequest): boolean` | Whether the client of `r` has hung up: its connection is closed or reused, or the peer ended its stream while `r` is held. A half-close counts, as nginx counts it, so a hung task is cancelled rather than kept for a reader who may be gone. |
 | `json(): JsonWriter` | The JSON writer, reset onto the handler's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
+| `next(): HttpRequest \| null` | The next whole request, as `take` hands it over, or null when none is `ready`. |
 | `pooled(): i32` | How many requests the pool has made: the most ever in flight at once. |
 | `problem(r: HttpRequest, status: i32, title: string, detail: string): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |
 | `ready(): boolean` | Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here, and a body that decoded past `maxDecoded` (413) or did not decode (400) is answered here. |
@@ -219,9 +287,19 @@ class HttpHandler
 | `sends(): i64` | How many times the handler handed a connection's waiting output to its socket: one per connection per pass, however many answers it holds. |
 | `start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Starts `r`'s response: `status` (200 to 599), the fields `names[k]`: `values[k]`, and a body of `bodyLength` bytes or `HTTP1_CHUNKED`; then `write` the body and `end`. Answers `HANDLER_SENT`, or `HANDLER_DROPPED` when `r`'s connection has closed — every later `write` and `end` for it then does nothing, and `end` hands it back. |
 | `take(): HttpRequest` | The next whole request, which the program now owes an answer. Panics when none is `ready`. |
+| `tryEmpty(r: HttpRequest, status: i32): Result<i32, string>` | `empty`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, or a status outside 200 to 599, leaves `r` as it was. |
+| `tryEnd(r: HttpRequest): Result<i32, string>` | `end`, with a broken contract answered as an `Err` instead of a panic: a response not started leaves `r` as it was; a body short of the declared length closes the connection, since the response cannot be completed, and hands `r` back. |
+| `tryProblem(r: HttpRequest, status: i32, title: string, detail: string): Result<i32, string>` | `problem`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, or a status outside 200 to 599, leaves `r` as it was. |
+| `tryRefuse(r: HttpRequest): Result<i32, string>` | `refuse`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered leaves `r` as it was. |
+| `trySend(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): Result<i32, string>` | `send`, with a broken contract answered as an `Err` instead of a panic, as `trySendFields` answers it. |
+| `trySendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): Result<i32, string>` | `sendFields`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, a status outside 200 to 599 or, when a body is sent (`len` above 0, a status other than 204 and 304), a window outside `body` leave `r` as it was; a field the carrier refuses closes the connection and hands `r` back. |
+| `trySendJson(r: HttpRequest, status: i32): Result<i32, string>` | `sendJson`, with a broken contract answered as an `Err` instead of a panic: no value begun with `json`, a request not taken or already answered, or a status outside 200 to 599, leaves `r` as it was. |
+| `tryStart(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): Result<i32, string>` | `start`, with a broken contract answered as an `Err` instead of a panic: a request not taken or already answered, a status outside 200 to 599 or a body length below `HTTP1_CHUNKED` leave `r` as it was; a field the carrier refuses closes the connection and hands `r` back. |
+| `tryWatch(fd: i32, id: i32): Result<boolean, string>` | `watch`, with an id outside the range answered as an `Err` instead of a panic. |
+| `tryWrite(r: HttpRequest, buf: u8[], off: i32, len: i32): Result<i32, string>` | `write`, with a broken contract answered as an `Err` instead of a panic. A response not started leaves `r` as it was. A window outside `buf`, or more bytes than the declared length leaves (whether this check or the carrier finds it), abandons the response: the head is out and the body cannot follow it as declared, so the connection is closed and `r` is the handler's again. The caller answers nothing more for `r`. |
 | `wait(timeoutMs: i32): i32` | One turn of the loop: waits up to `timeoutMs` (-1 for no limit) for a socket to be ready, accepts, reads and writes what is, closes the connections past their timeouts, and answers how many whole requests are waiting for `take`. |
 | `watch(fd: i32, id: i32): void` | Watches `fd` for reading beside the handler's sockets, as `id` (0 to `HANDLER_MAX_WATCHED - 1`): `fired(id)` says whether it was ready in the last `wait`. For a program's own descriptors — `signalFd()` for a graceful stop, a pipe from another thread. |
-| `write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
+| `write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. A response not started, a window outside `buf`, or more bytes than the declared length leaves panics; `tryWrite` answers those instead, closing the connection. |
 
 ### HttpRequest
 
@@ -253,16 +331,21 @@ class HttpRequest
 | `header(name: string): i32` | The index of the first field named `name`, which is lowercase, or `HANDLER_ABSENT`. |
 | `headerIs(name: string, value: string): boolean` | Whether the first field named `name` (lowercase) has exactly the value `value`. |
 | `methodIs(method: string): boolean` | Whether the method is exactly `method` (methods are case-sensitive, RFC 9110 §9.1). |
-| `param(k: i32, out: u8[]): i32` | Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM` when `out` is too short. Nothing is written on a code. |
-| `paramDecimal(k: i32): i32` | Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1. |
-| `paramEnd(k: i32): i32` | Where parameter `k` ends in `head`. |
-| `paramIs(k: i32, text: string): boolean` | Whether parameter `k`, raw, is exactly `text`. |
-| `paramStart(k: i32): i32` | Where parameter `k` starts in `head`. Panics on a parameter the route does not have. |
+| `param(k: i32, out: u8[]): i32` | Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM` when `out` is too short. Nothing is written on a code. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramDecimal(k: i32): i32` | Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramEnd(k: i32): i32` | Where parameter `k` ends in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramIs(k: i32, text: string): boolean` | Whether parameter `k`, raw, is exactly `text`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
+| `paramStart(k: i32): i32` | Where parameter `k` starts in `head`. Panics on a parameter the route does not have, a caller contract; `tryParam...` answers `Err` instead. |
 | `pathIs(path: string): boolean` | Whether the path, the target up to its `?`, is exactly `path`. |
 | `query(name: string, out: u8[]): i32` | The first query parameter named `name`, its value decoded into `out` from 0 — `+` as a space and `%XX` as its byte, the form encoding (application/x-www-form-urlencoded) — and its length; a name is compared decoded too. `HANDLER_ABSENT` when no parameter has the name, `ROUTER_BAD_ESCAPE` for a malformed escape in its value, `ROUTER_NO_ROOM` when `out` is too short. A name with no `=` has an empty value. |
 | `queryIndex(name: string): i32` | Finds the first parameter named `name`: where its pair starts, or -1; its raw value goes to `queryValue...`. |
-| `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`. |
-| `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`. |
+| `tryParamDecimal(k: i32): Result<i32, string>` | Parameter `k` read as a decimal number, as `paramDecimal` reads it, or an error naming the parameter the route does not have. |
+| `tryParamEnd(k: i32): Result<i32, string>` | Where parameter `k` ends in `head`, or an error naming the parameter the route does not have. |
+| `tryParamStart(k: i32): Result<i32, string>` | Where parameter `k` starts in `head`, or an error naming the parameter the route does not have. |
+| `tryValueEnd(i: i32): Result<i32, string>` | Where field `i`'s value ends in `head`, or an error when `i` is not a field index `header` answered. |
+| `tryValueStart(i: i32): Result<i32, string>` | Where field `i`'s value starts in `head`, or an error when `i` is not a field index `header` answered. |
+| `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`. Panics on an `i` that is not a field index, a caller contract: pass only what `header` answered, after checking it is not `HANDLER_ABSENT`. |
+| `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`. Panics on an `i` that is not a field index, a caller contract: pass only what `header` answered, after checking it is not `HANDLER_ABSENT`. |
 
 ## Limits
 

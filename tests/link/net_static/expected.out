@@ -96,9 +96,14 @@ PASS  handler: app.js.gz as gzip
 PASS  handler: HEAD
 PASS  handler: a traversal, 404 and refused
 PASS  handler: a file past the cache streams whole
+PASS  tryServeHandler: a GET of site.css, Ok and 200
+PASS  tryServeHandler: a second answer to it is an Err
+PASS  tryServeHandler: a range, Ok and 206
+PASS  tryServeHandler: a second answer to the range is an Err
+PASS  tryServeHandler: a file that is not there, Ok(STATIC_NOT_FOUND) and refused
 PASS  limits out of range: no entries, nothing served
 PASS  limits out of range: a path past 4096, nothing served
 PASS  limits out of range: a negative cache, nothing served
 PASS  limits out of range: a cache past 2^30, nothing served
 PASS  limits in range: the root resolves
-static files: 103 passed, 0 failed, 0 skipped
+static files: 108 passed, 0 failed, 0 skipped

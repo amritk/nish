@@ -219,5 +219,5 @@ class HttpServerRequest
 | `pathIs(path: string): boolean` | Whether the path, the target up to its `?`, is exactly `path`. |
 | `query(name: string, out: u8[]): i32` | The first query parameter named `name`, its value decoded into `out` from 0 — `+` as a space and `%XX` as its byte, the form encoding (application/x-www-form-urlencoded) — and its length; a name is compared decoded too. `HANDLER_ABSENT` when no parameter has the name, `ROUTER_BAD_ESCAPE` for a malformed escape in its value, `ROUTER_NO_ROOM` when `out` is too short. A name with no `=` has an empty value. |
 | `queryIndex(name: string): i32` | Finds the first parameter named `name`: where its pair starts, or -1; its raw value goes to `queryValue...`. |
-| `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`. |
-| `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`. |
+| `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`, or -1 when the request holds no field `i`. |
+| `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`, or -1 when the request holds no field `i`. |

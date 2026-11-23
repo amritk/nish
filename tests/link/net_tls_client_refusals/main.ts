@@ -2,7 +2,7 @@
 // ServerHello built byte by byte (so it can be broken), or a real server's
 // flight with one thing changed. Every case starts a fresh client.
 import { Suite } from "nish/testing";
-import { TLS_LEVEL_APPLICATION, TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TlsServer } from "nish/net/tls";
+import { TLS_LEVEL_APPLICATION, TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TlsSecretPool, TlsServer } from "nish/net/tls";
 import {
   TLS_ALERT_BAD_CERTIFICATE,
   TLS_ALERT_DECODE_ERROR,
@@ -669,5 +669,10 @@ export const main = (): i32 => {
   c = fresh();
   c.wipe();
   refused(t, "a wiped client", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, goodExts())), TLS_ALERT_INTERNAL_ERROR);
+
+  // A secret pool of a negative hash length is made empty, where it panicked.
+  const empty: TlsSecretPool = new TlsSecretPool(-1);
+  t.eqI32("a secret pool of a negative hash length: no client Finished", toI32(empty.clientFinished.length), ZERO);
+  t.eqI32("a secret pool of a negative hash length: no CertificateVerify input", toI32(empty.toBeSigned.length), ZERO);
   return t.done();
 };

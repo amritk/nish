@@ -406,7 +406,7 @@ KeyUpdate's next secret over both hashes match Python's `cryptography` and
 - *The caller's mistakes are `internal_error`, or a negative count:* a window
   outside an array, an output too small, content over 2^14 bytes, a padding no
   record can carry, an unknown suite or a secret of the wrong length, a
-  sequence number at 2^53 − 1, an AES or ChaCha20 key that is not one, a
+  sequence number below 0 or at 2^53 − 1, an AES or ChaCha20 key that is not one, a
   signature when none is due, a P-256 key that is not one, and a `TlsServer`
   that already refused its configuration or randomness. A handshake that
   fails before its ServerHello wipes the ephemeral key it never used.
@@ -1398,7 +1398,20 @@ interop server does not.
 - **A ticket under a retired or unknown key** fails to open — its key id
   names neither key — and the client gets a full handshake (§4.2.11: unknown
   PSKs SHOULD be ignored). So does every ticket after the process restarts,
-  since keys never leave memory.
+  since keys never leave memory. A ticket longer than 65,535 bytes, which no
+  `identity<1..2^16-1>` can carry (§4.2.11), and a key record whose id is
+  not 16 bytes fail the same way, before the key is exposed
+  (`tlsTicketNamesKey`). On the seal side a key record whose id is not
+  16 bytes seals nothing: `tlsTicketSeal` answers 0, so the server issues
+  no ticket rather than one no key could open. Every refusal of
+  `tlsTicketSeal` leaves the state's `issuedAt` as it was; only a sealed
+  ticket stamps it with `now`.
+- **A vector too long for its length field is refused.** `tlsWriteNewSessionTicket`
+  answers -1, and `tlsEncodeNewSessionTicket` empty, for a nonce past 255 bytes
+  or a ticket past 65,535, where they once wrote the length's low bits over
+  the whole vector; the ServerHello and ClientHello writers do the same for a
+  session id past 255 (`tlsPutLength`). Pinned by the two refusal checks in
+  `tests/link/net_tls_psk_wire` (a 256-byte nonce, a 65,536-byte ticket).
 - **Nonces, enforced.** Each ticket is sealed under a fresh 12-byte random
   nonce. Under one key, n tickets collide with probability about n² / 2^97.
   The issue window bounds time, not the number of connections, so the count

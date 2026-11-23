@@ -1,0 +1,32 @@
+paramStart: Err HttpRequest.param: the route has 0 parameter(s), not one at 0
+paramEnd: Err HttpRequest.param: the route has 0 parameter(s), not one at 0
+paramDecimal: Err HttpRequest.param: the route has 0 parameter(s), not one at 0
+host: t
+valueStart 7: Err HttpRequest.value: 7 is not a field index of the 1 `header` answers
+valueEnd 7: Err HttpRequest.value: 7 is not a field index of the 1 `header` answers
+watch: Err HttpHandler.watch: id 16 is outside 0 to 15
+start 99: Err HttpHandler.start: status 99 is outside 200 to 599
+start: Ok 0
+write 1 of 3: Ok 0
+connections: 1
+write 5 of 3: Err HttpHandler.write: 5 byte(s) is more than the 2 the length the response declared leaves
+write 5 of 3: connections 0
+write after: Err HttpHandler.write: the response is not started (state 0)
+end after: Err HttpHandler.end: the response is not started (state 0)
+problem: Err HttpHandler.start: the request is not one taken and unanswered (state 0)
+refuse: Err HttpHandler.start: the request is not one taken and unanswered (state 0)
+start: Ok 0
+connections: 1
+write outside: Err HttpHandler.write: the window 4 + 2 is outside its 5 bytes
+write outside: connections 0
+end after: Err HttpHandler.end: the response is not started (state 0)
+start: Ok 0
+write 1 of 3: Ok 0
+connections: 1
+end at 1 of 3: Err HttpHandler.end: the body is 2 byte(s) short of the length the response declared
+end at 1 of 3: connections 0
+empty after: Err HttpHandler.start: the request is not one taken and unanswered (state 0)
+connections: 1
+start content-length: Err HttpHandler.start: the carrier refused the head (-22): a reserved field, or a name or value that is not a token or field text
+start content-length: connections 0
+empty after: Err HttpHandler.start: the request is not one taken and unanswered (state 0)

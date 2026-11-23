@@ -123,6 +123,9 @@ export const HPACK_ERR_SIZE_UPDATE_MISSING: i32 = -8
  */
 export const HPACK_ERR_COPY_BUDGET: i32 = -9
 
+/** What `hpackHuffmanLength` answers for a coded length that does not fit `i32`, or a code cut short. */
+const HPACK_HUFFMAN_TOO_LONG: i32 = 2147483647
+
 /**
  * How many times the larger of the table's maximum size and a block's length
  * the decoder copies into its table for one block, at most
@@ -347,8 +350,10 @@ const hpackAppendText = (out: u8[], text: string): void => {
 
 /** Appends `src[at, at + n)`, a window the caller has checked, to `out`. */
 const hpackAppend = (out: u8[], src: u8[], at: i32, n: i32): void => {
-  // The length test is the caller's check again, there so the prover drops the bounds check.
-  for (let i: i32 = at; i < at + n && i >= 0 && i < toI32(src.length); i += 1) {
+  // Widened, so `at + n` cannot wrap; the length test is the caller's check again, there so the
+  // prover drops the bounds check.
+  const end: i64 = toI64(at) + toI64(n)
+  for (let i: i32 = at; toI64(i) < end && i >= 0 && i < toI32(src.length); i += 1) {
     out.push(src[i])
   }
 }
@@ -382,7 +387,10 @@ const hpackSameAsWindow = (bytes: u8[], store: u8[], at: i32, n: i32): boolean =
     return false
   }
   for (let i: i32 = 0; i < n && i < toI32(bytes.length); i += 1) {
-    if (bytes[i] !== store[at + i]) {
+    // `at` and `i` are each below 2^31, so the unsigned sum cannot wrap; a sum past `store`, a window
+    // the caller has checked, reads as a difference.
+    const j: i32 = toI32(toU32(at) + toU32(i))
+    if (at < 0 || j < 0 || j >= toI32(store.length) || bytes[i] !== store[j]) {
       return false
     }
   }
@@ -450,56 +458,102 @@ export class HpackHuffman {
 
   /** Rebuilds the code from Appendix B's 257 code lengths. Build one and reuse it: each build allocates. */
   constructor() {
+    // Every access below goes through the field, never a local holding its array, which is what lets
+    // the layout pass store each array inside the object (`src/inline-arrays.ts`).
     this.codes = new Array<i32>(257)
     this.lengths = new Array<i32>(257)
     this.symbols = new Array<i32>(257)
     this.firstCode = new Array<i32>(31)
     this.countAt = new Array<i32>(31)
     this.baseRank = new Array<i32>(31)
-    for (let sym: i32 = 0; sym <= HPACK_EOS; sym += 1) {
-      this.lengths[sym] = toI32(HPACK_HUFFMAN_LENGTHS.charCodeAt(sym)) - 60
+    // Every bound below is the array's own length, which the constants fix at 257 symbols and 31 code
+    // lengths, so no test ever stops a loop early.
+    const table: string = HPACK_HUFFMAN_LENGTHS
+    for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(table.length); sym += 1) {
+      this.lengths[sym] = toI32(table.charCodeAt(sym)) - 60
     }
-    let code: i32 = 0
-    let rank: i32 = 0
-    for (let len: i32 = 5; len <= HPACK_HUFFMAN_MAX_BITS; len += 1) {
-      this.firstCode[len] = code
-      this.baseRank[len] = rank
-      for (let sym: i32 = 0; sym <= HPACK_EOS; sym += 1) {
-        if (this.lengths[sym] === len) {
-          this.codes[sym] = code
-          this.symbols[rank] = sym
-          code += 1
-          rank += 1
+    // How many symbols each length has. Appendix B's lengths are 5 to 30, so every one lands in a row.
+    for (let sym: i32 = 0; sym < toI32(this.lengths.length); sym += 1) {
+      const len: i32 = this.lengths[sym]
+      if (len >= 0 && len < toI32(this.countAt.length)) {
+        this.countAt[len] = toI32(toU32(this.countAt[len]) + 1)
+      }
+    }
+    // Canonical order is by length, then by symbol: each length's first code and rank follow from the
+    // counts of the shorter ones. Unsigned: the code is below 2^30 and the rank at most 257, so neither
+    // can wrap. Each count goes back to 0, to count again as the pass after hands the codes out.
+    let code: u32 = 0
+    let rank: u32 = 0
+    for (
+      let len: i32 = 5;
+      len <= HPACK_HUFFMAN_MAX_BITS &&
+      len < toI32(this.firstCode.length) &&
+      len < toI32(this.baseRank.length) &&
+      len < toI32(this.countAt.length);
+      len += 1
+    ) {
+      this.firstCode[len] = toI32(code)
+      this.baseRank[len] = toI32(rank)
+      const count: u32 = toU32(this.countAt[len])
+      this.countAt[len] = 0
+      code = (code + count) << 1
+      rank += count
+    }
+    // Walking the symbols in order hands each length its codes in symbol order, as the canonical code
+    // does, and leaves every count as it was. Appendix B has 257 symbols, so the rank never reaches
+    // past `symbols`.
+    for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(this.codes.length); sym += 1) {
+      const len: i32 = this.lengths[sym]
+      if (
+        len >= 5 &&
+        len <= HPACK_HUFFMAN_MAX_BITS &&
+        len < toI32(this.firstCode.length) &&
+        len < toI32(this.baseRank.length) &&
+        len < toI32(this.countAt.length)
+      ) {
+        const done: u32 = toU32(this.countAt[len])
+        const at: i32 = toI32(toU32(this.baseRank[len]) + done)
+        if (at >= 0 && at < toI32(this.symbols.length)) {
+          this.codes[sym] = toI32(toU32(this.firstCode[len]) + done)
+          this.symbols[at] = sym
+          this.countAt[len] = toI32(done + 1)
         }
       }
-      this.countAt[len] = rank - this.baseRank[len]
-      code = code << 1
     }
   }
 }
 
 /**
  * The length of `src[off, off + len)` once Huffman-coded, in bytes, padding included. A window outside
- * `src` panics, as does a coded length past 2^31 - 1 bytes.
+ * `src` panics. A coded length past 2^31 - 1 bytes answers 2^31 - 1, which is never shorter than the raw
+ * window, so a caller comparing the two keeps the octets raw.
  * @param h The code to measure with.
  * @param src The octets to measure; only read.
  * @param off Where the window starts, an index into `src`.
  * @param len How many octets from `off` on to measure.
- * @returns The number of bytes `hpackHuffmanEncode` would append for the same window, 0 for an empty one.
+ * @returns The number of bytes `hpackHuffmanEncode` would append for the same window, 0 for an empty one;
+ *   2^31 - 1 when that does not fit an `i32`, or when `h`'s tables were cut short (only by writing their
+ *   internal fields).
  */
 export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i32): i32 => {
   hpackCheckWindow("hpackHuffmanLength", src, off, len)
-  let bits: i64 = 0
-  const end: i32 = off + len
-  // The window check has already proved `0 <= i < src.length` for every `i`
-  // below `end`; the loop condition says so again, which is what lets the
-  // prover drop the bounds check on each read. The two loops below do the same.
-  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
-    bits += toI64(h.lengths[toI32(src[i])])
+  // Unsigned: at most 30 bits for each of fewer than 2^31 octets, far below 2^64.
+  let bits: u64 = 0
+  // Widened, so `off + len` cannot wrap. The window check has already proved
+  // `0 <= i < src.length` for every `i` below `end`; the loop condition says so
+  // again, which is what lets the prover drop the bounds check on each read.
+  // The two loops below do the same.
+  const end: i64 = toI64(off) + toI64(len)
+  for (let i: i32 = off; i >= 0 && toI64(i) < end && i < toI32(src.length); i += 1) {
+    const sym: i32 = toI32(src[i])
+    if (sym >= toI32(h.lengths.length)) {
+      return HPACK_HUFFMAN_TOO_LONG
+    }
+    bits += toU64(h.lengths[sym] & 31)
   }
-  const bytes: i64 = (bits + toI64(7)) >> toI64(3)
-  if (bytes > toI64(2147483647)) {
-    panic("hpackHuffmanLength: more than 2^31 - 1 bytes once coded")
+  const bytes: u64 = (bits + toU64(7)) >> toU64(3)
+  if (bytes > toU64(2147483647)) {
+    return HPACK_HUFFMAN_TOO_LONG
   }
   return toI32(bytes)
 }
@@ -510,7 +564,8 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
  *
  * The accumulator holds fewer than eight waiting bits between symbols, and a
  * code is at most 30, so it never needs more than 37 bits.
- * A window outside `src` panics.
+ * A window outside `src` panics. A table cut short (only by writing its
+ * internal fields) ends the coding at the first octet it has no code for.
  * @param h The code to encode with.
  * @param src The octets to encode; only read.
  * @param off Where the window starts, an index into `src`.
@@ -519,23 +574,27 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
  */
 export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): void => {
   hpackCheckWindow("hpackHuffmanEncode", src, off, len)
-  let acc: i64 = 0
-  let bits: i32 = 0
-  const end: i32 = off + len
-  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
+  let acc: u64 = 0
+  // Unsigned: fewer than eight waiting bits plus one code of at most 31, so it never wraps.
+  let bits: u32 = 0
+  const end: i64 = toI64(off) + toI64(len)
+  for (let i: i32 = off; i >= 0 && toI64(i) < end && i < toI32(src.length); i += 1) {
     const sym: i32 = toI32(src[i])
-    const n: i32 = h.lengths[sym]
-    acc = (acc << toI64(n)) | toI64(h.codes[sym])
+    if (sym >= toI32(h.lengths.length) || sym >= toI32(h.codes.length)) {
+      break
+    }
+    const n: u32 = toU32(h.lengths[sym] & 31)
+    acc = (acc << toU64(n)) | toU64(h.codes[sym])
     bits += n
     while (bits >= 8) {
       bits -= 8
-      out.push(toU8((acc >> toI64(bits)) & toI64(255)))
+      out.push(toU8((acc >> toU64(bits)) & toU64(255)))
     }
-    acc = acc & ((toI64(1) << toI64(bits)) - toI64(1))
+    acc = acc & ((toU64(1) << toU64(bits)) - toU64(1))
   }
   if (bits > 0) {
-    const pad: i32 = 8 - bits
-    out.push(toU8(((acc << toI64(pad)) | ((toI64(1) << toI64(pad)) - toI64(1))) & toI64(255)))
+    const pad: u32 = 8 - bits
+    out.push(toU8(((acc << toU64(pad)) | ((toU64(1) << toU64(pad)) - toU64(1))) & toU64(255)))
   }
 }
 
@@ -557,22 +616,44 @@ export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i3
  *   since every code is at least five bits long.
  * @returns `HPACK_OK` when the window decoded whole and ended in valid padding; `HPACK_ERR_HUFFMAN_EOS` when
  *   a complete code was the EOS symbol, at the point it was read; `HPACK_ERR_HUFFMAN_PADDING` when the bits
- *   left after the last symbol are more than seven or not all ones.
+ *   left after the last symbol are more than seven or not all ones, and when thirty bits match no code,
+ *   which only a table cut short (by writing its internal fields) allows.
  */
 export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): i32 => {
   hpackCheckWindow("hpackHuffmanDecode", src, off, len)
-  let code: i32 = 0
-  let bits: i32 = 0
-  const end: i32 = off + len
-  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
-    const byte: i32 = toI32(src[i])
-    for (let k: i32 = 7; k >= 0; k -= 1) {
-      code = (code << 1) | ((byte >> k) & 1)
+  // Unsigned, and `bits` never passes 30: the code is complete, so thirty bits always end a symbol,
+  // and the row test below gives up before a 31st.
+  let code: u32 = 0
+  let bits: u32 = 0
+  const end: i64 = toI64(off) + toI64(len)
+  for (let i: i32 = off; i >= 0 && toI64(i) < end && i < toI32(src.length); i += 1) {
+    const byte: u32 = toU32(src[i])
+    for (let k: u32 = 8; k > 0; k -= 1) {
+      code = (code << 1) | ((byte >> (k - 1)) & 1)
       bits += 1
-      if (bits >= 5) {
-        const at: i32 = code - h.firstCode[bits]
-        if (at >= 0 && at < h.countAt[bits]) {
-          const sym: i32 = h.symbols[h.baseRank[bits] + at]
+      const row: i32 = toI32(bits)
+      if (row > HPACK_HUFFMAN_MAX_BITS) {
+        return HPACK_ERR_HUFFMAN_PADDING
+      }
+      // No code is shorter than five bits, so the tables are read only from there on.
+      if (row >= 5) {
+        if (
+          row >= toI32(h.firstCode.length) ||
+          row >= toI32(h.countAt.length) ||
+          row >= toI32(h.baseRank.length)
+        ) {
+          return HPACK_ERR_HUFFMAN_PADDING
+        }
+        // Both sides fit an `i32`, so the `i64` difference cannot wrap.
+        const at: i64 = toI64(code) - toI64(h.firstCode[row])
+        if (at >= 0 && at < toI64(h.countAt[row])) {
+          // `at` is below `h.countAt[row]`, so in `[0, 2^31)`; the unsigned sum of two such cannot wrap,
+          // and one past `symbols` matches no code.
+          const slot: i32 = toI32(toU32(h.baseRank[row]) + toU32(at))
+          if (slot < 0 || slot >= toI32(h.symbols.length)) {
+            return HPACK_ERR_HUFFMAN_PADDING
+          }
+          const sym: i32 = h.symbols[slot]
           if (sym === HPACK_EOS) {
             return HPACK_ERR_HUFFMAN_EOS
           }
@@ -583,7 +664,7 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
       }
     }
   }
-  if (bits > 7 || code !== (1 << bits) - 1) {
+  if (bits > 7 || code !== (toU32(1) << bits) - 1) {
     return HPACK_ERR_HUFFMAN_PADDING
   }
   return HPACK_OK
@@ -618,7 +699,9 @@ export class HpackCursor {
     hpackCheckWindow("HpackCursor", buf, off, len)
     this.buf = buf
     this.pos = off
-    this.end = off + len
+    // The window check proved `off` and `len` non-negative with a sum at most `buf.length`, so the unsigned
+    // sum does not wrap.
+    this.end = toI32(toU32(off) + toU32(len))
   }
 
   /**
@@ -629,7 +712,9 @@ export class HpackCursor {
     hpackCheckWindow("HpackCursor", buf, off, len)
     this.buf = buf
     this.pos = off
-    this.end = off + len
+    // The window check proved `off` and `len` non-negative with a sum at most `buf.length`, so the unsigned
+    // sum does not wrap.
+    this.end = toI32(toU32(off) + toU32(len))
   }
 }
 
@@ -649,13 +734,14 @@ export const hpackEncodeInteger = (out: u8[], flags: i32, prefixBits: i32, value
   if (prefixBits < 1 || prefixBits > 8 || value < 0) {
     panic(`hpackEncodeInteger: a value of ${value} with a ${prefixBits}-bit prefix, outside 1 to 8`)
   }
-  const max: i32 = (1 << prefixBits) - 1
+  // Unsigned: the prefix is 1 to 8 bits, so `max` is 1 to 255, and `value` is at least `max` below.
+  const max: i32 = toI32((toU32(1) << toU32(prefixBits)) - toU32(1))
   if (value < max) {
     out.push(toU8(flags | value))
     return
   }
   out.push(toU8(flags | max))
-  let rest: i32 = value - max
+  let rest: i32 = toI32(toU32(value) - toU32(max))
   while (rest >= 128) {
     out.push(toU8((rest & 127) | 128))
     rest = rest >> 7
@@ -682,24 +768,29 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
   if (prefixBits < 1 || prefixBits > 8) {
     panic(`hpackDecodeInteger: a ${prefixBits}-bit prefix, outside 1 to 8`)
   }
-  if (c.pos >= c.end) {
+  // A position outside the buffer is a cursor whose public `pos` a caller moved; it has nothing to read.
+  const buf: u8[] = c.buf
+  const at: i32 = c.pos
+  if (at >= c.end || at < 0 || at >= toI32(buf.length)) {
     return HPACK_ERR_TRUNCATED
   }
-  const max: i32 = (1 << prefixBits) - 1
-  const first: i32 = toI32(c.buf[c.pos]) & max
-  c.pos += 1
+  const max: i32 = toI32((toU32(1) << toU32(prefixBits)) - toU32(1))
+  const first: i32 = toI32(buf[at]) & max
+  c.pos = at + 1
   if (first < max) {
     return first
   }
-  let value: i64 = toI64(max)
+  // Unsigned: at most 2^31 - 1 before each step, plus at most 127 * 2^28, far below 2^64.
+  let value: u64 = toU64(max)
   for (let shift: i32 = 0; shift <= 28; shift += 7) {
-    if (c.pos >= c.end) {
+    const next: i32 = c.pos
+    if (next >= c.end || next < 0 || next >= toI32(buf.length)) {
       return HPACK_ERR_TRUNCATED
     }
-    const b: i32 = toI32(c.buf[c.pos])
-    c.pos += 1
-    value += toI64(b & 127) << toI64(shift)
-    if (value > toI64(2147483647)) {
+    const b: i32 = toI32(buf[next])
+    c.pos = next + 1
+    value += toU64(b & 127) << toU64(shift)
+    if (value > toU64(2147483647)) {
       return HPACK_ERR_INTEGER_OVERFLOW
     }
     if ((b & 128) === 0) {
@@ -711,7 +802,7 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
 
 /**
  * Appends `data` as a §5.2 string literal: Huffman-coded when `huffman` is
- * true, else raw. A caller who wants the shorter of the two compares
+ * true and the coded length fits below 2^31 - 1, else raw. A caller who wants the shorter of the two compares
  * `hpackHuffmanLength` with the raw length.
  * @param h The code to encode with when `huffman` is true.
  * @param out Where the literal goes, appended after what it holds: its length with a 7-bit prefix and the
@@ -721,8 +812,11 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
  */
 export const hpackEncodeString = (h: HpackHuffman, out: u8[], data: u8[], huffman: boolean): void => {
   const n: i32 = toI32(data.length)
-  if (huffman) {
-    hpackEncodeInteger(out, 128, 7, hpackHuffmanLength(h, data, 0, n))
+  // `hpackHuffmanLength` answers 2^31 - 1 when the coded length does not fit, or the code is cut short; the
+  // octets then go raw, so the length written is always the length that follows.
+  const coded: i32 = huffman ? hpackHuffmanLength(h, data, 0, n) : HPACK_HUFFMAN_TOO_LONG
+  if (coded < HPACK_HUFFMAN_TOO_LONG) {
+    hpackEncodeInteger(out, 128, 7, coded)
     hpackHuffmanEncode(h, data, 0, n, out)
     return
   }
@@ -748,24 +842,30 @@ export const hpackEncodeString = (h: HpackHuffman, out: u8[], data: u8[], huffma
  *   `HPACK_ERR_HUFFMAN_EOS` or `HPACK_ERR_HUFFMAN_PADDING` from `hpackHuffmanDecode` for a Huffman-coded one.
  */
 export const hpackDecodeString = (h: HpackHuffman, c: HpackCursor, out: u8[]): i32 => {
-  if (c.pos >= c.end) {
+  // A position or end outside the buffer is a cursor whose public `pos` a caller moved; it has nothing to
+  // read.
+  const buf: u8[] = c.buf
+  const first: i32 = c.pos
+  if (first >= c.end || first < 0 || first >= toI32(buf.length)) {
     return HPACK_ERR_TRUNCATED
   }
-  const huffman: boolean = (toI32(c.buf[c.pos]) & 128) !== 0
+  const huffman: boolean = (toI32(buf[first]) & 128) !== 0
   const n: i32 = hpackDecodeInteger(c, 7)
   if (n < 0) {
     return n
   }
-  if (n > c.end - c.pos) {
+  const at: i32 = c.pos
+  // Widened, so the sum of two `i32`s cannot wrap.
+  const stop: i64 = toI64(at) + toI64(n)
+  if (at < 0 || stop > toI64(c.end) || stop > toI64(buf.length)) {
     return HPACK_ERR_TRUNCATED
   }
-  const at: i32 = c.pos
-  c.pos += n
+  c.pos = toI32(stop)
   if (huffman) {
-    return hpackHuffmanDecode(h, c.buf, at, n, out)
+    return hpackHuffmanDecode(h, buf, at, n, out)
   }
-  for (let i: i32 = at; i < at + n; i += 1) {
-    out.push(c.buf[i])
+  for (let i: i32 = at; toI64(i) < stop && i < toI32(buf.length); i += 1) {
+    out.push(buf[i])
   }
   return HPACK_OK
 }
@@ -822,84 +922,111 @@ export class HpackTable {
     this.maxSize = maxSize
   }
 
-  /** How many entries `entries` describes, evicted ones included. */
-  private slots(): i32 {
-    return toI32(this.entries.length) >> 1
-  }
-
   /**
    * How many entries the table holds.
    * @returns The live entry count: dynamic indexes 1 to it are in range; 0 when the table is empty.
    */
   count(): i32 {
-    return this.slots() - this.first
+    // Both are in `[0, 2^30)`, so the difference cannot wrap; a `first` outside them, which only a caller
+    // writing the public field makes, leaves no entry reachable.
+    const n: i32 = toI32(this.entries.length) >> 1
+    const f: i32 = this.first
+    return f >= 0 && f <= n ? n - f : 0
   }
 
-  /** Where dynamic entry `i`, 1 being the newest, sits in `entries`; `i` must be in range. */
+  /** Where dynamic entry `i`, 1 being the newest, sits in `entries`; -1 for an `i` outside 1 to `count()`. */
   private slot(i: i32): i32 {
-    return this.slots() - i
+    if (i < 1 || i > this.count()) {
+      return -1
+    }
+    // `n` is in `[0, 2^30)` and `i` at least 1, so the difference cannot wrap.
+    const n: i32 = toI32(this.entries.length) >> 1
+    return n - i
   }
 
-  /** Where entry `k` of `entries` starts in `bytes`. */
+  /** Where entry `k` of `entries` starts in `bytes`; -1 for a `k` `entries` does not have. */
   private startOf(k: i32): i32 {
-    return this.entries[k * 2]
+    const entries: i32[] = this.entries
+    // Unsigned: a `k` of 2^30 or more, or a negative one, wraps to a position the test below refuses.
+    const at: i32 = toI32(toU32(k) << 1)
+    return k >= 0 && at >= 0 && at < toI32(entries.length) ? entries[at] : -1
   }
 
   /** Where entry `k` of `entries` ends in `bytes`: where the next starts, or the end of `bytes`. */
   private endOf(k: i32): i32 {
-    return k + 1 < this.slots() ? this.entries[k * 2 + 2] : toI32(this.bytes.length)
+    const entries: i32[] = this.entries
+    const at: i32 = toI32((toU32(k) << 1) + 2)
+    return k >= 0 && at >= 0 && at < toI32(entries.length) ? entries[at] : toI32(this.bytes.length)
   }
 
   /** What entry `k` of `entries` costs (§4.1); it fits an `i32` because the table holds it. */
   private costOf(k: i32): i32 {
-    return this.endOf(k) - this.startOf(k) + HPACK_ENTRY_OVERHEAD
+    // Widened, so the arithmetic on two `i32`s cannot wrap; the result fits as the table holds the entry.
+    return toI32(toI64(this.endOf(k)) - toI64(this.startOf(k)) + toI64(HPACK_ENTRY_OVERHEAD))
   }
 
   /**
    * Where the name of dynamic entry `i` starts in `bytes`.
-   * @param i The dynamic index, 1 being the newest; it must be from 1 to `count()` and is not checked.
-   * @returns The offset in `bytes`, valid until the table next changes.
+   * @param i The dynamic index, 1 being the newest, from 1 to `count()`.
+   * @returns The offset in `bytes`, valid until the table next changes; -1 for an `i` outside 1 to `count()`.
    */
   nameStart(i: i32): i32 {
     return this.startOf(this.slot(i))
   }
 
   /**
-   * How many octets the name of dynamic entry `i` has.
+   * How many octets the name of dynamic entry `i` has; -1 for an `i` outside 1 to `count()`.
    * @internal Read by this module's decoder and encoder; not for callers.
    */
   nameLength(i: i32): i32 {
-    return this.entries[this.slot(i) * 2 + 1]
+    const entries: i32[] = this.entries
+    const k: i32 = this.slot(i)
+    const at: i32 = toI32((toU32(k) << 1) + 1)
+    return k >= 0 && at >= 0 && at < toI32(entries.length) ? entries[at] : -1
   }
 
   /**
-   * Where the value of dynamic entry `i` starts in `bytes`, straight after its name.
+   * Where the value of dynamic entry `i` starts in `bytes`, straight after its name; -1 for an `i` outside
+   * 1 to `count()`.
    * @internal Read by this module's decoder and encoder; not for callers.
    */
   valueStart(i: i32): i32 {
-    return this.nameStart(i) + this.nameLength(i)
+    const start: i32 = this.nameStart(i)
+    const length: i32 = this.nameLength(i)
+    if (start < 0 || length < 0) {
+      return -1
+    }
+    // Both are non-negative, and the name lies inside `bytes`, so the unsigned sum does not wrap.
+    return toI32(toU32(start) + toU32(length))
   }
 
   /**
-   * How many octets the value of dynamic entry `i` has.
+   * How many octets the value of dynamic entry `i` has; -1 for an `i` outside 1 to `count()`.
    * @internal Read by this module's decoder and encoder; not for callers.
    */
   valueLength(i: i32): i32 {
-    return this.endOf(this.slot(i)) - this.valueStart(i)
+    const k: i32 = this.slot(i)
+    const start: i32 = this.valueStart(i)
+    if (k < 0 || start < 0) {
+      return -1
+    }
+    // The value ends at or after it starts, so the unsigned difference does not wrap.
+    return toI32(toU32(this.endOf(k)) - toU32(start))
   }
 
   /**
-   * What dynamic entry `i` costs (§4.1).
+   * What dynamic entry `i` costs (§4.1); -1 for an `i` outside 1 to `count()`.
    * @internal Read by `HpackDecoder`; not for callers.
    */
   entrySize(i: i32): i32 {
-    return this.costOf(this.slot(i))
+    const k: i32 = this.slot(i)
+    return k < 0 ? -1 : this.costOf(k)
   }
 
   /**
    * A fresh copy of the name of dynamic entry `i`. It allocates; the codec reads the window instead.
-   * @param i The dynamic index, 1 being the newest; it must be from 1 to `count()` and is not checked.
-   * @returns A new array, the caller's to keep.
+   * @param i The dynamic index, 1 being the newest, from 1 to `count()`.
+   * @returns A new array, the caller's to keep; empty for an `i` outside 1 to `count()`.
    */
   name(i: i32): u8[] {
     const out: u8[] = []
@@ -909,8 +1036,8 @@ export class HpackTable {
 
   /**
    * A fresh copy of the value of dynamic entry `i`, as `name` makes the name.
-   * @param i The dynamic index, 1 being the newest; it must be from 1 to `count()` and is not checked.
-   * @returns A new array, the caller's to keep.
+   * @param i The dynamic index, 1 being the newest, from 1 to `count()`.
+   * @returns A new array, the caller's to keep; empty for an `i` outside 1 to `count()`.
    */
   value(i: i32): u8[] {
     const out: u8[] = []
@@ -924,37 +1051,58 @@ export class HpackTable {
    */
   evictTo(limit: i32): void {
     while (toI64(this.size) > toI64(limit) && this.count() > 0) {
-      this.size -= this.costOf(this.first)
-      this.first += 1
+      // The size counts every live entry's cost, so the unsigned difference does not wrap; and `first` is
+      // below the slot count, under 2^30, while `count()` is positive.
+      this.size = toI32(toU32(this.size) - toU32(this.costOf(this.first)))
+      this.first = toI32(toU32(this.first) + 1)
     }
     this.compact()
   }
 
   /** Shifts the evicted prefix out of `entries`, and out of `bytes`, once it is half of either. */
   private compact(): void {
-    const end: i32 = toI32(this.bytes.length)
-    const start: i32 = this.count() > 0 ? this.startOf(this.first) : end
-    const n: i32 = this.slots()
-    if (this.first > 0 && this.first * 2 >= n) {
-      const live: i32 = (n - this.first) * 2
-      const from: i32 = this.first * 2
-      for (let k: i32 = 0; k < live; k += 1) {
-        this.entries[k] = this.entries[from + k]
+    const entries: i32[] = this.entries
+    const bytes: u8[] = this.bytes
+    const end: i32 = toI32(bytes.length)
+    // A live entry starts inside `bytes`; were one not to, nothing of `bytes` would be shifted out.
+    const oldest: i32 = this.count() > 0 ? this.startOf(this.first) : end
+    const start: i32 = oldest >= 0 && oldest <= end ? oldest : 0
+    const n: i32 = toI32(entries.length) >> 1
+    const f: i32 = this.first
+    // `n` is under 2^30 and `f` from 1 to it, so neither `n - f` nor the doubling below wraps.
+    if (f > 0 && f <= n && f >= n - f) {
+      const live: i32 = toI32(toU32(n - f) << 1)
+      const from: i32 = toI32(toU32(f) << 1)
+      for (let k: i32 = 0; k < live && k < toI32(entries.length); k += 1) {
+        const at: i32 = toI32(toU32(from) + toU32(k))
+        if (at >= 0 && at < toI32(entries.length)) {
+          entries[k] = entries[at]
+        }
       }
-      while (toI32(this.entries.length) > live) {
-        this.entries.pop()
+      while (toI32(entries.length) > live && toI32(entries.length) > 0) {
+        entries.pop()
       }
       this.first = 0
     }
-    if (start > 0 && start * 2 >= end) {
-      for (let k: i32 = start; k < end; k += 1) {
-        this.bytes[k - start] = this.bytes[k]
+    // `start` is from 1 to `end`, so `end - start` cannot wrap, nor `k - start` for `k` from `start` on.
+    if (start > 0 && start >= end - start) {
+      for (let k: i32 = start; k < end && k < toI32(bytes.length); k += 1) {
+        const at: i32 = k - start
+        if (at >= 0 && at < toI32(bytes.length)) {
+          bytes[at] = bytes[k]
+        }
       }
-      while (toI32(this.bytes.length) > end - start) {
-        this.bytes.pop()
+      const keep: i32 = end - start
+      while (toI32(bytes.length) > keep && toI32(bytes.length) > 0) {
+        bytes.pop()
       }
-      for (let k: i32 = this.first; k < this.slots(); k += 1) {
-        this.entries[k * 2] -= start
+      // Every live entry starts at or after `start`, so the unsigned difference does not wrap.
+      const slots: i32 = toI32(entries.length) >> 1
+      for (let k: i32 = this.first; k >= 0 && k < slots; k += 1) {
+        const at: i32 = toI32(toU32(k) << 1)
+        if (at >= 0 && at < toI32(entries.length)) {
+          entries[at] = toI32(toU32(entries[at]) - toU32(start))
+        }
       }
     }
   }
@@ -978,10 +1126,12 @@ export class HpackTable {
       this.evictTo(nothing)
       return nothing
     }
-    this.evictTo(this.maxSize - toI32(cost))
+    // The cost is from 32 to `maxSize`, so neither unsigned sum nor difference below wraps: the size after
+    // eviction is at most `maxSize - cost`, and the octets pushed are the cost less 32.
+    this.evictTo(toI32(toU32(this.maxSize) - toU32(cost)))
     this.entries.push(toI32(this.bytes.length))
     this.entries.push(toI32(name.length))
-    let pushed: i32 = 0
+    let pushed: u32 = 0
     for (const b of name) {
       this.bytes.push(b)
       pushed += 1
@@ -990,8 +1140,8 @@ export class HpackTable {
       this.bytes.push(b)
       pushed += 1
     }
-    this.size += toI32(cost)
-    return pushed
+    this.size = toI32(toU32(this.size) + toU32(cost))
+    return toI32(pushed)
   }
 
   /**
@@ -1079,11 +1229,20 @@ export class HpackWork {
    * @internal Called by `HpackDecoder` as it gives fields back; not for callers.
    */
   pool(j: i32): u8[][] {
-    while (toI32(this.pools.length) <= j) {
+    const at: i32 = j > 0 ? j : 0
+    const pools: u8[][][] = this.pools
+    while (toI32(pools.length) <= at) {
       const fresh: u8[][] = []
-      this.pools.push(fresh)
+      pools.push(fresh)
     }
-    return this.pools[j]
+    const n: i32 = toI32(pools.length)
+    if (at >= 0 && at < n) {
+      return pools[at]
+    }
+    // Not reached: the loop above grew `pools` past `at`.
+    const fresh: u8[][] = []
+    pools.push(fresh)
+    return fresh
   }
 
   /**
@@ -1096,14 +1255,20 @@ export class HpackWork {
     const j: i32 = this.classOf(length)
     const pool: u8[][] = this.pool(j)
     const kept: i32 = toI32(pool.length)
-    if (kept === 0) {
-      const made: u8[] = new Array<u8>(1 << j)
-      hpackEmpty(made)
-      return made
+    if (kept > 0 && toI32(pool.length) > 0) {
+      const out: u8[] = pool[kept - 1]
+      pool.pop()
+      return out
     }
-    const out: u8[] = pool[kept - 1]
-    pool.pop()
-    return out
+    // `classOf` answers below `HPACK_FIELD_CLASSES`, so the room is at most 2^23 and an unsigned shift holds it.
+    const room: u32 = toU32(1) << toU32(j)
+    // A length is made at most 65535 at once; a larger class's room is filled out by pushes, which leave the same room.
+    const made: u8[] = new Array<u8>(toU16(room < toU32(65535) ? room : toU32(65535)))
+    while (toU32(made.length) < room) {
+      made.push(0)
+    }
+    hpackEmpty(made)
+    return made
   }
 }
 
@@ -1231,9 +1396,10 @@ export class HpackDecoder {
       hpackAppendText(out, hpackStaticName(index))
       return
     }
-    const i: i32 = index - HPACK_STATIC_LENGTH
+    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
+    const i: i32 = toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH))
     hpackAppend(out, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))
-    this.tableCopied += toI64(this.table.nameLength(i))
+    this.countCopied(this.table.nameLength(i))
   }
 
   /** Appends the value at `index` to `out`, as `appendNameAt` does the name. */
@@ -1242,9 +1408,10 @@ export class HpackDecoder {
       hpackAppendText(out, hpackStaticValue(index))
       return
     }
-    const i: i32 = index - HPACK_STATIC_LENGTH
+    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
+    const i: i32 = toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH))
     hpackAppend(out, this.table.bytes, this.table.valueStart(i), this.table.valueLength(i))
-    this.tableCopied += toI64(this.table.valueLength(i))
+    this.countCopied(this.table.valueLength(i))
   }
 
   /** How many octets the name at `index` has. */
@@ -1252,7 +1419,8 @@ export class HpackDecoder {
     if (index <= HPACK_STATIC_LENGTH) {
       return toI32(hpackStaticName(index).length)
     }
-    return this.table.nameLength(index - HPACK_STATIC_LENGTH)
+    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
+    return this.table.nameLength(toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH)))
   }
 
   /** What the entry at `index` counts towards a header list, without building it. */
@@ -1264,29 +1432,34 @@ export class HpackDecoder {
         toI64(HPACK_ENTRY_OVERHEAD)
       )
     }
-    return toI64(this.table.entrySize(index - HPACK_STATIC_LENGTH))
+    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
+    return toI64(this.table.entrySize(toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH))))
+  }
+
+  /** Adds `n` octets, when there are any, to `tableCopied`; the count would need 2^63 octets to wrap. */
+  private countCopied(n: i32): void {
+    if (n > 0) {
+      this.tableCopied = toI64(toU64(this.tableCopied) + toU64(n))
+    }
   }
 
   /** Whether `index` names an entry of either table. */
   private hasIndex(index: i32): boolean {
-    return index >= 1 && index <= HPACK_STATIC_LENGTH + this.table.count()
+    return index >= 1 && toI64(index) <= toI64(HPACK_STATIC_LENGTH) + toI64(this.table.count())
   }
 
   /** Empties the fields and gives each one's array back, emptied, to its class's pool, for the next block. */
   private clear(): void {
-    while (toI32(this.names.length) > 0) {
+    const names: u8[][] = this.names
+    const values: u8[][] = this.values
+    if (toI32(names.length) > 0 || toI32(values.length) > 0) {
       const work: HpackWork = this.working()
-      const last: i32 = toI32(this.names.length) - 1
-      const name: u8[] = this.names[last]
-      const value: u8[] = this.values[last]
-      this.names.pop()
-      this.values.pop()
-      work.pool(work.classOf(toI32(name.length))).push(name)
-      work.pool(work.classOf(toI32(value.length))).push(value)
-      // Emptied as it goes back, so a reference a caller kept past the block reads nothing until the array is taken again.
-      hpackEmpty(name)
-      hpackEmpty(value)
-      this.neverIndexed.pop()
+      hpackGiveBack(work, names)
+      hpackGiveBack(work, values)
+    }
+    const neverIndexed: boolean[] = this.neverIndexed
+    while (toI32(neverIndexed.length) > 0) {
+      neverIndexed.pop()
     }
   }
 
@@ -1339,19 +1512,32 @@ export class HpackDecoder {
    * those have grown to the largest block and list seen.
    */
   private decodeFields(c: HpackCursor): i32 {
-    let listSize: i64 = 0
+    // Unsigned sums: each field adds at most about 2^32, and a block holds fewer than 2^31 fields.
+    let listSize: u64 = 0
     let tooLarge: boolean = false
     let sawField: boolean = false
     // What this block has asked the table to copy, against its budget.
-    let copied: i64 = 0
-    const length: i32 = c.end - c.pos
+    let copied: u64 = 0
+    const length: i64 = toI64(c.end) - toI64(c.pos)
+    const buf: u8[] = c.buf
     if (this.owedUpdate >= 0) {
-      if (c.pos >= c.end || hpackRepresentationOf(toI32(c.buf[c.pos])) !== HPACK_REP_SIZE_UPDATE) {
+      const at: i32 = c.pos
+      if (at >= c.end) {
+        return HPACK_ERR_SIZE_UPDATE_MISSING
+      }
+      if (at < 0 || at >= toI32(buf.length)) {
+        return HPACK_ERR_TRUNCATED
+      }
+      if (hpackRepresentationOf(toI32(buf[at])) !== HPACK_REP_SIZE_UPDATE) {
         return HPACK_ERR_SIZE_UPDATE_MISSING
       }
     }
     while (c.pos < c.end) {
-      const rep: i32 = hpackRepresentationOf(toI32(c.buf[c.pos]))
+      const at: i32 = c.pos
+      if (at < 0 || at >= toI32(buf.length)) {
+        return HPACK_ERR_TRUNCATED
+      }
+      const rep: i32 = hpackRepresentationOf(toI32(buf[at]))
       switch (rep) {
         case HPACK_REP_SIZE_UPDATE: {
           if (sawField) {
@@ -1378,14 +1564,16 @@ export class HpackDecoder {
           }
           sawField = true
           const size: i64 = this.sizeAt(index)
-          listSize += size
-          tooLarge = tooLarge || listSize > toI64(this.maxHeaderListSize)
+          listSize += toU64(size)
+          tooLarge = tooLarge || listSize > toU64(this.maxHeaderListSize)
           if (!tooLarge) {
             // The entry's cost less the overhead is its name and value.
             const nameLength: i32 = this.nameLengthAt(index)
             const name: u8[] = this.working().take(nameLength)
             this.appendNameAt(index, name)
-            const value: u8[] = this.working().take(toI32(size) - HPACK_ENTRY_OVERHEAD - nameLength)
+            // The size is the overhead, the name and the value, so the unsigned difference is the value's length.
+            const valueLength: u32 = toU32(toI32(size)) - toU32(HPACK_ENTRY_OVERHEAD) - toU32(nameLength)
+            const value: u8[] = this.working().take(toI32(valueLength))
             this.appendValueAt(index, value)
             this.names.push(name)
             this.values.push(value)
@@ -1420,17 +1608,19 @@ export class HpackDecoder {
           const nameLength: i32 = index === 0 ? toI32(name.length) : this.nameLengthAt(index)
           const size: i64 = toI64(nameLength) + toI64(value.length) + toI64(HPACK_ENTRY_OVERHEAD)
           sawField = true
-          listSize += size
-          tooLarge = tooLarge || listSize > toI64(this.maxHeaderListSize)
+          listSize += toU64(size)
+          tooLarge = tooLarge || listSize > toU64(this.maxHeaderListSize)
           const incremental: boolean = rep === HPACK_REP_INCREMENTAL
           const fits: boolean = size <= toI64(this.table.maxSize)
           // The table copies the field in, and an indexed name out first.
           const added: boolean = incremental && fits
           const nameOut: i64 = index !== 0 ? toI64(nameLength) : toI64(0)
-          const cost: i64 = added ? size - toI64(HPACK_ENTRY_OVERHEAD) + nameOut : toI64(0)
+          // The size is at least the overhead, so the unsigned difference does not wrap.
+          const cost: u64 = added ? toU64(size) - toU64(HPACK_ENTRY_OVERHEAD) + toU64(nameOut) : toU64(0)
           copied += cost
-          const scale: i32 = this.table.maxSize > length ? this.table.maxSize : length
-          if (copied > toI64(HPACK_COPY_FACTOR) * toI64(scale)) {
+          const maxSize: i64 = toI64(this.table.maxSize)
+          const scale: i64 = maxSize > length ? maxSize : length
+          if (copied > toU64(HPACK_COPY_FACTOR) * toU64(scale)) {
             return HPACK_ERR_COPY_BUDGET
           }
           // An indexed name is copied out only when the table takes the field,
@@ -1455,7 +1645,7 @@ export class HpackDecoder {
             this.neverIndexed.push(rep === HPACK_REP_NEVER)
           }
           if (added) {
-            this.tableCopied += toI64(this.table.add(name, value))
+            this.countCopied(this.table.add(name, value))
           } else if (incremental) {
             const nothing: i32 = 0
             this.table.evictTo(nothing)
@@ -1473,6 +1663,25 @@ export class HpackDecoder {
       out.push(b)
     }
     return out
+  }
+}
+
+/**
+ * Empties `list`, giving each array in it back, emptied, to its class's pool
+ * in `work`, for the next block. Each is emptied as it goes back, so a
+ * reference a caller kept past the block reads nothing until the array is
+ * taken again.
+ */
+const hpackGiveBack = (work: HpackWork, list: u8[][]): void => {
+  while (true) {
+    const n: i32 = toI32(list.length)
+    if (n <= 0 || toI32(list.length) <= 0) {
+      return
+    }
+    const bytes: u8[] = list[n - 1]
+    list.pop()
+    work.pool(work.classOf(toI32(bytes.length))).push(bytes)
+    hpackEmpty(bytes)
   }
 }
 
@@ -1526,19 +1735,22 @@ export class HpackEncoder {
    * from the newest entry.
    */
   private findField(name: u8[], value: u8[]): i32 {
-    for (let i: i32 = 1; i <= HPACK_STATIC_LENGTH; i += 1) {
+    for (let k: u32 = 1; k <= toU32(HPACK_STATIC_LENGTH); k += 1) {
+      const i: i32 = toI32(k)
       if (hpackSameAsText(name, hpackStaticName(i)) && hpackSameAsText(value, hpackStaticValue(i))) {
         return i
       }
     }
-    const n: i32 = this.table.count()
-    for (let i: i32 = 1; i <= n; i += 1) {
+    // Unsigned counters: the dynamic table holds at most `maxSize / 32` entries, so neither they nor the index wrap.
+    const n: u32 = toU32(this.table.count())
+    for (let k: u32 = 1; k <= n; k += 1) {
       const t: HpackTable = this.table
+      const i: i32 = toI32(k)
       if (
         hpackSameAsWindow(name, t.bytes, t.nameStart(i), t.nameLength(i)) &&
         hpackSameAsWindow(value, t.bytes, t.valueStart(i), t.valueLength(i))
       ) {
-        return HPACK_STATIC_LENGTH + i
+        return toI32(toU32(HPACK_STATIC_LENGTH) + k)
       }
     }
     return 0
@@ -1546,15 +1758,18 @@ export class HpackEncoder {
 
   /** The lowest index whose entry has `name`, or 0 when neither table has one. */
   private findName(name: u8[]): i32 {
-    for (let i: i32 = 1; i <= HPACK_STATIC_LENGTH; i += 1) {
+    for (let k: u32 = 1; k <= toU32(HPACK_STATIC_LENGTH); k += 1) {
+      const i: i32 = toI32(k)
       if (hpackSameAsText(name, hpackStaticName(i))) {
         return i
       }
     }
-    const n: i32 = this.table.count()
-    for (let i: i32 = 1; i <= n; i += 1) {
+    // Unsigned counters, as in `findField`.
+    const n: u32 = toU32(this.table.count())
+    for (let k: u32 = 1; k <= n; k += 1) {
+      const i: i32 = toI32(k)
       if (hpackSameAsWindow(name, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))) {
-        return HPACK_STATIC_LENGTH + i
+        return toI32(toU32(HPACK_STATIC_LENGTH) + k)
       }
     }
     return 0

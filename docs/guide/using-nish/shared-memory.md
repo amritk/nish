@@ -62,8 +62,8 @@ export const main = (): i32 => {
 - **A name somebody else made is refused.** `createRegion` fails with
   `SHM_EXISTS` when the name exists, whoever made it; `openRegion` fails with
   `SHM_ACCESS` when the region is not this user's or is open to anyone else.
-  A name is 1 to 30 letters, digits, `.`, `_` or `-`, and a size is 1 byte to
-  1 GiB.
+  A name is 1 to 30 letters, digits, `.`, `_` or `-`, not starting with `.`,
+  and a size is 1 byte to 1 GiB; any other name fails with `SHM_INVALID`.
 - **A region belongs to the thread that mapped it.** In a program that also
   uses [threads](threads.md), another thread opens the name itself.
 
@@ -149,8 +149,20 @@ export const main = (): i32 => {
   lose or repeat records. They never read outside the region, and a ring a
   broken process scribbled on stops the program with `the ring is corrupt`
   rather than handing back garbage lengths.
+- **Or answer instead of stopping.** For a program built without
+  `--allow-panics`, or one whose ring shape comes from outside,
+  `tryInitMpscRing` answers a shape or place it cannot use as an `Err`, and
+  `attachMpscRing` (like `attachSpscRing`) answers an `Err` for a header no
+  init wrote. On an `MpscRing`, `offer(src, off, len)` answers `0`,
+  `RING_FULL`, `RING_TOO_LONG` or `RING_CORRUPT` where `tryPush` answers
+  `false` or stops, and `take(buf, off)` and `takeWait(buf, off, timeoutMs)`
+  answer `RING_CORRUPT` where `tryPop` and `popWait` stop; a corrupt record
+  stays where it is.
 - **Frame records yourself.** A record is bytes; `getI32LE`, `setI64LE` and
-  their kin in [`nish/bytes`](standard-library.md) read and write fields.
+  their kin in [`nish/bytes`](standard-library.md) read and write fields;
+  `tryGetI32LE` and `trySetI64LE` and their kin (32- and 64-bit, little
+  endian) answer a range outside the record as an `Err` or `false` instead of
+  stopping, for bytes another process wrote.
 
 The repository's
 [`examples/prefork-jobs.ts`](https://github.com/amritk/nish/blob/main/examples/prefork-jobs.ts) puts it

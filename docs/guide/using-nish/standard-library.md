@@ -3043,7 +3043,7 @@ test vectors. A byte string is a `u8[]`.
 
 | Module | Main exports |
 | --- | --- |
-| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array) |
+| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `updateAll(data)` for a whole array, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array and answers `false` when the window does not fit). A second `digest` or `digestInto` writes the same digest again rather than panicking, and a `copy` of a finished hasher is finished too; an `update` after the digest still panics |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes (`HmacSha256.digestInto(out, at)` writes the tag into your array and allocates nothing), and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
@@ -3055,7 +3055,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |
 | `nish/crypto/x25519` | X25519 key exchange |
-| `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
+| `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and for a message longer than 2^31 − 1 bytes `ed25519Sign` answers `null` and `ed25519Verify` `false`; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/p384` | P-384 ECDSA verification |
 | `nish/crypto/rsa` | RSA signature verification, PKCS#1 v1.5 and PSS over SHA-256/384/512, under a PKCS#1 public key: `rsaParsePublicKey`, `rsaVerifyPkcs1v15`, `rsaVerifyPss` |

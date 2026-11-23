@@ -98,16 +98,17 @@ const POLY1305_HIGH_BIT: i32 = 0x1000000
 const chacha20Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
 
 /**
- * The little-endian `u32` at `buf[at]` to `buf[at + 3]`. The offsets are
- * summed in `u32`, which wraps by definition, rather than as checked `i32`
- * sums: every caller passes a window inside `buf`, a wrapped offset would
- * index past it rather than reach another byte, and a check is a branch that
- * `tests/cases/ct_asm_chacha20poly1305` refuses. `poly1305Le64`,
- * `poly1305Block` and `chacha20Poly1305TagMatch` sum theirs the same way.
+ * The little-endian `u32` at `buf[at]` to `buf[at + 3]`. The last byte is read
+ * first, so that its bounds check covers the other three; every caller passes
+ * a window inside `buf`. `poly1305Le64` and `chacha20Poly1305TagMatch` read
+ * theirs the same way. The copy `tests/cases/ct_asm_chacha20poly1305` holds to
+ * the disassembly check reads with `uncheckedGet` and `wrappingAdd` instead,
+ * because a bounds or overflow check is a branch that check refuses; the ones
+ * here test only the public offset.
  */
 const chacha20Word = (buf: u8[], at: i32): u32 => {
-  const p: u32 = toU32(at)
-  return toU32(buf[p]) | (toU32(buf[p + 1]) << 8) | (toU32(buf[p + 2]) << 16) | (toU32(buf[p + 3]) << 24)
+  const b3: u32 = toU32(buf[at + 3])
+  return toU32(buf[at]) | (toU32(buf[at + 1]) << 8) | (toU32(buf[at + 2]) << 16) | (b3 << 24)
 }
 
 /**
@@ -303,8 +304,8 @@ const chacha20Poly1305Setup = (state: u32[]): u8[] => {
  * rather than left to the width of an array length.
  */
 const chacha20CounterFits = (counter: u32, len: i32): boolean => {
-  const blocks: i64 = (toI64(len) + toI64(63)) >> toI64(6)
-  return toI64(counter) + blocks <= toI64(1) << toI64(32)
+  const blocks: u64 = (toU64(toU32(len)) + toU64(63)) >>> toU64(6)
+  return toU64(counter) + blocks <= toU64(1) << toU64(32)
 }
 
 /**
@@ -322,13 +323,13 @@ const chacha20CounterFits = (counter: u32, len: i32): boolean => {
  *   for a position outside it.
  */
 export const chacha20QuarterRound = (state: u32[], a: i32, b: i32, c: i32, d: i32): u32[] | null => {
-  const n: i32 = toI32(state.length)
-  if (a < 0 || a >= n || b < 0 || b >= n || c < 0 || c >= n || d < 0 || d >= n) {
-    return null
-  }
-  const x: u32[] = new Array<u32>(n)
+  const x: u32[] = new Array<u32>(state.length)
   for (let i: i32 = 0; i < toI32(x.length) && i < toI32(state.length); i++) {
     x[i] = state[i]
+  }
+  const n: i32 = toI32(x.length)
+  if (a < 0 || a >= n || b < 0 || b >= n || c < 0 || c >= n || d < 0 || d >= n) {
+    return null
   }
   x[a] = x[a] + x[b]
   x[d] = chacha20Rotl(x[d] ^ x[a], 16)
@@ -396,16 +397,16 @@ export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[]
 
 /** The little-endian `u64` at `buf[at]` to `buf[at + 7]`. */
 const poly1305Le64 = (buf: u8[], at: i32): u64 => {
-  const p: u32 = toU32(at)
+  const b7: u64 = toU64(buf[at + 7])
   return (
-    toU64(buf[p]) |
-    (toU64(buf[p + 1]) << 8) |
-    (toU64(buf[p + 2]) << 16) |
-    (toU64(buf[p + 3]) << 24) |
-    (toU64(buf[p + 4]) << 32) |
-    (toU64(buf[p + 5]) << 40) |
-    (toU64(buf[p + 6]) << 48) |
-    (toU64(buf[p + 7]) << 56)
+    toU64(buf[at]) |
+    (toU64(buf[at + 1]) << 8) |
+    (toU64(buf[at + 2]) << 16) |
+    (toU64(buf[at + 3]) << 24) |
+    (toU64(buf[at + 4]) << 32) |
+    (toU64(buf[at + 5]) << 40) |
+    (toU64(buf[at + 6]) << 48) |
+    (b7 << 56)
   )
 }
 
@@ -541,26 +542,28 @@ const poly1305Finish = (h: u64[], key: u8[], tag: u8[]): void => {
   h4 = ctSelect(keep, g4 & 0x3ffffff, h4)
 
   const word: u64 = 0xffffffff
-  let f: u64 = ((h0 | (h1 << 26)) & word) + toU64(chacha20Word(key, 16))
-  tag[0] = toU8(f)
-  tag[1] = toU8(f >>> 8)
-  tag[2] = toU8(f >>> 16)
-  tag[3] = toU8(f >>> 24)
-  f = (((h1 >>> 6) | (h2 << 20)) & word) + toU64(chacha20Word(key, 20)) + (f >>> 32)
-  tag[4] = toU8(f)
-  tag[5] = toU8(f >>> 8)
-  tag[6] = toU8(f >>> 16)
-  tag[7] = toU8(f >>> 24)
-  f = (((h2 >>> 12) | (h3 << 14)) & word) + toU64(chacha20Word(key, 24)) + (f >>> 32)
-  tag[8] = toU8(f)
-  tag[9] = toU8(f >>> 8)
-  tag[10] = toU8(f >>> 16)
-  tag[11] = toU8(f >>> 24)
-  f = (((h3 >>> 18) | (h4 << 8)) & word) + toU64(chacha20Word(key, 28)) + (f >>> 32)
-  tag[12] = toU8(f)
-  tag[13] = toU8(f >>> 8)
-  tag[14] = toU8(f >>> 16)
-  tag[15] = toU8(f >>> 24)
+  // Every word is summed before the first store, and the last byte is stored
+  // first, so that its bounds check covers the other fifteen.
+  const f0: u64 = ((h0 | (h1 << 26)) & word) + toU64(chacha20Word(key, 16))
+  const f1: u64 = (((h1 >>> 6) | (h2 << 20)) & word) + toU64(chacha20Word(key, 20)) + (f0 >>> 32)
+  const f2: u64 = (((h2 >>> 12) | (h3 << 14)) & word) + toU64(chacha20Word(key, 24)) + (f1 >>> 32)
+  const f3: u64 = (((h3 >>> 18) | (h4 << 8)) & word) + toU64(chacha20Word(key, 28)) + (f2 >>> 32)
+  tag[15] = toU8(f3 >>> 24)
+  tag[0] = toU8(f0)
+  tag[1] = toU8(f0 >>> 8)
+  tag[2] = toU8(f0 >>> 16)
+  tag[3] = toU8(f0 >>> 24)
+  tag[4] = toU8(f1)
+  tag[5] = toU8(f1 >>> 8)
+  tag[6] = toU8(f1 >>> 16)
+  tag[7] = toU8(f1 >>> 24)
+  tag[8] = toU8(f2)
+  tag[9] = toU8(f2 >>> 8)
+  tag[10] = toU8(f2 >>> 16)
+  tag[11] = toU8(f2 >>> 24)
+  tag[12] = toU8(f3)
+  tag[13] = toU8(f3 >>> 8)
+  tag[14] = toU8(f3 >>> 16)
 }
 
 /**
@@ -578,8 +581,12 @@ const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPa
   const tail: i32 = len & 15
   if (tail > 0) {
     const last: u8[] = new Array<u8>(16)
-    for (let i: i32 = 0; i < tail && i < toI32(last.length); i++) {
-      last[i] = buf[at + 16 * whole + i]
+    // Where the tail starts, summed in `u32`: it is inside `buf`, so the sum
+    // cannot wrap, and the loop stops at the end of `buf` all the same.
+    let k: i32 = toI32(toU32(at) + (toU32(whole) << 4))
+    for (let i: i32 = 0; i < tail && i < toI32(last.length) && k >= 0 && k < toI32(buf.length); i++) {
+      last[i] = buf[k]
+      k = k + 1
     }
     if (zeroPad) {
       poly1305Block(h, r, last, 0, toU64(POLY1305_HIGH_BIT))
@@ -609,7 +616,9 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
   const r: u64[] = new Array<u64>(5)
   poly1305Clamp(key, r)
   poly1305Absorb(h, r, msg, 0, toI32(msg.length), false)
-  const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
+  // `POLY1305_TAG_SIZE`, written out because a literal length is what proves
+  // `poly1305Finish`'s stores in range.
+  const tag: u8[] = new Array<u8>(16)
   poly1305Finish(h, key, tag)
   wipe(h)
   wipe(r)
@@ -656,7 +665,9 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
     lengths[8 + i] = toU8(len >>> (8 * i))
   }
   poly1305Block(h, r, lengths, 0, toU64(POLY1305_HIGH_BIT))
-  const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
+  // `POLY1305_TAG_SIZE`, written out because a literal length is what proves
+  // `poly1305Finish`'s stores in range.
+  const tag: u8[] = new Array<u8>(16)
   poly1305Finish(h, polyKey, tag)
   wipe(h)
   wipe(r)
@@ -673,24 +684,24 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
  * disassembly check; the caller has checked that `sealed` holds the window.
  */
 const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
-  const p: u32 = toU32(at)
+  const last: u32 = toU32(tag[15] ^ sealed[at + 15])
   const diff: u32 =
-    toU32(tag[0] ^ sealed[p]) |
-    toU32(tag[1] ^ sealed[p + 1]) |
-    toU32(tag[2] ^ sealed[p + 2]) |
-    toU32(tag[3] ^ sealed[p + 3]) |
-    toU32(tag[4] ^ sealed[p + 4]) |
-    toU32(tag[5] ^ sealed[p + 5]) |
-    toU32(tag[6] ^ sealed[p + 6]) |
-    toU32(tag[7] ^ sealed[p + 7]) |
-    toU32(tag[8] ^ sealed[p + 8]) |
-    toU32(tag[9] ^ sealed[p + 9]) |
-    toU32(tag[10] ^ sealed[p + 10]) |
-    toU32(tag[11] ^ sealed[p + 11]) |
-    toU32(tag[12] ^ sealed[p + 12]) |
-    toU32(tag[13] ^ sealed[p + 13]) |
-    toU32(tag[14] ^ sealed[p + 14]) |
-    toU32(tag[15] ^ sealed[p + 15])
+    toU32(tag[0] ^ sealed[at]) |
+    toU32(tag[1] ^ sealed[at + 1]) |
+    toU32(tag[2] ^ sealed[at + 2]) |
+    toU32(tag[3] ^ sealed[at + 3]) |
+    toU32(tag[4] ^ sealed[at + 4]) |
+    toU32(tag[5] ^ sealed[at + 5]) |
+    toU32(tag[6] ^ sealed[at + 6]) |
+    toU32(tag[7] ^ sealed[at + 7]) |
+    toU32(tag[8] ^ sealed[at + 8]) |
+    toU32(tag[9] ^ sealed[at + 9]) |
+    toU32(tag[10] ^ sealed[at + 10]) |
+    toU32(tag[11] ^ sealed[at + 11]) |
+    toU32(tag[12] ^ sealed[at + 12]) |
+    toU32(tag[13] ^ sealed[at + 13]) |
+    toU32(tag[14] ^ sealed[at + 14]) |
+    last
   return ctEq(diff, 0)
 }
 
@@ -722,13 +733,18 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
   ) {
     return null
   }
+  // Summed in `u32`: `len` is at most `longest`, so the sum is at most
+  // 2^31 - 1 and reads back as the same `i32`.
+  const total: i32 = toI32(toU32(len) + toU32(POLY1305_TAG_SIZE))
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
-  const sealed: u8[] = new Array<u8>(len + POLY1305_TAG_SIZE)
+  const sealed: u8[] = new Array<u8>(total)
   chacha20XorInto(state, plaintext, 0, len, sealed, 0)
   const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
-  for (let i: i32 = 0; i < toI32(tag.length); i++) {
-    sealed[len + i] = tag[i]
+  let k: i32 = len
+  for (let i: i32 = 0; i < toI32(tag.length) && k >= 0 && k < toI32(sealed.length); i++) {
+    sealed[k] = tag[i]
+    k = k + 1
   }
   wipe(state)
   wipe(polyKey)
