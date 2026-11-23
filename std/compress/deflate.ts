@@ -270,28 +270,27 @@ const deflateCtz64 = (x: u64): i32 => {
 }
 
 /**
- * How many bytes from `a` and from `b` agree, at most `max`; `a < b` and
- * `b + max` lie inside `src`, which the caller has checked.
+ * How many bytes from `a` and from `b` agree, at most `max` and at most
+ * `DEFLATE_MAX_MATCH`; `a < b` and `b + max` lie inside `src`, which the
+ * caller has checked.
  */
 const deflateMatchLength = (src: u8[], a: i32, b: i32, max: i32): i32 => {
-  if (a < 0 || b > 2147483639 - max) {
-    panic("deflateMatchLength: a match outside its input")
-  }
+  // The conjuncts past `k`'s are the caller's checks restated as bounds the
+  // prover reads, so that each sum is in range; none is false for a caller.
   let k: i32 = 0
-  while (k + 8 <= max) {
+  while (k >= 0 && k <= 250 && k + 8 <= max && a >= 0 && a <= 2147483381 && b >= 0 && b <= 2147483381) {
     const pa: i32 = a + k
     const pb: i32 = b + k
-    if (pa >= 0 && pa <= 2147483639 && pb >= 0 && pb <= 2147483639) {
-      const x: u64 = deflateLoad64(src, pa) ^ deflateLoad64(src, pb)
-      if (x !== toU64(0)) {
-        return k + (deflateCtz64(x) >> 3)
-      }
-    } else {
-      return k
+    const x: u64 = deflateLoad64(src, pa) ^ deflateLoad64(src, pb)
+    if (x !== toU64(0)) {
+      return k + (deflateCtz64(x) >> 3)
     }
     k += 8
   }
-  while (k < max && uncheckedGet(src, a + k) === uncheckedGet(src, b + k)) {
+  while (k >= 0 && k < 258 && k < max && a >= 0 && a <= 2147483381 && b >= 0 && b <= 2147483381) {
+    if (uncheckedGet(src, a + k) !== uncheckedGet(src, b + k)) {
+      return k
+    }
     k += 1
   }
   return k
