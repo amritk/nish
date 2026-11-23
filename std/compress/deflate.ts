@@ -2067,8 +2067,12 @@ export class FixedDeflater {
     this.distCode = new Array<i32>(30)
     this.distBase = new Array<i32>(30)
     this.distExtra = new Array<i32>(30)
+    const lens: i32[] = new Array<i32>(288)
+    for (let s: i32 = 0; s < 288; s += 1) {
+      lens[s] = deflateFixedLitLength(s)
+    }
     for (let b: i32 = 0; b < 256; b += 1) {
-      this.literal[b] = deflateFixedLitCode(b) | (deflateFixedLitLength(b) << 16)
+      this.literal[b] = deflateFixedLitCode(b) | (lens[b] << 16)
     }
     for (let s: i32 = 0; s < 29; s += 1) {
       const base: i32 = deflateLengthBase(s)
