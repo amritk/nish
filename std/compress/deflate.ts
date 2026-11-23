@@ -1511,42 +1511,47 @@ export class Deflater {
     const last: i32 = toI32(toU32(end) - toU32(4))
     let n: i32 = 0
     let p: i32 = start
-    while (p < end && n < room) {
-      let m: i32 = 0
-      if (p <= last) {
+    // The match `longest` found one position on, when it beat the one at
+    // `p` and the position was taken as a literal: the next turn takes it
+    // up without searching again. 0 for none.
+    let carry: i32 = 0
+    // The first position `longest` has not recorded.
+    let inserted: i32 = p
+    // A carried match is written even when the block is otherwise full: the
+    // room leaves two tokens of slack.
+    while (p < end && (n < room || carry !== 0)) {
+      let m: i32 = carry
+      carry = 0
+      if (m === 0 && p <= last) {
         m = this.longest(src, p, end, histStart)
+        // Cannot wrap: `p` is at most `last`.
+        inserted = toI32(toU32(p) + toU32(1))
       }
       if (m < 0) {
         return -1
       }
+      if (m !== 0 && m >> 16 < lazyLength && p < last && n < room) {
+        // Cannot wrap: `p` is below `last`, so `p + 2` is at most `end - 3`.
+        const p1: i32 = toI32(toU32(p) + toU32(1))
+        const m2: i32 = this.longest(src, p1, end, histStart)
+        if (m2 < 0) {
+          return -1
+        }
+        inserted = toI32(toU32(p) + toU32(2))
+        if (m2 >> 16 > m >> 16) {
+          carry = m2
+          m = 0
+        }
+      }
       if (m === 0) {
         const b: i32 = toI32(uncheckedGet(src, p))
         uncheckedSet(tokens, n, b)
-        n += 1
-        // Cannot wrap: a count is at most the block's token count.
+        // Cannot wrap: a literal is taken only below `room` (a carried match
+        // is never one), and a count is at most the block's token count.
+        n = toI32(toU32(n) + toU32(1))
         uncheckedSet(lf, b, toI32(toU32(uncheckedGet(lf, b)) + toU32(1)))
         p += 1
       } else {
-        let inserted: i32 = p + 1
-        while (m >> 16 < lazyLength && p < last && n < room) {
-          // Cannot wrap: `p` is below `last`, so `p + 2` is at most `end - 3`.
-          const p1: i32 = toI32(toU32(p) + toU32(1))
-          const m2: i32 = this.longest(src, p1, end, histStart)
-          if (m2 < 0) {
-            return -1
-          }
-          inserted = toI32(toU32(p) + toU32(2))
-          if (m2 >> 16 > m >> 16) {
-            const b: i32 = toI32(uncheckedGet(src, p))
-            uncheckedSet(tokens, n, b)
-            n += 1
-            uncheckedSet(lf, b, toI32(toU32(uncheckedGet(lf, b)) + toU32(1)))
-            p = p1
-            m = m2
-          } else {
-            break
-          }
-        }
         const len: i32 = m >> 16
         const dist: i32 = m & 0xffff
         if (len < 3 || len > DEFLATE_MAX_MATCH || dist < 1 || dist > DEFLATE_WINDOW) {
@@ -1572,7 +1577,9 @@ export class Deflater {
           const hq: i32 = three
             ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
             : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
-          const vq: i32 = wrappingAdd(q, this.delta)
+          // Cannot wrap: `rebase` keeps a position in the chains' numbering
+          // between 0 and 2^31 - 1.
+          const vq: i32 = toI32(toU32(q) + toU32(this.delta))
           uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
           uncheckedSet(head, hq, vq)
         }
