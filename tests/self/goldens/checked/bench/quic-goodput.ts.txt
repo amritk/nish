@@ -1454,14 +1454,14 @@ function wipe<TlsExchangeWords>(_target: TlsExchangeWords): void -> @nish.wipe$$
   pointer _target: size=280 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function expose<u8[], u8[] | null, p256PublicKeyExposed>(s: Secret<u8[]>, f: void): u8[] | null -> @nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKeyExposed
   calls: nish.p256PublicKeyExposed
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:70 p256PublicKeyExposed -> @nish.p256PublicKeyExposed
 function exposeWith<u8[], u8[], u8[] | null, p256EcdhExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] | null -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256EcdhExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256EcdhExposed
   calls: nish.p256EcdhExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -1477,7 +1477,7 @@ function exposeWith<u8[], u8[], u8[] | null, p256SignExposed>(s: Secret<u8[]>, a
   stackSites=0 stackLocals=0
   callee +0:93 p256SignExposed -> @nish.p256SignExposed
 function exposeWith<u8[], P256SignScratch, u8[], p256NonceKeyExposed>(s: Secret<u8[]>, arg: P256SignScratch, f: void): u8[] -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256NonceKeyExposed
   calls: nish.p256NonceKeyExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -1491,7 +1491,7 @@ function expose<u8[], boolean, p256ScalarInRange>(s: Secret<u8[]>, f: void): boo
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:70 p256ScalarInRange -> @nish.p256ScalarInRange
-function exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed>(s: Secret<u8[]>, arg: P256SignScratch, f: void): u32[] -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed [exported instance]
+function exposeWith<u8[], P256SignScratch, u32[] | null, p256SignSExposed>(s: Secret<u8[]>, arg: P256SignScratch, f: void): u32[] | null -> @nish.exposeWith$arr.u8$$P256SignScratch$opt.arr.u32$fn.21.nish.p256SignSExposed [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSExposed
   calls: nish.p256SignSExposed
@@ -12193,7 +12193,7 @@ function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @ni
   callee +0:27 p256SignSha256 -> @nish.p256SignSha256
   callee +4:10 tlsEcdsaDerSignature -> @nish.tlsEcdsaDerSignature
 function TlsP256Signer.constructor(this: TlsP256Signer): void -> @nish.TlsP256Signer.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.P256SignScratch.constructor
   calls: nish.P256SignScratch.constructor nish_alloc_struct nish_array_grow
   pointer this: size=24 writesThrough=true captured=false
@@ -12206,7 +12206,7 @@ function TlsP256Signer.sign(this: TlsP256Signer, priv: Secret<u8[]>, content: u8
   calls: nish.p256SignSha256Into nish.tlsEcdsaDerInto nish.tlsEcdsaDerLength
   pointer this: size=24 writesThrough=false captured=false
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256Into#1
-  pointer content: size=0 writesThrough=false captured=false passedTo=nish.p256SignSha256Into#2
+  pointer content: size=0 writesThrough=true captured=false passedTo=nish.p256SignSha256Into#2
   stackSites=0 stackLocals=0
   callee +0:8 p256SignSha256Into -> @nish.p256SignSha256Into
   local +4:11 at: i32 (const)
@@ -13153,7 +13153,6 @@ import expose from "nish:secret" -> generic function expose
 import exposeWith from "nish:secret" -> generic function exposeWith
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
-import SHA256_BLOCK from "nish/crypto/sha256" -> const SHA256_BLOCK
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import Sha256 from "nish/crypto/sha256" -> struct Sha256
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
@@ -13161,6 +13160,7 @@ import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
 const P256_SCALAR_SIZE: i32 = 32 [exported]
 const P256_POINT_SIZE: i32 = 65 [exported]
 const P256_SIGNATURE_SIZE: i32 = 64 [exported]
+const P256_SIGN_ROUNDS: i32 = 64
 const P256_FROM: i32 = 0
 const P256_ENTRY: i32 = 24
 const P256_COMB_TEETH: i32 = 6
@@ -13168,10 +13168,6 @@ const P256_COMB_SPACING: i32 = 4
 const P256_COMBS: i32 = 11
 const P256_COMB_ENTRIES: i32 = 32
 const P256_BASE_ENTRY: i32 = 16
-const P256_WNAF_WIDTH: i32 = 5
-const P256_WNAF_BITS: i32 = 256
-const P256_WNAF_TABLE: i32 = 8
-const P256_WORD_TOP: i32 = 24
 const P256_NONCE_MESSAGE: i32 = 97
 struct P256ProjectivePoint (class) size=24 align=8
   field x: u32[] index=0 offset=0
@@ -15725,12 +15721,8 @@ function p256CurveB(): u32[] -> @nish.p256CurveB
   callee +0:22 p256Limbs -> @nish.p256Limbs
   callee +1:3 p256SetLimbs -> @nish.p256SetLimbs
 function p256PlainOne(): u32[] -> @nish.p256PlainOne
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  calls: nish.p256Limbs nish_panic_index
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local -1:9 out: u32[] (const)
-  callee -1:22 p256Limbs -> @nish.p256Limbs
 function p256Copy(out: u32[], a: u32[]): void -> @nish.p256Copy
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -15738,28 +15730,28 @@ function p256Copy(out: u32[], a: u32[]): void -> @nish.p256Copy
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
-function p256LimbsFromBytes(out: u32[], bytes: u8[], at: i32): void -> @nish.p256LimbsFromBytes
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+function p256LimbsFromBytes(out: u32[], bytes: u8[], at: i32): boolean -> @nish.p256LimbsFromBytes
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at
   pointer out: size=0 writesThrough=true captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -12:9 length: i32 (const)
-  local -8:12 i: i32 (let)
-  local -7:9 limb: u32 (let)
-  local -6:14 b: i32 (let)
-  local -5:13 j: i32 (const)
-function p256LimbsToBytes(out: u8[], at: i32, a: u32[]): void -> @nish.p256LimbsToBytes
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+function p256LimbsToBytes(out: u8[], at: i32, a: u32[]): boolean -> @nish.p256LimbsToBytes
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at
   pointer out: size=0 writesThrough=true captured=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -9:9 length: i32 (const)
-  local -5:12 i: i32 (let)
-  local -4:11 limb: u32 (const)
-  local -3:14 b: i32 (let)
-  local -2:13 j: i32 (const)
+  local -1:9 a0: u32 (const)
+  local +4:9 a1: u32 (const)
+  local +9:9 a2: u32 (const)
+  local +14:9 a3: u32 (const)
+  local +19:9 a4: u32 (const)
+  local +24:9 a5: u32 (const)
+  local +29:9 a6: u32 (const)
+  local +34:9 a7: u32 (const)
 function p256SubBorrow(d: u32[], a: u32[], m: u32[]): u32 -> @nish.p256SubBorrow
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -16188,15 +16180,14 @@ function p256PointDouble(out: P256ProjectivePoint, p: P256ProjectivePoint, s: P2
   callee +40:3 p256FiatAdd -> @nish.p256FiatAdd
   callee +41:3 p256PointCopy -> @nish.p256PointCopy
 function p256TableStore(table: u32[], at: i32, a: u32[]): void -> @nish.p256TableStore
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_index
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at
   pointer table: size=0 writesThrough=true captured=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -1:12 i: i32 (let)
 function p256TableStorePoint(table: u32[], i: i32, p: P256ProjectivePoint): void -> @nish.p256TableStorePoint
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256TableStore
   calls: nish.p256TableStore
   pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableStore#0 nish.p256TableStore#0 nish.p256TableStore#0
@@ -16206,7 +16197,7 @@ function p256TableStorePoint(table: u32[], i: i32, p: P256ProjectivePoint): void
   callee +1:3 p256TableStore -> @nish.p256TableStore
   callee +2:3 p256TableStore -> @nish.p256TableStore
 function p256TableBuild(table: u32[], p: P256ProjectivePoint, s: P256PointScratch, acc: P256ProjectivePoint): void -> @nish.p256TableBuild
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SetIdentity
   calls: nish.p256PointAdd nish.p256PointCopy nish.p256SetIdentity nish.p256TableStorePoint
   pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableStorePoint#0 nish.p256TableStorePoint#0 nish.p256TableStorePoint#0
@@ -16222,14 +16213,13 @@ function p256TableBuild(table: u32[], p: P256ProjectivePoint, s: P256PointScratc
   callee +5:5 p256PointAdd -> @nish.p256PointAdd
   callee +6:5 p256TableStorePoint -> @nish.p256TableStorePoint
 function p256TableMove(out: u32[], table: u32[], at: i32, hit: u32): void -> @nish.p256TableMove
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  escaping: hit
-  calls: nish.p256FiatCmovznzU32 nish_panic_index
+  escaping: at hit
+  calls: nish.p256FiatCmovznzU32
   pointer out: size=0 writesThrough=true captured=false
   pointer table: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -4:9 p: u32 (const)
   callee +0:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
   callee +1:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
   callee +2:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
@@ -16239,7 +16229,7 @@ function p256TableMove(out: u32[], table: u32[], at: i32, hit: u32): void -> @ni
   callee +6:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
   callee +7:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
 function p256TableSelect(out: P256ProjectivePoint, table: u32[], digit: u32): void -> @nish.p256TableSelect
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SetZero
   calls: nish.p256SetZero nish.p256TableMove
   pointer out: size=24 writesThrough=false captured=false
@@ -16253,8 +16243,8 @@ function p256TableSelect(out: P256ProjectivePoint, table: u32[], digit: u32): vo
   callee +5:5 p256TableMove -> @nish.p256TableMove
   callee +6:5 p256TableMove -> @nish.p256TableMove
   callee +7:5 p256TableMove -> @nish.p256TableMove
-function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256ScalarMult
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoint, s: P256PointScratch): boolean -> @nish.p256ScalarMult
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.P256ProjectivePoint.constructor
   calls: nish.P256ProjectivePoint.constructor nish.p256PointAdd nish.p256PointCopy nish.p256PointDouble nish.p256SetIdentity nish.p256TableBuild nish.p256TableSelect nish.p256WipePoint nish.wipe$arr.u32
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#0
@@ -16266,23 +16256,22 @@ function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoin
   local +1:9 acc: P256ProjectivePoint (const)
   callee +1:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local +2:9 entry: P256ProjectivePoint (const)
-  local +3:9 kLength: i32 (const)
-  callee +7:3 p256TableBuild -> @nish.p256TableBuild
-  callee +8:3 p256SetIdentity -> @nish.p256SetIdentity
-  local +9:12 i: i32 (let)
-  local +11:11 at: i32 (const)
-  local +12:11 byte: u32 (const)
-  local +13:11 digit: u32 (const)
-  callee +14:5 p256PointDouble -> @nish.p256PointDouble
-  callee +15:5 p256PointDouble -> @nish.p256PointDouble
-  callee +16:5 p256PointDouble -> @nish.p256PointDouble
-  callee +17:5 p256PointDouble -> @nish.p256PointDouble
-  callee +18:5 p256TableSelect -> @nish.p256TableSelect
-  callee +19:5 p256PointAdd -> @nish.p256PointAdd
-  callee +21:3 p256PointCopy -> @nish.p256PointCopy
-  callee +22:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +23:3 p256WipePoint -> @nish.p256WipePoint
-  callee +24:3 p256WipePoint -> @nish.p256WipePoint
+  callee +3:3 p256TableBuild -> @nish.p256TableBuild
+  callee +4:3 p256SetIdentity -> @nish.p256SetIdentity
+  local +5:12 i: i32 (let)
+  local +7:11 at: i32 (const)
+  local +8:11 byte: u32 (const)
+  local +9:11 digit: u32 (const)
+  callee +10:5 p256PointDouble -> @nish.p256PointDouble
+  callee +11:5 p256PointDouble -> @nish.p256PointDouble
+  callee +12:5 p256PointDouble -> @nish.p256PointDouble
+  callee +13:5 p256PointDouble -> @nish.p256PointDouble
+  callee +14:5 p256TableSelect -> @nish.p256TableSelect
+  callee +15:5 p256PointAdd -> @nish.p256PointAdd
+  callee +17:3 p256PointCopy -> @nish.p256PointCopy
+  callee +18:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +19:3 p256WipePoint -> @nish.p256WipePoint
+  callee +20:3 p256WipePoint -> @nish.p256WipePoint
 function p256Generator(): P256ProjectivePoint -> @nish.p256Generator
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nish.P256ProjectivePoint.constructor
@@ -16314,7 +16303,7 @@ function p256BaseHalf(out: u32[]): void -> @nish.p256BaseHalf
 function p256BaseTable(): u32[] -> @nish.p256BaseTable
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function p256BaseRecode(m: u32[], k: u8[], s: P256PointScratch): void -> @nish.p256BaseRecode
+function p256BaseRecode(m: u32[], k: u8[], s: P256PointScratch): boolean -> @nish.p256BaseRecode
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256LimbsFromBytes
   calls: nish.p256BaseHalf nish.p256BaseOffset nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256FiatSelectznz nish.p256LimbsFromBytes nish.p256SetOrder nish.p256SubBorrow
@@ -16322,40 +16311,37 @@ function p256BaseRecode(m: u32[], k: u8[], s: P256PointScratch): void -> @nish.p
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256LimbsFromBytes#1
   pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +1:3 p256SetOrder -> @nish.p256SetOrder
-  callee +2:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
-  callee +2:24 p256SubBorrow -> @nish.p256SubBorrow
-  callee +3:3 p256BaseOffset -> @nish.p256BaseOffset
-  callee +4:3 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
-  callee +5:3 p256BaseHalf -> @nish.p256BaseHalf
-  callee +6:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +0:8 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +3:3 p256SetOrder -> @nish.p256SetOrder
+  callee +4:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
+  callee +4:24 p256SubBorrow -> @nish.p256SubBorrow
+  callee +5:3 p256BaseOffset -> @nish.p256BaseOffset
+  callee +6:3 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  callee +7:3 p256BaseHalf -> @nish.p256BaseHalf
+  callee +8:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
 function p256BaseDigit(m: u32[], c: i32, i: i32): u32 -> @nish.p256BaseDigit
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer m: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 digit: u32 (let)
   local +1:12 j: i32 (let)
-  local +2:11 bit: i32 (const)
-  local +3:11 limb: i32 (const)
-  local +6:11 at: i32 (const)
-  local +7:11 word: u32 (const)
+  local +4:11 bit: u32 (const)
+  local +5:11 limb: u32 (const)
+  local +8:11 at: i32 (const)
+  local +9:11 word: u32 (const)
 function p256BaseMove(out: P256ProjectivePoint, table: u32[], at: i32, mask: u32): void -> @nish.p256BaseMove
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_index
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at
   pointer out: size=24 writesThrough=false captured=false
   pointer table: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -7:9 x: u32[] (const)
   local -6:9 y: u32[] (const)
-  local -2:9 p: u32 (const)
-  local -1:12 i: u32 (let)
 function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u32, s: P256PointScratch): void -> @nish.p256BaseSelect
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SetZero
-  calls: nish.p256BaseMove nish.p256FiatSelectznz nish.p256FiatSub nish.p256SetZero nish_panic_overflow
+  calls: nish.p256BaseMove nish.p256FiatSelectznz nish.p256FiatSub nish.p256SetZero
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256BaseMove#0
   pointer table: size=0 writesThrough=false captured=false passedTo=nish.p256BaseMove#1
   pointer s: size=72 writesThrough=false captured=false
@@ -16367,10 +16353,11 @@ function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u
   callee +4:3 p256SetZero -> @nish.p256SetZero
   callee +5:3 p256SetZero -> @nish.p256SetZero
   local +6:12 j: i32 (let)
-  callee +7:5 p256BaseMove -> @nish.p256BaseMove
-  callee +9:3 p256SetZero -> @nish.p256SetZero
-  callee +10:3 p256FiatSub -> @nish.p256FiatSub
-  callee +11:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
+  local +8:11 at: i32 (const)
+  callee +9:5 p256BaseMove -> @nish.p256BaseMove
+  callee +11:3 p256SetZero -> @nish.p256SetZero
+  callee +12:3 p256FiatSub -> @nish.p256FiatSub
+  callee +13:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
 function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointAddMixed
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatMul
@@ -16423,8 +16410,8 @@ function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P2
   callee +41:3 p256FiatMul -> @nish.p256FiatMul
   callee +42:3 p256FiatMul -> @nish.p256FiatMul
   callee +43:3 p256FiatAdd -> @nish.p256FiatAdd
-function p256BaseMult(out: P256ProjectivePoint, k: u8[], s: P256PointScratch): void -> @nish.p256BaseMult
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+function p256BaseMult(out: P256ProjectivePoint, k: u8[], s: P256PointScratch): boolean -> @nish.p256BaseMult
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256BaseMultWith
   calls: nish.p256BaseMultWith nish.p256BaseTable nish_arena_mark nish_arena_release
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256BaseMultWith#0
@@ -16433,9 +16420,9 @@ function p256BaseMult(out: P256ProjectivePoint, k: u8[], s: P256PointScratch): v
   stackSites=0 stackLocals=0
   local +0:9 table: u32[] (const)
   callee +0:24 p256BaseTable -> @nish.p256BaseTable
-  callee +1:3 p256BaseMultWith -> @nish.p256BaseMultWith
-function p256BaseMultWith(out: P256ProjectivePoint, k: u8[], s: P256PointScratch, table: u32[]): void -> @nish.p256BaseMultWith
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +1:10 p256BaseMultWith -> @nish.p256BaseMultWith
+function p256BaseMultWith(out: P256ProjectivePoint, k: u8[], s: P256PointScratch, table: u32[]): boolean -> @nish.p256BaseMultWith
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256BaseRecode
   calls: nish.p256BaseDigit nish.p256BaseRecode nish.p256BaseSelect nish.p256PointAddMixed nish.p256PointCopy nish.p256PointDouble nish.p256SetIdentity nish.p256WipePoint nish.wipe$arr.u32
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256SetIdentity#0 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointAddMixed#0 nish.p256PointCopy#0
@@ -16444,19 +16431,19 @@ function p256BaseMultWith(out: P256ProjectivePoint, k: u8[], s: P256PointScratch
   pointer table: size=0 writesThrough=false captured=false passedTo=nish.p256BaseSelect#1
   stackSites=0 stackLocals=0
   local +0:9 m: u32[] (const)
-  callee +1:3 p256BaseRecode -> @nish.p256BaseRecode
-  callee +2:3 p256SetIdentity -> @nish.p256SetIdentity
-  local +3:12 i: i32 (let)
-  callee +5:7 p256PointDouble -> @nish.p256PointDouble
-  local +7:14 c: i32 (let)
-  callee +8:7 p256BaseSelect -> @nish.p256BaseSelect
-  callee +8:41 p256BaseDigit -> @nish.p256BaseDigit
-  callee +9:7 p256PointAddMixed -> @nish.p256PointAddMixed
-  callee +10:7 p256PointCopy -> @nish.p256PointCopy
-  callee +13:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +14:3 p256WipePoint -> @nish.p256WipePoint
+  callee +1:84 p256BaseRecode -> @nish.p256BaseRecode
+  callee +4:3 p256SetIdentity -> @nish.p256SetIdentity
+  local +5:12 i: i32 (let)
+  callee +7:7 p256PointDouble -> @nish.p256PointDouble
+  local +9:14 c: i32 (let)
+  callee +10:7 p256BaseSelect -> @nish.p256BaseSelect
+  callee +10:41 p256BaseDigit -> @nish.p256BaseDigit
+  callee +11:7 p256PointAddMixed -> @nish.p256PointAddMixed
+  callee +12:7 p256PointCopy -> @nish.p256PointCopy
+  callee +15:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +16:3 p256WipePoint -> @nish.p256WipePoint
 function p256AffineX(x: u32[], p: P256ProjectivePoint): void -> @nish.p256AffineX
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FieldInvert
   calls: nish.p256FiatMul nish.p256FieldInvert nish.p256Limbs nish.p256PlainOne nish_arena_mark nish_arena_release
   pointer x: size=0 writesThrough=true captured=false passedTo=nish.p256FiatMul#0 nish.p256FiatMul#0 nish.p256FiatMul#1
@@ -16480,32 +16467,32 @@ function p256DecodePoint(bytes: u8[]): P256ProjectivePoint | null -> @nish.p256D
   callee +1:21 p256FieldR2 -> @nish.p256FieldR2
   local +2:9 p: P256ProjectivePoint (const)
   callee +2:13 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +3:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +4:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +5:7 p256Below -> @nish.p256Below
-  callee +5:38 p256Below -> @nish.p256Below
-  callee +8:3 p256FiatMul -> @nish.p256FiatMul
+  callee +3:8 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +3:46 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +6:7 p256Below -> @nish.p256Below
+  callee +6:38 p256Below -> @nish.p256Below
   callee +9:3 p256FiatMul -> @nish.p256FiatMul
-  callee +10:3 p256FiatSetOne -> @nish.p256FiatSetOne
-  local +12:9 lhs: u32[] (const)
-  callee +12:22 p256Limbs -> @nish.p256Limbs
-  local +13:9 rhs: u32[] (const)
+  callee +10:3 p256FiatMul -> @nish.p256FiatMul
+  callee +11:3 p256FiatSetOne -> @nish.p256FiatSetOne
+  local +13:9 lhs: u32[] (const)
   callee +13:22 p256Limbs -> @nish.p256Limbs
-  local +14:9 t: u32[] (const)
-  callee +14:20 p256Limbs -> @nish.p256Limbs
-  callee +15:3 p256FiatSquare -> @nish.p256FiatSquare
+  local +14:9 rhs: u32[] (const)
+  callee +14:22 p256Limbs -> @nish.p256Limbs
+  local +15:9 t: u32[] (const)
+  callee +15:20 p256Limbs -> @nish.p256Limbs
   callee +16:3 p256FiatSquare -> @nish.p256FiatSquare
-  callee +17:3 p256FiatMul -> @nish.p256FiatMul
-  callee +18:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee +17:3 p256FiatSquare -> @nish.p256FiatSquare
+  callee +18:3 p256FiatMul -> @nish.p256FiatMul
   callee +19:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee +20:3 p256FiatSub -> @nish.p256FiatSub
-  callee +21:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee +21:25 p256CurveB -> @nish.p256CurveB
-  callee +22:3 p256FiatSub -> @nish.p256FiatSub
-  callee +23:7 p256FiatNonzero -> @nish.p256FiatNonzero
-function p256EncodePoint(p: P256ProjectivePoint): u8[] -> @nish.p256EncodePoint
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.p256PlainOne
+  callee +20:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee +21:3 p256FiatSub -> @nish.p256FiatSub
+  callee +22:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee +22:25 p256CurveB -> @nish.p256CurveB
+  callee +23:3 p256FiatSub -> @nish.p256FiatSub
+  callee +24:7 p256FiatNonzero -> @nish.p256FiatNonzero
+function p256EncodePoint(p: P256ProjectivePoint): u8[] | null -> @nish.p256EncodePoint
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256FieldInvert
   calls: nish.p256FiatMul nish.p256FieldInvert nish.p256Limbs nish.p256LimbsToBytes nish.p256PlainOne
   pointer p: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -16523,8 +16510,8 @@ function p256EncodePoint(p: P256ProjectivePoint): u8[] -> @nish.p256EncodePoint
   callee +7:3 p256FiatMul -> @nish.p256FiatMul
   callee +8:3 p256FiatMul -> @nish.p256FiatMul
   local +9:9 out: u8[] (const)
-  callee +11:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +12:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +11:8 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +11:40 p256LimbsToBytes -> @nish.p256LimbsToBytes
 function p256ScalarInRange(bytes: u8[]): boolean -> @nish.p256ScalarInRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256LimbsFromBytes
@@ -16533,30 +16520,30 @@ function p256ScalarInRange(bytes: u8[]): boolean -> @nish.p256ScalarInRange
   stackSites=0 stackLocals=0
   local +0:9 a: u32[] (const)
   callee +0:20 p256Limbs -> @nish.p256Limbs
-  callee +1:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  local +2:9 below: u32 (const)
-  callee +2:22 p256Below -> @nish.p256Below
-  callee +2:35 p256Order -> @nish.p256Order
-  local +3:9 zero: u32 (const)
-  callee +3:26 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +4:3 wipe<u32[]> -> @nish.wipe$arr.u32
-function p256DigestScalar(out: u32[], digest: u8[]): void -> @nish.p256DigestScalar
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  callee +1:8 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  local +4:9 below: u32 (const)
+  callee +4:22 p256Below -> @nish.p256Below
+  callee +4:35 p256Order -> @nish.p256Order
+  local +5:9 zero: u32 (const)
+  callee +5:26 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +6:3 wipe<u32[]> -> @nish.wipe$arr.u32
+function p256DigestScalar(out: u32[], digest: u8[]): boolean -> @nish.p256DigestScalar
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256LimbsFromBytes
-  calls: nish.p256Limbs nish.p256LimbsFromBytes nish.p256Order nish.p256ReduceOnce nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
+  calls: nish.p256Limbs nish.p256LimbsFromBytes nish.p256Order nish.p256ReduceOnce nish_arena_mark nish_arena_release nish_array_grow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256ReduceOnce#0
   pointer digest: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 length: i32 (const)
-  local +1:9 bytes: u8[] (const)
-  local +2:9 take: i32 (const)
-  local +3:9 skip: i32 (const)
-  local +4:12 i: i32 (let)
-  local +7:9 a: u32[] (const)
-  callee +7:20 p256Limbs -> @nish.p256Limbs
-  callee +8:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +9:3 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee +9:26 p256Order -> @nish.p256Order
+  local +1:7 take: i32 (let)
+  local +5:9 bytes: u8[] (const)
+  local +6:12 i: i32 (let)
+  local +9:12 i: i32 (let)
+  local +12:9 a: u32[] (const)
+  callee +12:20 p256Limbs -> @nish.p256Limbs
+  callee +13:33 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +16:3 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee +16:26 p256Order -> @nish.p256Order
 function p256PadBlock(k: u8[], pad: u8): u8[] -> @nish.p256PadBlock
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: pad
@@ -16630,19 +16617,19 @@ function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
   stackSites=1 stackLocals=1
   local +0:9 empty: u8[] (const)
   callee +1:10 p256Mac -> @nish.p256Mac
-function p256SignScalar(priv: u8[], z: u32[]): u8[] -> @nish.p256SignScalar
+function p256SignScalar(priv: u8[], z: u32[]): u8[] | null -> @nish.p256SignScalar
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256BaseMult nish.p256FiatNonzero nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceKey nish.p256NonceValue nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ScalarR2 nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256NonceKey#3 nish.p256NonceKey#3 nish.p256LimbsFromBytes#1
   pointer z: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsToBytes#2 nish.p256FiatScalarAdd#2
   stackSites=4 stackLocals=4
-  local -8:9 n: u32[] (const)
-  callee -8:20 p256Order -> @nish.p256Order
-  local -7:9 r2: u32[] (const)
-  callee -7:21 p256ScalarR2 -> @nish.p256ScalarR2
-  local -6:9 h1: u8[] (const)
-  callee -5:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local -10:9 n: u32[] (const)
+  callee -10:20 p256Order -> @nish.p256Order
+  local -9:9 r2: u32[] (const)
+  callee -9:21 p256ScalarR2 -> @nish.p256ScalarR2
+  local -8:9 h1: u8[] (const)
+  callee -7:8 p256LimbsToBytes -> @nish.p256LimbsToBytes
   local -4:9 empty: u8[] (const)
   local -3:7 v: u8[] (let)
   local -2:7 k: u8[] (let)
@@ -16658,7 +16645,8 @@ function p256SignScalar(priv: u8[], z: u32[]): u8[] -> @nish.p256SignScalar
   callee +14:3 wipe<u8[]> -> @nish.wipe$arr.u8
   local +17:9 dM: u32[] (const)
   callee +17:21 p256Limbs -> @nish.p256Limbs
-  callee +18:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  local +18:7 failed: boolean (let)
+  callee +18:26 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
   callee +19:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
   local +20:9 scratch: P256PointScratch (const)
   callee +20:19 new P256PointScratch -> @nish.P256PointScratch.constructor
@@ -16672,42 +16660,43 @@ function p256SignScalar(priv: u8[], z: u32[]): u8[] -> @nish.p256SignScalar
   callee +24:21 p256Limbs -> @nish.p256Limbs
   local +25:9 s: u32[] (const)
   callee +25:20 p256Limbs -> @nish.p256Limbs
-  callee +27:12 p256NonceValue -> @nish.p256NonceValue
-  callee +28:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +30:9 p256ScalarInRange -> @nish.p256ScalarInRange
-  callee +31:7 p256BaseMult -> @nish.p256BaseMult
-  callee +32:7 p256AffineX -> @nish.p256AffineX
-  callee +33:7 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee +37:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +38:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +39:7 p256ScalarInverse -> @nish.p256ScalarInverse
-  callee +40:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +41:7 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
-  callee +42:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +43:11 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +43:39 p256FiatNonzero -> @nish.p256FiatNonzero
-  local +44:15 sig: u8[] (const)
-  callee +45:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +46:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +49:9 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +50:9 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +51:9 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +52:9 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +53:9 p256WipePoint -> @nish.p256WipePoint
-  callee +54:9 p256WipeScratch -> @nish.p256WipeScratch
-  callee +58:12 p256NonceKey -> @nish.p256NonceKey
-  callee +59:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +61:12 p256NonceValue -> @nish.p256NonceValue
-  callee +62:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local +26:7 sig: u8[] | null (let)
+  callee +28:12 p256NonceValue -> @nish.p256NonceValue
+  callee +29:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +31:9 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee +34:17 p256BaseMult -> @nish.p256BaseMult
+  callee +34:53 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +36:9 p256AffineX -> @nish.p256AffineX
+  callee +37:9 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee +41:9 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +42:9 p256ScalarInverse -> @nish.p256ScalarInverse
+  callee +43:9 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +44:9 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  callee +45:9 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +46:13 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +46:41 p256FiatNonzero -> @nish.p256FiatNonzero
+  local +47:17 encoded: u8[] (const)
+  callee +48:21 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +48:57 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +56:14 p256NonceKey -> @nish.p256NonceKey
+  callee +57:7 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +59:14 p256NonceValue -> @nish.p256NonceValue
+  callee +60:7 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +66:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +67:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +68:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +69:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +70:3 p256WipePoint -> @nish.p256WipePoint
+  callee +71:3 p256WipeScratch -> @nish.p256WipeScratch
 function p256PublicKey(priv: Secret<u8[]>): u8[] | null -> @nish.p256PublicKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
   calls: nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed#0
   stackSites=0 stackLocals=0
   callee +0:67 expose<u8[], u8[] | null, p256PublicKeyExposed> -> @nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
 function p256PublicKeyExposed(priv: u8[]): u8[] | null -> @nish.p256PublicKeyExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256BaseMult nish.p256EncodePoint nish.p256ScalarInRange nish.p256WipePoint nish.p256WipeScratch
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256BaseMult#1
@@ -16717,13 +16706,14 @@ function p256PublicKeyExposed(priv: u8[]): u8[] | null -> @nish.p256PublicKeyExp
   callee +3:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local +4:9 scratch: P256PointScratch (const)
   callee +4:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-  callee +5:3 p256BaseMult -> @nish.p256BaseMult
+  local +5:9 multiplied: boolean (const)
+  callee +5:31 p256BaseMult -> @nish.p256BaseMult
   callee +6:3 p256WipeScratch -> @nish.p256WipeScratch
-  local +7:9 encoded: u8[] (const)
-  callee +7:25 p256EncodePoint -> @nish.p256EncodePoint
-  callee +8:3 p256WipePoint -> @nish.p256WipePoint
+  local +7:7 encoded: u8[] | null (let)
+  callee +9:15 p256EncodePoint -> @nish.p256EncodePoint
+  callee +11:3 p256WipePoint -> @nish.p256WipePoint
 function p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> | null -> @nish.p256Ecdh [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256EcdhExposed
   calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256EcdhExposed nish.secret$arr.u8
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256EcdhExposed#0
@@ -16733,7 +16723,7 @@ function p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> | null -> @
   callee +0:31 exposeWith<u8[], u8[], u8[] | null, p256EcdhExposed> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256EcdhExposed
   callee +4:10 secret<u8[]> -> @nish.secret$arr.u8
 function p256EcdhExposed(priv: u8[], peerPoint: u8[]): u8[] | null -> @nish.p256EcdhExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256DecodePoint nish.p256FiatMul nish.p256FiatNonzero nish.p256FieldInvert nish.p256Limbs nish.p256LimbsToBytes nish.p256PlainOne nish.p256ScalarInRange nish.p256ScalarMult nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256ScalarMult#1
@@ -16746,24 +16736,25 @@ function p256EcdhExposed(priv: u8[], peerPoint: u8[]): u8[] | null -> @nish.p256
   callee +7:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local +8:9 scratch: P256PointScratch (const)
   callee +8:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-  callee +9:3 p256ScalarMult -> @nish.p256ScalarMult
-  callee +10:3 p256WipeScratch -> @nish.p256WipeScratch
-  local +11:9 infinity: boolean (const)
-  callee +11:29 p256FiatNonzero -> @nish.p256FiatNonzero
-  local +13:9 acc: u32[] (const)
-  callee +13:22 p256Limbs -> @nish.p256Limbs
-  callee +14:3 p256FieldInvert -> @nish.p256FieldInvert
-  local +15:9 x: u32[] (const)
-  callee +15:20 p256Limbs -> @nish.p256Limbs
-  callee +16:3 p256FiatMul -> @nish.p256FiatMul
-  callee +17:3 p256FiatMul -> @nish.p256FiatMul
-  callee +17:21 p256PlainOne -> @nish.p256PlainOne
-  local +18:9 out: u8[] (const)
-  callee +19:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +20:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +21:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +22:3 p256WipePoint -> @nish.p256WipePoint
-  callee +24:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +11:8 p256ScalarMult -> @nish.p256ScalarMult
+  callee +14:3 p256WipeScratch -> @nish.p256WipeScratch
+  local +15:9 infinity: boolean (const)
+  callee +15:29 p256FiatNonzero -> @nish.p256FiatNonzero
+  local +17:9 acc: u32[] (const)
+  callee +17:22 p256Limbs -> @nish.p256Limbs
+  callee +18:3 p256FieldInvert -> @nish.p256FieldInvert
+  local +19:9 x: u32[] (const)
+  callee +19:20 p256Limbs -> @nish.p256Limbs
+  callee +20:3 p256FiatMul -> @nish.p256FiatMul
+  callee +21:3 p256FiatMul -> @nish.p256FiatMul
+  callee +21:21 p256PlainOne -> @nish.p256PlainOne
+  local +22:9 out: u8[] (const)
+  local +23:9 written: boolean (const)
+  callee +23:28 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +24:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +25:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +26:3 p256WipePoint -> @nish.p256WipePoint
+  callee +28:5 wipe<u8[]> -> @nish.wipe$arr.u8
 function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Sign [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
@@ -16782,90 +16773,104 @@ function p256SignExposed(priv: u8[], digest: u8[]): u8[] | null -> @nish.p256Sig
   callee +0:8 p256ScalarInRange -> @nish.p256ScalarInRange
   local +3:9 z: u32[] (const)
   callee +3:20 p256Limbs -> @nish.p256Limbs
-  callee +4:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee +5:10 p256SignScalar -> @nish.p256SignScalar
+  callee +4:8 p256DigestScalar -> @nish.p256DigestScalar
+  callee +7:10 p256SignScalar -> @nish.p256SignScalar
 function p256Wnaf(out: i32[], k: u8[]): void -> @nish.p256Wnaf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: nish.p256ByteBit nish_panic_index nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.p256ByteBit
   pointer out: size=0 writesThrough=true captured=false
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256ByteBit#0 nish.p256ByteBit#0
   stackSites=0 stackLocals=0
-  local -15:7 carry: i32 (let)
-  local -14:7 bit: i32 (let)
-  callee -12:9 p256ByteBit -> @nish.p256ByteBit
-  local -8:11 left: i32 (const)
-  local -7:11 now: i32 (const)
-  local -6:9 word: i32 (let)
-  local -5:14 j: i32 (let)
-  callee -4:22 p256ByteBit -> @nish.p256ByteBit
+  local -18:7 carry: i32 (let)
+  local -17:7 bit: i32 (let)
+  callee -15:9 p256ByteBit -> @nish.p256ByteBit
+  local -10:9 bits: i32 (let)
+  local -9:14 j: i32 (let)
+  local -8:13 at: i32 (const)
+  callee -6:24 p256ByteBit -> @nish.p256ByteBit
+  local -2:11 word: i32 (const)
 function p256ByteBit(k: u8[], i: i32): i32 -> @nish.p256ByteBit
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer k: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 at: i32 (const)
+  local +0:9 byte: i32 (const)
+  local +1:9 at: i32 (const)
 function p256OddMultiples(table: P256ProjectivePoint[], p: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256OddMultiples
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.P256ProjectivePoint.constructor
-  calls: nish.P256ProjectivePoint.constructor nish.p256PointAdd nish.p256PointCopy nish.p256PointDouble nish_panic_index
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256PointCopy
+  calls: nish.P256ProjectivePoint.constructor nish.p256PointAdd nish.p256PointCopy nish.p256PointDouble
   pointer table: size=0 writesThrough=true captured=false
-  pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256PointDouble#1 nish.p256PointCopy#1
+  pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#1 nish.p256PointDouble#1
   pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256PointDouble#2 nish.p256PointAdd#3
   stackSites=1 stackLocals=1
-  local +0:9 twice: P256ProjectivePoint (const)
-  callee +0:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +1:3 p256PointDouble -> @nish.p256PointDouble
-  callee +2:3 p256PointCopy -> @nish.p256PointCopy
-  local +3:12 j: i32 (let)
-  callee +4:5 p256PointAdd -> @nish.p256PointAdd
-function p256WnafAdd(acc: P256ProjectivePoint, table: P256ProjectivePoint[], digit: i32, neg: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256WnafAdd
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +0:3 p256PointCopy -> @nish.p256PointCopy
+  local +1:9 twice: P256ProjectivePoint (const)
+  callee +1:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +2:3 p256PointDouble -> @nish.p256PointDouble
+  local +4:12 j: i32 (let)
+  callee +5:5 p256PointAdd -> @nish.p256PointAdd
+function p256WnafAdd(acc: P256ProjectivePoint, table: P256ProjectivePoint[], digit: i32, neg: P256ProjectivePoint, s: P256PointScratch): boolean -> @nish.p256WnafAdd
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PointAdd
-  calls: nish.p256Copy nish.p256FiatSub nish.p256PointAdd nish.p256SetZero nish_panic_overflow
+  calls: nish.p256Copy nish.p256FiatSub nish.p256PointAdd nish.p256SetZero
   pointer acc: size=24 writesThrough=false captured=false passedTo=nish.p256PointAdd#0 nish.p256PointAdd#1 nish.p256PointAdd#0 nish.p256PointAdd#1
   pointer table: size=0 writesThrough=true captured=false
   pointer neg: size=24 writesThrough=false captured=false passedTo=nish.p256PointAdd#2
   pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256PointAdd#3 nish.p256PointAdd#3
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
-  callee +5:5 p256PointAdd -> @nish.p256PointAdd
-  callee +8:3 p256Copy -> @nish.p256Copy
-  callee +9:3 p256SetZero -> @nish.p256SetZero
-  callee +10:3 p256FiatSub -> @nish.p256FiatSub
-  callee +11:3 p256Copy -> @nish.p256Copy
-  callee +12:3 p256PointAdd -> @nish.p256PointAdd
-function p256DoubleMultPublic(out: P256ProjectivePoint, a: u8[], b: u8[], q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256DoubleMultPublic
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee +6:5 p256PointAdd -> @nish.p256PointAdd
+  callee +9:3 p256Copy -> @nish.p256Copy
+  callee +10:3 p256SetZero -> @nish.p256SetZero
+  callee +11:3 p256FiatSub -> @nish.p256FiatSub
+  callee +12:3 p256Copy -> @nish.p256Copy
+  callee +13:3 p256PointAdd -> @nish.p256PointAdd
+function p256DoubleMultPublic(out: P256ProjectivePoint, a: u8[], b: u8[], q: P256ProjectivePoint, s: P256PointScratch): boolean -> @nish.p256DoubleMultPublic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.P256ProjectivePoint.constructor
-  calls: nish.P256ProjectivePoint.constructor nish.p256Generator nish.p256OddMultiples nish.p256PointDouble nish.p256SetIdentity nish.p256Wnaf nish.p256WnafAdd nish_alloc_struct nish_array_grow nish_panic
+  calls: nish.P256ProjectivePoint.constructor nish.p256Generator nish.p256OddMultiples nish.p256PointDouble nish.p256SetIdentity nish.p256Wnaf nish.p256WnafAdd nish_alloc_struct
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256SetIdentity#0 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256WnafAdd#0 nish.p256WnafAdd#0
   pointer a: size=0 writesThrough=false captured=false passedTo=nish.p256Wnaf#1
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.p256Wnaf#1
   pointer q: size=24 writesThrough=false captured=false passedTo=nish.p256OddMultiples#1
   pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256OddMultiples#2 nish.p256OddMultiples#2 nish.p256PointDouble#2 nish.p256WnafAdd#4 nish.p256WnafAdd#4
-  stackSites=3 stackLocals=3
+  stackSites=5 stackLocals=5
   local +0:9 wa: i32[] (const)
   local +1:9 wb: i32[] (const)
   callee +2:3 p256Wnaf -> @nish.p256Wnaf
   callee +3:3 p256Wnaf -> @nish.p256Wnaf
-  local +4:9 tableG: P256ProjectivePoint[] (const)
-  local +5:9 tableQ: P256ProjectivePoint[] (const)
-  local +6:12 j: i32 (let)
-  callee +7:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +8:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +10:3 p256OddMultiples -> @nish.p256OddMultiples
-  callee +10:28 p256Generator -> @nish.p256Generator
-  callee +11:3 p256OddMultiples -> @nish.p256OddMultiples
-  local +12:9 neg: P256ProjectivePoint (const)
-  callee +12:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +13:3 p256SetIdentity -> @nish.p256SetIdentity
-  local +14:7 started: boolean (let)
-  local +15:12 i: i32 (let)
-  callee +17:7 p256PointDouble -> @nish.p256PointDouble
-  callee +20:7 p256WnafAdd -> @nish.p256WnafAdd
-  callee +24:7 p256WnafAdd -> @nish.p256WnafAdd
+  local +5:9 tableG: P256ProjectivePoint[] (const)
+  callee +6:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +7:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +8:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +9:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +10:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +11:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +12:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +13:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  local +15:9 tableQ: P256ProjectivePoint[] (const)
+  callee +16:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +17:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +18:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +19:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +20:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +21:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +22:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +23:5 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +25:3 p256OddMultiples -> @nish.p256OddMultiples
+  callee +25:28 p256Generator -> @nish.p256Generator
+  callee +26:3 p256OddMultiples -> @nish.p256OddMultiples
+  local +27:9 neg: P256ProjectivePoint (const)
+  callee +27:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +28:3 p256SetIdentity -> @nish.p256SetIdentity
+  local +29:7 started: boolean (let)
+  local +30:12 i: i32 (let)
+  callee +32:7 p256PointDouble -> @nish.p256PointDouble
+  callee +35:12 p256WnafAdd -> @nish.p256WnafAdd
+  callee +41:12 p256WnafAdd -> @nish.p256WnafAdd
 function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Verify [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256DecodePoint
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256DecodePoint nish.p256DigestScalar nish.p256DoubleMultPublic nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ScalarR2 nish.timingSafeEqual
   pointer pub: size=0 writesThrough=false captured=false passedTo=nish.p256DecodePoint#0
@@ -16889,34 +16894,34 @@ function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Ve
   callee +16:20 p256Limbs -> @nish.p256Limbs
   local +17:9 z: u32[] (const)
   callee +17:20 p256Limbs -> @nish.p256Limbs
-  callee +18:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +19:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +20:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee +23:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +24:3 p256ScalarInverse -> @nish.p256ScalarInverse
-  local +25:9 u1: u32[] (const)
-  callee +25:21 p256Limbs -> @nish.p256Limbs
-  local +26:9 u2: u32[] (const)
-  callee +26:21 p256Limbs -> @nish.p256Limbs
+  callee +19:6 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +20:6 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +21:6 p256DigestScalar -> @nish.p256DigestScalar
   callee +27:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +28:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  local +29:9 u1Bytes: u8[] (const)
-  local +30:9 u2Bytes: u8[] (const)
-  callee +31:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +32:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  local +34:9 scratch: P256PointScratch (const)
-  callee +34:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-  local +35:9 sum: P256ProjectivePoint (const)
-  callee +35:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +36:3 p256DoubleMultPublic -> @nish.p256DoubleMultPublic
-  callee +37:7 p256FiatNonzero -> @nish.p256FiatNonzero
-  local +40:9 x: u32[] (const)
-  callee +40:20 p256Limbs -> @nish.p256Limbs
-  callee +41:3 p256AffineX -> @nish.p256AffineX
-  callee +42:3 p256ReduceOnce -> @nish.p256ReduceOnce
-  local +43:9 vBytes: u8[] (const)
-  callee +44:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +45:10 timingSafeEqual -> @nish.timingSafeEqual
+  callee +28:3 p256ScalarInverse -> @nish.p256ScalarInverse
+  local +29:9 u1: u32[] (const)
+  callee +29:21 p256Limbs -> @nish.p256Limbs
+  local +30:9 u2: u32[] (const)
+  callee +30:21 p256Limbs -> @nish.p256Limbs
+  callee +31:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +32:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  local +33:9 u1Bytes: u8[] (const)
+  local +34:9 u2Bytes: u8[] (const)
+  callee +35:8 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +35:45 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local +39:9 scratch: P256PointScratch (const)
+  callee +39:19 new P256PointScratch -> @nish.P256PointScratch.constructor
+  local +40:9 sum: P256ProjectivePoint (const)
+  callee +40:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +41:8 p256DoubleMultPublic -> @nish.p256DoubleMultPublic
+  callee +44:7 p256FiatNonzero -> @nish.p256FiatNonzero
+  local +47:9 x: u32[] (const)
+  callee +47:20 p256Limbs -> @nish.p256Limbs
+  callee +48:3 p256AffineX -> @nish.p256AffineX
+  callee +49:3 p256ReduceOnce -> @nish.p256ReduceOnce
+  local +50:9 vBytes: u8[] (const)
+  callee +51:10 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +51:44 timingSafeEqual -> @nish.timingSafeEqual
 function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p256SignSha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Sign
@@ -16939,136 +16944,163 @@ function p256VerifySha256(pub: u8[], msg: u8[], sig: u8[]): boolean -> @nish.p25
 function p256Rotr(x: u32, n: u32): u32 -> @nish.p256Rotr
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function p256LoadWord(buf: u8[], at: i32): u32 -> @nish.p256LoadWord
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: at
-  calls: nish_panic_index
-  pointer buf: size=0 writesThrough=false captured=false
+function p256Word(b0: u8, b1: u8, b2: u8, b3: u8): u32 -> @nish.p256Word
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function p256ShaCompress(h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): void -> @nish.p256ShaCompress
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: nish.p256LoadWord nish.p256Rotr nish_panic_overflow
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at
+  calls: nish.p256Rotr nish.p256Word
   pointer h: size=0 writesThrough=true captured=false
   pointer w: size=0 writesThrough=true captured=false
   pointer kt: size=0 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.p256LoadWord#0
+  pointer src: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -1:14 t: i32 (let)
-  callee +0:14 p256LoadWord -> @nish.p256LoadWord
-  local +2:14 t: i32 (let)
-  local +3:13 w2: u32 (const)
-  local +4:13 w15: u32 (const)
-  local +5:13 sigma1: u32 (const)
-  callee +5:27 p256Rotr -> @nish.p256Rotr
-  callee +5:46 p256Rotr -> @nish.p256Rotr
-  local +6:13 sigma0: u32 (const)
-  callee +6:27 p256Rotr -> @nish.p256Rotr
-  callee +6:46 p256Rotr -> @nish.p256Rotr
-  local +9:9 a: u32 (let)
-  local +10:9 b: u32 (let)
-  local +11:9 c: u32 (let)
-  local +12:9 d: u32 (let)
-  local +13:9 e: u32 (let)
-  local +14:9 f: u32 (let)
-  local +15:9 g: u32 (let)
-  local +16:9 hh: u32 (let)
-  local +17:14 t: i32 (let)
-  local +18:13 bigSigma1: u32 (const)
-  callee +18:30 p256Rotr -> @nish.p256Rotr
-  callee +18:47 p256Rotr -> @nish.p256Rotr
-  callee +18:65 p256Rotr -> @nish.p256Rotr
-  local +19:13 choose: u32 (const)
-  local +20:13 t1: u32 (const)
-  local +21:13 bigSigma0: u32 (const)
-  callee +21:30 p256Rotr -> @nish.p256Rotr
-  callee +21:47 p256Rotr -> @nish.p256Rotr
-  callee +21:65 p256Rotr -> @nish.p256Rotr
-  local +22:13 majority: u32 (const)
-function p256ShaInto(out: u8[], at: i32, data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[]): void -> @nish.p256ShaInto
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +0:10 p256Word -> @nish.p256Word
+  callee +1:10 p256Word -> @nish.p256Word
+  callee +2:10 p256Word -> @nish.p256Word
+  callee +3:10 p256Word -> @nish.p256Word
+  callee +4:10 p256Word -> @nish.p256Word
+  callee +5:10 p256Word -> @nish.p256Word
+  callee +6:10 p256Word -> @nish.p256Word
+  callee +7:10 p256Word -> @nish.p256Word
+  callee +8:10 p256Word -> @nish.p256Word
+  callee +9:10 p256Word -> @nish.p256Word
+  callee +10:11 p256Word -> @nish.p256Word
+  callee +11:11 p256Word -> @nish.p256Word
+  callee +12:11 p256Word -> @nish.p256Word
+  callee +13:11 p256Word -> @nish.p256Word
+  callee +14:11 p256Word -> @nish.p256Word
+  callee +15:11 p256Word -> @nish.p256Word
+  local +16:12 t: i32 (let)
+  local +17:11 w2: u32 (const)
+  local +18:11 w15: u32 (const)
+  local +19:11 sigma1: u32 (const)
+  callee +19:25 p256Rotr -> @nish.p256Rotr
+  callee +19:44 p256Rotr -> @nish.p256Rotr
+  local +20:11 sigma0: u32 (const)
+  callee +20:25 p256Rotr -> @nish.p256Rotr
+  callee +20:44 p256Rotr -> @nish.p256Rotr
+  local +23:7 a: u32 (let)
+  local +24:7 b: u32 (let)
+  local +25:7 c: u32 (let)
+  local +26:7 d: u32 (let)
+  local +27:7 e: u32 (let)
+  local +28:7 f: u32 (let)
+  local +29:7 g: u32 (let)
+  local +30:7 hh: u32 (let)
+  local +31:12 t: i32 (let)
+  local +32:11 bigSigma1: u32 (const)
+  callee +32:28 p256Rotr -> @nish.p256Rotr
+  callee +32:45 p256Rotr -> @nish.p256Rotr
+  callee +32:63 p256Rotr -> @nish.p256Rotr
+  local +33:11 choose: u32 (const)
+  local +34:11 t1: u32 (const)
+  local +35:11 bigSigma0: u32 (const)
+  callee +35:28 p256Rotr -> @nish.p256Rotr
+  callee +35:45 p256Rotr -> @nish.p256Rotr
+  callee +35:63 p256Rotr -> @nish.p256Rotr
+  local +36:11 majority: u32 (const)
+function p256ShaInto(data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[]): boolean -> @nish.p256ShaInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: off
-  calls: nish.p256SetLimbs nish.p256ShaCompress nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.p256ShaCompress#3
+  calls: nish.p256SetLimbs nish.p256ShaCompress
+  pointer data: size=0 writesThrough=true captured=false passedTo=nish.p256ShaCompress#3
   pointer kt: size=0 writesThrough=false captured=false passedTo=nish.p256ShaCompress#2 nish.p256ShaCompress#2 nish.p256ShaCompress#2
   pointer h: size=0 writesThrough=true captured=false passedTo=nish.p256SetLimbs#0 nish.p256ShaCompress#0 nish.p256ShaCompress#0 nish.p256ShaCompress#0
   pointer w: size=0 writesThrough=true captured=false passedTo=nish.p256ShaCompress#1 nish.p256ShaCompress#1 nish.p256ShaCompress#1
   pointer tail: size=0 writesThrough=true captured=false passedTo=nish.p256ShaCompress#3 nish.p256ShaCompress#3
   stackSites=0 stackLocals=0
-  callee -20:3 p256SetLimbs -> @nish.p256SetLimbs
-  local -9:7 from: i32 (let)
-  callee -7:5 p256ShaCompress -> @nish.p256ShaCompress
-  local -4:9 rest: i32 (const)
-  local -3:9 tailLength: i32 (const)
-  local -2:9 dataLength: i32 (const)
+  callee -19:3 p256SetLimbs -> @nish.p256SetLimbs
+  local -6:9 blocks: i32 (const)
+  local -5:12 b: i32 (let)
+  callee -4:5 p256ShaCompress -> @nish.p256ShaCompress
+  local -2:9 rest: i32 (const)
   local -1:12 i: i32 (let)
-  local +2:12 i: i32 (let)
-  local +8:9 end: i32 (const)
-  local +9:9 bits: u64 (const)
-  local +10:12 i: i32 (let)
-  local +11:11 j: i32 (const)
-  callee +16:3 p256ShaCompress -> @nish.p256ShaCompress
-  callee +18:5 p256ShaCompress -> @nish.p256ShaCompress
-  local +20:9 outLength: i32 (const)
+  local +4:7 copied: i32 (let)
+  local +5:9 dataLength: i32 (const)
+  local +7:9 k: i32 (let)
+  local +16:7 end: i32 (let)
+  local +20:9 bits: u64 (const)
   local +21:12 i: i32 (let)
-  local +22:11 word: u32 (const)
-  local +23:14 b: i32 (let)
-  local +24:13 j: i32 (const)
-function p256HmacInto(out: u8[], key: u8[], message: u8[], len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[], block: u8[]): void -> @nish.p256HmacInto
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +22:11 j: i32 (const)
+  callee +25:3 p256ShaCompress -> @nish.p256ShaCompress
+  callee +27:5 p256ShaCompress -> @nish.p256ShaCompress
+function p256DigestInto(out: u8[], h: u32[]): boolean -> @nish.p256DigestInto
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  pointer out: size=0 writesThrough=true captured=false
+  pointer h: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -5:12 i: i32 (let)
+  local -4:11 word: u32 (const)
+  local -3:14 b: i32 (let)
+  local -2:13 j: i32 (const)
+  local -1:13 shift: i32 (const)
+function p256HmacInto(out: u8[], key: u8[], message: u8[], len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[], block: u8[]): boolean -> @nish.p256HmacInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.p256ShaInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#0
+  calls: nish.p256DigestInto nish.p256ShaInto nish.wipe$arr.u32 nish.wipe$arr.u8
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256DigestInto#0
   pointer key: size=0 writesThrough=false captured=false
   pointer message: size=0 writesThrough=false captured=false
-  pointer kt: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#5 nish.p256ShaInto#5
-  pointer h: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#6 nish.p256ShaInto#6 nish.wipe$arr.u32#0
-  pointer w: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#7 nish.p256ShaInto#7 nish.wipe$arr.u32#0
-  pointer tail: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#8 nish.p256ShaInto#8 nish.wipe$arr.u8#0
-  pointer block: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#0 nish.p256ShaInto#2 nish.p256ShaInto#2 nish.wipe$arr.u8#0
+  pointer kt: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#3 nish.p256ShaInto#3
+  pointer h: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#4 nish.p256ShaInto#4 nish.p256DigestInto#1 nish.wipe$arr.u32#0
+  pointer w: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#5 nish.p256ShaInto#5 nish.wipe$arr.u32#0
+  pointer tail: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#6 nish.p256ShaInto#6 nish.wipe$arr.u8#0
+  pointer block: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#0 nish.p256ShaInto#0 nish.wipe$arr.u8#0
   stackSites=0 stackLocals=0
-  local -7:9 blockLength: i32 (const)
-  local -6:9 keyLength: i32 (const)
-  local -5:9 messageLength: i32 (const)
   local -1:12 i: i32 (let)
   local +2:12 i: i32 (let)
-  callee +5:3 p256ShaInto -> @nish.p256ShaInto
-  local +6:12 i: i32 (let)
-  callee +9:3 p256ShaInto -> @nish.p256ShaInto
-  callee +10:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +11:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +12:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +13:3 wipe<u8[]> -> @nish.wipe$arr.u8
-function p256CopyBytes(out: u8[], from: u8[], n: i32): void -> @nish.p256CopyBytes
+  local +5:12 i: i32 (let)
+  local +6:11 k: i32 (const)
+  local +9:9 inner: boolean (const)
+  callee +9:26 p256ShaInto -> @nish.p256ShaInto
+  local +11:12 i: i32 (let)
+  local +12:11 word: u32 (const)
+  local +13:14 b: i32 (let)
+  local +14:13 four: i32 (const)
+  local +15:13 j: i32 (const)
+  local +16:13 shift: i32 (const)
+  local +20:12 i: i32 (let)
+  local +23:12 i: i32 (let)
+  local +27:9 outerLength: i32 (const)
+  local +28:9 outer: boolean (const)
+  callee +28:26 p256ShaInto -> @nish.p256ShaInto
+  local +29:9 done: boolean (const)
+  callee +29:25 p256DigestInto -> @nish.p256DigestInto
+  callee +30:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +31:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +32:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +33:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function p256FillBytes(out: u8[], value: u8): void -> @nish.p256FillBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
+  escaping: value
   pointer out: size=0 writesThrough=true captured=false
-  pointer from: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
 function p256WindowFits(length: i32, at: i32, len: i32): boolean -> @nish.p256WindowFits
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function P256SignScratch.constructor(this: P256SignScratch): void -> @nish.P256SignScratch.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.p256Order
-  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct nish_panic
+  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct
   pointer this: size=144 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:17 p256Limbs -> @nish.p256Limbs
-  callee +8:14 p256Limbs -> @nish.p256Limbs
   callee +9:14 p256Limbs -> @nish.p256Limbs
   callee +10:14 p256Limbs -> @nish.p256Limbs
-  callee +11:15 p256Limbs -> @nish.p256Limbs
-  callee +12:14 p256Order -> @nish.p256Order
-  callee +13:15 p256ScalarR2 -> @nish.p256ScalarR2
-  callee +14:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +16:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-function p256SignMac(sc: P256SignScratch, out: u8[], message: u8[], len: i32): void -> @nish.p256SignMac
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +11:14 p256Limbs -> @nish.p256Limbs
+  callee +12:15 p256Limbs -> @nish.p256Limbs
+  callee +13:14 p256Order -> @nish.p256Order
+  callee +14:15 p256ScalarR2 -> @nish.p256ScalarR2
+  callee +15:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee +17:19 new P256PointScratch -> @nish.P256PointScratch.constructor
+function p256SignMac(sc: P256SignScratch, out: u8[], message: u8[], len: i32): boolean -> @nish.p256SignMac
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256HmacInto
   escaping: len
   calls: nish.p256HmacInto
@@ -17078,22 +17110,25 @@ function p256SignMac(sc: P256SignScratch, out: u8[], message: u8[], len: i32): v
   stackSites=0 stackLocals=0
   callee +0:3 p256HmacInto -> @nish.p256HmacInto
 function p256NonceKeyExposed(priv: u8[], sc: P256SignScratch): u8[] -> @nish.p256NonceKeyExposed
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256HmacInto
-  calls: nish.p256CopyBytes nish.p256HmacInto nish.p256Limbs nish.wipe$arr.u8 nish_panic nish_panic_overflow
+  calls: nish.p256HmacInto nish.p256Limbs nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false
   pointer sc: size=144 writesThrough=false captured=false
-  stackSites=1 stackLocals=0
-  local +0:9 message: u8[] (const)
-  callee +1:3 p256CopyBytes -> @nish.p256CopyBytes
-  local +2:12 i: i32 (let)
-  local +3:11 j: i32 (const)
-  local +4:11 l: i32 (const)
-  local +10:9 key: u8[] (const)
-  callee +11:3 p256HmacInto -> @nish.p256HmacInto
-  callee +17:5 p256Limbs -> @nish.p256Limbs
-  callee +22:3 wipe<u8[]> -> @nish.wipe$arr.u8
-function p256SignSExposed(priv: u8[], sc: P256SignScratch): u32[] -> @nish.p256SignSExposed
+  stackSites=4 stackLocals=1
+  local +0:9 separated: u8[] (const)
+  local +1:9 h1: u8[] (const)
+  local +5:9 message: u8[] (const)
+  local +6:12 i: i32 (let)
+  local +10:12 i: i32 (let)
+  local +11:11 j: i32 (const)
+  local +12:11 l: i32 (const)
+  local +16:9 key: u8[] (const)
+  local +17:9 made: boolean (const)
+  callee +17:25 p256HmacInto -> @nish.p256HmacInto
+  callee +23:5 p256Limbs -> @nish.p256Limbs
+  callee +28:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function p256SignSExposed(priv: u8[], sc: P256SignScratch): u32[] | null -> @nish.p256SignSExposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256LimbsFromBytes
   calls: nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.wipe$arr.u32
@@ -17102,35 +17137,53 @@ function p256SignSExposed(priv: u8[], sc: P256SignScratch): u32[] -> @nish.p256S
   stackSites=0 stackLocals=0
   local +0:9 dM: u32[] (const)
   callee +0:21 p256Limbs -> @nish.p256Limbs
-  callee +1:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +2:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  local +3:9 s: u32[] (const)
-  callee +3:20 p256Limbs -> @nish.p256Limbs
+  callee +1:8 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
   callee +4:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +5:3 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  local +5:9 s: u32[] (const)
+  callee +5:20 p256Limbs -> @nish.p256Limbs
   callee +6:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +7:3 wipe<u32[]> -> @nish.wipe$arr.u32
-function p256NonceSeparated(sc: P256SignScratch, sep: u8): void -> @nish.p256NonceSeparated
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
+  callee +7:3 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  callee +8:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +9:3 wipe<u32[]> -> @nish.wipe$arr.u32
+function p256NonceSeparated(sc: P256SignScratch, sep: u8): boolean -> @nish.p256NonceSeparated
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
   escaping: sep
-  calls: nish.p256CopyBytes nish_panic_index
   pointer sc: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee -1:3 p256CopyBytes -> @nish.p256CopyBytes
-function p256SignNonceKey(sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): void -> @nish.p256SignNonceKey
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.p256NonceSeparated
+  local -6:9 message: u8[] (const)
+  local -5:9 v: u8[] (const)
+  local -1:12 i: i32 (let)
+function p256SignNonceKey(sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): boolean -> @nish.p256SignNonceKey
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: sep
-  calls: nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed nish.p256CopyBytes nish.p256NonceSeparated nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  calls: nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed nish.p256NonceSeparated nish.wipe$arr.u8 nish_arena_mark nish_arena_release
   pointer sc: size=144 writesThrough=false captured=false passedTo=nish.p256NonceSeparated#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed#1
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed#0
   stackSites=0 stackLocals=0
-  callee +0:3 p256NonceSeparated -> @nish.p256NonceSeparated
-  local +1:9 next: u8[] (const)
-  callee +1:22 exposeWith<u8[], P256SignScratch, u8[], p256NonceKeyExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed
-  callee +2:3 p256CopyBytes -> @nish.p256CopyBytes
-  callee +3:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee -8:8 p256NonceSeparated -> @nish.p256NonceSeparated
+  local -5:9 next: u8[] (const)
+  callee -5:22 exposeWith<u8[], P256SignScratch, u8[], p256NonceKeyExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed
+  local -4:9 k: u8[] (const)
+  local -3:7 made: boolean (let)
+  local -1:14 i: i32 (let)
+  callee +4:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function p256PointSized(p: P256ProjectivePoint): boolean -> @nish.p256PointSized
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer p: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function p256SignScratchSized(sc: P256SignScratch): boolean -> @nish.p256SignScratchSized
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.p256PointSized
+  pointer sc: size=144 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 s: P256PointScratch (const)
+  local +1:9 scalars: boolean (const)
+  local +8:9 points: boolean (const)
+  callee +16:31 p256PointSized -> @nish.p256PointSized
+  callee +16:59 p256PointSized -> @nish.p256PointSized
+  callee +16:84 p256PointSized -> @nish.p256PointSized
 function p256WipeSignScratch(sc: P256SignScratch): void -> @nish.p256WipeSignScratch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u8
@@ -17147,10 +17200,10 @@ function p256SignSha256Into(sc: P256SignScratch, priv: Secret<u8[]>, msg: u8[], 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256BaseMultWith nish.p256BaseTable nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256WindowFits nish.p256WipeSignScratch nish_arena_release nish_panic nish_panic_overflow
-  pointer sc: size=144 writesThrough=true captured=false passedTo=nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256WipeSignScratch#0 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0
-  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange#0 nish.p256SignNonceKey#1 nish.p256SignNonceKey#1 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#0
-  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#2
+  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$opt.arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256BaseMultWith nish.p256BaseTable nish.p256DigestInto nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256FillBytes nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256SignScratchSized nish.p256WindowFits nish.p256WipeSignScratch nish_arena_release nish_panic
+  pointer sc: size=144 writesThrough=true captured=false passedTo=nish.p256SignScratchSized#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$opt.arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.p256WipeSignScratch#0
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange#0 nish.p256SignNonceKey#1 nish.p256SignNonceKey#1 nish.exposeWith$arr.u8$$P256SignScratch$opt.arr.u32$fn.21.nish.p256SignSExposed#0
+  pointer msg: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsToBytes#0 nish.p256LimbsToBytes#0
   stackSites=0 stackLocals=0
   callee -9:8 p256WindowFits -> @nish.p256WindowFits
@@ -17158,32 +17211,38 @@ function p256SignSha256Into(sc: P256SignScratch, priv: Secret<u8[]>, msg: u8[], 
   callee +0:16 p256BaseTable -> @nish.p256BaseTable
   local +2:9 _scope: i64 (const)
   callee +3:8 expose<u8[], boolean, p256ScalarInRange> -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange
-  callee +6:3 p256ShaInto -> @nish.p256ShaInto
-  callee +7:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee +8:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  local +9:12 i: i32 (let)
-  callee +13:3 p256SignNonceKey -> @nish.p256SignNonceKey
-  callee +14:3 p256SignMac -> @nish.p256SignMac
-  callee +15:3 p256SignNonceKey -> @nish.p256SignNonceKey
-  callee +16:3 p256SignMac -> @nish.p256SignMac
-  callee +18:5 p256SignMac -> @nish.p256SignMac
-  callee +19:9 p256ScalarInRange -> @nish.p256ScalarInRange
-  callee +20:7 p256BaseMultWith -> @nish.p256BaseMultWith
-  callee +21:7 p256AffineX -> @nish.p256AffineX
-  callee +22:7 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee +23:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +24:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +25:7 p256ScalarInverse -> @nish.p256ScalarInverse
-  local +26:13 s: u32[] (const)
-  callee +26:24 exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed
-  callee +27:11 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +27:42 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +28:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +29:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +30:9 p256WipeSignScratch -> @nish.p256WipeSignScratch
-  callee +35:5 p256NonceSeparated -> @nish.p256NonceSeparated
-  callee +36:5 p256SignMac -> @nish.p256SignMac
-  callee +37:5 p256SignMac -> @nish.p256SignMac
+  local +12:7 ok: boolean (let)
+  callee +13:5 p256SignScratchSized -> @nish.p256SignScratchSized
+  callee +14:5 p256ShaInto -> @nish.p256ShaInto
+  callee +15:5 p256DigestInto -> @nish.p256DigestInto
+  callee +16:5 p256DigestScalar -> @nish.p256DigestScalar
+  callee +17:5 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +19:5 p256FillBytes -> @nish.p256FillBytes
+  callee +20:5 p256FillBytes -> @nish.p256FillBytes
+  callee +24:5 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee +25:5 p256SignMac -> @nish.p256SignMac
+  callee +26:5 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee +27:5 p256SignMac -> @nish.p256SignMac
+  local +28:7 signed: boolean (let)
+  local +29:7 rounds: i32 (let)
+  callee +31:10 p256SignMac -> @nish.p256SignMac
+  callee +32:15 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee +33:12 p256BaseMultWith -> @nish.p256BaseMultWith
+  callee +35:9 p256AffineX -> @nish.p256AffineX
+  callee +36:9 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee +37:14 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +40:9 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +41:9 p256ScalarInverse -> @nish.p256ScalarInverse
+  local +42:15 s: u32[] | null (const)
+  callee +42:33 exposeWith<u8[], P256SignScratch, u32[] | null, p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$opt.arr.u32$fn.21.nish.p256SignSExposed
+  callee +45:20 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +45:51 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +47:16 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +47:51 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +65:9 p256NonceSeparated -> @nish.p256NonceSeparated
+  callee +66:9 p256SignMac -> @nish.p256SignMac
+  callee +67:9 p256SignMac -> @nish.p256SignMac
+  callee +70:3 p256WipeSignScratch -> @nish.p256WipeSignScratch
 module std/crypto/x25519.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith
