@@ -16,6 +16,37 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-24
+
+### Added
+
+- runtime: PollWaitBatch and the direct ring wait for ring-only loops ([#2256](https://github.com/amritk/nish/pull/2256))
+
+### Performance
+
+- runtime: A nish/sqlite cursor call looks its handle up once ([#2255](https://github.com/amritk/nish/pull/2255))
+- runtime: Coalesce a ring slot's queued sends into one SEND, from a per-ring buffer pool ([#2252](https://github.com/amritk/nish/pull/2252))
+- runtime: Integer index seeks reuse one key, and Cursor.countRange counts an index's keys in one walk ([#2257](https://github.com/amritk/nish/pull/2257))
+- runtime: Cursor.readRow decodes the columns selectRow chose in one call ([#2259](https://github.com/amritk/nish/pull/2259))
+- runtime: Batched ring waits on HttpHandler, measured on bench/handler-ring ([#2261](https://github.com/amritk/nish/pull/2261))
+- runtime: Send large ring writes from pool buffers, print ring stats, attribute the PSS rise ([#2271](https://github.com/amritk/nish/pull/2271))
+
+### Documentation
+
+- plan: Add WP89, GPU graphics and a 2D game layer in std/ ([#2246](https://github.com/amritk/nish/pull/2246))
+- guide: Link the language reference on the docs site, not GitHub ([#2254](https://github.com/amritk/nish/pull/2254))
+- runtime: SQLite's unix-excl VFS is opt-in through openDatabase's URI route ([#2253](https://github.com/amritk/nish/pull/2253))
+- bench: Ring sends per response, packets per response and CPU at 18k and 96k ([#2251](https://github.com/amritk/nish/pull/2251))
+- self: Every property a security row states has its own failing check ([#2264](https://github.com/amritk/nish/pull/2264))
+- CLAUDE.md names the bench goldens and the sqlite adapter's size check ([#2265](https://github.com/amritk/nish/pull/2265))
+- Pin the runtime budget to a runtime change and BENCHMARKS commits to main ([#2266](https://github.com/amritk/nish/pull/2266))
+- plan: Reopen WP38 with fast-math, simd128, v4 and recipe stages ([#2234](https://github.com/amritk/nish/pull/2234))
+
+### Tests
+
+- runtime: Derive the per-target runtime layout asserts from ARENA_TYPE and ARRAY_TYPE ([#2258](https://github.com/amritk/nish/pull/2258))
+
+
 ## [0.45.1] - 2026-11-24
 
 ### Fixed
@@ -2298,3 +2329,4 @@ file per release, and each release's notes and downloads are on the
 [0.44.0]: https://github.com/amritk/nish/releases/tag/v0.44.0
 [0.45.0]: https://github.com/amritk/nish/releases/tag/v0.45.0
 [0.45.1]: https://github.com/amritk/nish/releases/tag/v0.45.1
+[0.46.0]: https://github.com/amritk/nish/releases/tag/v0.46.0
