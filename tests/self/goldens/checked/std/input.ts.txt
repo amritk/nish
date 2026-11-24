@@ -11,10 +11,10 @@ function StepInput.constructor(this: StepInput, keys: KeyState): void -> @StepIn
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: keys
   pointer this: size=16 writesThrough=true captured=false
-  pointer keys: size=72 writesThrough=true captured=true
+  pointer keys: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function StepInput.isDown(this: StepInput, key: i32, code: i32): boolean -> @StepInput.isDown [exported method]
-  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: code key
   calls: nish.KeyState.isDown
   pointer this: size=16 writesThrough=false captured=false
