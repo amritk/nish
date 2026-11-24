@@ -101,11 +101,19 @@ export const synthTone = (
   }
   const from: i32 = toI32(start * rate)
   const n: i32 = toI32(length * rate)
+  // Never true: `start` is not negative here. The test is what proves `from + i`
+  // stays a sample index.
+  if (from < 0) {
+    return
+  }
+  const size: i32 = toI32(out.length)
   const ratio: f64 = Math.log(f1 / f0)
   let phase: f64 = 0.0
   let noise: i32 = SYNTH_NOISE_SEED
   let held: f64 = 0.0
-  for (let i: i32 = 0; i < n && from + i < toI32(out.length); i++) {
+  // `at` is `from + i`, counted on its own so the test against `size` bounds it.
+  let at: i32 = from
+  for (let i: i32 = 0; i < n && at < size; i++) {
     const t: f64 = toF64(i) / rate
     const f: f64 = f0 * Math.exp((ratio * toF64(i)) / toF64(n))
     const before: f64 = phase
@@ -128,7 +136,8 @@ export const synthTone = (
     }
     const attack: f64 = Math.min(t / 0.002, 1.0)
     const release: f64 = Math.min((length - t) / 0.005, 1.0)
-    out[from + i] = out[from + i] + v * volume * attack * release * Math.exp(-t * decay)
+    out[at] = out[at] + v * volume * attack * release * Math.exp(-t * decay)
+    at = at + 1
   }
 }
 

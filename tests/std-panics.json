@@ -4,9 +4,9 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 1772,
+  "total": 1521,
   "explicit": {
-    "kept": 355,
+    "kept": 363,
     "toFix": 9
   },
   "modules": {
@@ -94,17 +94,7 @@
     "std/crypto/x509.ts": {
       "slice": 1
     },
-    "std/host/game.ts": {
-      "index": 7
-    },
-    "std/host/ring.ts": {
-      "divide": 3,
-      "index": 6,
-      "overflow": 8
-    },
     "std/host/text.ts": {
-      "index": 1,
-      "overflow": 2,
       "slice": 1
     },
     "std/json-equal.ts": {
@@ -285,10 +275,7 @@
       "panic": 1
     },
     "std/raster.ts": {
-      "array-length": 12,
-      "divide": 1,
-      "index": 37,
-      "overflow": 36
+      "array-length": 12
     },
     "std/regex.ts": {
       "array-length": 2
@@ -310,9 +297,7 @@
       "ffi-nul": 3
     },
     "std/synth.ts": {
-      "array-length": 1,
-      "index": 2,
-      "overflow": 3
+      "array-length": 1
     },
     "std/temporal.ts": {
       "divide": 3,
@@ -322,26 +307,15 @@
       "slice": 7
     },
     "std/term-io.ts": {
-      "divide": 2,
-      "index": 5,
-      "overflow": 14,
       "slice": 3
     },
     "std/term-pixels.ts": {
       "array-length": 6,
-      "divide": 2,
-      "index": 18,
-      "overflow": 69,
-      "panic": 4,
+      "panic": 12,
       "slice": 2
     },
-    "std/term-probe.ts": {
-      "divide": 2
-    },
     "std/term-rate.ts": {
-      "index": 20,
-      "overflow": 22,
-      "pop": 2
+      "overflow": 3
     },
     "std/term.ts": {
       "slice": 1
@@ -1596,18 +1570,48 @@
     },
     {
       "module": "std/term-pixels.ts",
+      "function": "Framebuffer.get",
+      "reason": "pixels must hold width × height; the fields are public and a caller that desyncs them has broken the framebuffer, which panics as indexing past pixels did"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "Framebuffer.set",
+      "reason": "pixels must hold width × height; the fields are public and a caller that desyncs them has broken the framebuffer, which panics as indexing past pixels did"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "drawHalfBlocks",
+      "reason": "the canvas's pixels must hold width × height; the caller owns its public fields"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "kittyFrame",
+      "reason": "the framebuffer's pixels must hold width × height; the caller owns its public fields"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "sixelFrame",
+      "reason": "the working register array must hold w × h entries; sixelFrame sizes it itself with pixelsAtLeast(w * h), a length the prover cannot see past, and a Result would hand every caller a made-up pixel"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "PixelBytes.reserve",
+      "reason": "an escape sequence past 2^31 - 1 bytes, which an i32 length cannot hold; the caller's framebuffer size sets it"
+    },
+    {
+      "module": "std/term-pixels.ts",
+      "function": "pixelsArea",
+      "reason": "width and height must be non-negative with product at most 2^31 - 1; the caller chooses the framebuffer size"
+    },
+    {
+      "module": "std/term-pixels.ts",
       "function": "pixelsCheckImageId",
       "reason": "kitty image id must be 1 or more, 0 meaning no id; the caller chooses it"
     },
     {
       "module": "std/term-pixels.ts",
-      "function": "pixelsCheckSize",
-      "reason": "width and height must be non-negative with product at most 2^31 - 1; the caller chooses the framebuffer size"
-    },
-    {
-      "module": "std/term-pixels.ts",
       "function": "scaleFramebuffer",
-      "reason": "divisor must be 1 or more, as documented; the caller chooses it"
+      "reason": "divisor must be 1 or more, as documented, and each framebuffer's pixels must hold width × height; the caller chooses the divisor and owns the public fields"
     },
     {
       "module": "std/text.ts",
