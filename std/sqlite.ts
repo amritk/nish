@@ -861,10 +861,14 @@ export class Cursor {
   /**
    * Counts an index's entries whose first key column is `k`, for each `k`
    * from `lo` to `hi`, into `out[k - lo]`, in one seek and one walk of the
-   * index: what `SELECT count(*) ... WHERE col = k` answers for each `k`, for
-   * an index whose first column has INTEGER or NUMERIC affinity. It clears
-   * the seek key and leaves the cursor on no row. `out` past the span, and
-   * all of it on an `Err`, is left as it was.
+   * index, for an index whose first column has INTEGER or NUMERIC affinity.
+   * On a full index that is what `SELECT count(*) ... WHERE col = k` answers
+   * for each `k`; a partial index holds only the rows its WHERE admits, and
+   * counts only those. A count that reaches its walk clears the seek key and
+   * leaves the cursor on no row, whatever it answers; one refused before it
+   * (`SQLITE_MISUSE`, `SQLITE_MISMATCH`, `SQLITE_RANGE`, `SQLITE_NOMEM`)
+   * leaves both as they were. The counts are copied into `out` one call per
+   * key. `out` past the span, and all of it on an `Err`, is left as it was.
    *
    * @param lo The first key counted.
    * @param hi The last key counted, at least `lo`.

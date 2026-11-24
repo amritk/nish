@@ -1248,6 +1248,9 @@ static int32_t unlocked_cursor_count_range(nishsqlite_cursor *cur, int64_t lo, i
     u32 sz = 0;
     const void *p = NULL;
     if ((rc = record_of(cur, &sz, &p)) != SQLITE_OK) break;
+    /* row_of reads an empty record as zero fields, but a compare reads the
+     * record's header size from its first byte, which an empty one does not
+     * have; and an index entry always holds at least its rowid. */
     if (sz == 0) {
       rc = SQLITE_CORRUPT;
       break;
