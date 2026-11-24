@@ -56,7 +56,7 @@
     "std-compress-checksum": { "n": 60, "instructions": 106368115 },
     "std-compress-gzip": { "n": 3, "instructions": 162588277 },
     "std-term-frame": { "n": 600, "instructions": 194287334 },
-    "std-raster": { "n": 400, "instructions": 135319674 },
+    "std-raster": { "n": 400, "instructions": 136938571 },
     "std-synth": { "n": 60, "instructions": 110069992 }
   }
 }
