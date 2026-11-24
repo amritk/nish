@@ -428,9 +428,9 @@ panic in `new HttpHandler` and an `Err` naming both from
 server whose CPU per request matters more to it than `maxWaitMs` of added
 latency on a quiet connection; leave them at the defaults otherwise. On
 one 4-vCPU box at 30,000 requests a second, `minEvents` 64 with
-`maxWaitMs` 1 cut the server's CPU a request by about a third at 18,000
-connections and by 4% at 96,000, a saving its single rounds did not all
-show, and added about 2 ms to the median latency at both
+`maxWaitMs` 1 cut the server's CPU a request by a quarter to a third at
+18,000 connections across two runs, showed no saving at 96,000 outside the
+run-to-run noise, and added about 2 ms to the median latency at both
 ([the benchmarks](../../BENCHMARKS.md#batched-ring-waits-minevents-and-maxwaitms)).
 
 A loop that holds nothing but one ring listener's connections, and at most
