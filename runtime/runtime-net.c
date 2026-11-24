@@ -606,8 +606,10 @@ static void nr_pump(struct nr_set *S) {
    "0" when the first ring listener opens, SIGUSR1 asks for one line per
    open set on stderr, printed by the next pump of the loop, and closing a
    ring listener prints its set's line before the set goes. Without it no
-   handler is installed and SIGUSR1 keeps its default action; a program that
-   blocks SIGUSR1 (`signalFd`) never runs the handler. */
+   handler is installed and SIGUSR1 keeps its default action. The handler
+   stays installed once set; with no set open, a signal prints nothing.
+   signalFd's pipe (runtime-host.c) handles only SIGINT and SIGTERM, so it
+   never claims SIGUSR1. */
 static int nr_stats_on = -1; /* -1 until the first open reads the knob */
 static volatile sig_atomic_t nr_stats_asked;
 

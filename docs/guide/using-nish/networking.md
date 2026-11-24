@@ -325,9 +325,11 @@ uring-stats signal port=8080 sends=3000 pool_new=497 pool_held=0 pool_cached=68 
 they have allocated, `pool_held` those queued on a connection now and
 `pool_cached` those kept for reuse; `live` is the open connections and
 `slots` the slots the rings hold. Closing a ring listener prints its line
-once more, marked `close`. Without the variable the runtime installs no
-handler and `SIGUSR1` ends the process, as it would anyway. A program that
-takes `SIGUSR1` with `signalFd()` gets the signal there and prints nothing.
+once more, marked `close`. The handler, once installed, stays for the rest
+of the process; after the last ring listener closes, `SIGUSR1` prints
+nothing. Without the variable the runtime installs no handler and `SIGUSR1`
+ends the process, as it would anyway. `signalFd()` reports only `SIGINT`
+and `SIGTERM`, so it never takes `SIGUSR1` from the dump.
 
 <!-- nish:ok -->
 ```ts
