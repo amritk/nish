@@ -42408,6 +42408,104 @@ if (selects("ci-scope", "ci.yml")) {
   )
 }
 
+if (selects("workflow-permissions", "release.yml", "ci.yml", "interop.yml")) {
+  // A called workflow's token gets no more than the calling job grants, and a
+  // callee job asking for more fails the caller's whole run at startup: no
+  // job runs and no log says which. 0.45.0's first release run died that way
+  // when ci.yml's ci-gate took `statuses: write` and release.yml's `ci` job
+  // did not grant it. Every local `uses: ./.github/workflows/*.yml` caller is
+  // checked against its callee's top-level block and each job's own.
+  const rank = { none: 0, read: 1, write: 2 }
+  /**
+   * The `permissions:` block at exactly `indent` spaces among `lines`, as a
+   * scope-to-level map; `null` when there is none. A shorthand (`read-all`,
+   * `write-all`, `{}`) maps the scope `*`.
+   */
+  const permsAt = (lines, indent) => {
+    const pad = " ".repeat(indent)
+    const at = lines.findIndex((l) => l.startsWith(`${pad}permissions:`) && !/^\s/.test(l.slice(indent)))
+    if (at < 0) {
+      return null
+    }
+    const inline = lines[at].slice(indent + "permissions:".length).replace(/#.*/, "").trim()
+    if (inline !== "") {
+      return new Map([["*", inline === "write-all" ? "write" : inline === "read-all" ? "read" : "none"]])
+    }
+    const out = new Map()
+    for (const l of lines.slice(at + 1)) {
+      if (l.trim() === "" || l.trimStart().startsWith("#")) {
+        continue
+      }
+      const m = new RegExp(`^${pad} {2,}([\\w-]+):\\s*(\\w+)`).exec(l)
+      if (!m) {
+        break
+      }
+      out.set(m[1], m[2])
+    }
+    return out
+  }
+  const granted = (perms, scope) => perms.get(scope) ?? perms.get("*") ?? "none"
+  /** What `caller` grants that `asked` needs and it does not, as `scope: level` strings. */
+  const shortfall = (caller, asked) =>
+    [...asked]
+      .filter(([scope, level]) =>
+        scope === "*" ? level !== "none" : (rank[granted(caller, scope)] ?? -1) < (rank[level] ?? Infinity)
+      )
+      .map(([scope, level]) => `${scope}: ${level}`)
+  const jobsOf = (lines) => {
+    const start = lines.indexOf("jobs:")
+    return start < 0
+      ? []
+      : lines
+          .slice(start + 1)
+          .map((l) => /^ {2}([\w-]+):\s*$/.exec(l)?.[1])
+          .filter((id) => id !== undefined)
+  }
+  const wfDir = path.join(root, ".github", "workflows")
+  const wfLines = (file) => fs.readFileSync(path.join(wfDir, file), "utf8").split("\n")
+  const callers = []
+  const gaps = []
+  for (const file of fs.readdirSync(wfDir).filter((f) => /\.ya?ml$/.test(f))) {
+    const lines = wfLines(file)
+    const top = permsAt(lines, 0)
+    for (const id of jobsOf(lines)) {
+      const job = ciJob(lines.join("\n"), id).split("\n")
+      const callee = /^ {4}uses: \.\/\.github\/workflows\/([\w.-]+)\s*$/m.exec(job.join("\n"))?.[1]
+      if (callee === undefined) {
+        continue
+      }
+      callers.push(`${file}:${id} -> ${callee}`)
+      // A caller job without a block hands on its workflow's; with neither,
+      // the repository default, which this check does not read: count it as
+      // granting nothing so a callee that asks for anything is flagged.
+      const grant = permsAt(job, 4) ?? top ?? new Map()
+      const calleeLines = wfLines(callee)
+      const asked = [["(top)", permsAt(calleeLines, 0)]]
+      for (const cid of jobsOf(calleeLines)) {
+        asked.push([cid, permsAt(ciJob(calleeLines.join("\n"), cid).split("\n"), 4)])
+      }
+      for (const [where, perms] of asked) {
+        const short = perms === null ? [] : shortfall(grant, perms)
+        if (short.length > 0) {
+          gaps.push(`${file}:${id} grants ${callee}'s ${where} too little: ${short.join(", ")}`)
+        }
+      }
+    }
+  }
+  // The comparison itself, on the shape that broke 0.45.0, so a parser that
+  // stopped reading job-level blocks cannot pass by finding nothing.
+  const brokeCaller = permsAt(["    permissions:", "      contents: read", "      attestations: read"], 4)
+  const brokeCallee = permsAt(["    permissions:", "      contents: read", "      # why", "      statuses: write"], 4)
+  check(
+    "workflow-permissions: every job calling a local workflow grants what the callee and each of its jobs ask for",
+    callers.length >= 2 &&
+      gaps.length === 0 &&
+      shortfall(brokeCaller, brokeCallee).join() === "statuses: write" &&
+      shortfall(new Map([["*", "write"]]), brokeCallee).length === 0,
+    `callers: ${callers.join(", ")}\n${gaps.join("\n")}`
+  )
+}
+
 if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
   // The train force-pushes release/next on every merge to main, so a run of
   // the commit it replaced tests a release nobody can merge any more: the

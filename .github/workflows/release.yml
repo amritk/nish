@@ -98,12 +98,18 @@ concurrency:
 jobs:
   ci:
     name: ci
-    # What ci.yml asks for at its top: a called workflow gets no more than
-    # this job grants, and without a block of its own it would inherit
-    # `contents: write` and nothing else.
+    # What ci.yml asks for, at its top and on its jobs: a called workflow
+    # gets no more than this job grants, and a job of it asking for more
+    # fails the whole run at startup, before any job runs (0.45.0's first
+    # run did, on ci-gate's `statuses: write`). Without a block of its own
+    # this job would inherit `contents: write` and nothing else.
+    # `statuses: write` is ci-gate's, for the `ci-gate` commit status it
+    # reports on a dispatched run. `node tests/run.js workflow-permissions`
+    # fails when a caller here grants less than its callee asks for.
     permissions:
       contents: read
       attestations: read
+      statuses: write
     uses: ./.github/workflows/ci.yml
 
   # The matrix, as this release's own answer rather than a list. Separate from
