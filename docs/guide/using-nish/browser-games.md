@@ -14,7 +14,7 @@ ball, is
 [`examples/game-starter`](https://github.com/amritk/nish/tree/main/examples/game-starter):
 copy that directory to start your own. The rules for module storage and the
 `wasm32` target are in
-[LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md);
+[LANGUAGE.md](../../reference/language.md);
 [Calling Nish from other languages](interop.md#in-a-browser) covers wasm in a
 browser in general.
 

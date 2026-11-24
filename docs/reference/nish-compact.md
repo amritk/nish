@@ -55,7 +55,7 @@ engine's own and the marker changes nothing a program prints.
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#compact-classes
+Rules: [Compact classes](language/builtins.md#compact-classes)
 
 ## Interfaces
 

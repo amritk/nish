@@ -23,7 +23,7 @@ habits Nish rejects. Claude Code loads a project's skills from
 the same way.
 
 Which packages count as Nish packages is the rule in
-[`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import):
+[`export` and `import`](../../reference/language/declarations.md#export-and-import):
 the ones whose `package.json` offers a file under the `nish` export condition.
 
 ## A skill is linked only when you accept it

@@ -139,7 +139,7 @@ module (NL4015).
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#regions-nishregion
+Rules: [Regions: `nish:region`](language/builtins.md#regions-nishregion)
 
 ## Functions
 

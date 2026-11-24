@@ -7,7 +7,7 @@ bytes instead, so a tree node of an `i32` and two links is 12 bytes rather than
 24 and twice as many fit in the cache. The program reads, writes and prints
 exactly what it does without the marker. The interface comes from the
 built-in module `nish:compact`. The rules are in the reference under
-[Compact classes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#compact-classes).
+[Compact classes](../../reference/language/builtins.md#compact-classes).
 
 ## Marking a class
 

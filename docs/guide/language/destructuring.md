@@ -4,7 +4,7 @@ A `const` or `let` can take a value apart into names: the fields of an object,
 or the elements of an array. The head of a `for...of` can do the same for each
 element it walks. Each name is read straight from the value, which is never
 copied. The normative rules are in the reference's
-[Destructuring declarations](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#destructuring-declarations)
+[Destructuring declarations](../../reference/language/statements.md#destructuring-declarations)
 section.
 
 ## Objects

@@ -6,7 +6,7 @@ exits but not for a long-running one, such as a cache or a server that keeps
 state per connection. A region holds things that live and die together, and
 one `free` gives all of it back. The functions come from the built-in module
 `nish:region`. The rules are in the reference under
-[Regions: `nish:region`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#regions-nishregion).
+[Regions: `nish:region`](../../reference/language/builtins.md#regions-nishregion).
 
 ## Making, using and freeing a region
 
@@ -258,7 +258,7 @@ never made, that is freed already or that belongs to another thread stops the
 program with a message, and so does entering a region that is already entered
 or freeing one that is (or a parent whose child is entered). Freeing twice
 is a stop, never a corruption. In a module
-held to [no panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope),
+held to [no panic](../../reference/language/semantics-decisions.md#the-no-panic-scope),
 as every module of your package is by default, each of these calls is
 refused.
 
