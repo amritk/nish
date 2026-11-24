@@ -169,8 +169,8 @@ if (baseRev !== null) {
 // feed's line (`same`), and neither twin has a cursor path, so they run on the
 // build and its copy only (`noTwin`). feed-cursor-walk opens its transaction
 // and cursors once, outside the timed loop; feed-cursor opens and closes them
-// on every call; feed-cursor-count is feed-cursor-walk with each post's likes
-// counted by `Cursor.countRange`.
+// on every call; feed-cursor-count is feed-cursor-walk with the 20 posts'
+// likes counted in one `Cursor.countRange` over their id span.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },

@@ -20,9 +20,13 @@
 // - feed-cursor-walk: the same walk on one read transaction and four cursors
 //   opened once, before the timed loop, and closed after it, so a call is the
 //   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
-// - feed-cursor-count: feed-cursor-walk with each post's likes counted by
-//   `Cursor.countRange(id, id, out)`, one seek and one walk inside the
-//   adapter, instead of a seek and a `next` per like from Nish.
+// - feed-cursor-count: feed-cursor-walk with the 20 posts' likes counted in
+//   one call, `Cursor.countRange(minId, maxId, out)`: one seek and one walk of
+//   the likes index inside the adapter, instead of a seek and a `next` per
+//   like from Nish. It reads the 20 ids from the posts index first, then each
+//   post's count at `out[id - minId]`. The 20 newest posts are consecutive
+//   ids on this seed; a span wider than COUNT_SPAN falls back to one
+//   `countRange(id, id, out)` per post.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -48,6 +52,8 @@ const USERS: i32 = 50000
 const POSTS: i32 = 500000
 /** The rows a feed answers: POST_SQL's LIMIT. */
 const FEED: i32 = 20
+/** The widest id span feed-cursor-count counts in one call: its buffer's length. */
+const COUNT_SPAN: i32 = 1024
 const POST_SQL: string =
   "SELECT p.id, p.body, p.created_at, u.username, (SELECT count(*) FROM likes l WHERE l.post_id = p.id) FROM posts p JOIN users u ON u.id = p.user_id"
 const INSERT_SQL: string = "INSERT INTO posts (user_id, body) VALUES (?, ?) RETURNING id, created_at"
@@ -109,12 +115,10 @@ class Fold {
 
 /**
  * The 20 newest posts read through the four cursors, each folded as
- * `Fold.post` folds a row of POST_SQL. A post's likes are counted with
- * `Cursor.countRange` into `counts` when it is not empty, else by seeking the
- * likes index and stepping over the post's entries. Answers the rows read, or
- * -1 when a read failed.
+ * `Fold.post` folds a row of POST_SQL. Answers the rows read, or -1 when a
+ * read failed.
  */
-const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, counts: i64[], f: Fold): i32 => {
+const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold): i32 => {
   let rows: i32 = 0
   let ok: boolean = true
   let r = ix.first()
@@ -130,26 +134,81 @@ const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, counts: 
     f.add(toU32(id))
     ok = ok && f.cursorText(post, 2) && f.cursorText(post, 3) && f.cursorText(user, 1)
     let n: i64 = 0
-    if (counts.length > 0) {
-      // One seek and one walk in C, the count left in `counts[0]`.
-      ok = ok && like.countRange(id, id, counts).isOk()
-      n = counts[0]
-    } else {
-      ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
-      if (ok) {
-        let l = like.seek(SEEK_GE)
-        while (l.isOk() && l.value && like.columnI64(0) === id) {
-          n += 1
-          l = like.next()
-        }
-        ok = l.isOk()
+    ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
+    if (ok) {
+      let l = like.seek(SEEK_GE)
+      while (l.isOk() && l.value && like.columnI64(0) === id) {
+        n += 1
+        l = like.next()
       }
+      ok = l.isOk()
     }
     f.add(toU32(n))
     rows += 1
     r = ix.next()
   }
   return ok && r.isOk() ? rows : -1
+}
+
+/**
+ * The 20 newest posts as `walkFeed` reads them, their likes counted in one
+ * `Cursor.countRange` over the posts' [min, max] id span into `counts` (one
+ * call per post when the span is wider than `counts`). `ids` holds the posts'
+ * ids, read from `ix` first. Answers the rows read, or -1 when a read failed.
+ */
+const walkFeedCounted = (
+  ix: Cursor,
+  post: Cursor,
+  user: Cursor,
+  like: Cursor,
+  ids: i64[],
+  counts: i64[],
+  f: Fold
+): i32 => {
+  let rows: i32 = 0
+  let r = ix.first()
+  while (r.isOk() && r.value && rows < FEED) {
+    ids[rows] = ix.rowid()
+    rows += 1
+    r = ix.next()
+  }
+  let ok: boolean = r.isOk()
+  let lo: i64 = 0
+  let hi: i64 = -1
+  for (let i: i32 = 0; i < rows; i += 1) {
+    if (i === 0 || ids[i] < lo) {
+      lo = ids[i]
+    }
+    if (i === 0 || ids[i] > hi) {
+      hi = ids[i]
+    }
+  }
+  // One seek and one walk in C, post id k's count left in `counts[k - lo]`.
+  const one: boolean = rows > 0 && hi - lo < toI64(counts.length)
+  if (ok && one) {
+    ok = like.countRange(lo, hi, counts).isOk()
+  }
+  for (let i: i32 = 0; ok && i < rows; i += 1) {
+    const id: i64 = ids[i]
+    const p = post.seekRowid(id)
+    ok = p.isOk() && p.value
+    if (ok) {
+      const u = user.seekRowid(post.columnI64(1))
+      ok = u.isOk() && u.value
+    }
+    // The fold order is POST_SQL's: id, body, created_at, username, likes.
+    f.add(toU32(id))
+    ok = ok && f.cursorText(post, 2) && f.cursorText(post, 3) && f.cursorText(user, 1)
+    let n: i64 = 0
+    if (one) {
+      n = counts[toI32(id - lo)]
+    } else {
+      ok = ok && like.countRange(id, id, counts).isOk()
+      n = counts[0]
+    }
+    f.add(toU32(n))
+  }
+  return ok ? rows : -1
 }
 
 /**
@@ -167,7 +226,7 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
   const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
   let rows: i32 = -1
   if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
-    rows = walkFeed(recent.value, posts.value, users.value, likes.value, new Array<i64>(0), f)
+    rows = walkFeed(recent.value, posts.value, users.value, likes.value, f)
   }
   if (db.endRead().isErr()) {
     return -1
@@ -276,7 +335,9 @@ export const main = (): number => {
     }
     t1 = monotonicNanos()
   } else if (mode === "feed-cursor-walk" || mode === "feed-cursor-count") {
-    const counts: i64[] = new Array<i64>(mode === "feed-cursor-count" ? 1 : 0)
+    const counted: boolean = mode === "feed-cursor-count"
+    const ids: i64[] = new Array<i64>(FEED)
+    const counts: i64[] = new Array<i64>(COUNT_SPAN)
     if (db.beginRead().isErr()) {
       return 2
     }
@@ -287,7 +348,9 @@ export const main = (): number => {
     if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
       t0 = monotonicNanos()
       for (let i: i32 = 0; i < count; i += 1) {
-        const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, counts, f)
+        const n: i32 = counted
+          ? walkFeedCounted(recent.value, posts.value, users.value, likes.value, ids, counts, f)
+          : walkFeed(recent.value, posts.value, users.value, likes.value, f)
         if (n < 0) {
           failed += 1
         } else {
