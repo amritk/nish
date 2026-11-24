@@ -18894,10 +18894,10 @@ if (dealtHere("runtimeChecks")) {
       const exe = path.join(buildDir, "uring-test")
       const cc = spawnSync(
         "clang",
-        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "-o", exe],
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "runtime/runtime-net.c", "-Iruntime", "-o", exe],
         { cwd: root, encoding: "utf8" }
       )
-      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
+      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
         ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
@@ -18912,6 +18912,11 @@ if (dealtHere("runtimeChecks")) {
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
         ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+        ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
+        ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
+        ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)"],
+        ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
         const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })

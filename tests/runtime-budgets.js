@@ -852,11 +852,26 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * restricted to NOP, and a freed pooled ring's descriptor is overwritten with it by
  * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
  * 8,448). **8,274 bytes** on 2026-11-17 once that `dup3` is tried again on `EINTR`
- * and `EBUSY`. A unit of its own beside runtime-net.c,
+ * and `EBUSY`. **9,412 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64 once a ring
+ * slot's sends coalesce from a per-ring buffer pool (8,448 to 9,472, and to 9,728 by
+ * the NURING-43 fix below; main measured 8,446): `nish_uring_send` 202 to 802, which appends to the slot's unsubmitted last
+ * record, moves its unsent bytes to the front to make room, replaces an overflowed pool
+ * buffer with one exact record, and takes buffers from the pool (`ur_record` and the
+ * replace are inlined into it); `ur_mark` 49 and `ur_send_marked` 86, the deferred
+ * submit (NURING-40); `ur_release` 65, the capped free list (NURING-41); `ur_make_ring`
+ * +78 and `ur_free_ring` +36 for the marked-slot list and the pool's free;
+ * `nish_uring_close` +35, the submit of an unsubmitted head before the close
+ * (NURING-40); and +31 across `ur_submit_queued`, `nish_uring_sleep_ms` and the
+ * `sends` counter. The branch first measured 9,530: the append and the fresh record
+ * had two copies of a record's fill, now one path, and a byte array of marked slots
+ * became the `ST_MARKED` bit of the slot's state. **9,477 bytes** on 2026-11-24 once a
+ * shutdown of a side already queued queues nothing, so repeated shutdowns between writes
+ * cannot each strand a pool buffer (NURING-43; 9,472 to 9,728): `nish_uring_shutdown`
+ * 123 to 188, the two `ST_SHUT` side bits read and set. A unit of its own beside runtime-net.c,
  * so that a build whose probe fails
  * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 8448
+const RUNTIME_URING_TEXT_BUDGET = 9728
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
