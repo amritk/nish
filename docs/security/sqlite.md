@@ -102,9 +102,15 @@ cursor of a connection before that can happen:
   `SQLITE_SELECT`, `SQLITE_READ`, `SQLITE_FUNCTION` and `SQLITE_RECURSIVE`;
 - in the authorizer itself, when an action off that list is authorized
   outside a prepare it classifies (a re-prepare inside `sqlite3_step`);
-- in every cursor call (`cursor_of`), when `sqlite3_get_autocommit` is set or
-  the `main` B-tree's transaction state is `SQLITE_TXN_NONE`: a rollback
-  SQLite made by itself.
+- in the rollback hook (`sqlite3_rollback_hook`) `nishsqlite_open` installs,
+  on every rollback, including one SQLite makes by itself after an
+  `SQLITE_NOMEM`, `SQLITE_IOERR` or `SQLITE_FULL` mid-read.
+
+A cursor call therefore checks only that its handle names a live slot (one
+array index and a generation compare) and locks the mutex the cursor read
+from its connection when it opened. A handle the program carries to another
+thread under `--threads` names no slot there, since the tables are
+thread-local, and a closed connection's cursor handle names a freed slot.
 
 The authorizer never refuses an action; it only watches. A statement it
 cannot classify as a plain read is treated as one that invalidates.
@@ -195,6 +201,14 @@ Tests:
   both directions, and each seek, checked row by row against the `SELECT`
   that answers the same question, with index keys and records on overflow
   pages and `NULL` keys.
+- `tests/run.js` (`sqlite-link`, "a cursor answers SQLITE_MISUSE after SQLite
+  rolls its read back on its own, on another thread, and after its connection
+  closes"): a C helper whose allocator refuses a large block while a
+  `group_concat` steps, so SQLite rolls the read back by itself; the cursor
+  then answers `SQLITE_MISUSE` from every call. The same handle on another
+  thread under `NISH_THREADS`, and a closed connection's handle once a later
+  connection opens a cursor, answer it too. Without the rollback hook the
+  helper exits 5.
 - `tests/run.js` (`sqlite-link`): the adapter built with `-DSQLITE_DEBUG` and
   `THREADSAFE=1` under a C helper that calls every exported cursor and key
   function, so SQLite's assertions check that each holds the connection's
@@ -213,8 +227,15 @@ for an oversized record, and the `SQLITE_NOMEM` paths, each of which needs a
 corrupt file or a failing allocator the suite has no harness for; the
 invalidation by a re-prepare whose statement now authorizes an action off the
 allowlist, which needs another connection to change the schema between a
-prepare and its step; and the invalidation `cursor_of` makes when SQLite has
-rolled the transaction back by itself, which needs an I/O error mid-read.
+prepare and its step.
+
+Open: under `-DSQLITE_DEBUG`, a rollback SQLite makes by itself while a
+cursor is open trips SQLite's own assertion in `unlockBtreeIfUnused`:
+SQLite calls the hook only after it has rolled the B-tree back, and finds the
+adapter's cursor still open there. A release build has no such assertion,
+and the hook frees the cursor before any later call reads it;
+the helper above is built without `SQLITE_DEBUG` for that reason. The suite's
+`-DSQLITE_DEBUG` runs do not reach this path.
 
 ## Findings
 

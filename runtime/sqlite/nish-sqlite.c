@@ -523,10 +523,10 @@ int32_t nishsqlite_column_into(int32_t h, int32_t c, uint8_t *buf, uint64_t n, i
  * program closes it, `nishsqlite_end_read`, or anything that could change what
  * it reads: a statement that is not plain stepping, `nishsqlite_exec`, the
  * authorizer seeing an action off its allowlist, or SQLite rolling the
- * transaction back on its own (`nishsqlite_rolled_back`). Invalidating frees the cursor and its slot, so its
- * handle answers SQLITE_MISUSE from then on. The moves and reads allocate
- * nothing once the first row has been read: the decoded row and the copy
- * buffer are the cursor's and are reused. */
+ * transaction back on its own (`nishsqlite_rolled_back`). Invalidating frees
+ * the cursor and its slot, so its handle answers SQLITE_MISUSE from then on.
+ * The moves and reads allocate nothing once the first row has been read: the
+ * decoded row and the copy buffer are the cursor's and are reused. */
 
 #define NISH_SQLITE_SEEK_GE 1
 #define NISH_SQLITE_SEEK_GT 2
