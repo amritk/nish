@@ -5,7 +5,7 @@ an array, return it from a function, pass it on, call it later and compare
 two of them. Such a value is a **function reference**. It names a function
 you declared at the top level of a module and nothing more, so it carries no
 captured variables. The normative rules are in the reference's
-[Function references](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#function-references)
+[Function references](../../reference/language/declarations.md#function-references)
 section.
 
 ## Keeping a function in a field

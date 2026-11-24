@@ -16,7 +16,7 @@ of it.
 | what went wrong | [`SqliteError`](#errors) |
 
 The reference is
-[SQLite: `nish/sqlite`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#sqlite-nishsqlite).
+[SQLite: `nish/sqlite`](../../reference/language/declarations.md#sqlite-nishsqlite).
 
 ## Opening a database
 
@@ -60,6 +60,45 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+### A database only this program opens
+
+When no other process reads the file while the program has it open, SQLite's
+`unix-excl` VFS skips work the default one does for them. It locks the file
+once, at the first statement, and holds the lock until the last connection
+to it in this program closes.
+A WAL database then keeps its index in memory, so there is no `-shm` file
+beside it. Name the VFS in a `file:` URI and add `OPEN_URI`:
+
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { OPEN_CREATE, OPEN_READWRITE, OPEN_URI, openDatabase } from "nish/sqlite";
+
+export const main = (): i32 => {
+  const db = openDatabase("file:app.db?vfs=unix-excl", OPEN_READWRITE | OPEN_CREATE | OPEN_URI).expect("open");
+  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL").expect("pragmas");
+  db.close().expect("close");
+  return 0;
+};
+```
+
+Three things change:
+
+- **Another process cannot use the file.** While it is open, any other process
+  that reads it gets `SQLITE_BUSY`. That includes the `sqlite3` shell and a
+  backup tool.
+- **The log is checkpointed from inside the program.** Two things can do it:
+  the connection's automatic checkpoint, or a second connection on the same
+  thread that runs `PRAGMA wal_checkpoint`. A `nish:threads` task cannot open a
+  connection.
+- **It does not work under `--profile wasi`.** The open succeeds, then the
+  first statement that locks answers `SQLITE_IOERR_LOCK`.
+
+It saves the lock calls of each short transaction. That is about two system
+calls per read and six per single-statement write, and nothing inside an
+explicit transaction. The figures and the reasons it is not the default are in
+[the VFS decision](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md).
 
 ## Running SQL: `exec`
 
@@ -107,7 +146,7 @@ call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
 `openDatabase` that holds a NUL byte is a check the module keeps at run time,
 one reason a call to it needs `--allow-panics` for now; there it stops the
 program with the
-[`ffi-nul` panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) rather than cutting the SQL
+[`ffi-nul` panic](../../reference/language/semantics-decisions.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 
 <!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
@@ -360,7 +399,8 @@ module's own checks.
 
 - **A connection belongs to the thread that opened it.** Its statements do too:
   the handles live in tables kept per thread, so a handle passed to another
-  thread names nothing there. Open one connection per thread that needs the
+  thread is read against that thread's table: it names nothing there, or that
+  thread's own object with the same handle value. Open one connection per thread that needs the
   database, and close it before the thread ends: a thread's open connections
   are not closed when it exits, and stay allocated.
 - **It uses `ffi`.** The module calls SQLite's C code, so `--capabilities`

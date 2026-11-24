@@ -12061,6 +12061,117 @@ int main(void) {
       )
     }
 
+    // A cursor call checks its handle alone, so every route that ends the
+    // read must free the cursor first. Two routes no Nish program can provoke
+    // on demand: SQLite rolling a read back on its own (an allocation failing
+    // inside a statement, as NOMEM, IOERR or FULL do), which only the
+    // connection's rollback hook sees; and a handle carried to another thread,
+    // whose cursor table is its own under --threads (-DNISH_THREADS). A helper with an allocator that refuses
+    // large blocks while one statement runs exits 0 only if the cursor then
+    // answers SQLITE_MISUSE (21, negated where a call answers a row) to every
+    // call, a thread given the handle gets
+    // SQLITE_MISUSE, and a handle of a closed connection's cursor names none
+    // of a later connection's. Built without SQLITE_DEBUG: SQLite's own
+    // assert in unlockBtreeIfUnused fires on an automatic rollback with a
+    // cursor open (docs/security/sqlite.md, open findings).
+    {
+      const helper = path.join(sqDir, "rolled-back.c")
+      const exe = path.join(sqDir, "rolled-back")
+      fs.writeFileSync(
+        helper,
+        `#include <pthread.h>
+#include <stdint.h>
+#include "sqlite3.h"
+int32_t nishsqlite_open(const char *, int32_t);
+int32_t nishsqlite_exec(int32_t, const char *);
+int32_t nishsqlite_close(int32_t);
+int32_t nishsqlite_begin_read(int32_t);
+int32_t nishsqlite_end_read(int32_t);
+int32_t nishsqlite_prepare(int32_t, const char *);
+int32_t nishsqlite_step(int32_t);
+int32_t nishsqlite_finalize(int32_t);
+int32_t nishsqlite_cursor_open(int32_t, const char *, const char *);
+int32_t nishsqlite_cursor_first(int32_t);
+int32_t nishsqlite_cursor_next(int32_t);
+int32_t nishsqlite_cursor_close(int32_t);
+int64_t nishsqlite_cursor_column_i64(int32_t, int32_t);
+int32_t nishsqlite_cursor_column_type(int32_t, int32_t);
+int64_t nishsqlite_cursor_rowid(int32_t);
+int32_t nishsqlite_key_i64(int32_t, int64_t);
+static sqlite3_mem_methods real;
+static int refusing;
+static void *m_malloc(int n) { return refusing && n > 4096 ? 0 : real.xMalloc(n); }
+static void *m_realloc(void *p, int n) { return refusing && n > 4096 ? 0 : real.xRealloc(p, n); }
+static void *other_thread(void *h) {
+  int32_t c = *(int32_t *)h;
+  *(int32_t *)h = nishsqlite_cursor_next(c) == -21 && nishsqlite_cursor_close(c) == 21 ? 0 : 1;
+  return 0;
+}
+static int32_t opened(int32_t db) {
+  if (db <= 0 || nishsqlite_exec(db, "CREATE TABLE t (a INTEGER, b TEXT);"
+      " WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 2000)"
+      " INSERT INTO t SELECT x, printf('%050d', x) FROM c") != 0 || nishsqlite_begin_read(db) != 0) return 0;
+  int32_t c = nishsqlite_cursor_open(db, "t", "a,b");
+  return c > 0 && nishsqlite_cursor_first(c) == 1 ? c : 0;
+}
+int main(void) {
+  sqlite3_config(SQLITE_CONFIG_GETMALLOC, &real);
+  sqlite3_mem_methods m = real;
+  m.xMalloc = m_malloc;
+  m.xRealloc = m_realloc;
+  if (sqlite3_config(SQLITE_CONFIG_MALLOC, &m) != 0) return 2;
+  int32_t db = nishsqlite_open(":memory:", 6);
+  int32_t c = opened(db);
+  if (c == 0) return 3;
+  int32_t s = nishsqlite_prepare(db, "SELECT length(group_concat(b)) FROM t");
+  refusing = 1;
+  int32_t stepped = nishsqlite_step(s);
+  refusing = 0;
+  if (stepped != 7) return 4;
+  if (nishsqlite_cursor_next(c) != -21 || nishsqlite_cursor_rowid(c) != 0 || nishsqlite_cursor_column_i64(c, 0) != 0 ||
+      nishsqlite_cursor_column_type(c, 0) != -21 || nishsqlite_key_i64(c, 1) != 21 || nishsqlite_cursor_close(c) != 21) return 5;
+  if (nishsqlite_finalize(s) != 0 || nishsqlite_close(db) != 0) return 6;
+  db = nishsqlite_open(":memory:", 6);
+  c = opened(db);
+  if (c == 0) return 7;
+  int32_t handed = c;
+  pthread_t t;
+  if (pthread_create(&t, 0, other_thread, &handed) != 0 || pthread_join(t, 0) != 0 || handed != 0) return 8;
+  if (nishsqlite_cursor_next(c) != 1 || nishsqlite_close(db) != 0) return 9;
+  int32_t later = nishsqlite_open(":memory:", 6);
+  int32_t d = opened(later);
+  if (d == 0 || d == c || nishsqlite_cursor_next(c) != -21 || nishsqlite_cursor_next(d) != 1) return 10;
+  if (nishsqlite_cursor_close(d) != 0 || nishsqlite_end_read(later) != 0) return 11;
+  return nishsqlite_close(later) == 0 ? 0 : 12;
+}
+`
+      )
+      const built = spawnSync(
+        "clang",
+        [
+          "-O0",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_THREADSAFE=1",
+          "-DNISH_THREADS=1",
+          path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+          helper,
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: a cursor answers SQLITE_MISUSE after SQLite rolls its read back on its own, on another thread, and after its connection closes",
+        ran !== null && ran.status === 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stderr}` : "")
+      )
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
@@ -18783,10 +18894,10 @@ if (dealtHere("runtimeChecks")) {
       const exe = path.join(buildDir, "uring-test")
       const cc = spawnSync(
         "clang",
-        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "-o", exe],
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "runtime/runtime-net.c", "-Iruntime", "-o", exe],
         { cwd: root, encoding: "utf8" }
       )
-      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
+      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
         ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
@@ -18801,6 +18912,11 @@ if (dealtHere("runtimeChecks")) {
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
         ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+        ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
+        ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
+        ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)"],
+        ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
         const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })
@@ -36971,6 +37087,36 @@ for (const name of [
     const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
     check(
       `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
+    )
+  }
+}
+// `std_sqlite_vfs_wasi` answers differently on wasi, which is its point
+// (docs/sqlite-vfs.md): `?vfs=unix-excl` opens there, but wasi-libc has no
+// record locks, so WAL and the first write answer SQLITE_IOERR_LOCK (3850).
+// Its native run is held to expected.out by the link section, this one to
+// expected.wasi.out.
+if (!only || "std_sqlite_vfs_wasi".includes(only) || "wasi".includes(only)) {
+  const name = "std_sqlite_vfs_wasi"
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, `wasi_${name}`)
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnNish(
+      [path.join(linkDir, name, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.wasi.out"), "utf8")
+    check(
+      `link/${name}: on \`--profile wasi\` \`?vfs=unix-excl\` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )

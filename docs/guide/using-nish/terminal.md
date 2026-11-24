@@ -245,14 +245,14 @@ functions:
 - `setTerminalRestore` sets the bytes the program leaves the terminal with.
 
 The rules are in the reference, under
-[`nish:term`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishterm-terminal-input). It reads the
+[`nish:term`](../../reference/language/builtins.md#nishterm-terminal-input). It reads the
 terminal; drawing on it is the standard library's
 [`nish/term`](standard-library.md#nishterm), whose `KeyDecoder` turns the
 bytes `readStdin` returns into key events.
 
 Every function is also a global, as every `nish:` export is, but importing
 them says where they come from. A program that calls any of them carries the
-`tty` [capability](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#capabilities), not `net`; `nish run
+`tty` [capability](../../reference/language/builtins.md#capabilities), not `net`; `nish run
 --capabilities` shows it.
 
 ## Errors are numbers

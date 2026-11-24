@@ -192,12 +192,12 @@ children with `kill` when `readSignal` answers.
 
 </scalar-detail>
 
-The rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses,
-https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-environment,
-https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-clock,
-https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals,
-https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory
-and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity
+The rules: [Directories and subprocesses](language/builtins.md#directories-and-subprocesses),
+[The environment](language/builtins.md#the-environment),
+[The clock](language/builtins.md#the-clock),
+[The host: the wall clock, entropy, file times and signals](language/builtins.md#the-host-the-wall-clock-entropy-file-times-and-signals),
+[Children and the machine: `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`](language/builtins.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory)
+and [Scheduling: `setNice`, `setIdlePriority`, `setCpuAffinity`](language/builtins.md#scheduling-setnice-setidlepriority-setcpuaffinity)
 
 ## Functions
 
