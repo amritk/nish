@@ -126,6 +126,8 @@ declare function nishsqlite_key_i64(h: i32, v: i64): i32
 declare function nishsqlite_key_text(h: i32, text: string): i32
 declare function nishsqlite_key_bytes(h: i32, buf: readonly u8[], n: u64, off: i32, len: i32): i32
 declare function nishsqlite_cursor_seek(h: i32, op: i32): i32
+declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
+declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
 declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
 declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
 declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
@@ -852,6 +854,40 @@ export class Cursor {
    */
   seek(op: i32): Result<boolean, i32> {
     return moved(nishsqlite_cursor_seek(this.handle, op))
+  }
+
+  /**
+   * Counts an index's entries whose first key column is `k`, for each `k`
+   * from `lo` to `hi`, into `out[k - lo]`, in one seek and one walk of the
+   * index: what `SELECT count(*) ... WHERE col = k` answers for each `k`, for
+   * an index whose first column has INTEGER or NUMERIC affinity. It clears
+   * the seek key and leaves the cursor on no row. `out` past the span, and
+   * all of it on an `Err`, is left as it was.
+   *
+   * @param lo The first key counted.
+   * @param hi The last key counted, at least `lo`.
+   * @param out Where the counts go; at least `hi - lo + 1` long.
+   * @returns The number of entries counted, or `Err` with `SQLITE_MISUSE` for
+   *   a table cursor, `SQLITE_MISMATCH` for an index whose first column has
+   *   another affinity, `SQLITE_RANGE` when `lo > hi` or the span is longer
+   *   than `out`, or the code SQLite fails with, as for `first`.
+   */
+  countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32> {
+    const n: i32 = nishsqlite_cursor_count_range(this.handle, lo, hi, toU64(out.length))
+    if (n < 0) {
+      return Err(-n)
+    }
+    for (let i = 0; i < out.length; i++) {
+      const c: i64 = nishsqlite_cursor_count_at(this.handle, toU64(i))
+      if (c < 0) {
+        break
+      }
+      // The call above ends what the loop proved of `i`.
+      if (i < out.length) {
+        out[i] = c
+      }
+    }
+    return Ok(n)
   }
 
   /**
