@@ -371,9 +371,6 @@ const TERM_STYLE_UNKNOWN: i32 = -2
  */
 const TERM_CELL_BYTES: i32 = 64
 
-/** The most cells a side of a `Screen` has; a terminal reports up to 65,535. */
-const TERM_MAX_SIDE: i32 = 4096
-
 /** The most cells a `Screen` has, so its `flush` buffer stays at 64 MiB. */
 const TERM_MAX_CELLS: i32 = 1048576
 
@@ -395,7 +392,7 @@ const TERM_REPLACEMENT: i32 = 65533
 /** Whether a string here is UTF-8 bytes (natively) rather than UTF-16 units (under Node). */
 const termNativeStrings = (): boolean => toI32("▀".length) === 3
 
-/** A side of a `Screen`: `v` held to 0–4,096 (`TERM_MAX_SIDE`). */
+/** A side of a `Screen`: `v` held to 0–4,096 cells; a terminal reports up to 65,535. */
 const termSide = (v: i32): integer<0, 4096> => {
   if (v <= 0) {
     return 0
@@ -727,7 +724,13 @@ const termCodePoints = (s: string): i32[] => {
 const termBytesText = (bytes: u8[], n: i32): string => {
   // Every caller passes at most `bytes.length`: a whole buffer, or a screen's `outLen`, which `put` keeps within `out`.
   const held: i32 = toI32(bytes.length)
-  const end: i32 = n < 0 ? 0 : n < held ? n : held
+  let end: i32 = n
+  if (end > held) {
+    end = held
+  }
+  if (end < 0) {
+    end = 0
+  }
   if (termNativeStrings()) {
     return String.fromBytes(bytes, 0, end)
   }
@@ -887,7 +890,13 @@ export class Screen {
     const bgs: i32[] = this.bgs
     const kept: i32[] = this.attrs
     const i: i32 = termGridAt(x, y, this.width, this.height, termShortest(glyphs, fgs, bgs, kept))
-    if (i >= 0 && i < toI32(glyphs.length) && i < toI32(fgs.length) && i < toI32(bgs.length) && i < toI32(kept.length)) {
+    if (
+      i >= 0 &&
+      i < toI32(glyphs.length) &&
+      i < toI32(fgs.length) &&
+      i < toI32(bgs.length) &&
+      i < toI32(kept.length)
+    ) {
       glyphs[i] = glyph
       fgs[i] = fg
       bgs[i] = bg
@@ -1341,8 +1350,18 @@ export class Canvas {
     // The far edges in i64, where `x + w` cannot wrap, then held to 0 and the canvas's sides.
     const r: i64 = toI64(x) + toI64(w)
     const b: i64 = toI64(y) + toI64(h)
-    const right: i32 = r <= toI64(0) ? 0 : r > toI64(this.width) ? this.width : toI32(r)
-    const bottom: i32 = b <= toI64(0) ? 0 : b > toI64(this.height) ? this.height : toI32(b)
+    let right: i32 = 0
+    if (r > toI64(this.width)) {
+      right = this.width
+    } else if (r > toI64(0)) {
+      right = toI32(r)
+    }
+    let bottom: i32 = 0
+    if (b > toI64(this.height)) {
+      bottom = this.height
+    } else if (b > toI64(0)) {
+      bottom = toI32(b)
+    }
     const pixels: i32[] = this.pixels
     for (let py: i32 = top; py < bottom; py++) {
       for (let px: i32 = left; px < right; px++) {
@@ -2160,7 +2179,13 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
         let j: i32 = second + 1
         let run: i32 = 0
         // 33 is `TERM_MAX_CSI_PARAMS + 1`, spelled out so the bounds walk reads it.
-        while (run < 33 && j >= 0 && j < toI32(bytes.length) && toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64) {
+        while (
+          run < 33 &&
+          j >= 0 &&
+          j < toI32(bytes.length) &&
+          toI32(bytes[j]) >= 32 &&
+          toI32(bytes[j]) < 64
+        ) {
           j = j + 1
           run = run + 1
         }
