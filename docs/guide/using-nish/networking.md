@@ -370,6 +370,57 @@ export const main = (): i32 => {
 };
 ```
 
+### Taking events in batches: `pollWaitBatch`
+
+A busy ring server wakes once per event if its loop waits with `pollWait`:
+each wait answers the one connection that is ready, the program serves it,
+and waits again. `pollWaitBatch(loop, ready, timeoutMs, minEvents,
+maxWaitMs)` waits as `pollWait` does for the first event, up to
+`timeoutMs`, and then up to `maxWaitMs` more for `minEvents` pairs, so one
+wake serves several connections:
+
+<!-- nish:ok -->
+```ts
+import { NET_LISTEN_RING, netClose, pollAdd, pollCreate, pollWaitBatch, tcpListenFlags } from "nish:net";
+
+export const main = (): i32 => {
+  const listener = tcpListenFlags("127.0.0.1", 0, 1024, NET_LISTEN_RING);
+  if (listener < 0) {
+    return 1;
+  }
+  const loop = pollCreate();
+  pollAdd(loop, listener, 1, -1);
+  const ready: i32[] = new Array<i32>(64);
+  // Up to 100 ms for a first event, then up to 2 ms more for 16 of them.
+  const n = pollWaitBatch(loop, ready, 100, 16, 2);
+  console.log(n === 0 ? "idle" : `${n} ready`);
+  netClose(listener);
+  netClose(loop);
+  return 0;
+};
+```
+
+- An idle loop is not woken every `maxWaitMs`: with nothing ready the call
+  sleeps to `timeoutMs` and answers `0`, as `pollWait` does.
+- `ready`'s length caps the batch. A `ready` of 8 answers at most 4 pairs
+  whatever `minEvents` asks for.
+- `maxWaitMs` is what the batch costs in latency. The second wait is on the
+  ring alone, so any other descriptor in the loop, `signalFd()` included,
+  may be reported up to `maxWaitMs` late. On a loop whose only other
+  descriptor is `signalFd()` a signal ends the batch at once on Linux 5.11
+  or later, unless the ring is `--sandbox` restricted, the listener has
+  grown a second ring, or `signalFd()` was closed; then it too waits up to
+  `maxWaitMs`.
+- With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
+  on macOS, it is `pollWait`.
+
+A loop that holds nothing but one ring listener's connections, and at most
+`signalFd()`, waits on the ring itself on Linux 5.11 and later, with either
+call, while the listener has not grown a second ring. With `signalFd()` in
+the loop it also needs a ring `--sandbox` does not restrict and a
+`signalFd()` the program has not closed. Otherwise the call waits as before;
+nothing about the answers changes, only the cost of the wait.
+
 Rings are off by default. What one ring process costs against five processes
 on descriptors, with an SQLite lookup per request, is measured in
 [the benchmarks](../../BENCHMARKS.md#io_uring-under-the-handler-wp63-s4).

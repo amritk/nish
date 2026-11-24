@@ -214,6 +214,11 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * The file measures **5,761 bytes** on 2026-11-12, same toolchain: 5,791 after the
  * exec grant's identity check (#1447), then 30 given back when a spawn under an exec
  * allowlist was handed whole to `runtime-sandbox.c`. The ceiling stands, leaving 127.
+ *
+ * **5,782 bytes** on 2026-11-24, same toolchain (`.text` 5,750 plus `.text.unlikely.`
+ * 32): `nish_file_close` tells `runtime-host.c` when the descriptor it closes is the
+ * signal pipe (a weak call to `nish_signal_fd_closing`, so that this file still links
+ * beside only `runtime.c` and `runtime-text.c`), +21. The ceiling stands, leaving 106.
  */
 const RUNTIME_OS_TEXT_BUDGET = 5888
 /**
@@ -518,8 +523,15 @@ const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
  * and a thread already running when `signalFd()` is called keeps its own mask, so the
  * cheaper form ended the process when the signal landed there (`test_host_signal_threads`
  * in tests/runtime-test.c).
+ *
+ * **825 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64 (`.text` 768 plus
+ * `.text.unlikely.` 57), 764 before, once WP63's batch wait asks whether the signal
+ * descriptor exists (`nish_signal_fd_made`, which answers -1 once it is closed) and a
+ * close of that descriptor tells this file so (`nish_signal_fd_closing`), +61 between
+ * them, so that a loop holding only ring slots and that descriptor can wait on its ring
+ * directly (the ceiling stands at 1,024, leaving 199).
  */
-const RUNTIME_HOST_TEXT_BUDGET = 768
+const RUNTIME_HOST_TEXT_BUDGET = 1024
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
  * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
@@ -580,8 +592,16 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * `nr_send`'s refusal after a write shut (+11), and `nish_net_mss`'s explicit `-1` on a
  * slot (+16), NURING-39. It stays here for the reason above. The budget is the next
  * 256-byte boundary, leaving 74.
+ * **12,593 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 11,190 before, once
+ * `pollWaitBatch` and the direct ring wait landed (11,264 to 12,800):
+ * `nish_poll_wait_batch` and its batch loop, which waits on the one live ring set for
+ * `minEvents` completions or `maxWaitMs`, and the check that sends a loop holding only
+ * ring slots and at most the signal descriptor to its ring rather than through the
+ * eventfd and epoll (NURING-45 on), with the batch's check that its loop holds a ring
+ * source (NURING-47) and the note of a closed signal descriptor (NURING-48). It stays
+ * here for the reason above.
  */
-const NET_TEXT_BUDGET = 11264
+const NET_TEXT_BUDGET = 12800
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -867,11 +887,16 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * became the `ST_MARKED` bit of the slot's state. **9,477 bytes** on 2026-11-24 once a
  * shutdown of a side already queued queues nothing, so repeated shutdowns between writes
  * cannot each strand a pool buffer (NURING-43; 9,472 to 9,728): `nish_uring_shutdown`
- * 123 to 188, the two `ST_SHUT` side bits read and set. A unit of its own beside runtime-net.c,
- * so that a build whose probe fails
- * runs the epoll path alone.
+ * 123 to 188, the two `ST_SHUT` side bits read and set. **9,936 bytes** on 2026-11-24
+ * with clang 18.1.3 on linux-x64, measured on the merge of that pool with the direct
+ * ring wait, which measured 8,880 alone (8,446 before): `nish_uring_wait_direct`, the
+ * `IORING_ENTER_EXT_ARG` enter with its timeout and the `IORING_FEAT_EXT_ARG` probe, the
+ * `POLL_ADD` that watches the signal descriptor from the ring, and the write of the
+ * marked slots' sends before the enter (+20), so a coalesced send goes out in the wait's
+ * own enter. The budget is the next 256-byte boundary, leaving 304. A unit of its own beside runtime-net.c, so that a
+ * build whose probe fails runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 9728
+const RUNTIME_URING_TEXT_BUDGET = 10240
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
