@@ -45,8 +45,8 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/9)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/9` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for `bench/crc32.mjs --check` and `bench/adler32.mjs --check` |
-| `examples` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | beside the shards, with the compiler from their cache key (linked here on a miss, saved only by shard 1): `scripts/smoke.sh` over every example with a `main`, `docs/cookbook/regen.sh --check`, and the size report in the job summary. They ran after the suite in shard 1 until #1797, about 80 s on the critical path of every run. Not scoped: it runs on every event |
+| `test (ubuntu-latest, shard <i>/9)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/9` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for `bench/crc32.mjs --check` and `bench/adler32.mjs --check`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
+| `examples` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | beside the shards, with the compiler from their cache key (linked here on a miss, saved only by shard 1): `scripts/smoke.sh` over every example with a `main`, `docs/cookbook/regen.sh --check`, and the size report in the job summary. They ran after the suite in shard 1 until #1797, about 80 s on the critical path of every run. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
@@ -102,9 +102,10 @@ no `|| true` or `continue-on-error` (#1724).
 
 ### Scoped lanes
 
-A pull request that touches only the docs used to pay for every side job:
-about 42 of a run's ~119 runner-minutes go to seven jobs that read only the
-compiler and some test trees. Those jobs are now **lanes**. The `scope` job runs
+A pull request that touches only the docs used to pay for every job: the nine
+`test` shards alone are about 77 runner-minutes, and seven side jobs that read
+only the compiler and some test trees about 42 more. Those jobs, the shards and
+`examples` with them, are now **lanes**. The `scope` job runs
 `scripts/ci-scope.mjs`, which reads the pull request's changed files and labels
 from the API and writes `<lane>=true|false` and a one-line `why=`: the reason
 every lane runs (a `ci:full` label, a deleted file, a path that changes what CI
@@ -119,6 +120,8 @@ seconds, whatever runner its rows would otherwise take.
 
 | Lane | Jobs | Runs when a changed path is under |
 | --- | --- | --- |
+| `test` | `test` (all nine shards) | the compiler, any file under `tests/`, `bench/`, `examples/`, `CHANGELOG.md`, `changelog/`, `contracts/`, `test/spec/`, `.vector-version`, `.refcache/`, and the prose the suite opens (`SUITE_PROSE` in `scripts/ci-scope.mjs`: `docs/guide/`, `docs/cookbook/`, `docs/security/`, `docs/reference/`, `docs/site/`, `docs/AI.md`, `docs/LANGUAGE.md`, `docs/BENCHMARKS.md` and the other pages it names, `web/`, `skills/`, `.claude/hooks/`, `README.md`, `llms.txt`, `scalar.config.json`, ...) |
+| `examples` | `examples` | the compiler, `examples/`, `tests/self/` and `tests/allow-panics.js` (the compiler-cache action), `tests/smoke/`, `tests/runtime-budgets.js`, `docs/cookbook/`, `docs/IR_COOKBOOK.md` |
 | `nish_cmp` | `nish-cmp` | the compiler (`src/`, `std/`, `runtime/`, `scripts/`, `bin/`, `nish-capabilities.lock.json`) or the corpus (`tests/cases`, `examples`, `docs/cookbook`, `bench`, `tests/parser`, `tests/differential`, `tests/link`, `tests/self`, `tests/nish-cmp.js`, `tests/pool.js`, `tests/driver.c`, `CHANGELOG.md`, `changelog/`) |
 | `elision` | `nish-cmp-elision` | the same as `nish_cmp` |
 | `bootstrap` | `bootstrap` | the compiler, `tests/nish/`, `tests/self/`, and `tests/cases/` and `tests/link/` (the built `nish-cli` compiles fixtures from both) |
@@ -131,9 +134,9 @@ lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
 `.claude/`, the top-level prose files and the other lanes' test trees), and
 the read set wins over the allowlist. A path on neither list turns every lane
 on. Each list was read from the code of every command the lane runs, composite
-actions included (`node tests/run.js ci-scope` pins a file per command, 21
-commands across the seven lanes, the compiler-cache action counted once for
-each of the five lanes that run it). That check proves only that a change to a
+actions included (`node tests/run.js ci-scope` pins a file per command, 27
+commands across the nine lanes, the compiler-cache action counted once for
+each of the seven lanes that run it). That check proves only that a change to a
 listed file turns its lane on: it cannot find a read nobody listed. Some were also traced with `strace -f` on
 x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
 `soundness.js`, the `simd`, `float-corpus`, `sha256_hw` and five kernel
@@ -162,7 +165,28 @@ macOS. Every lane runs on:
 - a change to `.github/**`, any `package.json` or `package-lock.json`, or
   `scripts/ci-scope.mjs` itself.
 
-The `test` shards and `lint` are not lanes and do not wait for `scope`.
+The `test` lane is the suite, so its read set is everything but the prose
+the suite never opens: the roadmap, the plans in `.claude/plans/`, `CLAUDE.md`,
+`AGENTS.md`, `rfcs/`, `specs/` and most work-package notes. `SUITE_PROSE`
+carves the rest back out of the allowlist, from two sources:
+
+- **every prose path the code names.** `node tests/run.js ci-scope` scans every
+  file under `tests/`, `scripts/`, `bench/` and `examples/` for a string that
+  is such a path and nothing else (`"docs/AI.md"`), a `path.join(root, "docs",
+  ...)` and a relative import into those trees, and fails when one would not
+  turn the `test` lane on; a named directory stands for every file under it.
+  A path inside a sentence (a failure message's "see docs/wp7-runtime.md") is
+  not a read and is not counted. `notOurs` in that check lists the one name
+  that is not the repository's (`scripts/link-skills.mjs` joins `.claude` to
+  the project it is handed), and fails if it stops being named. A path the
+  code builds at run time is not seen by the scan;
+- **every prose file a whole run opened.** TRACE_PARAGRAPH
+
+The suite also reads all of `tests/` with `tests/ci-scope/` (its ci-scope
+section replays the backtest data there), so a change there runs it while the
+side lanes skip it. Neither source sees a check that only `stat`s a prose path
+it does not name. `lint` is not a lane and does not wait for `scope`; the lanes
+wait a few seconds for it before their first step.
 
 **`ci-gate`** needs every other job, runs `if: always()`, and fails unless each
 one succeeded or was skipped by its own `if:` on this run (`runtime-net`, and

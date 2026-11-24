@@ -37,7 +37,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
  * for some also traced with `strace -f` on x86_64 Linux (docs/wp10-ci.md
  * "Scoped lanes" lists which). A lane's own `reads` carve paths back out.
  */
-const INERT = [
+export const INERT = [
   "docs/**",
   "web/**",
   "skills/**",
@@ -95,13 +95,105 @@ const RUN_JS_UNREAD = ["tests/ci-scope/**"]
 const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nish-capabilities.lock.json"]
 
 /**
+ * The paths on the allowlist above that `npm test`, the `test` job's suite,
+ * opens: the guide pages and cookbook programs it compiles, the records,
+ * notes and site it checks, the web host and skills it runs, and what
+ * `npm pack` packs. Every prose path named by the code the suite can run is
+ * here (`node tests/run.js ci-scope` fails on one that is not), and so is
+ * every one a traced whole run opened (docs/wp10-ci.md, "Scoped lanes").
+ */
+const SUITE_PROSE = [
+  "docs/AI.md",
+  "docs/BENCHMARKS.md",
+  "docs/INSTALL.md",
+  "docs/IR_COOKBOOK.md",
+  "docs/LANGUAGE.md",
+  "docs/MASTER_PLAN.md",
+  "docs/crypto-performance.md",
+  "docs/cookbook/**",
+  "docs/guide/**",
+  "docs/reference/**",
+  "docs/security/**",
+  "docs/site/**",
+  "docs/wp7-runtime.md",
+  "docs/wp9-optimisation.md",
+  "docs/wp10-ci.md",
+  "docs/wp12-release.md",
+  "docs/wp13-differential.md",
+  "docs/wp15-performance.md",
+  "docs/wp19-stage0-retirement.md",
+  "docs/wp32-map.md",
+  "docs/wp38-simd.md",
+  "docs/wp48-layout-survey.txt",
+  "docs/wp49-async-server.md",
+  "docs/wp50-wasm-host.md",
+  "docs/wp64-temporal.md",
+  "web/**",
+  "skills/**",
+  ".claude/hooks/**",
+  "README.md",
+  "THIRD_PARTY_NOTICES.md",
+  "llms.txt",
+  "scalar.config.json",
+]
+
+/**
  * The lanes. `jobs` are ci.yml job ids and `names` their `name:` templates,
- * verbatim (tests/run.js pins both against ci.yml); `minutes` is the runner time the
- * lane's rows took on run 44273081341 (the saving a skip buys); `reads` is
+ * verbatim (tests/run.js pins both against ci.yml), and `formerNames` (optional)
+ * templates the jobs had before, which the backtest's older runs carry;
+ * `minutes` is the runner time the lane's rows took on run 44273081341 (the
+ * saving a skip buys; `examples`, which that run did not have, on run
+ * 45467470771); `reads` is
  * the lane's read set, which wins over `inert`; `unread` (optional) is what the
  * lane provably skips inside `reads`, and wins over both.
  */
 export const LANES = [
+  {
+    name: "test",
+    jobs: ["test"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    names: ["test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)"],
+    // The name before the ninth shard, for the backtest's older runs.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    formerNames: ["test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)"],
+    minutes: 76.9,
+    // npm test: tests/run.js and everything it spawns, over the whole tree
+    // but the prose its sections never open.
+    reads: [
+      ...COMPILER,
+      ...RUN_JS,
+      "bench/**",
+      "examples/**",
+      "CHANGELOG.md",
+      "changelog/**",
+      "contracts/**",
+      "test/spec/**",
+      ".vector-version",
+      ".refcache/**",
+      ...SUITE_PROSE,
+    ],
+    inert: INERT,
+  },
+  {
+    name: "examples",
+    jobs: ["examples"],
+    names: ["examples"],
+    minutes: 2.6,
+    // The compiler-cache action, scripts/smoke.sh over examples/ (pinned by
+    // tests/smoke), docs/cookbook/regen.sh --check and the size report, which
+    // reads tests/runtime-budgets.js.
+    reads: [
+      ...COMPILER,
+      "examples/**",
+      "tests/self/**",
+      "tests/allow-panics.js",
+      "tests/smoke/**",
+      "tests/runtime-budgets.js",
+      "docs/cookbook/**",
+      "docs/IR_COOKBOOK.md",
+    ],
+    inert: [...INERT, "tests/**", "bench/**", "CHANGELOG.md", "changelog/**"],
+  },
   {
     name: "nish_cmp",
     jobs: ["nish-cmp"],
@@ -441,7 +533,7 @@ export const gate = (needs, expectSkip) => {
  */
 export const laneOf = (display) =>
   LANES.find((lane) =>
-    lane.names.some((name) => {
+    [...lane.names, ...(lane.formerNames ?? [])].some((name) => {
       const re = name
         .split(/\$\{\{.*?\}\}/)
         .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -506,7 +598,7 @@ const backtest = (file) => {
   const per = saved / prs.length
   console.log(
     `saved: ${per.toFixed(2)} runner-minutes per pull request run, of ${total.toFixed(1)} in the lanes ` +
-      `(${((100 * per) / 119).toFixed(1)}% of a ~119-minute run)`
+      `(${((100 * per) / total).toFixed(1)}%)`
   )
   console.log(`misses: ${misses.length}`)
   for (const m of misses) {

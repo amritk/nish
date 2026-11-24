@@ -49,9 +49,9 @@
 # scope + ci-gate: scoped lanes (docs/wp10-ci.md). `scope` runs
 #       scripts/ci-scope.mjs, which turns a side job off for a pull request
 #       only when every changed path is one that job is proven not to read;
-#       bootstrap, nish-cmp, nish-cmp-elision, simd-arm64, sha256-macos,
-#       fuzz-smoke and postgres-live then skip their steps and still report.
-#       The test shards and lint always run. `ci-gate` needs every job and
+#       the test shards, examples, bootstrap, nish-cmp, nish-cmp-elision,
+#       simd-arm64, sha256-macos, fuzz-smoke and postgres-live then skip
+#       their steps and still report. lint always runs. `ci-gate` needs every job and
 #       fails unless each one it selected succeeded: it is the one check
 #       branch protection has to require.
 #
@@ -178,7 +178,8 @@ jobs:
   # request is the only event that can turn a lane off; any other event (a
   # push to main, the merge queue, workflow_call) runs everything, as do the
   # `ci:full` label and the NISH_CI_SCOPE repository variable set to `full`.
-  # The test shards and lint are never lanes and do not wait on this job.
+  # The test shards and examples are lanes too, so they wait on this job (a
+  # few seconds before their first step); lint is never a lane and does not.
   scope:
     name: scope
     runs-on: ubuntu-latest
@@ -189,6 +190,8 @@ jobs:
     # token reads a pull request's files and labels; if that read fails, the
     # script runs every lane.
     outputs:
+      test: ${{ steps.scope.outputs.test }}
+      examples: ${{ steps.scope.outputs.examples }}
       bootstrap: ${{ steps.scope.outputs.bootstrap }}
       nish_cmp: ${{ steps.scope.outputs.nish_cmp }}
       elision: ${{ steps.scope.outputs.elision }}
@@ -214,6 +217,7 @@ jobs:
 
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
+    needs: scope
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
@@ -316,9 +320,19 @@ jobs:
         # list's length, and a check in tests/run.js holds the two together.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.test == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the test lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the test lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.test != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.test != 'false'
         with:
           # Exact: tests/differential/emit-ts-known.txt quotes Node's own
           # messages as evidence, and is regenerated under this version.
@@ -333,6 +347,7 @@ jobs:
       # since #818 moved golang.org/x/net to v0.60.0. The action exports
       # GOTOOLCHAIN=local, which is what the bench sets anyway.
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        if: needs.scope.outputs.test != 'false'
         with:
           go-version: "1.26.x"
           cache: false
@@ -362,7 +377,7 @@ jobs:
       # lldb-18 are the debuggers the `fnref` section asks what `-g` says of a
       # function reference; without them those checks are counted skips.
       - name: Install LLVM 18 + lld (Ubuntu)
-        if: runner.os == 'Linux'
+        if: ${{ (runner.os == 'Linux') && needs.scope.outputs.test != 'false' }}
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
@@ -373,7 +388,7 @@ jobs:
       # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `llvm-nm`,
       # `opt`, `ld.lld` and `wasm-ld` regardless of what the runner image ships.
       - name: Link the LLVM 18 tools by their plain names
-        if: runner.os == 'Linux'
+        if: ${{ (runner.os == 'Linux') && needs.scope.outputs.test != 'false' }}
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -383,14 +398,14 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install LLVM 18 + lld (macOS)
-        if: runner.os == 'macOS'
+        if: ${{ (runner.os == 'macOS') && needs.scope.outputs.test != 'false' }}
         timeout-minutes: 10
         uses: ./.github/actions/brew-install
         with:
           formulae: llvm@18
 
       - name: Put LLVM 18 on PATH (macOS)
-        if: runner.os == 'macOS'
+        if: ${{ (runner.os == 'macOS') && needs.scope.outputs.test != 'false' }}
         run: |
           prefix="$(brew --prefix llvm@18)"
           # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
@@ -399,6 +414,7 @@ jobs:
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Toolchain versions
+        if: needs.scope.outputs.test != 'false'
         run: |
           for tool in clang llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld; do
             printf '%-8s ' "$tool"; command -v "$tool"
@@ -411,6 +427,7 @@ jobs:
       # `npm run check` is the `lint` job's, once per push: the typecheck reads
       # the same sources in every shard.
       - name: Install dependencies
+        if: needs.scope.outputs.test != 'false'
         run: npm ci --ignore-scripts
 
       # The seed: the last release's compiler for this runner's platform,
@@ -419,6 +436,7 @@ jobs:
       # makes is stage1's, and stage1 is `src/` built by this binary -- the
       # rolling freeze (WP19 G3) asked on the platform the suite runs on.
       - name: Fetch the seed
+        if: needs.scope.outputs.test != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           NISH_REQUIRE_ATTESTATION: "1"
@@ -433,6 +451,7 @@ jobs:
       # Shard 1 alone saves a miss, since the nine build the same bytes;
       # `fuzz-smoke` and `postgres-live` read the same key and save nothing.
       - name: The compiler under test
+        if: needs.scope.outputs.test != 'false'
         uses: ./.github/actions/compiler-cache
         with:
           save: ${{ matrix.shard == 1 }}
@@ -444,7 +463,7 @@ jobs:
       # across the swap only with it on, and skips that check otherwise;
       # without it a request was lost at random (#1158's shard 1).
       - name: Let a closing SO_REUSEPORT listener hand its queue on (Linux)
-        if: runner.os == 'Linux'
+        if: ${{ (runner.os == 'Linux') && needs.scope.outputs.test != 'false' }}
         run: |
           sudo sysctl -w net.ipv4.tcp_migrate_req=1
           test "$(cat /proc/sys/net/ipv4/tcp_migrate_req)" = 1
@@ -493,6 +512,7 @@ jobs:
       # stayed green with no sign of it. `--output-error=warn` keeps it
       # writing the file and makes that case `tee=1` in the summary.
       - name: Test
+        if: needs.scope.outputs.test != 'false'
         env:
           WASI_SYSROOT: /usr
           SHARD: ${{ matrix.shard }}
@@ -510,7 +530,7 @@ jobs:
       # survive it. It reports and never fails, and runs after a failed Test
       # step too, which is when the FAIL lines are wanted.
       - name: Test summary
-        if: ${{ !cancelled() }}
+        if: ${{ (!cancelled()) && needs.scope.outputs.test != 'false' }}
         env:
           SHARD: ${{ matrix.shard }}
         run: node scripts/ci-test-summary.mjs "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/test.status"
@@ -529,7 +549,7 @@ jobs:
       # runners have AVX2, so here the drivers the suite built must name it, as
       # the `simd-arm64` job's line must name the NEON path.
       - name: The AVX2 path ran
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
@@ -539,7 +559,7 @@ jobs:
       # with the reference alone on a CPU without AES-NI. These runners have it
       # (the section also requires the path wherever /proc/cpuinfo names it).
       - name: The AES-NI path ran
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           set -o pipefail
           build/test/simd/aes-gcm | grep -E '^aes-gcm: [0-9]+ cases agree across aesni-pclmul;'
@@ -550,7 +570,7 @@ jobs:
       # them would take the section's other arm and stay green, so the line that
       # says the kernels ran is required here, where they are known to exist.
       - name: The lowered AES program ran the kernels
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
 
@@ -559,7 +579,7 @@ jobs:
       # section stays green. These runners' kernels have Landlock ABI 3 or
       # later, so the lines that say a scope held are required here.
       - name: The Landlock directory scopes ran
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: |
           uname -r
           printf '#include <stdio.h>\n#include <sys/syscall.h>\n#include <unistd.h>\nint main(void) { printf("Landlock ABI %%ld\\n", syscall(444, NULL, 0, 1)); return 0; }\n' \
@@ -573,7 +593,7 @@ jobs:
       # other arm there. These runners have it, so the driver must name the
       # SHA-NI path and the lowered programs must have called the kernel.
       - name: The SHA-NI path ran
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           set -o pipefail
           build/test/simd/sha256 | grep -E '^sha256: [0-9]+ cases agree across sha-ni;'
@@ -583,7 +603,7 @@ jobs:
       # The ChaCha20 kernel, likewise: these runners have AVX2, so the driver
       # must name that path and the lowered program must have called it.
       - name: The AVX2 ChaCha20 path ran
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           set -o pipefail
           build/test/simd/chacha20 | grep -E '^chacha20: [0-9]+ cases agree across avx2;'
@@ -595,7 +615,7 @@ jobs:
       # These runners have both, so the lines that say the kernel ran are
       # required here.
       - name: The PCLMULQDQ CRC-32 path ran
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           set -o pipefail
           build/test/simd/crc32 | grep -E '^crc32: [0-9]+ cases agree across pclmul;'
@@ -607,7 +627,7 @@ jobs:
       # reference alone without SSSE3 and the `adler32 kernel` section on its
       # soft arm, and these runners have SSSE3, so the kernel lines are required.
       - name: The SSSE3 Adler-32 path ran
-        if: matrix.shard == 2
+        if: ${{ (matrix.shard == 2) && needs.scope.outputs.test != 'false' }}
         run: |
           set -o pipefail
           build/test/simd/adler32 | grep -E '^adler32: [0-9]+ cases agree across ssse3;'
@@ -619,7 +639,7 @@ jobs:
       # -O3`, and skips without either tool. The line that says the map's loop
       # vectorised is required here, where both are installed.
       - name: parallelMapInto's element loop vectorises
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: |
           grep -E "^PASS  par_map_vector: opt -O3 vectorises parallelMapInto's element loop" "$RUNNER_TEMP/test.log"
 
@@ -628,7 +648,7 @@ jobs:
       # it would take the skip and stay green, so the line that says the binary
       # ran and printed what the baseline prints is required here.
       - name: A --cpu x86-64-v3 binary runs and prints what the baseline prints
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: |
           grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/test.log"
 
@@ -638,7 +658,7 @@ jobs:
       # each profile's link, and the reader's own negative case, were read are
       # required here (docs/security/runtime.md, RT-HARDEN).
       - name: Every profile's link is hardened, read from its headers
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: |
           for what in "a --profile debug link" "a --profile speed link" "a --profile size link" "a nish run binary"; do
             grep -F "PASS  hardening: $what of hello is PIE, full RELRO, a non-executable stack and control-flow protected" "$RUNNER_TEMP/test.log"
@@ -661,7 +681,7 @@ jobs:
       # here can hand it a stale one, and when the suite fails this step and
       # every step after it are skipped.
       - name: Keep the compiler the suite tested
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: cp build/nish-test build/nish
 
       # bench/crc32.mjs builds bench/crc32.ts with the compiler just kept and
@@ -669,14 +689,14 @@ jobs:
       # against the one it pins: the benchmark the PR tables come from still
       # measures the same answers.
       - name: The CRC-32 benchmark answers the same on both paths
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: node bench/crc32.mjs --check
 
       # bench/adler32.mjs the same way: the bench's own kernel, the Nish loop
       # and the shipped adler32Update with NISH_ADLER32 unset, each checksum
       # against the one it pins.
       - name: The Adler-32 benchmark answers the same on every path
-        if: matrix.shard == 1
+        if: ${{ (matrix.shard == 1) && needs.scope.outputs.test != 'false' }}
         run: node bench/adler32.mjs --check
 
       # The diagnostic-code registry's `gen-diagnostic-codes.mjs --check` and
@@ -698,27 +718,40 @@ jobs:
   # suite on test shard 1, about 80 s on the critical path of every run; here
   # they run beside the shards on their own runner. The compiler comes from
   # the same cache key the shards link (tests/self/compiler-cache.js), so it is
-  # the binary the suite tests. Not scoped: like `test` and `lint`, it runs on
-  # every event, and `ci-gate` needs it.
+  # the binary the suite tests. A scoped lane (scripts/ci-scope.mjs): a pull
+  # request that changes none of what these three read skips its steps.
   examples:
     name: examples
+    needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.examples == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the examples lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the examples lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.examples != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.examples != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
+        if: needs.scope.outputs.examples != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18 wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev
 
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.examples != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -728,10 +761,12 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.examples != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       - name: Fetch the seed
+        if: needs.scope.outputs.examples != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -741,6 +776,7 @@ jobs:
       # The test shards save this key; this job only reads it, so a miss links
       # here (about a minute) and saves nothing.
       - name: The compiler under test
+        if: needs.scope.outputs.examples != 'false'
         timeout-minutes: 10
         uses: ./.github/actions/compiler-cache
         with:
@@ -750,6 +786,7 @@ jobs:
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
       # run, the compiler the step above linked.
       - name: Smoke (build + run every example with a main, size profile)
+        if: needs.scope.outputs.examples != 'false'
         env:
           NISH: build/nish
         run: bash scripts/smoke.sh
@@ -759,11 +796,13 @@ jobs:
       # (the `internal` linkage of --strict-exports and the `nsw` defaults were
       # missing), so the staleness check is a gate rather than a chore.
       - name: Docs (IR cookbook up to date)
+        if: needs.scope.outputs.examples != 'false'
         env:
           NISH: build/nish
         run: bash docs/cookbook/regen.sh --check
 
       - name: Size report
+        if: needs.scope.outputs.examples != 'false'
         env:
           RUNNER_LABEL: ubuntu-latest
         run: |

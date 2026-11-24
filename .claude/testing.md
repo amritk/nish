@@ -170,6 +170,14 @@ test is **data, not code**: a source file next to the output it must produce.
   skip a change to a file its check reads. A new top-level tree a lane reads
   needs no edit: a path on no allowlist runs every lane. Run
   `node tests/run.js ci-scope` after changing `scripts/ci-scope.mjs`.
+- **The suite itself is a scoped lane.** The `test` shards skip a pull request
+  whose every path is prose the suite does not open (`docs/`, `web/`,
+  `skills/`, `.claude/` and the top-level prose files, less `SUITE_PROSE` in
+  `scripts/ci-scope.mjs`). A check that opens a new file there names it as a
+  string of its own (`"docs/guide/x.md"`, or `path.join(root, "docs", ...)`)
+  and adds it, or its tree, to `SUITE_PROSE`: `node tests/run.js ci-scope`
+  fails on a named path the lane would skip, but cannot see a path the check
+  builds at run time.
 
 ## What every construct ships with
 

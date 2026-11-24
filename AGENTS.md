@@ -230,6 +230,11 @@ Each shard's summary line, FAIL lines and SKIP lines are also copied into the
 job's step summary (the "Test summary" step, `scripts/ci-test-summary.mjs`),
 which is uploaded separately from the console log. Read them there when the
 console log stops before its summary, as shard 8's has in green runs (#1836).
+On a pull request that changes only prose the suite never opens (the roadmap,
+`.claude/plans/`, `CLAUDE.md`, most work-package notes), the `test` lane is off:
+each row is green with a "Not selected: the test lane" step summary and no
+suite summary, and there is nothing more to read
+([docs/wp10-ci.md](./docs/wp10-ci.md#scoped-lanes)).
 
 ## Shipping a change: what a pull request must be, and who merges it
 

@@ -9279,7 +9279,9 @@ if (dealtHere("selfHosting")) {
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
-  const strayed = simdSteps.filter((step) => !step.includes(`if: matrix.shard == ${simdShard}\n`))
+  const strayed = simdSteps.filter(
+    (step) => !step.includes(`if: \${{ (matrix.shard == ${simdShard}) && needs.scope.outputs.test != 'false' }}\n`)
+  )
   check(
     `ci.yml: the \`test\` job's ${simdSteps.length} steps that read the simd group run in its shard, ${simdShard}`,
     simdSteps.length > 0 && strayed.length === 0,
@@ -42820,7 +42822,9 @@ if (selects("ci-scope", "ci.yml")) {
     `ran less than everything: ${notFull.join(", ")}`
   )
 
-  const docsOnly = on(["docs/guide/index.md", "README.md"])
+  // Prose no lane opens: a roadmap page, a plan and the agent instructions.
+  // docs/guide/ is not here: the `test` lane compiles its examples.
+  const docsOnly = on(["docs/roadmap/index.md", ".claude/plans/x.plan.md", "CLAUDE.md"]) // ci-scope: data, not opened
   const srcChange = on(["src/compile.ts"])
   const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
   check(
@@ -42891,7 +42895,8 @@ if (selects("ci-scope", "ci.yml")) {
     ["nish-cmp (aarch64-linux)", "nish_cmp"],
     ["the NEON path agrees (aarch64-linux)", "simd"],
     ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
-    ["test (ubuntu-latest, shard 1/9)", null],
+    ["test (ubuntu-latest, shard 1/9)", "test"],
+    ["examples", "examples"],
     ["lint", null],
     ["the golden cases, in Nish (shard 1/3)", null],
     ["nish-cmp", null],
@@ -42971,7 +42976,7 @@ if (selects("ci-scope", "ci.yml")) {
   const unread = "every changed path of each is on its allowlist of paths it does not read"
   check(
     "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off",
-    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}`,
+    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: examples, nish_cmp, elision, bootstrap; ${unread}`,
     JSON.stringify(someOff.lines)
   )
   check(
@@ -43193,6 +43198,36 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     "runtime/nish.d.ts",
   ]
   const laneCommands = {
+    test: {
+      "compiler-cache": compilerCache,
+      // The whole suite: everything tests/run.js imports, the replay data its
+      // ci-scope section reads, and a file from each prose tree it opens.
+      "npm test (node tests/run.js)": [
+        ...importsOf("tests/run.js"),
+        "tests/ci-scope/backtest-prs.json",
+        "docs/guide/using-nish/terminal.md",
+        "docs/cookbook/builtin-capabilities.ts",
+        "docs/security/README.md",
+        "docs/site/theme.css",
+        "docs/AI.md",
+        "docs/LANGUAGE.md",
+        "skills/writing-nish/SKILL.md",
+        "web/compile.mjs",
+        "contracts/README.md",
+        "README.md",
+        "llms.txt",
+      ],
+    },
+    examples: {
+      "compiler-cache": compilerCache,
+      "bash scripts/smoke.sh": ["scripts/smoke.sh", "scripts/nish-compiler.sh", "examples/add.ts", "tests/smoke/argv.stdout"],
+      "bash docs/cookbook/regen.sh --check": [
+        "docs/cookbook/regen.sh",
+        "docs/IR_COOKBOOK.md",
+        "docs/cookbook/builtin-capabilities.ts",
+      ],
+      "bash scripts/size-report.sh": ["scripts/size-report.sh", "tests/runtime-budgets.js", "examples/main.c"],
+    },
     bootstrap: {
       "bash scripts/bootstrap.sh --verify": [
         "scripts/bootstrap.sh",
@@ -43297,30 +43332,168 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   ])
   const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
   check(
-    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (27) of all nine lanes",
     commandGaps.length === 0 && uncoveredLanes.length === 0,
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
 
-  // A lane whose job runs tests/run.js reads all of tests/ but tests/ci-scope:
-  // a section can open any fixture there, and #1746's second review found a
-  // hand-picked list missing tests/runtime/range-test.c.
-  const testsFiles = filesUnder("tests").filter((f) => !f.startsWith("tests/ci-scope/"))
+  // A lane that is off must cost no runner time beyond its first step, which
+  // says why: every other step of each of its jobs runs only when the lane
+  // does, alone or after the step's own condition, and the job waits for
+  // `scope`. A step added without the gate would run on a pull request the
+  // lane skips; one that inverted it would run only then.
+  const ungatedSteps = ciScope.LANES.flatMap((l) =>
+    l.jobs.flatMap((id) => {
+      const job = ciJob(ciYmlText, id)
+      const [first, ...rest] = stepsOf(job)
+      const ok = (st) => {
+        const ifs = [...st.matchAll(/^ {8}if: (.*)$/gm)].map((m) => m[1])
+        const own = /^\$\{\{ \((.+)\) && (.+) \}\}$/.exec(ifs[0] ?? "")
+        return ifs.length === 1 && (ifs[0] === gateOf(l.name) || own?.[2] === gateOf(l.name))
+      }
+      return [
+        ...(job !== "" && /^ {4}needs: (scope|\[[^\]]*\bscope\b[^\]]*\])$/m.test(job) ? [] : [`${id}: does not need scope`]),
+        ...(first !== undefined &&
+        first.startsWith("name: Say why this job was not selected\n") &&
+        first.includes(`\n        if: needs.scope.outputs.${l.name} == 'false'\n`)
+          ? []
+          : [`${id}: its first step does not say why the lane was off`]),
+        ...rest.filter((st) => !ok(st)).map((st) => `${id}: ${st.split("\n")[0]}`),
+      ]
+    })
+  )
+  check(
+    "ci-scope: every step of every lane job but the first runs only when its lane does, and the first says why it did not",
+    ungatedSteps.length === 0,
+    ungatedSteps.join("\n")
+  )
+
+  // The `test` lane skips a pull request whose every path is prose its suite
+  // never opens, so every prose path the code it can run names must turn it
+  // on: each string literal that is such a path (`"docs/AI.md"`) in a file
+  // under tests/, scripts/, bench/ or examples/ (comment lines aside), each
+  // `path.join(root, "docs", ...)`, and each relative import into those trees.
+  // A named directory stands for every file under it. A path that does not
+  // exist is not checked (the ci-scope cases above name made-up ones), and a
+  // path built at run time is not seen: the traced run in docs/wp10-ci.md,
+  // "Scoped lanes", covers those. A new name fails here until it is added to
+  // SUITE_PROSE in scripts/ci-scope.mjs, or to `notOurs` with why it is not
+  // opened.
+  {
+    // The trees and files on the allowlist of paths no lane reads, whose
+    // reads by the suite SUITE_PROSE carves back out.
+    const proseTops = ciScope.INERT.filter((g) => /^[^*]+\/\*\*$/.test(g) && !g.startsWith("tests/")).map((g) =>
+      g.slice(0, -3)
+    )
+    const proseFiles = ciScope.INERT.filter((g) => !g.includes("*"))
+    const alt = (xs) => xs.map((x) => x.replace(/\./g, "\\.")).join("|")
+    // A string that is a path and nothing else: one inside a sentence (a
+    // failure message's "see docs/wp7-runtime.md") is not opened.
+    const literal = new RegExp(
+      `(["'\`])((?:${alt(proseTops)})/[A-Za-z0-9_.][A-Za-z0-9_./-]*|${alt(proseFiles)})\\1`,
+      "g"
+    )
+    const joined = new RegExp(`\\broot\\s*,\\s*"(${alt([...proseTops, ...proseFiles])})"((?:\\s*,\\s*"[^"]+")*)`, "g")
+    const imported = /(?:\bfrom\s+|\bimport\(\s*|\brequire\(\s*)["'](\.\.?\/[^"']+)["']/g
+    const inProse = new RegExp(`^(?:${alt([...proseTops, ...proseFiles])})(?:/|$)`)
+    // Names that are not a read of the repository's prose, each with why.
+    // Every one must still be named, so an entry cannot outlive the line it
+    // excuses.
+    const notOurs = {
+      // scripts/link-skills.mjs joins it to the project it is handed, and the
+      // suite hands it temporary ones.
+      ".claude": "link-skills", // ci-scope: data, not opened
+    }
+    const named = new Map()
+    const excused = new Set()
+    const name = (p, where) => {
+      const at = p.replace(/[/.]+$/, "")
+      if (at in notOurs) {
+        excused.add(at)
+      } else if (!named.has(at)) {
+        named.set(at, where)
+      }
+    }
+    const runnable = filesUnder("tests", "scripts", "bench", "examples").filter(
+      (f) => /\.(?:[cm]?js|ts|sh|py|c|h)$/.test(f) && f !== "scripts/ci-scope.mjs" && !f.includes("node_modules/")
+    )
+    for (const file of runnable) {
+      fs.readFileSync(path.join(root, file), "utf8")
+        .split("\n")
+        .forEach((line, i) => {
+          // A comment, or a line that names a path as data and says so.
+          if (/^\s*(?:\/\/|\/\*|\*|#)/.test(line) || line.endsWith("// ci-scope: data, not opened")) {
+            return
+          }
+          const where = `${file}:${i + 1}`
+          for (const m of line.matchAll(literal)) {
+            name(m[2], where)
+          }
+          for (const m of line.matchAll(joined)) {
+            name([m[1], ...[...m[2].matchAll(/"([^"]+)"/g)].map((x) => x[1])].join("/"), where)
+          }
+          for (const m of line.matchAll(imported)) {
+            const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1]))
+            if (inProse.test(target)) {
+              name(target, where)
+            }
+          }
+        })
+    }
+    const proseMisses = [...named]
+      .filter(([p]) => fs.existsSync(path.join(root, p)))
+      .flatMap(([p, where]) =>
+        (fs.statSync(path.join(root, p)).isDirectory() ? filesUnder(p) : [p])
+          .filter((f) => unread("test", [f]).length > 0)
+          .slice(0, 3)
+          .map((f) => `${f} (named at ${where})`)
+      )
+    check(
+      `ci-scope: every prose path the code the \`test\` job can run names turns the test lane on (${named.size} named)`,
+      named.size >= 50 && proseMisses.length === 0 && excused.size === Object.keys(notOurs).length,
+      [
+        ...proseMisses,
+        ...Object.keys(notOurs)
+          .filter((p) => !excused.has(p))
+          .map((p) => `${p} is excused but no longer named`),
+      ].join("\n") || `only ${named.size} paths named: the scan no longer finds them`
+    )
+  }
+
+  // A lane whose job runs a section of tests/run.js reads all of tests/ but
+  // tests/ci-scope: a section can open any fixture there, and #1746's second
+  // review found a hand-picked list missing tests/runtime/range-test.c. The
+  // `test` lane runs the whole suite (`npm test`), whose ci-scope section
+  // replays tests/ci-scope's data, so it reads that too, and it alone.
+  const allTestsFiles = filesUnder("tests")
+  const testsFiles = allTestsFiles.filter((f) => !f.startsWith("tests/ci-scope/"))
   const runJsLanes = ciScope.LANES.filter((l) =>
     l.jobs.some((j) => /^\s+(?:\$run )?node tests\/run\.js /m.test(ciJob(ciYmlText, j)))
   )
-  const runJsMisses = runJsLanes.flatMap((l) =>
-    unread(l.name, testsFiles)
-      .slice(0, 5)
-      .map((f) => `${l.name}: ${f}`)
-  )
+  const suiteLanes = ciScope.LANES.filter((l) => l.jobs.some((j) => /^\s+npm test -- /m.test(ciJob(ciYmlText, j))))
+  const runJsMisses = [
+    ...runJsLanes.flatMap((l) =>
+      unread(l.name, testsFiles)
+        .slice(0, 5)
+        .map((f) => `${l.name}: ${f}`)
+    ),
+    ...suiteLanes.flatMap((l) =>
+      unread(l.name, allTestsFiles)
+        .slice(0, 5)
+        .map((f) => `${l.name}: ${f}`)
+    ),
+  ]
   const ciScopeRead = ciScope.LANES.filter(
     (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
   )
   check(
-    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
-    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.length === 0,
-    `lanes running tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
+    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/, but tests/ci-scope only for the whole suite's",
+    runJsLanes.length >= 3 &&
+      suiteLanes.map((l) => l.name).join() === "test" &&
+      runJsMisses.length === 0 &&
+      ciScopeRead.map((l) => l.name).join() === "test",
+    `lanes running a section of tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
+      `lanes running npm test: ${suiteLanes.map((l) => l.name).join(", ") || "none"}\n` +
       `misses: ${runJsMisses.join(", ") || "none"}\n` +
       `lanes a tests/ci-scope change turns on: ${ciScopeRead.map((l) => l.name).join(", ") || "none"}`
   )
@@ -43376,8 +43549,9 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // `--delegate-bench-timing` (DELEGATE_BENCH_TIMING): the crypto twins'
   // timed portable proofs run in the push-to-main run of this same job. That
   // holds while ci.yml runs on a push to main, the `test` job has no
-  // job-level `if:` and its Test step none either, and the flag is honoured
-  // on a `pull_request` event alone, so the push run times them.
+  // job-level `if:` and its Test step none but the `test` lane's gate (which
+  // a push always passes: `decide` scopes a pull request alone), and the flag
+  // is honoured on a `pull_request` event alone, so the push run times them.
   {
     const runSrc = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8")
     const honoured = /^const DELEGATE_BENCH_TIMING =\n(?:.*\n){0,3}?.*process\.env\.GITHUB_EVENT_NAME === "pull_request"$/m
@@ -43389,7 +43563,10 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
           (/^on:\n {2}push:\n {4}branches: \[main\]$/m.test(ciYmlText) &&
             !/^ {4}if:/m.test(testJob) &&
             testStep !== "" &&
-            !/^ {8}(?:if|continue-on-error):/m.test(testStep) &&
+            !/^ {8}continue-on-error:/m.test(testStep) &&
+            binding(testJob, /npm test -- /, [gateOf("test")]) &&
+            ciScope.decide({ event: "push", files: [{ path: "docs/x.md", status: "modified" }] }).lanes.test ===
+              true &&
             honoured.test(runSrc))),
       `Test step:\n${testStep || "(not found)"}`
     )
@@ -43500,11 +43677,12 @@ if (selects("ci.yml", "ci-test-summary")) {
     `Test step:\n${testStep || "(not found)"}`
   )
   // After a failed Test step too, since that is when the FAIL lines matter,
-  // and in every shard; `continue-on-error` is not needed, since it exits 0.
+  // and in every shard whose `test` lane runs (when it is off there is no
+  // log); `continue-on-error` is not needed, since it exits 0.
   check(
     "ci.yml: the Test summary step follows the Test step in every shard, after a failure too",
     steps.indexOf(summaryStep) === steps.indexOf(testStep) + 1 &&
-      /^ {8}if: \$\{\{ !cancelled\(\) \}\}$/m.test(summaryStep) &&
+      /^ {8}if: \$\{\{ \(!cancelled\(\)\) && needs\.scope\.outputs\.test != 'false' \}\}$/m.test(summaryStep) &&
       (summaryStep.match(/^ {8}if:/gm) ?? []).length === 1 &&
       /^ {8}run: node scripts\/ci-test-summary\.mjs "\$RUNNER_TEMP\/test\.log" "\$RUNNER_TEMP\/test\.status"$/m.test(
         summaryStep
