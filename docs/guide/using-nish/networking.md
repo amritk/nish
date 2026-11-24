@@ -409,14 +409,17 @@ export const main = (): i32 => {
   may be reported up to `maxWaitMs` late. On a loop whose only other
   descriptor is `signalFd()` a signal ends the batch at once on Linux 5.11
   or later, unless the ring is `--sandbox` restricted, the listener has
-  grown a second ring or has a sibling, or `signalFd()` was closed; then it
-  too waits up to `maxWaitMs`.
+  grown a second ring, or `signalFd()` was closed; then it too waits up to
+  `maxWaitMs`.
 - With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
   on macOS, it is `pollWait`.
 
 A loop that holds nothing but one ring listener's connections, and at most
 `signalFd()`, waits on the ring itself on Linux 5.11 and later, with either
-call; nothing about the answers changes, only the cost of the wait.
+call, while the listener has not grown a second ring. With `signalFd()` in
+the loop it also needs a ring `--sandbox` does not restrict and a
+`signalFd()` the program has not closed. Otherwise the call waits as before;
+nothing about the answers changes, only the cost of the wait.
 
 Rings are off by default. What one ring process costs against five processes
 on descriptors, with an SQLite lookup per request, is measured in

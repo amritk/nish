@@ -214,6 +214,11 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * The file measures **5,761 bytes** on 2026-11-12, same toolchain: 5,791 after the
  * exec grant's identity check (#1447), then 30 given back when a spawn under an exec
  * allowlist was handed whole to `runtime-sandbox.c`. The ceiling stands, leaving 127.
+ *
+ * **5,782 bytes** on 2026-11-24, same toolchain (`.text` 5,750 plus `.text.unlikely.`
+ * 32): `nish_file_close` tells `runtime-host.c` when the descriptor it closes is the
+ * signal pipe (a weak call to `nish_signal_fd_closing`, so that this file still links
+ * beside only `runtime.c` and `runtime-text.c`), +21. The ceiling stands, leaving 106.
  */
 const RUNTIME_OS_TEXT_BUDGET = 5888
 /**
@@ -519,10 +524,12 @@ const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
  * cheaper form ended the process when the signal landed there (`test_host_signal_threads`
  * in tests/runtime-test.c).
  *
- * **788 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 764 before, once WP63's
- * batch wait asks whether the signal descriptor exists (`nish_signal_fd_made`, +24), so
- * that a loop holding only ring slots and that descriptor can wait on its ring directly
- * (768 to 1,024, the next 256-byte boundary).
+ * **825 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64 (`.text` 768 plus
+ * `.text.unlikely.` 57), 764 before, once WP63's batch wait asks whether the signal
+ * descriptor exists (`nish_signal_fd_made`, which answers -1 once it is closed) and a
+ * close of that descriptor tells this file so (`nish_signal_fd_closing`), +61 between
+ * them, so that a loop holding only ring slots and that descriptor can wait on its ring
+ * directly (the ceiling stands at 1,024, leaving 199).
  */
 const RUNTIME_HOST_TEXT_BUDGET = 1024
 /**

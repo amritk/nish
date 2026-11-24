@@ -483,8 +483,10 @@ ring's poll would never report (NURING-48, NURING-49). A poll that answered
 before a wait began, reaped by an earlier pump, ends that wait without an
 enter rather than after one sleep. One narrow overlap is left: with a
 `ready` of 2, the read of the loop's epoll set after the poll answers may
-report the set's own eventfd, a pair `pollWait` drops, so the call answers
-0 and the next wait reports the signal.
+report the set's own eventfd, a pair `pollWait` drops. The call then
+answers 0 and the next wait reports the signal only when its timeout is 0
+or already spent; with time left, `nr_poll_wait` loops and the same call
+reads the pipe on its next pass.
 
 **`pollWaitBatch(loop, ready, timeoutMs, minEvents, maxWaitMs)`** waits as
 `pollWait` does for the first event, then, with one live ring set, up to

@@ -12484,8 +12484,8 @@ batches. It writes and answers as `pollWait` does.
   **at most `maxWaitMs` late**, by this call or the next. A loop whose only
   descriptor is `signalFd()` hears the signal as soon as it arrives while
   that loop sleeps on its ring (below); where it does not (a kernel before
-  5.11, a ring `--sandbox` restricts, a second ring or listener, or a
-  `signalFd()` already closed), the signal too waits up to `maxWaitMs`.
+  5.11, a ring `--sandbox` restricts, a second ring, or a `signalFd()`
+  already closed), the signal too waits up to `maxWaitMs`.
 - A `minEvents` of 1 or less, a `maxWaitMs` of 0 or less, a loop with no
   live ring listener or with two of them, and Darwin, answer exactly as
   `pollWait` does. A `ready` shorter than 2 answers `-22`.
