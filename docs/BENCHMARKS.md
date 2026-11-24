@@ -3892,13 +3892,14 @@ The wasm32 build of the tokenizer was not timed and is not byte-identical. After
 <!-- sqlite-cursor:begin -->
 ## The feed through cursors against SQL
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed three ways through `nish/sqlite`. All three read the 20 newest posts with each author's username and like count, and fold them the same way:
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed four ways through `nish/sqlite`. All four read the 20 newest posts with each author's username and like count, and fold them the same way:
 
 - **`feed`** is SQL. One statement is prepared once; each call steps it 21 times, reads every column and resets. The statement has no parameters, so nothing is bound.
-- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx`.
-- **`feed-cursor`** is the same walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
+- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx` by a `seek` and then a `next` and a `columnI64` per like.
+- **`feed-cursor-count`** is the same walk with the likes counted in one `countRange` call for the whole feed ([below](#like-counts-in-one-call)).
+- **`feed-cursor`** is the `feed-cursor-walk` walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
 
-Every run of all three printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the two cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy.
+Every run of every workload printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy. The first two tables predate `feed-cursor-count` and time the other three.
 
 `node bench/sqlite/run.mjs` (12 rounds after a warm-up round) with the bench code of commit `c940ecb3`, which includes #1801 (`9996c9b1`): `openCursor` caches checked cursor shapes, and `beginRead`/`endRead` keep `BEGIN`, the schema read and `COMMIT` prepared. The machine is an Intel Xeon @ 2.10GHz with 4 logical cores, Linux 6.18.44, Ubuntu clang 18.1.3 and SQLite 3.54.1. ns per call:
 
@@ -3941,20 +3942,38 @@ The whole machine ran slower in this run than in the one above (`feed` 21,963 ag
 
 ### Like counts in one call
 
-`feed-cursor-count` is `feed-cursor-walk` with each post's likes counted by `Cursor.countRange(id, id, counts)`. That is one seek and one walk of `likes_post_id_idx` inside the adapter, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeed`). Both workloads also reach the kept seek key: an integer seek now sets the cursor's own `UnpackedRecord` and builds no record ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `feed-cursor-walk` is still the old per-like walk.
+`feed-cursor-count` reads the posts and authors as `feed-cursor-walk` does, then counts all 20 posts' likes in one `Cursor.countRange(minId, maxId, counts)` call over the posts' id span and reads each post's count as `counts[id - minId]`: one seek and one walk of `likes_post_id_idx` inside the adapter for the whole feed, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeedCounted` and `walkFeed`). When the span does not fit the 1,024-entry buffer it falls back to one `countRange(id, id, counts)` per post. The bench database's 20 newest posts are ids 499,981 to 500,000, so every timed call takes the one-call path and none takes the fallback. `feed-cursor-walk` is the per-like walk, unchanged from `main`.
 
-`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `3e3444ad`, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `a2f87c15`, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
 
 | Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
 | --- | --- | --- | --- |
-| `feed` (SQL) | 14,590 / 19,588 (5,225) | 16,284 / 22,154 (7,089) | 1,694 / 2,566 |
-| `feed-cursor-walk` | 12,193 / 15,300 (5,988) | 10,556 / 13,232 (5,937) | 1,637 / 2,069 |
-| `feed-cursor-count` | 11,568 / 13,126 (3,637) | 11,195 / 13,948 (4,321) | 373 / 821 |
-| `feed-cursor` | 13,479 / 16,284 (3,544) | 14,462 / 17,428 (7,312) | 983 / 1,144 |
+| `feed` (SQL) | 17,739 / 18,900 (2,323) | 17,763 / 18,909 (3,385) | 25 / 9 |
+| `feed-cursor-walk` | 12,534 / 13,311 (1,406) | 11,341 / 13,033 (958) | 1,193 / 277 |
+| `feed-cursor-count` | 9,758 / 10,567 (979) | 7,821 / 10,484 (1,218) | 1,936 / 82 |
+| `feed-cursor` | 12,380 / 16,660 (2,618) | 14,979 / 15,953 (3,090) | 2,599 / 706 |
 
-**`feed-cursor-count` less `feed-cursor-walk` is −2,174 ns at the median and −625 ns at the min, both on the build.** This is derived: it is the difference of two rows of the table, not a timed row of its own. The median gap is larger than both noise bands (2,069 and 821). It is smaller than every IQR of the two rows (5,988, 5,937, 3,637 and 4,321). The walk's copy (13,232 ns) is faster than the count's build. So this run does not resolve the gain beyond those spreads. The machine was noisy in this run: `feed`'s noise band is 2,566 ns at the median, against 564 ns in the first table.
+The noise bands are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures.
 
-Against `feed` in the same rounds, `feed-cursor-count` is 6,461 ns less a call at the median (−33.0 % of `feed`'s median), and `feed-cursor-walk` is 4,287 ns less (−21.9 %).
+**`feed-cursor-count` less `feed-cursor-walk` is −2,744 ns at the median and −2,776 ns at the min, both on the build.** This is derived: it is the difference of two rows of the table, not a timed row of its own. The median gap is larger than both noise bands (277 and 82) and every IQR of the two rows (1,406, 958, 979 and 1,218), and the walk's copy (13,033 ns) is slower than the count's build (10,567 ns). The min gap is larger than both min bands (1,193 and 1,936).
+
+Against `feed` in the same rounds, `feed-cursor-count` is 8,333 ns less a call at the median (−44.1 % of `feed`'s median, 18,900 ns), and `feed-cursor-walk` is 5,589 ns less (−29.6 %).
+
+#### The integer seek against `main`
+
+An integer seek now sets the cursor's own `UnpackedRecord` and clears it after, instead of building one per seek ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `main`'s seek also builds its record on the stack and allocates nothing, so what changes is the per-seek setup, not an allocation. `feed-cursor-walk` and `feed-cursor` reach it on every like count's `seek`.
+
+`node bench/sqlite/run.mjs --base origin/main --rounds 12 --no-rust`, base `b2c55694`, with this branch's `std/` and `runtime/` at commit `88a30a8a` and `main`'s `bench/sqlite/main.ts` and `run.mjs` checked out for the run: `--base` builds this tree's `main.ts` against the base's `std/`, which has no `countRange`. `walkFeed` is byte-identical on both sides. The build, its copy and the base were timed in the same rounds, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Base min / median (IQR) | Noise band, min / median | Base less build, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `feed` (SQL) | 15,065 / 19,846 (3,481) | 13,837 / 21,088 (5,025) | 16,876 / 21,021 (4,824) | 1,228 / 1,242 | +1,811 / +1,175 |
+| `feed-cursor-walk` | 9,994 / 13,291 (2,065) | 9,816 / 12,868 (856) | 12,128 / 13,241 (2,881) | 179 / 422 | +2,134 / −50 |
+| `feed-cursor` | 11,520 / 17,408 (3,913) | 14,847 / 16,183 (2,660) | 14,205 / 17,268 (4,011) | 3,327 / 1,226 | +2,685 / −141 |
+
+The last two columns are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures: from the table's medians `feed-cursor` is −140.
+
+**A gain for the walk is not shown.** At the median, the verdict statistic, the base is 50 ns faster than the build, inside the 422 ns noise band. At the min the base is 2,134 ns slower, outside the 179 ns band but inside the base's IQR (2,881). `feed-cursor` moved −141 ns at the median, inside its 1,226 ns band. `feed`, which makes no cursor call, moved +1,175 ns at the median, inside its 1,242 ns band.
 <!-- sqlite-cursor:end -->
 
 <!-- sqlite-vfs:begin -->
