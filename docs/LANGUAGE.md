@@ -12474,15 +12474,18 @@ batches. It writes and answers as `pollWait` does.
   `ready.length / 2`, or than 64, holds.
 - The second wait is on the ring alone. A descriptor in the loop that becomes
   ready meanwhile, a UDP socket, a timer's pipe or `signalFd()`, is reported
-  **at most `maxWaitMs` late**, by this call or the next; on a loop whose
-  only descriptor is `signalFd()` the signal ends the batch as soon as it
-  arrives.
+  **at most `maxWaitMs` late**, by this call or the next. A loop whose only
+  descriptor is `signalFd()` hears the signal as soon as it arrives while
+  that loop sleeps on its ring (below); where it does not (a kernel before
+  5.11, a ring `--sandbox` restricts, a second ring or listener, or a
+  `signalFd()` already closed), the signal too waits up to `maxWaitMs`.
 - A `minEvents` of 1 or less, a `maxWaitMs` of 0 or less, a loop with no
   live ring listener or with two of them, and Darwin, answer exactly as
   `pollWait` does. A `ready` shorter than 2 answers `-22`.
 - *Lowering:* `nish_poll_wait_batch`; not `willreturn`. The second wait is
-  one `io_uring_enter` with `IORING_ENTER_EXT_ARG`'s timeout, or the ring's
-  own wait on a kernel before 5.11.
+  `io_uring_enter` with `IORING_ENTER_EXT_ARG`'s timeout, or the ring's own
+  wait on a kernel before 5.11. Each enter sleeps at most 10 ms while slots
+  are live, so a long `maxWaitMs` is many enters.
 - *Tests:* `net_poll_batch`, `link/net_ring_batch`;
   `reject_net_poll_batch_readonly`, `reject_net_poll_batch_arity`,
   `reject_net_poll_batch_wasm`, `reject_net_poll_batch_wasi`.
@@ -12494,8 +12497,10 @@ rather than on an eventfd in its epoll set, for `pollWait` and
 `pollWaitBatch` alike; `signalFd()` is then watched by a poll in the ring.
 Nothing a program sees changes but the cost of a wait. A kernel before 5.11,
 a listener that has grown past its first ring, a second listener, any other
-descriptor in the loop, or `signalFd()` beside a ring a `--sandbox` filter
-restricts (which may not poll) sends the wait back through epoll (`uring`
+descriptor in the loop, `signalFd()` beside a ring a `--sandbox` filter
+restricts (which may not poll), or a `signalFd()` that `netClose` or
+`fileClose` has closed (its number may name a new descriptor) sends the
+wait back through epoll (`uring`
 "direct", `link/net_ring_batch`).
 
 **Level-triggered.** A descriptor that is still ready when the program waits

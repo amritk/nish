@@ -57,8 +57,9 @@
  *    ring-only loop. Idle, it sleeps its whole bound and counts one direct
  *    wait. With two recvs' data in, a minimum of 2 is met before the bound,
  *    and a minimum of 4 with one in waits the bound out. A pipe watched by its
- *    POLL_ADD is answered with POLLIN, held until taken, armed again after,
- *    and a second descriptor is refused while it is armed. A ring without
+ *    POLL_ADD is answered with POLLIN and held until taken, a wait meanwhile
+ *    entering no sleep; it is armed again after, and a second descriptor is
+ *    refused while it is armed. A ring without
  *    IORING_FEAT_EXT_ARG (a kernel before 5.11, forced by the setup hook)
  *    answers -EOPNOTSUPP, and its set still accepts through `nish_uring_wait`
  *    (NURING-40).
@@ -1013,7 +1014,10 @@ static int direct(void) {
       if (data < 2 && nish_uring_wait_direct(s, -1, 1, 100) < 0) return fail("direct wait");
     }
     if (data != 2) return fail("the two clients' bytes did not both arrive");
-    met = took < UR_SLEEP_MAX_MS - 2;
+    /* Under the bound's floor in whole milliseconds: a sleep of the whole
+       bound reads as UR_SLEEP_MAX_MS - 1 at the least, which the wait for 4
+       below pins from the other side. */
+    met = took < UR_SLEEP_MAX_MS - 1;
   }
   if (!met) return fail("a direct wait for 2 with 2 completions due slept its whole bound 5 times");
 
@@ -1054,6 +1058,15 @@ static int direct(void) {
     if (nish_uring_wait_direct(s, pp[0], 1, 1000) < 0 || nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0)
       return fail("direct wait");
   if (!(nish_uring_poll_events(s, 0) & POLLIN)) return fail("the poll did not answer a readable pipe");
+  /* An answered poll not yet taken is work to do now: a wait for 1,000 ms on
+     an otherwise idle set returns without an enter, so a pending signal is
+     not held for UR_SLEEP_MAX_MS. Counted, not timed. */
+  if (nish_uring_sleep_ms(s, 1000) == 0) return fail("the set was not idle before the answered-poll wait");
+  nish_uring_stats(s, &st);
+  before = st.direct_waits;
+  if (nish_uring_wait_direct(s, pp[0], 1, 1000) != 0) return fail("a wait with its poll answered answered an error");
+  nish_uring_stats(s, &st);
+  if (st.direct_waits != before) return fail("a direct wait entered the kernel to sleep with its poll already answered");
   if (nish_uring_wait_direct(s, pp[0], 1, 0) != 0 || s->poll_armed)
     return fail("a poll answered and not taken was armed again");
   if (!(nish_uring_poll_events(s, 1) & POLLIN) || nish_uring_poll_events(s, 0) != 0)

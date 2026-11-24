@@ -797,6 +797,11 @@ int32_t nish_read_signal(int32_t fd);
  * while none is made, without making one. A loop's wait asks it to tell the
  * signal descriptor from any other (runtime-net.c, the direct ring wait). */
 int32_t nish_signal_fd_made(void);
+/* Every closer that takes a program's descriptor number calls this first:
+ * once the signal read end is closed, `nish_signal_fd_made` answers -1 for
+ * good, since its number may be reused (docs/security/net-uring.md,
+ * NURING-44). */
+void nish_signal_fd_closing(int32_t fd);
 /* Who owns a path, and whether it runs (docs/security/runtime.md, RT-9; the
  * builtins `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`, #386).
  * `nish_lstat_owner_mode(path)`: `lstat`, so a

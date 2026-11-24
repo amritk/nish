@@ -25,11 +25,14 @@
 // arms the ring's poll on the signal descriptor. `netClose` closes it, a UDP
 // socket takes its number, and a datagram sent to it must be reported by the
 // next `pollWait`, though the ring's poll is still armed on the old pipe.
+// `reusefile` is the same with `fileClose` closing the signal descriptor:
+// either closer frees the number, so either must end the direct wait's
+// watch on it.
 //
 // Exit 0 is a pass, 2 says the kernel refused rings (the section's skip), 5
 // that the UDP socket did not take the closed number (`reuse`'s skip), and 1
 // is a failure, with its line.
-import { realpathSync } from "nish:fs"
+import { fileClose, realpathSync } from "nish:fs"
 import {
   NET_LISTEN_RING,
   netAddress,
@@ -163,16 +166,22 @@ const apart = (): i32 => {
 }
 
 /**
- * The `reuse` mode: a socket takes a closed `signalFd()`'s number.
+ * The `reuse` and `reusefile` modes: a socket takes a closed `signalFd()`'s
+ * number.
  * @param loop the loop, holding the listener
+ * @param viaFile whether `fileClose` closes the signal descriptor, not `netClose`
  * @returns the exit status
  */
-const reuse = (loop: i32): i32 => {
+const reuse = (loop: i32, viaFile: boolean): i32 => {
   const sig: i32 = signalFd()
   pollAdd(loop, sig, 1, SIGNAL)
   const ready: i32[] = new Array<i32>(16)
   pollWait(loop, ready, 20)
-  netClose(sig)
+  if (viaFile) {
+    fileClose(sig)
+  } else {
+    netClose(sig)
+  }
   const receiver: i32 = udpBind("127.0.0.1", 0, 0)
   if (receiver !== sig) {
     console.log(`the UDP socket took ${receiver}, not ${sig}`)
@@ -189,7 +198,8 @@ const reuse = (loop: i32): i32 => {
     console.log(`a wait on the reused number answered ${n} after ${took} ms`)
     return 1
   }
-  console.log(`reuse: a socket on the closed signal number was reported after ${took} ms`)
+  const how: string = viaFile ? "fileClose" : "netClose"
+  console.log(`reuse: a socket on the signal number ${how} closed was reported after ${took} ms`)
   return 0
 }
 
@@ -214,8 +224,8 @@ export const main = (): i32 => {
   }
   const loop: i32 = pollCreate()
   pollAdd(loop, listener, 1, LISTENER)
-  if (mode === "reuse") {
-    return reuse(loop)
+  if (mode === "reuse" || mode === "reusefile") {
+    return reuse(loop, mode === "reusefile")
   }
   const sig: i32 = mode === "signal" ? signalFd() : -1
   if (mode === "signal") {
@@ -296,14 +306,17 @@ export const main = (): i32 => {
     return 1
   }
 
-  // Sixteen bytes in: one wait for 16 answers them all.
+  // Sixteen bytes in: one wait for 16 answers them all, well before its
+  // maxWaitMs of 1,000.
   if (!poke(clients, CLIENTS)) {
     console.log("a client's write did not take its byte")
     return 1
   }
+  let t0: i64 = monotonicNanos()
   let n: i32 = pollWaitBatch(loop, ready, 2000, CLIENTS, 1000)
-  if (n !== CLIENTS || take(ready, n, buf) !== CLIENTS) {
-    console.log(`a wait for 16 with 16 bytes due answered ${n}`)
+  let took: i64 = since(t0)
+  if (n !== CLIENTS || take(ready, n, buf) !== CLIENTS || took >= 500) {
+    console.log(`a wait for 16 with 16 bytes due answered ${n} after ${took} ms`)
     return 1
   }
   console.log("batch: one wait for 16 answered 16")
@@ -313,21 +326,30 @@ export const main = (): i32 => {
     console.log("a client's write did not take its byte")
     return 1
   }
-  let t0: i64 = monotonicNanos()
+  t0 = monotonicNanos()
   n = pollWaitBatch(loop, ready, 2000, CLIENTS, 50)
-  let took: i64 = since(t0)
+  took = since(t0)
   if (n !== 1 || take(ready, n, buf) !== 1 || took < 40 || took >= 1000) {
     console.log(`a wait for 16 with one byte due answered ${n} after ${took} ms`)
     return 1
   }
   console.log("batch: a wait for 16 with one due answered 1 at its maxWaitMs")
 
-  // Nothing in: the wait answers 0 at its timeout, with no second wait.
-  t0 = monotonicNanos()
-  n = pollWaitBatch(loop, ready, 100, 4, 50)
-  took = since(t0)
-  if (n !== 0 || took < 90 || took >= 1000) {
-    console.log(`an idle wait for 4 answered ${n} after ${took} ms`)
+  // Nothing in: the wait answers 0 at its timeout of 100 ms, with no second
+  // wait of its maxWaitMs after it, which would take 150. An attempt the
+  // scheduler stretches past 145 is tried again, up to 3 times.
+  took = 1000
+  for (let attempt: i32 = 0; attempt < 3 && took >= 145; attempt++) {
+    t0 = monotonicNanos()
+    n = pollWaitBatch(loop, ready, 100, 4, 50)
+    took = since(t0)
+    if (n !== 0 || took < 90) {
+      console.log(`an idle wait for 4 answered ${n} after ${took} ms`)
+      return 1
+    }
+  }
+  if (took >= 145) {
+    console.log(`an idle wait for 4 took ${took} ms, past its timeout of 100 three times`)
     return 1
   }
   console.log("batch: an idle wait answered 0 at its timeout")

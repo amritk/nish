@@ -964,10 +964,10 @@ static void nr_fd_forget(int32_t fd) {
    for it, or -1: there is one live set, no other loop holds a virtual
    source, and the loop's only ordinary descriptor, if any, is `signalFd()`
    watched for reading. NULL otherwise, and the wait uses epoll. Once
-   `netClose` has closed the signal descriptor its number may name a new
-   socket, which the ring's poll, still armed on the old pipe, would never
-   report, so no loop with an ordinary descriptor waits directly again. */
-static int32_t nr_signal_closed;
+   `netClose` or `fileClose` has closed the signal descriptor its number may
+   name a new socket, which the ring's poll, still armed on the old pipe,
+   would never report; `nish_signal_fd_made` answers -1 from then on, so no
+   loop with an ordinary descriptor waits directly again. */
 
 static struct nr_set *nr_direct(int32_t loop, int32_t *watch) {
   if (nr_fds_spilled || nr_loops_spilled || nr_nloops != 1 || nr_loops[0] != loop) return NULL;
@@ -980,7 +980,7 @@ static struct nr_set *nr_direct(int32_t loop, int32_t *watch) {
   *watch = -1;
   for (int32_t i = 0; i < nr_nfds; i++) {
     if (nr_fds[i].loop != loop) continue;
-    if (*watch >= 0 || nr_signal_closed || nr_fds[i].fd != nish_signal_fd_made() || nr_fds[i].events != 1)
+    if (*watch >= 0 || nr_fds[i].fd != nish_signal_fd_made() || nr_fds[i].events != 1)
       return NULL;
     *watch = nr_fds[i].fd;
   }
@@ -1478,7 +1478,7 @@ int32_t nish_net_close(int32_t fd) {
   if (R) return nr_close_listener(R);
   if (nr_nsets > 0) nr_forget_loop(fd);
   nr_fd_forget(fd);
-  if (fd >= 0 && fd == nish_signal_fd_made()) nr_signal_closed = 1;
+  nish_signal_fd_closing(fd);
 #endif
   return close(fd) != 0 ? nish_net_fail() : 0;
 }

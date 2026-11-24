@@ -407,7 +407,10 @@ export const main = (): i32 => {
 - `maxWaitMs` is what the batch costs in latency. The second wait is on the
   ring alone, so any other descriptor in the loop, `signalFd()` included,
   may be reported up to `maxWaitMs` late. On a loop whose only other
-  descriptor is `signalFd()` a signal ends the batch at once.
+  descriptor is `signalFd()` a signal ends the batch at once on Linux 5.11
+  or later, unless the ring is `--sandbox` restricted, the listener has
+  grown a second ring or has a sibling, or `signalFd()` was closed; then it
+  too waits up to `maxWaitMs`.
 - With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
   on macOS, it is `pollWait`.
 

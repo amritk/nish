@@ -1468,6 +1468,9 @@ int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32
     s->poll_armed = 1;
     s->poll_fd = watch_fd;
   }
+  /* A poll already answered, by a pump that reaped it before this wait, is
+   * work to do now: sleeping would hold a pending signal for a whole enter. */
+  if (watch_fd >= 0 && s->poll_revents != 0) return 0;
   int32_t t = nish_uring_sleep_ms(s, timeout_ms);
   if (t == 0) return 0;
   struct {

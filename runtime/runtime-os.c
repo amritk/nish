@@ -326,7 +326,14 @@ int64_t nish_file_size(int32_t fd) {
 
 /* `fileClose(fd)`: never retried on `EINTR`, because Linux has released the
    number by then and a retry could close a descriptor opened since. */
-int32_t nish_file_close(int32_t fd) { return fd < 0 ? -9 : close(fd) == 0 ? 0 : nish_fs_err(errno); }
+int32_t nish_file_close(int32_t fd) {
+  if (fd < 0) return -9;
+#if !defined(__wasi__) && !defined(__wasm__)
+  /* The signal pipe's number is about to be free for reuse (NURING-44). */
+  nish_signal_fd_closing(fd);
+#endif
+  return close(fd) == 0 ? 0 : nish_fs_err(errno);
+}
 
 /* ---- Files and directories with an explicit mode (docs/security/runtime.md,
    RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and

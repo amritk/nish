@@ -18794,7 +18794,7 @@ if (dealtHere("runtimeChecks")) {
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
-        ["direct", "a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, and a ring without EXT_ARG is refused it (NURING-40)"],
+        ["direct", "a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, does not sleep while that answer is untaken, and a ring without EXT_ARG is refused it (NURING-40)"],
         ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
@@ -36211,10 +36211,17 @@ if (!only || "net_ring".includes(only)) {
     // ring source has joined answers its one datagram at once, though a ring
     // listener is live elsewhere. `batch.ts reuse`: a UDP socket that takes a
     // closed signalFd()'s number is reported, though the ring's poll is still
-    // armed on the old pipe. 5 says the socket took another number.
+    // armed on the old pipe; `reusefile` closes it with fileClose, the other
+    // closer that takes a program's number (NURING-44). 5 says the socket took
+    // another number.
     const cases = [
       ["apart", "net_ring: pollWaitBatch on a loop no ring source joined answers as pollWait does, not at its maxWaitMs", "apart: "],
       ["reuse", "net_ring: a socket on a closed signalFd()'s number is reported, not taken for the ring's watch", "reuse: "],
+      [
+        "reusefile",
+        "net_ring: a socket on a signalFd() number fileClose freed is reported, not taken for the ring's watch",
+        "reuse: ",
+      ],
     ]
     for (const [mode, name, line] of cases) {
       const r = bb.exe === null ? null : spawnSync(bb.exe, [mode], { encoding: "utf8", timeout: 60000 })
