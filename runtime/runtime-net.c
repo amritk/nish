@@ -303,11 +303,11 @@ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t 
 int32_t nish_uring_full(const struct nish_uring_set *s);
 int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
 void nish_uring_destroy(struct nish_uring_set *s);
-/* runtime-uring.c's counters; the dump below prints six of them. */
+/* runtime-uring.c's counters; the dump below prints seven of them. */
 struct nish_uring_stats {
   int64_t rings, live, accepting, slots, taskrun_reentries, overflow_drains, nobufs_rearms, send_requeues;
   int64_t accept_errors, accept_pauses, bound_violations, max_accepting_rings, direct_waits, sends;
-  int64_t pool_new, pool_held, pool_cached;
+  int64_t pool_new, pool_held, pool_cached, enters;
 };
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 
@@ -360,6 +360,7 @@ struct nr_set {
   uint32_t fhead, flen, fcap;
   uint32_t *pend; /* wblocked or lingering slots, checked after each pump */
   uint32_t npend, pcap;
+  int64_t windows, window_waits; /* batch windows, and the ring waits inside them, for the stats line */
 };
 
 static struct nr_set *nr_sets[NR_SETS];
@@ -635,9 +636,11 @@ static void nr_stats_print(const struct nr_set *S, const char *why) {
   struct nish_uring_stats st;
   nish_uring_stats(S->u, &st);
   dprintf(2,
-          "uring-stats %s port=%d sends=%lld pool_new=%lld pool_held=%lld pool_cached=%lld live=%lld slots=%lld\n",
+          "uring-stats %s port=%d sends=%lld pool_new=%lld pool_held=%lld pool_cached=%lld live=%lld slots=%lld "
+          "enters=%lld windows=%lld window_waits=%lld\n",
           why, (int)S->port, (long long)st.sends, (long long)st.pool_new, (long long)st.pool_held,
-          (long long)st.pool_cached, (long long)st.live, (long long)st.slots);
+          (long long)st.pool_cached, (long long)st.live, (long long)st.slots, (long long)st.enters,
+          (long long)S->windows, (long long)S->window_waits);
 }
 
 static void nr_pump_all(void) {
@@ -1138,9 +1141,11 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
   int32_t watch = -1;
   int direct = nr_direct(loop, &watch) == S;
   int64_t end = nr_now_ms() + max_wait_ms;
+  S->windows++;
   while (n < min && n < max) {
     int64_t left = end - nr_now_ms();
     if (left <= 0) break;
+    S->window_waits++;
     int rc = direct ? nish_uring_wait_direct(S->u, watch, min - n, (int32_t)left) : -EOPNOTSUPP;
     if (rc == -EOPNOTSUPP) {
       struct nish_uring_event ev[NR_EVENTS];

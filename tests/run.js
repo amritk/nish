@@ -36365,16 +36365,16 @@ server.on("exit", (code, sig) => {
       } else {
         const line = (why) => {
           const m = new RegExp(
-            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+)$`,
+            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+) enters=(\\d+) windows=(\\d+) window_waits=(\\d+)$`,
             "m"
           ).exec(on?.err ?? "")
           return m === null ? null : m.slice(1).map(Number)
         }
         const sig = line("signal")
         const end = line("close")
-        // [sends, pool_new, pool_held, pool_cached, live, slots]
+        // [sends, pool_new, pool_held, pool_cached, live, slots, enters, windows, window_waits]
         check(
-          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots and slots on SIGUSR1 and at the listener's close",
+          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots, slots, enters and batch windows on SIGUSR1 and at the listener's close",
           on !== null &&
             on.why === "exit 0" &&
             sig !== null &&
@@ -36388,7 +36388,11 @@ server.on("exit", (code, sig) => {
             end[3] >= 1 &&
             end[3] <= end[1] &&
             end[4] === 0 &&
-            end[5] === sig[5],
+            end[5] === sig[5] &&
+            sig[6] >= 1 &&
+            end[6] >= sig[6] &&
+            end[7] >= sig[7] &&
+            end[8] >= sig[8],
           on === null ? `does not compile and link\n${shown(b.c)}` : `${on.why}\nstdout: ${on.out}\nstderr: ${on.err}`
         )
         const off = drive("")
