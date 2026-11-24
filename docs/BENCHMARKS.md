@@ -3857,6 +3857,64 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
 
+<!-- handler-coalesce:begin -->
+## Coalesced ring sends, before and after (uring-send-coalesce S2)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. The stand-in is S4's ([above](#io_uring-under-the-handler-wp63-s4)): `bench/handler-ring/server.ts` on rings (`ring`), and the `Http1Server` design on rings (`h1-ring`: `bench/http1-server.ts`, the HTTP/1.1 load-test server, as one process under `BENCH_RING=1`, so its head and body go out through the ring's sends). The change measured is #2252 (`c12ccb0f`), which touches only `runtime/runtime-uring.c`: a ring slot's queued sends go out as one SEND from a per-ring buffer pool. `src/` is the same on both sides, so the two compilers build the same code and link different runtimes:
+
+- **ring**, **h1-ring**: built by `build/nish` at the bench commit, whose `runtime/` is `c12ccb0f`'s (after).
+- **ring-copy**, **h1-ring-copy**: a byte-identical copy of the after build; its gap to the after build is the noise band.
+- **ring-base**, **h1-ring-base**: built by a compiler from a worktree at `b2c55694` (`c12ccb0f^`, before), passed as `--base-compiler`. `run.sh` refuses to go on if the base builds match the after builds byte for byte.
+
+`run.sh` runs the arms in interleaved rounds, with the order rotated each round. `out/rsp` and `in/rsp` are the TCP segments `/proc/net/snmp` counted (`OutSegs`, `InSegs`) over loadgen's window, divided by the responses in it, as `bench/handler-ring/segs.c` samples them every 10 ms. The counters belong to the network namespace, so they count the server's segments and the load generator's, data and pure ACKs alike, on loopback.
+
+Bench code at commit `c664c0ed` on this pull request's branch (later commits change only documentation), on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The server is pinned to CPU 0 and the load to CPUs 1 to 3, with `--nodb` (`BENCH_NODB=1`: every server answers `/plaintext`'s 129 bytes without a query). 5 rounds at each count:
+
+```sh
+bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler <before>/build/nish \
+  --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base h1"
+bash bench/handler-ring/run.sh --nodb --conns 96000 --think 4 --warmup 4 --base-compiler <before>/build/nish \
+  --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base"
+```
+
+At 18,000 connections the load is 30,000 requests a second, a 3-second warm-up and a 10-second window. At 96,000 it is a closed loop with 4 seconds' think time, about 24,000 requests a second, with a 4-second warm-up. The epoll `h1` design runs only at 18,000: one process under the 20,000 limit cannot hold 96,000 descriptors. Every arm held every connection in every round, and none lost a request (`send_failed`, `closed` and `lat_lost` were 0 in every round).
+
+Medians of 5 (min to max). `user` and `sys` are medians of the server's user and system CPU a request. `PSS MB` is the median of the five rounds' `srv_pss_mb` (MiB) with its range, read from the per-round lines; the summary's own `PSS MB` column is the last round's. `p99` is the median of the rounds' p99 latency:
+
+| C | design | server µs/req | user | sys | out/rsp | in/rsp | box µs/req | req/s | PSS MB | p99 ms |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 18,000 | ring | 17.07 (16.30–17.44) | 2.23 | 14.57 | 3.000 | 3.000 | 33.07 | 30,000 | 11.1 (11.1–11.2) | 0.73 |
+| 18,000 | ring-copy | 16.60 (16.00–18.17) | 2.30 | 14.23 | 3.000 | 3.000 | 32.64 | 29,998 | 11.2 (11.0–11.3) | 0.73 |
+| 18,000 | ring-base | 17.00 (16.27–18.00) | 2.40 | 14.60 | 3.000 | 3.000 | 33.27 | 30,000 | 10.7 (10.6–10.7) | 1.68 |
+| 18,000 | h1-ring | 17.13 (16.17–18.20) | 2.23 | 14.70 | 3.000 | 3.000 | 31.57 | 30,000 | 10.0 (9.9–10.0) | 1.04 |
+| 18,000 | h1-ring-copy | 16.37 (15.93–18.03) | 2.53 | 13.79 | 3.000 | 3.000 | 32.57 | 30,000 | 10.1 (9.9–10.6) | 0.70 |
+| 18,000 | h1-ring-base | 16.73 (16.53–17.67) | 3.00 | 14.23 | 3.000 | 3.000 | 32.07 | 30,000 | 9.6 (9.5–9.7) | 1.00 |
+| 18,000 | h1 (epoll) | 11.90 (10.87–13.27) | 1.57 | 10.20 | 3.000 | 3.000 | 27.73 | 30,000 | 3.0 (3.0–3.0) | 0.76 |
+| 96,000 | ring | 14.26 (14.25–15.71) | 2.25 | 12.13 | 3.002 | 3.002 | 27.25 | 23,995 | 33.3 (32.9–33.8) | 2.66 |
+| 96,000 | ring-copy | 14.75 (13.75–15.09) | 2.33 | 12.21 | 3.003 | 3.003 | 27.96 | 23,995 | 32.8 (32.5–34.5) | 2.27 |
+| 96,000 | ring-base | 14.84 (14.38–15.97) | 2.29 | 12.54 | 3.002 | 3.002 | 27.63 | 23,995 | 31.4 (31.1–31.5) | 1.36 |
+| 96,000 | h1-ring | 15.00 (14.50–15.50) | 2.21 | 12.88 | 3.001 | 3.001 | 28.84 | 23,996 | 32.0 (31.5–32.5) | 2.66 |
+| 96,000 | h1-ring-copy | 14.42 (13.71–14.97) | 2.17 | 12.51 | 3.001 | 3.001 | 27.17 | 23,994 | 31.9 (31.8–32.0) | 1.65 |
+| 96,000 | h1-ring-base | 14.92 (14.80–15.29) | 2.25 | 12.63 | 3.001 | 3.001 | 28.46 | 23,995 | 30.4 (30.3–30.8) | 1.94 |
+
+After against before, as `run.sh` prints it (the change in server CPU a request at the medians, and the noise band, the after build against its copy):
+
+| C | design | after vs before | band |
+| ---: | --- | ---: | ---: |
+| 18,000 | ring | 0.4% more | 2.8% |
+| 18,000 | h1-ring | 2.4% more | 4.4% |
+| 96,000 | ring | 3.9% less | 3.4% |
+| 96,000 | h1-ring | 0.5% more | 3.9% |
+
+**Packets per response: no change.** The before and after builds counted the same segments per response at each count: 3.000 at 18,000 connections, and 3.001 to 3.002 at 96,000 (the copy, 3.001 to 3.003). On this loopback route, before #2252 already sent no more segments a response than after it, so this run shows nothing the coalescing removed from the wire. These counts are the namespace's, request and ACKs included; a route that splits a response's sends across segments, which this one does not show, is where a change would appear.
+
+**CPU per request: no change outside the noise band.** Three of the four comparisons are inside their band. The fourth, `ring` at 96,000, is 3.9% less against a 3.4% band; the same design at 18,000 is 0.4% more, and the per-round figures overlap (after 14.25 to 15.71 µs, before 14.38 to 15.97), so this run does not claim it as a gain.
+
+**PSS: up after #2252, in every round.** At 96,000 connections `ring` rose 1.9 MiB at the medians (33.3 against 31.4, 6.1%) and `h1-ring` 1.6 MiB (32.0 against 30.4, 5.3%); at 18,000 both rose 0.4 MiB (11.1 against 10.7, and 10.0 against 9.6). At both counts and in both designs, every after round is above every before round, and the copy's range sits with the after build's, not the before's. That is about 21 and 17 bytes a connection at 96,000 and 23 at 18,000, consistent with the per-ring send buffer pool #2252 adds. This run measures that the process is larger; it does not attribute the bytes.
+
+What this does not say: these are one server process each on loopback, and only `--nodb`; a route over a real network, or a response large enough to need more than one segment, was not measured.
+<!-- handler-coalesce:end -->
+
 <!-- mul-high:begin -->
 ## The `mulHigh` builtin in P-256 and the JSON tokenizer (WP41 S1)
 
