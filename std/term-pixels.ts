@@ -220,7 +220,8 @@ export class Framebuffer {
       return
     }
     const pixels: i32[] = this.pixels
-    // Always in range: `pixels` holds `width * height`.
+    // In range while `pixels` holds `width * height`; the fields are public, so
+    // one set out of step with the others makes the pixel off the framebuffer.
     const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
     if (at >= 0 && at < toI32(pixels.length)) {
       pixels[at] = colour & 0xffffff
@@ -239,7 +240,8 @@ export class Framebuffer {
       return 0
     }
     const pixels: i32[] = this.pixels
-    // Always in range: `pixels` holds `width * height`.
+    // In range while `pixels` holds `width * height`; the fields are public, so
+    // one set out of step with the others makes the pixel off the framebuffer.
     const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
     return at >= 0 && at < toI32(pixels.length) ? pixels[at] : 0
   }
@@ -699,6 +701,11 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
       n = n + 3
       pixel = pixel + 1
     }
+    // Only a `kittyRaw` cut below one pixel's 3 bytes holds none; stop rather
+    // than loop on it.
+    if (n === 0) {
+      return
+    }
     pixelsKittyOpen(out)
     if (first) {
       out.putText("a=T,f=24,t=d,i=")
@@ -1024,8 +1031,11 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
   }
   const pxStart: i32 = left > 0 ? left : 0
   for (let py: i32 = pyStart; py < ch && toF64(py) < bottom; py++) {
-    // `py` is at least `top` and below `ch`, so `y` is a row of the rect.
-    const y: i32 = toI32(toF64(py) - top)
+    // `py` is at least `top` and below `ch`, so `yRow` is a row of the rect;
+    // it can pass 2^31 - 1 when the rect starts far above the canvas, so it is
+    // checked against `ys` before it becomes an index.
+    const yRow: f64 = toF64(py) - top
+    const y: i32 = yRow < toF64(ys.length) ? toI32(yRow) : -1
     for (let px: i32 = pxStart; px < cw; px++) {
       const x: i64 = toI64(px) - toI64(left)
       // `xs` is `rect.width` long and `ys` `rect.height`: past them, the
@@ -1034,7 +1044,8 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
         break
       }
       const at: i32 = pixelsIndex(px, py, cw, toI32(cpixels.length))
-      // Never taken: `pixels` holds `width * height`, and `x` is not negative.
+      // Taken only when a caller has set `pixels`, `width` or `height` out of
+      // step: `pixels` holds `width * height` otherwise, and `x` is not negative.
       if (at < 0 || at >= toI32(cpixels.length) || x < toI64(0)) {
         continue
       }

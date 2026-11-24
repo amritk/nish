@@ -246,15 +246,6 @@ const rateLevelScale = (from: i32, to: i32): f64 => {
   return scale
 }
 
-/**
- * A counter of frames one more, staying at 2^31 - 1 once there: at 240 frames
- * a second, the most, that takes over 100 days, and past it the count undercounts.
- *
- * @param count The count so far.
- * @returns `count + 1`, or `count` at the most an i32 holds.
- */
-const rateCount = (count: i32): i32 => (count < 2147483647 ? count + 1 : count)
-
 /** Whether `x` is a number, not NaN or an infinity. */
 const rateFinite = (x: f64): boolean => x - x === 0.0
 
@@ -616,7 +607,7 @@ export class RateController {
       return false
     }
     if (this.unacked() >= this.maxUnacked || this.stale > 0) {
-      this.dropped = rateCount(this.dropped)
+      this.dropped = this.dropped + 1
       return false
     }
     return true
@@ -1047,8 +1038,8 @@ export class RateController {
     while (head >= 0 && head < toI32(sent.length) && nowMs - sent[head] > wait) {
       head = head + 1
       this.head = head
-      this.lost = rateCount(this.lost)
-      this.stale = rateCount(this.stale)
+      this.lost = this.lost + 1
+      this.stale = this.stale + 1
       this.staleSinceMs = nowMs
     }
     this.ageRate(nowMs)
