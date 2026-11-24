@@ -1,5 +1,5 @@
 // Opt-out (`--allow-panics`): calls into `std/host/game`, `std/host/ring`,
-// `std/math`, `std/raster`, `std/synth` and `std/term` reach their panic sites;
+// `std/math`, `std/raster` and `std/synth` reach their panic sites;
 // this file keeps none of its own. Follow-up: make those modules panic-free,
 // then build this file without `--allow-panics`.
 //

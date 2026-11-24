@@ -130,7 +130,36 @@ cannot overflow, and the key decoder holds at most 34 bytes of a CSI
 **A frame loop does not grow the heap** ("link/std_term: a frame loop's
 `flush` is taken back every pass, and nothing in main piles up").
 
+## WP85 S3: panic sites removed from `std/term.ts`
+
+WP85 S3 (#2157) took `std/term.ts` from 171 unproven panic sites to 1
+(`tests/std-panics.json`). Each was removed by a guard the prover reads, a
+clamp of a value that has a real floor (a loop start below 0, a `used` count
+below 0), or a loop condition. No site was removed with `nish:unsafe`, with a
+wrapping cast, or by making up a value. No exported signature changed.
+
+Five explicit panics were reachable only through their callers' arguments:
+
+| Panic at main | What it does now | Evidence |
+| --- | --- | --- |
+| `Screen.flush`: the drawn and sent buffers disagree in length | flushes the cells all of them hold (the shortest buffer, within the screen) and drops the rest | "link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out": a grown glyph buffer flushes its 2 cells, a shortened colour buffer 2 of 3 |
+| `termBytesText`: a count past the buffer | the count is clamped to the buffer | its callers pass a whole buffer or the decoder's own `outLen`, so no input reaches it; "link/std_term: exits with 0 and stdout matches expected.out" |
+| `KeyDecoder.keep`: a negative `used` | `used` is clamped to 0 | no input reaches it; the same std_term check |
+| `termDecodeKeys`, `termDecodeEvents`: the cursor stepped back | the cursor's range is the loop condition | no input reaches it; "link/std_term_events: exits with 0 and stdout matches expected.out" |
+
+The decoders were checked against main's by a scratch fuzzer: 190,000 random
+inputs, fed whole and in random splits, gave byte-identical events. The fuzzer
+is pinned by no test; the fixed cases in `tests/link/std_term/main.ts` and
+`tests/link/std_term_events/main.ts` are.
+
+**Open.** The one site left is the slice in `termBytesText`
+(the native `String.fromBytes(bytes, 0, end)`). `end` is clamped to the
+buffer's length first, so it cannot fail, but the prover cannot see a slice bound yet (#2208).
+Building the string a byte at a time, as the Node path does, would avoid the slice and slow every
+frame (`bench/instructions.json`, std-term-frame), so it waits for #2208.
+
 Tests:
+- `link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out` (WP85 S3)
 - `term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25`
 - `term_calls: over a pipe held open with nothing in it readStdin answers -11 and waitStdin(50) times out after at least 50 ms`
 - `term_import: waitStdin and readStdin drain a thousand piped bytes and stop at the end of the stream`
