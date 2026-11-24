@@ -78,3 +78,4 @@ ESC [ 32 parameters A: [up(65)]
 ESC [ and 4000 parameters: 4002 keys, the first escape
 a 65535 x 65535 screen is 4096 x 256, its canvas 4096 x 512, and flushes true
 its last cell flushes as ^[[256;4096H^[[0mZ
+bad bytes decode cell by cell: true

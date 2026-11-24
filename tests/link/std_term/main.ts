@@ -315,5 +315,28 @@ export const main = (): number => {
   // The last of its 1,048,576 cells reaches the terminal like any other.
   huge.set(4095, 255, 90, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
   console.log(`its last cell flushes as ${shown(huge.flush())}`);
+
+  // --- bytes Screen.text cannot decode, natively: a lead cut short by a
+  // non-continuation or by the string's end, a stray continuation and a lead
+  // of 248 or more are each one U+FFFD of one byte, and the next byte is read
+  // afresh; a lone surrogate's WTF-8 decodes to its code point, which a flush
+  // sends as U+FFFD. The prelude's `String.fromBytes` makes another string, so
+  // only a native run decodes these bytes ------------------------------------
+  const bad: u8[] = [226, 130, 65, 237, 160, 128, 248, 66, 240, 159];
+  const b = new Screen(8, 1, false);
+  b.flush();
+  const badDrawn = b.text(0, 0, String.fromBytes(bad, 0, bad.length), COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  const native = "\u2580".length === 3;
+  const decoded =
+    badDrawn === 8 &&
+    b.glyphAt(0, 0) === 65533 &&
+    b.glyphAt(1, 0) === 65533 &&
+    b.glyphAt(2, 0) === 65 &&
+    b.glyphAt(3, 0) === 55296 &&
+    b.glyphAt(4, 0) === 65533 &&
+    b.glyphAt(5, 0) === 66 &&
+    b.glyphAt(6, 0) === 65533 &&
+    b.glyphAt(7, 0) === 65533;
+  console.log(`bad bytes decode cell by cell: ${!native || decoded}`);
   return 0;
 };
