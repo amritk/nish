@@ -60,6 +60,18 @@
  *    (the errno, or -EOPNOTSUPP for a missing feature), with no set, the
  *    process alive and no descriptor leaked. A kernel that wants
  *    COOP_TASKRUN takes the second setup and the set opens on it.
+ *  - `coalesce`: 200 head+body responses, each two sends in one pass, as
+ *    `netWrite2` makes them, and then three writes in one pass. Each leaves
+ *    as one SEND; the mode prints the SENDs per response (NURING-40).
+ *  - `inflight`: 16 MB in 1,000-byte writes to a client that does not read
+ *    yet, so a SEND stays in the kernel; the writes behind it join one record
+ *    rather than the one in flight, and every byte arrives in order once the
+ *    client reads (NURING-40).
+ *  - `pool`: a response to each of 64 clients in one pass holds 64 pool
+ *    buffers; once sent, no slot holds one and at most UR_SENDPOOL_MAX stay
+ *    cached, and steady responses after a warm-up allocate none (NURING-41).
+ *  `coalesce`, `inflight` and `pool` drive their set and clients in one
+ *  process, as `move` does.
  */
 #define _GNU_SOURCE
 /* The hooks the layer calls in place of io_uring_setup and io_uring_register,
@@ -1176,6 +1188,147 @@ static int coalesce(void) {
   return 0;
 }
 
+#define IF_WRITE 1000
+#define IF_WRITES 16000
+
+/* 16 MB in writes of 1,000 bytes, one a pass, to a client that reads only
+ * once the server has queued them all, more than loopback's socket buffers
+ * hold: a SEND sits in the kernel, and every write after it must join the
+ * record behind it, not the one the kernel holds. The client then reads 4 KiB
+ * at a time, the set taking a pass between reads, so the kernel takes records
+ * short and the ring sends their rest; every byte must arrive in order, and
+ * the writes queued behind the stalled SEND must leave in fewer SENDs than a
+ * quarter of them (one a write without the append). */
+static int inflight(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(120);
+  struct nish_uring_set *s;
+  int l, fd, ring, slot;
+  struct sockaddr_in a;
+  if (inproc_open(4, &s, &l, &a) != 0) return 1;
+  if (move_accept(s, 0, &a, &fd, &ring, &slot) != 0) return 1;
+  struct nish_uring_stats st;
+  nish_uring_stats(s, &st);
+  int64_t sends0 = st.sends, requeues0 = st.send_requeues;
+  uint8_t out[IF_WRITE];
+  struct nish_uring_event ev[EVENTS_MAX];
+  int behind = 0;
+  for (int w = 0; w < IF_WRITES; w++) {
+    for (int i = 0; i < IF_WRITE; i++) out[i] = pattern(w, i);
+    if (nish_uring_queued(s, ring, slot) > 1 << 20) behind++;
+    if (nish_uring_send(s, ring, slot, out, IF_WRITE) != IF_WRITE) return fail("a write was refused");
+    if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
+  }
+  if (behind < IF_WRITES / 4) return fail("the kernel took the writes as they came: no SEND stayed in flight");
+  nish_uring_stats(s, &st);
+  int64_t stalled = st.sends;
+  if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) return fail("O_NONBLOCK");
+  long long deadline = now_ms() + 60000;
+  uint8_t in[4096];
+  long got = 0, total = (long)IF_WRITE * IF_WRITES;
+  while (got < total) {
+    if (now_ms() > deadline) {
+      nish_uring_stats(s, &st);
+      fprintf(stderr, "uring-test: read %ld of %ld, %ld queued, %ld SENDs\n", got, total, (long)nish_uring_queued(s, ring, slot), (long)(st.sends - sends0));
+      return fail("the client did not read every byte");
+    }
+    ssize_t k = read(fd, in, sizeof in);
+    if (k == 0) return fail("the server closed the stream early");
+    if (k < 0 && errno != EAGAIN) return fail("client read");
+    for (ssize_t i = 0; i < k; i++, got++)
+      if (in[i] != pattern((int)(got / IF_WRITE), (int)(got % IF_WRITE))) {
+        fprintf(stderr, "uring-test: byte %ld arrived out of order\n", got);
+        return 1;
+      }
+    int n = nish_uring_wait(s, k > 0 ? 0 : 1, ev, EVENTS_MAX);
+    if (n < 0) return fail("wait");
+    for (int i = 0; i < n; i++)
+      if (ev[i].kind != NISH_URING_ACCEPTED) {
+        fprintf(stderr, "uring-test: event kind %d res %d while the client read\n", (int)ev[i].kind, ev[i].res);
+        return 1;
+      }
+  }
+  nish_uring_stats(s, &st);
+  printf("%d writes, %d behind a stalled SEND, %ld SENDs, %ld after the stall, %ld requeues\n", IF_WRITES, behind,
+         (long)(st.sends - sends0), (long)(st.sends - stalled), (long)(st.send_requeues - requeues0));
+  if (st.sends - stalled >= behind / 4) return fail("writes behind a SEND in flight did not join one record");
+  if (nish_uring_queued(s, ring, slot) != 0) return fail("bytes stayed queued after the client read them all");
+  nish_uring_destroy(s);
+  close(fd);
+  close(l);
+  return 0;
+}
+
+#define PL_CLIENTS 64
+#define PL_WARM 20
+#define PL_ROUNDS 200
+
+/* The send pool. A response to each of 64 clients in one pass takes 64 pool
+ * buffers at once; once they are sent, the ring keeps at most
+ * UR_SENDPOOL_MAX of them and frees the rest, and no slot holds one. Then
+ * rounds of one response to one client, after a warm-up, must take every
+ * buffer from the pool: the count of buffers ever allocated does not move. */
+static int pool(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(120);
+  struct nish_uring_set *s;
+  int l, fd[PL_CLIENTS], ring[PL_CLIENTS], slot[PL_CLIENTS];
+  struct sockaddr_in a;
+  if (inproc_open(PL_CLIENTS, &s, &l, &a) != 0) return 1;
+  for (int c = 0; c < PL_CLIENTS; c++)
+    if (move_accept(s, c, &a, &fd[c], &ring[c], &slot[c]) != 0) return 1;
+  uint8_t out[CO_HEAD + CO_BODY], in[CO_HEAD + CO_BODY];
+  for (int c = 0; c < PL_CLIENTS; c++) {
+    for (int i = 0; i < CO_HEAD + CO_BODY; i++) out[i] = pattern(c, i);
+    if (nish_uring_send(s, ring[c], slot[c], out, CO_HEAD) != CO_HEAD ||
+        nish_uring_send(s, ring[c], slot[c], out + CO_HEAD, CO_BODY) != CO_BODY)
+      return fail("a burst send was refused");
+  }
+  struct nish_uring_stats st;
+  nish_uring_stats(s, &st);
+  printf("burst: %ld buffers held, %ld cached\n", (long)st.pool_held, (long)st.pool_cached);
+  if (st.pool_held != PL_CLIENTS) return fail("a burst response did not take one pool buffer");
+  for (int c = 0; c < PL_CLIENTS; c++) {
+    if (drain_slot(s, ring[c], slot[c]) != 0) return 1;
+    for (int i = 0; i < CO_HEAD + CO_BODY; i++) out[i] = pattern(c, i);
+    if (read_all(fd[c], in, sizeof in) != 0 || memcmp(in, out, sizeof in) != 0)
+      return fail("a burst response did not arrive in order");
+  }
+  nish_uring_stats(s, &st);
+  printf("after the burst: %ld held, %ld cached, %ld allocated\n", (long)st.pool_held, (long)st.pool_cached,
+         (long)st.pool_new);
+  if (st.pool_held != 0) return fail("an idle slot held a pool buffer after its response");
+  if (st.pool_cached > UR_SENDPOOL_MAX) return fail("the ring kept more than UR_SENDPOOL_MAX free buffers");
+  int64_t warm = 0;
+  for (int r = 0; r < PL_WARM + PL_ROUNDS; r++) {
+    if (r == PL_WARM) {
+      nish_uring_stats(s, &st);
+      warm = st.pool_new;
+    }
+    int c = r % PL_CLIENTS;
+    for (int i = 0; i < CO_HEAD + CO_BODY; i++) out[i] = pattern(r, i);
+    if (nish_uring_send(s, ring[c], slot[c], out, CO_HEAD) != CO_HEAD ||
+        nish_uring_send(s, ring[c], slot[c], out + CO_HEAD, CO_BODY) != CO_BODY)
+      return fail("a steady send was refused");
+    if (drain_slot(s, ring[c], slot[c]) != 0) return 1;
+    if (read_all(fd[c], in, sizeof in) != 0 || memcmp(in, out, sizeof in) != 0)
+      return fail("a steady response did not arrive in order");
+  }
+  nish_uring_stats(s, &st);
+  printf("steady: %ld buffers allocated after the warm-up, %ld held\n", (long)(st.pool_new - warm),
+         (long)st.pool_held);
+  if (st.pool_new != warm) return fail("a steady response allocated a pool buffer after the warm-up");
+  if (st.pool_held != 0) return fail("an idle slot held a pool buffer after a steady response");
+  nish_uring_destroy(s);
+  for (int c = 0; c < PL_CLIENTS; c++) close(fd[c]);
+  close(l);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
   signal(SIGPIPE, SIG_IGN);
@@ -1187,6 +1340,8 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "nomem") == 0) return nomem();
   if (strcmp(argv[1], "shutclose") == 0) return shutclose();
   if (strcmp(argv[1], "coalesce") == 0) return coalesce();
+  if (strcmp(argv[1], "inflight") == 0) return inflight();
+  if (strcmp(argv[1], "pool") == 0) return pool();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},

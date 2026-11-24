@@ -18801,6 +18801,9 @@ if (dealtHere("runtimeChecks")) {
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
         ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+        ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
+        ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
+        ["pool", "a burst leaves no buffer on an idle slot and at most UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
         const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })
