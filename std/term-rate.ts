@@ -198,6 +198,9 @@ const rateLocalRttMs: f64 = 5.0
 /** The deepest detail step: 256 colours on top of the others. */
 const rateMaxLevel: i32 = 4
 
+/** The slowest tier, which every controller's tiers end at. */
+const rateLeastTier: i32 = 5
+
 /** The least time the link is taken to spend on a frame, so one fast answer cannot read as unbounded bandwidth. */
 const rateMinBusyMs: f64 = 0.5
 
@@ -236,12 +239,21 @@ const rateLevelScale = (from: i32, to: i32): f64 => {
     level = level + 1
     scale = scale / rateLevelFactor(level)
   }
-  while (level > to) {
-    scale = scale * rateLevelFactor(level)
-    level = level - 1
+  // Counted up like the loop above, which the prover clears; the factors are powers of two, so the order changes no bit.
+  for (let k: i32 = to; k < from; k++) {
+    scale = scale * rateLevelFactor(k + 1)
   }
   return scale
 }
+
+/**
+ * A counter of frames one more, staying at 2^31 - 1 once there: at 240 frames
+ * a second, the most, that takes over 100 days, and past it the count undercounts.
+ *
+ * @param count The count so far.
+ * @returns `count + 1`, or `count` at the most an i32 holds.
+ */
+const rateCount = (count: i32): i32 => (count < 2147483647 ? count + 1 : count)
 
 /** Whether `x` is a number, not NaN or an infinity. */
 const rateFinite = (x: f64): boolean => x - x === 0.0
@@ -347,6 +359,12 @@ export class TermStats {
 export class RateController {
   /** The tiers allowed, fastest first, ending at 5. */
   private tiers: i32[]
+  /** The first of `tiers`, the fastest allowed. */
+  private fastestFps: i32
+  /** The frame rate `stepUp` found, when it answers true. */
+  private upFps: i32
+  /** The detail step `stepUp` found, when it answers true. */
+  private upLevel: i32
   /**
    * Paces frames at `tier`.
    * @internal Used by `termIoWait` in term-io.ts.
@@ -476,13 +494,21 @@ export class RateController {
     this.fixedFps = capped > 0 ? capped : 0
     const all: i32[] = [120, 60, 30, 20, 15, 10, 5]
     this.tiers = []
+    // Taken while pushing, not read back by index: 5 is always pushed, so it is set.
+    let fastest: i32 = 0
     for (const t of all) {
       if (t === 5 || (t <= options.maxFps && (t !== 120 || options.allow120))) {
         this.tiers.push(t)
+        if (fastest === 0) {
+          fastest = t
+        }
       }
     }
+    this.fastestFps = fastest
+    this.upFps = fastest
+    this.upLevel = 0
     // The least tier at or above `minFps`; the tiers end at 5, which is below every sensible floor.
-    let minTier: i32 = this.tiers[0]
+    let minTier: i32 = fastest
     for (const t of this.tiers) {
       if (t >= options.minFps) {
         minTier = t
@@ -492,13 +518,14 @@ export class RateController {
     this.floorFps = this.prefer === DETAIL_FIRST ? 5 : minTier
     const remote: boolean =
       options.remoteHint && !(options.probeRttMs > 0.0 && options.probeRttMs < rateLocalRttMs)
-    let want: i32 = this.tiers[0]
+    let want: i32 = fastest
     if (remote) {
       want = 15
     } else if (options.probeRttMs >= rateLocalRttMs) {
       want = 30
     }
-    let start: i32 = this.tiers[this.tiers.length - 1]
+    // The last tier, 5, which is pushed whatever the options.
+    let start: i32 = rateLeastTier
     for (const t of this.tiers) {
       if (t <= want && t > start) {
         start = t
@@ -557,7 +584,10 @@ export class RateController {
    * @returns How many frames await their acknowledgement, from 0.
    */
   unacked(): i32 {
-    return toI32(this.sentMs.length) - this.head
+    // `head` is never negative; the test only lets the prover see the difference fit.
+    const head: i32 = this.head
+    const length: i32 = toI32(this.sentMs.length)
+    return head > 0 ? length - head : length
   }
 
   /**
@@ -586,7 +616,7 @@ export class RateController {
       return false
     }
     if (this.unacked() >= this.maxUnacked || this.stale > 0) {
-      this.dropped = this.dropped + 1
+      this.dropped = rateCount(this.dropped)
       return false
     }
     return true
@@ -607,16 +637,26 @@ export class RateController {
       return
     }
     const size: i32 = bytes > 0 ? bytes : 0
-    const length: i32 = toI32(this.sentMs.length)
-    if (this.head > 0 && this.head * 2 >= length) {
+    const sent: f64[] = this.sentMs
+    const sizes: i32[] = this.sentBytes
+    const length: i32 = toI32(sent.length)
+    const head: i32 = this.head
+    if (head > 0 && head >= length - head) {
       // Drop the answered prefix once it is half the queue: a link always a frame behind never empties it.
-      for (let i: i32 = this.head; i < length; i++) {
-        this.sentMs[i - this.head] = this.sentMs[i]
-        this.sentBytes[i - this.head] = this.sentBytes[i]
+      // Locals and a bounds test at each access, so the prover sees every index in range.
+      for (let i: i32 = head; i < length; i++) {
+        const to: i32 = i - head
+        if (i >= 0 && to >= 0 && to < length && i < toI32(sizes.length) && to < toI32(sizes.length)) {
+          sent[to] = sent[i]
+          sizes[to] = sizes[i]
+        }
       }
-      for (let i: i32 = 0; i < this.head; i++) {
-        this.sentMs.pop()
-        this.sentBytes.pop()
+      const keep: i32 = length - head
+      while (sent.length > 0 && toI32(sent.length) > keep) {
+        sent.pop()
+      }
+      while (sizes.length > 0 && toI32(sizes.length) > keep) {
+        sizes.pop()
       }
       this.head = 0
     }
@@ -640,16 +680,22 @@ export class RateController {
    * @param nowMs When the acknowledgement was read, in milliseconds on the clock every call uses.
    */
   ackReceived(nowMs: f64): void {
-    if (this.stale > 0) {
-      this.stale = this.stale - 1
+    // Fields read into locals, which the prover keeps facts on.
+    const stale: i32 = this.stale
+    if (stale > 0) {
+      this.stale = stale - 1
       return
     }
-    if (this.unacked() === 0) {
+    const head: i32 = this.head
+    const sentAt: f64[] = this.sentMs
+    const sizes: i32[] = this.sentBytes
+    if (head < 0 || head >= toI32(sentAt.length) || head >= toI32(sizes.length)) {
+      // No frame waiting: a stray answer.
       return
     }
-    const sent: f64 = this.sentMs[this.head]
-    const bytes: f64 = toF64(this.sentBytes[this.head])
-    this.head = this.head + 1
+    const sent: f64 = sentAt[head]
+    const bytes: f64 = toF64(sizes[head])
+    this.head = head + 1
     if (!rateFinite(nowMs)) {
       return
     }
@@ -678,7 +724,10 @@ export class RateController {
       // The aged sample still reported is kept while trips take what it predicts: the quickest trip when it was taken,
       // which holds the whole latency and perhaps some bytes, so the prediction errs long, plus these bytes' time.
       const expected: f64 = this.rateQuickMs + (bytes * this.ackBusyMs) / this.ackBytes
-      this.contradicted = rtt > rateStaleFactor * expected ? this.contradicted + 1 : 0
+      // Never past the threshold, which resets it, so the count stops there.
+      const was: i32 = this.contradicted
+      const more: i32 = was < rateStaleTrips ? was + 1 : rateStaleTrips
+      this.contradicted = rtt > rateStaleFactor * expected ? more : 0
       if (this.contradicted >= rateStaleTrips) {
         this.ackBytes = 0.0
         this.ackBusyMs = 0.0
@@ -688,11 +737,14 @@ export class RateController {
     }
     if (bytes > 0.0 && rtt > rateMinBusyMs) {
       // Whatever the latency and however late the answer was read, the bytes took no longer than the whole trip.
-      if (toI32(this.floorPerSec.length) < rateTripCount) {
-        this.floorPerSec.push((bytes * 1000.0) / rtt)
-      } else {
-        this.floorPerSec[this.floorNext] = (bytes * 1000.0) / rtt
-        this.floorNext = (this.floorNext + 1) % rateTripCount
+      const floors: f64[] = this.floorPerSec
+      const next: i32 = this.floorNext
+      if (toI32(floors.length) < rateTripCount) {
+        floors.push((bytes * 1000.0) / rtt)
+      } else if (next >= 0 && next < toI32(floors.length)) {
+        // `floorNext` stays in [0, rateTripCount), the full list's length; the test shows the prover.
+        floors[next] = (bytes * 1000.0) / rtt
+        this.floorNext = (next + 1) % rateTripCount
       }
       this.updateRate()
     }
@@ -709,15 +761,20 @@ export class RateController {
    * down to their round trip.
    */
   private measureTrip(rtt: f64, bytes: f64): void {
+    const trips: f64[] = this.tripMs
+    const sizes: f64[] = this.tripBytes
+    // The quickest trip's values are kept as found, so no index outlives the loop's bound.
     let quickest: i32 = -1
-    for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
-      if (quickest < 0 || this.tripMs[i] < this.tripMs[quickest]) {
+    let otherMs: f64 = 0.0
+    let otherBytes: f64 = 0.0
+    for (let i: i32 = 0; i < toI32(trips.length) && i < toI32(sizes.length); i++) {
+      if (quickest < 0 || trips[i] < otherMs) {
         quickest = i
+        otherMs = trips[i]
+        otherBytes = sizes[i]
       }
     }
     if (quickest >= 0) {
-      const otherMs: f64 = this.tripMs[quickest]
-      const otherBytes: f64 = this.tripBytes[quickest]
       const big: boolean = bytes > otherBytes
       const moreBytes: f64 = big ? bytes - otherBytes : otherBytes - bytes
       const moreMs: f64 = big ? rtt - otherMs : otherMs - rtt
@@ -726,13 +783,18 @@ export class RateController {
         this.measureRate(moreBytes, moreMs)
       }
     }
-    if (toI32(this.tripMs.length) < rateTripCount) {
-      this.tripMs.push(rtt)
-      this.tripBytes.push(bytes)
-    } else {
-      this.tripMs[this.tripNext] = rtt
-      this.tripBytes[this.tripNext] = bytes
-      this.tripNext = (this.tripNext + 1) % rateTripCount
+    // Read again after `measureRate`: facts end at a call.
+    const kept: f64[] = this.tripMs
+    const keptBytes: f64[] = this.tripBytes
+    const next: i32 = this.tripNext
+    if (toI32(kept.length) < rateTripCount) {
+      kept.push(rtt)
+      keptBytes.push(bytes)
+    } else if (next >= 0 && next < toI32(kept.length) && next < toI32(keptBytes.length)) {
+      // `tripNext` stays in [0, rateTripCount), the full lists' length; the test shows the prover.
+      kept[next] = rtt
+      keptBytes[next] = bytes
+      this.tripNext = (next + 1) % rateTripCount
     }
   }
 
@@ -796,10 +858,13 @@ export class RateController {
    */
   private leastLatency(): f64 {
     let least: f64 = -1.0
-    for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
-      const bytes: f64 = this.tripBytes[i]
+    const trips: f64[] = this.tripMs
+    const sizes: f64[] = this.tripBytes
+    // The lists grow together; bounding by both lets the prover see each index.
+    for (let i: i32 = 0; i < toI32(trips.length) && i < toI32(sizes.length); i++) {
+      const bytes: f64 = sizes[i]
       if (bytes <= 0.0 || this.haveRate) {
-        const left: f64 = bytes > 0.0 ? this.tripMs[i] - (bytes * 1000.0) / this.bytesPerSec : this.tripMs[i]
+        const left: f64 = bytes > 0.0 ? trips[i] - (bytes * 1000.0) / this.bytesPerSec : trips[i]
         const latency: f64 = left > 0.0 ? left : 0.0
         if (least < 0.0 || latency < least) {
           least = latency
@@ -857,8 +922,11 @@ export class RateController {
     }
     if (this.haveRtt) {
       let rtt: f64 = this.rttMs
-      if (this.unacked() > 0 && nowMs - this.sentMs[this.head] > rtt) {
-        rtt = nowMs - this.sentMs[this.head]
+      // A frame waits exactly when `head` is inside the queue; tested on locals so the prover sees the index.
+      const sent: f64[] = this.sentMs
+      const head: i32 = this.head
+      if (head >= 0 && head < toI32(sent.length) && nowMs - sent[head] > rtt) {
+        rtt = nowMs - sent[head]
       }
       const base: f64 = this.fixedPart(rtt, scale)
       const trip: f64 =
@@ -910,7 +978,7 @@ export class RateController {
 
   /** One step down the path at `nowMs`, when over budget: fewer frames, or less detail. */
   private stepDown(nowMs: f64): void {
-    const least: i32 = this.tiers[this.tiers.length - 1]
+    const least: i32 = rateLeastTier
     if (this.tier > this.floorFps) {
       // Straight to the fastest tier down to the floor that fits.
       let fps: i32 = this.slowerTier(this.tier, this.floorFps)
@@ -920,9 +988,10 @@ export class RateController {
       this.moveTo(fps, this.level, nowMs)
       return
     }
-    const here: f64 = this.load(this.tier, this.level, nowMs)
-    if (this.level < rateMaxLevel && this.load(this.tier, this.level + 1, nowMs) <= here * rateStepGain) {
-      this.moveTo(this.tier, this.level + 1, nowMs)
+    const level: i32 = this.level
+    const here: f64 = this.load(this.tier, level, nowMs)
+    if (level < rateMaxLevel && this.load(this.tier, level + 1, nowMs) <= here * rateStepGain) {
+      this.moveTo(this.tier, level + 1, nowMs)
       return
     }
     if (this.tier > least) {
@@ -935,18 +1004,23 @@ export class RateController {
   }
 
   /**
-   * The next state up the path, as `fps * 8 + level`, or -1 at the top. It is
-   * the descent backwards: tiers below the floor first, then detail, then
-   * tiers above it.
+   * Find the next state up the path into `upFps` and `upLevel`, or answer
+   * false at the top. It is the descent backwards: tiers below the floor
+   * first, then detail, then tiers above it.
    */
-  private stepUp(): i32 {
-    if (this.tier < this.floorFps || (this.level === 0 && this.tier < this.tiers[0])) {
-      return this.fasterTier(this.tier) * 8 + this.level
+  private stepUp(): boolean {
+    const level: i32 = this.level
+    if (this.tier < this.floorFps || (level === 0 && this.tier < this.fastestFps)) {
+      this.upFps = this.fasterTier(this.tier)
+      this.upLevel = level
+      return true
     }
-    if (this.level > 0) {
-      return this.tier * 8 + this.level - 1
+    if (level > 0) {
+      this.upFps = this.tier
+      this.upLevel = level - 1
+      return true
     }
-    return -1
+    return false
   }
 
   /**
@@ -967,10 +1041,14 @@ export class RateController {
       // Their answers were lost too; with nothing drawn since, the next answer is a new frame's.
       this.stale = 0
     }
-    while (this.unacked() > 0 && nowMs - this.sentMs[this.head] > wait) {
-      this.head = this.head + 1
-      this.lost = this.lost + 1
-      this.stale = this.stale + 1
+    // On locals, so the prover sees `head` inside the queue at each read.
+    const sent: f64[] = this.sentMs
+    let head: i32 = this.head
+    while (head >= 0 && head < toI32(sent.length) && nowMs - sent[head] > wait) {
+      head = head + 1
+      this.head = head
+      this.lost = rateCount(this.lost)
+      this.stale = rateCount(this.stale)
       this.staleSinceMs = nowMs
     }
     this.ageRate(nowMs)
@@ -994,8 +1072,7 @@ export class RateController {
       return
     }
     this.overSinceMs = -1.0
-    const up: i32 = this.stepUp()
-    if (up < 0 || this.load((up / 8) | 0, up % 8, nowMs) > rateRiseMargin) {
+    if (!this.stepUp() || this.load(this.upFps, this.upLevel, nowMs) > rateRiseMargin) {
       this.underSinceMs = -1.0
       return
     }
@@ -1003,7 +1080,7 @@ export class RateController {
       this.underSinceMs = nowMs
     }
     if (settled && nowMs - this.underSinceMs >= rateRiseAfterMs) {
-      this.moveTo((up / 8) | 0, up % 8, nowMs)
+      this.moveTo(this.upFps, this.upLevel, nowMs)
     }
   }
 
@@ -1011,7 +1088,8 @@ export class RateController {
   private publish(): void {
     const d: RateDecision = this.current
     d.fps = this.tier
-    d.resolutionDivisor = this.level >= 2 ? 4 : this.level + 1
+    const level: i32 = this.level
+    d.resolutionDivisor = level >= 2 ? 4 : level + 1
     d.backendCap = this.level >= 3 ? BACKEND_CAP_HALFBLOCK : BACKEND_CAP_KITTY
     d.palette256 = this.level >= rateMaxLevel
     const s: TermStats = this.measured
@@ -1076,11 +1154,18 @@ const rateBackendName = (cap: i32): string => {
 export const drawStatsOverlay = (screen: Screen, stats: TermStats, corner: i32): void => {
   const top: string = `${stats.tier}fps ${rateWhole(stats.rttMs)}ms ${rateWhole(stats.bytesPerSec / 1000.0)}kB/s`
   const bottom: string = `${rateWhole(stats.frameCostMs)}ms drop ${stats.dropped} ${rateBackendName(stats.backend)}`
-  const width: i32 = toI32(top.length > bottom.length ? top.length : bottom.length)
+  const topWidth: i32 = toI32(top.length)
+  const bottomWidth: i32 = toI32(bottom.length)
+  const width: i32 = topWidth > bottomWidth ? topWidth : bottomWidth
   const right: boolean = corner === CORNER_TOP_RIGHT || corner === CORNER_BOTTOM_RIGHT
   const below: boolean = corner === CORNER_BOTTOM_LEFT || corner === CORNER_BOTTOM_RIGHT
-  const x: i32 = right && screen.width > width ? screen.width - width : 0
-  const y: i32 = below && screen.height > 2 ? screen.height - 2 : 0
+  // The screen's size in locals, which the prover keeps facts on; each row is worked out apart, so no sum can overflow.
+  // Both widths are lengths and so never negative: the two tests only let the prover see the difference fit.
+  const screenWidth: i32 = screen.width
+  const screenHeight: i32 = screen.height
+  const x: i32 = right && width >= 0 && screenWidth >= 0 && screenWidth > width ? screenWidth - width : 0
+  const y: i32 = below && screenHeight > 2 ? screenHeight - 2 : 0
+  const next: i32 = below && screenHeight > 2 ? screenHeight - 1 : 1
   screen.text(x, y, top, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_INVERSE)
-  screen.text(x, y + 1, bottom, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_INVERSE)
+  screen.text(x, next, bottom, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_INVERSE)
 }

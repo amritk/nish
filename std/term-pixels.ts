@@ -143,21 +143,30 @@ const PIXELS_ANSI16: string =
 const pixelsHex = (text: string, at: i32, count: i32): i32 => {
   let v: i32 = 0
   const length: i32 = toI32(text.length)
-  for (let i: i32 = at; i < at + count && i >= 0 && i < length; i++) {
+  const end: i64 = toI64(at) + toI64(count)
+  for (let i: i32 = at; toI64(i) < end && i >= 0 && i < length; i++) {
     const c: i32 = toI32(text.charCodeAt(i))
     v = (v << 4) | (c >= 97 ? c - 87 : c - 48)
   }
   return v
 }
 
-/** Panic, as `who`, unless `width × height` is a size an array of pixels can have. */
-const pixelsCheckSize = (who: string, width: i32, height: i32): void => {
+/** `width × height`, after panicking, as `who`, unless it is a size an array of pixels can have. */
+const pixelsArea = (who: string, width: i32, height: i32): i32 => {
   if (width < 0 || height < 0) {
     panic(`${who}: a negative size`)
   }
-  if (width > 0 && height > ((2147483647 / width) | 0)) {
+  const area: i64 = toI64(width) * toI64(height)
+  if (area > toI64(2147483647)) {
     panic(`${who}: more than 2^31 - 1 pixels`)
   }
+  return toI32(area)
+}
+
+/** `y * width + x` as an index below `length`, or -1 when it is not one. */
+const pixelsIndex = (x: i32, y: i32, width: i32, length: i32): i32 => {
+  const wide: i64 = toI64(y) * toI64(width) + toI64(x)
+  return wide < toI64(0) || wide >= toI64(length) ? -1 : toI32(wide)
 }
 
 /** A `width × height` grid of `0xRRGGBB` pixels, row by row, all black when made. */
@@ -176,10 +185,10 @@ export class Framebuffer {
    * @param height Pixels down.
    */
   constructor(width: i32, height: i32) {
-    pixelsCheckSize("Framebuffer", width, height)
+    const area: i32 = pixelsArea("Framebuffer", width, height)
     this.width = width
     this.height = height
-    this.pixels = new Array<i32>(width * height)
+    this.pixels = new Array<i32>(area)
     this.pixels.fill(0)
   }
 
@@ -190,11 +199,11 @@ export class Framebuffer {
    * @param height The new pixels down; negative panics, as in the constructor.
    */
   resize(width: i32, height: i32): void {
-    pixelsCheckSize("Framebuffer.resize", width, height)
+    const area: i32 = pixelsArea("Framebuffer.resize", width, height)
     if (width !== this.width || height !== this.height) {
       this.width = width
       this.height = height
-      this.pixels = new Array<i32>(width * height)
+      this.pixels = new Array<i32>(area)
     }
     this.pixels.fill(0)
   }
@@ -210,7 +219,12 @@ export class Framebuffer {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return
     }
-    this.pixels[y * this.width + x] = colour & 0xffffff
+    const pixels: i32[] = this.pixels
+    // Always in range: `pixels` holds `width * height`.
+    const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
+    if (at >= 0 && at < toI32(pixels.length)) {
+      pixels[at] = colour & 0xffffff
+    }
   }
 
   /**
@@ -224,7 +238,10 @@ export class Framebuffer {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return 0
     }
-    return this.pixels[y * this.width + x]
+    const pixels: i32[] = this.pixels
+    // Always in range: `pixels` holds `width * height`.
+    const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
+    return at >= 0 && at < toI32(pixels.length) ? pixels[at] : 0
   }
 
   /**
@@ -261,10 +278,20 @@ export const scaleFramebuffer = (src: Framebuffer, divisor: i32, dst: Framebuffe
   const w: i32 = pixelsCeilDiv(src.width, divisor)
   const h: i32 = pixelsCeilDiv(src.height, divisor)
   dst.resize(w, h)
-  for (let y: i32 = 0; y < h; y++) {
-    const from: i32 = y * divisor * src.width
-    for (let x: i32 = 0; x < w; x++) {
-      dst.pixels[y * w + x] = src.pixels[from + x * divisor]
+  const from: i32[] = src.pixels
+  const to: i32[] = dst.pixels
+  const srcW: i32 = src.width
+  // `x * divisor` and `y * divisor` stay below the source's size, as `w` and
+  // `h` are its size over `divisor` rounded up; the loops say so for the
+  // prover, and each index is checked against its array as well.
+  for (let y: i32 = 0; y < h && toI64(y) * toI64(divisor) < toI64(src.height); y++) {
+    const sy: i32 = toI32(toI64(y) * toI64(divisor))
+    for (let x: i32 = 0; x < w && toI64(x) * toI64(divisor) < toI64(srcW); x++) {
+      const s: i32 = pixelsIndex(toI32(toI64(x) * toI64(divisor)), sy, srcW, toI32(from.length))
+      const d: i32 = pixelsIndex(x, y, w, toI32(to.length))
+      if (s >= 0 && s < toI32(from.length) && d >= 0 && d < toI32(to.length)) {
+        to[d] = from[s]
+      }
     }
   }
 }
@@ -314,7 +341,14 @@ export class PixelRect {
 }
 
 /** `a / b` rounded up, for `a >= 0` and `b > 0`. */
-const pixelsCeilDiv = (a: i32, b: i32): i32 => (a === 0 ? 0 : (((a - 1) / b) | 0) + 1)
+const pixelsCeilDiv = (a: i32, b: i32): i32 => {
+  if (a <= 0 || b <= 0) {
+    return 0
+  }
+  // `q` is at most `a - 1`, so `q + 1` cannot overflow; the test says so.
+  const q: i32 = ((a - 1) / b) | 0
+  return q < a ? q + 1 : a
+}
 
 /**
  * The rect a `fbW × fbH` framebuffer is drawn in on a `cols × rows` area of
@@ -376,8 +410,8 @@ export const fitFramebuffer = (
   const usedCols: i32 = pixelsCeilDiv(w, pw)
   const usedRows: i32 = pixelsCeilDiv(h, ph)
   const scale: f64 = toF64(w) / toF64(fbW)
-  const col: i32 = (cols - usedCols) >> 1
-  const row: i32 = (rows - usedRows) >> 1
+  const col: i32 = toI32(Math.floor((toF64(cols) - toF64(usedCols)) / 2.0))
+  const row: i32 = toI32(Math.floor((toF64(rows) - toF64(usedRows)) / 2.0))
   if (backend === GRAPHICS_ASCII) {
     return new PixelRect(col, row, usedCols, usedRows, usedCols, usedRows, scale)
   }
@@ -470,13 +504,16 @@ export class PixelBytes {
    * @param n How many bytes the caller is about to `put`.
    */
   reserve(n: i32): void {
-    const need: i32 = this.length + n
-    if (need <= toI32(this.bytes.length)) {
+    // Summed and doubled in f64, which cannot overflow.
+    const need: f64 = toF64(this.length) + toF64(n)
+    if (need <= toF64(this.bytes.length)) {
       return
     }
-    // Doubled in f64, which cannot overflow, and capped at the longest array.
+    if (need > 2147483647.0) {
+      panic("PixelBytes.reserve: more than 2^31 - 1 bytes")
+    }
     let size: f64 = toF64(this.bytes.length)
-    while (size < toF64(need)) {
+    while (size < need) {
       size = size * 2.0
     }
     const grown: u8[] = new Array<u8>(toI32(Math.min(size, 2147483647.0)))
@@ -492,8 +529,13 @@ export class PixelBytes {
    */
   put(b: i32): void {
     this.reserve(PIXELS_ONE)
-    this.bytes[this.length] = toU8(b)
-    this.length = this.length + 1
+    const bytes: u8[] = this.bytes
+    const at: i32 = this.length
+    // Always true after `reserve`; it proves the store and the count in range.
+    if (at >= 0 && at < toI32(bytes.length)) {
+      bytes[at] = toU8(b)
+      this.length = at + 1
+    }
   }
 
   /**
@@ -504,10 +546,14 @@ export class PixelBytes {
   putText(s: string): void {
     const n: i32 = toI32(s.length)
     this.reserve(n)
-    for (let i: i32 = 0; i < n; i++) {
-      this.bytes[this.length + i] = toU8(s.charCodeAt(i))
+    const bytes: u8[] = this.bytes
+    let at: i32 = this.length
+    // `at` stays in range after `reserve`; bounding the loop by it proves so.
+    for (let i: i32 = 0; i < n && at >= 0 && at < toI32(bytes.length); i++) {
+      bytes[at] = toU8(s.charCodeAt(i))
+      at = at + 1
     }
-    this.length = this.length + n
+    this.length = at
   }
 
   /**
@@ -546,8 +592,7 @@ const pixelsSampleMap = (n: i32, source: i32): i32[] => {
 /** `pixelsSampleMap` written into the first `n` entries of `map`, which is at least `n` long. */
 const pixelsSampleMapInto = (map: i32[], n: i32, source: i32): void => {
   for (let i: i32 = 0; i < n && i < toI32(map.length); i++) {
-    const s: i32 = toI32(Math.floor(((toF64(i) + 0.5) * toF64(source)) / toF64(n)))
-    map[i] = s >= source ? source - 1 : s
+    map[i] = toI32(Math.min(Math.floor(((toF64(i) + 0.5) * toF64(source)) / toF64(n)), toF64(source) - 1.0))
   }
 }
 
@@ -567,13 +612,22 @@ const pixelsAtLeast = (a: i32[], n: i32): i32[] => {
   return grown
 }
 
+/** Append `v + 1` in decimal: the 1-based number escapes give the 0-based `v`. */
+const pixelsPutOneBased = (out: PixelBytes, v: i32): void => {
+  if (v < 2147483647) {
+    out.putDecimal(v + 1)
+  } else {
+    out.putText("2147483648")
+  }
+}
+
 /** Append `CSI row ; col H`, the cursor to the 0-based cell (`col`, `row`), as `moveCursor` writes it. */
 const pixelsMoveTo = (out: PixelBytes, col: i32, row: i32): void => {
   out.put(PIXELS_ESC)
   out.put(PIXELS_BRACKET)
-  out.putDecimal(row + 1)
+  pixelsPutOneBased(out, row)
   out.put(PIXELS_SEMICOLON)
-  out.putDecimal(col + 1)
+  pixelsPutOneBased(out, col)
   out.put(PIXELS_CUP)
 }
 
@@ -624,28 +678,29 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  */
 export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBytes): void => {
   pixelsCheckImageId("kittyFrame", imageId)
-  const count: i32 = fb.width * fb.height
+  // `pixels` holds the `width * height` pixels.
+  const pixels: i32[] = fb.pixels
+  const count: i32 = toI32(pixels.length)
   if (count === 0 || rect.cols <= 0 || rect.rows <= 0) {
     return
   }
   pixelsMoveTo(out, rect.col, rect.row)
   const raw: u8[] = out.kittyRaw
-  const total: i32 = count * 3
-  let sent: i32 = 0
   let pixel: i32 = 0
-  while (sent < total) {
-    // The next chunk's pixels as RGB bytes, 1024 pixels to a full chunk.
-    const n: i32 = total - sent < PIXELS_KITTY_RAW ? total - sent : PIXELS_KITTY_RAW
-    // `k + 2 < raw.length` always holds below `n`; it proves the stores in range.
-    for (let k: i32 = 0; k < n && k + 2 < toI32(raw.length); k = k + 3) {
-      const c: i32 = fb.pixels[pixel]
-      raw[k] = toU8((c >> 16) & 255)
-      raw[k + 1] = toU8((c >> 8) & 255)
-      raw[k + 2] = toU8(c & 255)
+  while (pixel < count) {
+    const first: boolean = pixel === 0
+    // The next chunk's pixels as RGB bytes, `raw` (1024 pixels) to a full chunk.
+    let n: i32 = 0
+    while (n < toI32(raw.length) - 2 && pixel >= 0 && pixel < toI32(pixels.length)) {
+      const c: i32 = pixels[pixel]
+      raw[n] = toU8((c >> 16) & 255)
+      raw[n + 1] = toU8((c >> 8) & 255)
+      raw[n + 2] = toU8(c & 255)
+      n = n + 3
       pixel = pixel + 1
     }
     pixelsKittyOpen(out)
-    if (sent === 0) {
+    if (first) {
       out.putText("a=T,f=24,t=d,i=")
       out.putDecimal(imageId)
       out.putText(",p=1,s=")
@@ -659,8 +714,7 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
       out.putText(",C=1,")
     }
     out.putText("q=2,")
-    sent = sent + n
-    out.putText(sent < total ? "m=1;" : "m=0;")
+    out.putText(pixel < count ? "m=1;" : "m=0;")
     out.reserve(PIXELS_KITTY_CHUNK)
     out.length = base64EncodeInto(raw, 0, n, out.bytes, out.length)
     pixelsStringEnd(out)
@@ -689,16 +743,22 @@ export const kittyDelete = (imageId: i32): string => {
   return `\x1b_Ga=d,d=I,i=${imageId},q=2\x1b\\`
 }
 
-/** The Sixel register of the palette colour with red level `r` (0–5), green `g` (0–6) and blue `b` (0–5). */
-const pixelsSixelRegister = (r: i32, g: i32, b: i32): i32 => r * 42 + g * 6 + b
+/**
+ * The Sixel register of the palette colour with red level `r` (0–5), green `g`
+ * (0–6) and blue `b` (0–5); -1, never met, for a level outside those, which
+ * `sixelFrame` skips.
+ */
+const pixelsSixelRegister = (r: i32, g: i32, b: i32): i32 =>
+  r >= 0 && r < 6 && g >= 0 && g < 7 && b >= 0 && b < 6 ? r * 42 + g * 6 + b : -1
 
 /**
  * The level of one 0–255 component among `levels`, nearest, after `bias` (a
  * dither offset, 0 without dithering) is added and the sum clamped to 0–255.
  */
 const pixelsLevel = (v: i32, bias: i32, levels: i32): i32 => {
-  const x: i32 = Math.min(Math.max(v + bias, 0), 255)
-  return ((x * (levels - 1) * 2 + 255) / 510) | 0
+  // In f64, which cannot overflow; every value is a small whole number, so it is exact.
+  const x: f64 = Math.min(Math.max(toF64(v) + toF64(bias), 0.0), 255.0)
+  return toI32(Math.floor((x * (toF64(levels) - 1.0) * 2.0 + 255.0) / 510.0))
 }
 
 /**
@@ -706,10 +766,19 @@ const pixelsLevel = (v: i32, bias: i32, levels: i32): i32 => {
  * threshold `t` (0–15): spread evenly over one quantisation step, centred on
  * zero, so a flat colour between two levels becomes a fixed pattern of both.
  */
-const pixelsDitherBias = (t: i32, levels: i32): i32 => (((t * 2 - 15) * 255) / ((levels - 1) * 32)) | 0
+const pixelsDitherBias = (t: i32, levels: i32): i32 => {
+  // In f64, which cannot overflow or divide by zero, rounded toward zero.
+  const q: f64 = ((toF64(t) * 2.0 - 15.0) * 255.0) / ((toF64(levels) - 1.0) * 32.0)
+  return toI32(q < 0.0 ? Math.ceil(q) : Math.floor(q))
+}
 
 /** Append the sixel character for the six-pixel column `bits`, `count` times, run-length encoded. */
 const pixelsSixelRun = (out: PixelBytes, bits: i32, count: i32): void => {
+  // `bits` is six bits, 0 to 63; the test, never true for a run that is
+  // written, proves the character in range.
+  if (count <= 0 || bits < 0 || bits > 63) {
+    return
+  }
   // `!n` followed by the character repeats it n times (DECGRI); three or fewer
   // are as short written out.
   if (count > 3) {
@@ -759,13 +828,13 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   if (w <= 0 || h <= 0 || fb.width <= 0 || fb.height <= 0) {
     return
   }
-  pixelsCheckSize("sixelFrame", w, h)
-  pixelsCheckSize("sixelFrame", w, SIXEL_REGISTERS)
+  const area: i32 = pixelsArea("sixelFrame", w, h)
+  const bitsArea: i32 = pixelsArea("sixelFrame", w, SIXEL_REGISTERS)
   // The working arrays live on `out`, grown once to the largest frame.
   out.sampleXs = pixelsAtLeast(out.sampleXs, w)
   out.sampleYs = pixelsAtLeast(out.sampleYs, h)
-  out.sixelReg = pixelsAtLeast(out.sixelReg, w * h)
-  out.sixelBits = pixelsAtLeast(out.sixelBits, SIXEL_REGISTERS * w)
+  out.sixelReg = pixelsAtLeast(out.sixelReg, area)
+  out.sixelBits = pixelsAtLeast(out.sixelBits, bitsArea)
   const xs: i32[] = out.sampleXs
   const ys: i32[] = out.sampleYs
   pixelsSampleMapInto(xs, w, fb.width)
@@ -777,9 +846,10 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   // `ys` is at least `h` long and `xs` `w`: bounding the loops by their lengths
   // too is what proves the reads in range.
   for (let y: i32 = 0; y < h && y < toI32(ys.length); y++) {
-    const from: i32 = ys[y] * fb.width
+    const sy: i32 = ys[y]
     for (let x: i32 = 0; x < w && x < toI32(xs.length); x++) {
-      const c: i32 = fb.pixels[from + xs[x]]
+      // The sample maps hold pixels of `fb`, so this is never `get`'s black.
+      const c: i32 = fb.get(xs[x], sy)
       let br: i32 = 0
       let bg: i32 = 0
       let bb: i32 = 0
@@ -794,8 +864,12 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
         pixelsLevel((c >> 8) & 255, bg, 7),
         pixelsLevel(c & 255, bb, 6)
       )
-      reg[y * w + x] = n
-      // Always true (a register is 0 to 251); it proves the store in range.
+      // Always in range: `reg` holds at least `w * h`.
+      const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
+      if (at >= 0 && at < toI32(reg.length)) {
+        reg[at] = n
+      }
+      // Always true (a register is 0 to 251, or -1); it proves the store in range.
       if (n >= 0 && n < toI32(used.length)) {
         used[n] = 1
       }
@@ -807,7 +881,7 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   out.putDecimal(w)
   out.put(PIXELS_SEMICOLON)
   out.putDecimal(h)
-  for (let n: i32 = 0; n < toI32(used.length); n++) {
+  for (let n: i32 = 0; n < toI32(used.length) && n < SIXEL_REGISTERS; n++) {
     if (used[n] !== 0) {
       const r: i32 = (n / 42) | 0
       const g: i32 = ((n / 6) | 0) % 7
@@ -815,11 +889,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       out.put(SIXEL_COLOUR)
       out.putDecimal(n)
       out.putText(";2;")
-      out.putDecimal(((r * 100) / 5) | 0)
+      out.putDecimal(toI32(Math.floor((toF64(r) * 100.0) / 5.0)))
       out.put(PIXELS_SEMICOLON)
-      out.putDecimal(((g * 100) / 6) | 0)
+      out.putDecimal(toI32(Math.floor((toF64(g) * 100.0) / 6.0)))
       out.put(PIXELS_SEMICOLON)
-      out.putDecimal(((b * 100) / 5) | 0)
+      out.putDecimal(toI32(Math.floor((toF64(b) * 100.0) / 5.0)))
     }
   }
   // Per band: the first and last column each register appears in, so a colour
@@ -830,19 +904,25 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   const first: i32[] = out.sixelFirst
   const last: i32[] = out.sixelLast
   const bits: i32[] = out.sixelBits
-  for (let top: i32 = 0; top < h; top = top + 6) {
-    const bottom: i32 = top + 6 < h ? top + 6 : h
+  for (let top: i32 = 0; top < h; ) {
+    // `top` below the largest i32 less 6 proves `top + 6`.
+    const bottom: i32 = top < 2147483641 && top + 6 < h ? top + 6 : h
     first.fill(-1)
+    let nextBit: i32 = PIXELS_ONE
     for (let y: i32 = top; y < bottom; y++) {
-      const bit: i32 = PIXELS_ONE << (y - top)
+      const bit: i32 = nextBit
+      nextBit = nextBit << 1
       for (let x: i32 = 0; x < w; x++) {
-        const n: i32 = reg[y * w + x]
-        // Never taken (a register is 0 to 251); it proves `first[n]` and
-        // `last[n]` in range.
-        if (n < 0 || n >= toI32(first.length) || n >= toI32(last.length)) {
+        const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
+        const n: i32 = at >= 0 && at < toI32(reg.length) ? reg[at] : -1
+        // `bits` holds a row of `w` for each register.
+        const slot: i32 = pixelsIndex(x, n, w, toI32(bits.length))
+        // Never taken (a register is 0 to 251, and `reg` and `bits` are
+        // large enough); it proves the reads and stores below in range.
+        if (n < 0 || n >= toI32(first.length) || n >= toI32(last.length) || slot < 0 || slot >= toI32(bits.length)) {
           continue
         }
-        bits[n * w + x] = bits[n * w + x] | bit
+        bits[slot] = bits[slot] | bit
         if (first[n] < 0) {
           first[n] = x
           last[n] = x
@@ -872,24 +952,33 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       out.putDecimal(n)
       // Blank columns before the colour's first one, then its runs to its last.
       pixelsSixelRun(out, 0, start)
+      // The run is `runBits` from column `runStart` up to `next`.
       let runBits: i32 = -1
-      let runCount: i32 = 0
-      const row: i32 = n * w
-      for (let x: i32 = start; x <= end; x++) {
-        const sixel: i32 = bits[row + x]
-        bits[row + x] = 0
-        if (sixel === runBits) {
-          runCount = runCount + 1
-        } else {
-          if (runCount > 0) {
-            pixelsSixelRun(out, runBits, runCount)
+      let runStart: i32 = start
+      let next: i32 = start
+      for (let x: i32 = start; x <= end && x < w; x++) {
+        next = x + 1
+        const slot: i32 = pixelsIndex(x, n, w, toI32(bits.length))
+        // Never taken: `bits` holds a row of `w` for each register.
+        if (slot < 0 || slot >= toI32(bits.length)) {
+          continue
+        }
+        const sixel: i32 = bits[slot]
+        bits[slot] = 0
+        if (sixel !== runBits) {
+          // `runStart` is never negative; the test says so for the prover.
+          if (runStart >= 0 && x > runStart) {
+            pixelsSixelRun(out, runBits, x - runStart)
           }
           runBits = sixel
-          runCount = 1
+          runStart = x
         }
       }
-      pixelsSixelRun(out, runBits, runCount)
+      if (runStart >= 0 && next > runStart) {
+        pixelsSixelRun(out, runBits, toI32(toI64(next) - toI64(runStart)))
+      }
     }
+    top = bottom
   }
   pixelsStringEnd(out)
 }
@@ -912,29 +1001,49 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
   }
   const xs: i32[] = pixelsSampleMap(rect.width, fb.width)
   const ys: i32[] = pixelsSampleMap(rect.height, fb.height)
+  // Read once: the calls below drop what the prover knows of fields.
   const left: i32 = rect.col
-  const top: i32 = rect.row * 2
-  for (let y: i32 = 0; y < rect.rows * 2; y++) {
-    const py: i32 = top + y
-    if (py < 0 || py >= canvas.height) {
-      continue
-    }
-    // `xs` is `rect.width` long and `ys` `rect.height`; their lengths bound the
-    // reads so the prover sees them in range.
-    for (let x: i32 = 0; x < toI32(xs.length); x++) {
-      const px: i32 = left + x
-      if (px < 0 || px >= canvas.width) {
+  const cw: i32 = canvas.width
+  const ch: i32 = canvas.height
+  const cpixels: i32[] = canvas.pixels
+  // The rect's canvas rows run from `top` to `bottom`, two to a cell row; i64
+  // holds them exactly for any rect. Walk only the part on the canvas.
+  const top: f64 = toF64(rect.row) * 2.0
+  const bottom: f64 = top + toF64(rect.rows) * 2.0
+  const pyStart: i32 = top > 0.0 ? (top < toF64(ch) ? toI32(top) : ch) : 0
+  const pxStart: i32 = left > 0 ? left : 0
+  for (let py: i32 = pyStart; py < ch && toF64(py) < bottom; py++) {
+    // `py` is at least `top` and below `ch`, so `y` is a row of the rect.
+    const y: i32 = toI32(toF64(py) - top)
+    for (let px: i32 = pxStart; px < cw; px++) {
+      const x: i64 = toI64(px) - toI64(left)
+      // `xs` is `rect.width` long and `ys` `rect.height`: past them, the
+      // rect ends.
+      if (x >= toI64(xs.length)) {
+        break
+      }
+      const at: i32 = pixelsIndex(px, py, cw, toI32(cpixels.length))
+      // Never taken: `pixels` holds `width * height`, and `x` is not negative.
+      if (at < 0 || at >= toI32(cpixels.length) || x < toI64(0)) {
         continue
       }
-      canvas.pixels[py * canvas.width + px] =
-        y < toI32(ys.length) ? fb.pixels[ys[y] * fb.width + xs[x]] : COLOR_DEFAULT
+      const sx: i32 = toI32(x)
+      if (sx < 0 || sx >= toI32(xs.length)) {
+        continue
+      }
+      cpixels[at] =
+        y >= 0 && y < toI32(ys.length) ? fb.get(xs[sx], ys[y]) : COLOR_DEFAULT
     }
   }
-  for (let row: i32 = rect.row; row < rect.row + rect.rows; row++) {
-    for (let col: i32 = left; col < left + rect.width; col++) {
-      if (row >= 0 && col >= 0 && row * 2 < canvas.height && col < canvas.width) {
-        canvas.paintCell(col, row)
-      }
+  // The cell rows `rect.row` up to `rect.row + rect.rows`, those on the canvas.
+  const rowEnd: i64 = toI64(rect.row) + toI64(rect.rows)
+  const colEnd: i64 = toI64(left) + toI64(rect.width)
+  for (let row: i32 = rect.row > 0 ? rect.row : 0; row < ch && toI64(row) < rowEnd; row++) {
+    if (toI64(row) * toI64(2) >= toI64(ch)) {
+      break
+    }
+    for (let col: i32 = pxStart; col < cw && toI64(col) < colEnd; col++) {
+      canvas.paintCell(col, row)
     }
   }
 }
@@ -945,13 +1054,15 @@ const pixelsNearestAnsi16 = (colour: i32): i32 => {
   const g: i32 = (colour >> 8) & 255
   const b: i32 = colour & 255
   let best: i32 = 0
-  let bestDistance: i32 = 2147483647
+  let bestDistance: f64 = 2147483647.0
   for (let i: i32 = 0; i < 16; i++) {
     const c: i32 = pixelsHex(PIXELS_ANSI16, i * 6, 6)
     const dr: i32 = r - ((c >> 16) & 255)
     const dg: i32 = g - ((c >> 8) & 255)
     const db: i32 = b - (c & 255)
-    const d: i32 = dr * dr + dg * dg + db * db
+    // Each difference is within 255 of zero; f64 holds the sum exactly, where
+    // the prover cannot bound it in i32.
+    const d: f64 = toF64(dr) * toF64(dr) + toF64(dg) * toF64(dg) + toF64(db) * toF64(db)
     if (d < bestDistance) {
       best = c
       bestDistance = d
@@ -983,17 +1094,37 @@ export const drawAscii = (fb: Framebuffer, screen: Screen, rect: PixelRect, colo
   }
   const xs: i32[] = pixelsSampleMap(rect.width, fb.width)
   const ys: i32[] = pixelsSampleMap(rect.height, fb.height)
-  const ramp: i32 = toI32(PIXELS_RAMP.length)
+  // A local the prover can bound reads by.
+  const rampText: string = PIXELS_RAMP
+  const ramp: i32 = toI32(rampText.length)
   // `ys` is `rect.height` long and `xs` `rect.width`; bounding the loops by
   // their lengths proves the reads in range.
   for (let y: i32 = 0; y < toI32(ys.length); y++) {
-    const from: i32 = ys[y] * fb.width
+    const sy: i32 = ys[y]
+    // Past the largest i32 there is no screen row; `screen.set` drops rows
+    // past its own height.
+    const row: i64 = toI64(rect.row) + toI64(y)
+    if (row > toI64(2147483647)) {
+      break
+    }
     for (let x: i32 = 0; x < toI32(xs.length); x++) {
-      const c: i32 = fb.pixels[from + xs[x]]
-      const luma: i32 = ((((c >> 16) & 255) * 299 + ((c >> 8) & 255) * 587 + (c & 255) * 114) / 1000) | 0
-      const glyph: i32 = toI32(PIXELS_RAMP.charCodeAt(((luma * ramp) / 256) | 0))
+      const col: i64 = toI64(rect.col) + toI64(x)
+      if (col > toI64(2147483647)) {
+        break
+      }
+      const c: i32 = fb.get(xs[x], sy)
+      const luma: f64 = Math.floor(
+        (toF64((c >> 16) & 255) * 299.0 + toF64((c >> 8) & 255) * 587.0 + toF64(c & 255) * 114.0) /
+          1000.0,
+      )
+      const k: i32 = toI32(Math.floor((luma * toF64(ramp)) / 256.0))
+      // Never taken: `luma` is below 256, so `k` is below `ramp`.
+      if (k < 0 || k >= ramp) {
+        continue
+      }
+      const glyph: i32 = toI32(rampText.charCodeAt(k))
       const fg: i32 = colors === 16 ? pixelsNearestAnsi16(c) : c
-      screen.set(rect.col + x, rect.row + y, glyph, fg, COLOR_DEFAULT, ATTR_NONE)
+      screen.set(toI32(col), toI32(row), glyph, fg, COLOR_DEFAULT, ATTR_NONE)
     }
   }
 }
