@@ -29,10 +29,10 @@
     "std/synth.ts": "206f1ab1363011efea8f6b8349cfc35eb52985ad4b8613edf81acd90e4d08762",
     "std/term-pixels.ts": "0818ca93e979c117b6731fff0fea8fb99a6018686c3a100772125cc5efcae663",
     "std/term-rate.ts": "c39e79cca5dbb76d91b6bb255d5b460fbca1ed8f8178e5b9c1702f2112432e14",
-    "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
+    "std/term.ts": "ff894deb594f84c3c7045a274c5f0d63f82bea7e3abba10570d4c28cde431b38"
   },
   "outputs": {
-    "game.wasm": "86a6ae63b04b89f69e6e9d0513bb27fc85e5b2d8e34e117bb34e43734616e797",
+    "game.wasm": "35a765026a5b049c60e7bcf9b86c637819f39002dd8c866e014586b78c70854e",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "dde2d49936cf795ce840e2eaa70092ccffcb8a5ab1655d98f91671766d69e011",

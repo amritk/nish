@@ -655,57 +655,59 @@ export const beginSync = (): string => "\x1b[?2026h"
 export const endSync = (): string => "\x1b[?2026l"
 
 /**
- * The code points of `s`: UTF-8 bytes natively, UTF-16 units under Node. A
- * unit that cannot start a character, or a lead whose continuation is cut
- * short, is one U+FFFD, and the next unit is read afresh.
+ * The character that starts at unit `i` of `s`, which has `n` units: UTF-8
+ * bytes natively, UTF-16 units under Node. The result is its code point shifted
+ * left 3, or-ed with the units it takes (1–4), so a caller walks `s` in place.
+ * A unit that cannot start a character, or a lead whose continuation is cut
+ * short, is one U+FFFD of one unit, and the next unit is read afresh.
  */
-const termCodePoints = (s: string): i32[] => {
-  const points: i32[] = []
-  const n: i32 = toI32(s.length)
-  const native: boolean = termNativeStrings()
-  let i: i32 = 0
-  while (i < n) {
-    const c: i32 = toI32(s.charCodeAt(i))
-    i = i + 1
-    if (!native) {
-      if (c >= 55296 && c < 56320 && i < n) {
-        const lo: i32 = toI32(s.charCodeAt(i))
-        if (lo >= 56320 && lo < 57344) {
-          points.push((c & 1023) * 1024 + (lo & 1023) + 65536)
-          i = i + 1
-          continue
-        }
-      }
-      points.push(c)
-      continue
-    }
-    if (c < 128) {
-      points.push(c)
-      continue
-    }
-    // A cut-short sequence is a U+FFFD for its lead and one for each
-    // continuation byte read, as each would be on its own.
-    const width: i32 = c >= 248 ? 1 : termLeadWidth(c)
-    let cp: i32 = termLeadBits(c, width)
-    let read: i32 = 1
-    while (read < width && i < n) {
-      const next: i32 = toI32(s.charCodeAt(i))
-      if (next < 128 || next >= 192) {
-        break
-      }
-      cp = (cp << 6) | (next & 63)
-      read = read + 1
-      i = i + 1
-    }
-    if (width > 1 && read === width) {
-      points.push(cp)
-      continue
-    }
-    for (let k: i32 = 0; k < read; k++) {
-      points.push(TERM_REPLACEMENT)
-    }
+const termCodePointStep = (s: string, i: i32, n: i32): i32 => {
+  if (i < 0 || i >= n) {
+    return (TERM_REPLACEMENT << 3) | 1
   }
-  return points
+  const c: i32 = toI32(s.charCodeAt(i))
+  let j: i32 = i
+  if (j < TERM_I32_MAX) {
+    j = j + 1
+  }
+  if (!termNativeStrings()) {
+    if (c >= 55296 && c < 56320 && j < n) {
+      const lo: i32 = toI32(s.charCodeAt(j))
+      if (lo >= 56320 && lo < 57344) {
+        return (((c & 1023) * 1024 + (lo & 1023) + 65536) << 3) | 2
+      }
+    }
+    return (c << 3) | 1
+  }
+  if (c < 128) {
+    return (c << 3) | 1
+  }
+  const width: i32 = c >= 248 ? 1 : termLeadWidth(c)
+  let cp: i32 = termLeadBits(c, width)
+  let read: i32 = 1
+  let k: i32 = j
+  while (read < width && k < n) {
+    const next: i32 = toI32(s.charCodeAt(k))
+    if (next < 128 || next >= 192) {
+      break
+    }
+    cp = (cp << 6) | (next & 63)
+    read = read + 1
+    k = k + 1
+  }
+  if (width > 1 && read === width) {
+    return (cp << 3) | width
+  }
+  return (TERM_REPLACEMENT << 3) | 1
+}
+
+/** The unit after the character at `i`, which `step` (from `termCodePointStep`) says takes `step & 7` units; at most `n`. */
+const termStepOn = (i: i32, step: i32, n: i32): i32 => {
+  if (i < 0 || i > 2147483640) {
+    return n
+  }
+  const next: i32 = i + (step & 7)
+  return next < n ? next : n
 }
 
 /**
@@ -881,7 +883,7 @@ export class Screen {
     const fgs: i32[] = this.fgs
     const bgs: i32[] = this.bgs
     const kept: i32[] = this.attrs
-    const i: i32 = termGridAt(x, y, this.width, this.height, termShortest(glyphs, fgs, bgs, kept))
+    const i: i32 = termGridAt(x, y, this.width, this.height, toI32(glyphs.length))
     if (
       i >= 0 &&
       i < toI32(glyphs.length) &&
@@ -909,9 +911,13 @@ export class Screen {
    *   held at 2,147,483,647 rather than wrapping.
    */
   text(x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32 {
+    const n: i32 = toI32(s.length)
     let column: i32 = x
-    for (const cp of termCodePoints(s)) {
-      this.set(column, y, cp, fg, bg, attrs)
+    let i: i32 = 0
+    while (i < n) {
+      const step: i32 = termCodePointStep(s, i, n)
+      this.set(column, y, step >> 3, fg, bg, attrs)
+      i = termStepOn(i, step, n)
       column = column < TERM_I32_MAX ? column + 1 : column
     }
     return column
@@ -1448,11 +1454,15 @@ export class Canvas {
    * @returns The column after the last character, whether or not it was clipped.
    */
   text(col: i32, row: i32, s: string, fg: i32): i32 {
+    const n: i32 = toI32(s.length)
     let column: i32 = col
-    for (const cp of termCodePoints(s)) {
+    let i: i32 = 0
+    while (i < n) {
+      const step: i32 = termCodePointStep(s, i, n)
+      i = termStepOn(i, step, n)
       const top: i32 = this.upper(column, row)
       const bg: i32 = top >= 0 ? top : this.lower(column, row)
-      this.screen.set(column, row, cp, fg, bg, ATTR_NONE)
+      this.screen.set(column, row, step >> 3, fg, bg, ATTR_NONE)
       column = column < TERM_I32_MAX ? column + 1 : column
     }
     return column
@@ -1798,7 +1808,8 @@ export class KeyState {
   /** The latest send time of an answered query that `delivered` was given: everything the terminal generated before it has arrived. */
   watermarkMs: f64
   /**
-   * The keys down, each as `termKeyId` names it.
+   * The keys down, each as `termKeyId` names it. A release replaces the array
+   * rather than shifting it, so read it afresh rather than keep it.
    * @internal Used by `Terminal` in term-io.ts.
    */
   downKeys: i32[]

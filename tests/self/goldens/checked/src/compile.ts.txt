@@ -344,24 +344,27 @@ function beginSync(): string -> @nish.beginSync [exported]
 function endSync(): string -> @nish.endSync [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function termCodePoints(s: string): i32[] -> @nish.termCodePoints
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.termLeadBits nish.termLeadWidth nish.termNativeStrings nish_array_grow
+function termCodePointStep(s: string, i: i32, n: i32): i32 -> @nish.termCodePointStep
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish.termLeadBits nish.termLeadWidth nish.termNativeStrings
   stackSites=0 stackLocals=0
-  local +0:9 points: i32[] (const)
-  local +1:9 n: i32 (const)
-  local +2:9 native: boolean (const)
-  callee +2:27 termNativeStrings -> @nish.termNativeStrings
-  local +3:7 i: i32 (let)
-  local +5:11 c: i32 (const)
-  local +9:15 lo: i32 (const)
-  local +25:11 width: i32 (const)
-  callee +25:39 termLeadWidth -> @nish.termLeadWidth
-  local +26:9 cp: i32 (let)
-  callee +26:19 termLeadBits -> @nish.termLeadBits
-  local +27:9 read: i32 (let)
-  local +29:13 next: i32 (const)
-  local +41:14 k: i32 (let)
+  local +0:9 c: i32 (const)
+  local +1:7 j: i32 (let)
+  callee +5:8 termNativeStrings -> @nish.termNativeStrings
+  local +7:13 lo: i32 (const)
+  local +17:9 width: i32 (const)
+  callee +17:37 termLeadWidth -> @nish.termLeadWidth
+  local +18:7 cp: i32 (let)
+  callee +18:17 termLeadBits -> @nish.termLeadBits
+  local +19:7 read: i32 (let)
+  local +20:7 k: i32 (let)
+  local +22:11 next: i32 (const)
+function termStepOn(i: i32, step: i32, n: i32): i32 -> @nish.termStepOn
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
+  local +0:9 next: i32 (const)
 function termBytesText(bytes: u8[], n: i32): string -> @nish.termBytesText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -424,7 +427,7 @@ function Screen.set(this: Screen, x: i32, y: i32, glyph: i32, fg: i32, bg: i32, 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: bg fg glyph x y
-  calls: nish.termGridAt nish.termShortest
+  calls: nish.termGridAt
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -12:11 glyphs: i32[] (const)
@@ -433,18 +436,20 @@ function Screen.set(this: Screen, x: i32, y: i32, glyph: i32, fg: i32, bg: i32, 
   local -9:11 kept: i32[] (const)
   local -8:11 i: i32 (const)
   callee -8:20 termGridAt -> @nish.termGridAt
-  callee -8:62 termShortest -> @nish.termShortest
 function Screen.text(this: Screen, x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32 -> @nish.Screen.text [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Screen.set
   escaping: attrs bg fg s x y
-  calls: nish.Screen.set nish.termCodePoints nish_arena_mark nish_arena_release
+  calls: nish.Screen.set nish.termCodePointStep nish.termStepOn
   pointer this: size=88 writesThrough=false captured=false passedTo=nish.Screen.set#0
   stackSites=0 stackLocals=0
-  local +0:9 column: i32 (let)
-  local +1:16 cp: i32 (const)
-  callee +1:22 termCodePoints -> @nish.termCodePoints
-  callee +2:7 Screen.set -> @nish.Screen.set
+  local +0:11 n: i32 (const)
+  local +1:9 column: i32 (let)
+  local +2:9 i: i32 (let)
+  local +4:13 step: i32 (const)
+  callee +4:25 termCodePointStep -> @nish.termCodePointStep
+  callee +5:7 Screen.set -> @nish.Screen.set
+  callee +6:11 termStepOn -> @nish.termStepOn
 function Screen.glyphAt(this: Screen, x: i32, y: i32): i32 -> @nish.Screen.glyphAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x y
@@ -706,20 +711,23 @@ function Canvas.line(this: Canvas, x0: i32, y0: i32, x1: i32, y1: i32, colour: i
   local +20:17 nx: i32 (const)
   local +32:17 ny: i32 (const)
 function Canvas.text(this: Canvas, col: i32, row: i32, s: string, fg: i32): i32 -> @nish.Canvas.text [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Screen.set
   escaping: col fg row s
-  calls: nish.Canvas.lower nish.Canvas.upper nish.Screen.set nish.termCodePoints nish_arena_mark nish_arena_release
+  calls: nish.Canvas.lower nish.Canvas.upper nish.Screen.set nish.termCodePointStep nish.termStepOn
   pointer this: size=24 writesThrough=false captured=false passedTo=nish.Canvas.upper#0 nish.Canvas.lower#0
   stackSites=0 stackLocals=0
-  local +0:9 column: i32 (let)
-  local +1:16 cp: i32 (const)
-  callee +1:22 termCodePoints -> @nish.termCodePoints
-  local +2:13 top: i32 (const)
-  callee +2:24 Canvas.upper -> @nish.Canvas.upper
-  local +3:13 bg: i32 (const)
-  callee +3:40 Canvas.lower -> @nish.Canvas.lower
-  callee +4:7 Screen.set -> @nish.Screen.set
+  local +0:11 n: i32 (const)
+  local +1:9 column: i32 (let)
+  local +2:9 i: i32 (let)
+  local +4:13 step: i32 (const)
+  callee +4:25 termCodePointStep -> @nish.termCodePointStep
+  callee +5:11 termStepOn -> @nish.termStepOn
+  local +6:13 top: i32 (const)
+  callee +6:24 Canvas.upper -> @nish.Canvas.upper
+  local +7:13 bg: i32 (const)
+  callee +7:40 Canvas.lower -> @nish.Canvas.lower
+  callee +8:7 Screen.set -> @nish.Screen.set
 function Canvas.upper(this: Canvas, col: i32, row: i32): i32 -> @nish.Canvas.upper [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: col

@@ -1,2 +1,5 @@
 grown: ESC [ H ESC [ 0 ; 3 8 ; 2 ; 0 ; 0 ; 7 ; 4 8 ; 2 ; 0 ; 0 ; 0 m B ESC [ 3 9 ; 4 9 m  
 shortened: ESC [ H ESC [ 0 ; 3 8 ; 2 ; 0 ; 0 ; 7 ; 4 8 ; 2 ; 0 ; 0 ; 0 m C ESC [ 3 9 ; 4 9 m  
+short glyphs: ESC [ H ESC [ 0 ; 3 8 ; 2 ; 0 ; 0 ; 7 ; 4 8 ; 2 ; 0 ; 0 ; 0 m E ESC [ 3 9 ; 4 9 m  
+short bgs: ESC [ H ESC [ 0 ; 3 8 ; 2 ; 0 ; 0 ; 7 ; 4 8 ; 2 ; 0 ; 0 ; 0 m E ESC [ 3 9 ; 4 9 m  
+short attrs: ESC [ H ESC [ 0 ; 3 8 ; 2 ; 0 ; 0 ; 7 ; 4 8 ; 2 ; 0 ; 0 ; 0 m E ESC [ 3 9 ; 4 9 m  
