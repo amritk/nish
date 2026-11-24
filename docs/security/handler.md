@@ -7,7 +7,7 @@ happens to an answer that outlives its connection, and the test that pins
 each property. It is written with the code rather than after an audit, so
 that the audit of the HTTP application layer starts from evidence.
 
-Anchors are function names in `std/net/handler.ts` at `983f4398`, the last
+Anchors are function names in `std/net/handler.ts` at `d212c29e`, the last
 commit to change it on the head that merges this record.
 
 **Result.** The handler adds no parser of its own: the request line, the
@@ -104,6 +104,7 @@ none is open. HANDLER-16 holds; HANDLER-17 is accepted.
 | HANDLER-15 | Low | `before`, `after` | A step runs only when the program's loop calls `before` and acts on what it answers: nothing holds a route body back until its steps have run, so a loop that skips `before`, or runs the body when `before` answered a step id, runs the body unguarded. | **Accepted.** Steps are pulled, as requests are (HANDLER-7), and the loop is the program's. A program that never calls `before` or `after` pays nothing per request for them (`bench/http1-server.ts`, [Steps on a route bound to none](../BENCHMARKS.md#steps-on-a-route-bound-to-none-wp43-s5)). One that does, on a route bound to no step, pays `before`'s state compare, its `stepped` mark, `Router.steps`' bounds compare and mask load and a compare of the mask with 0, and `after`'s state compare and its read of `stepped` and the ran mask: 25.0 to 26.8 instructions a request for the pair, measured on a copy of that bench whose loop calls both. The guide page (`docs/guide/using-nish/api-server.md`, "Steps before and after a route") shows the loop to copy. |
 | HANDLER-16 | High if it failed | `whole`, `decode`, `ready`, `HandlerLimits` | A body the carrier took under `http.maxBody` may be gzip or deflate that inflates to gigabytes. Decoding it must not grow memory past a cap the program set, must not hand the program a partial body, and must not cost the connection or the requests behind it. | **Holds.** `decode` runs only for one `Content-Encoding` field naming exactly one of gzip, x-gzip or deflate (`httpContentEncoding`, COMP-18 in `compress.md`), through one `HttpBodyDecoder` per handler whose limit is `maxDecoded`; past it the request is marked 413, and a stream that is not the coding it names, 400. `ready` answers a marked request with a problem and hands it back to the pool before `take` can return it, so the program never sees it, and the connection stays open for the next request. The decoded body takes the decoder's output array and the decoder takes the request's old buffer, so a handler holds at most `slots` times `max(http.maxBody, maxDecoded)` in bodies plus one decoder's output, and while a decode grows that output, the smaller array it replaces (under `maxDecoded`; COMP-18). `maxDecoded` 0 turns decoding off. |
 | HANDLER-17 | Low | `decode` | A body with a coding the handler does not decode (`br`, `zstd`, `compress`, two codings, or two `Content-Encoding` fields) reaches the program as sent, with `decodedFrom` `HTTP_CODING_IDENTITY`, though its bytes are not identity. | **Accepted.** Refusing every such body with 415 would take a choice from the program that RFC 9110 §15.5.16 leaves to it, and passing it through decodes nothing, so it costs no more than any other body. The `Content-Encoding` field is still set after the handler decodes a body, so it alone does not tell the two apart: a program that reads a body should answer 415 itself when `decodedFrom` is `HTTP_CODING_IDENTITY` and `httpContentEncoding` on a `Content-Encoding` field gives anything but `HTTP_CODING_IDENTITY` (a field of only `identity` names no coding, so its body is plain); `docs/guide/using-nish/compression.md` says so. |
+| HANDLER-18 | Low if it failed | `wait`, `handlerLimitsFault`, `HandlerLimits` | A batched wait (`minEvents` above 1 with `maxWaitMs` above 0, WP63's ring batch) holds a turn open after its first event, so every deadline `wait` enforces, the body deadline (HANDLER-5) and the accept rest (HANDLER-10) among them, is heard that much later, and a turn that must not block must not wait at all. A `maxWaitMs` without a bound would delay them without limit. | **Holds.** `handlerLimitsFault` refuses a `minEvents` under 1 and a `maxWaitMs` over `HANDLER_MAX_WAIT_MS` (1000, the interval `expireBodies` already checks at), and a `maxWaitMs` under 0, which batches nothing and can only be a mistake: `new HttpHandler` panics with the message and `openHttpHandler` answers it as an `Err`. `tests/link/net_handler_batch_limits` opens a handler at each of `minEvents` 0 and -5 and `maxWaitMs` -1 and 1001, and prints the refusal for each; a line of its `expected.out` turns to `opened` and fails without the matching test. `wait` calls `pollWaitBatch` only with both limits set and a `timeout` other than 0, and makes the timeout 0 while a deferred handler holds a queued request; the runtime batches only on a loop a ring source joined, while one ring set is live (`nr_batch` in `runtime/runtime-net.c`). `tests/run.js`'s `net_handler_batch` check ("net_handler: minEvents and maxWaitMs batch a ring wait, and minEvents 1, wait(0), a deferred queue, epoll and two live ring sets do not wait") answers 40 requests at `minEvents` 64, sees a lone pending request held 300 ms or more at `maxWaitMs` 400, and fails if `minEvents` 1 holds it too. At `minEvents` 64 and `maxWaitMs` 400 it then needs every turn under 200 ms while a request arrives, for `wait(0)`, for `wait(3000)` after `deferSends` with a request queued, for a descriptor listener beside a live ring set, and for a ring listener beside a second live set. Each fails at about 400 ms without its guard: `wait(0)` and the deferred queue without `wait`'s `timeout !== 0`, the descriptor listener without `nr_batch`'s check that a ring source joined the loop, and the two sets without its one-set rule. |
 
 ## Properties verified
 
@@ -192,3 +193,18 @@ taken", "two codings in one field are taken", "two codings in two fields are
 taken", "as they arrived"; "a warm connection answers forty bodies and forty
 bombs", "and the arena stays flat"; "under maxDecoded 0 a deflate body is taken",
 "undecoded, with decodedFrom identity".
+
+**Batched waits** (HANDLER-18): every line of
+`tests/link/net_handler_batch_limits/expected.out`, which
+`link/net_handler_batch_limits: exits with 0 and stdout matches expected.out`
+compares byte for byte: "refused 0/1", "refused -5/1", "refused 64/-1" and
+"refused 64/1001", each with the message naming both limits, then "opened
+1/0" and "opened 64/1000", the bounds themselves. The timing is
+`net_handler: minEvents and maxWaitMs batch a ring wait, and minEvents 1,
+wait(0), a deferred queue, epoll and two live ring sets do not wait` in
+`tests/run.js`, which builds `tests/link/net_handler_batch`, needs io_uring
+rings, and is a counted skip where the kernel refuses them. It needs both of
+the program's last lines: "batch: 40 answered at minEvents 64, a pending
+request held 300+ ms at maxWaitMs 400, and minEvents 1 did not hold it" and
+"prompt at minEvents 64: wait(0), a deferred queue, epoll beside a live ring
+set, and two live ring sets".

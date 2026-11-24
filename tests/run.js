@@ -36569,6 +36569,92 @@ if (!only || "net_handler_ring".includes(only)) {
     }
   }
 }
+
+// ring-batch-wait: `HandlerLimits.minEvents` and `maxWaitMs` route
+// `HttpHandler.wait` through `pollWaitBatch`. tests/link/net_handler_batch
+// answers 40 connections through a handler at minEvents 64 and maxWaitMs 1
+// (the batched wait must not lose a request), then times one turn with a
+// single request pending: at minEvents 64 and maxWaitMs 400 the turn holds
+// at least 300 ms for a batch that never fills, and at minEvents 1 it does
+// not hold. The second half fails if `wait` ignores the limits; the first if
+// the batched loop drops readiness. Then, still at minEvents 64 and maxWaitMs
+// 400, the longest turn while a request arrives must stay under 200 ms for
+// `wait(0)`, for a deferred queue (whose turns `wait` makes 0), for a
+// descriptor listener beside a live ring set and for a ring listener beside a
+// second live set: each fails at about 400 ms without its guard (`wait`'s
+// `timeout !== 0`, `nr_batch`'s `held` and its one-set rule). 2 says the
+// kernel refused rings, a counted skip.
+if (!only || "net_handler_batch".includes(only)) {
+  const name =
+    "net_handler: minEvents and maxWaitMs batch a ring wait, and minEvents 1, wait(0), a deferred queue, epoll and two live ring sets do not wait"
+  if (!HAS_CLANG || process.platform !== "linux") {
+    skip("net_handler: a batched ring wait is io_uring's, and this host has no clang or is not Linux")
+  } else {
+    const dir = path.join(buildDir, "net_handler_batch")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "batch")
+    const c = spawnNish([path.join(linkDir, "net_handler_batch", "batch.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r = c.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 60000 }) : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+    } else {
+      check(
+        name,
+        r !== null &&
+          r.status === 0 &&
+          r.stdout.includes("batch: 40 answered at minEvents 64, a pending request held") &&
+          r.stdout.includes(
+            "prompt at minEvents 64: wait(0), a deferred queue, epoll beside a live ring set, and two live ring sets"
+          ),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
+// ring-batch-wait: bench/handler-ring/run.sh builds ring-base with
+// --base-compiler, a compiler whose std may predate `HandlerLimits.minEvents`
+// and `maxWaitMs`; server.ts sets both and prints them, so that build refused
+// it. run.sh builds ring-base from base-source.sh's copy, which drops the
+// lines between `bench:batch begin` and `end`. The seed (0.45.1) is such a
+// compiler: it must build the copy, and run.sh must build ring-base from it
+// and not ask ring-base for a `batch` line.
+if (!only || "handler-ring base".includes(only)) {
+  const seedBin = path.join(root, "build", "seed", "bin", "nish")
+  const runSh = fs.readFileSync(path.join(root, "bench", "handler-ring", "run.sh"), "utf8")
+  check(
+    "handler-ring: run.sh builds ring-base from base-source.sh's copy and asks only its own builds for a batch line",
+    /bash "\$root\/bench\/handler-ring\/base-source\.sh" "\$out\/server-base\.ts"/.test(runSh) &&
+      /if \[ "\$kind" != ring-base \] && ! grep -q "\^batch/.test(runSh),
+    "run.sh's base build or its batch check moved; this check reads both"
+  )
+  if (!HAS_CLANG || !fs.existsSync(seedBin)) {
+    skip("handler-ring: the seed builds ring-base's source (no clang or no build/seed)")
+  } else {
+    const dir = path.join(buildDir, "handler-ring-base")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const src = path.join(dir, "server-base.ts")
+    const g = spawnSync("bash", [path.join(root, "bench", "handler-ring", "base-source.sh"), src], { encoding: "utf8" })
+    const b =
+      g.status === 0
+        ? spawnSync(seedBin, withAllowPanics(seedBin, [src, "--link", path.join(dir, "server-base")]), {
+            cwd: root,
+            encoding: "utf8",
+            timeout: 300000,
+          })
+        : null
+    check(
+      "handler-ring: the seed builds ring-base's source, server.ts without its batch lines",
+      b !== null && b.status === 0,
+      b === null ? `base-source.sh failed\n${shown(g)}` : shown(b)
+    )
+  }
+}
 }
 
 // WP40 §2a at run time: a dependency's grant with arguments, held by the WP37
