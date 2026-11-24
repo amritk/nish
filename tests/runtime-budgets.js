@@ -518,8 +518,13 @@ const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
  * and a thread already running when `signalFd()` is called keeps its own mask, so the
  * cheaper form ended the process when the signal landed there (`test_host_signal_threads`
  * in tests/runtime-test.c).
+ *
+ * **788 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 764 before, once WP63's
+ * batch wait asks whether the signal descriptor exists (`nish_signal_fd_made`, +24), so
+ * that a loop holding only ring slots and that descriptor can wait on its ring directly
+ * (768 to 1,024, the next 256-byte boundary).
  */
-const RUNTIME_HOST_TEXT_BUDGET = 768
+const RUNTIME_HOST_TEXT_BUDGET = 1024
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
  * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
@@ -580,8 +585,14 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * `nr_send`'s refusal after a write shut (+11), and `nish_net_mss`'s explicit `-1` on a
  * slot (+16), NURING-39. It stays here for the reason above. The budget is the next
  * 256-byte boundary, leaving 74.
+ * **12,505 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 11,190 before, once
+ * `pollWaitBatch` and the direct ring wait landed (11,264 to 12,544):
+ * `nish_poll_wait_batch` and its batch loop, which waits on the one live ring set for
+ * `minEvents` completions or `maxWaitMs`, and the check that sends a loop holding only
+ * ring slots and at most the signal descriptor to its ring rather than through the
+ * eventfd and epoll (NURING-40 on). It stays here for the reason above.
  */
-const NET_TEXT_BUDGET = 11264
+const NET_TEXT_BUDGET = 12544
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -852,11 +863,15 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * restricted to NOP, and a freed pooled ring's descriptor is overwritten with it by
  * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
  * 8,448). **8,274 bytes** on 2026-11-17 once that `dup3` is tried again on `EINTR`
- * and `EBUSY`. A unit of its own beside runtime-net.c,
+ * and `EBUSY`. **8,880 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64,
+ * 8,446 before, once a set's ring can be waited on directly (8,448 to 8,960):
+ * `nish_uring_wait_direct`, the `IORING_ENTER_EXT_ARG` enter with its timeout and the
+ * `IORING_FEAT_EXT_ARG` probe, and the `POLL_ADD` that watches the signal descriptor
+ * from the ring. A unit of its own beside runtime-net.c,
  * so that a build whose probe fails
  * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 8448
+const RUNTIME_URING_TEXT_BUDGET = 8960
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle

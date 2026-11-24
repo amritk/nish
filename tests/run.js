@@ -3154,6 +3154,7 @@ if (dealtHere("netTcp")) {
       "nish_poll_modify",
       "nish_poll_remove",
       "nish_poll_wait",
+      "nish_poll_wait_batch",
     ]
     const used = [
       "nish_net_local_port",
