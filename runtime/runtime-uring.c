@@ -322,6 +322,7 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 #define ST_PARKED 4u
 #define ST_HELD 8u
 #define ST_HUP 16u
+#define ST_MARKED 32u /* on its ring's `mlist`; a close keeps it (NURING-40) */
 #define ST_GEN(st) ((st) >> 8)
 #define GEN_MASK 0xffffffu
 
@@ -380,8 +381,7 @@ struct ur_ring {
   uint32_t nparked;
   /* Slots whose queue gained a record since the ring last submitted: its
    * SEND is written then, so the writes of one pass leave as one (NURING-40).
-   * `marked` keeps a slot on `mlist` at most once, across a close too. */
-  uint8_t *marked;
+   * ST_MARKED keeps a slot on `mlist` at most once, across a close too. */
   uint32_t *mlist;
   uint32_t nmarked;
   struct ur_send *pool; /* free send buffers, linked by `next` */
@@ -646,7 +646,6 @@ static void ur_free_ring(struct ur_ring *r) {
   free(r->sq_last);
   free(r->parked);
   free(r->qbytes);
-  free(r->marked);
   free(r->mlist);
   while (r->pool) {
     struct ur_send *q = r->pool;
@@ -792,9 +791,8 @@ static int ur_make_ring(const struct ur_sizes *z, int restricted, struct ur_ring
   r->sq_last = calloc(z->slots, sizeof *r->sq_last);
   r->parked = calloc(z->slots, sizeof *r->parked);
   r->qbytes = calloc(z->slots, sizeof *r->qbytes);
-  r->marked = calloc(z->slots, sizeof *r->marked);
   r->mlist = calloc(z->slots, sizeof *r->mlist);
-  if (!r->st || !r->sq_first || !r->sq_last || !r->parked || !r->qbytes || !r->marked || !r->mlist) {
+  if (!r->st || !r->sq_first || !r->sq_last || !r->parked || !r->qbytes || !r->mlist) {
     rc = -ENOMEM;
     goto fail;
   }
@@ -1029,8 +1027,8 @@ static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set
 /* Note that (r, slot) has a record to submit; the ring writes its SEND when
  * it next submits. */
 static void ur_mark(struct ur_ring *r, uint32_t slot) {
-  if (r->marked[slot]) return;
-  r->marked[slot] = 1;
+  if (r->st[slot] & ST_MARKED) return;
+  r->st[slot] |= ST_MARKED;
   r->mlist[r->nmarked++] = slot;
 }
 
@@ -1042,7 +1040,7 @@ static void ur_send_marked(struct nish_uring_set *s, struct ur_ring *r) {
   r->nmarked = 0;
   for (uint32_t i = 0; i < n; i++) {
     uint32_t slot = r->mlist[i];
-    r->marked[slot] = 0;
+    r->st[slot] &= ~ST_MARKED;
     ur_send_head(r, slot, s);
   }
 }
@@ -1546,69 +1544,53 @@ static void ur_replace(struct nish_uring_set *s, struct ur_ring *r, uint32_t slo
   ur_release(s, r, t);
 }
 
-/* Add `n` bytes to the slot's last record while the kernel does not hold it
- * (NURING-40): in its room, after moving its unsent bytes to the front if
- * that makes room. A pool buffer they overflow is replaced by one exact
- * record of its unsent bytes and these, so a head and a large body still
- * leave as one SEND; an exact record is never copied again, and the bytes
- * start a new record behind it instead. Answers 1 when it took them, 0 when
- * a new record must carry them, and -1 when memory is short. */
-static int ur_append(struct nish_uring_set *s, struct ur_ring *r, uint32_t slot, const uint8_t *p, uint32_t n) {
-  struct ur_send *t = r->sq_last[slot];
-  if (!t || t->in_flight || t->how >= 0) return 0;
-  size_t unsent = (size_t)t->len - t->off, need = unsent + n;
-  if (t->cap - t->len < n && need <= t->cap) {
-    memmove(t->data, t->data + t->off, unsent);
-    t->off = 0;
-    t->len = (uint32_t)unsent;
-  }
-  if (t->cap - t->len >= n) {
-    memcpy(t->data + t->len, p, n);
-    t->len += n;
-    return 1;
-  }
-  if (!t->pooled || need > INT32_MAX) return 0;
-  struct ur_send *q = ur_record(s, r, need);
-  if (!q) return -1;
-  memcpy(q->data, t->data + t->off, unsent);
-  memcpy(q->data + unsent, p, n);
-  q->slot = slot;
-  q->gen = t->gen;
-  q->off = 0;
-  q->len = (uint32_t)need;
-  q->in_flight = 0;
-  q->how = -1;
-  ur_replace(s, r, slot, t, q);
-  return 1;
-}
-
 /* Queue `n` bytes for (ring, slot). They are copied, so the caller's buffer
- * is free on return; a failure comes back later as a SEND_FAILED event. Bytes
- * queued before the ring next submits join the slot's last record, so the
- * writes of one pass leave as one SEND (NURING-40). */
+ * is free on return; a failure comes back later as a SEND_FAILED event.
+ * Bytes queued before the ring next submits join the slot's last record
+ * while the kernel does not hold it (NURING-40): in its room, after moving
+ * its unsent bytes to the front if that makes room. A pool buffer they
+ * overflow is replaced by one exact record of its unsent bytes and these, so
+ * a head and a large body still leave as one SEND; an exact record is never
+ * copied again, and the bytes start a new record behind it instead. */
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
   if (n < 0) return -EINVAL;
   if (n == 0) return 0;
-  int took = ur_append(s, r, (uint32_t)slot, p, (uint32_t)n);
-  if (took < 0) return -ENOMEM;
-  if (took) {
-    r->qbytes[slot] += (uint32_t)n;
-    ur_mark(r, (uint32_t)slot);
-    return n;
+  struct ur_send *t = r->sq_last[slot];
+  size_t pre = 0;
+  if (t && !t->in_flight && t->how < 0) {
+    size_t unsent = (size_t)t->len - t->off;
+    if (t->cap - t->len < (uint32_t)n && unsent + (uint32_t)n <= t->cap) {
+      memmove(t->data, t->data + t->off, unsent);
+      t->off = 0;
+      t->len = (uint32_t)unsent;
+    }
+    if (t->cap - t->len >= (uint32_t)n) {
+      memcpy(t->data + t->len, p, (size_t)n);
+      t->len += (uint32_t)n;
+      goto queued;
+    }
+    pre = unsent;
+    if (!t->pooled || pre + (uint32_t)n > INT32_MAX) t = NULL, pre = 0;
+  } else {
+    t = NULL;
   }
-  struct ur_send *q = ur_record(s, r, (size_t)n);
+  struct ur_send *q = ur_record(s, r, pre + (uint32_t)n);
   if (!q) return -ENOMEM;
-  memcpy(q->data, p, (size_t)n);
+  if (t) memcpy(q->data, t->data + t->off, pre);
+  memcpy(q->data + pre, p, (size_t)n);
   q->slot = (uint32_t)slot;
   q->gen = ST_GEN(r->st[slot]);
   q->off = 0;
-  q->len = (uint32_t)n;
+  q->len = (uint32_t)(pre + (uint32_t)n);
   q->in_flight = 0;
   q->how = -1;
+  if (t) ur_replace(s, r, (uint32_t)slot, t, q);
+  else ur_enqueue(s, r, (uint32_t)slot, q);
+queued:
   r->qbytes[slot] += (uint32_t)n;
-  ur_enqueue(s, r, (uint32_t)slot, q);
+  ur_mark(r, (uint32_t)slot);
   return n;
 }
 
@@ -1671,7 +1653,7 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   e->flags = UR_SQE_CQE_SKIP_SUCCESS;
   e->user_data = ur_tag(UR_CLOSE, st, (uint32_t)slot);
   ur_drop_sends(s, r, (uint32_t)slot);
-  r->st[slot] = ((ST_GEN(st) + 1) & GEN_MASK) << 8;
+  r->st[slot] = (((ST_GEN(st) + 1) & GEN_MASK) << 8) | (st & ST_MARKED);
   r->live--;
   s->stats.live--;
   ur_top_up(s);
