@@ -714,7 +714,7 @@ export const rasterPushTrail = (trail: RasterTrail, x: f64, y: f64): void => {
   const ys: f64[] = trail.ys
   const n: i32 = toI32(xs.length)
   const head: i32 = trail.head
-  if (head < 0 || head >= n || head >= toI32(ys.length)) {
+  if (head < 0 || head >= n || n !== toI32(ys.length) || head >= toI32(ys.length)) {
     trail.head = 0
     return
   }
@@ -943,9 +943,10 @@ export const rasterSpawnParticle = (
   const sizes: f64[] = pool.sizes
   const colours: i32[] = pool.colours
   const i: i32 = pool.next
-  // The pool keeps its arrays one length, so this is `pool.has(i)` written
-  // against each array the stores below index.
+  // `pool.has(i)` refuses a pool whose arrays differ in length; the tests
+  // after it restate that against each array the stores below index.
   if (
+    !pool.has(i) ||
     i < 0 ||
     i >= toI32(lives.length) ||
     i >= toI32(xs.length) ||
@@ -993,9 +994,13 @@ export const rasterStepParticles = (pool: RasterParticles, dt: f64, gravity: f64
   const vys: f64[] = pool.vys
   const lives: f64[] = pool.lives
   const n: i32 = toI32(lives.length)
+  // A pool whose arrays differ in length steps nothing, as `pool.has` decides.
+  if (!pool.has(0)) {
+    return
+  }
   for (let i: i32 = 0; i < n; i++) {
-    // The pool keeps its arrays one length, so this skips no slot `pool.has`
-    // would take; it is what proves each index.
+    // Past the test above the arrays are one length, so this skips only dead
+    // slots; the length tests are what prove each index.
     if (
       i >= toI32(xs.length) ||
       i >= toI32(ys.length) ||
@@ -1050,8 +1055,12 @@ export const rasterParticles = (
   const sizes: f64[] = pool.sizes
   const colours: i32[] = pool.colours
   const n: i32 = toI32(lives.length)
+  // As in `rasterStepParticles`: a malformed pool draws nothing.
+  if (!pool.has(0)) {
+    return
+  }
   for (let i: i32 = 0; i < n; i++) {
-    // As in `rasterStepParticles`: no slot `pool.has` takes is skipped.
+    // As in `rasterStepParticles`: only dead slots are skipped.
     if (
       i >= toI32(xs.length) ||
       i >= toI32(ys.length) ||
