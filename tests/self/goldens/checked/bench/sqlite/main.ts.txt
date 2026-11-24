@@ -730,6 +730,7 @@ function Cursor.error(this: Cursor, code: i32): SqliteError -> @nish.Cursor.erro
   callee +0:12 new SqliteError -> @nish.SqliteError.constructor
   callee +0:34 sqlite3_errstr -> @sqlite3_errstr
 import OPEN_READWRITE from "nish/sqlite" -> const OPEN_READWRITE
+import OPEN_URI from "nish/sqlite" -> const OPEN_URI
 import SEEK_GE from "nish/sqlite" -> const SEEK_GE
 import Cursor from "nish/sqlite" -> struct Cursor
 import Database from "nish/sqlite" -> struct Database

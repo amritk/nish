@@ -12,7 +12,7 @@ The dialect changes the number a bare `number` is, and it has six features:
 dialect refuses, with the meaning Node gives it.
 
 The rules are in the reference, under
-[The compatibility dialect](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-compatibility-dialect).
+[The compatibility dialect](../../reference/language/semantics-decisions.md#the-compatibility-dialect).
 
 ## Asking for it
 

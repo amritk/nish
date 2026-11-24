@@ -585,7 +585,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 1024
  * `nr_send`'s refusal after a write shut (+11), and `nish_net_mss`'s explicit `-1` on a
  * slot (+16), NURING-39. It stays here for the reason above. The budget is the next
  * 256-byte boundary, leaving 74.
- * **12,505 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 11,190 before, once
+ * **12,593 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 11,190 before, once
  * `pollWaitBatch` and the direct ring wait landed (11,264 to 12,800):
  * `nish_poll_wait_batch` and its batch loop, which waits on the one live ring set for
  * `minEvents` completions or `maxWaitMs`, and the check that sends a loop holding only
@@ -865,15 +865,31 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * restricted to NOP, and a freed pooled ring's descriptor is overwritten with it by
  * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
  * 8,448). **8,274 bytes** on 2026-11-17 once that `dup3` is tried again on `EINTR`
- * and `EBUSY`. **8,880 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64,
- * 8,446 before, once a set's ring can be waited on directly (8,448 to 8,960):
- * `nish_uring_wait_direct`, the `IORING_ENTER_EXT_ARG` enter with its timeout and the
- * `IORING_FEAT_EXT_ARG` probe, and the `POLL_ADD` that watches the signal descriptor
- * from the ring. A unit of its own beside runtime-net.c,
- * so that a build whose probe fails
- * runs the epoll path alone.
+ * and `EBUSY`. **9,412 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64 once a ring
+ * slot's sends coalesce from a per-ring buffer pool (8,448 to 9,472, and to 9,728 by
+ * the NURING-43 fix below; main measured 8,446): `nish_uring_send` 202 to 802, which appends to the slot's unsubmitted last
+ * record, moves its unsent bytes to the front to make room, replaces an overflowed pool
+ * buffer with one exact record, and takes buffers from the pool (`ur_record` and the
+ * replace are inlined into it); `ur_mark` 49 and `ur_send_marked` 86, the deferred
+ * submit (NURING-40); `ur_release` 65, the capped free list (NURING-41); `ur_make_ring`
+ * +78 and `ur_free_ring` +36 for the marked-slot list and the pool's free;
+ * `nish_uring_close` +35, the submit of an unsubmitted head before the close
+ * (NURING-40); and +31 across `ur_submit_queued`, `nish_uring_sleep_ms` and the
+ * `sends` counter. The branch first measured 9,530: the append and the fresh record
+ * had two copies of a record's fill, now one path, and a byte array of marked slots
+ * became the `ST_MARKED` bit of the slot's state. **9,477 bytes** on 2026-11-24 once a
+ * shutdown of a side already queued queues nothing, so repeated shutdowns between writes
+ * cannot each strand a pool buffer (NURING-43; 9,472 to 9,728): `nish_uring_shutdown`
+ * 123 to 188, the two `ST_SHUT` side bits read and set. **9,936 bytes** on 2026-11-24
+ * with clang 18.1.3 on linux-x64, measured on the merge of that pool with the direct
+ * ring wait, which measured 8,880 alone (8,446 before): `nish_uring_wait_direct`, the
+ * `IORING_ENTER_EXT_ARG` enter with its timeout and the `IORING_FEAT_EXT_ARG` probe, the
+ * `POLL_ADD` that watches the signal descriptor from the ring, and the write of the
+ * marked slots' sends before the enter (+20), so a coalesced send goes out in the wait's
+ * own enter. The budget is the next 256-byte boundary, leaving 304. A unit of its own beside runtime-net.c, so that a
+ * build whose probe fails runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 8960
+const RUNTIME_URING_TEXT_BUDGET = 10240
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle

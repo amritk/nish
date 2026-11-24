@@ -21,7 +21,10 @@
 // those pages and hands any other file a page links to back as a download. So
 // a routed page links another routed page relatively (the site resolves it to
 // that page) and any other file of the repository by its GitHub URL, and a
-// relative link from a routed page to a file that is not one is reported.
+// relative link from a routed page to a file that is not one is reported, as
+// is a GitHub URL, bracketed or bare, from a routed page to a file the site
+// has a page for: a routed file, or docs/LANGUAGE.md, which the site has as
+// the per-section pages scripts/gen-reference.mjs cuts it into.
 //
 // It also reads scalar.config.json, the navigation of the user guide's site:
 // every route's `filepath` must be an existing .md file, and every page under
@@ -87,16 +90,16 @@ const proseLines = (text) => {
 // generated against the Unicode version of the day and deletes code points
 // unassigned back then that are letters now, which is a difference in scripts
 // no heading here is written in.
-/** GitHub-style heading slugs for a Markdown file, in order. */
-const headingSlugs = (text) => {
+/** Each heading of a Markdown file, in order: its level and its GitHub-style slug. */
+const githubHeadings = (text) => {
   const seen = new Map()
-  const slugs = new Set()
+  const out = []
   for (const line of proseLines(text)) {
-    const m = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line)
+    const m = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
     if (!m) {
       continue
     }
-    let slug = m[1]
+    let slug = m[2]
       .replace(/`([^`]*)`/g, "$1") // inline code keeps its text
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links keep their text
       .toLowerCase()
@@ -107,10 +110,13 @@ const headingSlugs = (text) => {
     if (n > 0) {
       slug = `${slug}-${n}`
     }
-    slugs.add(slug)
+    out.push({ level: m[1].length, slug })
   }
-  return slugs
+  return out
 }
+
+/** GitHub-style heading slugs for a Markdown file. */
+const headingSlugs = (text) => new Set(githubHeadings(text).map((h) => h.slug))
 
 // The docs site (Scalar) slugs a heading its own way, which is not GitHub's:
 // it deletes `_` and every character but a letter, a number, a mark, `-`, `.`
@@ -170,6 +176,8 @@ const REFDEF = /^\s*\[[^\]]+\]:\s*(\S+)/
 
 // This repository's files on github.com, at main.
 const REPO_URL = /^https:\/\/github\.com\/amritk\/nish\/(?:blob|tree)\/main\/([^#?]*)(#.*)?$/
+// One in running prose, which ends before trailing punctuation, as GitHub's autolink does.
+const BARE_REPO_URL = /https:\/\/github\.com\/amritk\/nish\/(?:blob|tree)\/main\/[^\s)<>]*[^\s)<>.,;:!?]/g
 
 // The site's pages, by absolute path, from scalar.config.json's routes.
 const scalarConfig = path.join(root, "scalar.config.json")
@@ -187,6 +195,54 @@ const collectPages = (entries) => {
 }
 collectPages(routes)
 
+// docs/LANGUAGE.md is not routed, but scripts/gen-reference.mjs publishes it
+// cut at its `##` headings as docs/reference/language/<slug>.md, keeping every
+// heading's anchor, so a routed page links a section of the spec there. Each
+// GitHub heading slug of the spec, to the slug of the `##` section holding it
+// (null before the first).
+const languageFile = "docs/LANGUAGE.md"
+let languageHome = null
+const languageSection = (fragment) => {
+  if (languageHome === null) {
+    languageHome = new Map()
+    let section = null
+    for (const { level, slug } of githubHeadings(fs.readFileSync(path.join(root, languageFile), "utf8"))) {
+      if (level === 2) {
+        section = slug
+      }
+      languageHome.set(slug, section)
+    }
+  }
+  return languageHome.get(fragment.toLowerCase())
+}
+
+/**
+ * The site page a link to the repository file `rel` (and `fragment`) names,
+ * as a repository path with its fragment: `rel` itself when it is routed, the
+ * spec's generated section page for docs/LANGUAGE.md; null when the site has
+ * no page for it.
+ */
+const sitePageOf = (rel, fragment) => {
+  if (rel === languageFile) {
+    if (fragment === undefined || fragment === "") {
+      return "docs/reference/language.md"
+    }
+    const section = languageSection(fragment)
+    if (section === undefined) {
+      return null
+    }
+    const page = section === null ? "docs/reference/language.md" : `docs/reference/language/${section}.md`
+    if (!routedPages.has(path.join(root, page))) {
+      return null
+    }
+    return section === fragment.toLowerCase() ? page : `${page}#${fragment}`
+  }
+  if (!routedPages.has(path.join(root, rel))) {
+    return null
+  }
+  return fragment === undefined ? rel : `${rel}#${fragment}`
+}
+
 const problems = []
 let checked = 0
 for (const file of files) {
@@ -200,6 +256,28 @@ for (const file of files) {
     if (ref) {
       targets.push(ref[1])
     }
+    const where = `${path.relative(root, file)}:${index + 1}`
+    // A routed page names another page of the site relatively, bracketed or
+    // bare: a GitHub URL to it takes the reader off the site.
+    if (routedPages.has(file)) {
+      const bare = line
+        .replace(/(`+)[^`]*?\1/g, "")
+        .replace(INLINE, "")
+        .replace(REFDEF, "")
+        .matchAll(BARE_REPO_URL)
+      for (const target of [...targets, ...[...bare].map((m) => m[0])]) {
+        const repo = REPO_URL.exec(target.replace(/^<|>$/g, ""))
+        const page =
+          repo === null ? null : sitePageOf(decodeURIComponent(repo[1]).replace(/\/$/, ""), repo[2]?.slice(1))
+        if (page !== null) {
+          const [pagePath, hash] = page.split("#")
+          const rel = path.relative(path.dirname(file), path.join(root, pagePath)).split(path.sep).join("/")
+          problems.push(
+            `${where}: \`${target}\` is a page of the docs site, which this GitHub URL leaves for github.com; link ${rel}${hash === undefined ? "" : `#${hash}`} instead`
+          )
+        }
+      }
+    }
     for (let target of targets) {
       target = target.replace(/^<|>$/g, "")
       const repo = REPO_URL.exec(target)
@@ -208,7 +286,6 @@ for (const file of files) {
       }
       checked++
       const [pathPart, fragment] = repo === null ? target.split("#") : [repo[1], repo[2]?.slice(1)]
-      const where = `${path.relative(root, file)}:${index + 1}`
       let resolved = file
       if (pathPart) {
         resolved =

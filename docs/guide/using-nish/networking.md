@@ -9,7 +9,7 @@ stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
 listeners, connections and pairs, passing a descriptor over one, and naming
 the process at the other end. The rules are in the reference,
-[`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
+[`nish:net`](../../reference/language/builtins.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them
 says where they come from. They are native only: a `wasm32` build has no
@@ -709,7 +709,7 @@ a single worker on a plain socket, with `preforkUdpCount` answering `1`.
 A `serviceWorker` other than `0` has no place in that one-worker run, so
 there the supervisor starts nothing and answers `PREFORK_SPAWN_FAILED`.
 The underlying call is `udpBind` with flag `4`
-([`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+([`nish:net`](../../reference/language/builtins.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
 ### QUIC congestion control: `congestion`
 
@@ -722,7 +722,7 @@ built with it closes at once, as one with any other limit out of range does.
 CUBIC regrows the window faster after a loss on a long, lossy path, and on a
 transfer of one bandwidth-delay product the two finish level. The
 measurement is in
-[the QUIC security record](https://github.com/amritk/nish/blob/main/docs/security/quic.md#congestion-control).
+[the QUIC security record](../../security/quic.md#congestion-control).
 
 ### QUIC and ECN: `arrivalEcn`
 

@@ -5,7 +5,7 @@ They behave as JavaScript's do: entries come back in the order they were
 inserted, and keys are compared as `===` compares them, except that every
 `NaN` is the same key. Both are always available, with no import, and their
 code in `std/collections.ts` keeps no panic site, so a program that uses them
-builds under the default. The full rules are in the reference under [`Map` and `Set`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#map-and-set).
+builds under the default. The full rules are in the reference under [`Map` and `Set`](../../reference/language/builtins.md#map-and-set).
 
 ## Making and filling one
 

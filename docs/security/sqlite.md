@@ -42,8 +42,11 @@ whose 65,535 slots are all live or retired answers `SQLITE_NOMEM`. Tests:
 `tests/link/std_sqlite` (a handle after `close` and after `finalize`, a forged
 handle).
 
-The tables are per thread: a handle passed to another thread names nothing
-there and answers `SQLITE_MISUSE`. A thread's tables are not freed when it
+The tables are per thread: a handle passed to another thread indexes that
+thread's own table. It answers `SQLITE_MISUSE` there unless that thread holds a
+live object in the slot of the same index and generation, which it then names
+(a thread's first connection has the same handle value as another's); it never
+reaches the first thread's memory. A thread's tables are not freed when it
 exits, so connections a thread leaves open stay allocated with their files
 open; that is a leak, not a use after free, since no other thread can name
 them.
@@ -102,9 +105,17 @@ cursor of a connection before that can happen:
   `SQLITE_SELECT`, `SQLITE_READ`, `SQLITE_FUNCTION` and `SQLITE_RECURSIVE`;
 - in the authorizer itself, when an action off that list is authorized
   outside a prepare it classifies (a re-prepare inside `sqlite3_step`);
-- in every cursor call (`cursor_of`), when `sqlite3_get_autocommit` is set or
-  the `main` B-tree's transaction state is `SQLITE_TXN_NONE`: a rollback
-  SQLite made by itself.
+- in the rollback hook (`sqlite3_rollback_hook`) `nishsqlite_open` installs,
+  on every rollback, including one SQLite makes by itself after an
+  `SQLITE_NOMEM`, `SQLITE_IOERR` or `SQLITE_FULL` mid-read.
+
+A cursor call therefore checks only that its handle names a live slot (one
+array index and a generation compare) and locks the mutex the cursor read
+from its connection when it opened. A handle the program carries to another
+thread under `--threads` indexes that thread's own table, since the tables
+are thread-local: it names that thread's cursor of the same index and
+generation if there is one, and otherwise no slot. A closed connection's
+cursor handle names a freed slot.
 
 The authorizer never refuses an action; it only watches. A statement it
 cannot classify as a plain read is treated as one that invalidates.
@@ -195,6 +206,15 @@ Tests:
   both directions, and each seek, checked row by row against the `SELECT`
   that answers the same question, with index keys and records on overflow
   pages and `NULL` keys.
+- `tests/run.js` (`sqlite-link`, "a cursor answers SQLITE_MISUSE after SQLite
+  rolls its read back on its own, on another thread, and after its connection
+  closes"): a C helper whose allocator refuses a large block while a
+  `group_concat` steps, so SQLite rolls the read back by itself; the cursor
+  then answers `SQLITE_MISUSE` from every call. The same handle on another
+  thread under `NISH_THREADS` that has opened no cursor (an empty table), and
+  a closed connection's handle once a later connection opens a cursor, answer
+  it too. Without the rollback hook the
+  helper exits 5.
 - `tests/run.js` (`sqlite-link`): the adapter built with `-DSQLITE_DEBUG` and
   `THREADSAFE=1` under a C helper that calls every exported cursor and key
   function, so SQLite's assertions check that each holds the connection's
@@ -213,8 +233,38 @@ for an oversized record, and the `SQLITE_NOMEM` paths, each of which needs a
 corrupt file or a failing allocator the suite has no harness for; the
 invalidation by a re-prepare whose statement now authorizes an action off the
 allowlist, which needs another connection to change the schema between a
-prepare and its step; and the invalidation `cursor_of` makes when SQLite has
-rolled the transaction back by itself, which needs an I/O error mid-read.
+prepare and its step.
+
+Open: under `-DSQLITE_DEBUG`, a rollback SQLite makes by itself while a
+cursor is open trips SQLite's own assertion in `unlockBtreeIfUnused`, inside
+`sqlite3BtreeRollback` (`btreeEndTransaction`), before the hook runs: a read
+cursor stays valid across SQLite's own rollback, so the B-tree still has it
+open there. The trip predates this adapter's rollback hook; a `-DSQLITE_DEBUG`
+build of the adapter without the hook trips it the same way. A release build
+has no such assertion, and the hook frees the cursor before any later call
+reads it;
+the helper above is built without `SQLITE_DEBUG` for that reason. The suite's
+`-DSQLITE_DEBUG` runs do not reach this path.
+
+### The unix-excl VFS
+
+`openDatabase` passes `OPEN_URI` through to `sqlite3_open_v2`, so a
+`file:<path>?vfs=unix-excl` name opens the file on SQLite's `unix-excl` VFS
+([docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md)).
+No adapter code is specific to it. What it changes, each with the check that
+fails without it:
+
+| What | Check |
+| --- | --- |
+| A WAL database makes no `-shm` file, so no other process can map its wal-index | "link/std_sqlite_excl: exits with 0 and stdout matches expected.out" |
+| A second process that reads the file while it is open is refused with `SQLITE_BUSY`; on the default VFS the same read succeeds | the same check |
+| A same-process second connection shares the file and can checkpoint it | "link/std_sqlite_excl_second: exits with 0 and stdout matches expected.out" |
+| Under `--profile wasi` it opens and the first lock answers `SQLITE_IOERR_LOCK`, so a WAL database there takes no write; an unknown VFS name fails the open | ``link/std_sqlite_vfs_wasi: on `--profile wasi` `?vfs=unix-excl` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)``; the unknown name natively, "link/std_sqlite_vfs_wasi: exits with 0 and stdout matches expected.out" |
+
+The exclusive lock is advisory, like every SQLite lock: it keeps out another
+SQLite, not a process that writes the file without locking.
+`--capabilities` cannot see the VFS, which is a runtime string handed to C, so
+a program reports the same grants on either one.
 
 ## Findings
 

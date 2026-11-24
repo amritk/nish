@@ -2110,6 +2110,22 @@ repository. The cursor workloads are not in the training.
 The figures are in
 [docs/BENCHMARKS.md](../docs/BENCHMARKS.md#pgo-and-the-cpu-level-on-the-sqlite-feed).
 
+**A base commit.** `--base REV` is the variant for a change to the module or
+the adapter: `main.ts` built by the same compiler against commit `REV`'s
+`std/`, `runtime/` and `scripts/build.sh`, set against the build and its copy.
+
+```bash
+node bench/sqlite/run.mjs --validate --base origin/main
+node bench/sqlite/run.mjs --rounds 12 --base origin/main
+```
+
+The compiler finds its library from its own path, so the script checks `REV`
+out in a git worktree at `build/bench/sqlite/base-tree`, copies the compiler
+to that tree's `build/nish`, builds from there, and removes the worktree. It
+needs a native compiler, not a Node entry point. The base runs every Nish
+workload, the cursor ones too, so `main.ts` may call only what `REV`'s module
+has. It takes the place of `--variant`; pass one or the other.
+
 **Before the adapter fix.** The same protocol, before this measurement's fixes,
 put `feed` at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two
 causes made up the difference:

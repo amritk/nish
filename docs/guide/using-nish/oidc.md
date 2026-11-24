@@ -5,7 +5,7 @@ Cognito, Google, Microsoft Entra) signs its tokens with keys it publishes
 and rotates. `nish/net/oidc` finds those keys from the issuer's URL alone,
 keeps them current as the provider rotates them, and verifies a token with
 them. It is a library module
-([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import))
+([`export` and `import`](../../reference/language/declarations.md#export-and-import))
 built on [authentication tokens (JWT)](auth.md), which does the signature
 and claim checks, and on the [HTTP client](http-client.md), which fetches.
 
