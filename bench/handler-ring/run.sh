@@ -15,6 +15,8 @@
 #   bash bench/handler-ring/run.sh --compiler build/nish
 #   bash bench/handler-ring/run.sh --conns 90000 --think 4 --warmup 4 --designs "ring epoll"
 #   bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "ring epoll1 epoll epoll-copy"
+#   bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler /path/to/older/nish \
+#     --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base"
 #
 # --nodb runs every server with BENCH_NODB=1: /plaintext answers its 129 bytes
 # without a query, so the CPU a request costs is the handler's and the
@@ -37,7 +39,15 @@
 # /plaintext with no database, and with the same L - 64 bound as epoll1.
 # h1-ring and h1-ring-copy are the same two builds with BENCH_RING=1: one
 # process on io_uring slots (`slots` = C + 1,024, as for ring), so
-# Http1Server's head + body go out through the ring's sends.
+# Http1Server's head + body go out through the ring's sends. ring-copy is
+# ring's byte-identical copy, its noise band.
+#
+# --base-compiler NISH builds the same two sources a second time with another
+# compiler (an older checkout's build/nish, which links that checkout's
+# runtime/), and the designs ring-base and h1-ring-base run those builds as
+# ring and h1-ring do, interleaved with them in every round. The summary
+# then prints each design against its -base build beside the band between
+# the design and its copy: a before/after of a runtime or compiler change.
 #
 # Packets per response: segs.c (built here) samples /proc/net/snmp's Tcp
 # OutSegs and InSegs every 10 ms while the load runs, and each round's line
@@ -71,6 +81,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 out="$root/build/bench/handler-ring"
 compiler="$root/build/nish"
+base_compiler=""
 conns=""
 rounds=5
 rate=30000
@@ -95,12 +106,13 @@ while [ $# -gt 0 ]; do
   --seconds) seconds="$2"; shift ;;
   --warmup) warmup="$2"; shift ;;
   --compiler) compiler="$2"; shift ;;
+  --base-compiler) base_compiler="$2"; shift ;;
   --think) think="$2"; shift ;;
   --designs) designs_arg="$2"; shift ;;
   --server-cpus) server_cpus="$2"; shift ;;
   --nodb) export BENCH_NODB=1 ;;
   *)
-    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish]" >&2
+    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish] [--base-compiler nish]" >&2
     exit 2
     ;;
   esac
@@ -151,10 +163,26 @@ nish_allow_panics "$compiler"
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"
 case " $designs_arg " in
-*" h1 "* | *" h1-copy "* | *" h1-ring "* | *" h1-ring-copy "*)
+*" h1 "* | *" h1-copy "* | *" h1-ring "* | *" h1-ring-copy "* | *" h1-ring-base "*)
   "$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
   cp "$out/h1" "$out/h1-copy"
   cmp "$out/h1" "$out/h1-copy"
+  ;;
+esac
+case " $designs_arg " in
+*"-base "*)
+  if [ -z "$base_compiler" ]; then
+    echo "run.sh: a -base design needs --base-compiler" >&2
+    exit 2
+  fi
+  nish_allow_panics "$base_compiler"
+  "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server-base" >/dev/null
+  "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http1-server.ts" --link "$out/h1-base" >/dev/null
+  # Builds that do not differ measure nothing.
+  if cmp -s "$out/server" "$out/server-base" && cmp -s "$out/h1" "$out/h1-base"; then
+    echo "run.sh: --base-compiler builds the same binaries as --compiler" >&2
+    exit 2
+  fi
   ;;
 esac
 node "$root/bench/sqlite/run.mjs" --validate --compiler "$compiler" >/dev/null
@@ -214,9 +242,11 @@ run() {
   local design=$1 c=$2 r=$3 pids n slots bin=$out/server
   : >"$out/server.out"
   case "$design" in
-  ring)
+  ring | ring-copy | ring-base)
     n=1
     slots=$((c + 1024))
+    if [ "$design" = ring-copy ]; then bin=$out/server-copy; fi
+    if [ "$design" = ring-base ]; then bin=$out/server-base; fi
     env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     # `rings` follows `listening`: wait for the line the check reads.
@@ -251,11 +281,12 @@ run() {
     wait_for listening
     pids=$server
     ;;
-  h1-ring | h1-ring-copy)
+  h1-ring | h1-ring-copy | h1-ring-base)
     n=1
     slots=$((c + 1024))
     bin=$out/h1
     if [ "$design" = h1-ring-copy ]; then bin=$out/h1-copy; fi
+    if [ "$design" = h1-ring-base ]; then bin=$out/h1-base; fi
     env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     wait_for '^rings '
@@ -384,13 +415,14 @@ awk -v limit="$limit" '
     printf "%-8s %-12s %5s %8s %6s %18s %7s %7s %8s %8s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "user", "sys", "out/rsp", "in/rsp", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      nds = split("ring epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy", ds, " ")
+      nds = split("ring ring-copy ring-base epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", ds, " ")
       for (di = 1; di <= nds; di++) {
         k = c SUBSEP ds[di]
         if (!(k in n)) continue
         delete a; delete b; delete q; delete l50; delete l99; delete l999; delete mu; delete ms; delete so; delete si
         for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i]; l50[i] = p50[k, i]; l99[i] = p99[k, i]; l999[i] = p999[k, i]; mu[i] = usr[k, i]; ms[i] = sys[k, i]; so[i] = oseg[k, i]; si[i] = iseg[k, i] }
         m[k] = med(a, n[k]); mb = med(b, n[k]); mq = med(q, n[k])
+        mso[k] = (k in noseg) ? "" : med(so, n[k])
         # A round with no sampler reading prints n/a for the design, as the
         # percentiles do below.
         if (k in noseg) { sso = "n/a"; ssi = "n/a" } else { sso = sprintf("%.3f", med(so, n[k])); ssi = sprintf("%.3f", med(si, n[k])) }
@@ -399,6 +431,18 @@ awk -v limit="$limit" '
         if (k in nolat) { s50 = "n/a"; s99 = "n/a"; s999 = "n/a" }
         else { s50 = sprintf("%.2f", med(l50, n[k])); s99 = sprintf("%.2f (%.2f-%.2f)", med(l99, n[k]), p99lo[k], p99hi[k]); s999 = sprintf("%.2f", med(l999, n[k])) }
         printf "%-8s %-12s %5s %8s %6s %7.2f (%.2f-%.2f) %7.2f %7.2f %8s %8s %8.2f %8.0f %8s %8s %7s %20s %8s %6d\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], med(mu, n[k]), med(ms, n[k]), sso, ssi, mb, mq, pss[k], mem[k], s50, s99, s999, lost[k]
+      }
+      # Each design against its --base-compiler build, beside the band
+      # between the design and its byte-identical copy.
+      split("ring h1-ring", cd, " ")
+      for (ki = 1; ki <= 2; ki++) {
+        x = c SUBSEP cd[ki]; xc = c SUBSEP cd[ki] "-copy"; xb = c SUBSEP cd[ki] "-base"
+        if (!((x in m) && (xc in m) && (xb in m)) || m[xb] <= 0 || m[x] <= 0) continue
+        d = (m[xb] - m[x]) / m[xb] * 100; band = (m[xc] - m[x]) / m[x] * 100
+        if (band < 0) band = -band
+        printf "         %s: %.1f%% %s CPU per request than %s-base; noise band (%s vs its copy) %.1f%%", cd[ki], (d < 0 ? -d : d), (d >= 0 ? "less" : "more"), cd[ki], cd[ki], band
+        if (mso[x] != "" && mso[xb] != "") printf "; out/rsp %.3f against %.3f", mso[x], mso[xb]
+        printf "\n"
       }
       e = c SUBSEP "epoll"; ec = c SUBSEP "epoll-copy"; u = c SUBSEP "ring"
       if ((e in m) && (ec in m) && (u in m)) {
