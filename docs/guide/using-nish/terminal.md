@@ -26,10 +26,14 @@ bounces a square across the screen until you press `q`.
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays,
 slice buffers and move positions by sums the compiler cannot prove in range,
-and the `nish/term` code they reach keeps panic sites no proof removes yet. A
-guard such as `i < xs.length` before an index, or a bound on a position,
-proves your own code; the slices and the library calls build under the
-default once the standard library is made panic-free.
+and the `nish/term` code they reach keeps panic sites no proof removes yet.
+`nish/term-rate` and `nish/term-probe` keep none; `nish/term-io` keeps only the
+slices that copy what stdin read, and `nish/term-pixels` only the panics a
+negative or too large size, a zero scale or a bad image id trips, its arrays
+sized by a count and its slices. A guard such as `i < xs.length` before an
+index, or a bound on a position, proves your own code; the slices and the
+library calls build under the default once the standard library is made
+panic-free.
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->

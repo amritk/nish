@@ -1,8 +1,10 @@
-// Opt-out (`--allow-panics`): the `Framebuffer` from `std/term-pixels` reaches
-// its panic sites, and the director's tables are indexed in root storage, which
-// the checker cannot yet prove in range. Follow-up: make that module panic-free
-// and teach the prover root-storage bounds, then build this file without
-// `--allow-panics`.
+// Opt-out (`--allow-panics`): this file's reads of `BREAK_LINK` and the
+// director's tables are indexed in root storage, which the checker cannot yet
+// prove in range, and one sum here is unbounded. `new Framebuffer` also reaches
+// the size check in `pixelsArea` (std/term-pixels.ts), a panic a caller's
+// negative size trips, which nothing proved at the call removes yet.
+// Follow-up: teach the prover root-storage bounds and constant sizes across a
+// call, then build this file without `--allow-panics`.
 //
 // The game behind the docs hero terminal, as a page runs it: the terminal
 // game's director and scenes (src/break-director.ts), stepped and drawn over
