@@ -16,6 +16,22 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-11-24
+
+### Fixed
+
+- runtime: Prove deflate and inflate's panic sites ([#2217](https://github.com/amritk/nish/pull/2217))
+
+### Documentation
+
+- plan: File the router prover performance plan ([#2227](https://github.com/amritk/nish/pull/2227))
+- guide: Space code blocks inside steps and details ([#2228](https://github.com/amritk/nish/pull/2228))
+
+### CI
+
+- release: Grant ci-gate's statuses: write to the release run ([#2229](https://github.com/amritk/nish/pull/2229))
+
+
 ## [0.45.0] - 2026-11-23
 
 ### Added
@@ -2281,3 +2297,4 @@ file per release, and each release's notes and downloads are on the
 [0.43.0]: https://github.com/amritk/nish/releases/tag/v0.43.0
 [0.44.0]: https://github.com/amritk/nish/releases/tag/v0.44.0
 [0.45.0]: https://github.com/amritk/nish/releases/tag/v0.45.0
+[0.45.1]: https://github.com/amritk/nish/releases/tag/v0.45.1

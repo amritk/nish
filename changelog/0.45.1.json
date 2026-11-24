@@ -1,0 +1,81 @@
+{
+  "version": "0.45.1",
+  "date": "2026-11-24",
+  "tag": "v0.45.1",
+  "range": {
+    "from": "v0.45.0",
+    "to": "3cfd1d60d"
+  },
+  "entries": [
+    {
+      "id": "prove-deflate-and-inflate-s-panic-sites-2217",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "prove deflate and inflate's panic sites",
+      "body": "std/compress/deflate.ts goes from 398 unproven panic sites to the five kept caller-misuse panics: a window outside its array, a level outside 0 to 9, and a negative limit. The bit-buffer and window arithmetic now carries bounds the prover accepts. The Huffman and length builders report a bad table instead of panicking. An encoder store that does not fit sets an overrun flag, which compress answers as DEFLATE_NO_ROOM, so output is never silently cut short. A corrupt or truncated stream still answers its DEFLATE_ERR_* code.\n\ndeflateBound, compressBound and fixedDeflateBound answer -1 only past the largest input whose bound fits in i32: 2,146,664,744, 2,146,664,726 and 1,908,874,339. Every bound gzip.ts relies on stays a real size. tests/link/std_compress_deflate_bounds pins each edge.\n\nMeasured: instructions (cachegrind, CI runner): std-compress-deflate 203,069,611 → 166,095,944 (-18.2%), std-compress-inflate 249,172,164 → 219,002,920 (-12.1%), std-compress-gzip 189,410,010 → 162,588,277 (-14.2%)\nTests: tests/link/std_compress_deflate_bounds\nVerified: pr-adversary 2 rounds, CI green\n\nFixes #2153",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "659dca5"
+      ],
+      "pr": 2217,
+      "author": "Redis Stasa",
+      "date": "2026-11-23"
+    },
+    {
+      "id": "file-the-router-prover-performance-plan-2227",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "file the router prover performance plan",
+      "body": "Plans the fix for the std-router regression from the panic-free sweep\n(155,580,314 to 162,304,316 instructions, +4.32%). The range prover learns\nthe facts the router's hand-written guards restate: bounds carried around\nwhile loops, exit facts out of private callees, and ranged private fields.\nThe guards those facts prove are then deleted. Filed as #2220 with stages\n#2221 to #2226; S5 (parallel arrays) waits on a decision.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1639c55"
+      ],
+      "pr": 2227,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-23"
+    },
+    {
+      "id": "space-code-blocks-inside-steps-and-details-2228",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "space code blocks inside steps and details",
+      "body": "Scalar spaces only the direct children of .t-prose, so inside a step or a\ncollapsible a code block touched the paragraph after it. The theme now gives\nthose children the same 18px block spacing.\n\nThe site's favicons are listed largest first, since Scalar drops the sizes\nattribute from head links, and the guide's compiler diagnostics are fenced\nas log so Scalar's log grammar can colour them.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1706a88"
+      ],
+      "pr": 2228,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-23"
+    },
+    {
+      "id": "grant-ci-gate-s-statuses-write-to-the",
+      "type": "ci",
+      "scope": "release",
+      "breaking": false,
+      "title": "grant ci-gate's statuses: write to the release run",
+      "body": "The 0.45.0 release run failed at startup, before any job ran. ci.yml's\nci-gate job now asks for `statuses: write`, to report a `ci-gate` commit\nstatus on a dispatched run, but release.yml's `ci` job, which calls\nci.yml, granted only `contents: read` and `attestations: read`. A called\nworkflow's job may not ask for more than its caller grants, so GitHub\nrefused the whole run. The `ci` job now grants `statuses: write` too.\n\nA new check, `node tests/run.js workflow-permissions`, reads every job\nthat calls a local workflow and fails when the callee's top-level\npermissions, or any of its jobs' own, ask for a scope the caller does not\ngrant. It names the caller, the callee job and the missing scope.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js workflow-permissions"
+      ],
+      "commits": [
+        "3cfd1d6"
+      ],
+      "pr": 2229,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-23"
+    }
+  ]
+}
