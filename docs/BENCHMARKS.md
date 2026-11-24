@@ -4035,17 +4035,18 @@ The last two columns are as the script printed them, from unrounded timings, so 
 
 ### One call per row: `readRow`
 
-`feed-cursor-row` is `feed-cursor-walk` with each post's `user_id`, `body` and `created_at` read by one `Cursor.readRow` call, and its author's `username` by another (`bench/sqlite/main.ts`, `walkFeedRows`). The per-column walk makes four column calls a post: `columnI64` and two `columnInto` on the post, one `columnInto` on the author. The rowid seeks and the likes count are the same in both. Both run in the same rounds, and every run of both printed `rows 200000 checksum 1510587328`, `feed`'s line.
+`feed-cursor-row` is `feed-cursor-walk` with each post's `user_id`, `body` and `created_at` read by one `Cursor.readRow` call, and its author's `username` by another (`bench/sqlite/main.ts`, `walkFeedRows`). Each cursor's `selectRow` runs once, before the timed loop. The per-column walk makes four column calls a post: `columnI64` and two `columnInto` on the post, one `columnInto` on the author. The rowid seeks and the likes count are the same in both. All three feed walks run in the same rounds, and every run printed `rows 200000 checksum 1510587328`, `feed`'s line.
 
-`node bench/sqlite/run.mjs --rounds 12 --no-rust` at commit `0ab764be`, on the machine above. That is the bench code of commit `ebdd2e71` with the adapter that converts a TEXT or BLOB column's integer as `columnI64` does. ns per call:
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `143cf516` (`main` with `feed-cursor-count` merged in), SQLite 3.54.1, on the machine above. ns per call; the band is the build against its byte-identical copy:
 
 | Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
 | --- | --- | --- | --- |
-| `feed` (SQL) | 13,930 / 17,757 (4,208) | 14,396 / 18,583 (2,417) | 466 / 827 |
-| `feed-cursor-walk` | 9,756 / 12,401 (1,902) | 10,793 / 12,743 (1,983) | 1,037 / 343 |
-| `feed-cursor-row` | 12,484 / 17,449 (4,949) | 11,988 / 16,921 (5,580) | 497 / 529 |
+| `feed` (SQL) | 13,873 / 17,419 (2,122) | 13,771 / 17,371 (2,659) | 102 / 49 |
+| `feed-cursor-walk` | 9,674 / 12,194 (2,029) | 9,763 / 12,348 (2,779) | 89 / 154 |
+| `feed-cursor-count` | 7,825 / 10,068 (1,350) | 7,878 / 10,166 (2,591) | 53 / 98 |
+| `feed-cursor-row` | 11,112 / 13,471 (1,697) | 11,463 / 14,008 (2,008) | 352 / 537 |
 
-**`readRow` was slower here: `feed-cursor-row` less `feed-cursor-walk` is +5,048 ns at the median and +2,728 ns at the min; between the copies it is +4,178 and +1,195.** At the median the gap is larger than both noise bands (343 and 529) and than `feed-cursor-row`'s IQR (4,949), but smaller than its copy's (5,580), so this run does not resolve it beyond that spread. Two calls a post in place of four do not show as a gain at this row width: each `readRow` encodes its column list into a byte buffer, the adapter reads the columns twice (once to size the text, once to copy it) and converts each TEXT column's bytes to an integer the walk never asks for, and the method decodes 20 bytes a column back into `ints` and `spans`.
+**A gain from `readRow` is not shown.** `feed-cursor-row` less `feed-cursor-walk` is +1,277 ns at the median and +1,438 ns at the min; between the copies it is +1,660 and +1,700. At the median that is more than both noise bands (154 and 537) but less than every IQR (1,697 and 2,029 for the builds, 2,008 and 2,779 for the copies), so this run shows `readRow` no faster and does not resolve the slowdown beyond that spread. Two calls a post in place of four do not show as a gain at this row width: inside the one call the adapter still makes two locked column calls a column, `column_type` and then `column_into` or `column_i64`, where the walk makes one, and the method decodes a 9-byte slot a column into `ints` and `spans`. This run does not measure which of those the time goes to.
 <!-- sqlite-cursor:end -->
 
 <!-- sqlite-vfs:begin -->
