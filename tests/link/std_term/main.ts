@@ -312,5 +312,8 @@ export const main = (): number => {
   const canvas = new Canvas(huge);
   canvas.clear(rgb(0, 0, 255));
   console.log(`a 65535 x 65535 screen is ${huge.width} x ${huge.height}, its canvas ${canvas.width} x ${canvas.height}, and flushes ${huge.flush().length > 0}`);
+  // The last of its 1,048,576 cells reaches the terminal like any other.
+  huge.set(4095, 255, 90, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  console.log(`its last cell flushes as ${shown(huge.flush())}`);
   return 0;
 };

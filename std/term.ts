@@ -429,8 +429,9 @@ const termCellCount = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 104
 
 /**
  * `n` cells of `value`. Built by `push` rather than `new Array<i32>(n)`, whose
- * length check the declared range of `n` does not reach: 1,048,576 pushes take
- * under a tenth of a second, once per `resize`.
+ * length check the declared range of `n` does not reach. A `resize` at the
+ * 1,048,576-cell cap, with its flush room, takes about 0.1 s, twice what
+ * `new Array` took.
  */
 const termCells = (n: integer<0, 1048576>, value: i32): i32[] => {
   const cells: i32[] = []
@@ -1091,7 +1092,7 @@ export class Screen {
     }
     const drawn: i32 = termShortest(glyphs, fgs, bgs, attrs)
     const sent: i32 = termShortest(sentGlyphs, sentFgs, sentBgs, sentAttrs)
-    const room = termCellLimit((toI32(this.out.length) / TERM_CELL_BYTES) | 0) - 1
+    const room = termCellLimit(((toI32(this.out.length) - TERM_CELL_BYTES) / TERM_CELL_BYTES) | 0)
     const held: i32 = sent < drawn ? sent : drawn
     const cells = termCellLimit(room < held ? room : held)
     if (this.sync) {
@@ -1275,6 +1276,7 @@ export class Canvas {
     this.width = w
     this.height = rows * 2
     const cells = termCellCount(w, rows)
+    // Two pixels a cell, in two passes: `2 * cells` is past `termCells`'s range.
     const pixels: i32[] = termCells(cells, COLOR_DEFAULT)
     for (let i: i32 = 0; i < cells; i++) {
       pixels.push(COLOR_DEFAULT)

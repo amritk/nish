@@ -137,6 +137,7 @@
 @.str.126 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c" x \00" }, align 8
 @.str.127 = private unnamed_addr constant { i64, [14 x i8] } { i64 13, [14 x i8] c", its canvas \00" }, align 8
 @.str.128 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c", and flushes \00" }, align 8
+@.str.129 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"its last cell flushes as \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
@@ -2317,6 +2318,17 @@ cond.end.1:
   %979 = select i1 %978, i8* bitcast ({ i64, [5 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.33 to i8*)
   %980 = call i8* @nish_str_concat(i8* %970, i8* %979)
   call void @nish_print(i8* %980)
+  %981 = load %struct.Screen*, %struct.Screen** %huge.addr, align 8
+  call void @nish.Screen.set(%struct.Screen* %981, i32 4095, i32 255, i32 90, i32 -1, i32 -1, i32 0)
+  %982 = load %struct.Screen*, %struct.Screen** %huge.addr, align 8
+  %983 = call i64 @nish_arena_mark()
+  %984 = call i8* @nish.Screen.flush(%struct.Screen* %982)
+  %985 = call i8* @nish_arena_keep(i64 %983, i8* %984)
+  %986 = call i64 @nish_arena_mark()
+  %987 = call i8* @shown(i8* %985)
+  %988 = call i8* @nish_arena_keep(i64 %986, i8* %987)
+  %989 = call i8* @nish_str_concat(i8* bitcast ({ i64, [26 x i8] }* @.str.129 to i8*), i8* %988)
+  call void @nish_print(i8* %989)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

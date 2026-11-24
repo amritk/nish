@@ -1085,7 +1085,7 @@ function Screen.flush(this: Screen): string -> @nish.Screen.flush [exported meth
   callee +16:24 termShortest -> @nish.termShortest
   local +17:11 sent: i32 (const)
   callee +17:23 termShortest -> @nish.termShortest
-  local +18:11 room: i32 (const)
+  local +18:11 room: integer<0, 1048576> (const)
   callee +18:18 termCellLimit -> @nish.termCellLimit
   local +19:11 held: i32 (const)
   local +20:11 cells: integer<0, 1048576> (const)
@@ -1151,13 +1151,13 @@ function Canvas.constructor(this: Canvas, screen: Screen): void -> @nish.Canvas.
   pointer this: size=24 writesThrough=true captured=false
   pointer screen: size=88 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local -8:11 w: integer<0, 4096> (const)
-  callee -8:15 termSide -> @nish.termSide
-  local -7:11 rows: integer<0, 4096> (const)
-  callee -7:18 termFitRows -> @nish.termFitRows
-  callee -7:33 termSide -> @nish.termSide
-  local -3:11 cells: integer<0, 1048576> (const)
-  callee -3:19 termCellCount -> @nish.termCellCount
+  local -9:11 w: integer<0, 4096> (const)
+  callee -9:15 termSide -> @nish.termSide
+  local -8:11 rows: integer<0, 4096> (const)
+  callee -8:18 termFitRows -> @nish.termFitRows
+  callee -8:33 termSide -> @nish.termSide
+  local -4:11 cells: integer<0, 1048576> (const)
+  callee -4:19 termCellCount -> @nish.termCellCount
   local -2:11 pixels: i32[] (const)
   callee -2:27 termCells -> @nish.termCells
   local -1:14 i: i32 (let)

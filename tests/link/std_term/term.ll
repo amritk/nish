@@ -2640,10 +2640,10 @@ if.end:
   %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 0
   %34 = load i64, i64* %33, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %35 = trunc i64 %34 to i32
-  %36 = sdiv i32 %35, 64
-  %37 = or i32 %36, 0
-  %38 = call i32 @nish.termCellLimit(i32 %37)
-  %39 = sub nsw i32 %38, 1
+  %36 = sub nsw i32 %35, 64
+  %37 = sdiv i32 %36, 64
+  %38 = or i32 %37, 0
+  %39 = call i32 @nish.termCellLimit(i32 %38)
   store i32 %39, i32* %room.addr, align 4
   %40 = load i32, i32* %sent.addr, align 4
   %41 = load i32, i32* %drawn.addr, align 4
