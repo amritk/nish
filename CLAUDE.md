@@ -129,7 +129,11 @@ before it is pushed (read the `wasi` skip line; it needs
 NL9007 warning, and that run's ratchet fails on it. A change to `runtime/*.c`
 runs `node tests/run.js c-symbols`, which fails on a new libc call until
 `src/c-symbols.ts` reserves it (`.claude/selfhost.md` →
-["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)).
+["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)). A change
+to `runtime/sqlite/nish-sqlite.c` also runs the `tests/run.js` check
+"sqlite/nish-sqlite.c less sqlite3.c: .text* at -Oz fits the … byte budget"
+before it is pushed: shrink the addition, or raise `RUNTIME_SQLITE_TEXT_BUDGET`
+with its `docs/wp7-runtime.md` row.
 
 **CI's runners are not this container.** A spawn or sandbox check in
 `tests/run.js` runs on ubuntu with uutils coreutils and with descriptors the
@@ -139,7 +143,8 @@ count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 
 **Generated goldens are regenerated, never edited or merged by hand.**
 `tests/self/goldens/checked/` (one file per module) moves with any change to
-`src/`, `std/` or a positive `tests/cases/*.ts`: rewrite it with
+`src/`, `std/`, a positive `tests/cases/*.ts` or a `bench/**/*.ts` program
+(it pins those too): rewrite it with
 `node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
 `build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
 merges, regenerates the goldens and stages them without committing. Sync after
