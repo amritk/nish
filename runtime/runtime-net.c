@@ -1125,12 +1125,13 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
    up, without entering the ring, and after each slice pumps the set once and
    collects once, so a window costs at most eight pumps however its
    completions trickle in: a wait on the ring itself would wake, run its
-   deferred task work and pump once per completion, sends' included. Its `min` is checked
-   at the end of a slice, so a window can outlast the moment `min` became
-   ready by up to one slice. It reads no epoll set, so an ordinary descriptor
-   that becomes ready meanwhile waits for the next call, at most
-   `max_wait_ms`; on a direct loop the slice's poll(2) on `signalFd()` ends
-   the batch as soon as it answers, and the next call reports it. */
+   deferred task work and pump once per completion, sends' included. Its
+   `min` is checked at the end of a slice, so a window can outlast the moment
+   `min` became ready by up to one slice. It reads no epoll set, so an
+   ordinary descriptor that becomes ready meanwhile waits for the next call,
+   at most `max_wait_ms`; on a direct loop the slice's poll(2) on
+   `signalFd()` ends the batch as soon as it answers, and the next call
+   reports it. */
 static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int32_t max_wait_ms) {
   struct nr_set *S = NULL;
   for (int32_t i = 0; i < nr_nsets; i++) {

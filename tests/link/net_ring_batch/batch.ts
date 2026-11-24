@@ -60,7 +60,7 @@ import {
   udpBind,
   udpSendTo,
 } from "nish:net"
-import { kill, monotonicNanos, readSignal, signalFd, spawn } from "nish:process"
+import { kill, monotonicNanos, readSignal, signalFd, spawn, waitPid } from "nish:process"
 
 /** The clients the program connects to itself. */
 const CLIENTS: i32 = 16
@@ -166,6 +166,21 @@ const trickler = (port: i32): i32 => {
 }
 
 /**
+ * Ask for the stats lines: `kill` takes only 0, 2, 9 and 15, so the system's
+ * `kill` sends SIGUSR1, and the next pump of the loop prints them.
+ * @param me this process's pid
+ * @returns false when `kill -USR1` did not run or failed
+ */
+const askStats = (me: i32): boolean => {
+  const pid: i32 = spawn(["kill", "-USR1", `${me}`])
+  if (pid <= 0) {
+    return false
+  }
+  const status: i32[] = waitPid(pid, 0)
+  return status[0] === pid && status[1] === 0
+}
+
+/**
  * The `trickle` mode: one batch window while 16 bytes trickle in.
  * @param loop the loop, holding the listener
  * @param listener the ring listener
@@ -201,7 +216,10 @@ const trickle = (loop: i32, listener: i32): i32 => {
     }
   }
   // The `signal` line before the window: the next pump prints it.
-  kill(me, 10)
+  if (!askStats(me)) {
+    console.log("kill -USR1 did not run")
+    return 1
+  }
   if (pollWait(loop, ready, 0) !== 0) {
     console.log("a byte came before the window")
     return 1
@@ -211,8 +229,12 @@ const trickle = (loop: i32, listener: i32): i32 => {
   const n: i32 = pollWaitBatch(loop, ready, 2000, CLIENTS, 400)
   const took: i64 = since(t0)
   const read: i32 = take(ready, n, buf)
-  kill(me, 10)
+  const asked: boolean = askStats(me)
   pollWait(loop, ready, 0)
+  if (!asked) {
+    console.log("kill -USR1 did not run after the window")
+    return 1
+  }
   if (n !== CLIENTS || read !== CLIENTS) {
     console.log(`a wait for 16 with 16 bytes trickling in answered ${n} pairs and ${read} bytes`)
     return 1
