@@ -293,10 +293,13 @@ export const main = (): i32 => {
 - **`countRange` counts an index's keys in one walk.** On an index whose
   first column is `INTEGER` or `NUMERIC`, `countRange(lo, hi, out)` writes
   how many entries have each key `lo`, `lo + 1`, ... `hi` into
-  `out[0..hi - lo]` and answers their total. `lo > hi` or a span longer than
+  `out[0..hi - lo]` and answers their total: on a full index, what
+  `SELECT count(*) ... WHERE col = k` answers for each key, and on a partial
+  index only the rows its `WHERE` admits. `lo > hi` or a span longer than
   `out` is `Err(SQLITE_RANGE)`, a table cursor `Err(SQLITE_MISUSE)`, and
-  another first column `Err(SQLITE_MISMATCH)`; a refusal leaves `out` as it
-  was. The count leaves the cursor on no row, so seek again before reading.
+  another first column `Err(SQLITE_MISMATCH)`; a refusal leaves `out`, the
+  seek key and the cursor's row as they were. A count that runs leaves the
+  cursor on no row, so seek again before reading.
 - **Reads take the stored value.** `columnI64` reads an integer.
   `columnInto` copies text or blob bytes into a buffer, the way
   `Statement.columnInto` does; for a number it answers

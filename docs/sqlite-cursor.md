@@ -73,15 +73,19 @@ class Cursor {
 - `countRange(lo, hi, out)` counts an index's entries whose first key column
   is `k`, for each `k` from `lo` to `hi`, into `out[k - lo]`, and answers their
   total. It is one seek and one forward walk inside the adapter, each entry's
-  record compared with `k` by `sqlite3VdbeRecordCompare` and never unpacked, so
-  a key with no entries costs nothing and `out` holds 0 for it. It agrees with
+  record compared with `k` by `sqlite3VdbeRecordCompare` and never unpacked; a
+  key with no entries costs one `Mem` write and one record compare as the walk
+  steps past it, and `out` holds 0 for it. On a full index it agrees with
   `SELECT count(*) … WHERE col = k` for every `k`, under an ascending or `DESC`
-  first column. It refuses with `Err(SQLITE_MISUSE)` on a table cursor,
+  first column; a partial index holds, and counts, only the rows its `WHERE`
+  admits. The counts reach `out` one adapter call per key. It refuses with `Err(SQLITE_MISUSE)` on a table cursor,
   `Err(SQLITE_MISMATCH)` when the first key column's affinity is neither
   INTEGER nor NUMERIC (under TEXT affinity SQL's `col = k` compares as text),
   and `Err(SQLITE_RANGE)` when `lo > hi` or the span is longer than `out`;
   `out` is then left as it was, and so is every element past the span. A count
-  clears the seek key and leaves the cursor on no row, as a failed seek does.
+  that reaches its walk clears the seek key and leaves the cursor on no row,
+  as a failed seek does, whatever it answers; a refusal, or `SQLITE_NOMEM` for
+  its buffer, comes first and leaves both as they were.
 - A cursor call on a closed, stale or invalidated cursor answers `MISUSE`
   (`Err(SQLITE_MISUSE)`, or 0 from `rowid` and `columnI64`). So does `next` or
   `previous` when the cursor has no current row, and a column read then.
@@ -240,7 +244,8 @@ zeroed with `sqlite3BtreeCursorZero`) and the `Mem`s of its seek key
 (`sqlite3VdbeMemInit`) and the `UnpackedRecord` a seek hands SQLite over
 them, filled once at open; the `KeyInfo` (`sqlite3KeyInfoAlloc`); and one
 `UnpackedRecord` for the current row (`sqlite3VdbeAllocUnpackedRecord`). A
-seek on integer key parts therefore allocates nothing and builds no record. A
+seek on integer key parts sets those `Mem`s and the record's few per-seek
+fields, and allocates nothing. A
 count buffer (`sqlite3_realloc64`) is allocated by the first `countRange`,
 grows to the longest span asked (never past `out.length`), and is kept. A payload
 buffer (`sqlite3_realloc64`) is allocated only when a record is not wholly on
@@ -251,8 +256,9 @@ cursor moves. A steady-state row loop therefore allocates nothing; a test
 reads 10,000 rows under `SQLITE_DEFAULT_MEMSTATUS=1` and checks that SQLite's
 memory high-water mark does not move. Another
 (`tests/link/std_sqlite_cursor_count`, linked with
-`SQLITE_DEFAULT_MEMSTATUS=1`) checks that SQLite's memory in use and its
-high-water mark do not move over two passes of integer seeks and range counts.
+`SQLITE_DEFAULT_MEMSTATUS=1`) pins `countRange`'s buffer reuse: a second pass
+of integer seeks and range counts leaves SQLite's memory in use and its
+high-water mark where the first pass left them.
 
 `nishsqlite_close` closes a connection's cursors before its statements.
 

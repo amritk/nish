@@ -184,7 +184,9 @@ and given only `nField`, `default_rc`, `errCode` and `eqSeen` before each use.
 key by `sqlite3VdbeRecordCompare`, on the same bytes a column read decodes
 (on its page, or copied with the slack above). It stops on the compare's
 `errCode` (a corrupt record) and refuses a zero-length record as
-`SQLITE_CORRUPT`. Its count buffer holds one `i64` per key of the span: a
+`SQLITE_CORRUPT`: the compare reads a record's header size from its first
+byte, which an empty one lacks, and an index entry always holds its rowid.
+A column read takes the same empty record as zero fields. Its count buffer holds one `i64` per key of the span: a
 span longer than `out` is `SQLITE_RANGE` before any allocation, so the buffer
 is never larger than the caller's own array, and the span is computed in
 unsigned 64-bit arithmetic, so `MIN..MAX` is refused, not wrapped. Nish reads
@@ -250,9 +252,9 @@ Tests:
   span one longer than `out`, `MIN..MAX` and an empty `out` (`SQLITE_RANGE`).
   `tests/run.js` (`sqlite-link`, "std_sqlite_cursor_count's steady seek and
   count loop allocates nothing") links it with memory statistics on and
-  `-DSQLITE_DEBUG`, and checks that two passes of integer seeks and counts
-  leave SQLite's memory in use and its high-water mark where the first pass
-  left them.
+  `-DSQLITE_DEBUG`, and pins `countRange`'s buffer reuse: a second pass of
+  integer seeks and counts leaves SQLite's memory in use and its high-water
+  mark where the first pass left them.
 
 Untested: a read that answers `SQLITE_ABORT` because the row moved under the
 cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`
