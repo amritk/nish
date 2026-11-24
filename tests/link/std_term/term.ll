@@ -131,27 +131,9 @@ if.end.1:
 
 define internal noundef i32 @nish.termCellCount(i32 noundef %w, i32 noundef %h) #1 {
 entry:
-  %cells.addr = alloca i32, align 4
   %0 = mul nsw i32 %w, %h
-  store i32 %0, i32* %cells.addr, align 4
-  %1 = load i32, i32* %cells.addr, align 4
-  %2 = icmp sle i32 %1, 0
-  br i1 %2, label %if.then, label %if.end
-
-if.then:
-  ret i32 0
-
-if.end:
-  %3 = load i32, i32* %cells.addr, align 4
-  %4 = icmp sge i32 %3, 1048576
-  br i1 %4, label %if.then.1, label %if.end.1
-
-if.then.1:
-  ret i32 1048576
-
-if.end.1:
-  %5 = load i32, i32* %cells.addr, align 4
-  ret i32 %5
+  %1 = tail call i32 @nish.termCellLimit(i32 %0)
+  ret i32 %1
 }
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.termCells(i32 noundef %n, i32 noundef %value) #2 {
@@ -7155,6 +7137,29 @@ cond.end:
   ret i32 %2
 }
 
+define internal noundef i32 @nish.termAddDigit(i32 noundef %value, i32 noundef %c) #1 {
+entry:
+  %0 = icmp slt i32 %value, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = sub nsw i32 %c, 48
+  ret i32 %1
+
+if.end:
+  %2 = icmp slt i32 %value, 10000000
+  br i1 %2, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %3 = mul nsw i32 %value, 10
+  %4 = sub nsw i32 %c, 48
+  %5 = add nsw i32 %3, %4
+  ret i32 %5
+
+if.end.1:
+  ret i32 %value
+}
+
 define internal noundef i32 @nish.termCsiField(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes, i32 noundef %from, i32 noundef %to, i32 noundef %field, i32 noundef %sub) #4 {
 entry:
   %f.addr = alloca i32, align 4
@@ -7293,33 +7298,9 @@ land.end.1:
 
 if.then.6:
   %47 = load i32, i32* %value.addr, align 4
-  %48 = icmp slt i32 %47, 0
-  br i1 %48, label %if.then.7, label %if.else.3
-
-if.then.7:
-  %49 = load i32, i32* %c.addr, align 4
-  %50 = sub nsw i32 %49, 48
-  store i32 %50, i32* %value.addr, align 4
-  br label %if.end.7
-
-if.else.3:
-  %51 = load i32, i32* %value.addr, align 4
-  %52 = icmp slt i32 %51, 10000000
-  br i1 %52, label %if.then.8, label %if.end.8
-
-if.then.8:
-  %53 = load i32, i32* %value.addr, align 4
-  %54 = mul nsw i32 %53, 10
-  %55 = load i32, i32* %c.addr, align 4
-  %56 = sub nsw i32 %55, 48
-  %57 = add nsw i32 %54, %56
-  store i32 %57, i32* %value.addr, align 4
-  br label %if.end.8
-
-if.end.8:
-  br label %if.end.7
-
-if.end.7:
+  %48 = load i32, i32* %c.addr, align 4
+  %49 = call i32 @nish.termAddDigit(i32 %47, i32 %48)
+  store i32 %49, i32* %value.addr, align 4
   br label %if.end.6
 
 if.end.6:
@@ -7332,14 +7313,14 @@ if.end.1:
   br label %for.inc
 
 for.inc:
-  %58 = load i32, i32* %k.addr, align 4
-  %59 = add nsw i32 %58, 1
-  store i32 %59, i32* %k.addr, align 4
+  %50 = load i32, i32* %k.addr, align 4
+  %51 = add nsw i32 %50, 1
+  store i32 %51, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %60 = load i32, i32* %value.addr, align 4
-  ret i32 %60
+  %52 = load i32, i32* %value.addr, align 4
+  ret i32 %52
 }
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.termCsiParams(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes, i32 noundef %from, i32 noundef %to) #3 {
@@ -7487,33 +7468,9 @@ land.end.1:
 
 if.then.4:
   %54 = load i32, i32* %value.addr, align 4
-  %55 = icmp slt i32 %54, 0
-  br i1 %55, label %if.then.5, label %if.else.2
-
-if.then.5:
-  %56 = load i32, i32* %c.addr, align 4
-  %57 = sub nsw i32 %56, 48
-  store i32 %57, i32* %value.addr, align 4
-  br label %if.end.5
-
-if.else.2:
-  %58 = load i32, i32* %value.addr, align 4
-  %59 = icmp slt i32 %58, 10000000
-  br i1 %59, label %if.then.6, label %if.end.6
-
-if.then.6:
-  %60 = load i32, i32* %value.addr, align 4
-  %61 = mul nsw i32 %60, 10
-  %62 = load i32, i32* %c.addr, align 4
-  %63 = sub nsw i32 %62, 48
-  %64 = add nsw i32 %61, %63
-  store i32 %64, i32* %value.addr, align 4
-  br label %if.end.6
-
-if.end.6:
-  br label %if.end.5
-
-if.end.5:
+  %55 = load i32, i32* %c.addr, align 4
+  %56 = call i32 @nish.termAddDigit(i32 %54, i32 %55)
+  store i32 %56, i32* %value.addr, align 4
   br label %if.end.4
 
 if.end.4:
@@ -7526,48 +7483,48 @@ if.end.2:
   br label %for.inc
 
 for.inc:
-  %65 = load i32, i32* %k.addr, align 4
-  %66 = add nsw i32 %65, 1
-  store i32 %66, i32* %k.addr, align 4
+  %57 = load i32, i32* %k.addr, align 4
+  %58 = add nsw i32 %57, 1
+  store i32 %58, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %67 = load %struct.nish_array*, %struct.nish_array** %params.addr, align 8
-  %68 = load i32, i32* %value.addr, align 4
-  %69 = icmp slt i32 %68, 0
-  br i1 %69, label %cond.true.1, label %cond.false.1
+  %59 = load %struct.nish_array*, %struct.nish_array** %params.addr, align 8
+  %60 = load i32, i32* %value.addr, align 4
+  %61 = icmp slt i32 %60, 0
+  br i1 %61, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
   br label %cond.end.1
 
 cond.false.1:
-  %70 = load i32, i32* %value.addr, align 4
+  %62 = load i32, i32* %value.addr, align 4
   br label %cond.end.1
 
 cond.end.1:
-  %71 = phi i32 [ 0, %cond.true.1 ], [ %70, %cond.false.1 ]
-  %72 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %67, i64 0, i32 0
-  %73 = load i64, i64* %72, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %74 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %67, i64 0, i32 1
-  %75 = load i64, i64* %74, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %76 = icmp eq i64 %73, %75
-  br i1 %76, label %push.grow.1, label %push.store.1
+  %63 = phi i32 [ 0, %cond.true.1 ], [ %62, %cond.false.1 ]
+  %64 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
+  %65 = load i64, i64* %64, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %66 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 1
+  %67 = load i64, i64* %66, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %68 = icmp eq i64 %65, %67
+  br i1 %68, label %push.grow.1, label %push.store.1
 
 push.grow.1:
-  call void @nish_array_grow(%struct.nish_array* %67, i64 4)
+  call void @nish_array_grow(%struct.nish_array* %59, i64 4)
   br label %push.store.1
 
 push.store.1:
-  %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %67, i64 0, i32 2
-  %78 = load i8*, i8** %77, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %79 = bitcast i8* %78 to i32*
-  %80 = getelementptr inbounds i32, i32* %79, i64 %73
-  store i32 %71, i32* %80, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %81 = add i64 %73, 1
-  store i64 %81, i64* %72, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %82 = trunc i64 %81 to i32
-  %83 = load %struct.nish_array*, %struct.nish_array** %params.addr, align 8
-  ret %struct.nish_array* %83
+  %69 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 2
+  %70 = load i8*, i8** %69, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %71 = bitcast i8* %70 to i32*
+  %72 = getelementptr inbounds i32, i32* %71, i64 %65
+  store i32 %63, i32* %72, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %73 = add i64 %65, 1
+  store i64 %73, i64* %64, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %74 = trunc i64 %73 to i32
+  %75 = load %struct.nish_array*, %struct.nish_array** %params.addr, align 8
+  ret %struct.nish_array* %75
 }
 
 define internal noundef nonnull align 8 i8* @nish.termKittyText(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes, i32 noundef %from, i32 noundef %to) #3 {
@@ -7705,33 +7662,9 @@ land.end.2:
 
 if.then.5:
   %46 = load i32, i32* %value.addr, align 4
-  %47 = icmp slt i32 %46, 0
-  br i1 %47, label %if.then.6, label %if.else.2
-
-if.then.6:
-  %48 = load i32, i32* %c.addr, align 4
-  %49 = sub nsw i32 %48, 48
-  store i32 %49, i32* %value.addr, align 4
-  br label %if.end.6
-
-if.else.2:
-  %50 = load i32, i32* %value.addr, align 4
-  %51 = icmp slt i32 %50, 10000000
-  br i1 %51, label %if.then.7, label %if.end.7
-
-if.then.7:
-  %52 = load i32, i32* %value.addr, align 4
-  %53 = mul nsw i32 %52, 10
-  %54 = load i32, i32* %c.addr, align 4
-  %55 = sub nsw i32 %54, 48
-  %56 = add nsw i32 %53, %55
-  store i32 %56, i32* %value.addr, align 4
-  br label %if.end.7
-
-if.end.7:
-  br label %if.end.6
-
-if.end.6:
+  %47 = load i32, i32* %c.addr, align 4
+  %48 = call i32 @nish.termAddDigit(i32 %46, i32 %47)
+  store i32 %48, i32* %value.addr, align 4
   br label %if.end.5
 
 if.end.5:
@@ -7744,41 +7677,41 @@ if.end.1:
   br label %for.inc
 
 for.inc:
-  %57 = load i32, i32* %k.addr, align 4
-  %58 = add nsw i32 %57, 1
-  store i32 %58, i32* %k.addr, align 4
+  %49 = load i32, i32* %k.addr, align 4
+  %50 = add nsw i32 %49, 1
+  store i32 %50, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %59 = load i1, i1* %stopped.addr, align 1
-  %60 = xor i1 %59, true
-  br i1 %60, label %land.rhs.4, label %land.end.4
+  %51 = load i1, i1* %stopped.addr, align 1
+  %52 = xor i1 %51, true
+  br i1 %52, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %61 = load i32, i32* %value.addr, align 4
-  %62 = icmp sge i32 %61, 0
+  %53 = load i32, i32* %value.addr, align 4
+  %54 = icmp sge i32 %53, 0
   br label %land.end.4
 
 land.end.4:
-  %63 = phi i1 [ false, %for.end ], [ %62, %land.rhs.4 ]
-  br i1 %63, label %if.then.8, label %if.end.8
+  %55 = phi i1 [ false, %for.end ], [ %54, %land.rhs.4 ]
+  br i1 %55, label %if.then.6, label %if.end.6
 
-if.then.8:
-  %64 = load %struct.nish_array*, %struct.nish_array** %text.addr, align 8
-  %65 = load i32, i32* %value.addr, align 4
-  call void @nish.termPushUtf8(%struct.nish_array* %64, i32 %65)
-  br label %if.end.8
+if.then.6:
+  %56 = load %struct.nish_array*, %struct.nish_array** %text.addr, align 8
+  %57 = load i32, i32* %value.addr, align 4
+  call void @nish.termPushUtf8(%struct.nish_array* %56, i32 %57)
+  br label %if.end.6
 
-if.end.8:
-  %66 = load %struct.nish_array*, %struct.nish_array** %text.addr, align 8
-  %67 = load %struct.nish_array*, %struct.nish_array** %text.addr, align 8
-  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %67, i64 0, i32 0
-  %69 = load i64, i64* %68, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %70 = trunc i64 %69 to i32
-  %71 = call i64 @nish_arena_mark()
-  %72 = call i8* @nish.termBytesText(%struct.nish_array* %66, i32 %70)
-  %73 = call i8* @nish_arena_keep(i64 %71, i8* %72)
-  ret i8* %73
+if.end.6:
+  %58 = load %struct.nish_array*, %struct.nish_array** %text.addr, align 8
+  %59 = load %struct.nish_array*, %struct.nish_array** %text.addr, align 8
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
+  %61 = load i64, i64* %60, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %62 = trunc i64 %61 to i32
+  %63 = call i64 @nish_arena_mark()
+  %64 = call i8* @nish.termBytesText(%struct.nish_array* %58, i32 %62)
+  %65 = call i8* @nish_arena_keep(i64 %63, i8* %64)
+  ret i8* %65
 }
 
 define internal noundef nonnull align 8 i8* @nish.termBytesRange(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes, i32 noundef %from, i32 noundef %to) #3 {

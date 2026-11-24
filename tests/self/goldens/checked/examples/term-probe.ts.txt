@@ -439,8 +439,9 @@ function termFitRows(w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 4096>
   callee +4:10 termSide -> @nish.termSide
 function termCellCount(w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 1048576> -> @nish.termCellCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.termCellLimit
   stackSites=0 stackLocals=0
-  local +0:9 cells: i32 (const)
+  callee +0:90 termCellLimit -> @nish.termCellLimit
 function termCells(n: integer<0, 1048576>, value: i32): i32[] -> @nish.termCells
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: value
@@ -1254,9 +1255,14 @@ function termModifiers(raw: i32): i32 -> @nish.termModifiers
 function termAction(raw: i32): i32 -> @nish.termAction
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function termAddDigit(value: i32, c: integer<0, 255>): i32 -> @nish.termAddDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: value
+  stackSites=0 stackLocals=0
 function termCsiField(bytes: u8[], from: i32, to: i32, field: i32, sub: i32): i32 -> @nish.termCsiField
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
+  calls: nish.termAddDigit
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 f: i32 (let)
@@ -1265,10 +1271,11 @@ function termCsiField(bytes: u8[], from: i32, to: i32, field: i32, sub: i32): i3
   local +3:7 start: i32 (let)
   local +7:12 k: i32 (let)
   local +8:11 c: i32 (const)
+  callee +23:15 termAddDigit -> @nish.termAddDigit
 function termCsiParams(bytes: u8[], from: i32, to: i32): i32[] -> @nish.termCsiParams
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
-  calls: nish_array_grow
+  calls: nish.termAddDigit nish_array_grow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 params: i32[] (const)
@@ -1277,10 +1284,11 @@ function termCsiParams(bytes: u8[], from: i32, to: i32): i32[] -> @nish.termCsiP
   local +7:7 start: i32 (let)
   local +11:12 k: i32 (let)
   local +12:11 c: i32 (const)
+  callee +20:15 termAddDigit -> @nish.termAddDigit
 function termKittyText(bytes: u8[], from: i32, to: i32): string -> @nish.termKittyText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
-  calls: nish.termBytesText nish.termPushUtf8
+  calls: nish.termAddDigit nish.termBytesText nish.termPushUtf8
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 text: u8[] (const)
@@ -1291,8 +1299,9 @@ function termKittyText(bytes: u8[], from: i32, to: i32): string -> @nish.termKit
   local +8:12 k: i32 (let)
   local +9:11 c: i32 (const)
   callee +20:7 termPushUtf8 -> @nish.termPushUtf8
-  callee +32:5 termPushUtf8 -> @nish.termPushUtf8
-  callee +34:10 termBytesText -> @nish.termBytesText
+  callee +23:15 termAddDigit -> @nish.termAddDigit
+  callee +27:5 termPushUtf8 -> @nish.termPushUtf8
+  callee +29:10 termBytesText -> @nish.termBytesText
 function termBytesRange(bytes: u8[], from: i32, to: i32): string -> @nish.termBytesRange
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from

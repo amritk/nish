@@ -416,16 +416,7 @@ const termFitRows = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 4096>
 }
 
 /** The cells of a `Screen` `w` by `h`, which `termFitRows` has kept within `TERM_MAX_CELLS`. */
-const termCellCount = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 1048576> => {
-  const cells = w * h
-  if (cells <= 0) {
-    return 0
-  }
-  if (cells >= 1048576) {
-    return 1048576
-  }
-  return cells
-}
+const termCellCount = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 1048576> => termCellLimit(w * h)
 
 /**
  * `n` cells of `value`. Built by `push` rather than `new Array<i32>(n)`, whose
@@ -2336,6 +2327,21 @@ const termAction = (raw: i32): i32 => {
 }
 
 /**
+ * `value`, a parameter being read (-1 before its first digit), with the digit
+ * byte `c` appended. Past eight digits a number is no parameter a terminal
+ * sends; it stops growing.
+ */
+const termAddDigit = (value: i32, c: integer<0, 255>): i32 => {
+  if (value < 0) {
+    return c - TERM_DIGIT_0
+  }
+  if (value < 10000000) {
+    return value * 10 + (c - TERM_DIGIT_0)
+  }
+  return value
+}
+
+/**
  * Field `field`, sub-field `sub` of the parameters `bytes[from, to)`, where
  * `;` separates fields and `:` sub-fields (ECMA-48 § 5.4.2; the kitty
  * protocol's `code:shifted ; mods:event ; text`); -1 when it is omitted.
@@ -2364,12 +2370,7 @@ const termCsiField = (bytes: u8[], from: i32, to: i32, field: i32, sub: i32): i3
         return value
       }
     } else if (c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10 && f === field && s === sub) {
-      // Past eight digits a number is no parameter a terminal sends; it stops growing.
-      if (value < 0) {
-        value = c - TERM_DIGIT_0
-      } else if (value < 10000000) {
-        value = value * 10 + (c - TERM_DIGIT_0)
-      }
+      value = termAddDigit(value, c)
     }
   }
   return value
@@ -2397,12 +2398,7 @@ const termCsiParams = (bytes: u8[], from: i32, to: i32): i32[] => {
     } else if (c === 58) {
       first = false
     } else if (first && c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10) {
-      // The eight-digit stop `termCsiField` keeps.
-      if (value < 0) {
-        value = c - TERM_DIGIT_0
-      } else if (value < 10000000) {
-        value = value * 10 + (c - TERM_DIGIT_0)
-      }
+      value = termAddDigit(value, c)
     }
   }
   params.push(value < 0 ? 0 : value)
@@ -2438,12 +2434,7 @@ const termKittyText = (bytes: u8[], from: i32, to: i32): string => {
       termPushUtf8(text, value)
       value = -1
     } else if (c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10 && f === 2) {
-      // The eight-digit stop `termCsiField` keeps.
-      if (value < 0) {
-        value = c - TERM_DIGIT_0
-      } else if (value < 10000000) {
-        value = value * 10 + (c - TERM_DIGIT_0)
-      }
+      value = termAddDigit(value, c)
     }
   }
   if (!stopped && value >= 0) {
