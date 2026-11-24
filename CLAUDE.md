@@ -69,7 +69,9 @@ before pushing.
 and "never" against the code's real match (a seccomp row matches syscall
 numbers, not descriptors), and each route, figure and command against what
 was run. Every `docs/BENCHMARKS.md` table names the commit whose bench code
-produced it and claims only the fields that version prints. A per-second
+produced it, a commit `main` can reach (its own, or the PR's squash commit),
+never a PR branch commit that a squash merge drops, and claims only the
+fields that version prints. A per-second
 maximum is quoted as a maximum, never as a typical cost. Each "up to",
 "every" or "lower than" is checked against the table it summarises. A PR that
 adds to those files or to a WP design note greps every `check(...)` string it
@@ -136,8 +138,11 @@ before it is pushed (read the `wasi` skip line; it needs
 NL9007 warning, and that run's ratchet fails on it. A change to `runtime/*.c`
 runs `node tests/run.js c-symbols`, which fails on a new libc call until
 `src/c-symbols.ts` reserves it (`.claude/selfhost.md` →
-["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)). A change
-to `runtime/sqlite/nish-sqlite.c` also runs the `tests/run.js` check
+["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)). One
+that grows a unit's `.text` moves its ceiling in `tests/runtime-budgets.js`
+(`node tests/run.js budget`) and its row in `docs/wp7-runtime.md` in the same
+PR, with the measurement, so a plan stage that edits a runtime file owns both.
+A change to `runtime/sqlite/nish-sqlite.c` also runs the `tests/run.js` check
 "sqlite/nish-sqlite.c less sqlite3.c: .text* at -Oz fits the … byte budget"
 before it is pushed: shrink the addition, or raise `RUNTIME_SQLITE_TEXT_BUDGET`
 with its `docs/wp7-runtime.md` row.
