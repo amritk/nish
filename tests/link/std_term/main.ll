@@ -137,20 +137,25 @@
 @.str.126 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c" x \00" }, align 8
 @.str.127 = private unnamed_addr constant { i64, [14 x i8] } { i64 13, [14 x i8] c", its canvas \00" }, align 8
 @.str.128 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c", and flushes \00" }, align 8
+@.str.129 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"its last cell flushes as \00" }, align 8
+@.str.130 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"\E2\96\80\00" }, align 8
+@.str.131 = private unnamed_addr constant { i64, [32 x i8] } { i64 31, [32 x i8] c"bad bytes decode cell by cell: \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
 declare double @floor(double)
 declare double @ceil(double)
 declare double @trunc(double)
-declare void @nish.Canvas.constructor(%struct.Canvas* noundef nonnull noalias align 8 dereferenceable(24) nocapture, %struct.Screen* noundef nonnull align 8 dereferenceable(88)) #0
+declare void @nish.Canvas.constructor(%struct.Canvas* noundef nonnull noalias align 8 dereferenceable(24) nocapture, %struct.Screen* noundef nonnull align 8 dereferenceable(88)) #2
 declare void @nish.Canvas.clear(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef) #0
-declare noundef i32 @nish.Canvas.pixel(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #0
-declare void @nish.Canvas.setPixel(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare void @nish.Canvas.fillRect(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.Canvas.pixel(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #3
+declare void @nish.Canvas.setPixel(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef, i32 noundef) #2
+declare void @nish.Canvas.fillRect(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare void @nish.Canvas.line(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.Canvas.text(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef, i8* noundef nonnull noalias readonly align 8, i32 noundef) #0
-declare void @nish.Canvas.paintCell(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.Canvas.upper(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #3
+declare noundef i32 @nish.Canvas.lower(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #3
+declare void @nish.Canvas.paintCell(%struct.Canvas* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #2
 declare void @nish.FixedStep.constructor(%struct.FixedStep* noundef nonnull noalias align 8 dereferenceable(32) nocapture, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish.FixedStep.advance(%struct.FixedStep* noundef nonnull align 8 dereferenceable(32) nocapture, double noundef) #0
 declare noundef double @nish.FixedStep.alpha(%struct.FixedStep* noundef nonnull readonly align 8 dereferenceable(32) nocapture) #3
@@ -167,15 +172,16 @@ declare void @nish.Screen.constructor(%struct.Screen* noundef nonnull noalias al
 declare void @nish.Screen.resize(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.Screen.clear(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef) #2
 declare void @nish.Screen.invalidate(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #2
-declare void @nish.Screen.set(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
+declare void @nish.Screen.set(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish.Screen.text(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i8* noundef nonnull noalias readonly align 8, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.Screen.glyphAt(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
-declare void @nish.Screen.put(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.Screen.glyphAt(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #3
+declare void @nish.Screen.put(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #2
 declare void @nish.Screen.putDecimal(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
 declare void @nish.Screen.putSyncMode(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
-declare void @nish.Screen.putGlyph(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare void @nish.Screen.putGlyph(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #2
+declare void @nish.Screen.putDecimalAfter(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
 declare void @nish.Screen.putColour(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.Screen.colourKey(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.Screen.colourKey(%struct.Screen* noundef nonnull readonly align 8 dereferenceable(88) nocapture, i32 noundef) #3
 declare noundef nonnull align 8 i8* @nish.Screen.flush(%struct.Screen* noundef nonnull align 8 dereferenceable(88) nocapture) #0
 declare noundef nonnull align 8 i8* @nish.beginSync() #1
 declare noundef nonnull align 8 i8* @nish.clearScreen() #1
@@ -184,7 +190,7 @@ declare noundef nonnull align 8 i8* @nish.enterAltScreen() #1
 declare noundef nonnull align 8 i8* @nish.hideCursor() #1
 declare noundef nonnull align 8 i8* @nish.leaveAltScreen() #1
 declare noundef nonnull align 8 i8* @nish.moveCursor(i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.paletteIndex(i32 noundef) #0
+declare noundef i32 @nish.paletteIndex(i32 noundef) #1
 declare noundef nonnull align 8 i8* @nish.resetStyle() #1
 declare noundef i32 @nish.rgb(i32 noundef, i32 noundef, i32 noundef) #1
 declare noundef nonnull align 8 i8* @nish.showCursor() #1
@@ -195,6 +201,7 @@ declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare double @nish_floor(double) #1
 declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #2
@@ -202,6 +209,7 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #5
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
@@ -813,6 +821,14 @@ entry:
   %huge.addr = alloca %struct.Screen*, align 8
   %canvas.addr = alloca %struct.Canvas*, align 8
   %Canvas.obj.1 = alloca %struct.Canvas, align 8
+  %bad.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.33 = alloca %struct.nish_array, align 8
+  %arr.data.30 = alloca [10 x i8], align 8
+  %b.addr = alloca %struct.Screen*, align 8
+  %Screen.obj.6 = alloca %struct.Screen, align 8
+  %badDrawn.addr = alloca i32, align 4
+  %native.addr = alloca i1, align 1
+  %decoded.addr = alloca i1, align 1
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish.enterAltScreen()
   call void @frame(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*), i8* %0)
@@ -2314,6 +2330,179 @@ cond.end.1:
   %979 = select i1 %978, i8* bitcast ({ i64, [5 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.33 to i8*)
   %980 = call i8* @nish_str_concat(i8* %970, i8* %979)
   call void @nish_print(i8* %980)
+  %981 = load %struct.Screen*, %struct.Screen** %huge.addr, align 8
+  call void @nish.Screen.set(%struct.Screen* %981, i32 4095, i32 255, i32 90, i32 -1, i32 -1, i32 0)
+  %982 = load %struct.Screen*, %struct.Screen** %huge.addr, align 8
+  %983 = call i64 @nish_arena_mark()
+  %984 = call i8* @nish.Screen.flush(%struct.Screen* %982)
+  %985 = call i8* @nish_arena_keep(i64 %983, i8* %984)
+  %986 = call i64 @nish_arena_mark()
+  %987 = call i8* @shown(i8* %985)
+  %988 = call i8* @nish_arena_keep(i64 %986, i8* %987)
+  %989 = call i8* @nish_str_concat(i8* bitcast ({ i64, [26 x i8] }* @.str.129 to i8*), i8* %988)
+  call void @nish_print(i8* %989)
+  %990 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.33, i64 0, i32 0
+  store i64 10, i64* %990, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %991 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.33, i64 0, i32 1
+  store i64 10, i64* %991, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %992 = bitcast [10 x i8]* %arr.data.30 to i8*
+  %993 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.33, i64 0, i32 2
+  store i8* %992, i8** %993, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %994 = bitcast i8* %992 to i8*
+  %995 = getelementptr inbounds i8, i8* %994, i64 0
+  store i8 226, i8* %995, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %996 = getelementptr inbounds i8, i8* %994, i64 1
+  store i8 130, i8* %996, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %997 = getelementptr inbounds i8, i8* %994, i64 2
+  store i8 65, i8* %997, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %998 = getelementptr inbounds i8, i8* %994, i64 3
+  store i8 237, i8* %998, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %999 = getelementptr inbounds i8, i8* %994, i64 4
+  store i8 160, i8* %999, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %1000 = getelementptr inbounds i8, i8* %994, i64 5
+  store i8 128, i8* %1000, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %1001 = getelementptr inbounds i8, i8* %994, i64 6
+  store i8 248, i8* %1001, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %1002 = getelementptr inbounds i8, i8* %994, i64 7
+  store i8 66, i8* %1002, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %1003 = getelementptr inbounds i8, i8* %994, i64 8
+  store i8 240, i8* %1003, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %1004 = getelementptr inbounds i8, i8* %994, i64 9
+  store i8 159, i8* %1004, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  store %struct.nish_array* %arr.hdr.33, %struct.nish_array** %bad.addr, align 8
+  call void @nish.Screen.constructor(%struct.Screen* %Screen.obj.6, i32 8, i32 1, i1 false)
+  store %struct.Screen* %Screen.obj.6, %struct.Screen** %b.addr, align 8
+  %1005 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1006 = call i64 @nish_arena_mark()
+  %1007 = call i8* @nish.Screen.flush(%struct.Screen* %1005)
+  %1008 = call i8* @nish_arena_keep(i64 %1006, i8* %1007)
+  %1009 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1010 = load %struct.nish_array*, %struct.nish_array** %bad.addr, align 8
+  %1011 = load %struct.nish_array*, %struct.nish_array** %bad.addr, align 8
+  %1012 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1011, i64 0, i32 0
+  %1013 = load i64, i64* %1012, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1014 = trunc i64 %1013 to i32
+  %1015 = sext i32 %1014 to i64
+  %1016 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1010, i64 0, i32 0
+  %1017 = load i64, i64* %1016, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1018 = icmp ule i64 0, %1015
+  %1019 = icmp ule i64 %1015, %1017
+  %1020 = and i1 %1018, %1019
+  br i1 %1020, label %bytes.ok, label %bytes.fail
+
+bytes.fail:
+  call void @nish_panic_slice(i64 0, i64 %1015, i64 %1017)
+  unreachable
+
+bytes.ok:
+  %1021 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1010, i64 0, i32 2
+  %1022 = load i8*, i8** %1021, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %1023 = getelementptr inbounds i8, i8* %1022, i64 0
+  %1024 = sub i64 %1015, 0
+  %1025 = call i8* @nish_str_new(i8* %1023, i64 %1024)
+  %1026 = call i32 @nish.Screen.text(%struct.Screen* %1009, i32 0, i32 0, i8* %1025, i32 -1, i32 -1, i32 0)
+  store i32 %1026, i32* %badDrawn.addr, align 4
+  %1027 = bitcast i8* bitcast ({ i64, [4 x i8] }* @.str.130 to i8*) to i64*
+  %1028 = load i64, i64* %1027, align 8
+  %1029 = trunc i64 %1028 to i32
+  %1030 = icmp eq i32 %1029, 3
+  store i1 %1030, i1* %native.addr, align 1
+  %1031 = load i32, i32* %badDrawn.addr, align 4
+  %1032 = icmp eq i32 %1031, 8
+  br i1 %1032, label %land.rhs.7, label %land.end.7
+
+land.rhs.7:
+  %1033 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1034 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1033, i32 0, i32 0)
+  %1035 = icmp eq i32 %1034, 65533
+  br label %land.end.7
+
+land.end.7:
+  %1036 = phi i1 [ false, %bytes.ok ], [ %1035, %land.rhs.7 ]
+  br i1 %1036, label %land.rhs.6, label %land.end.6
+
+land.rhs.6:
+  %1037 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1038 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1037, i32 1, i32 0)
+  %1039 = icmp eq i32 %1038, 65533
+  br label %land.end.6
+
+land.end.6:
+  %1040 = phi i1 [ false, %land.end.7 ], [ %1039, %land.rhs.6 ]
+  br i1 %1040, label %land.rhs.5, label %land.end.5
+
+land.rhs.5:
+  %1041 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1042 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1041, i32 2, i32 0)
+  %1043 = icmp eq i32 %1042, 65
+  br label %land.end.5
+
+land.end.5:
+  %1044 = phi i1 [ false, %land.end.6 ], [ %1043, %land.rhs.5 ]
+  br i1 %1044, label %land.rhs.4, label %land.end.4
+
+land.rhs.4:
+  %1045 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1046 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1045, i32 3, i32 0)
+  %1047 = icmp eq i32 %1046, 55296
+  br label %land.end.4
+
+land.end.4:
+  %1048 = phi i1 [ false, %land.end.5 ], [ %1047, %land.rhs.4 ]
+  br i1 %1048, label %land.rhs.3, label %land.end.3
+
+land.rhs.3:
+  %1049 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1050 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1049, i32 4, i32 0)
+  %1051 = icmp eq i32 %1050, 65533
+  br label %land.end.3
+
+land.end.3:
+  %1052 = phi i1 [ false, %land.end.4 ], [ %1051, %land.rhs.3 ]
+  br i1 %1052, label %land.rhs.2, label %land.end.2
+
+land.rhs.2:
+  %1053 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1054 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1053, i32 5, i32 0)
+  %1055 = icmp eq i32 %1054, 66
+  br label %land.end.2
+
+land.end.2:
+  %1056 = phi i1 [ false, %land.end.3 ], [ %1055, %land.rhs.2 ]
+  br i1 %1056, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %1057 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1058 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1057, i32 6, i32 0)
+  %1059 = icmp eq i32 %1058, 65533
+  br label %land.end.1
+
+land.end.1:
+  %1060 = phi i1 [ false, %land.end.2 ], [ %1059, %land.rhs.1 ]
+  br i1 %1060, label %land.rhs, label %land.end
+
+land.rhs:
+  %1061 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1062 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1061, i32 7, i32 0)
+  %1063 = icmp eq i32 %1062, 65533
+  br label %land.end
+
+land.end:
+  %1064 = phi i1 [ false, %land.end.1 ], [ %1063, %land.rhs ]
+  store i1 %1064, i1* %decoded.addr, align 1
+  %1065 = load i1, i1* %native.addr, align 1
+  %1066 = xor i1 %1065, true
+  br i1 %1066, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1067 = load i1, i1* %decoded.addr, align 1
+  br label %lor.end
+
+lor.end:
+  %1068 = phi i1 [ true, %land.end ], [ %1067, %lor.rhs ]
+  %1069 = select i1 %1068, i8* bitcast ({ i64, [5 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.33 to i8*)
+  %1070 = call i8* @nish_str_concat(i8* bitcast ({ i64, [32 x i8] }* @.str.131 to i8*), i8* %1069)
+  call void @nish_print(i8* %1070)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

@@ -316,6 +316,8 @@ const TERM_ESC: i32 = 27
 
 /** The space a blank cell holds. */
 const TERM_SPACE: i32 = 32
+/** The largest `i32`, where a column count stops rather than wraps. */
+const TERM_I32_MAX: i32 = 2147483647
 
 /** DEL, the first byte past printable ASCII. */
 const TERM_DELETE: i32 = 127
@@ -369,9 +371,6 @@ const TERM_STYLE_UNKNOWN: i32 = -2
  */
 const TERM_CELL_BYTES: i32 = 64
 
-/** The most cells a side of a `Screen` has; a terminal reports up to 65,535. */
-const TERM_MAX_SIDE: i32 = 4096
-
 /** The most cells a `Screen` has, so its `flush` buffer stays at 64 MiB. */
 const TERM_MAX_CELLS: i32 = 1048576
 
@@ -392,6 +391,90 @@ const TERM_REPLACEMENT: i32 = 65533
 
 /** Whether a string here is UTF-8 bytes (natively) rather than UTF-16 units (under Node). */
 const termNativeStrings = (): boolean => toI32("▀".length) === 3
+
+/** A side of a `Screen`: `v` held to 0–4,096 cells; a terminal reports up to 65,535. */
+const termSide = (v: i32): integer<0, 4096> => {
+  if (v <= 0) {
+    return 0
+  }
+  if (v >= 4096) {
+    return 4096
+  }
+  return v
+}
+
+/** The rows of a `Screen` `w` columns wide: `h`, or fewer when `w * h` would pass `TERM_MAX_CELLS`. */
+const termFitRows = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 4096> => {
+  if (w <= 0) {
+    return h
+  }
+  const most: i32 = (TERM_MAX_CELLS / w) | 0
+  if (h <= most) {
+    return h
+  }
+  return termSide(most)
+}
+
+/** The cells of a `Screen` `w` by `h`, which `termFitRows` has kept within `TERM_MAX_CELLS`. */
+const termCellCount = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 1048576> => termCellLimit(w * h)
+
+/**
+ * `n` cells of `value`. Built by `push` rather than `new Array<i32>(n)`, whose
+ * length check the declared range of `n` does not reach. A `resize` at the
+ * 1,048,576-cell cap, with its flush room, takes about 0.1 s, twice what
+ * `new Array` took.
+ */
+const termCells = (n: integer<0, 1048576>, value: i32): i32[] => {
+  const cells: i32[] = []
+  for (let i: i32 = 0; i < n; i++) {
+    cells.push(value)
+  }
+  return cells
+}
+
+/** The zeroed room a flush of `cells` cells writes into: `TERM_CELL_BYTES` per cell and once more. */
+const termFlushRoom = (cells: integer<0, 1048576>): u8[] => {
+  const room: u8[] = []
+  for (let i: i32 = 0; i <= cells; i++) {
+    for (let k: i32 = 0; k < TERM_CELL_BYTES; k++) {
+      room.push(0)
+    }
+  }
+  return room
+}
+
+/** `n` held to the cells a `Screen` can have, 0 to `TERM_MAX_CELLS`. */
+const termCellLimit = (n: i32): integer<0, 1048576> => {
+  if (n <= 0) {
+    return 0
+  }
+  if (n >= 1048576) {
+    return 1048576
+  }
+  return n
+}
+
+/**
+ * Where cell `x`, `y` of a `w`-wide, `h`-high grid sits in a buffer of `len`
+ * slots, row by row, or -1 when it is off the grid or past the buffer's end.
+ */
+const termGridAt = (x: i32, y: i32, w: i32, h: i32, len: i32): i32 => {
+  if (x < 0 || y < 0 || x >= w || y >= h) {
+    return -1
+  }
+  const at: i64 = toI64(y) * toI64(w) + toI64(x)
+  if (at >= toI64(len)) {
+    return -1
+  }
+  return toI32(at)
+}
+
+/** The length of the shortest of four of a `Screen`'s buffers. */
+const termShortest = (a: i32[], b: i32[], c: i32[], d: i32[]): i32 => {
+  const ab: i32 = toI32(a.length) < toI32(b.length) ? toI32(a.length) : toI32(b.length)
+  const cd: i32 = toI32(c.length) < toI32(d.length) ? toI32(c.length) : toI32(d.length)
+  return ab < cd ? ab : cd
+}
 
 /** `v` held to `lo`–`hi`. */
 const termClamp = (v: i32, lo: i32, hi: i32): i32 => {
@@ -432,18 +515,41 @@ export const rgb = (r: i32, g: i32, b: i32): i32 =>
   (termClamp(r, 0, 255) << 16) | (termClamp(g, 0, 255) << 8) | termClamp(b, 0, 255)
 
 /** The index of the 6×6×6 colour cube's level (0–5) nearest one component in 0–255. */
-const termCubeLevel = (v: i32): i32 => {
+const termCubeLevel = (v: i32): integer<0, 5> => {
   if (v < 48) {
     return 0
   }
   if (v < 115) {
     return 1
   }
-  return ((v - 35) / 40) | 0
+  if (v < 155) {
+    return 2
+  }
+  if (v < 195) {
+    return 3
+  }
+  if (v < 235) {
+    return 4
+  }
+  return 5
 }
 
 /** The component value of cube level `q`: 0, 95, 135, 175, 215 or 255. */
-const termCubeValue = (q: i32): i32 => (q === 0 ? 0 : q * 40 + 55)
+const termCubeValue = (q: i32): f64 => (q === 0 ? 0 : toF64(q) * 40 + 55)
+
+/**
+ * The grey ramp entry (232–255) for a mean component in 0–255: grey `k` is
+ * `10k + 8`, and the mean picks the highest one whose midpoint below it does
+ * not pass the mean.
+ */
+const termGreyIndex = (average: i32): i32 => {
+  for (let step: i32 = 0; step < 23; step++) {
+    if (average < step * 10 + 13) {
+      return step + 232
+    }
+  }
+  return 255
+}
 
 /**
  * The 256-colour palette entry nearest a colour: one of the 6×6×6 cube (16–231)
@@ -459,22 +565,22 @@ export const paletteIndex = (colour: i32): i32 => {
   const r: i32 = (colour >> 16) & 255
   const g: i32 = (colour >> 8) & 255
   const b: i32 = colour & 255
-  const qr: i32 = termCubeLevel(r)
-  const qg: i32 = termCubeLevel(g)
-  const qb: i32 = termCubeLevel(b)
+  const qr = termCubeLevel(r)
+  const qg = termCubeLevel(g)
+  const qb = termCubeLevel(b)
   const cube: i32 = qr * 36 + qg * 6 + qb + 16
-  const dr: i32 = r - termCubeValue(qr)
-  const dg: i32 = g - termCubeValue(qg)
-  const db: i32 = b - termCubeValue(qb)
-  const cubeDistance: i32 = dr * dr + dg * dg + db * db
-  const average: i32 = ((r + g + b) / 3) | 0
-  const step: i32 = average > 238 ? 23 : termClamp(((average - 3) / 10) | 0, 0, 23)
-  const grey: i32 = step * 10 + 8
-  const gr: i32 = r - grey
-  const gg: i32 = g - grey
-  const gb: i32 = b - grey
-  const greyDistance: i32 = gr * gr + gg * gg + gb * gb
-  return greyDistance < cubeDistance ? step + 232 : cube
+  // The distances are squared in f64: each term is under 2^16, exact there.
+  const dr: f64 = toF64(r) - termCubeValue(qr)
+  const dg: f64 = toF64(g) - termCubeValue(qg)
+  const db: f64 = toF64(b) - termCubeValue(qb)
+  const cubeDistance: f64 = dr * dr + dg * dg + db * db
+  const greyIndex: i32 = termGreyIndex(((r + g + b) / 3) | 0)
+  const grey: f64 = (toF64(greyIndex) - 232) * 10 + 8
+  const gr: f64 = toF64(r) - grey
+  const gg: f64 = toF64(g) - grey
+  const gb: f64 = toF64(b) - grey
+  const greyDistance: f64 = gr * gr + gg * gg + gb * gb
+  return greyDistance < cubeDistance ? greyIndex : cube
 }
 
 /**
@@ -528,7 +634,9 @@ export const resetStyle = (): string => "\x1b[0m"
  * @param y The row, from 0 at the top.
  * @returns The escape sequence, to `write`.
  */
-export const moveCursor = (x: i32, y: i32): string => `\x1b[${y + 1};${x + 1}H`
+export const moveCursor = (x: i32, y: i32): string =>
+  // The sequence counts from 1, which is past `i32` for a side of 2,147,483,647, so the sum is `i64`.
+  `\x1b[${toI64(y) + toI64(1)};${toI64(x) + toI64(1)}H`
 
 /**
  * Begin a synchronized update (DEC mode 2026): a terminal that knows the mode
@@ -547,55 +655,59 @@ export const beginSync = (): string => "\x1b[?2026h"
 export const endSync = (): string => "\x1b[?2026l"
 
 /**
- * The code point of the character that starts at unit `i` of `s`: UTF-8 bytes
- * natively, UTF-16 units under Node. A unit that cannot start one is U+FFFD.
+ * The character that starts at unit `i` of `s`, which has `n` units: UTF-8
+ * bytes natively, UTF-16 units under Node. The result is its code point shifted
+ * left 3, or-ed with the units it takes (1–4), so a caller walks `s` in place.
+ * A unit that cannot start a character, or a lead whose continuation is cut
+ * short, is one U+FFFD of one unit, and the next unit is read afresh.
  */
-const termCodePointAt = (s: string, i: i32, n: i32): i32 => {
+const termCodePointStep = (s: string, i: i32, n: i32): i32 => {
+  if (i < 0 || i >= n) {
+    return (TERM_REPLACEMENT << 3) | 1
+  }
   const c: i32 = toI32(s.charCodeAt(i))
+  let j: i32 = i
+  if (j < TERM_I32_MAX) {
+    j = j + 1
+  }
   if (!termNativeStrings()) {
-    if (c >= 55296 && c < 56320 && i + 1 < n) {
-      const lo: i32 = toI32(s.charCodeAt(i + 1))
+    if (c >= 55296 && c < 56320 && j < n) {
+      const lo: i32 = toI32(s.charCodeAt(j))
       if (lo >= 56320 && lo < 57344) {
-        return ((c - 55296) << 10) + (lo - 56320) + 65536
+        return (((c & 1023) * 1024 + (lo & 1023) + 65536) << 3) | 2
       }
     }
-    return c
+    return (c << 3) | 1
   }
-  const width: i32 = termCodePointUnits(s, i, n)
   if (c < 128) {
-    return c
-  }
-  if (width === 1) {
-    return TERM_REPLACEMENT
-  }
-  let cp: i32 = termLeadBits(c, width)
-  for (let k: i32 = 1; k < width; k++) {
-    cp = (cp << 6) | (toI32(s.charCodeAt(i + k)) & 63)
-  }
-  return cp
-}
-
-/** How many units of `s` the character at `i` takes: 1–4 bytes natively, 1 or 2 units under Node. */
-const termCodePointUnits = (s: string, i: i32, n: i32): i32 => {
-  const c: i32 = toI32(s.charCodeAt(i))
-  if (!termNativeStrings()) {
-    if (c >= 55296 && c < 56320 && i + 1 < n) {
-      const lo: i32 = toI32(s.charCodeAt(i + 1))
-      return lo >= 56320 && lo < 57344 ? 2 : 1
-    }
-    return 1
+    return (c << 3) | 1
   }
   const width: i32 = c >= 248 ? 1 : termLeadWidth(c)
-  if (width === 1 || i + width > n) {
-    return 1
-  }
-  for (let k: i32 = 1; k < width; k++) {
-    const next: i32 = toI32(s.charCodeAt(i + k))
+  let cp: i32 = termLeadBits(c, width)
+  let read: i32 = 1
+  let k: i32 = j
+  while (read < width && k < n) {
+    const next: i32 = toI32(s.charCodeAt(k))
     if (next < 128 || next >= 192) {
-      return 1
+      break
     }
+    cp = (cp << 6) | (next & 63)
+    read = read + 1
+    k = k + 1
   }
-  return width
+  if (width > 1 && read === width) {
+    return (cp << 3) | width
+  }
+  return (TERM_REPLACEMENT << 3) | 1
+}
+
+/** The unit after the character at `i`, which `step` (from `termCodePointStep`) says takes `step & 7` units; at most `n`. */
+const termStepOn = (i: i32, step: i32, n: i32): i32 => {
+  if (i < 0 || i > 2147483640) {
+    return n
+  }
+  const next: i32 = i + (step & 7)
+  return next < n ? next : n
 }
 
 /**
@@ -604,28 +716,38 @@ const termCodePointUnits = (s: string, i: i32, n: i32): i32 => {
  * sends the same bytes back out.
  */
 const termBytesText = (bytes: u8[], n: i32): string => {
+  // Every caller passes at most `bytes.length`: a whole buffer, or a screen's `outLen`, which `put` keeps within `out`.
+  const held: i32 = toI32(bytes.length)
+  let end: i32 = n
+  if (end > held) {
+    end = held
+  }
+  if (end < 0) {
+    end = 0
+  }
   if (termNativeStrings()) {
-    return String.fromBytes(bytes, 0, n)
+    return String.fromBytes(bytes, 0, end)
   }
   const pieces: string[] = []
-  let run: i32 = 0
   let i: i32 = 0
-  while (i < n) {
-    if (!(i >= 0 && i < toI32(bytes.length))) {
-      panic("nish/term: a byte count past the end of its buffer")
-    }
+  while (i >= 0 && i < end && i < toI32(bytes.length)) {
     const c: i32 = toI32(bytes[i])
+    i = i + 1
     if (c < 128) {
-      i = i + 1
+      pieces.push(String.fromCharCode(c))
       continue
-    }
-    if (run < i) {
-      pieces.push(String.fromBytes(bytes, run, i))
     }
     const width: i32 = termLeadWidth(c)
     let cp: i32 = width === 1 ? TERM_REPLACEMENT : termLeadBits(c, width)
-    for (let k: i32 = 1; k < width && i + k < n; k++) {
-      cp = (cp << 6) | (toI32(bytes[i + k]) & 63)
+    // A character cut off at `end` takes the bytes that are there.
+    let left: i32 = 0
+    if (width > 1) {
+      left = width - 1
+    }
+    while (left > 0 && i >= 0 && i < end && i < toI32(bytes.length)) {
+      cp = (cp << 6) | (toI32(bytes[i]) & 63)
+      i = i + 1
+      left = left - 1
     }
     if (cp >= 65536) {
       const v: i32 = cp - 65536
@@ -633,11 +755,6 @@ const termBytesText = (bytes: u8[], n: i32): string => {
     } else {
       pieces.push(String.fromCharCode(cp))
     }
-    i = i + width
-    run = i
-  }
-  if (run < n) {
-    pieces.push(String.fromBytes(bytes, run, n))
   }
   return pieces.join("")
 }
@@ -710,25 +827,22 @@ export class Screen {
    * @param height The new rows.
    */
   resize(width: i32, height: i32): void {
-    this.width = termClamp(width, 0, TERM_MAX_SIDE)
-    this.height = termClamp(height, 0, TERM_MAX_SIDE)
-    if (this.width * this.height > TERM_MAX_CELLS) {
-      this.height = (TERM_MAX_CELLS / this.width) | 0
-    }
-    const cells: i32 = this.width * this.height
-    this.glyphs = new Array<i32>(cells)
-    this.fgs = new Array<i32>(cells)
-    this.bgs = new Array<i32>(cells)
-    this.attrs = new Array<i32>(cells)
-    this.sentGlyphs = new Array<i32>(cells)
-    this.sentFgs = new Array<i32>(cells)
-    this.sentBgs = new Array<i32>(cells)
-    this.sentAttrs = new Array<i32>(cells)
+    const w = termSide(width)
+    const h = termFitRows(w, termSide(height))
+    const cells = termCellCount(w, h)
+    this.width = w
+    this.height = h
+    this.glyphs = termCells(cells, TERM_SPACE)
+    this.fgs = termCells(cells, COLOR_DEFAULT)
+    this.bgs = termCells(cells, COLOR_DEFAULT)
+    this.attrs = termCells(cells, ATTR_NONE)
+    this.sentGlyphs = termCells(cells, TERM_UNSENT)
+    this.sentFgs = termCells(cells, COLOR_DEFAULT)
+    this.sentBgs = termCells(cells, COLOR_DEFAULT)
+    this.sentAttrs = termCells(cells, ATTR_NONE)
     // Sized here rather than in `flush`, so a flush stores nothing into the
     // screen and a frame loop around it can take its string back every pass.
-    this.out = new Array<u8>(cells * TERM_CELL_BYTES + TERM_CELL_BYTES)
-    this.clear(COLOR_DEFAULT)
-    this.invalidate()
+    this.out = termFlushRoom(cells)
   }
 
   /**
@@ -765,17 +879,23 @@ export class Screen {
    *   has an attribute it cannot write.
    */
   set(x: i32, y: i32, glyph: i32, fg: i32, bg: i32, attrs: i32): void {
-    if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
-      return
+    const glyphs: i32[] = this.glyphs
+    const fgs: i32[] = this.fgs
+    const bgs: i32[] = this.bgs
+    const kept: i32[] = this.attrs
+    const i: i32 = termGridAt(x, y, this.width, this.height, toI32(glyphs.length))
+    if (
+      i >= 0 &&
+      i < toI32(glyphs.length) &&
+      i < toI32(fgs.length) &&
+      i < toI32(bgs.length) &&
+      i < toI32(kept.length)
+    ) {
+      glyphs[i] = glyph
+      fgs[i] = fg
+      bgs[i] = bg
+      kept[i] = attrs & (ATTR_BOLD | ATTR_INVERSE)
     }
-    const i: i32 = y * this.width + x
-    if (!(i >= 0 && i < toI32(this.glyphs.length))) {
-      return
-    }
-    this.glyphs[i] = glyph
-    this.fgs[i] = fg
-    this.bgs[i] = bg
-    this.attrs[i] = attrs & (ATTR_BOLD | ATTR_INVERSE)
   }
 
   /**
@@ -787,16 +907,18 @@ export class Screen {
    * @param fg The characters' colour.
    * @param bg The colour behind them.
    * @param attrs `ATTR_BOLD` and `ATTR_INVERSE` bits, as `set` takes them.
-   * @returns The column after the last character, `x` plus the characters in `s`, whether or not they were clipped.
+   * @returns The column after the last character, `x` plus the characters in `s`, whether or not they were clipped;
+   *   held at 2,147,483,647 rather than wrapping.
    */
   text(x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32 {
     const n: i32 = toI32(s.length)
     let column: i32 = x
     let i: i32 = 0
     while (i < n) {
-      this.set(column, y, termCodePointAt(s, i, n), fg, bg, attrs)
-      i = i + termCodePointUnits(s, i, n)
-      column = column + 1
+      const step: i32 = termCodePointStep(s, i, n)
+      this.set(column, y, step >> 3, fg, bg, attrs)
+      i = termStepOn(i, step, n)
+      column = column < TERM_I32_MAX ? column + 1 : column
     }
     return column
   }
@@ -809,28 +931,31 @@ export class Screen {
    * @returns The code point drawn there, or -1 off the screen.
    */
   glyphAt(x: i32, y: i32): i32 {
-    if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
-      return -1
+    const glyphs: i32[] = this.glyphs
+    const i: i32 = termGridAt(x, y, this.width, this.height, toI32(glyphs.length))
+    if (i >= 0 && i < toI32(glyphs.length)) {
+      return glyphs[i]
     }
-    return this.glyphs[y * this.width + x]
+    return -1
   }
 
-  /** Append one byte to the flush in progress; `flush` has reserved the room. */
+  /** Append one byte to the flush in progress; `flush` has made the room, so none is dropped. */
   private put(b: i32): void {
-    this.out[this.outLen] = toU8(b)
-    this.outLen = this.outLen + 1
+    const out: u8[] = this.out
+    const at: i32 = this.outLen
+    if (at >= 0 && at < toI32(out.length)) {
+      out[at] = toU8(b)
+      this.outLen = at + 1
+    }
   }
 
-  /** Append `v`, at least 0, in decimal: the three digits a colour channel has without recursing. */
+  /** Append `v`, at least 0, in decimal; a negative `v` appends nothing. */
   private putDecimal(v: i32): void {
-    if (v >= 100) {
-      if (v >= 1000) {
-        this.putDecimal((v / 1000) | 0)
-      }
-      this.put((((v / 100) | 0) % 10) + TERM_DIGIT_0)
+    if (v < 0) {
+      return
     }
     if (v >= 10) {
-      this.put((((v / 10) | 0) % 10) + TERM_DIGIT_0)
+      this.putDecimal((v / 10) | 0)
     }
     this.put((v % 10) + TERM_DIGIT_0)
   }
@@ -869,13 +994,38 @@ export class Screen {
     }
   }
 
-  /** Append the SGR parameters for colour `key` (an RGB or a palette index) on base 30 (foreground) or 40. */
-  private putColour(base: i32, key: i32): void {
-    if (key < 0) {
-      this.putDecimal(base + 9)
+  /**
+   * Append `v + 1`, `v` at least 0, in decimal, carrying digit by digit so that
+   * `v + 1` is never formed; a negative `v` appends nothing.
+   */
+  private putDecimalAfter(v: i32): void {
+    if (v < 0) {
       return
     }
-    this.putDecimal(base + 8)
+    const rest: i32 = (v / 10) | 0
+    const digit: i32 = v % 10
+    if (digit === 9) {
+      this.putDecimalAfter(rest)
+      this.put(TERM_DIGIT_0)
+      return
+    }
+    if (rest > 0) {
+      this.putDecimal(rest)
+    }
+    this.put(TERM_DIGIT_0 + digit + 1)
+  }
+
+  /**
+   * Append the SGR parameters for colour `key` (an RGB or a palette index),
+   * on base `tens` decimal 30 (foreground) or 40 (background).
+   */
+  private putColour(tens: i32, key: i32): void {
+    this.put(tens === TERM_SGR_FOREGROUND ? TERM_DIGIT_0 + 3 : TERM_DIGIT_0 + 4)
+    if (key < 0) {
+      this.put(TERM_DIGIT_0 + 9)
+      return
+    }
+    this.put(TERM_DIGIT_0 + 8)
     if (this.palette256) {
       this.put(TERM_SEMICOLON)
       this.put(TERM_DIGIT_0 + 5)
@@ -921,7 +1071,6 @@ export class Screen {
    */
   flush(): string {
     const w: i32 = this.width
-    const cells: i32 = toI32(this.glyphs.length)
     this.outLen = 0
     const glyphs: i32[] = this.glyphs
     const fgs: i32[] = this.fgs
@@ -931,20 +1080,18 @@ export class Screen {
     const sentFgs: i32[] = this.sentFgs
     const sentBgs: i32[] = this.sentBgs
     const sentAttrs: i32[] = this.sentAttrs
-    if (
-      !(
-        toI32(fgs.length) === cells &&
-        toI32(bgs.length) === cells &&
-        toI32(attrs.length) === cells &&
-        toI32(sentGlyphs.length) === cells &&
-        toI32(sentFgs.length) === cells &&
-        toI32(sentBgs.length) === cells &&
-        toI32(sentAttrs.length) === cells &&
-        toI32(this.out.length) >= cells * TERM_CELL_BYTES + TERM_CELL_BYTES
-      )
-    ) {
-      panic("nish/term: a Screen's buffers disagree on its size")
+    // `resize` gives every buffer `width * height` cells and `out` room for
+    // them. A caller that pushed to or shortened a buffer (they are public)
+    // has its flush cover the cells all of them hold, never past that room,
+    // so a flush allocates nothing; a screen with no columns places no cells.
+    if (w <= 0) {
+      return ""
     }
+    const drawn: i32 = termShortest(glyphs, fgs, bgs, attrs)
+    const sent: i32 = termShortest(sentGlyphs, sentFgs, sentBgs, sentAttrs)
+    const room = termCellLimit(((toI32(this.out.length) - TERM_CELL_BYTES) / TERM_CELL_BYTES) | 0)
+    const held: i32 = sent < drawn ? sent : drawn
+    const cells = termCellLimit(room < held ? room : held)
     if (this.sync) {
       this.putSyncMode(TERM_FINAL_SET)
     }
@@ -952,8 +1099,9 @@ export class Screen {
     let styleFg: i32 = TERM_STYLE_UNKNOWN
     let styleBg: i32 = TERM_STYLE_UNKNOWN
     let styleAttrs: i32 = TERM_STYLE_UNKNOWN
-    let cursorRow: i32 = -1
-    let cursorCol: i32 = -1
+    // The cell the cursor is at, or -1 when that is not known: after the last
+    // column of a row, where terminals differ on whether it wrapped.
+    let cursor: i32 = -1
     for (
       let i: i32 = 0;
       i < cells &&
@@ -975,13 +1123,17 @@ export class Screen {
         continue
       }
       const row: i32 = (i / w) | 0
-      const col: i32 = i - row * w
+      const col: i32 = i % w
       const fgKey: i32 = this.colourKey(fg)
       const bgKey: i32 = this.colourKey(bg)
-      if (cursorRow !== row || cursorCol !== col) {
-        const gap: i32 = col - cursorCol
+      if (cursor !== i) {
+        // How far along this row the cursor is behind the cell, or 0 when it is on another row.
+        let gap: i32 = 0
+        if (cursor >= 0 && cursor < i && ((cursor / w) | 0) === row) {
+          gap = i - cursor
+        }
         let bridged: boolean = false
-        if (cursorRow === row && gap > 0 && gap <= TERM_BRIDGE) {
+        if (gap > 0 && gap <= TERM_BRIDGE) {
           bridged = true
           for (let k: i32 = i - gap; k < i; k++) {
             if (
@@ -1006,7 +1158,7 @@ export class Screen {
         if (!bridged) {
           this.put(TERM_ESC)
           this.put(TERM_BRACKET)
-          if (cursorRow === row && gap > 0) {
+          if (gap > 0) {
             if (gap > 1) {
               this.putDecimal(gap)
             }
@@ -1014,9 +1166,9 @@ export class Screen {
           } else if (row === 0 && col === 0) {
             this.put(TERM_FINAL_POSITION)
           } else {
-            this.putDecimal(row + 1)
+            this.putDecimalAfter(row)
             this.put(TERM_SEMICOLON)
-            this.putDecimal(col + 1)
+            this.putDecimalAfter(col)
             this.put(TERM_FINAL_POSITION)
           }
         }
@@ -1069,11 +1221,7 @@ export class Screen {
       sentFgs[i] = fg
       sentBgs[i] = bg
       sentAttrs[i] = at
-      cursorRow = row
-      cursorCol = col + 1
-      if (cursorCol >= w) {
-        cursorRow = -1
-      }
+      cursor = col < w - 1 ? i + 1 : -1
     }
     if (
       styleAttrs !== TERM_STYLE_UNKNOWN &&
@@ -1117,11 +1265,20 @@ export class Canvas {
    * @param screen The screen it draws on, two pixels to a cell, one above the other.
    */
   constructor(screen: Screen) {
+    // `resize` holds the screen's sides to 0–4,096; a caller that set them
+    // past that gets a canvas of the held sides, as many pixels as fit.
+    const w = termSide(screen.width)
+    const rows = termFitRows(w, termSide(screen.height))
     this.screen = screen
-    this.width = screen.width
-    this.height = screen.height * 2
-    this.pixels = new Array<i32>(this.width * this.height)
-    this.pixels.fill(COLOR_DEFAULT)
+    this.width = w
+    this.height = rows * 2
+    const cells = termCellCount(w, rows)
+    // Two pixels a cell, in two passes: `2 * cells` is past `termCells`'s range.
+    const pixels: i32[] = termCells(cells, COLOR_DEFAULT)
+    for (let i: i32 = 0; i < cells; i++) {
+      pixels.push(COLOR_DEFAULT)
+    }
+    this.pixels = pixels
   }
 
   /**
@@ -1150,7 +1307,12 @@ export class Canvas {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return COLOR_DEFAULT
     }
-    return this.pixels[y * this.width + x]
+    const pixels: i32[] = this.pixels
+    const at: i32 = termGridAt(x, y, this.width, this.height, toI32(pixels.length))
+    if (at >= 0 && at < toI32(pixels.length)) {
+      return pixels[at]
+    }
+    return COLOR_DEFAULT
   }
 
   /**
@@ -1164,7 +1326,11 @@ export class Canvas {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return
     }
-    this.pixels[y * this.width + x] = colour
+    const pixels: i32[] = this.pixels
+    const at: i32 = termGridAt(x, y, this.width, this.height, toI32(pixels.length))
+    if (at >= 0 && at < toI32(pixels.length)) {
+      pixels[at] = colour
+    }
     this.paintCell(x, y >> 1)
   }
 
@@ -1180,14 +1346,32 @@ export class Canvas {
   fillRect(x: i32, y: i32, w: i32, h: i32, colour: i32): void {
     const left: i32 = x < 0 ? 0 : x
     const top: i32 = y < 0 ? 0 : y
-    const right: i32 = x + w > this.width ? this.width : x + w
-    const bottom: i32 = y + h > this.height ? this.height : y + h
+    // The far edges in i64, where `x + w` cannot wrap, then held to 0 and the canvas's sides.
+    const r: i64 = toI64(x) + toI64(w)
+    const b: i64 = toI64(y) + toI64(h)
+    let right: i32 = 0
+    if (r > toI64(this.width)) {
+      right = this.width
+    } else if (r > toI64(0)) {
+      right = toI32(r)
+    }
+    let bottom: i32 = 0
+    if (b > toI64(this.height)) {
+      bottom = this.height
+    } else if (b > toI64(0)) {
+      bottom = toI32(b)
+    }
+    const pixels: i32[] = this.pixels
     for (let py: i32 = top; py < bottom; py++) {
       for (let px: i32 = left; px < right; px++) {
-        this.pixels[py * this.width + px] = colour
+        const at: i32 = termGridAt(px, py, this.width, this.height, toI32(pixels.length))
+        if (at >= 0 && at < toI32(pixels.length)) {
+          pixels[at] = colour
+        }
       }
     }
-    for (let row: i32 = top >> 1; row < (bottom + 1) >> 1; row++) {
+    const end: i32 = (bottom >> 1) + (bottom & 1)
+    for (let row: i32 = top >> 1; row < end; row++) {
       for (let col: i32 = left; col < right; col++) {
         this.paintCell(col, row)
       }
@@ -1220,13 +1404,31 @@ export class Canvas {
         return
       }
       const twice: f64 = 2.0 * err
+      // The walk never steps past an end, so a coordinate at its end stays.
       if (twice >= dy) {
-        err = err + dy
-        x = x + sx
+        if (x < x1) {
+          err = err + dy
+          x = x + 1
+        } else {
+          // `~(~x + 1)` is `x - 1`; `~x < ~x1` (that is, `x1 < x`) proves `~x + 1` does not wrap.
+          const nx: i32 = ~x
+          if (nx < ~x1) {
+            err = err + dy
+            x = ~(nx + 1)
+          }
+        }
       }
       if (twice <= dx) {
-        err = err + dx
-        y = y + sy
+        if (y < y1) {
+          err = err + dx
+          y = y + 1
+        } else {
+          const ny: i32 = ~y
+          if (ny < ~y1) {
+            err = err + dx
+            y = ~(ny + 1)
+          }
+        }
       }
       // The walk only moves away from an edge it has passed, so no later point is on the canvas.
       if (
@@ -1256,13 +1458,30 @@ export class Canvas {
     let column: i32 = col
     let i: i32 = 0
     while (i < n) {
-      const top: i32 = this.pixel(column, row * 2)
-      const bg: i32 = top >= 0 ? top : this.pixel(column, row * 2 + 1)
-      this.screen.set(column, row, termCodePointAt(s, i, n), fg, bg, ATTR_NONE)
-      i = i + termCodePointUnits(s, i, n)
-      column = column + 1
+      const step: i32 = termCodePointStep(s, i, n)
+      i = termStepOn(i, step, n)
+      const top: i32 = this.upper(column, row)
+      const bg: i32 = top >= 0 ? top : this.lower(column, row)
+      this.screen.set(column, row, step >> 3, fg, bg, ATTR_NONE)
+      column = column < TERM_I32_MAX ? column + 1 : column
     }
     return column
+  }
+
+  /** The top pixel of cell `col`, `row`, or `COLOR_DEFAULT` off the canvas. */
+  private upper(col: i32, row: i32): i32 {
+    if (row < 0 || row > 1073741822) {
+      return COLOR_DEFAULT
+    }
+    return this.pixel(col, row * 2)
+  }
+
+  /** The bottom pixel of cell `col`, `row`, or `COLOR_DEFAULT` off the canvas. */
+  private lower(col: i32, row: i32): i32 {
+    if (row < 0 || row > 1073741822) {
+      return COLOR_DEFAULT
+    }
+    return this.pixel(col, row * 2 + 1)
   }
 
   /**
@@ -1270,8 +1489,8 @@ export class Canvas {
    * @internal Called by `drawHalfBlocks` in term-pixels.ts.
    */
   paintCell(col: i32, row: i32): void {
-    const top: i32 = this.pixel(col, row * 2)
-    const bottom: i32 = this.pixel(col, row * 2 + 1)
+    const top: i32 = this.upper(col, row)
+    const bottom: i32 = this.lower(col, row)
     if (top < 0 && bottom < 0) {
       this.screen.set(col, row, TERM_SPACE, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE)
     } else if (top < 0) {
@@ -1530,15 +1749,13 @@ export class KeyDecoder {
 
   /** The held bytes followed by `bytes[0, count)`. */
   private merged(bytes: u8[], count: i32): u8[] {
-    const held: i32 = toI32(this.pending.length)
-    const n: i32 = termClamp(count, 0, toI32(bytes.length))
-    const work: u8[] = new Array<u8>(held + n)
+    const work: u8[] = []
     const pending: u8[] = this.pending
-    for (let k: i32 = 0; k < toI32(pending.length) && k < toI32(work.length); k++) {
-      work[k] = pending[k]
+    for (let k: i32 = 0; k < toI32(pending.length); k++) {
+      work.push(pending[k])
     }
-    for (let k: i32 = 0; k < n && k < toI32(bytes.length); k++) {
-      work[held + k] = bytes[k]
+    for (let k: i32 = 0; k < count && k < toI32(bytes.length); k++) {
+      work.push(bytes[k])
     }
     return work
   }
@@ -1546,10 +1763,12 @@ export class KeyDecoder {
   /** Hold `work` from `used` on; when `restart` is set, the held bytes count as arriving at `nowMs`. */
   private keep(work: u8[], used: i32, restart: boolean, nowMs: f64): void {
     const rest: u8[] = []
-    for (let k: i32 = used; k < toI32(work.length); k++) {
-      if (!(k >= 0)) {
-        panic("nish/term: the key decoder used more bytes than it was given")
-      }
+    // The decoders count `used` up from 0; were one ever below, every byte would be held, none lost.
+    let from: i32 = 0
+    if (used > 0) {
+      from = used
+    }
+    for (let k: i32 = from; k < toI32(work.length); k++) {
       rest.push(work[k])
     }
     if (toI32(rest.length) > 0 && restart) {
@@ -1589,18 +1808,13 @@ export class KeyState {
   /** The latest send time of an answered query that `delivered` was given: everything the terminal generated before it has arrived. */
   watermarkMs: f64
   /**
-   * The keys down, each as `termKeyId` names it.
+   * The keys down, each as `termKeyId` names it. A release replaces the array
+   * rather than shifting it, so read it afresh rather than keep it.
    * @internal Used by `Terminal` in term-io.ts.
    */
   downKeys: i32[]
-  /** When each key down last pressed or repeated. */
-  private downSince: f64[]
-  /** Whether each key down has repeated. */
-  private downRepeated: boolean[]
-  /** The code each key down last came with, which its synthesized release carries. */
-  private downCodes: i32[]
-  /** The `MOD_` bits each key down last came with, which its synthesized release carries. */
-  private downMods: i32[]
+  /** Each key down, in the order they went down, as `downKeys` lists their names. */
+  private held: TermHeldKey[]
   /**
    * Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on.
    */
@@ -1619,10 +1833,7 @@ export class KeyState {
     this.watermarked = false
     this.quitOnCtrlC = true
     this.downKeys = []
-    this.downSince = []
-    this.downRepeated = []
-    this.downCodes = []
-    this.downMods = []
+    this.held = []
   }
 
   /**
@@ -1635,7 +1846,7 @@ export class KeyState {
    * @returns True from the key's press until its release, real or synthetic, or a loss of focus.
    */
   isDown(key: i32, code: i32): boolean {
-    return this.find(termKeyId(key, code)) >= 0
+    return this.find(termKeyId(key, code)) !== null
   }
 
   /**
@@ -1659,9 +1870,8 @@ export class KeyState {
     for (let k: i32 = 0; k < toI32(events.length); k++) {
       const e: TermEvent = events[k]
       if (e.type === EVENT_FOCUS && !e.gained) {
-        const first: i32 = 0
-        while (toI32(this.downKeys.length) > 0) {
-          this.release(first, out)
+        for (const h of this.held) {
+          this.release(h, out)
         }
       } else if (e.type === EVENT_KEY && this.quitOnCtrlC && termIsCtrlC(e)) {
         if (e.action === ACTION_PRESS) {
@@ -1723,13 +1933,10 @@ export class KeyState {
       return out
     }
     const clock: f64 = this.watermarked ? this.watermarkMs : nowMs
-    let k: i32 = 0
-    while (k < toI32(this.downKeys.length)) {
-      const gap: f64 = this.downRepeated[k] ? this.releaseGapMs : this.firstRepeatMs
-      if (clock - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
-        this.release(k, out)
-      } else {
-        k = k + 1
+    for (const h of this.held) {
+      const gap: f64 = h.repeated ? this.releaseGapMs : this.firstRepeatMs
+      if (clock - h.since >= gap && !termNamesKey(batch, h.id)) {
+        this.release(h, out)
       }
     }
     return out
@@ -1737,77 +1944,93 @@ export class KeyState {
 
   /** Record key event `e` at `nowMs`; false for a release of a key not down, which `apply` drops. */
   private press(e: TermEvent, nowMs: f64): boolean {
-    const at: i32 = this.find(termKeyId(e.key, e.code))
+    const id: i32 = termKeyId(e.key, e.code)
+    const at: TermHeldKey | null = this.find(id)
     if (e.action === ACTION_RELEASE) {
       this.releasesAreSynthetic = false
-      if (at < 0) {
+      if (at === null) {
         return false
       }
       this.remove(at)
       return true
     }
     const known: boolean = termFinite(nowMs)
-    if (at < 0) {
+    if (at === null) {
       let since: f64 = known ? nowMs : toF64(0)
       if (!known && this.watermarked) {
         since = this.watermarkMs
       }
-      this.downKeys.push(termKeyId(e.key, e.code))
-      this.downSince.push(since)
-      this.downRepeated.push(false)
-      this.downCodes.push(e.code)
-      this.downMods.push(e.modifiers)
+      this.held.push(new TermHeldKey(id, since, e.code, e.modifiers))
+      this.downKeys.push(id)
       return true
     }
     if (known) {
-      this.downSince[at] = nowMs
+      at.since = nowMs
     }
-    this.downRepeated[at] = true
-    this.downCodes[at] = e.code
-    this.downMods[at] = e.modifiers
+    at.repeated = true
+    at.code = e.code
+    at.modifiers = e.modifiers
     if (this.releasesAreSynthetic) {
       e.action = ACTION_REPEAT
     }
     return true
   }
 
-  /** Let key `at` go, appending its release to `out`. */
-  private release(at: i32, out: TermEvent[]): void {
-    const id: i32 = this.downKeys[at]
+  /** Let key `h` go, appending its release to `out`. */
+  private release(h: TermHeldKey, out: TermEvent[]): void {
     const e: TermEvent = new TermEvent(EVENT_KEY)
-    e.key = id >> 21
-    e.code = this.downCodes[at]
-    e.modifiers = this.downMods[at]
+    e.key = h.id >> 21
+    e.code = h.code
+    e.modifiers = h.modifiers
     e.action = ACTION_RELEASE
     out.push(e)
-    this.remove(at)
+    this.remove(h)
   }
 
-  /** Where key `id` is in `downKeys`, or -1. */
-  private find(id: i32): i32 {
-    for (let k: i32 = 0; k < toI32(this.downKeys.length); k++) {
-      if (this.downKeys[k] === id) {
-        return k
+  /** The key named `id` among those down, or null. */
+  private find(id: i32): TermHeldKey | null {
+    for (const h of this.held) {
+      if (h.id === id) {
+        return h
       }
     }
-    return -1
+    return null
   }
 
-  /** Drop key `at`, keeping the others in order. */
-  private remove(at: i32): void {
-    const last: i32 = toI32(this.downKeys.length) - 1
-    for (let k: i32 = at; k < last; k++) {
-      this.downKeys[k] = this.downKeys[k + 1]
-      this.downSince[k] = this.downSince[k + 1]
-      this.downRepeated[k] = this.downRepeated[k + 1]
-      this.downCodes[k] = this.downCodes[k + 1]
-      this.downMods[k] = this.downMods[k + 1]
+  /** Drop key `gone`, keeping the others in order, and `downKeys` with them. */
+  private remove(gone: TermHeldKey): void {
+    const held: TermHeldKey[] = []
+    const ids: i32[] = []
+    for (const h of this.held) {
+      if (h !== gone) {
+        held.push(h)
+        ids.push(h.id)
+      }
     }
-    this.downKeys.pop()
-    this.downSince.pop()
-    this.downRepeated.pop()
-    this.downCodes.pop()
-    this.downMods.pop()
+    this.held = held
+    this.downKeys = ids
+  }
+}
+
+/** A key `KeyState` holds down: its name, as `termKeyId` makes it, and what its synthesized release carries. */
+class TermHeldKey {
+  /** When the key last pressed or repeated. */
+  since: f64
+  /** The key's name, as `termKeyId` makes it. */
+  id: i32
+  /** The code the key last came with. */
+  code: i32
+  /** The `MOD_` bits the key last came with. */
+  modifiers: i32
+  /** Whether the key has repeated. */
+  repeated: boolean
+
+  constructor(id: i32, since: f64, code: i32, modifiers: i32) {
+    this.id = id
+    this.since = since
+    this.repeated = false
+    this.code = code
+    this.modifiers = modifiers
   }
 }
 
@@ -1942,13 +2165,12 @@ const termAsciiKind = (b: i32): i32 => {
  */
 const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => {
   let i: i32 = 0
-  while (i < toI32(bytes.length)) {
-    if (!(i >= 0)) {
-      panic("nish/term: the key decoder stepped back")
-    }
+  // `i` only moves forward, a byte at a time or past what `bytes` holds, so it stays from 0 to the length.
+  while (i >= 0 && i < toI32(bytes.length)) {
     const b: i32 = toI32(bytes[i])
     if (b === TERM_ESC) {
-      if (i + 1 >= toI32(bytes.length)) {
+      const second: i32 = i + 1
+      if (second >= toI32(bytes.length)) {
         if (!last) {
           return i
         }
@@ -1956,16 +2178,24 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
         i = i + 1
         continue
       }
-      const next: i32 = toI32(bytes[i + 1])
+      const next: i32 = toI32(bytes[second])
       if (next === 91) {
-        let j: i32 = i + 2
-        const stop: i32 = j + TERM_MAX_CSI_PARAMS + 1
-        while (j < toI32(bytes.length) && j < stop && toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64) {
+        let j: i32 = second + 1
+        let run: i32 = 0
+        // 33 is `TERM_MAX_CSI_PARAMS + 1`, spelled out so the bounds walk reads it.
+        while (
+          run < 33 &&
+          j >= 0 &&
+          j < toI32(bytes.length) &&
+          toI32(bytes[j]) >= 32 &&
+          toI32(bytes[j]) < 64
+        ) {
           j = j + 1
+          run = run + 1
         }
         // A run past the cap is no key a terminal sends: give the ESC up now
         // rather than hold, and copy on every `feed`, what follows.
-        if (j === stop) {
+        if (run > TERM_MAX_CSI_PARAMS) {
           events.push(new KeyEvent(KEY_ESCAPE, b))
           i = i + 1
           continue
@@ -1989,7 +2219,8 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
         continue
       }
       if (next === 79) {
-        if (i + 2 >= toI32(bytes.length)) {
+        const at: i32 = second + 1
+        if (at >= toI32(bytes.length)) {
           if (!last) {
             return i
           }
@@ -1997,10 +2228,10 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
           i = i + 1
           continue
         }
-        const final: i32 = toI32(bytes[i + 2])
+        const final: i32 = toI32(bytes[at])
         if (final >= 64 && final < 127) {
           events.push(new KeyEvent(termArrowKind(final), final))
-          i = i + 3
+          i = at + 1
         } else {
           events.push(new KeyEvent(KEY_ESCAPE, b))
           i = i + 1
@@ -2021,7 +2252,11 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
       return i
     }
     events.push(new KeyEvent(KEY_CHAR, char >> 3))
-    i = i + (char & 7)
+    // `termUtf8At` used `char & 7` bytes, all of them in `bytes`.
+    const used: i32 = char & 7
+    for (let k: i32 = 0; k < used && i < toI32(bytes.length); k++) {
+      i = i + 1
+    }
   }
   return toI32(bytes.length)
 }
@@ -2042,26 +2277,34 @@ const termUtf8At = (bytes: u8[], i: i32, last: boolean): i32 => {
     return (TERM_REPLACEMENT << 3) | 1
   }
   let cp: i32 = termLeadBits(b, width)
-  let good: i32 = 0
-  let stopped: boolean = false
-  for (let k: i32 = 1; k < width && !stopped; k++) {
-    if (i + k >= toI32(bytes.length)) {
-      stopped = true
-    } else {
-      const c: i32 = toI32(bytes[i + k])
-      if (c < 128 || c >= 192) {
-        stopped = true
-      } else {
-        cp = (cp << 6) | (c & 63)
-        good = good + 1
-      }
-    }
+  let left: i32 = 0
+  if (width > 1) {
+    left = width - 1
   }
-  if (good < width - 1) {
-    if (!last && i + 1 + good >= toI32(bytes.length)) {
+  // The lead byte and the good ones after it; a lead asks for at most 3 more.
+  let used: i32 = 1
+  let at: i32 = i
+  let ended: boolean = false
+  while (left > 0 && used < 4 && at >= 0 && at < toI32(bytes.length)) {
+    const next: i32 = at + 1
+    if (next >= toI32(bytes.length)) {
+      ended = true
+      break
+    }
+    const c: i32 = toI32(bytes[next])
+    if (c < 128 || c >= 192) {
+      break
+    }
+    cp = (cp << 6) | (c & 63)
+    used = used + 1
+    left = left - 1
+    at = next
+  }
+  if (left > 0) {
+    if (!last && ended) {
       return -1
     }
-    return (TERM_REPLACEMENT << 3) | (1 + good)
+    return (TERM_REPLACEMENT << 3) | used
   }
   let least: i32 = 65536
   if (width === 2) {
@@ -2095,6 +2338,21 @@ const termAction = (raw: i32): i32 => {
 }
 
 /**
+ * `value`, a parameter being read (-1 before its first digit), with the digit
+ * byte `c` appended. Past eight digits a number is no parameter a terminal
+ * sends; it stops growing.
+ */
+const termAddDigit = (value: i32, c: integer<0, 255>): i32 => {
+  if (value < 0) {
+    return c - TERM_DIGIT_0
+  }
+  if (value < 10000000) {
+    return value * 10 + (c - TERM_DIGIT_0)
+  }
+  return value
+}
+
+/**
  * Field `field`, sub-field `sub` of the parameters `bytes[from, to)`, where
  * `;` separates fields and `:` sub-fields (ECMA-48 § 5.4.2; the kitty
  * protocol's `code:shifted ; mods:event ; text`); -1 when it is omitted.
@@ -2103,20 +2361,27 @@ const termCsiField = (bytes: u8[], from: i32, to: i32, field: i32, sub: i32): i3
   let f: i32 = 0
   let s: i32 = 0
   let value: i32 = -1
-  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
+  let start: i32 = from
+  if (start < 0) {
+    start = 0
+  }
+  for (let k: i32 = start; k < to && k < toI32(bytes.length); k++) {
     const c: i32 = toI32(bytes[k])
     if (c === TERM_SEMICOLON) {
+      // Past the field asked for, nothing later can change the answer.
+      if (f >= field) {
+        return value
+      }
       f = f + 1
       s = 0
     } else if (c === 58) {
-      s = s + 1
-    } else if (c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10 && f === field && s === sub) {
-      // Past eight digits a number is no parameter a terminal sends; it stops growing.
-      if (value < 0) {
-        value = c - TERM_DIGIT_0
-      } else if (value < 10000000) {
-        value = value * 10 + (c - TERM_DIGIT_0)
+      if (s < sub) {
+        s = s + 1
+      } else if (f === field) {
+        return value
       }
+    } else if (c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10 && f === field && s === sub) {
+      value = termAddDigit(value, c)
     }
   }
   return value
@@ -2128,23 +2393,75 @@ const termCsiParams = (bytes: u8[], from: i32, to: i32): i32[] => {
   if (from >= to) {
     return params
   }
-  let fields: i32 = 1
-  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
-    if (toI32(bytes[k]) === TERM_SEMICOLON) {
-      fields = fields + 1
+  // `value` is -1 until a digit of the field's first sub-field arrives; `first` is false past its `:`.
+  let value: i32 = -1
+  let first: boolean = true
+  let start: i32 = from
+  if (start < 0) {
+    start = 0
+  }
+  for (let k: i32 = start; k < to && k < toI32(bytes.length); k++) {
+    const c: i32 = toI32(bytes[k])
+    if (c === TERM_SEMICOLON) {
+      params.push(value < 0 ? 0 : value)
+      value = -1
+      first = true
+    } else if (c === 58) {
+      first = false
+    } else if (first && c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10) {
+      value = termAddDigit(value, c)
     }
   }
-  for (let f: i32 = 0; f < fields; f++) {
-    const v: i32 = termCsiField(bytes, from, to, f, 0)
-    params.push(v < 0 ? 0 : v)
-  }
+  params.push(value < 0 ? 0 : value)
   return params
+}
+
+/**
+ * The text of a kitty key report: the code points of the third field of the
+ * parameters `bytes[from, to)`, one per `:` sub-field, up to the first omitted
+ * one (kitty keyboard protocol, "Text as code points").
+ */
+const termKittyText = (bytes: u8[], from: i32, to: i32): string => {
+  const text: u8[] = []
+  let f: i32 = 0
+  let value: i32 = -1
+  let stopped: boolean = false
+  let start: i32 = from
+  if (start < 0) {
+    start = 0
+  }
+  for (let k: i32 = start; k < to && k < toI32(bytes.length); k++) {
+    const c: i32 = toI32(bytes[k])
+    if (c === TERM_SEMICOLON) {
+      if (f >= 2) {
+        break
+      }
+      f = f + 1
+    } else if (c === 58 && f === 2) {
+      if (value < 0) {
+        stopped = true
+        break
+      }
+      termPushUtf8(text, value)
+      value = -1
+    } else if (c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10 && f === 2) {
+      value = termAddDigit(value, c)
+    }
+  }
+  if (!stopped && value >= 0) {
+    termPushUtf8(text, value)
+  }
+  return termBytesText(text, toI32(text.length))
 }
 
 /** The string of UTF-8 `bytes[from, to)`, as `termBytesText` makes one. */
 const termBytesRange = (bytes: u8[], from: i32, to: i32): string => {
   const part: u8[] = []
-  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
+  let start: i32 = from
+  if (start < 0) {
+    start = 0
+  }
+  for (let k: i32 = start; k < to && k < toI32(bytes.length); k++) {
     part.push(bytes[k])
   }
   return termBytesText(part, toI32(part.length))
@@ -2229,8 +2546,11 @@ const termTildeKind = (n: i32): i32 => {
   if (n >= 17 && n <= 21) {
     return KEY_F6 + (n - 17)
   }
-  if (n === 23 || n === 24) {
-    return KEY_F11 + (n - 23)
+  if (n === 23) {
+    return KEY_F11
+  }
+  if (n === 24) {
+    return KEY_F12
   }
   return KEY_UNKNOWN
 }
@@ -2307,18 +2627,26 @@ const termPasteEndByte = (k: i32): i32 => {
 const termDecodePaste = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
   const n: i32 = toI32(bytes.length)
   let k: i32 = i
+  // Where decoding resumes past a whole terminator, or -1 while there is none.
+  let resume: i32 = -1
   while (k >= 0 && k < toI32(bytes.length)) {
     let m: i32 = 0
-    while (m < 6 && k + m < n && toI32(bytes[k + m]) === termPasteEndByte(m)) {
+    let at: i32 = k
+    while (m < 6 && at >= 0 && at < toI32(bytes.length) && toI32(bytes[at]) === termPasteEndByte(m)) {
       m = m + 1
+      at = at + 1
     }
-    if (m === 6 || (m > 0 && k + m === n && !last)) {
+    if (m === 6) {
+      resume = at
+      break
+    }
+    if (m > 0 && at >= n && !last) {
       break
     }
     d.pasteBytes.push(bytes[k])
     k = k + 1
   }
-  if (k >= n || k + 6 > n) {
+  if (resume < 0) {
     return k
   }
   const e: TermEvent = new TermEvent(EVENT_PASTE)
@@ -2326,7 +2654,15 @@ const termDecodePaste = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, even
   events.push(e)
   d.pasting = false
   d.pasteBytes = []
-  return k + 6
+  return resume
+}
+
+/** A coordinate `v` that counts from 1, made to count from 0; an omitted or 0 one is 0. */
+const termFromOne = (v: i32): i32 => {
+  if (v > 0) {
+    return v - 1
+  }
+  return 0
 }
 
 /**
@@ -2338,8 +2674,8 @@ const termDecodePaste = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, even
  */
 const termMouseEvent = (d: KeyDecoder, bytes: u8[], from: i32, to: i32, final: i32): TermEvent => {
   const b: i32 = termCsiField(bytes, from, to, 0, 0)
-  const x: i32 = termClamp(termCsiField(bytes, from, to, 1, 0) - 1, 0, 2147483646)
-  const y: i32 = termClamp(termCsiField(bytes, from, to, 2, 0) - 1, 0, 2147483646)
+  const x: i32 = termFromOne(termCsiField(bytes, from, to, 1, 0))
+  const y: i32 = termFromOne(termCsiField(bytes, from, to, 2, 0))
   const e: TermEvent = new TermEvent(EVENT_MOUSE)
   const bits: i32 = b < 0 ? 3 : b
   const none: i32 = 0
@@ -2367,8 +2703,16 @@ const termMouseEvent = (d: KeyDecoder, bytes: u8[], from: i32, to: i32, final: i
   }
   e.px = x
   e.py = y
-  e.x = d.cellWidthPx > 0 ? (x / d.cellWidthPx) | 0 : -1
-  e.y = d.cellHeightPx > 0 ? (y / d.cellHeightPx) | 0 : -1
+  const w: i32 = d.cellWidthPx
+  const h: i32 = d.cellHeightPx
+  e.x = -1
+  e.y = -1
+  if (w > 0) {
+    e.x = (x / w) | 0
+  }
+  if (h > 0) {
+    e.y = (y / h) | 0
+  }
   return e
 }
 
@@ -2419,8 +2763,9 @@ const termCsiEvent = (
   // but a final no key uses (xterm ctlseqs, "Functions using CSI").
   const cpr: boolean = final === 82 && d.cprOutstanding > 0
   if (prefix !== 0 || intermediate !== 0 || final === 110 || final === 116 || cpr) {
-    if (cpr) {
-      d.cprOutstanding = d.cprOutstanding - 1
+    const outstanding: i32 = d.cprOutstanding
+    if (cpr && outstanding > 0) {
+      d.cprOutstanding = outstanding - 1
     }
     events.push(termReplyEvent(TERM_BRACKET, prefix, termCsiParams(bytes, from, to), intermediate, final, ""))
     return
@@ -2445,11 +2790,7 @@ const termCsiEvent = (
     const code: i32 = final === 117 ? first : termCsiField(bytes, from, to, 2, 0)
     const e: TermEvent = termKeyEvent(termKittyKind(code), code < 0 ? final : code, mods, action)
     if (final === 117) {
-      const text: u8[] = []
-      for (let s: i32 = 0; termCsiField(bytes, from, to, 2, s) >= 0; s++) {
-        termPushUtf8(text, termCsiField(bytes, from, to, 2, s))
-      }
-      e.text = termBytesText(text, toI32(text.length))
+      e.text = termKittyText(bytes, from, to)
     }
     events.push(e)
     return
@@ -2468,107 +2809,125 @@ const termCsiEvent = (
 }
 
 /**
- * Decode the control sequence at `bytes[i]` (`ESC [`) into `events` and answer
- * where decoding resumes, or -1 when it is unfinished at the end and `last`
- * is not set. Parameter and intermediate bytes run 32–63 and a final byte
- * 64–126 (ECMA-48 § 5.4); a sequence broken off by another byte is an ESC
- * key, and the bytes after it keys of their own, as `feed` has it.
+ * Decode the control sequence whose `[` is `bytes[open]`, just after its ESC,
+ * into `events` and answer where decoding resumes, or -1 when it is
+ * unfinished at the end and `last` is not set. Parameter and intermediate
+ * bytes run 32–63 and a final byte 64–126 (ECMA-48 § 5.4); a sequence broken
+ * off by another byte is an ESC key, and the bytes after it keys of their
+ * own, as `feed` has it.
  */
-const termDecodeCsi = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
+const termDecodeCsi = (d: KeyDecoder, bytes: u8[], open: i32, last: boolean, events: TermEvent[]): i32 => {
   const n: i32 = toI32(bytes.length)
-  let j: i32 = i + 2
-  while (j < n && toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64) {
+  // `j` steps past the `[` (91, no parameter byte) and then the parameter run.
+  let j: i32 = open
+  while (j >= 0 && j < n && (j === open || (toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64))) {
     j = j + 1
   }
-  if (j >= n && !last) {
-    return -1
-  }
-  const final: i32 = j < n ? toI32(bytes[j]) : 0
-  if (!(final >= 64 && final < 127)) {
-    events.push(termKeyEvent(KEY_ESCAPE, TERM_ESC, 0, ACTION_PRESS))
-    return i + 1
-  }
-  // The Linux console's F1–F5, `ESC [ [ A` to `ESC [ [ E` (console_codes(4)).
-  if (final === TERM_BRACKET && j === i + 2) {
-    if (j + 1 >= n && !last) {
+  if (j < 0 || j >= toI32(bytes.length)) {
+    if (!last) {
       return -1
     }
-    const f: i32 = j + 1 < n ? toI32(bytes[j + 1]) : 0
-    if (f >= 65 && f <= 69) {
+    events.push(termKeyEvent(KEY_ESCAPE, TERM_ESC, 0, ACTION_PRESS))
+    return open
+  }
+  const final: i32 = toI32(bytes[j])
+  if (!(final >= 64 && final < 127)) {
+    events.push(termKeyEvent(KEY_ESCAPE, TERM_ESC, 0, ACTION_PRESS))
+    return open
+  }
+  let from: i32 = open
+  if (from < j) {
+    from = from + 1
+  }
+  // The Linux console's F1–F5, `ESC [ [ A` to `ESC [ [ E` (console_codes(4)).
+  if (final === TERM_BRACKET && from === j) {
+    const key: i32 = j + 1
+    if (key >= n && !last) {
+      return -1
+    }
+    const f: i32 = termByte(bytes, key)
+    if (key < n && f >= 65 && f <= 69) {
       events.push(termKeyEvent(KEY_F1 + (f - 65), f, 0, ACTION_PRESS))
-      return j + 2
+      return key + 1
     }
   }
-  let from: i32 = i + 2
   let prefix: i32 = 0
-  if (from < j && toI32(bytes[from]) >= 60) {
-    prefix = toI32(bytes[from])
+  if (from < j && termByte(bytes, from) >= 60) {
+    prefix = termByte(bytes, from)
     from = from + 1
   }
   let to: i32 = from
   while (to < j && termByte(bytes, to) >= TERM_DIGIT_0) {
     to = to + 1
   }
-  termCsiEvent(d, bytes, from, to, prefix, to < j ? toI32(bytes[j - 1]) : 0, final, events)
+  let intermediate: i32 = 0
+  if (to < j) {
+    const back: i32 = j - 1
+    intermediate = termByte(bytes, back)
+  }
+  termCsiEvent(d, bytes, from, to, prefix, intermediate, final, events)
   return j + 1
 }
 
 /**
- * Decode the control string at `bytes[i]` — DCS `ESC P`, APC `ESC _`, OSC
- * `ESC ]`, PM `ESC ^` or SOS `ESC X` — into one `EVENT_REPLY`, and answer
- * where decoding resumes. It ends at ST, `ESC \`, or BEL (ECMA-48 § 8.3.143;
- * xterm ctlseqs, "Operating System Commands"). Unfinished at the end it is -1
- * unless `last`, when it is dropped; an ESC inside that starts no ST breaks
- * it off, and decoding resumes at that ESC. A DCS reads as a CSI does then
- * carries its data in `text`: XTVERSION `ESC P > | name ST`, DECRQSS
- * `ESC P 1 $ r … ST`. An APC's first byte is its `reply` (kitty graphics
- * `ESC _ G … ST`); an OSC's number is its one param and the rest its text.
+ * Decode the control string whose introducer is `bytes[open]`, just after its
+ * ESC — DCS `P`, APC `_`, OSC `]`, PM `^` or SOS `X` — into one `EVENT_REPLY`,
+ * and answer where decoding resumes. It ends at ST, `ESC \`, or BEL (ECMA-48
+ * § 8.3.143; xterm ctlseqs, "Operating System Commands"). Unfinished at the
+ * end it is -1 unless `last`, when it is dropped; an ESC inside that starts
+ * no ST breaks it off, and decoding resumes at that ESC. A DCS reads as a CSI
+ * does then carries its data in `text`: XTVERSION `ESC P > | name ST`,
+ * DECRQSS `ESC P 1 $ r … ST`. An APC's first byte is its `reply` (kitty
+ * graphics `ESC _ G … ST`); an OSC's number is its one param and the rest its
+ * text.
  */
-const termDecodeString = (bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
+const termDecodeString = (bytes: u8[], open: i32, last: boolean, events: TermEvent[]): i32 => {
   const n: i32 = toI32(bytes.length)
-  const introducer: i32 = toI32(bytes[i + 1])
-  let end: i32 = i + 2
-  while (end < n && toI32(bytes[end]) !== 7 && toI32(bytes[end]) !== TERM_ESC) {
+  const introducer: i32 = termByte(bytes, open)
+  // The introducer is neither BEL nor ESC, so the walk starts on it.
+  let end: i32 = open
+  while (end >= 0 && end < toI32(bytes.length) && toI32(bytes[end]) !== 7 && toI32(bytes[end]) !== TERM_ESC) {
     end = end + 1
   }
-  if (end + (end < n && toI32(bytes[end]) === TERM_ESC ? 1 : 0) >= n) {
+  if (end < 0 || end >= toI32(bytes.length)) {
     return last ? n : -1
   }
   let resume: i32 = end + 1
   if (toI32(bytes[end]) === TERM_ESC) {
-    if (toI32(bytes[end + 1]) !== 92) {
+    const after: i32 = end + 1
+    if (after >= n) {
+      return last ? n : -1
+    }
+    if (termByte(bytes, after) !== 92) {
       return end
     }
-    resume = end + 2
+    resume = after + 1
   }
-  const start: i32 = i + 2
+  let start: i32 = open
+  if (start < end) {
+    start = start + 1
+  }
   if (introducer === 95) {
-    events.push(
-      termReplyEvent(
-        introducer,
-        0,
-        [],
-        0,
-        start < end ? toI32(bytes[start]) : 0,
-        termBytesRange(bytes, start + 1, end)
-      )
-    )
+    let reply: i32 = 0
+    let text: i32 = start
+    if (start < end) {
+      reply = termByte(bytes, start)
+      text = start + 1
+    }
+    events.push(termReplyEvent(introducer, 0, [], 0, reply, termBytesRange(bytes, text, end)))
     return resume
   }
   if (introducer === 93) {
     let semi: i32 = start
-    while (semi < end && toI32(bytes[semi]) !== TERM_SEMICOLON) {
+    while (semi < end && termByte(bytes, semi) !== TERM_SEMICOLON) {
       semi = semi + 1
     }
+    let text: i32 = semi
+    if (semi < end) {
+      text = semi + 1
+    }
     events.push(
-      termReplyEvent(
-        introducer,
-        0,
-        termCsiParams(bytes, start, semi),
-        0,
-        0,
-        termBytesRange(bytes, semi + 1, end)
-      )
+      termReplyEvent(introducer, 0, termCsiParams(bytes, start, semi), 0, 0, termBytesRange(bytes, text, end))
     )
     return resume
   }
@@ -2583,15 +2942,24 @@ const termDecodeString = (bytes: u8[], i: i32, last: boolean, events: TermEvent[
     from = from + 1
   }
   let to: i32 = from
-  while (to < end && toI32(bytes[to]) >= TERM_DIGIT_0 && toI32(bytes[to]) < 64) {
+  while (to < end && termByte(bytes, to) >= TERM_DIGIT_0 && termByte(bytes, to) < 64) {
     to = to + 1
   }
   let f: i32 = to
-  while (f < end && toI32(bytes[f]) >= 32 && toI32(bytes[f]) < TERM_DIGIT_0) {
+  while (f < end && termByte(bytes, f) >= 32 && termByte(bytes, f) < TERM_DIGIT_0) {
     f = f + 1
   }
-  const intermediate: i32 = f > to ? toI32(bytes[f - 1]) : 0
-  const final: i32 = f < end ? toI32(bytes[f]) : 0
+  let intermediate: i32 = 0
+  if (f > to) {
+    const back: i32 = f - 1
+    intermediate = termByte(bytes, back)
+  }
+  let final: i32 = 0
+  let text: i32 = f
+  if (f < end) {
+    final = toI32(bytes[f])
+    text = f + 1
+  }
   events.push(
     termReplyEvent(
       introducer,
@@ -2599,7 +2967,7 @@ const termDecodeString = (bytes: u8[], i: i32, last: boolean, events: TermEvent[
       termCsiParams(bytes, from, to),
       intermediate,
       final,
-      termBytesRange(bytes, f + 1, end)
+      termBytesRange(bytes, text, end)
     )
   )
   return resume
@@ -2620,47 +2988,49 @@ const termOpensString = (b: i32): boolean => b === 80 || b === 88 || b === 93 ||
 const termDecodeEvents = (d: KeyDecoder, bytes: u8[], last: boolean, events: TermEvent[]): i32 => {
   const n: i32 = toI32(bytes.length)
   let i: i32 = 0
-  while (i < toI32(bytes.length)) {
-    if (!(i >= 0)) {
-      panic("nish/term: the event decoder stepped back")
-    }
-    let next: i32 = i + 1
+  // Every step answers a `next` past `i`, so `i` only moves forward from 0.
+  while (i >= 0 && i < toI32(bytes.length)) {
+    const second: i32 = i + 1
+    let next: i32 = second
     const b: i32 = toI32(bytes[i])
     if (d.pasting) {
       next = termDecodePaste(d, bytes, i, last, events)
       if (next < n && d.pasting) {
         return next
       }
-    } else if (b === TERM_ESC && i + 1 >= n) {
-      if (!last) {
-        return i
-      }
-      events.push(termKeyEvent(KEY_ESCAPE, b, 0, ACTION_PRESS))
     } else if (b === TERM_ESC) {
-      const after: i32 = termByte(bytes, i + 1)
-      if (after === TERM_BRACKET) {
-        next = termDecodeCsi(d, bytes, i, last, events)
-      } else if (termOpensString(after)) {
-        next = termDecodeString(bytes, i, last, events)
-      } else if (after === 79 && i + 2 >= n && !last) {
-        next = -1
-      } else if (after === 79 && termByte(bytes, i + 2) >= 64 && termByte(bytes, i + 2) < 127) {
-        // SS3 `ESC O X`: the arrows, Home, End and F1–F4 in application
-        // mode, and keypad Enter `ESC O M` (xterm ctlseqs, "PC-Style Function Keys").
-        const f: i32 = termByte(bytes, i + 2)
-        events.push(
-          termKeyEvent(f === 77 ? KEY_ENTER : termLetterKind(f), f === 77 ? 13 : f, 0, ACTION_PRESS)
-        )
-        next = i + 3
-      } else if (after !== TERM_ESC && after !== 79 && after < 128) {
-        // Alt held with a key sends ESC before it (xterm's metaSendsEscape).
-        events.push(termKeyEvent(termAsciiKind(after), after, MOD_ALT, ACTION_PRESS))
-        next = i + 2
-      } else {
+      if (second >= n) {
+        if (!last) {
+          return i
+        }
         events.push(termKeyEvent(KEY_ESCAPE, b, 0, ACTION_PRESS))
-      }
-      if (next < 0) {
-        return i
+      } else {
+        const after: i32 = termByte(bytes, second)
+        const third: i32 = second + 1
+        const f: i32 = termByte(bytes, third)
+        if (after === TERM_BRACKET) {
+          next = termDecodeCsi(d, bytes, second, last, events)
+        } else if (termOpensString(after)) {
+          next = termDecodeString(bytes, second, last, events)
+        } else if (after === 79 && third >= n && !last) {
+          next = -1
+        } else if (after === 79 && third < n && f >= 64 && f < 127) {
+          // SS3 `ESC O X`: the arrows, Home, End and F1–F4 in application
+          // mode, and keypad Enter `ESC O M` (xterm ctlseqs, "PC-Style Function Keys").
+          events.push(
+            termKeyEvent(f === 77 ? KEY_ENTER : termLetterKind(f), f === 77 ? 13 : f, 0, ACTION_PRESS)
+          )
+          next = third + 1
+        } else if (after !== TERM_ESC && after !== 79 && after < 128) {
+          // Alt held with a key sends ESC before it (xterm's metaSendsEscape).
+          events.push(termKeyEvent(termAsciiKind(after), after, MOD_ALT, ACTION_PRESS))
+          next = third
+        } else {
+          events.push(termKeyEvent(KEY_ESCAPE, b, 0, ACTION_PRESS))
+        }
+        if (next < 0) {
+          return i
+        }
       }
     } else if (b < 128) {
       events.push(termKeyEvent(termAsciiKind(b), b, 0, ACTION_PRESS))
@@ -2670,7 +3040,13 @@ const termDecodeEvents = (d: KeyDecoder, bytes: u8[], last: boolean, events: Ter
         return i
       }
       events.push(termKeyEvent(KEY_CHAR, char >> 3, 0, ACTION_PRESS))
-      next = i + (char & 7)
+      // `char & 7` bytes make the character, each one in `bytes`.
+      const used: i32 = char & 7
+      let at: i32 = i
+      for (let k: i32 = 0; k < used && at < n; k++) {
+        at = at + 1
+      }
+      next = at
     }
     i = next
   }

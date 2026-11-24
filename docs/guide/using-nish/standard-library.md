@@ -2355,7 +2355,7 @@ the timeout you gave the constructor passes. While `waiting()` is true, call
 followed by more than 32 parameter bytes is no key, so the decoder gives the
 ESC up as `KEY_ESCAPE` at once rather than holding what follows.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { KEY_LEFT, KeyDecoder } from "nish/term";
