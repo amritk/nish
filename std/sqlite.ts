@@ -865,10 +865,10 @@ export class Cursor {
    * On a full index that is what `SELECT count(*) ... WHERE col = k` answers
    * for each `k`; a partial index holds only the rows its WHERE admits, and
    * counts only those. A count that reaches its walk clears the seek key and
-   * leaves the cursor on no row, whatever it answers; one refused before it
-   * (`SQLITE_MISUSE`, `SQLITE_MISMATCH`, `SQLITE_RANGE`, `SQLITE_NOMEM`)
-   * leaves both as they were. The counts are copied into `out` one call per
-   * key. `out` past the span, and all of it on an `Err`, is left as it was.
+   * leaves the cursor on no row, whatever it answers; one refused first leaves
+   * both as they were. Copying the counts into `out` takes one call per key,
+   * and one more when `out` is longer than the span. `out` past the span, and
+   * all of it on an `Err`, is left as it was.
    *
    * @param lo The first key counted.
    * @param hi The last key counted, at least `lo`.

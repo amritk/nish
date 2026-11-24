@@ -3942,7 +3942,7 @@ The whole machine ran slower in this run than in the one above (`feed` 21,963 ag
 
 ### Like counts in one call
 
-`feed-cursor-count` reads the posts and authors as `feed-cursor-walk` does, then counts all 20 posts' likes in one `Cursor.countRange(minId, maxId, counts)` call over the posts' id span and reads each post's count as `counts[id - minId]`: one seek and one walk of `likes_post_id_idx` inside the adapter for the whole feed, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeedCounted` and `walkFeed`). When the span does not fit the 1,024-entry buffer it falls back to one `countRange(id, id, counts)` per post. The bench database's 20 newest posts are ids 499,981 to 500,000, so every timed call takes the one-call path and none takes the fallback. `feed-cursor-walk` is the per-like walk, unchanged from `main`.
+`feed-cursor-count` reads the posts and authors as `feed-cursor-walk` does, then counts all 20 posts' likes in one `Cursor.countRange(minId, maxId, counts)` call over the posts' id span and reads each post's count as `counts[id - minId]`: one seek and one walk of `likes_post_id_idx` inside the adapter for the whole feed, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeedCounted` and `walkFeed`). When the span does not fit the 1,024-entry buffer it falls back to one `countRange(id, id, counts)` per post. The bench database's 20 newest posts are ids 499,981 to 500,000, so every call, timed or `--validate`, takes the one-call path: the fallback is unexercised. `feed-cursor-walk` is the per-like walk, unchanged from `main`.
 
 `node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `a2f87c15`, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
 
@@ -3961,7 +3961,7 @@ Against `feed` in the same rounds, `feed-cursor-count` is 8,333 ns less a call a
 
 #### The integer seek against `main`
 
-An integer seek now sets the cursor's own `UnpackedRecord` and clears it after, instead of building one per seek ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `main`'s seek also builds its record on the stack and allocates nothing, so what changes is the per-seek setup, not an allocation. `feed-cursor-walk` and `feed-cursor` reach it on every like count's `seek`.
+An integer seek now reuses the cursor's own `UnpackedRecord`, made at open, setting only its `nField`, `default_rc`, `errCode` and `eqSeen` before each seek, instead of building one per seek ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `main`'s seek also builds its record on the stack and allocates nothing, so what changes is the per-seek setup, not an allocation. `feed-cursor-walk` and `feed-cursor` reach it on every like count's `seek`.
 
 `node bench/sqlite/run.mjs --base origin/main --rounds 12 --no-rust`, base `b2c55694`, with this branch's `std/` and `runtime/` at commit `88a30a8a` and `main`'s `bench/sqlite/main.ts` and `run.mjs` checked out for the run: `--base` builds this tree's `main.ts` against the base's `std/`, which has no `countRange`. `walkFeed` is byte-identical on both sides. The build, its copy and the base were timed in the same rounds, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
 

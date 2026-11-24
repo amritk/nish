@@ -12540,7 +12540,7 @@ int main(void) {
     })
     const countRun = countDebug.status === 0 ? runOut("count-memstatus") : null
     check(
-      "sqlite-link: std_sqlite_cursor_count's steady seek and count loop allocates nothing (SQLITE_DEFAULT_MEMSTATUS=1, -DSQLITE_DEBUG)",
+      "sqlite-link: std_sqlite_cursor_count's countRange reuses its buffer: no allocation after the first pass (SQLITE_DEFAULT_MEMSTATUS=1, -DSQLITE_DEBUG)",
       countRun !== null &&
         countRun.status === 0 &&
         countRun.stdout ===

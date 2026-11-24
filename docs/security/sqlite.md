@@ -186,14 +186,16 @@ key by `sqlite3VdbeRecordCompare`, on the same bytes a column read decodes
 `errCode` (a corrupt record) and refuses a zero-length record as
 `SQLITE_CORRUPT`: the compare reads a record's header size from its first
 byte, which an empty one lacks, and an index entry always holds its rowid.
-A column read takes the same empty record as zero fields. Its count buffer holds one `i64` per key of the span: a
-span longer than `out` is `SQLITE_RANGE` before any allocation, so the buffer
-is never larger than the caller's own array, and the span is computed in
-unsigned 64-bit arithmetic, so `MIN..MAX` is refused, not wrapped. Nish reads
-the buffer back one element at a time with `nishsqlite_cursor_count_at`,
-which answers -1 for an index at or past the last successful count's span
-(and for every index once a count fails past its refusals); `countRange`
-reads it only after a count succeeds and writes `out` only below that.
+A column read takes the same empty record as zero fields. Its count buffer
+holds one `i64` per key of the span: a span longer than `out` is
+`SQLITE_RANGE` before any allocation, so the buffer is never larger than the
+caller's own array, and the span is computed in unsigned 64-bit arithmetic,
+so `MIN..MAX` is refused, not wrapped. Nish reads the buffer back one element
+at a time with `nishsqlite_cursor_count_at`, which answers -1 for an index at
+or past the last successful count's span (and for every index once a count
+fails past its refusals); `countRange` reads it only after a count succeeds,
+one call per key and one more that ends the copy when `out` is longer than
+the span, and writes `out` only below the span.
 
 Tests:
 
@@ -250,8 +252,9 @@ Tests:
   of `out` past the span is checked untouched. Each refusal: a table cursor
   (`SQLITE_MISUSE`), a TEXT first column (`SQLITE_MISMATCH`), `lo > hi`, a
   span one longer than `out`, `MIN..MAX` and an empty `out` (`SQLITE_RANGE`).
-  `tests/run.js` (`sqlite-link`, "std_sqlite_cursor_count's steady seek and
-  count loop allocates nothing") links it with memory statistics on and
+  `tests/run.js` (`sqlite-link`, "std_sqlite_cursor_count's countRange
+  reuses its buffer: no allocation after the first pass") links it with
+  memory statistics on and
   `-DSQLITE_DEBUG`, and pins `countRange`'s buffer reuse: a second pass of
   integer seeks and counts leaves SQLite's memory in use and its high-water
   mark where the first pass left them.

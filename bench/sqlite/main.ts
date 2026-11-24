@@ -153,8 +153,10 @@ const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold)
 /**
  * The 20 newest posts as `walkFeed` reads them, their likes counted in one
  * `Cursor.countRange` over the posts' [min, max] id span into `counts` (one
- * call per post when the span is wider than `counts`). `ids` holds the posts'
- * ids, read from `ix` first. Answers the rows read, or -1 when a read failed.
+ * call per post when the span is wider than `counts`, which the bench
+ * database, its ids contiguous, never makes: that fallback is unexercised).
+ * `ids` holds the posts' ids, read from `ix` first. Answers the rows read,
+ * or -1 when a read failed.
  */
 const walkFeedCounted = (
   ix: Cursor,

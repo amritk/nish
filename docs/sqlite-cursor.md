@@ -78,10 +78,11 @@ class Cursor {
   steps past it, and `out` holds 0 for it. On a full index it agrees with
   `SELECT count(*) … WHERE col = k` for every `k`, under an ascending or `DESC`
   first column; a partial index holds, and counts, only the rows its `WHERE`
-  admits. The counts reach `out` one adapter call per key. It refuses with `Err(SQLITE_MISUSE)` on a table cursor,
-  `Err(SQLITE_MISMATCH)` when the first key column's affinity is neither
-  INTEGER nor NUMERIC (under TEXT affinity SQL's `col = k` compares as text),
-  and `Err(SQLITE_RANGE)` when `lo > hi` or the span is longer than `out`;
+  admits. Copying the counts into `out` takes one adapter call per key, and
+  one more when `out` is longer than the span. It refuses with
+  `Err(SQLITE_MISUSE)` on a table cursor, `Err(SQLITE_MISMATCH)` when the
+  first key column's affinity is neither INTEGER nor NUMERIC (under TEXT
+  affinity SQL's `col = k` compares as text), and `Err(SQLITE_RANGE)` when `lo > hi` or the span is longer than `out`;
   `out` is then left as it was, and so is every element past the span. A count
   that reaches its walk clears the seek key and leaves the cursor on no row,
   as a failed seek does, whatever it answers; a refusal, or `SQLITE_NOMEM` for
