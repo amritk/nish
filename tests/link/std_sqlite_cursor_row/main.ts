@@ -159,6 +159,9 @@ export const main = (): i32 => {
   t.ok("  and leaves ints and spans as they were", allI64(ints, toI64(-7)) && allI32(spans, -7));
   t.ok("  selectRow -1, readRow is RANGE", cur.selectRow([-1]).isOk() && i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
   t.ok("  selectRow 70000, readRow is RANGE", cur.selectRow([70000]).isOk() && i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
+  // Their low 16 bits are 1, a real column: only selectRow's clamp keeps them out.
+  t.ok("  selectRow 65537, readRow is RANGE", cur.selectRow([65537]).isOk() && i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
+  t.ok("  selectRow -65535, readRow is RANGE", cur.selectRow([-65535]).isOk() && i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
   t.ok("  selectRow late, 0, s again", cur.selectRow(late).isOk());
   const wide = new Array<i32>(65536);
   t.ok("  selectRow of 65536 columns is MISUSE", voidErr(cur.selectRow(wide), SQLITE_MISUSE));
@@ -172,7 +175,7 @@ export const main = (): i32 => {
   t.ok("  no columns answers 0", none.isOk() && none.value === 0);
   t.ok("seekRowid 1000 is not there", !cur.seekRowid(toI64(1000)).expect("seek"));
   const gone = cur.readRow(ints, spans, text);
-  t.ok("  and no row with no columns still answers 0", gone.isOk() && gone.value === 0);
+  t.ok("  and no row with no columns is MISUSE", i32Err(gone, SQLITE_MISUSE));
   t.ok("  selectRow every column", cur.selectRow(every).isOk());
   t.ok("  even with columns chosen", i32Err(cur.readRow(ints, spans, text), SQLITE_MISUSE));
 

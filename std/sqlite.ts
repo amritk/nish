@@ -1010,7 +1010,8 @@ export class Cursor {
    * convert. The row's text and blob bytes sit in `text` in column order. A
    * refusal, or an answer larger than `text.length`, writes no `ints` or
    * `spans`, and `text` may hold the first columns' bytes: grow `text` and
-   * call again. An empty list answers `Ok(0)`. It allocates nothing.
+   * call again. An empty list answers `Ok(0)` on a row, and `SQLITE_MISUSE`
+   * with no row or a closed cursor, as any list does. It allocates nothing.
    *
    * @param ints Receives each column's integer; at least as long as the list.
    * @param spans Receives each column's type, offset and length; at least

@@ -69,7 +69,9 @@ class Cursor {
 - `columnInto(n, buf, at)` has `Statement.columnInto`'s contract: it copies a
   TEXT or BLOB value's bytes into `buf` at `at` only when they fit, and answers
   their length either way, so a caller whose buffer is too small grows it and
-  calls again. A NULL is 0 bytes. An INTEGER or FLOAT is `Err(SQLITE_MISMATCH)`:
+  calls again. A NULL is 0 bytes. It refuses first what `columnType` refuses,
+  the moved row's `SQLITE_ABORT` for the INTEGER PRIMARY KEY column among
+  them; any other INTEGER or FLOAT is `Err(SQLITE_MISMATCH)`:
   turning a number into text would allocate inside SQLite, and `columnI64`
   reads it.
 - `countRange(lo, hi, out)` counts an index's entries whose first key column
@@ -104,11 +106,12 @@ class Cursor {
   for TEXT, BLOB and NULL: unlike `columnI64`, `readRow` converts no TEXT or
   BLOB to a number, so a caller that wants `'42'` as 42 calls `columnI64`.
   Other types answer offset and length 0. It answers `Ok` with the bytes the
-  row's columns hold, 0 for an empty list. When that is more than
+  row's columns hold, 0 for an empty list on a row. When that is more than
   `text.length` it writes nothing to `ints` or `spans` (`text` may hold the
   columns that fit before it), so a caller grows `text` and calls again. A
   refusal is the code `columnType` answers for the first column it refuses
-  (`RANGE`, `SCHEMA`, or `MISUSE` with no row or a closed cursor), and
+  (`RANGE`, `SCHEMA`, or `MISUSE` with no row or a closed cursor, even for
+  an empty list), and
   writes nothing to `ints` or `spans`, though `text` may hold the bytes of
   the columns before it; no `selectRow` before it, `ints` shorter than the
   list or `spans` shorter than 3 per column is `MISUSE`, and over 2^31 - 1
@@ -330,9 +333,11 @@ translation unit. The calls, all of them:
   `beginRead`'s and `endRead`'s kept statements).
 
 `readRow` (`nishsqlite_cursor_read_row`) calls nothing the per-column reads
-do not: it calls the adapter's own `columnType`, `columnI64` and
-`columnInto` functions for each chosen column, under the connection's
-mutex, which is recursive. `selectRow` calls no adapter function.
+do not: under the connection's mutex, taken once for the row, it finds each
+chosen column's `Mem` once with the helper `columnType`, `columnI64` and
+`columnInto` share, and reads its type, then its integer or its bytes, from
+that `Mem` with the `sqlite3_value_*` accessors they use. `selectRow` calls
+no adapter function.
 
 What it writes, all of it: its own allocations, and the caller's buffers a
 `readRow` passes; in the `KeyInfo` it allocated,

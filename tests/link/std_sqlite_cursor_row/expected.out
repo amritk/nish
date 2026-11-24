@@ -32,6 +32,8 @@ PASS    and readRow is RANGE for column 7
 PASS    and leaves ints and spans as they were
 PASS    selectRow -1, readRow is RANGE
 PASS    selectRow 70000, readRow is RANGE
+PASS    selectRow 65537, readRow is RANGE
+PASS    selectRow -65535, readRow is RANGE
 PASS    selectRow late, 0, s again
 PASS    selectRow of 65536 columns is MISUSE
 PASS    and a refused list keeps the one chosen
@@ -42,7 +44,7 @@ PASS    and none of them writes
 PASS    selectRow no columns
 PASS    no columns answers 0
 PASS  seekRowid 1000 is not there
-PASS    and no row with no columns still answers 0
+PASS    and no row with no columns is MISUSE
 PASS    selectRow every column
 PASS    even with columns chosen
 PASS  readRow before any selectRow is MISUSE
@@ -55,4 +57,4 @@ PASS    which readRow refuses with MISUSE
 PASS  close
 PASS  endRead
 PASS  close the database
-std_sqlite_cursor_row: 57 passed, 0 failed, 0 skipped
+std_sqlite_cursor_row: 59 passed, 0 failed, 0 skipped

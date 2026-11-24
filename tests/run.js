@@ -12694,9 +12694,9 @@ int main(void) {
     )
     // A readRow walk takes no more of SQLite's heap once warm. This watches
     // sqlite3_memory_used and its highwater only: SQLite's allocator, which
-    // holds the cursor's record buffer, its overflow cache and the column
-    // list selectRow stores, not the Nish heap where the exchange buffer
-    // lives. The first pass reads every row, the 5,000-byte overflow ones
+    // holds the cursor's record buffer and its overflow cache, not the Nish
+    // heap, where selectRow's column list and readRow's answer slots live in
+    // the Cursor's rowIo. The first pass reads every row, the 5,000-byte overflow ones
     // among them, so those reach their size; two more passes then keep
     // SQLite's memory where it was, and both the text bytes and the integers
     // sum to what the rows hold.
