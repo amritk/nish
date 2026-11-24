@@ -431,9 +431,25 @@ awk '
     k = v["conns"] SUBSEP v["round"]
     us[k, v["label"]] = v["srv_us"]
     if (!(k in seen)) { seen[k] = 1; order[++n] = k }
+    if (!(v["label"] in lseen)) { lseen[v["label"]] = 1; labels[++nl] = v["label"] }
+    if (index(v["label"], "@")) batched = 1
   }
   function fmt(x) { return x == "" ? "-" : sprintf("%.2f", x) }
   END {
+    # With --min-events every design is a label per batch size, so the table
+    # gives each label a column in the order the rounds first ran them.
+    if (batched) {
+      printf "%-8s %5s", "C", "round"
+      for (j = 1; j <= nl; j++) printf " %14s", labels[j]
+      printf "\n"
+      for (i = 1; i <= n; i++) {
+        k = order[i]; split(k, cr, SUBSEP)
+        printf "%-8s %5s", cr[1], cr[2]
+        for (j = 1; j <= nl; j++) printf " %14s", fmt(us[k, labels[j]])
+        printf "\n"
+      }
+      exit
+    }
     printf "%-8s %5s %8s %8s %10s %8s %8s\n", "C", "round", "ring", "epoll", "epoll-copy", "saving", "band"
     for (i = 1; i <= n; i++) {
       k = order[i]; split(k, cr, SUBSEP)
