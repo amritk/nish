@@ -1,4 +1,4 @@
-// `pollWaitBatch` on a `NET_LISTEN_RING` listener (NURING-40). The program is
+// `pollWaitBatch` on a `NET_LISTEN_RING` listener (NURING-45). The program is
 // its own peer: it opens a ring listener, connects 16 clients to it with
 // `tcpConnect`, accepts them, and then drives the batch wait.
 //

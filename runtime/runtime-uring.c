@@ -396,7 +396,7 @@ struct nish_uring_set {
   uint16_t lent_bid[EVENTS_MAX];
   int nlent;
   /* The one-shot POLL_ADD a direct wait arms on its caller's descriptor
-   * (NURING-40): the descriptor, whether the poll is in the kernel, the
+   * (NURING-45): the descriptor, whether the poll is in the kernel, the
    * events it answered and not yet taken, and whether one failed, after
    * which no descriptor is watched again. */
   int poll_fd, poll_armed, poll_broken;
@@ -1440,7 +1440,7 @@ again:
  * NURING-8 bound is kept all the same, so a ring the kernel flags without a
  * completion is still serviced within UR_SLEEP_MAX_MS. A `watch_fd` of 0 or
  * more is watched by a one-shot POLL_ADD in the ring, armed once and taken
- * with `nish_uring_poll_events` (NURING-40), so a caller that also waits on one
+ * with `nish_uring_poll_events` (NURING-45), so a caller that also waits on one
  * descriptor, `signalFd()`, needs no epoll set beside the ring.
  *
  * Answers 0 after a sleep or when there is work to do now, and the caller

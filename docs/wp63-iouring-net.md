@@ -477,9 +477,9 @@ as it did. The wait goes through epoll as before on a kernel without
 `IORING_FEAT_EXT_ARG` (before 5.11), on a set that has grown a second ring,
 with a second live set or any other descriptor in the loop, when
 `signalFd()` sits beside a ring `--sandbox` restricted, whose restrictions
-refuse `POLL_ADD` (NURING-40), and for good once `netClose` or `fileClose`
+refuse `POLL_ADD` (NURING-45), and for good once `netClose` or `fileClose`
 has closed `signalFd()`, whose number may then name a new descriptor the
-ring's poll would never report (NURING-43, NURING-44). A poll that answered
+ring's poll would never report (NURING-48, NURING-49). A poll that answered
 before a wait began, reaped by an earlier pump, ends that wait without an
 enter rather than after one sleep. One narrow overlap is left: with a
 `ready` of 2, the read of the loop's epoll set after the poll answers may

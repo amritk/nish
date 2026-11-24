@@ -1,4 +1,4 @@
-/* The `net_ring` section's wrapper for `batch.ts` (NURING-40): makes every
+/* The `net_ring` section's wrapper for `batch.ts` (NURING-45): makes every
  * epoll wait answer EPERM, then runs argv[1]. A loop that holds only ring
  * slots sleeps on its ring, so its program never reaches one; a wait that
  * does fails the program. Exits 3 when the kernel takes no filter, and 4 when

@@ -62,7 +62,7 @@
  *    refused while it is armed. A ring without
  *    IORING_FEAT_EXT_ARG (a kernel before 5.11, forced by the setup hook)
  *    answers -EOPNOTSUPP, and its set still accepts through `nish_uring_wait`
- *    (NURING-40).
+ *    (NURING-45).
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer

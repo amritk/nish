@@ -329,7 +329,7 @@ int64_t nish_file_size(int32_t fd) {
 int32_t nish_file_close(int32_t fd) {
   if (fd < 0) return -9;
 #if !defined(__wasi__) && !defined(__wasm__)
-  /* The signal pipe's number is about to be free for reuse (NURING-44). */
+  /* The signal pipe's number is about to be free for reuse (NURING-49). */
   nish_signal_fd_closing(fd);
 #endif
   return close(fd) == 0 ? 0 : nish_fs_err(errno);

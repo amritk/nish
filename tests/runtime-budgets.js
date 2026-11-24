@@ -590,8 +590,8 @@ const RUNTIME_HOST_TEXT_BUDGET = 1024
  * `nish_poll_wait_batch` and its batch loop, which waits on the one live ring set for
  * `minEvents` completions or `maxWaitMs`, and the check that sends a loop holding only
  * ring slots and at most the signal descriptor to its ring rather than through the
- * eventfd and epoll (NURING-40 on), with the batch's check that its loop holds a ring
- * source (NURING-42) and the note of a closed signal descriptor (NURING-43). It stays
+ * eventfd and epoll (NURING-45 on), with the batch's check that its loop holds a ring
+ * source (NURING-47) and the note of a closed signal descriptor (NURING-48). It stays
  * here for the reason above.
  */
 const NET_TEXT_BUDGET = 12800

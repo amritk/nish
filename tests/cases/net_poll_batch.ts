@@ -1,4 +1,4 @@
-// pollWaitBatch (NURING-40) on a descriptor loop, with the program as its own
+// pollWaitBatch (NURING-45) on a descriptor loop, with the program as its own
 // peer. A minimum of 1 answers as pollWait does. On a loop with no ring slots
 // a wait for more than one event answers what the first wait found, without
 // waiting out maxWaitMs for the rest, and an idle wait answers 0 at its

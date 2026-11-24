@@ -215,7 +215,7 @@ int32_t nish_signal_fd(void) {
 /* Set once a closer (`netClose`, `fileClose`) is handed the read end: from
    then on its number may name any descriptor opened since, so
    `nish_signal_fd_made` answers -1 rather than a number that is no longer the
-   signal pipe (docs/security/net-uring.md, NURING-43 and NURING-44). */
+   signal pipe (docs/security/net-uring.md, NURING-48 and NURING-49). */
 static int32_t nish_signal_closed;
 
 int32_t nish_signal_fd_made(void) {
