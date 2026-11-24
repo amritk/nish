@@ -12531,6 +12531,24 @@ int main(void) {
         shapesRun.stdout === fs.readFileSync(path.join(root, shapesDir, "expected.out"), "utf8"),
       shapesDebug.stderr + (shapesRun ? shapesRun.stdout.slice(-2000) + shapesRun.stderr : "")
     )
+    // countRange's program with SQLite's counters and asserts on. Its steady
+    // seek and count loop is then measured, not trivially flat: its last line
+    // says the counters ran, and the rest is the default build's output.
+    const countDir = path.join("tests", "link", "std_sqlite_cursor_count")
+    const countDebug = link(path.join(countDir, "main.ts"), "count-memstatus", [], {
+      NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1 -DSQLITE_DEBUG",
+    })
+    const countRun = countDebug.status === 0 ? runOut("count-memstatus") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_count's countRange reuses its buffer: no allocation after the first pass (SQLITE_DEFAULT_MEMSTATUS=1, -DSQLITE_DEBUG)",
+      countRun !== null &&
+        countRun.status === 0 &&
+        countRun.stdout ===
+          fs
+            .readFileSync(path.join(root, countDir, "expected.out"), "utf8")
+            .replace("memory counted: false\n", "memory counted: true\n"),
+      countDebug.stderr + (countRun ? countRun.stdout.slice(-2000) + countRun.stderr : "")
+    )
     // The default build has no virtual-table module, so the schema program
     // makes an rtree only when SQLite is built with one.
     const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {

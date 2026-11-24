@@ -176,7 +176,26 @@ Where the decoded bytes lie:
 
 A seek key is built only with `sqlite3VdbeMemSetInt64` and
 `sqlite3VdbeMemSetStr` (text copied, `SQLITE_TRANSIENT`), and no more key
-parts than the index has key columns: one more is `SQLITE_RANGE`.
+parts than the index has key columns: one more is `SQLITE_RANGE`. The
+`UnpackedRecord` that hands it to SQLite is the cursor's own, filled at open
+and given only `nField`, `default_rc`, `errCode` and `eqSeen` before each use.
+
+`countRange(lo, hi, out)` compares each index entry's record with a one-value
+key by `sqlite3VdbeRecordCompare`, on the same bytes a column read decodes
+(on its page, or copied with the slack above). It stops on the compare's
+`errCode` (a corrupt record) and refuses a zero-length record as
+`SQLITE_CORRUPT`: the compare reads a record's header size from its first
+byte, which an empty one lacks, and an index entry always holds its rowid.
+A column read takes the same empty record as zero fields. Its count buffer
+holds one `i64` per key of the span: a span longer than `out` is
+`SQLITE_RANGE` before any allocation, so the buffer is never larger than the
+caller's own array, and the span is computed in unsigned 64-bit arithmetic,
+so `MIN..MAX` is refused, not wrapped. Nish reads the buffer back one element
+at a time with `nishsqlite_cursor_count_at`, which answers -1 for an index at
+or past the last successful count's span (and for every index once a count
+fails past its refusals); `countRange` reads it only after a count succeeds,
+one call per key and one more that ends the copy when `out` is longer than
+the span, and writes `out` only below the span.
 
 Tests:
 
@@ -226,6 +245,19 @@ Tests:
   with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
 - `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
   equal byte for byte to SQL's.
+- `tests/link/std_sqlite_cursor_count`: `countRange` checked against
+  `SELECT count(*)` for every key of each span, ascending, `DESC`, on a
+  two-column index and under NUMERIC affinity, with NULL, REAL and TEXT
+  values, spans at both ends of `i64` and keys with no entries; every element
+  of `out` past the span is checked untouched. Each refusal: a table cursor
+  (`SQLITE_MISUSE`), a TEXT first column (`SQLITE_MISMATCH`), `lo > hi`, a
+  span one longer than `out`, `MIN..MAX` and an empty `out` (`SQLITE_RANGE`).
+  `tests/run.js` (`sqlite-link`, "std_sqlite_cursor_count's countRange
+  reuses its buffer: no allocation after the first pass") links it with
+  memory statistics on and
+  `-DSQLITE_DEBUG`, and pins `countRange`'s buffer reuse: a second pass of
+  integer seeks and counts leaves SQLite's memory in use and its high-water
+  mark where the first pass left them.
 
 Untested: a read that answers `SQLITE_ABORT` because the row moved under the
 cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`
@@ -233,7 +265,9 @@ for an oversized record, and the `SQLITE_NOMEM` paths, each of which needs a
 corrupt file or a failing allocator the suite has no harness for; the
 invalidation by a re-prepare whose statement now authorizes an action off the
 allowlist, which needs another connection to change the schema between a
-prepare and its step.
+prepare and its step. `countRange`'s `SQLITE_TOOBIG` past 2,147,483,647
+counted entries, which needs an index that large; its `SQLITE_CORRUPT` and
+`errCode` stops, which need a corrupt file.
 
 Open: under `-DSQLITE_DEBUG`, a rollback SQLite makes by itself while a
 cursor is open trips SQLite's own assertion in `unlockBtreeIfUnused`, inside
