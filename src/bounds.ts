@@ -151,10 +151,18 @@ import {
   ROLE_FUNCTION,
   ROLE_METHOD,
   inlineElementStruct,
+  isArraySliceInstance,
 } from "./program"
 import { Options } from "./options"
 import { isAsciiText } from "./strings"
-import { isSimdExport, simdSuffix, simdTypeLane } from "./nish-modules"
+import {
+  isNetExport,
+  isNetRangeBuffer,
+  isSimdExport,
+  netRangeBuffer,
+  simdSuffix,
+  simdTypeLane,
+} from "./nish-modules"
 import { isSpawnEntry, isVoidSpawn, parallelRoleOf } from "./parallel"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import {
@@ -184,6 +192,7 @@ const FACT_MAX_INDEX: i32 = 3
 const FACT_MIN_LENGTH: i32 = 4
 const FACT_MIN_VALUE: i32 = 5
 const FACT_EXCLUDES: i32 = 6
+const FACT_ORDERED: i32 = 7
 
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
@@ -193,7 +202,8 @@ const FACT_EXCLUDES: i32 = 6
  * ever an array, so no reader of the family mistakes one for the other, and
  * every rule that forgets an array's length facts forgets it too; `n`
  * is the literal of the three constant families, and the reach of a `below`:
- * `v + n < w.length`, 0 for the plain `v < w.length`.
+ * `v + n < w.length`, 0 for the plain `v < w.length`. An `ordered` fact is
+ * `v <= w` between two index locals, and its `n` is 0.
  */
 class Fact {
   kind: i32
@@ -256,6 +266,15 @@ export class State {
    */
   excludedVar: Local[]
   excludedValue: i32[]
+  /**
+   * `low <= high`, two index locals: what a range check whose ends are both
+   * locals needs between them (`provesRange`), recorded by a guard, by a
+   * copy (`const start = i`) and by an offset (`const j = i + 1`). An
+   * increment of `high` keeps it and one of `low` drops it, a decrement the
+   * other way round, and no call can reach either local.
+   */
+  orderedLow: Local[]
+  orderedHigh: Local[]
 
   constructor(table: TypeTable) {
     this.table = table
@@ -273,6 +292,8 @@ export class State {
     this.minValueValue = []
     this.excludedVar = []
     this.excludedValue = []
+    this.orderedLow = []
+    this.orderedHigh = []
   }
 }
 
@@ -318,6 +339,12 @@ const cloneState = (s: State): State => {
     out.excludedValue.push(s.excludedValue[k])
     k = k + 1
   }
+  k = 0
+  while (k < s.orderedLow.length) {
+    out.orderedLow.push(s.orderedLow[k])
+    out.orderedHigh.push(s.orderedHigh[k])
+    k = k + 1
+  }
   return out
 }
 
@@ -342,6 +369,8 @@ const copyInto = (into: State, from: State): void => {
   into.minValueValue = from.minValueValue
   into.excludedVar = from.excludedVar
   into.excludedValue = from.excludedValue
+  into.orderedLow = from.orderedLow
+  into.orderedHigh = from.orderedHigh
 }
 
 // ---- Reading the state ------------------------------------------------------------
@@ -504,7 +533,30 @@ const knownExcludes = (state: State, v: Local, n: i32): boolean => {
   return false
 }
 
+/** `low <= high`: the one local, or a fact the state holds (`FACT_ORDERED`). */
+const knownOrdered = (state: State, low: Local, high: Local): boolean => {
+  if (low === high) {
+    return true
+  }
+  let k = 0
+  while (k < state.orderedLow.length) {
+    if (state.orderedLow[k] === low && state.orderedHigh[k] === high) {
+      return true
+    }
+    k = k + 1
+  }
+  return false
+}
+
 const addFact = (state: State, fact: Fact): void => {
+  if (fact.kind === FACT_ORDERED) {
+    const high = fact.w
+    if (high !== null && !knownOrdered(state, fact.v, high)) {
+      state.orderedLow.push(fact.v)
+      state.orderedHigh.push(high)
+    }
+    return
+  }
   if (fact.kind === FACT_EXCLUDES) {
     if (!knownExcludes(state, fact.v, fact.n)) {
       state.excludedVar.push(fact.v)
@@ -621,7 +673,38 @@ const mentions = (state: State, v: Local): boolean => {
       return true
     }
   }
+  return mentionsOrdered(state, v)
+}
+
+/** Whether an `ordered` fact names `v` at either end. */
+const mentionsOrdered = (state: State, v: Local): boolean => {
+  let k = 0
+  while (k < state.orderedLow.length) {
+    if (state.orderedLow[k] === v || state.orderedHigh[k] === v) {
+      return true
+    }
+    k = k + 1
+  }
   return false
+}
+
+/**
+ * Drop every `ordered` fact with `v` at the end `low` names: an increment of
+ * `v` breaks `v <= w` and keeps `u <= v`, and a decrement the other way round.
+ */
+const forgetOrdered = (state: State, v: Local, low: boolean): void => {
+  const lows: Local[] = []
+  const highs: Local[] = []
+  let k = 0
+  while (k < state.orderedLow.length) {
+    if ((low ? state.orderedLow[k] : state.orderedHigh[k]) !== v) {
+      lows.push(state.orderedLow[k])
+      highs.push(state.orderedHigh[k])
+    }
+    k = k + 1
+  }
+  state.orderedLow = lows
+  state.orderedHigh = highs
 }
 
 /** Drop every `v !== n`: any write to `v` may land on the value it excluded. */
@@ -685,6 +768,7 @@ const forgetUpperBounds = (state: State, v: Local): void => {
   state.maxIndexVar = maxVar
   state.maxIndexValue = maxValue
   forgetExcluded(state, v)
+  forgetOrdered(state, v, true)
 }
 
 /**
@@ -785,6 +869,7 @@ const forgetLowerBounds = (state: State, v: Local): void => {
   state.minValueVar = floorVar
   state.minValueValue = floorValue
   forgetExcluded(state, v)
+  forgetOrdered(state, v, false)
 }
 
 /**
@@ -902,6 +987,14 @@ const intersect = (a: State, b: State): State => {
     if (knownExcludes(b, a.excludedVar[k], a.excludedValue[k])) {
       out.excludedVar.push(a.excludedVar[k])
       out.excludedValue.push(a.excludedValue[k])
+    }
+    k = k + 1
+  }
+  k = 0
+  while (k < a.orderedLow.length) {
+    if (knownOrdered(b, a.orderedLow[k], a.orderedHigh[k])) {
+      out.orderedLow.push(a.orderedLow[k])
+      out.orderedHigh.push(a.orderedHigh[k])
     }
     k = k + 1
   }
@@ -1176,6 +1269,10 @@ const indexLocal = (ctx: CheckContext, expr: Node): Local | null => {
   }
   return v
 }
+
+/** Two index locals of one base type, which a ranged local and an `i32` are: an `ordered` fact relates only these. */
+const sameBase = (ctx: CheckContext, a: Local, b: Local): boolean =>
+  ctx.table.baseOf(a.type) === ctx.table.baseOf(b.type)
 
 /** An index local and the literal added to it: `i + c`, as `offsetIndex` reads it. */
 export class Offset {
@@ -1803,6 +1900,11 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   if (unsignedVar !== null && unsignedLength !== null && strict) {
     out.push(new Fact(FACT_BELOW, unsignedVar, unsignedLength, 0))
   }
+  // `a < b` / `a <= b` between two index locals of one base: `a <= b`, what a
+  // range check with both ends locals needs between them (`provesRange`).
+  if (loVar !== null && hiVar !== null && loVar !== hiVar && sameBase(ctx, loVar, hiVar)) {
+    out.push(new Fact(FACT_ORDERED, loVar, hiVar, 0))
+  }
   // `i < n` / `i <= n`.
   if (loVar !== null && hiConst >= 0) {
     out.push(new Fact(FACT_MAX_INDEX, loVar, null, strict ? hiConst : hiConst + 1))
@@ -2053,6 +2155,11 @@ const factsOf = (state: State): Fact[] => {
     out.push(new Fact(FACT_EXCLUDES, state.excludedVar[k], null, state.excludedValue[k]))
     k = k + 1
   }
+  k = 0
+  while (k < state.orderedLow.length) {
+    out.push(new Fact(FACT_ORDERED, state.orderedLow[k], state.orderedHigh[k], 0))
+    k = k + 1
+  }
   return out
 }
 
@@ -2136,6 +2243,13 @@ const differenceFacts = (walk: BoundsWalk, state: State, v: Local, w: Local, c: 
       out.push(new Fact(FACT_BELOW, v, above, 0))
     } else {
       out.push(new Fact(FACT_AT_MOST, v, above, 0))
+    }
+  }
+  // `v = w - c` is at most `w`, and a copy is also at least it.
+  if (v !== w) {
+    out.push(new Fact(FACT_ORDERED, v, w, 0))
+    if (c === 0) {
+      out.push(new Fact(FACT_ORDERED, w, v, 0))
     }
   }
 }
@@ -2226,6 +2340,11 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
     return out
   }
   rangeFacts(walk, state, v, e, out)
+  // `const j = i + c` is at least `i`: the sum is exact (`offsetIndex`).
+  const sum = offsetIndex(ctx, e)
+  if (sum !== null && sum.v !== v && sameBase(ctx, sum.v, v)) {
+    out.push(new Fact(FACT_ORDERED, sum.v, v, 0))
+  }
   if (e.kind === NodeKind.Binary && e.text === "-") {
     const c = literalValue(e.children[1])
     const w = indexLocal(ctx, e.children[0])
@@ -2960,6 +3079,364 @@ const judgeParallelLength = (walk: BoundsWalk, state: State, call: Node): void =
     return
   }
   if (knownLengthAtMost(state, src, dst)) {
+    noteProof(walk, call)
+  }
+}
+
+// ---- Range checks and array lengths ---------------------------------------------------
+
+/**
+ * `new Array<T>(n)` with an `i32` `n`, whose check `emitNewArrayLength` writes
+ * (`newArrayLengthChecked` in `src/emit-arrays.ts`): `n` may be negative. The
+ * check also bounds `n` above, but by a limit of at least `INT_MAX`, which no
+ * `i32` passes, so a non-negative `n` passes it and the check is proven: a
+ * local of a range from 0 (the checker reads it as its base `i32` at the
+ * call), one a guard or initialiser left `>= 0`, a literal or a sum of them.
+ * Pass 2 only, as `judgeDivision` says.
+ */
+const judgeArrayLength = (walk: BoundsWalk, state: State, node: Node): void => {
+  if (walk.tables !== null) {
+    return
+  }
+  const ctx = walk.ctx
+  const args = node.children[2].children
+  if (args.length !== 1 || !ctx.table.isArray(ctx.program.nodeTypes[node.id])) {
+    return
+  }
+  const length = args[0]
+  const type = ctx.program.nodeTypes[length.id]
+  if (type < 0 || ctx.table.baseOf(type) !== T_I32) {
+    return
+  }
+  if (impliesNonNegative(walk, state, length)) {
+    noteProof(walk, node)
+  }
+}
+
+/** Whether `found` is the local `v`: what a lookup that may find nothing answers. */
+const isLocal = (found: Local | null, v: Local): boolean => found !== null && found === v
+
+/**
+ * A bound of a range check in one of the shapes this section reads, none of
+ * which writes anything: a literal or a constant, a local, a `.length`, or a
+ * sum or difference of two of them. The value the check compares is then the
+ * one the state describes once the arguments have run.
+ */
+const isQuietBound = (walk: BoundsWalk, expr: Node): boolean => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind === NodeKind.Number || e.kind === NodeKind.Ident) {
+    return true
+  }
+  if (lengthOf(walk, e) !== null || constantValue(walk, e) >= 0) {
+    return true
+  }
+  if (e.kind === NodeKind.Binary && (e.text === "+" || e.text === "-")) {
+    return isQuietBound(walk, e.children[0]) && isQuietBound(walk, e.children[1])
+  }
+  return false
+}
+
+/**
+ * Whether `node` may change anything an earlier argument read: an
+ * assignment, `++` or `--` may rebind a bound's local, and a call or a `new`
+ * may resize the holder, whose length the check reads after every argument
+ * has run, while a bound spelled `buf.length` was read before it. A builtin
+ * integer conversion calls nothing, so a position spelled `toI64(0)` is quiet.
+ */
+const changesAnything = (program: CheckedProgram, node: Node): boolean => {
+  if (node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) {
+    return true
+  }
+  if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
+    return true
+  }
+  if (node.kind === NodeKind.New || (node.kind === NodeKind.Call && !isQuietConversion(program, node))) {
+    return true
+  }
+  for (const child of node.children) {
+    if (changesAnything(program, child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** A builtin integer conversion, lowered inline (`isBuiltinConversion`). */
+const isQuietConversion = (program: CheckedProgram, call: Node): boolean =>
+  isBuiltinConversion(program, call, "toI32") ||
+  isBuiltinConversion(program, call, "toI64") ||
+  isBuiltinConversion(program, call, "toU32") ||
+  isBuiltinConversion(program, call, "toU64")
+
+/**
+ * The holder whose `.length` `expr` reads exactly: the bare member, or `toI32`
+ * of an `i32` one. `lengthOf` also answers a `toI32` that may stop short of
+ * the length, which is enough for an upper bound and not for an equality.
+ */
+const exactLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
+  let e = unwrapBoundsParens(expr)
+  if (e.kind === NodeKind.Call && isBuiltinToI32(walk.ctx.program, e)) {
+    e = unwrapBoundsParens(e.children[1].children[0])
+    if (walk.ctx.program.nodeTypes[e.id] !== T_I32) {
+      return null
+    }
+  }
+  if (e.kind !== NodeKind.Member || e.text !== "length") {
+    return null
+  }
+  return holderOf(walk, e.children[0])
+}
+
+/**
+ * `bound <= w.length`: the length itself, a literal the length is known to
+ * reach, a local known at most the length, `i + c` with `i` reaching `c - 1`
+ * below it, or a difference `e - c` of one of those.
+ */
+const provesWithin = (walk: BoundsWalk, state: State, bound: Node, w: Local): boolean => {
+  const ctx = walk.ctx
+  if (isLocal(lengthOf(walk, bound), w)) {
+    return true
+  }
+  const n = constantValue(walk, bound)
+  if (n >= 0) {
+    return n === 0 || knownMinLength(state, w, n)
+  }
+  const v = indexLocal(ctx, bound)
+  if (v !== null) {
+    return knownAtMost(state, v, w)
+  }
+  const sum = offsetIndex(ctx, bound)
+  if (sum !== null) {
+    return belowReach(state, sum.v, w) >= sum.c - 1
+  }
+  // The difference is exact (`minusLiteral`), so it is below its left side.
+  const minus = minusLiteral(ctx, bound)
+  if (minus !== null) {
+    if (isLocal(lengthOf(walk, minus.base), w)) {
+      return true
+    }
+    const base = indexLocal(ctx, minus.base)
+    return base !== null && knownAtMost(state, base, w)
+  }
+  return false
+}
+
+/**
+ * `from <= to`, for a range of `w`: `to` is `w`'s length and `from` is within
+ * it, the two are one local or `ordered`, `to` is `from + c` or `from` is
+ * `to - c`, or what bounds them apart says so: the most `from` can be is no
+ * more than the least `to` can be.
+ */
+const provesOrdered = (walk: BoundsWalk, state: State, from: Node, to: Node, w: Local): boolean => {
+  const ctx = walk.ctx
+  if (isLocal(exactLengthOf(walk, to), w)) {
+    return provesWithin(walk, state, from, w)
+  }
+  const a = indexLocal(ctx, from)
+  const b = indexLocal(ctx, to)
+  if (a !== null && b !== null && sameBase(ctx, a, b) && knownOrdered(state, a, b)) {
+    return true
+  }
+  const sum = offsetIndex(ctx, to)
+  if (a !== null && sum !== null && sum.v === a) {
+    return true
+  }
+  const minus = minusLiteral(ctx, from)
+  if (b !== null && minus !== null && isLocal(indexLocal(ctx, minus.base), b)) {
+    return true
+  }
+  const ceiling = boundCeiling(walk, state, from)
+  if (ceiling === 0) {
+    return impliesNonNegative(walk, state, to)
+  }
+  return ceiling >= 0 && ceiling <= boundFloor(walk, state, to)
+}
+
+/** `0 <= from <= to <= w.length`: what `emitSliceCheck` asks of `[from, to)`. */
+const provesRange = (walk: BoundsWalk, state: State, w: Local, from: Node, to: Node): boolean =>
+  isQuietBound(walk, from) &&
+  isQuietBound(walk, to) &&
+  impliesNonNegative(walk, state, from) &&
+  provesWithin(walk, state, to, w) &&
+  provesOrdered(walk, state, from, to, w)
+
+/**
+ * `0 <= off` and `off + len <= w.length` with `len >= 0`, the window
+ * `[off, off + len)` a buffer call checks (`emitNetCall`): `off` is 0 and
+ * `len` within the length, `len` is a literal `off` reaches that far below
+ * the length, or `len` is the rest of the buffer, `w.length - off`.
+ */
+const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: Node): boolean => {
+  const ctx = walk.ctx
+  if (!isQuietBound(walk, off) || !isQuietBound(walk, len) || !impliesNonNegative(walk, state, off)) {
+    return false
+  }
+  const start = constantValue(walk, off)
+  if (start === 0) {
+    return impliesNonNegative(walk, state, len) && provesWithin(walk, state, len, w)
+  }
+  const count = constantValue(walk, len)
+  if (count === 0) {
+    return provesWithin(walk, state, off, w)
+  }
+  if (count > 0) {
+    if (start > 0) {
+      return toI64(start) + toI64(count) < I32_MAX && knownMinLength(state, w, start + count)
+    }
+    const v = indexLocal(ctx, off)
+    return v !== null && belowReach(state, v, w) >= count - 1
+  }
+  const rest = unwrapBoundsParens(len)
+  if (rest.kind !== NodeKind.Binary || rest.text !== "-" || !checksOverflow(ctx.program, ctx.table, rest)) {
+    return false
+  }
+  const v = indexLocal(ctx, off)
+  return (
+    v !== null &&
+    isLocal(indexLocal(ctx, rest.children[1]), v) &&
+    isLocal(exactLengthOf(walk, rest.children[0]), w) &&
+    provesWithin(walk, state, off, w)
+  )
+}
+
+/** Whether no argument of `call` from `first` on may change what the check compares (`changesAnything`). */
+const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean => {
+  let k = 0
+  for (const arg of call.children[1].children) {
+    if (k >= first && changesAnything(program, arg)) {
+      return false
+    }
+    k = k + 1
+  }
+  return true
+}
+
+/** `String.fromBytes(bytes, start, end)`, the builtin (`emitFromBytes`). */
+const isFromBytes = (ctx: CheckContext, call: Node): boolean => {
+  const callee = unwrapBoundsParens(call.children[0])
+  return (
+    callee.kind === NodeKind.Member &&
+    callee.text === "fromBytes" &&
+    callee.children[0].kind === NodeKind.Ident &&
+    callee.children[0].text === "String" &&
+    ctx.program.nodeCallees[call.id] === null &&
+    call.children[1].children.length === 3
+  )
+}
+
+/** `dst.set(src)` or `dst.set(src, at)` on an array receiver (`emitSet`). */
+const isArraySet = (ctx: CheckContext, call: Node): boolean => {
+  const callee = unwrapBoundsParens(call.children[0])
+  const count = call.children[1].children.length
+  if (callee.kind !== NodeKind.Member || callee.text !== "set" || count < 1 || count > 2) {
+    return false
+  }
+  return (
+    ctx.program.nodeCallees[call.id] === null &&
+    ctx.table.isArray(ctx.program.nodeTypes[callee.children[0].id])
+  )
+}
+
+/**
+ * The name of a builtin buffer call that checks a `(buf, off, len)` window
+ * (`emitNetCall`): `writeBytes`, `readStdin`, `fileReadAt` and the `nish:net`
+ * ones, by the name the checker resolved, or "" for any other call.
+ */
+const windowCallName = (ctx: CheckContext, call: Node): string => {
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Ident || ctx.program.nodeCallees[call.id] !== null) {
+    return ""
+  }
+  const imported = ctx.program.nodeBuiltins[call.id]
+  const name = imported.length > 0 ? imported : callee.text
+  if (name !== "writeBytes" && name !== "readStdin" && name !== "fileReadAt" && !isNetExport(name)) {
+    return ""
+  }
+  return netRangeBuffer(name) >= 0 ? name : ""
+}
+
+/**
+ * Record a range check the caller proves, judged once every argument has run,
+ * where the emitter compares: `String.fromBytes`, an array's `set`, a string's
+ * or an array's `slice`, and the window of a buffer call. Each bound must be
+ * a shape `isQuietBound` reads and no later argument may assign or call
+ * anything (`changesAnything`), so the state describes the values compared. A proof goes into
+ * `nodeProvenIndex` on the call, which the emitter reads to leave the check
+ * out (an array's `slice` keeps the check in `std/array.ts`, and the proof is
+ * the call's, as a `spawn` slot's is). Pass 2 only, as `judgeDivision` says.
+ */
+const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
+  if (walk.tables !== null) {
+    return
+  }
+  const ctx = walk.ctx
+  const args = call.children[1].children
+  if (isFromBytes(ctx, call)) {
+    const w = holderOf(walk, args[0])
+    if (w !== null && quietFrom(ctx.program, call, 1) && provesRange(walk, state, w, args[1], args[2])) {
+      noteProof(walk, call)
+    }
+    return
+  }
+  const callee = unwrapBoundsParens(call.children[0])
+  if (isArraySet(ctx, call)) {
+    // The write is `[at, at + src.length)` of `dst`: from 0, it is in range
+    // exactly when `src` is no longer than `dst`.
+    const dst = holderOf(walk, callee.children[0])
+    const src = holderOf(walk, args[0])
+    const fromZero = args.length === 1 || constantValue(walk, args[1]) === 0
+    if (dst !== null && src !== null && fromZero && knownLengthAtMost(state, src, dst)) {
+      noteProof(walk, call)
+    }
+    return
+  }
+  // A string's `slice` keeps its receiver in the callee; an array's is the
+  // call of a `std/array.ts` template with the receiver moved to the front of
+  // the arguments (`checkAsTemplateCall` in `src/arrays.ts`).
+  const target = ctx.program.nodeCallees[call.id]
+  const arraySlice = target !== null && isArraySliceInstance(target) && args.length >= 2
+  if (isSliceCall(ctx, call) || arraySlice) {
+    if (!arraySlice && callee.kind !== NodeKind.Member) {
+      return
+    }
+    const first = arraySlice ? 1 : 0
+    const w = holderOf(walk, arraySlice ? args[0] : callee.children[0])
+    if (w === null || !quietFrom(ctx.program, call, first)) {
+      return
+    }
+    const proven =
+      args.length === first + 1
+        ? isQuietBound(walk, args[first]) &&
+          impliesNonNegative(walk, state, args[first]) &&
+          provesWithin(walk, state, args[first], w)
+        : provesRange(walk, state, w, args[first], args[first + 1])
+    if (proven) {
+      noteProof(walk, call)
+    }
+    return
+  }
+  const name = windowCallName(ctx, call)
+  if (name.length === 0) {
+    return
+  }
+  // Every window of the call, `netWrite2`'s two included, or none.
+  let windows = 0
+  let at = 0
+  while (at + 2 < args.length) {
+    // All three are read before the first call, which no length fact survives.
+    const buffer = args[at]
+    const off = args[at + 1]
+    const len = args[at + 2]
+    if (isNetRangeBuffer(name, at)) {
+      const w = holderOf(walk, buffer)
+      if (w === null || !quietFrom(ctx.program, call, at + 1) || !provesWindow(walk, state, w, off, len)) {
+        return
+      }
+      windows = windows + 1
+    }
+    at = at + 1
+  }
+  if (windows > 0) {
     noteProof(walk, call)
   }
 }
@@ -3789,6 +4266,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (isArrayPop(ctx, e)) {
       judgePop(walk, state, e)
     }
+    judgeRangeCheck(walk, state, e)
     if (callsNothing(ctx, e)) {
       return
     }
@@ -3811,6 +4289,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
       walkArgument(walk, state, arg, target, at)
       at = at + 1
     }
+    judgeArrayLength(walk, state, e)
     applyCallEffects(walk, state, e) // a constructor body is a callee like any other
     return
   }
@@ -4990,9 +5469,11 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
 
 /**
  * Whether `node` holds anything `judge`, `judgeClampBound`, `judgeRange`,
- * `judgeDivision` or `judgePop` is ever called on: an element access, a call
- * spelled `.charCodeAt(...)`, `.substring(...)`, `.pop()` or `.spawn(...)` whatever its
- * receiver, a division, or a value entering a range. Read
+ * `judgeDivision`, `judgePop`, `judgeRangeCheck` or `judgeArrayLength` is ever
+ * called on: an element access, a call spelled `.charCodeAt(...)`,
+ * `.substring(...)`, `.pop()`, `.spawn(...)`, `.slice(...)`, `.set(...)` or
+ * `.fromBytes(...)` whatever its receiver, a buffer call, a `new`, a
+ * division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
  */
@@ -5009,9 +5490,22 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
     if (name === "charCodeAt" || name === "substring" || name === "pop" || name === "spawn") {
       return true
     }
+    // The range checks `judgeRangeCheck` reads.
+    if (name === "slice" || name === "set" || name === "fromBytes" || windowCallName(ctx, node).length > 0) {
+      return true
+    }
     if (isParallelMapInto(ctx, node)) {
       return true
     }
+    // An array's `slice`, once the checker has rewritten it into a template call.
+    const target = ctx.program.nodeCallees[node.id]
+    if (target !== null && isArraySliceInstance(target)) {
+      return true
+    }
+  }
+  // A `new Array<T>(n)` length (`judgeArrayLength`).
+  if (node.kind === NodeKind.New) {
+    return true
   }
   // A division is judged for its divisor (`judgeDivision`), whatever its type.
   if (

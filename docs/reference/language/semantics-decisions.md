@@ -1386,17 +1386,39 @@ are not all in `[0, length)`; and the second check of a compound store
 - *What proves it away:* a dominating `if (a.length > 0)`, the length fact the
   bounds proof already keeps (`tests/cases/panics_pop`)
 
-**`slice`**: `s.slice(a, b)`, `dst.set(src, at)`,
+**`slice`**: `s.slice(a, b)`, an array's `xs.slice(a, b)`, `dst.set(src, at)`,
 `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`,
-`netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the
-range outside the receiver
+`netWrite`, `netWrite2`, `writeBytes`, `readStdin`, `fileReadAt`,
+`udpSendTo` and `udpRecvFrom`: the range outside the receiver
 
-- *What proves it away:* nothing yet: `substring` clamps instead, and is not a
-  site; an array's `xs.slice` is not a `slice` site but a `call` reaching
-  `std/array.ts`'s `panic` ([Callback methods and
-  `slice`](builtins.md#callback-methods-and-slice)) (`tests/cases/panics_slice`,
-  `str_from_bytes_oob`, `reject_deny_panics_from_bytes`,
-  `io_write_bytes_bounds`, `net_write2_bounds`)
+- *What proves it away:* the bounds walk, at the call, in the state every
+  argument leaves: `0 <= start <= end <= length` for a `slice` and for
+  `String.fromBytes`, read from a guard such as
+  `if (start >= 0 && start <= end && end <= bytes.length)`, from literals the
+  length is known to reach (`if (2 <= bytes.length)` proves
+  `String.fromBytes(bytes, 0, 2)`), and from `start <= end` between two
+  locals, which a guard, a copy (`const from = i`) or an offset
+  (`const j = i + 1`) records, an increment of the larger keeps, and an
+  increment of the smaller or a decrement of the larger drops;
+  `dst.set(src)` or `dst.set(src, 0)` under `src.length <= dst.length`, and
+  no other offset yet; and a buffer window
+  `[off, off + len)` whose `off` is 0 and `len` within the buffer, whose
+  `len` is a literal `off` reaches that far below the length, or whose `len`
+  is the rest of the buffer, `buf.length - off`. Every bound is a literal, a
+  constant, a local, a `.length`, or a sum or difference of them, and no later
+  argument assigns or calls anything but a builtin integer conversion, since
+  the check reads the length after every argument has run. A proven check is left out of the IR, but for an
+  array's `slice`, whose check `std/array.ts` still makes and its caller does
+  not follow ([Callback methods and `slice`](builtins.md#callback-methods-and-slice)).
+  `substring` clamps instead, and is not a site (`tests/cases/panics_slice`,
+  `deny_panics_ranges`, `str_from_bytes_oob`, `io_write_bytes_bounds`,
+  `net_write2_bounds`; `reject_deny_panics_from_bytes`,
+  `reject_deny_panics_arr_slice`, `reject_deny_panics_array_slice`,
+  `reject_deny_panics_set_offset`, `reject_deny_panics_write_bytes`,
+  `reject_deny_panics_range_decrement`, `reject_deny_panics_range_increment`,
+  `reject_deny_panics_range_negative_start` and
+  `reject_deny_panics_range_rebound` and `reject_deny_panics_window_shrink`
+  stay refused)
 
 **`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
 when signed
@@ -1451,7 +1473,15 @@ integer, a `u32` under `--number-mode i32`)
   integer constant (as for `divide`) from 0 to 2^31 - 1 inclusive, one more
   than a named divisor or `&`/`>>>` operand is read up to, which is not checked
   and not a site (`tests/cases/panics_array_length`, `deny_panics_const_names`;
-  a negative constant stays refused, `reject_deny_panics_const_negative_length`)
+  a negative constant stays refused, `reject_deny_panics_const_negative_length`).
+  An `i32` length is checked only for being negative, since no `i32` passes
+  the limit, so the bounds walk proves it where the `new` runs once the
+  length is known non-negative: a local of a range from 0 such as
+  `integer<0, N>` (the call reads a ranged value as its base `i32`, so it is a
+  site, proven as it stands), a guard such as `if (n >= 0)`, or a literal, a
+  `.length` or a sum of them; the site is listed as proven and the IR has no
+  check (`deny_panics_ranges`; `reject_deny_panics_array_length_unguarded`
+  and `reject_deny_panics_array_length`, an `i64`, stay refused)
 
 **`panic`**: `panic(message)`
 

@@ -23,7 +23,7 @@ function sortWith<i32, ascending>(xs: i32[], cmp: void): i32[] -> @nish.sortWith
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$i32
   escaping: xs
-  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.9.ascending nish.mergePass$i32$fn.9.ascending nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.9.ascending nish.mergePass$i32$fn.9.ascending nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$i32#0 nish.insertionRun$i32$fn.9.ascending#1 nish.mergePass$i32$fn.9.ascending#1 nish.mergePass$i32$fn.9.ascending#0 nish.copyRun$i32#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -43,7 +43,7 @@ function sortWith<i32, (a, b) => ...>(xs: i32[], cmp: void): i32[] -> @nish.sort
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$i32
   escaping: xs
-  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.16.nish_main$arrow0 nish.mergePass$i32$fn.16.nish_main$arrow0 nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.16.nish_main$arrow0 nish.mergePass$i32$fn.16.nish_main$arrow0 nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$i32#0 nish.insertionRun$i32$fn.16.nish_main$arrow0#1 nish.mergePass$i32$fn.16.nish_main$arrow0#1 nish.mergePass$i32$fn.16.nish_main$arrow0#0 nish.copyRun$i32#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -60,10 +60,10 @@ function sortWith<i32, (a, b) => ...>(xs: i32[], cmp: void): i32[] -> @nish.sort
   callee +24:13 stepTo -> @nish.stepTo
   callee +27:5 copyRun<i32> -> @nish.copyRun$i32
 function sortWith<string, (a, b) => ...>(xs: string[], cmp: void): string[] -> @nish.sortWith$str$fn.16.nish_main$arrow1 [exported instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$str
   escaping: xs
-  calls: nish.copyRun$str nish.insertionRun$str$fn.16.nish_main$arrow1 nish.mergePass$str$fn.16.nish_main$arrow1 nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$str nish.insertionRun$str$fn.16.nish_main$arrow1 nish.mergePass$str$fn.16.nish_main$arrow1 nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$str#0 nish.insertionRun$str$fn.16.nish_main$arrow1#1 nish.mergePass$str$fn.16.nish_main$arrow1#1 nish.mergePass$str$fn.16.nish_main$arrow1#0 nish.copyRun$str#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -275,7 +275,7 @@ function (a, b) => ...(a: string, b: string): i32 -> @nish_main$arrow1
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sorted<string, (a, b) => ...>(xs: string[], cmp: void): string[] -> @sorted$str$fn.16.nish_main$arrow1 [instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sortWith$str$fn.16.nish_main$arrow1
   calls: nish.sortWith$str$fn.16.nish_main$arrow1
   pointer xs: size=0 writesThrough=true captured=false

@@ -1,2 +1,2 @@
 error: `slice` may panic here
-`slice` panics when its range is outside the string, and no proof removes that check yet: `substring` clamps the range instead
+`slice` panics when `[1, 3)` is outside `s`, and nothing proves it in range here: guard the call — `if (3 <= s.length)` proves it, or `substring` clamps the range instead

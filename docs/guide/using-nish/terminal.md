@@ -23,13 +23,13 @@ called whenever a frame may go out, and draws into the frame's `screen` (text
 cells) and `framebuffer` (pixels, when the options ask for one). This program
 bounces a square across the screen until you press `q`.
 
-The examples on this page build with
+Most examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays,
 slice buffers and move positions by sums the compiler cannot prove in range,
 and the `nish/term` code they reach keeps panic sites no proof removes yet. A
-guard such as `i < xs.length` before an index, or a bound on a position,
-proves your own code; the slices and the library calls build under the
-default once the standard library is made panic-free.
+guard such as `i < xs.length` before an index, a test of a slice's bounds, or
+a bound on a position, proves your own code; the library calls build under
+the default once the standard library is made panic-free.
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
@@ -335,8 +335,7 @@ This program prints the number of each key you press. It stops on `q`, on
 Ctrl-D, or when stdin ends or fails. Run it in a terminal and press an arrow key to see
 its three bytes.
 
-<!-- allow-panics: slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { isTerminal, readStdin, setRawMode, waitStdin } from "nish:term";
 

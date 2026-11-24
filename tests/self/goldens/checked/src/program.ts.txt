@@ -734,6 +734,15 @@ function StructInstantiation.constructor(this: StructInstantiation, template: St
   pointer info: size=184 writesThrough=true captured=true
   pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+function isArraySliceInstance(sig: FunctionSig): boolean -> @isArraySliceInstance [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isArrayModule nish_str_eq
+  pointer sig: size=224 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 instance: Instantiation | null (const)
+  local +4:9 template: TemplateInfo | null (const)
+  local +11:9 home: CheckedProgram (const)
+  callee +12:10 isArrayModule -> @isArrayModule
 function Instantiation.constructor(this: Instantiation, template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32): void -> @Instantiation.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: bindings nodeCount sig template typeArgs

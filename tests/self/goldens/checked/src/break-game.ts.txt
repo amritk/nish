@@ -2004,7 +2004,7 @@ function Floater.constructor(this: Floater): void -> @Floater.constructor [expor
 function BreakGame.constructor(this: BreakGame, seed: i32): void -> @BreakGame.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: seed
-  calls: Ball.constructor Capsule.constructor Floater.constructor LevelTuning.constructor RasterParticles.constructor View.constructor nish.Rng.constructor nish_alloc_struct nish_array_grow nish_panic
+  calls: Ball.constructor Capsule.constructor Floater.constructor LevelTuning.constructor RasterParticles.constructor View.constructor nish.Rng.constructor nish_alloc_struct nish_array_grow
   pointer this: size=328 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:19 new LevelTuning -> @LevelTuning.constructor

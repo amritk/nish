@@ -397,7 +397,10 @@ const emitSlice = (emitter: Emitter, expr: Node, str: string): string => {
   if (hasEnd) {
     to = emitIndex(emitter, args.children[1])
   }
-  emitSliceCheck(emitter, from, to, len, hasEnd, "slice")
+  // `src/bounds.ts` proved the range on the call (`judgeRangeCheck`).
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitSliceCheck(emitter, from, to, len, hasEnd, "slice")
+  }
   const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
   const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${from}`)
   return newString(emitter, at, n)
@@ -616,7 +619,10 @@ export const emitFromBytes = (emitter: Emitter, expr: Node): string => {
   const bytes = emitter.emitExpression(args[0])
   const from = emitIndex(emitter, args[1])
   const to = emitIndex(emitter, args[2])
-  emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
+  // `src/bounds.ts` proved the range on the call (`judgeRangeCheck`).
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
+  }
   const data = loadData(emitter, bytes)
   const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${from}`)
   const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
@@ -643,7 +649,10 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
     out.push("nish_str_new")
   } else if (name === "slice") {
     out.push("nish_str_new")
-    out.push("nish_panic_slice")
+    // `emitSlice` leaves out a range `src/bounds.ts` proved.
+    if (!proven) {
+      out.push("nish_panic_slice")
+    }
   } else if (name === "indexOf") {
     out.push("nish_str_index_of")
     out.push("nish_str_index_of_from")

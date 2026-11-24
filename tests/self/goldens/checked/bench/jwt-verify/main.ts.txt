@@ -799,7 +799,7 @@ function pbkdf2Finish(keyedOuter: Sha256, work: Sha256, out: u8[]): void -> @nis
 function pbkdf2HmacSha256Exposed(password: u8[], request: Pbkdf2Request): u8[] | null -> @nish.pbkdf2HmacSha256Exposed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacKeySha256
-  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8 nish_panic
+  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8
   pointer password: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
   pointer request: size=16 writesThrough=false captured=false
   stackSites=3 stackLocals=3
@@ -16347,7 +16347,7 @@ function claimsOf(shape: i32, t: i32): string -> @claimsOf
   local +0:9 iat: i32 (const)
 function asciiBytes(text: string): u8[] -> @asciiBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_index
+  calls: nish_panic_index
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)
@@ -16378,7 +16378,7 @@ function Token.constructor(this: Token, text: string): void -> @Token.constructo
   callee +0:18 asciiBytes -> @asciiBytes
 function keyBytes(a: Args): u8[] -> @keyBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: inputs nish_panic nish_panic_index
+  calls: inputs nish_panic_index
   pointer a: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 drawn: u8[] (const)
@@ -16454,7 +16454,7 @@ function midstateLoop(a: Args, raw: u8[], tokens: Token[]): i32 -> @midstateLoop
 function decodeServerLoop(a: Args, tokens: Token[]): i32 -> @decodeServerLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via now
-  calls: foldStart jvFoldTo jvStep nish_panic nish_panic_index nish_panic_overflow now report serverDecode
+  calls: foldStart jvFoldTo jvStep nish_panic_index nish_panic_overflow now report serverDecode
   pointer a: size=16 writesThrough=false captured=false
   pointer tokens: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0

@@ -13,7 +13,6 @@ declare noundef i32 @nish_poll_create() #0
 declare noundef i32 @nish_net_ring_state() #0
 declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish_send_fd(i32 noundef, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #2
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
 
 define noundef i32 @state() #0 {
 entry:
@@ -110,21 +109,8 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %buf.addr, align 8
   %4 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %5 = add i64 0, 8
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0
-  %7 = load i64, i64* %6, align 8
-  %8 = icmp ule i64 0, %5
-  %9 = icmp ule i64 %5, %7
-  %10 = and i1 %8, %9
-  br i1 %10, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %5, i64 %7)
-  unreachable
-
-net.ok:
-  %11 = call i32 @nish_net_read(i32 %h, %struct.nish_array* %4, i64 0, i64 8)
-  ret i32 %11
+  %5 = call i32 @nish_net_read(i32 %h, %struct.nish_array* %4, i64 0, i64 8)
+  ret i32 %5
 }
 
 define noundef i32 @writeOf(i32 noundef %h) #2 {
@@ -144,21 +130,8 @@ entry:
   store i8 1, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %buf.addr, align 8
   %6 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %7 = add i64 0, 1
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 0
-  %9 = load i64, i64* %8, align 8
-  %10 = icmp ule i64 0, %7
-  %11 = icmp ule i64 %7, %9
-  %12 = and i1 %10, %11
-  br i1 %12, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %7, i64 %9)
-  unreachable
-
-net.ok:
-  %13 = call i32 @nish_net_write(i32 %h, %struct.nish_array* %6, i64 0, i64 1)
-  ret i32 %13
+  %7 = call i32 @nish_net_write(i32 %h, %struct.nish_array* %6, i64 0, i64 1)
+  ret i32 %7
 }
 
 define noundef i32 @closeOf(i32 noundef %h) #2 {
@@ -199,27 +172,13 @@ entry:
   store i8 1, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %buf.addr, align 8
   %6 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %7 = add i64 0, 1
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 0
-  %9 = load i64, i64* %8, align 8
-  %10 = icmp ule i64 0, %7
-  %11 = icmp ule i64 %7, %9
-  %12 = and i1 %10, %11
-  br i1 %12, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %7, i64 %9)
-  unreachable
-
-net.ok:
-  %13 = call i32 @nish_send_fd(i32 %h, i32 0, %struct.nish_array* %6, i64 0, i64 1)
-  ret i32 %13
+  %7 = call i32 @nish_send_fd(i32 %h, i32 0, %struct.nish_array* %6, i64 0, i64 1)
+  ret i32 %7
 }
 
 attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #2 = { nounwind "probe-stack"="inline-asm" }
-attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}

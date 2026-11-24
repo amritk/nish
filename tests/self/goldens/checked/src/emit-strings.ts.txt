@@ -373,13 +373,13 @@ function emitSlice(emitter: Emitter, expr: Node, str: string): string -> @emitSl
   local +3:9 hasEnd: boolean (const)
   local +4:7 to: string (let)
   callee +6:10 emitIndex -> @emitIndex
-  callee +8:3 emitSliceCheck -> @emitSliceCheck
-  local +9:9 n: string (const)
-  callee +9:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local +10:9 at: string (const)
-  callee +10:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +10:69 stringData -> @stringData
-  callee +11:10 newString -> @newString
+  callee +10:5 emitSliceCheck -> @emitSliceCheck
+  local +12:9 n: string (const)
+  callee +12:13 IRFunction.emitValue -> @IRFunction.emitValue
+  local +13:9 at: string (const)
+  callee +13:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:69 stringData -> @stringData
+  callee +14:10 newString -> @newString
 function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): string -> @emitOccursAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -566,15 +566,15 @@ function emitFromBytes(emitter: Emitter, expr: Node): string -> @emitFromBytes [
   callee +2:16 emitIndex -> @emitIndex
   local +3:9 to: string (const)
   callee +3:14 emitIndex -> @emitIndex
-  callee +4:3 emitSliceCheck -> @emitSliceCheck
-  callee +4:37 loadLength -> @loadLength
-  local +5:9 data: string (const)
-  callee +5:16 loadData -> @loadData
-  local +6:9 at: string (const)
-  callee +6:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local +7:9 n: string (const)
-  callee +7:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +8:10 newString -> @newString
+  callee +6:5 emitSliceCheck -> @emitSliceCheck
+  callee +6:39 loadLength -> @loadLength
+  local +8:9 data: string (const)
+  callee +8:16 loadData -> @loadData
+  local +9:9 at: string (const)
+  callee +9:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local +10:9 n: string (const)
+  callee +10:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:10 newString -> @newString
 function stringConstructCallees(name: string, proven: boolean): string[] -> @stringConstructCallees [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_str_eq

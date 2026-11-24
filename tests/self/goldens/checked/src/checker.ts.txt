@@ -1372,7 +1372,7 @@ function shadowsGuardName(program: CheckedProgram, name: string): boolean -> @sh
   stackSites=0 stackLocals=0
   callee +0:28 guardNamesDeclared -> @guardNamesDeclared
   callee +2:34 guardNameBit -> @guardNameBit
-function rangeGuard(name: string, lo: i32, hi: i32): string -> @rangeGuard
+function rangeGuard(name: string, lo: i32, hi: i32): string -> @checker$.rangeGuard
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
@@ -1380,7 +1380,7 @@ function checkSurvivingRangeCheck(walk: PerfWalk, value: Node): void -> @checkSu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.performance
   escaping: value
-  calls: CheckContext.performance TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName nish_panic_index nish_str_concat perfLocalName rangeGuard
+  calls: CheckContext.performance TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName checker$.rangeGuard nish_panic_index nish_str_concat perfLocalName
   pointer walk: size=80 writesThrough=false captured=false
   pointer value: size=40 writesThrough=true captured=true passedTo=perfLocalName#1 CheckContext.performance#1
   stackSites=0 stackLocals=0
@@ -1397,7 +1397,7 @@ function checkSurvivingRangeCheck(walk: PerfWalk, value: Node): void -> @checkSu
   local +8:9 name: string (const)
   callee +8:30 perfLocalName -> @perfLocalName
   callee +10:5 CheckContext.performance -> @CheckContext.performance
-  callee +13:81 rangeGuard -> @rangeGuard
+  callee +13:81 rangeGuard -> @checker$.rangeGuard
   local +17:9 target: string (const)
   callee +17:27 perfLocalName -> @perfLocalName
   local +18:9 what: string (const)

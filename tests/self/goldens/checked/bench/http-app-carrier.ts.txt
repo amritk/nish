@@ -7224,8 +7224,7 @@ function urlIsUtf8(buf: u8[], off: i32, len: i32): boolean -> @nish.urlIsUtf8
   local +46:13 c: i32 (const)
   local +55:13 c: i32 (const)
 function urlBytesOf(s: string): u8[] | null -> @nish.urlBytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 bytes: u8[] (const)
@@ -11682,7 +11681,7 @@ function pbkdf2Finish(keyedOuter: Sha256, work: Sha256, out: u8[]): void -> @nis
 function pbkdf2HmacSha256Exposed(password: u8[], request: Pbkdf2Request): u8[] | null -> @nish.pbkdf2HmacSha256Exposed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacKeySha256
-  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8 nish_panic
+  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8
   pointer password: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
   pointer request: size=16 writesThrough=false captured=false
   stackSites=3 stackLocals=3
@@ -19910,9 +19909,9 @@ function chacha20CounterFits(counter: u32, len: i32): boolean -> @nish.chacha20C
   stackSites=0 stackLocals=0
   local +0:9 blocks: u64 (const)
 function chacha20QuarterRound(state: u32[], a: i32, b: i32, c: i32, d: i32): u32[] | null -> @nish.chacha20QuarterRound [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a b c d
-  calls: nish.chacha20Rotl nish_panic
+  calls: nish.chacha20Rotl
   pointer state: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 x: u32[] (const)
@@ -19939,7 +19938,7 @@ function chacha20(key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[] | null
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20XorInto
   escaping: counter
-  calls: nish.chacha20CounterFits nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish_panic
+  calls: nish.chacha20CounterFits nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.chacha20XorInto#1
@@ -42250,8 +42249,7 @@ function Order.constructor(this: Order): void -> @Order.constructor [constructor
   pointer this: size=80 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function bytesOf(s: string): u8[] -> @bytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 k: i32 (let)

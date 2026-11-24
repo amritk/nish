@@ -18,7 +18,7 @@ function total(xs: f64[]): f64 -> @total
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Grid.constructor nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_from_f64 nish_str_from_i32 startingWith$f64 startingWith$i32 total
+  calls: Grid.constructor nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_from_f64 nish_str_from_i32 startingWith$f64 startingWith$i32 total
   stackSites=2 stackLocals=2
   local +0:9 n: i32 (const)
   local +1:9 weights: f64[] (const)

@@ -608,7 +608,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
       }
     }
   } else if (rhs.kind === NodeKind.New) {
-    len = emitNewArrayLength(emitter, rhs.children[2].children[0], size)
+    len = emitNewArrayLength(emitter, rhs, size)
     const bytes = size === 1 ? len : emitter.fn.emitValue(`mul i64 ${len}, ${size}`)
     data = emitData(emitter, rhs, elem, -1, bytes)
     emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
@@ -1358,11 +1358,19 @@ const emitLengthCheck = (emitter: Emitter, ok: string): void => {
   fn.placeBlock(okBlock)
 }
 
-/** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
-const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
+/**
+ * `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked`
+ * says it must be and `src/bounds.ts` did not prove the `i32` non-negative
+ * (`judgeArrayLength`), the proof read off the `new` itself.
+ */
+const emitNewArrayLength = (emitter: Emitter, expr: Node, size: i32): string => {
+  const length = expr.children[2].children[0]
   const type = emitter.typeOf(length)
   const constant = emitter.program.nodeConstants[unwrapParens(length).id]
-  if (!newArrayLengthChecked(length, type, constant, emitter.opts.numberMode, emitter.table)) {
+  if (
+    !newArrayLengthChecked(length, type, constant, emitter.opts.numberMode, emitter.table) ||
+    emitter.program.nodeProvenIndex[expr.id]
+  ) {
     return emitIndex(emitter, length)
   }
   const fn = emitter.fn
@@ -1395,7 +1403,7 @@ const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string =
 export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.table.refOf(emitter.typeOf(expr))
   const size = elementSize(emitter, elem)
-  const n = emitNewArrayLength(emitter, expr.children[2].children[0], size)
+  const n = emitNewArrayLength(emitter, expr, size)
   const arr = emitHeader(emitter, n, expr)
   const bytes = size === 1 ? n : emitter.fn.emitValue(`mul i64 ${n}, ${size}`)
   // The slot's type spells the length out, so it has to come from the literal
@@ -2471,8 +2479,11 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const src = emitter.emitExpression(args[0])
   const at = args.length > 1 ? emitOffset(emitter, args[1]) : "0"
   const count = loadLength(emitter, src)
-  const end = fn.emitValue(`add i64 ${at}, ${count}`)
-  emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
+  // `src/bounds.ts` proved the range on the call (`judgeRangeCheck`).
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    const end = fn.emitValue(`add i64 ${at}, ${count}`)
+    emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
+  }
   const size = elementSize(emitter, elem)
   const bytes = size === 1 ? count : fn.emitValue(`mul i64 ${count}, ${size}`)
   const disjoint = emitter.program.nodeDisjointCopy[expr.id]

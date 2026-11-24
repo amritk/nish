@@ -72,53 +72,27 @@ entry:
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = trunc i64 %1 to i32
   %3 = sext i32 %2 to i64
-  %4 = add i64 0, %3
+  %4 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %3, %struct.nish_array* %from, %struct.nish_array* %meta)
+  store i32 %4, i32* %n.addr, align 4
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8
-  %7 = icmp ule i64 0, %4
-  %8 = icmp ule i64 %4, %6
-  %9 = and i1 %7, %8
-  br i1 %9, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
-  unreachable
-
-net.ok:
-  %10 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %3, %struct.nish_array* %from, %struct.nish_array* %meta)
-  store i32 %10, i32* %n.addr, align 4
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   br label %while.cond
 
 while.cond:
-  %13 = load i32, i32* %n.addr, align 4
-  %14 = icmp eq i32 %13, -11
-  br i1 %14, label %while.body, label %while.end
+  %7 = load i32, i32* %n.addr, align 4
+  %8 = icmp eq i32 %7, -11
+  br i1 %8, label %while.body, label %while.end
 
 while.body:
-  %15 = trunc i64 %12 to i32
-  %16 = sext i32 %15 to i64
-  %17 = add i64 0, %16
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
-  %19 = load i64, i64* %18, align 8
-  %20 = icmp ule i64 0, %17
-  %21 = icmp ule i64 %17, %19
-  %22 = and i1 %20, %21
-  br i1 %22, label %net.ok.1, label %net.fail.1
-
-net.fail.1:
-  call void @nish_panic_slice(i64 0, i64 %17, i64 %19)
-  unreachable
-
-net.ok.1:
-  %23 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %16, %struct.nish_array* %from, %struct.nish_array* %meta)
-  store i32 %23, i32* %n.addr, align 4
+  %9 = trunc i64 %6 to i32
+  %10 = sext i32 %9 to i64
+  %11 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %10, %struct.nish_array* %from, %struct.nish_array* %meta)
+  store i32 %11, i32* %n.addr, align 4
   br label %while.cond
 
 while.end:
-  %24 = load i32, i32* %n.addr, align 4
-  ret i32 %24
+  %12 = load i32, i32* %n.addr, align 4
+  ret i32 %12
 }
 
 define internal noundef zeroext i1 @intact(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %n) #1 {

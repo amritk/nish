@@ -4172,7 +4172,7 @@ function pbkdf2Finish(keyedOuter: Sha256, work: Sha256, out: u8[]): void -> @nis
 function pbkdf2HmacSha256Exposed(password: u8[], request: Pbkdf2Request): u8[] | null -> @nish.pbkdf2HmacSha256Exposed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacKeySha256
-  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8 nish_panic
+  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8
   pointer password: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
   pointer request: size=16 writesThrough=false captured=false
   stackSites=3 stackLocals=3
@@ -5734,8 +5734,7 @@ function urlIsUtf8(buf: u8[], off: i32, len: i32): boolean -> @nish.urlIsUtf8
   local +46:13 c: i32 (const)
   local +55:13 c: i32 (const)
 function urlBytesOf(s: string): u8[] | null -> @nish.urlBytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 bytes: u8[] (const)
@@ -6236,8 +6235,7 @@ function startupStream(): u8[] -> @startupStream
   callee +12:3 Bytes.byte -> @Bytes.byte
   callee +13:3 Bytes.message -> @Bytes.message
 function ascii(s: string): u8[] -> @ascii
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)

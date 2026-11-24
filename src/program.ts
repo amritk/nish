@@ -819,6 +819,28 @@ export class StructInstantiation {
  * that instantiates something and nothing at all on one that does not, and it
  * needs no invariant about how the parser hands out ids.
  */
+/**
+ * Whether `sig` is an instance of `std/array.ts`'s `slice` or `sliceFrom`,
+ * what `xs.slice(a, b)` and `xs.slice(a)` compile to. Its range check is its
+ * one panic, in `sliceOutOfRange`, and `src/bounds.ts` judges that range at
+ * the call, as `s.slice` is judged (`PANIC_SLICE` in `src/panics.ts`).
+ */
+export const isArraySliceInstance = (sig: FunctionSig): boolean => {
+  const instance = sig.instance
+  if (instance === null) {
+    return false
+  }
+  const template = instance.template
+  if (template === null || template.owner !== null) {
+    return false
+  }
+  if (template.sourceName !== "slice" && template.sourceName !== "sliceFrom") {
+    return false
+  }
+  const home = template.home.program
+  return isArrayModule(home.packageName, home.source.path)
+}
+
 export class Instantiation {
   /**
    * The generic function or generic method this specialises (a *request*), or

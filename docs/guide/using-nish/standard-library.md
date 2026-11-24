@@ -237,8 +237,9 @@ default until the library is made panic-free. Many examples also index
 arrays, add numbers or size new arrays without a guard the compiler reads,
 which a test such as `i < xs.length` before an index, or a bound on a sum or
 a length, proves in your own code; a few copy a range of bytes (`set`,
-`String.fromBytes`), which no proof covers yet, or call `panic`, which no
-proof removes.
+`String.fromBytes`) whose bounds they do not test, which a guard such as
+`start >= 0 && start <= end && end <= bytes.length` proves, or call `panic`,
+which no proof removes.
 
 <!-- allow-panics: does integer arithmetic nothing bounds; calls `std/testing.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
@@ -1298,8 +1299,7 @@ compare values, not doubles, and `0.3` is a multiple of `0.1` though
 `0.3 / 0.1` is `2.9999999999999996`. This module reads the decimal digits
 themselves and never makes an `f64`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_NUMBER_ERR_GAP, jsonNumberCanonical, jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number";
 

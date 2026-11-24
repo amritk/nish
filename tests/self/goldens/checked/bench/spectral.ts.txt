@@ -41,7 +41,7 @@ function mulAtAv(n: i32, v: f64[], out: f64[], tmp: f64[]): void -> @mulAtAv
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: llvm.sqrt.f64 mulAtAv nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_from_f64
+  calls: llvm.sqrt.f64 mulAtAv nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_f64
   stackSites=0 stackLocals=0
   local +0:9 N: i32 (const)
   local +1:9 u: f64[] (const)

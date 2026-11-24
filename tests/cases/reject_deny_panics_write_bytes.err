@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`writeBytes` panics when `[off, off + n)` is outside `buf`, and nothing proves it in range here: pass an offset of 0 and guard the count — `if (n >= 0 && n <= buf.length)` proves it — or pass the rest of the buffer, `buf.length - off`, with `off` guarded by `if (off >= 0 && off <= buf.length)`
