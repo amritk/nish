@@ -29,6 +29,15 @@
 // either closer frees the number, so either must end the direct wait's
 // watch on it.
 //
+// With `trickle`: a child (this program, `trickler <port>`) connects 16
+// clients, and once they are accepted writes one byte on each, 10 ms apart.
+// One wait for 16 with a `maxWaitMs` of 400 must take all 16. tests/run.js
+// runs it with NISH_URING_STATS=1: the program raises SIGUSR1 on itself
+// before and after the wait, and the two `signal` lines' `enters` and
+// `window_waits` show how often the window entered the ring and pumped. A
+// window that waits on the ring wakes once per byte; one that sleeps in
+// slices pumps at most eight times.
+//
 // Exit 0 is a pass, 2 says the kernel refused rings (the section's skip), 5
 // that the UDP socket did not take the closed number (`reuse`'s skip), and 1
 // is a failure, with its line.
@@ -126,6 +135,92 @@ const killer = (pid: i32): i32 => {
   return kill(pid, 15) === 0 ? 0 : 1
 }
 
+/**
+ * The `trickler` mode: connect `CLIENTS` clients to `port`, then, after
+ * 300 ms, write one byte on each, 10 ms apart, and hold them for 2 s.
+ * @param port the listener's port
+ * @returns the exit status
+ */
+const trickler = (port: i32): i32 => {
+  const addr: u8[] = new Array<u8>(18)
+  netAddress(addr, "127.0.0.1", port)
+  const clients: i32[] = new Array<i32>(CLIENTS)
+  for (let i: i32 = 0; i < CLIENTS; i++) {
+    clients[i] = tcpConnect(addr)
+    if (clients[i] < 0) {
+      return 1
+    }
+  }
+  const idle: i32 = pollCreate()
+  const ready: i32[] = new Array<i32>(2)
+  pollWait(idle, ready, 300)
+  const one: u8[] = [120]
+  for (let i: i32 = 0; i < CLIENTS; i++) {
+    if (netWrite(clients[i], one, 0, 1) !== 1) {
+      return 1
+    }
+    pollWait(idle, ready, 10)
+  }
+  pollWait(idle, ready, 2000)
+  return 0
+}
+
+/**
+ * The `trickle` mode: one batch window while 16 bytes trickle in.
+ * @param loop the loop, holding the listener
+ * @param listener the ring listener
+ * @returns the exit status
+ */
+const trickle = (loop: i32, listener: i32): i32 => {
+  const pid: string | null = realpathSync("/proc/self")
+  const self: string | null = realpathSync("/proc/self/exe")
+  if (pid === null || self === null) {
+    console.log("/proc/self could not be read")
+    return 1
+  }
+  const me: i32 = parseInt(pid.substring(6))
+  if (spawn([self, "trickler", `${netLocalPort(listener)}`]) <= 0) {
+    console.log("the trickler did not start")
+    return 1
+  }
+  const ready: i32[] = new Array<i32>(128)
+  const peer: u8[] = new Array<u8>(18)
+  const buf: u8[] = new Array<u8>(64)
+  let accepted: i32 = 0
+  while (accepted < CLIENTS) {
+    const n: i32 = pollWait(loop, ready, 2000)
+    if (n <= 0) {
+      console.log(`a wait for the trickler's clients answered ${n} with ${accepted} accepted`)
+      return 1
+    }
+    let h: i32 = tcpAccept(listener, peer)
+    while (h >= 0) {
+      accepted += 1
+      pollAdd(loop, h, 1, h)
+      h = tcpAccept(listener, peer)
+    }
+  }
+  // The `signal` line before the window: the next pump prints it.
+  kill(me, 10)
+  if (pollWait(loop, ready, 0) !== 0) {
+    console.log("a byte came before the window")
+    return 1
+  }
+  // The first byte opens the window; the other 15 come within 160 ms of it.
+  const t0: i64 = monotonicNanos()
+  const n: i32 = pollWaitBatch(loop, ready, 2000, CLIENTS, 400)
+  const took: i64 = since(t0)
+  const read: i32 = take(ready, n, buf)
+  kill(me, 10)
+  pollWait(loop, ready, 0)
+  if (n !== CLIENTS || read !== CLIENTS) {
+    console.log(`a wait for 16 with 16 bytes trickling in answered ${n} pairs and ${read} bytes`)
+    return 1
+  }
+  console.log(`trickle: one wait for 16 took 16 bytes that came 10 ms apart, in ${took} ms`)
+  return 0
+}
+
 /** The token a UDP socket is reported under. */
 const DATAGRAM: i32 = -3
 
@@ -209,6 +304,9 @@ export const main = (): i32 => {
   if (mode === "killer") {
     return killer(args.length > 2 ? parseInt(args[2]) : 0)
   }
+  if (mode === "trickler") {
+    return trickler(args.length > 2 ? parseInt(args[2]) : 0)
+  }
   const listener: i32 = tcpListenFlags("127.0.0.1", 0, 64, NET_LISTEN_RING)
   if (listener < 0) {
     console.log(`tcpListenFlags failed with ${listener}`)
@@ -226,6 +324,9 @@ export const main = (): i32 => {
   pollAdd(loop, listener, 1, LISTENER)
   if (mode === "reuse" || mode === "reusefile") {
     return reuse(loop, mode === "reusefile")
+  }
+  if (mode === "trickle") {
+    return trickle(loop, listener)
   }
   const sig: i32 = mode === "signal" ? signalFd() : -1
   if (mode === "signal") {

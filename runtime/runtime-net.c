@@ -76,6 +76,7 @@ typedef int nish_net_unused;
 #if defined(__linux__)
 #include <linux/filter.h>
 #include <netinet/udp.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/epoll.h>
@@ -1118,12 +1119,18 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
 #endif
 
 #if defined(__linux__)
-/* A batch's second wait: `n` pairs are in `out`, and it waits on the one live
-   set's ring, up to `max_wait_ms`, until `min` are ready or `max` fill it. It
-   reads no epoll set, so an ordinary descriptor that becomes ready meanwhile
-   waits for the next call, at most `max_wait_ms`; on a direct loop the
-   ring's poll on `signalFd()` ends the batch as soon as it answers, and the
-   next call reports it. */
+/* A batch's second wait: `n` pairs are in `out`, and it sleeps on the one
+   live set, up to `max_wait_ms`, until `min` are ready or `max` fill it. It
+   sleeps in at most eight slices, each an eighth of `max_wait_ms` rounded
+   up, without entering the ring, and after each slice pumps the set once and
+   collects once, so a window costs at most eight pumps however its
+   completions trickle in: a wait on the ring itself would wake, run its
+   deferred task work and pump once per completion, sends' included. Its `min` is checked
+   at the end of a slice, so a window can outlast the moment `min` became
+   ready by up to one slice. It reads no epoll set, so an ordinary descriptor
+   that becomes ready meanwhile waits for the next call, at most
+   `max_wait_ms`; on a direct loop the slice's poll(2) on `signalFd()` ends
+   the batch as soon as it answers, and the next call reports it. */
 static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int32_t max_wait_ms) {
   struct nr_set *S = NULL;
   for (int32_t i = 0; i < nr_nsets; i++) {
@@ -1141,23 +1148,18 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
   int32_t watch = -1;
   int direct = nr_direct(loop, &watch) == S;
   int64_t end = nr_now_ms() + max_wait_ms;
+  int64_t slice = (max_wait_ms + 7) / 8;
   S->windows++;
   while (n < min && n < max) {
     int64_t left = end - nr_now_ms();
     if (left <= 0) break;
     S->window_waits++;
-    int rc = direct ? nish_uring_wait_direct(S->u, watch, min - n, (int32_t)left) : -EOPNOTSUPP;
-    if (rc == -EOPNOTSUPP) {
-      struct nish_uring_event ev[NR_EVENTS];
-      int k = nish_uring_wait(S->u, (int32_t)left, ev, NR_EVENTS);
-      if (k < 0) break;
-      for (int i = 0; i < k; i++) nr_dispatch(S, &ev[i]);
-    } else if (rc < 0) {
-      break;
-    }
+    /* poll(2) ignores a negative descriptor, so with no watch this sleeps. */
+    struct pollfd p = {direct ? watch : -1, POLLIN, 0};
+    int woke = poll(&p, 1, (int)(left < slice ? left : slice)) > 0;
     nr_pump(S);
     n += nr_collect_from(loop, out + 2 * n, max - n, 1);
-    if (direct && watch >= 0 && nish_uring_poll_events(S->u, 0)) break;
+    if (woke) break;
   }
   return n;
 }

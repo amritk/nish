@@ -36647,6 +36647,34 @@ server.on("exit", (code, sig) => {
         )
       }
     }
+    // `batch.ts trickle`: 16 bytes arrive 10 ms apart into one wait for 16
+    // with a maxWaitMs of 400. Its two `signal` stats lines, before and after
+    // the wait, bound what the window did: it sleeps in at most eight slices
+    // and pumps once after each, so it pumps at most 8 times and enters the
+    // ring fewer times than bytes arrived. A window that waits on the ring
+    // wakes, enters and pumps once per byte: 15 waits and 30 enters or more.
+    const tr = bb.exe === null ? null : spawnSync(bb.exe, ["trickle"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const trName = "net_ring: a pollWaitBatch window that bytes trickle into pumps at most 8 times and enters the ring fewer times than bytes came"
+    if (tr !== null && tr.status === 2) {
+      skip(`${trName}: the kernel refused rings`)
+    } else {
+      const lines = [...(tr?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* enters=(\d+) windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        trName,
+        tr !== null &&
+          tr.status === 0 &&
+          tr.stdout.includes("trickle: one wait for 16 took 16 bytes") &&
+          a !== null &&
+          b[1] - a[1] === 1 &&
+          b[2] - a[2] >= 1 &&
+          b[2] - a[2] <= 8 &&
+          b[0] - a[0] < 16,
+        tr === null ? `does not build\n${shown(bb.c)}` : `signal ${tr.signal}\n${shown(tr)}`
+      )
+    }
   }
 }
 
