@@ -3920,6 +3920,24 @@ The verdict statistic is the median.
 **With a request's setup on every call, the cursors are still faster than the SQL: 3,434 ns less a call.** That is larger than both noise bands (564 and 46) and the four IQRs (1,208, 624, 2,346 and 1,370).
 
 **The setup a per-request open adds is derived, not measured: `feed-cursor` less `feed-cursor-walk` is 2,116 ns at the median (1,676 ns at the min).** It is the difference of two rows of the table, not a timed row of its own. It is larger than both of their noise bands (54 and 46) but smaller than the IQRs of `feed-cursor` (2,346) and of `feed-cursor-walk`'s copy (2,809), so this run does not resolve it beyond those spreads.
+
+### One slot lookup per cursor call
+
+A cursor call used to look its handle up and then ask SQLite whether the read had ended (`sqlite3_get_autocommit` and the `main` B-tree's transaction state). It now looks the slot up once and locks the mutex the cursor kept at open; a rollback hook invalidates the cursors when SQLite rolls a read back on its own ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md#transactions-and-invalidation)). Both cursor workloads reach it on every call of the walk: `first`, `next`, `rowid`, `seekRowid`, `keyReset`, `keyI64`, `seek` and `columnInto` (`bench/sqlite/main.ts`, `walkFeed`).
+
+`node bench/sqlite/run.mjs --rounds 12 --base origin/main` with the bench code of commit `6685b628`, base `99d670d3` (`main.ts` built on that commit's `std/` and `runtime/`, timed in the same rounds), on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Base min / median (IQR) | Noise band, min / median | Base less build, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `feed` (SQL) | 20,312 / 21,963 (3,247) | 20,604 / 21,564 (1,245) | 20,686 / 22,020 (2,718) | 292 / 398 | +374 / +58 |
+| `feed-cursor-walk` | 13,671 / 14,338 (1,775) | 13,760 / 14,963 (2,428) | 14,417 / 15,932 (4,323) | 89 / 625 | +745 / +1,594 |
+| `feed-cursor` | 16,384 / 17,397 (2,162) | 16,472 / 17,711 (4,657) | 16,912 / 18,113 (3,476) | 88 / 315 | +529 / +716 |
+
+**The walk is 1,594 ns a call faster than the base at the median (11.1 % of the build's median), and 745 ns at the min.** Both are larger than its noise band (625 and 89), but the median is smaller than the IQRs of the copy (2,428) and the base (4,323), so this run does not resolve it beyond those spreads.
+
+**With a request's setup on every call, the gain is 716 ns at the median (4.1 %) and 529 ns at the min.** Both are larger than the noise band (315 and 88) and smaller than every IQR of the row. `feed`, which makes no cursor call, moved 58 ns at the median, inside its 398 ns band.
+
+The whole machine ran slower in this run than in the one above (`feed` 21,963 against 18,082 ns at the median), so its figures compare with each other, not with that table.
 <!-- sqlite-cursor:end -->
 
 <!-- sqlite-pgo:begin -->
