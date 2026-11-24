@@ -102,7 +102,37 @@ transaction around many statements (insert-txn) already pays them once.
 
 ### Time
 
-The timed run of `node bench/sqlite/run.mjs --variant unix-excl` is recorded here when it finishes.
+`node bench/sqlite/run.mjs --variant unix-excl` (12 rounds, bench code of
+commit `f3a10584`) times a byte-identical copy of the Nish build opened on
+`file:<db>?vfs=unix-excl` in the same rounds as the build on the plain path.
+WAL and `synchronous=NORMAL` are the seed's on both. Medians, ns per call; the
+band is the build against its own copy. The full table is in
+[BENCHMARKS.md](BENCHMARKS.md#sqlites-unix-excl-vfs-against-the-default).
+
+| Workload | unix | unix-excl | unix-excl − unix | Band |
+| --- | --- | --- | --- | --- |
+| lookup | 6,206 | 5,611 | −595 (−9.6%) | 78 (1.3%) |
+| feed | 18,281 | 17,632 | −649 (−3.6%) | 365 (2.0%) |
+| feed-cursor-walk | 12,704 | 12,692 | −12 (−0.1%) | 107 (0.8%) |
+| feed-cursor | 16,981 | 14,241 | −2,740 (−16.1%) | 1,969 (11.6%) |
+| insert | 16,992 | 15,394 | −1,598 (−9.4%) | 1,223 (7.2%) |
+| insert-txn | 5,336 | 5,451 | +115 (+2.2%) | 56 (1.0%) |
+
+The run's "unix-excl − unix" line prints −1,599 ns for insert, the difference
+of the two unrounded medians.
+
+- **A point lookup and an autocommit insert are about 9.5% faster.** Both
+  gaps are past the band and past both sides' IQRs (574 and 338 for lookup,
+  1,308 and 788 for insert). These are the workloads that pay the lock calls
+  on every call.
+- **The SQL feed and the per-call cursor feed are faster by more than the
+  band but less than an IQR.** The feed's IQR on the plain path is 3,320, and
+  `feed-cursor`'s is 5,562, so this run does not separate them from noise.
+- **One read transaction (`feed-cursor-walk`) does not move**, as the
+  system-call counts predict.
+- **insert-txn is 115 ns slower, past its 56 ns band but inside both IQRs
+  (478 and 423).** It makes the same system calls on both VFSes, so this run
+  does not show a cost and cannot bound one smaller than its spread.
 
 ## Why opt-in, not the default
 

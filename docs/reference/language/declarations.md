@@ -5019,6 +5019,13 @@ export const main = (): i32 => {
   `begin()`, `commit()` and `rollback()` are `exec` of `BEGIN`, `COMMIT` and
   `ROLLBACK`; pragmas, such as `journal_mode=WAL`, are SQL too. A binding is
   copied by SQLite, and `reset` keeps the bindings.
+- **`OPEN_URI` reads the name as a `file:` URI**, so its parameters reach
+  SQLite: `file:app.db?vfs=unix-excl` opens the file on SQLite's `unix-excl`
+  VFS. That VFS holds the file's lock from the first statement until the
+  connection closes, keeps a WAL database's index in memory rather than a
+  `-shm` file, and makes any other process that reads the file answer
+  `SQLITE_BUSY`. Under `--profile wasi` it answers `SQLITE_IOERR_LOCK`. An
+  unknown VFS name fails the open ([docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md)).
 - **A handle is an `i32`** into tables the C adapter keeps per thread. `close`
   finalizes every statement the connection still has, and a handle used after
   `close` or `finalize` answers `SQLITE_MISUSE` rather than reaching freed
