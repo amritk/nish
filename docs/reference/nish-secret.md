@@ -111,8 +111,8 @@ or a string. `secureZero` is the global for a bare `u8[]` that never was a
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret
-and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-secret-field
+Rules: [Secrets: `nish:secret`](language/builtins.md#secrets-nishsecret)
+and [A `Secret` field](language/builtins.md#a-secret-field)
 
 ## Functions
 

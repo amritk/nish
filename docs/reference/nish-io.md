@@ -79,8 +79,8 @@ is on every host, and is the route for bytes that are not text.
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtin-modules-nish
-and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#console
+Rules: [Builtin modules (`nish:`)](language/builtins.md#builtin-modules-nish)
+and [`console`](language/builtins.md#console)
 
 ## Functions
 

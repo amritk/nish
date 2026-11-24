@@ -5,11 +5,11 @@ under the names and the rules of JavaScript's
 [`Temporal`](https://tc39.es/proposal-temporal/docs/). A program that uses it
 reads them the same way natively and under Node. It is written in Nish and
 imported like any other library module
-([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+([`export` and `import`](../../reference/language/declarations.md#export-and-import)).
 Its reference is [`nish/temporal`](../../reference/temporal.md).
 
 The language has no `Date` object: `Date.now()` is the only member it keeps
-([the clock](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
+([the clock](../../reference/language/builtins.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
 For anything beyond a timestamp in milliseconds, use this module.
 
 ## Five types

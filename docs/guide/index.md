@@ -180,6 +180,6 @@ and the language specification.
   [tokens from an OpenID Connect issuer](using-nish/oidc.md).
 
 This guide teaches; it is not the definition of the language. That is the
-[language reference](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md), and each page here links the section of
+[language reference](../reference/language.md), and each page here links the section of
 it that governs what the page describes. Where the two disagree, the reference
 is right and the guide has a bug.

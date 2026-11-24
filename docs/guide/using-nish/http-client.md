@@ -8,7 +8,7 @@ does the same without blocking the process, so other tasks run while it waits
 `nish/net/http1-client-codec`, below it, is the protocol alone: it writes a
 request's head and reads the response, bytes in and events out, and opens no
 socket, for a program that runs its own loop. Both are imported like any other
-library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+library module ([`export` and `import`](../../reference/language/declarations.md#export-and-import)).
 
 ## Fetching a URL
 

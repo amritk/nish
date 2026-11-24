@@ -202,8 +202,8 @@ another goes through the same temporary and rename.
 
 </scalar-detail>
 
-The rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#file-io
-and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses
+The rules: [File I/O](language/builtins.md#file-io)
+and [Directories and subprocesses](language/builtins.md#directories-and-subprocesses)
 
 ## Functions
 

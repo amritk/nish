@@ -412,7 +412,7 @@ freestanding wasm module.
 A module keeps its state in [module storage](../language/arrays-and-strings.md#module-storage),
 and under `--profile wasm-host` that storage is memory the page can read and
 write directly, with no call into the module
-([Host modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#host-modules-the-functions-a-page-supplies)).
+([Host modules](../../reference/language/declarations.md#host-modules-the-functions-a-page-supplies)).
 The loaded module carries two things for it, and `--emit-dts` types both:
 
 - **`layout`** has one entry per storage, under its name:
@@ -557,7 +557,7 @@ that.
   where you would call `nish_arena_release(mark)`; releasing frees what the
   roots reach.
 
-The rules and the IR: [LANGUAGE.md → Root storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#root-storage-an-object-graph-kept-between-calls).
+The rules and the IR: [LANGUAGE.md → Root storage](../../reference/language/declarations.md#root-storage-an-object-graph-kept-between-calls).
 
 ### Lending an array to the page
 
@@ -882,7 +882,7 @@ the host must not write through it.
 
 A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
-[Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
+[Interop](../../reference/language/result-and-error-handling.md#interop) for which `Result`s each host takes.
 
 An enum does not cross. A function that takes or returns a numeric enum is
 left out of the header and the typings, and each writes a comment naming
@@ -998,7 +998,7 @@ dependency still needs the `ffi` capability to call its C:
 
 `nish/sqlite` needs none of this: the standard library links SQLite itself
 when a program calls it. What a link can and cannot confine is recorded in
-[`docs/security/package-link.md`](https://github.com/amritk/nish/blob/main/docs/security/package-link.md).
+[`docs/security/package-link.md`](../../security/package-link.md).
 
 Without a `package.json`, your own C still goes on the build line beside the
 runtime:
@@ -1322,7 +1322,7 @@ then releases the arenas. A panic or `process.exit` ends
 the process without the close; the operating system takes the descriptor
 back, but a bounds panic does not flush what C still buffers, so call
 `fflush` on a `FILE *` you wrote before code that may panic. The rules are in
-[A handle class](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
+[A handle class](../../reference/language/declarations.md#a-handle-class-a-class-that-owns-a-cptr).
 
 A C function that fills a struct takes it through a pointer, and a
 `declare class` is that struct. Its fields are laid out in the order you write
@@ -1418,7 +1418,7 @@ field is part of the struct, not a Nish array: you cannot hold it in a
 variable, pass it to a function, read its `.length` or walk it with
 `for...of`, and you write it one element at a time. Unions and bitfields
 still have no spelling, so a struct with one stays out of reach. The rules
-are in [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+are in [A `declare class`](../../reference/language/declarations.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
@@ -1426,7 +1426,7 @@ writes the fields until it returns, and may not keep the address. A
 it cannot be an array element or built from an object literal. A parameter
 typed `Rlimit | null` passes `NULL` for `null`, under the same rule as a
 `CPtr | null`. The rules are in
-[A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+[A `declare class`](../../reference/language/declarations.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A C function that answers a pointer to a struct it owns, such as `localeconv`
 or `gmtime`, often answers the same static buffer every call. `readStruct`
@@ -1463,7 +1463,7 @@ capability, and a build with `--deny unsafe` refuses it. A
 `CPtr` field is copied as C's address, not followed, so read what it points
 at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
-[`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+[`readStruct`](../../reference/language/declarations.md#readstruct-a-struct-out-of-memory-c-owns).
 
 Many C libraries hand out a pointer to a struct they never show you:
 `sqlite3 *`, `FILE *`, `DIR *`. A `declare class` with no fields is that
@@ -1514,7 +1514,7 @@ did that now gets the error above: declare the C function that makes the
 value, or give the class the fields C lays out.
 
 The rules are in
-[An opaque `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type).
+[An opaque `declare class`](../../reference/language/declarations.md#an-opaque-declare-class-a-c-pointer-type).
 
 A C function that fails through `errno` is checked with `cErrno` from
 `nish:unsafe`. It answers the errno the most recent `declare function` call on
@@ -1548,10 +1548,10 @@ Each thread reads its own. A program that never names `cErrno` pays nothing;
 one that does pays a store and a load around every C call in the program. A
 wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
 there. The rules are in
-[`cErrno`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#cerrno-the-errno-a-c-call-left).
+[`cErrno`](../../reference/language/declarations.md#cerrno-the-errno-a-c-call-left).
 
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
 everything that calls it. The rules are in
-[Calling C](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#calling-c).
+[Calling C](../../reference/language/declarations.md#calling-c).

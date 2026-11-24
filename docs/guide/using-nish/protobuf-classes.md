@@ -6,7 +6,7 @@ fields, a test of each field number, a typed read. `nish proto` writes those
 loops for you. It reads a proto3 file and writes one Nish module with a class
 per message, each with an `encode` onto a `ProtoWriter` and a `decode` from a
 `ProtoReader`. You check the module in and import it like any other
-([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import));
+([`export` and `import`](../../reference/language/declarations.md#export-and-import));
 the `.proto` file is only read again when you regenerate.
 
 ```console

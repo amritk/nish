@@ -122,7 +122,7 @@ while the program is stopped and enters raw mode again on `fg`.
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishterm-terminal-input
+Rules: [`nish:term`: terminal input](language/builtins.md#nishterm-terminal-input)
 
 ## Functions
 
