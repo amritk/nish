@@ -162,7 +162,8 @@ if (baseRev !== null) {
 // (`noTwin`). feed-cursor-walk opens its transaction and cursors once, outside
 // the timed loop; feed-cursor opens and closes them on every call.
 // feed-cursor-row is feed-cursor-walk with each post's and author's columns
-// read by one Cursor.readRow call, timed in the same rounds.
+// read by one Cursor.readRow call, each cursor's columns chosen by
+// Cursor.selectRow once, outside the timed loop, timed in the same rounds.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
