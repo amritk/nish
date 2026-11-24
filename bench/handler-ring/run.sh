@@ -20,15 +20,18 @@
 #   bash bench/handler-ring/run.sh --conns "18000 96000" --designs "ring ring-copy" \
 #     --min-events "1 64 256" --max-wait-ms 1
 #
-# --min-events "M ..." runs each ring design (ring, ring-copy, ring-base) once
-# per M, as the design ring@M with BENCH_MIN_EVENTS=M and
+# --min-events "M ..." runs ring and ring-copy once per M (whole numbers, no
+# leading zero, none twice), as the design ring@M with BENCH_MIN_EVENTS=M and
 # BENCH_MAX_WAIT_MS=--max-wait-ms (default 0): `HttpHandler.wait` waits up to
 # that many ms for M events a turn (`pollWaitBatch`), and M = 1 is the plain
 # `pollWait` loop. The runtime caps a batch at 64 events, so an M above 64
 # waits as 64 does. Every ring@M runs in each round's rotated order with the
 # other designs, and the summary prints each ring@M against ring@1: the p50
 # and p99 the batch adds, its CPU per request, and the band between ring@1
-# and ring-copy@1.
+# and ring-copy@1. ring-base runs once, as ring-base@1: it is built from
+# base-source.sh's copy of server.ts, without the lines that set the batch
+# fields, so a --base-compiler whose std predates them builds it, and it
+# prints no `batch` line.
 #
 # --nodb runs every server with BENCH_NODB=1: /plaintext answers its 129 bytes
 # without a query, so the CPU a request costs is the handler's and the
@@ -54,12 +57,14 @@
 # Http1Server's head + body go out through the ring's sends. ring-copy is
 # ring's byte-identical copy, its noise band.
 #
-# --base-compiler NISH builds the same two sources a second time with another
+# --base-compiler NISH builds the two sources a second time with another
 # compiler (an older checkout's build/nish, which links that checkout's
-# runtime/), and the designs ring-base and h1-ring-base run those builds as
-# ring and h1-ring do, interleaved with them in every round. The summary
-# then prints each design against its -base build beside the band between
-# the design and its copy: a before/after of a runtime or compiler change.
+# runtime/; server.ts goes through base-source.sh first, so its std need not
+# have the batch fields), and the designs ring-base and h1-ring-base run
+# those builds as ring and h1-ring do, interleaved with them in every round.
+# The summary then prints each design against its -base build beside the
+# band between the design and its copy: a before/after of a runtime or
+# compiler change.
 #
 # Packets per response: segs.c (built here) samples /proc/net/snmp's Tcp
 # OutSegs and InSegs every 10 ms while the load runs, and each round's line
@@ -144,11 +149,19 @@ fi
 
 # HandlerLimits refuses a minEvents under 1 and a maxWaitMs outside 0 to
 # 1000; refuse them here, before a build, rather than as a server that dies.
+# A leading zero or a repeat would name one batch size by two labels (064 and
+# 64 both run minEvents 64), so both are refused too.
+seen_m=" "
 for m in $min_events; do
-  if ! [[ $m =~ ^[0-9]+$ ]] || [ "$m" -lt 1 ]; then
-    echo "run.sh: --min-events takes whole numbers of at least 1, not $m" >&2
+  if ! [[ $m =~ ^[1-9][0-9]*$ ]]; then
+    echo "run.sh: --min-events takes whole numbers of at least 1 with no leading zero, not $m" >&2
     exit 2
   fi
+  if [[ $seen_m == *" $m "* ]]; then
+    echo "run.sh: --min-events names $m twice" >&2
+    exit 2
+  fi
+  seen_m="$seen_m$m "
 done
 if ! [[ $max_wait_ms =~ ^[0-9]+$ ]] || [ "$max_wait_ms" -gt 1000 ]; then
   echo "run.sh: --max-wait-ms takes a whole number from 0 to 1000, not $max_wait_ms" >&2
@@ -207,11 +220,14 @@ case " $designs_arg " in
   nish_allow_panics "$base_compiler"
   # Build only the base binaries a requested design runs, and refuse a pair
   # that does not differ: it would measure nothing.
-  for pair in "ring-base server bench/handler-ring/server.ts" "h1-ring-base h1 bench/http1-server.ts"; do
+  # ring-base builds base-source.sh's copy of server.ts, without the lines
+  # that set minEvents and maxWaitMs: a std from before them refuses both.
+  bash "$root/bench/handler-ring/base-source.sh" "$out/server-base.ts"
+  for pair in "ring-base server $out/server-base.ts" "h1-ring-base h1 $root/bench/http1-server.ts"; do
     read -r design bin src <<<"$pair"
     case " $designs_arg " in
     *" $design "*)
-      "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/$src" --link "$out/$bin-base" >/dev/null
+      "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$src" --link "$out/$bin-base" >/dev/null
       if cmp -s "$out/$bin" "$out/$bin-base"; then
         echo "run.sh: --base-compiler builds the same $bin binary as --compiler" >&2
         exit 2
@@ -298,7 +314,9 @@ run() {
       echo "the kernel refused rings: $(cat "$out/server.out")" >&2
       exit 1
     fi
-    if ! grep -q "^batch $me $mw\$" "$out/server.out"; then
+    # ring-base is built without the batch lines (base-source.sh) and runs
+    # the plain wait whatever its label says.
+    if [ "$kind" != ring-base ] && ! grep -q "^batch $me $mw\$" "$out/server.out"; then
       echo "$design did not take minEvents $me and maxWaitMs $mw: $(cat "$out/server.out")" >&2
       exit 1
     fi
@@ -404,9 +422,16 @@ read -r -a asked <<<"$designs_arg"
 designs=()
 for d in "${asked[@]}"; do
   case "$d" in
-  ring | ring-copy | ring-base)
+  ring | ring-copy)
     if [ -n "$min_events" ]; then
       for m in $min_events; do designs+=("$d@$m"); done
+      continue
+    fi
+    ;;
+  ring-base)
+    # The base build cannot batch: it runs once, as ring-base@1.
+    if [ -n "$min_events" ]; then
+      designs+=("$d@1")
       continue
     fi
     ;;
@@ -534,11 +559,14 @@ awk -v limit="$limit" '
       # between the design and its byte-identical copy.
       split("ring h1-ring", cd, " ")
       for (ki = 1; ki <= 2; ki++) {
-        x = c SUBSEP cd[ki]; xc = c SUBSEP cd[ki] "-copy"; xb = c SUBSEP cd[ki] "-base"
+        # Under --min-events the ring trio runs as ring@1, ring-copy@1 and
+        # ring-base@1.
+        at = ((c SUBSEP cd[ki] "@1") in m) ? "@1" : ""
+        x = c SUBSEP cd[ki] at; xc = c SUBSEP cd[ki] "-copy" at; xb = c SUBSEP cd[ki] "-base" at
         if (!((x in m) && (xc in m) && (xb in m)) || m[xb] <= 0 || m[x] <= 0) continue
         d = (m[xb] - m[x]) / m[xb] * 100; band = (m[xc] - m[x]) / m[x] * 100
         if (band < 0) band = -band
-        printf "         %s: %.1f%% %s CPU per request than %s-base; noise band (%s vs its copy) %.1f%%", cd[ki], (d < 0 ? -d : d), (d >= 0 ? "less" : "more"), cd[ki], cd[ki], band
+        printf "         %s: %.1f%% %s CPU per request than %s-base%s; noise band (%s vs its copy) %.1f%%", cd[ki] at, (d < 0 ? -d : d), (d >= 0 ? "less" : "more"), cd[ki], at, cd[ki] at, band
         if (mso[x] != "" && mso[xb] != "") printf "; out/rsp %.3f against %.3f", mso[x], mso[xb]
         printf "\n"
       }

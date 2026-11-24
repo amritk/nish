@@ -24,7 +24,9 @@
 // and `maxWaitMs`, so a turn with fewer than M events waits up to W ms for
 // more (`pollWaitBatch`); unset, they keep the handler's defaults, 1 and 0,
 // and the wait is plain `pollWait`. Under BENCH_RING=1, worker 0 prints
-// `batch <minEvents> <maxWaitMs>` before `rings`.
+// `batch <minEvents> <maxWaitMs>` before `rings`. Both sit between
+// `bench:batch begin` and `bench:batch end` lines, which base-source.sh
+// drops so a compiler whose std has no batch fields builds ring-base.
 //
 // Two knobs for the cheaper wins (WP63 S5; bench/handler-ring/wins.sh):
 // BENCH_MMAP=1 runs `PRAGMA mmap_size=268435456` on each worker's connection
@@ -320,6 +322,7 @@ export const main = (): i32 => {
   limits.http.idleTimeout = 600000
   const ring: string | null = getenv("BENCH_RING")
   limits.ring = ring !== null && ring === "1"
+  // bench:batch begin
   const minEvents: string | null = getenv("BENCH_MIN_EVENTS")
   if (minEvents !== null) {
     limits.minEvents = parseInt(minEvents)
@@ -328,6 +331,7 @@ export const main = (): i32 => {
   if (maxWaitMs !== null) {
     limits.maxWaitMs = parseInt(maxWaitMs)
   }
+  // bench:batch end
   const listener: i32 = limits.listen("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)
   if (listener < 0) {
     console.error(`server: listen failed ${listener}`)
@@ -346,7 +350,9 @@ export const main = (): i32 => {
   if (worker === 0) {
     console.log(`listening ${port}`)
     if (limits.ring) {
+      // bench:batch begin
       console.log(`batch ${limits.minEvents} ${limits.maxWaitMs}`)
+      // bench:batch end
       console.log(`rings ${netRingState()}`)
     }
   }
