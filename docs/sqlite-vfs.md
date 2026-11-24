@@ -44,7 +44,7 @@ Each fact is pinned by a test; the test names are the `tests/run.js` checks.
 | In WAL mode no `-shm` file is made; the `-wal` file is. The default VFS on the same file makes both. | `link/std_sqlite_excl: exits with 0 and stdout matches expected.out` |
 | A second process that opens the file (on the default VFS) and reads is refused with `SQLITE_BUSY` while the first holds it open. On the default VFS the same read succeeds. | the same check; the child's answer is its exit status |
 | A second connection in the same process, on the same URI, reads the first one's rows, runs `PRAGMA wal_checkpoint(TRUNCATE)` (the `-wal` file is then 0 bytes) and closes; the first connection then writes again. | `link/std_sqlite_excl_second: exits with 0 and stdout matches expected.out` |
-| A `nish:threads` task cannot be that second connection: `spawn` refuses a task that calls `nish/sqlite`, whatever the VFS. | ``link/std_sqlite_excl_thread: rejected with "main.ts:24:5: error: `checkpointer` writes memory its caller can see through `openDatabase`, and `spawn` runs it beside the scope's other tasks"`` |
+| A `nish:threads` task cannot be that second connection: `spawn` refuses a task that opens one on `?vfs=unix-excl`. | ``link/std_sqlite_excl_thread: rejected with "main.ts:24:5: error: `checkpointer` writes memory its caller can see through `openDatabase`, and `spawn` runs it beside the scope's other tasks"`` |
 | Under `--profile wasi`, `?vfs=unix-excl` opens, but `PRAGMA journal_mode=WAL` and the first write answer `SQLITE_IOERR_LOCK` (3850): wasi-libc has no record locks. Natively both answer 0. | ``link/std_sqlite_vfs_wasi: on `--profile wasi` `?vfs=unix-excl` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)`` and `link/std_sqlite_vfs_wasi: exits with 0 and stdout matches expected.out` |
 
 The lock is the process's, not the connection's, which is why a same-process
@@ -65,8 +65,7 @@ so it is one of:
 
 It cannot be a `nish:threads` task. The compiler counts every C call as a
 write the task's caller can see, so `spawn` refuses a task that opens a
-connection (`tests/link/std_sqlite_excl_thread`). That refusal is not about
-the VFS: it holds on the default VFS too.
+connection (`tests/link/std_sqlite_excl_thread`).
 
 ### Capabilities and the sandbox
 
@@ -74,10 +73,12 @@ the VFS: it holds on the default VFS too.
 C, so a program reports the same grants on either VFS (`ffi`, plus whatever
 else it does). `std_sqlite_excl` reports `ffi, fs.read, process.spawn`, the
 last two from its own child process and `-shm` checks. Under `--sandbox` with
-those grants and `fs.write`, it prints its expected output on both VFSes;
+those grants and `fs.write`, it printed its expected output on both VFSes;
 under `--sandbox` alone the first open answers "unable to open database
 file", which is the sandbox refusing SQLite's own `open` of the file, not the
-VFS.
+VFS. Both were observed by hand on this branch, the refusal again at
+`d33dd1d5`; no check runs the fixture under `--sandbox`, so neither is
+pinned.
 
 ## What it saves
 

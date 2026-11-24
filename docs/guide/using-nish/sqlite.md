@@ -65,7 +65,8 @@ export const main = (): i32 => {
 
 When no other process reads the file while the program has it open, SQLite's
 `unix-excl` VFS skips work the default one does for them. It locks the file
-once, at the first statement, and holds the lock until the connection closes.
+once, at the first statement, and holds the lock until the last connection
+to it in this program closes.
 A WAL database then keeps its index in memory, so there is no `-shm` file
 beside it. Name the VFS in a `file:` URI and add `OPEN_URI`:
 

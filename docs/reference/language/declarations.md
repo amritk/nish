@@ -5022,7 +5022,7 @@ export const main = (): i32 => {
 - **`OPEN_URI` reads the name as a `file:` URI**, so its parameters reach
   SQLite: `file:app.db?vfs=unix-excl` opens the file on SQLite's `unix-excl`
   VFS. That VFS holds the file's lock from the first statement until the
-  connection closes, keeps a WAL database's index in memory rather than a
+  program's last connection to it closes, keeps a WAL database's index in memory rather than a
   `-shm` file, and makes any other process that reads the file answer
   `SQLITE_BUSY`. Under `--profile wasi` it answers `SQLITE_IOERR_LOCK`. An
   unknown VFS name fails the open ([docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md)).
