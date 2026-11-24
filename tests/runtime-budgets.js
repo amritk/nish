@@ -900,13 +900,14 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * `IORING_ENTER_EXT_ARG` enter with its timeout and the `IORING_FEAT_EXT_ARG` probe, the
  * `POLL_ADD` that watches the signal descriptor from the ring, and the write of the
  * marked slots' sends before the enter (+20), so a coalesced send goes out in the wait's
- * own enter. The budget is the next 256-byte boundary, leaving 304. **9,772 bytes** on
- * 2026-11-24 once a write over one buffer's room chains across pool buffers, each its
- * own SEND, rather than taking an exact record from `malloc`, and a shutdown takes a pool
- * buffer too (NURING-12, NURING-44; 10,240 to 9,984): `nish_uring_send` 802 to 541, with
- * the fill out of line as `ur_record` 84; `nish_uring_shutdown` +12, `ur_unlink_all` +7
- * and `ur_release` -6. The budget is the 256-byte boundary above it, leaving 212. A unit of its own beside runtime-net.c, so that a
- * build whose probe fails runs the epoll path alone.
+ * own enter. The budget is the next 256-byte boundary, leaving 304. A unit of its own
+ * beside runtime-net.c, so that a build whose probe fails runs the epoll path alone.
+ * **9,772 bytes** on 2026-11-24 once a write over one buffer's room chains across pool
+ * buffers, each its own SEND, rather than taking an exact record from `malloc`, and a
+ * shutdown takes a pool buffer too (NURING-12, NURING-44; 10,240 to 9,984):
+ * `nish_uring_send` 802 to 541, with the fill out of line as `ur_record` 84;
+ * `nish_uring_shutdown` +12, `ur_unlink_all` +7 and `ur_release` -6. The budget is the
+ * 256-byte boundary above it, leaving 212.
  */
 const RUNTIME_URING_TEXT_BUDGET = 9984
 /**
