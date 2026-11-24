@@ -82,9 +82,10 @@
  *    buffers; once sent, no slot holds one and at most UR_SENDPOOL_MAX stay
  *    cached, and steady responses after a warm-up allocate none (NURING-41).
  *  - `bigsend`: steady head+64 KiB responses leave from chained pool buffers;
- *    after a warm-up no record is allocated, of any size, and a shutdown
- *    takes a pool buffer too (NURING-51). The mode prints the SENDs per
- *    response.
+ *    after a warm-up nothing is allocated (malloc, calloc and realloc are
+ *    counted), a response takes at least one SEND per pool buffer it fills,
+ *    and a shutdown takes a pool buffer too (NURING-51). The mode prints
+ *    the SENDs per response.
  *  `coalesce`, `inflight`, `pool` and `bigsend` drive their set and clients
  *  in one process, as `move` does.
  */
@@ -99,14 +100,27 @@ static long test_register(int fd, unsigned op, void *arg, unsigned nr);
  * kernel answer. */
 static int test_accept_res(int res);
 #define UR_ACCEPT_RES(res) test_accept_res(res)
-/* `bigsend` counts every allocation of a send record, whatever its size. */
+/* `bigsend` counts every heap allocation the process makes while it counts,
+ * whoever makes it: malloc, calloc and realloc are replaced here and pass to
+ * glibc's own, so a plain malloc anywhere in the send path is counted. */
 #include <stdlib.h>
-static long ut_record_mallocs;
-static void *ut_malloc(size_t n) {
-  ut_record_mallocs++;
-  return malloc(n);
+extern void *__libc_malloc(size_t n);
+extern void *__libc_calloc(size_t k, size_t n);
+extern void *__libc_realloc(void *p, size_t n);
+static volatile int ut_counting;
+static volatile long ut_allocs;
+void *malloc(size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_malloc(n);
 }
-#define UR_MALLOC(n) ut_malloc(n)
+void *calloc(size_t k, size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_calloc(k, n);
+}
+void *realloc(void *p, size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_realloc(p, n);
+}
 /* runtime-net.c, linked beside this file for `netwrite`, opens its sets
  * through the wrapper below, which keeps the last one for its stats. */
 #define nish_uring_open ut_uring_open_real
@@ -1605,13 +1619,13 @@ static int bigsend(void) {
   if (move_accept(s, 0, &a, &fd, &ring, &slot) != 0) return 1;
   static uint8_t out[BS_HEAD + BS_BODY], in[BS_HEAD + BS_BODY];
   struct nish_uring_stats st;
-  long warm = 0;
   int64_t sends = 0;
   for (int r = 0; r < BS_WARM + BS_ROUNDS; r++) {
     if (r == BS_WARM) {
-      warm = ut_record_mallocs;
       nish_uring_stats(s, &st);
       sends = st.sends;
+      ut_allocs = 0;
+      ut_counting = 1;
     }
     for (int i = 0; i < BS_HEAD + BS_BODY; i++) out[i] = pattern(r, i);
     if (nish_uring_send(s, ring, slot, out, BS_HEAD) != BS_HEAD ||
@@ -1633,17 +1647,27 @@ static int bigsend(void) {
     if (memcmp(in, out, sizeof in) != 0) return fail("a 64 KiB response did not arrive in order");
     if (drain_slot(s, ring, slot) != 0) return 1;
   }
+  ut_counting = 0;
+  long steady = ut_allocs;
   nish_uring_stats(s, &st);
-  printf("64 KiB responses: sends per response %.2f, %ld records allocated after the warm-up, %ld held\n",
-         (double)(st.sends - sends) / BS_ROUNDS, ut_record_mallocs - warm, (long)st.pool_held);
-  if (ut_record_mallocs != warm) return fail("a steady 64 KiB response allocated a record after the warm-up");
+  /* Each pool buffer is its own SEND, so a response that fills `bufs` buffers
+     takes at least that many; a short send only adds to it. */
+  const int64_t bufs = (BS_HEAD + BS_BODY + UR_CHUNK_DATA - 1) / UR_CHUNK_DATA;
+  printf("64 KiB responses: sends per response %.2f (at least %lld), %ld allocations after the warm-up, %ld held\n",
+         (double)(st.sends - sends) / BS_ROUNDS, (long long)bufs, steady, (long)st.pool_held);
+  if (steady != 0) return fail("a steady 64 KiB response allocated after the warm-up");
+  if (st.sends - sends < bufs * BS_ROUNDS) return fail("a 64 KiB response took fewer SENDs than the pool buffers it fills");
   if (st.pool_held != 0) return fail("an idle slot held a pool buffer after a 64 KiB response");
-  if (nish_uring_send(s, ring, slot, out, 1) != 1 || nish_uring_shutdown(s, ring, slot, 1) != 0)
+  ut_allocs = 0;
+  ut_counting = 1;
+  if (nish_uring_send(s, ring, slot, out, 1) != 1 || nish_uring_shutdown(s, ring, slot, 1) != 0) {
+    ut_counting = 0;
     return fail("a write and a shutdown were refused");
+  }
+  ut_counting = 0;
   nish_uring_stats(s, &st);
-  printf("a write and a shutdown: %ld held, %ld records allocated\n", (long)st.pool_held, ut_record_mallocs - warm);
-  if (st.pool_held != 2 || ut_record_mallocs != warm)
-    return fail("a shutdown did not take its record from the pool");
+  printf("a write and a shutdown: %ld held, %ld allocations\n", (long)st.pool_held, (long)ut_allocs);
+  if (st.pool_held != 2 || ut_allocs != 0) return fail("a shutdown did not take its record from the pool");
   if (drain_slot(s, ring, slot) != 0) return 1;
   if (read_all(fd, in, 1) != 0 || in[0] != out[0]) return fail("the byte before the shutdown did not arrive");
   if (read(fd, in, 1) != 0) return fail("the client read past the shutdown");

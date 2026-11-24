@@ -444,10 +444,6 @@ static int ur_errno(long rc) { return rc < 0 ? -errno : (int)rc; }
 #ifndef UR_ACCEPT_RES
 #define UR_ACCEPT_RES(res) (res)
 #endif
-/* Every send record's allocation; uring-test.c counts them. */
-#ifndef UR_MALLOC
-#define UR_MALLOC(n) malloc(n)
-#endif
 
 static int ur_setup(uint32_t entries, struct ur_params *p) { return ur_errno(UR_SYS_SETUP(entries, p)); }
 
@@ -1080,7 +1076,7 @@ static struct ur_send *ur_record(struct nish_uring_set *s, struct ur_ring *r) {
     r->npool--;
     s->stats.pool_cached--;
   } else {
-    q = UR_MALLOC(UR_CHUNK);
+    q = malloc(UR_CHUNK);
     if (!q) return NULL;
     s->stats.pool_new++;
   }
