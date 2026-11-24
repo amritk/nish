@@ -6,7 +6,9 @@
 // records are too short to hold. Each row's one-call read is compared with
 // `columnType`, `columnI64` and `columnInto` on every column, through the
 // table and through an index on (s DESC); each refusal is pinned to its code
-// and to a buffer left as it was.
+// and to a buffer left as it was. TEXT values that read as numbers ('42',
+// '7abc') pin that readRow converts no TEXT or BLOB to an integer, where
+// `columnI64` does.
 import { Suite } from "nish/testing";
 import {
   OPEN_CREATE,
@@ -23,15 +25,20 @@ import {
 /** `r` is `Err(code)`. */
 const i32Err = (r: Result<i32, i32>, code: i32): boolean => r.isErr() && r.error === code;
 
+/** `r` is `Err(code)`. */
+const voidErr = (r: Result<void, i32>, code: i32): boolean => r.isErr() && r.error === code;
+
 /**
- * Whether `readRow(cols)` on the cursor's current row answers what the
- * per-column calls answer: the same refusal for the row as the first column
- * `columnType` refuses, or each column's type, integer and bytes.
+ * Whether `readRow` with `cols` chosen answers on the cursor's current row
+ * what the per-column calls answer: the same refusal for the row as the
+ * first column `columnType` refuses, or each column's type and bytes, and
+ * `columnI64`'s integer for a number, 0 for TEXT, BLOB and NULL.
  */
 const agrees = (cur: Cursor, cols: i32[], text: u8[], buf: u8[]): boolean => {
   const ints = new Array<i64>(cols.length);
   const spans = new Array<i32>(3 * cols.length);
-  const got = cur.readRow(cols, ints, spans, text);
+  if (cur.selectRow(cols).isErr()) return false;
+  const got = cur.readRow(ints, spans, text);
   let need = 0;
   for (let k = 0; k < cols.length; k++) {
     const ty = cur.columnType(cols[k]);
@@ -39,7 +46,7 @@ const agrees = (cur: Cursor, cols: i32[], text: u8[], buf: u8[]): boolean => {
     if (got.isErr() || spans[3 * k] !== ty.value) return false;
     if (ty.value === SQLITE_TEXT || ty.value === SQLITE_BLOB) {
       const n = cur.columnInto(cols[k], buf, 0).expect("columnInto");
-      if (ints[k] !== cur.columnI64(cols[k]) || spans[3 * k + 1] !== need || spans[3 * k + 2] !== n) return false;
+      if (ints[k] !== toI64(0) || spans[3 * k + 1] !== need || spans[3 * k + 2] !== n) return false;
       for (let i = 0; i < n; i++) {
         if (text[need + i] !== buf[i]) return false;
       }
@@ -67,14 +74,6 @@ const allI64 = (a: i64[], v: i64): boolean => {
   return true;
 };
 
-/** Every element of `a` is `v`. */
-const allU8 = (a: u8[], v: u8): boolean => {
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== v) return false;
-  }
-  return true;
-};
-
 export const main = (): i32 => {
   const t = new Suite("std_sqlite_cursor_row");
   const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
@@ -85,7 +84,8 @@ export const main = (): i32 => {
         "CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, r REAL, s TEXT, b BLOB, z);" +
           "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 300)" +
           " INSERT INTO t SELECT x, CASE WHEN x % 5 = 0 THEN NULL ELSE x * 3 - 400 END, x * 0.5," +
-          " CASE WHEN x % 7 = 0 THEN NULL ELSE printf('s%d', x) END," +
+          " CASE WHEN x % 7 = 0 THEN NULL WHEN x % 13 = 0 THEN printf('%d', x) WHEN x % 17 = 0 THEN '7abc'" +
+          " ELSE printf('s%d', x) END," +
           " CASE WHEN x % 11 = 0 THEN zeroblob(6000) ELSE x'0102' END," +
           " CASE x % 3 WHEN 0 THEN 1.25 WHEN 1 THEN 'z' ELSE NULL END FROM c;" +
           "ALTER TABLE t ADD COLUMN late INTEGER DEFAULT 9;" +
@@ -101,7 +101,7 @@ export const main = (): i32 => {
   const buf = new Array<u8>(8192);
   const every: i32[] = [0, 1, 2, 3, 4, 5];
   const late: i32[] = [6, 0, 3];
-  const twice: i32[] = [4, 3, 4, 0];
+  const twice: i32[] = [4, 3, 4, 0, 3];
   const empty: i32[] = [];
   let rows = 0;
   let same = true;
@@ -122,7 +122,8 @@ export const main = (): i32 => {
   t.ok("seekRowid 22, an overflow row", cur.seekRowid(toI64(22)).expect("seek"));
   const ints = new Array<i64>(6);
   const spans = new Array<i32>(18);
-  const read = cur.readRow(every, ints, spans, text);
+  t.ok("  selectRow every column", cur.selectRow(every).isOk());
+  const read = cur.readRow(ints, spans, text);
   t.ok("  answers its text bytes, 3 + 6000 + 1", read.isOk() && read.value === 6004);
   t.eqI64("  the alias column is the rowid", ints[0], toI64(22));
   t.eqI64("  n", ints[1], toI64(22 * 3 - 400));
@@ -133,25 +134,46 @@ export const main = (): i32 => {
   const small = new Array<u8>(6003);
   for (let i = 0; i < 6; i++) ints[i] = toI64(-7);
   for (let i = 0; i < 18; i++) spans[i] = -7;
-  const tight = cur.readRow(every, ints, spans, small);
+  const tight = cur.readRow(ints, spans, small);
   t.ok("  a text buffer one byte short answers the length needed", tight.isOk() && tight.value === 6004);
-  t.ok("  and writes nothing", allU8(small, 0) && allI64(ints, toI64(-7)) && allI32(spans, -7));
+  t.ok("  and writes no ints or spans", allI64(ints, toI64(-7)) && allI32(spans, -7));
+  t.ok("  though text holds the columns that fit, s22 first", small[0] === 115 && small[1] === 50 && small[2] === 50);
+  t.ok("seekRowid 26, s '26'", cur.seekRowid(toI64(26)).expect("seek"));
+  t.eqI64("  columnI64 converts it to 26", cur.columnI64(3), toI64(26));
+  t.ok("  selectRow s", cur.selectRow([3]).isOk());
+  const digits = cur.readRow(ints, spans, text);
+  t.ok("  readRow answers its 2 bytes", digits.isOk() && digits.value === 2 && spans[0] === SQLITE_TEXT);
+  t.eqI64("  and 0 for its integer, no conversion", ints[0], toI64(0));
+  t.ok("seekRowid 34, s '7abc'", cur.seekRowid(toI64(34)).expect("seek"));
+  t.eqI64("  columnI64 converts its leading digits to 7", cur.columnI64(3), toI64(7));
+  const lead = cur.readRow(ints, spans, text);
+  t.ok("  readRow answers its 4 bytes and 0", lead.isOk() && lead.value === 4 && ints[0] === toI64(0));
   t.ok("seekRowid 5", cur.seekRowid(toI64(5)).expect("seek"));
-  t.ok("  a short record is SCHEMA for the row", i32Err(cur.readRow(late, ints, spans, text), SQLITE_SCHEMA));
+  for (let i = 0; i < 6; i++) ints[i] = toI64(-7);
+  for (let i = 0; i < 18; i++) spans[i] = -7;
+  t.ok("  selectRow late, 0, s", cur.selectRow(late).isOk());
+  t.ok("  a short record is SCHEMA for the row", i32Err(cur.readRow(ints, spans, text), SQLITE_SCHEMA));
   t.ok("  and writes nothing", allI64(ints, toI64(-7)) && allI32(spans, -7));
-  t.ok("  column 7 is RANGE", i32Err(cur.readRow([1, 7], ints, spans, text), SQLITE_RANGE));
-  t.ok("  column -1 is RANGE", i32Err(cur.readRow([-1], ints, spans, text), SQLITE_RANGE));
-  t.ok("  column 70000 is RANGE", i32Err(cur.readRow([70000], ints, spans, text), SQLITE_RANGE));
-  t.ok("  ints shorter than cols is MISUSE", i32Err(cur.readRow(every, [toI64(0)], spans, text), SQLITE_MISUSE));
-  t.ok("  spans shorter than 3 per column is MISUSE", i32Err(cur.readRow(every, ints, [0, 0], text), SQLITE_MISUSE));
+  t.ok("  selectRow column 7 is RANGE", voidErr(cur.selectRow([1, 7]), SQLITE_RANGE));
+  t.ok("  selectRow column -1 is RANGE", voidErr(cur.selectRow([-1]), SQLITE_RANGE));
+  t.ok("  selectRow column 70000 is RANGE", voidErr(cur.selectRow([70000]), SQLITE_RANGE));
+  const wide = new Array<i32>(65536);
+  t.ok("  selectRow of 65536 columns is MISUSE", voidErr(cur.selectRow(wide), SQLITE_MISUSE));
+  t.ok("  and a refused list keeps the one chosen", i32Err(cur.readRow(ints, spans, text), SQLITE_SCHEMA));
+  t.ok("  selectRow every column", cur.selectRow(every).isOk());
+  t.ok("  ints shorter than the list is MISUSE", i32Err(cur.readRow([toI64(0)], spans, text), SQLITE_MISUSE));
+  t.ok("  spans shorter than 3 per column is MISUSE", i32Err(cur.readRow(ints, [0, 0], text), SQLITE_MISUSE));
   t.ok("  and none of them writes", allI64(ints, toI64(-7)) && allI32(spans, -7));
-  const none = cur.readRow(empty, ints, spans, text);
+  t.ok("  selectRow no columns", cur.selectRow(empty).isOk());
+  const none = cur.readRow(ints, spans, text);
   t.ok("  no columns answers 0", none.isOk() && none.value === 0);
   t.ok("seekRowid 1000 is not there", !cur.seekRowid(toI64(1000)).expect("seek"));
-  t.ok("  and no row is MISUSE", i32Err(cur.readRow(every, ints, spans, text), SQLITE_MISUSE));
-  t.ok("  even for no columns", i32Err(cur.readRow(empty, ints, spans, text), SQLITE_MISUSE));
+  t.ok("  and no row is MISUSE", i32Err(cur.readRow(ints, spans, text), SQLITE_MISUSE));
+  t.ok("  selectRow every column", cur.selectRow(every).isOk());
+  t.ok("  even with columns chosen", i32Err(cur.readRow(ints, spans, text), SQLITE_MISUSE));
 
   const idx = db.openCursor("ts", "s DESC,rowid").expect("open ts");
+  t.ok("readRow before any selectRow is MISUSE", i32Err(idx.readRow(ints, spans, text), SQLITE_MISUSE));
   const pair: i32[] = [1, 0];
   let entries = 0;
   let same2 = true;
@@ -164,7 +186,8 @@ export const main = (): i32 => {
   t.eqI32("index: 310 entries", entries, 310);
   t.ok("index: readRow answers what the per-column calls answer, the rowid among them", same2);
   t.ok("close the index cursor", idx.close().isOk());
-  t.ok("  and readRow on it is MISUSE", i32Err(idx.readRow(pair, ints, spans, text), SQLITE_MISUSE));
+  t.ok("  and readRow on it is MISUSE", i32Err(idx.readRow(ints, spans, text), SQLITE_MISUSE));
+  t.ok("  and selectRow on it is MISUSE", voidErr(idx.selectRow(pair), SQLITE_MISUSE));
   t.ok("close", cur.close().isOk());
   t.ok("endRead", db.endRead().isOk());
   t.ok("close the database", db.close().isOk());

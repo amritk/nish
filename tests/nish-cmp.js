@@ -11288,11 +11288,12 @@ const STD_CIPHER_PANIC_FREE = "ciphers, curves, signatures and password hashing"
 const stdCipherPanicFree = (file, why, entries) =>
   entries.map((program) => ({ program, file, changelog: STD_CIPHER_PANIC_FREE, why }))
 
-/** The changelog words of the sqlite-cursor-speed S3 stage, which adds `Cursor.readRow`. */
-const CURSOR_READ_ROW = "Cursor.readRow decodes a row's requested columns in one call"
+/** The changelog words of the sqlite-cursor-speed S3 stage, which adds `Cursor.selectRow` and `Cursor.readRow`. */
+const CURSOR_READ_ROW = "Cursor.readRow decodes the columns selectRow chose in one call"
 /**
- * Every corpus program that reaches nish/sqlite: Cursor gains its rowIo field
- * and readRow, so sqlite.ll and the mains that build a Cursor move. Compared
+ * Every corpus program that reaches nish/sqlite: Cursor gains its rowIo and
+ * nsel fields, selectRow and readRow, so sqlite.ll and the mains that build a
+ * Cursor move. Compared
  * only under `--no-sidecars`, where the wasm sidecar no longer hides them.
  */
 const cursorReadRow = (why, filesByProgram) =>
@@ -11302,7 +11303,7 @@ const cursorReadRow = (why, filesByProgram) =>
 
 const DECLARED = [
   ...cursorReadRow(
-    "std/sqlite.ts's Cursor gains a rowIo field and readRow, which call nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
+    "std/sqlite.ts's Cursor gains rowIo and nsel fields, selectRow and readRow, which call nishsqlite_cursor_select_row and nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
     {
       "tests/link/sqlite_busy_backoff/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite/main.ts": ["main.ll", "sqlite.ll"],
@@ -11319,7 +11320,7 @@ const DECLARED = [
     }
   ),
   ...cursorReadRow(
-    "the program calls Cursor.readRow, which the reference's std/sqlite.ts does not have, so only the candidate compiles it",
+    "the program calls Cursor.selectRow and Cursor.readRow, which the reference's std/sqlite.ts does not have, so only the candidate compiles it",
     {
       "bench/sqlite/main.ts": ["exit"],
       "tests/link/std_sqlite_cursor_row/main.ts": ["exit"],

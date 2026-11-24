@@ -12674,11 +12674,14 @@ int main(void) {
         rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
       rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
     )
-    // A readRow walk allocates nothing once warm. The first pass reads every
-    // row, the 5,000-byte overflow ones among them, so the cursor's record
-    // buffer, SQLite's overflow cache and readRow's exchange buffer reach
-    // their size; two more passes then keep SQLite's memory where it was,
-    // and both the text bytes and the integers sum to what the rows hold.
+    // A readRow walk takes no more of SQLite's heap once warm. This watches
+    // sqlite3_memory_used and its highwater only: SQLite's allocator, which
+    // holds the cursor's record buffer, its overflow cache and the column
+    // list selectRow stores, not the Nish heap where the exchange buffer
+    // lives. The first pass reads every row, the 5,000-byte overflow ones
+    // among them, so those reach their size; two more passes then keep
+    // SQLite's memory where it was, and both the text bytes and the integers
+    // sum to what the rows hold.
     const rowMemTs = path.join(sqDir, "cursor-row-memory.ts")
     fs.writeFileSync(
       rowMemTs,
@@ -12688,11 +12691,11 @@ int main(void) {
         "declare function sqlite3_memory_used(): i64;",
         "declare function sqlite3_memory_highwater(reset: i32): i64;",
         "",
-        "const pass = (cur: Cursor, cols: i32[], ints: i64[], spans: i32[], text: u8[]): i64 => {",
+        "const pass = (cur: Cursor, ints: i64[], spans: i32[], text: u8[]): i64 => {",
         "  let got = toI64(0);",
         '  let more = cur.first().expect("first");',
         "  while (more) {",
-        '    got = got + toI64(cur.readRow(cols, ints, spans, text).expect("readRow")) + ints[0] + ints[1];',
+        '    got = got + toI64(cur.readRow(ints, spans, text).expect("readRow")) + ints[0] + ints[1];',
         '    more = cur.next().expect("next");',
         "  }",
         "  return got;",
@@ -12711,10 +12714,11 @@ int main(void) {
         "  const ints = new Array<i64>(4);",
         "  const spans = new Array<i32>(12);",
         "  const text = new Array<u8>(8192);",
-        "  const once = pass(cur, cols, ints, spans, text);",
+        '  cur.selectRow(cols).expect("selectRow");',
+        "  const once = pass(cur, ints, spans, text);",
         "  const used = sqlite3_memory_used();",
         "  sqlite3_memory_highwater(1);",
-        "  const twice = pass(cur, cols, ints, spans, text) + pass(cur, cols, ints, spans, text);",
+        "  const twice = pass(cur, ints, spans, text) + pass(cur, ints, spans, text);",
         "  const peak = sqlite3_memory_highwater(0);",
         "  const after = sqlite3_memory_used();",
         "  console.log(`${once} ${twice} ${used} ${peak} ${after}`);",
@@ -12733,7 +12737,7 @@ int main(void) {
     // fourth row and 2 bytes on the rest.
     const rowWant = 4 * ((2000 * 2001) / 2) + 500 * 5000 + 1500 * 2
     check(
-      "sqlite-link: after a first pass, two readRow walks over overflow rows keep SQLite's memory flat",
+      "sqlite-link: after a first pass, two readRow walks over overflow rows keep SQLite's heap flat (sqlite3_memory_used, not the Nish heap)",
       rowMemRun !== null &&
         rowMemRun.status === 0 &&
         rowOnce === String(rowWant) &&

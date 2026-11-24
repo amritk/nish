@@ -4,6 +4,7 @@ PASS  table: 310 rows
 PASS  table: readRow answers what the per-column calls answer on every row
 PASS  table: the 300 records written before ALTER TABLE are short
 PASS  seekRowid 22, an overflow row
+PASS    selectRow every column
 PASS    answers its text bytes, 3 + 6000 + 1
 PASS    the alias column is the rowid
 PASS    n
@@ -12,25 +13,42 @@ PASS    s is TEXT, its 3 bytes at 0
 PASS    b is BLOB, its 6000 bytes after them
 PASS    z, 22 % 3 = 1, is 'z' at 6003
 PASS    a text buffer one byte short answers the length needed
-PASS    and writes nothing
+PASS    and writes no ints or spans
+PASS    though text holds the columns that fit, s22 first
+PASS  seekRowid 26, s '26'
+PASS    columnI64 converts it to 26
+PASS    selectRow s
+PASS    readRow answers its 2 bytes
+PASS    and 0 for its integer, no conversion
+PASS  seekRowid 34, s '7abc'
+PASS    columnI64 converts its leading digits to 7
+PASS    readRow answers its 4 bytes and 0
 PASS  seekRowid 5
+PASS    selectRow late, 0, s
 PASS    a short record is SCHEMA for the row
 PASS    and writes nothing
-PASS    column 7 is RANGE
-PASS    column -1 is RANGE
-PASS    column 70000 is RANGE
-PASS    ints shorter than cols is MISUSE
+PASS    selectRow column 7 is RANGE
+PASS    selectRow column -1 is RANGE
+PASS    selectRow column 70000 is RANGE
+PASS    selectRow of 65536 columns is MISUSE
+PASS    and a refused list keeps the one chosen
+PASS    selectRow every column
+PASS    ints shorter than the list is MISUSE
 PASS    spans shorter than 3 per column is MISUSE
 PASS    and none of them writes
+PASS    selectRow no columns
 PASS    no columns answers 0
 PASS  seekRowid 1000 is not there
 PASS    and no row is MISUSE
-PASS    even for no columns
+PASS    selectRow every column
+PASS    even with columns chosen
+PASS  readRow before any selectRow is MISUSE
 PASS  index: 310 entries
 PASS  index: readRow answers what the per-column calls answer, the rowid among them
 PASS  close the index cursor
 PASS    and readRow on it is MISUSE
+PASS    and selectRow on it is MISUSE
 PASS  close
 PASS  endRead
 PASS  close the database
-std_sqlite_cursor_row: 35 passed, 0 failed, 0 skipped
+std_sqlite_cursor_row: 53 passed, 0 failed, 0 skipped

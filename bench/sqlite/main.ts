@@ -21,8 +21,9 @@
 //   opened once, before the timed loop, and closed after it, so a call is the
 //   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
 // - feed-cursor-row: feed-cursor-walk with each post's and each author's
-//   columns read by one `Cursor.readRow` call instead of one call a column;
-//   the likes count still reads its key with `columnI64`.
+//   columns read by one `Cursor.readRow` call instead of one call a column,
+//   the column lists chosen by `selectRow` once, before the timed loop; the
+//   likes count still reads its key with `columnI64`.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -94,11 +95,18 @@ class Fold {
     this.sum = sum
   }
 
-  /** The `n` bytes of `text` at `at` folded, as `bytes` folds `buf`'s. */
+  /**
+   * The `n` bytes of `text` at `at` folded, as `bytes` folds `buf`'s: the
+   * span's end is checked once, so the loop tests one bound per byte, as
+   * `bytes`'s does.
+   */
   span(text: u8[], at: i32, n: i32): void {
+    const len: i32 = toI32(text.length)
+    const start: i32 = at < 0 ? 0 : at
+    const end: i32 = at >= 0 && n >= 0 && n <= len - at ? at + n : start
     let sum: u32 = this.sum * 31 + toU32(n)
-    for (let k: i32 = 0; k < n && at >= 0 && at + k < toI32(text.length); k += 1) {
-      sum = sum * 31 + toU32(text[at + k])
+    for (let k: i32 = start; k < end && k < len; k += 1) {
+      sum = sum * 31 + toU32(text[k])
     }
     this.sum = sum
   }
@@ -149,7 +157,7 @@ const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold)
   return ok && r.isOk() ? rows : -1
 }
 
-/** What `walkFeedRows` reads a row into: the column lists and the buffers `Cursor.readRow` fills. */
+/** What `walkFeedRows` reads a row into: the column lists `Cursor.selectRow` chooses and the buffers `Cursor.readRow` fills. */
 class RowReads {
   /** posts' user_id, body and created_at. */
   post: i32[]
@@ -168,9 +176,13 @@ class RowReads {
   }
 }
 
+/** Whether a `readRow` answer read the row: `Ok` with its text bytes all in `text`. */
+const fits = (r: Result<i32, i32>, text: u8[]): boolean => r.isOk() && r.value <= toI32(text.length)
+
 /**
  * `walkFeed` with each post's and each author's columns read by one
- * `readRow` call; it folds the same values in the same order.
+ * `readRow` call, the lists chosen by `selectRow` before the walk; it folds
+ * the same values in the same order.
  */
 const walkFeedRows = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold, rr: RowReads): i32 => {
   let rows: i32 = 0
@@ -180,13 +192,13 @@ const walkFeedRows = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: F
   while (ok && r.isOk() && r.value && rows < FEED) {
     const id: i64 = ix.rowid()
     const p = post.seekRowid(id)
-    ok = p.isOk() && p.value && post.readRow(rr.post, rr.ints, sp, rr.text).isOk()
+    ok = p.isOk() && p.value && fits(post.readRow(rr.ints, sp, rr.text), rr.text)
     f.add(toU32(id))
     if (ok && sp.length >= 9) {
       f.span(rr.text, sp[4], sp[5])
       f.span(rr.text, sp[7], sp[8])
       const u = user.seekRowid(rr.ints[0])
-      ok = u.isOk() && u.value && user.readRow(rr.user, rr.ints, sp, rr.text).isOk()
+      ok = u.isOk() && u.value && fits(user.readRow(rr.ints, sp, rr.text), rr.text)
       if (ok) {
         f.span(rr.text, sp[1], sp[2])
       }
@@ -340,7 +352,13 @@ export const main = (): number => {
     const users = db.openCursor("users", "id,username,created_at")
     const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
     const rr = new RowReads()
-    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk() && mode === "feed-cursor-row") {
+    const chosen: boolean =
+      mode === "feed-cursor-row" &&
+      posts.isOk() &&
+      users.isOk() &&
+      posts.value.selectRow(rr.post).isOk() &&
+      users.value.selectRow(rr.user).isOk()
+    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk() && chosen) {
       t0 = monotonicNanos()
       for (let i: i32 = 0; i < count; i += 1) {
         const n: i32 = walkFeedRows(recent.value, posts.value, users.value, likes.value, f, rr)
