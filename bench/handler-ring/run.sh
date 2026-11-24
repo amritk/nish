@@ -176,13 +176,20 @@ case " $designs_arg " in
     exit 2
   fi
   nish_allow_panics "$base_compiler"
-  "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server-base" >/dev/null
-  "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http1-server.ts" --link "$out/h1-base" >/dev/null
-  # Builds that do not differ measure nothing.
-  if cmp -s "$out/server" "$out/server-base" && cmp -s "$out/h1" "$out/h1-base"; then
-    echo "run.sh: --base-compiler builds the same binaries as --compiler" >&2
-    exit 2
-  fi
+  # Build only the base binaries a requested design runs, and refuse a pair
+  # that does not differ: it would measure nothing.
+  for pair in "ring-base server bench/handler-ring/server.ts" "h1-ring-base h1 bench/http1-server.ts"; do
+    read -r design bin src <<<"$pair"
+    case " $designs_arg " in
+    *" $design "*)
+      "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/$src" --link "$out/$bin-base" >/dev/null
+      if cmp -s "$out/$bin" "$out/$bin-base"; then
+        echo "run.sh: --base-compiler builds the same $bin binary as --compiler" >&2
+        exit 2
+      fi
+      ;;
+    esac
+  done
   ;;
 esac
 node "$root/bench/sqlite/run.mjs" --validate --compiler "$compiler" >/dev/null

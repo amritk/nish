@@ -3864,11 +3864,11 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. The 
 
 - **ring**, **h1-ring**: built by `build/nish` at the bench commit, whose `runtime/` is `c12ccb0f`'s (after).
 - **ring-copy**, **h1-ring-copy**: a byte-identical copy of the after build; its gap to the after build is the noise band.
-- **ring-base**, **h1-ring-base**: built by a compiler from a worktree at `b2c55694` (`c12ccb0f^`, before), passed as `--base-compiler`. `run.sh` refuses to go on if the base builds match the after builds byte for byte.
+- **ring-base**, **h1-ring-base**: built by a compiler from a worktree at `b2c55694` (`c12ccb0f^`, before), passed as `--base-compiler`. `run.sh` builds the base binary of each requested `-base` design and refuses to go on if it matches its after build byte for byte.
 
 `run.sh` runs the arms in interleaved rounds, with the order rotated each round. `out/rsp` and `in/rsp` are the TCP segments `/proc/net/snmp` counted (`OutSegs`, `InSegs`) over loadgen's window, divided by the responses in it, as `bench/handler-ring/segs.c` samples them every 10 ms. The counters belong to the network namespace, so they count the server's segments and the load generator's, data and pure ACKs alike, on loopback.
 
-Bench code at commit `c664c0ed` on this pull request's branch (later commits change only documentation), on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The server is pinned to CPU 0 and the load to CPUs 1 to 3, with `--nodb` (`BENCH_NODB=1`: every server answers `/plaintext`'s 129 bytes without a query). 5 rounds at each count:
+Bench code as #2251 adds it (`bench/handler-ring/run.sh` and `segs.c`; the run used them at that pull request's branch commit `c664c0ed`, and the one later change, which narrows `run.sh`'s identical-build check to the requested `-base` designs, changes no binary or printed field), on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The server is pinned to CPU 0 and the load to CPUs 1 to 3, with `--nodb` (`BENCH_NODB=1`: every server answers `/plaintext`'s 129 bytes without a query). 5 rounds at each count:
 
 ```sh
 bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler <before>/build/nish \
@@ -3879,7 +3879,7 @@ bash bench/handler-ring/run.sh --nodb --conns 96000 --think 4 --warmup 4 --base-
 
 At 18,000 connections the load is 30,000 requests a second, a 3-second warm-up and a 10-second window. At 96,000 it is a closed loop with 4 seconds' think time, about 24,000 requests a second, with a 4-second warm-up. The epoll `h1` design runs only at 18,000: one process under the 20,000 limit cannot hold 96,000 descriptors. Every arm held every connection in every round, and none lost a request (`send_failed`, `closed` and `lat_lost` were 0 in every round).
 
-Medians of 5 (min to max). `user` and `sys` are medians of the server's user and system CPU a request. `PSS MB` is the median of the five rounds' `srv_pss_mb` (MiB) with its range, read from the per-round lines; the summary's own `PSS MB` column is the last round's. `p99` is the median of the rounds' p99 latency:
+Medians of 5 (min to max). `user` and `sys` are medians of the server's user and system CPU a request. `PSS MB` is the median of the five rounds' `srv_pss_mb` (MiB) with its range, read from the per-round lines; the summary's own `PSS MB` column is the last round's. `p99` is the median of the rounds' p99 latency, and no latency comparison is claimed from it (below):
 
 | C | design | server µs/req | user | sys | out/rsp | in/rsp | box µs/req | req/s | PSS MB | p99 ms |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
@@ -3912,7 +3912,7 @@ After against before, as `run.sh` prints it (the change in server CPU a request 
 
 **PSS: up after #2252, in every round.** At 96,000 connections `ring` rose 1.9 MiB at the medians (33.3 against 31.4, 6.1%) and `h1-ring` 1.6 MiB (32.0 against 30.4, 5.3%); at 18,000 both rose 0.4 MiB (11.1 against 10.7, and 10.0 against 9.6). At both counts and in both designs, every after round is above every before round, and the copy's range sits with the after build's, not the before's. The rise grows with the connection count, about 16 to 22 bytes a connection at 96,000 and 18 to 29 at 18,000 (PSS is printed to 0.1 MiB, so each difference is ±0.1 MiB). The send buffer pool #2252 adds is capped at 32 buffers of 16 KiB, 0.5 MiB a ring (`UR_SENDPOOL_MAX`, `UR_CHUNK`), so it alone does not account for 1.9 MiB; #2252 also adds per-slot state. This run measures that the process is larger; it does not attribute the bytes.
 
-What this does not say: these are one server process each on loopback, and only `--nodb`; a route over a real network, or a response large enough to need more than one segment, was not measured.
+What this does not say: these are one server process each on loopback, and only `--nodb`; a route over a real network, or a response large enough to need more than one segment, was not measured. Nor does it claim a latency change either way. The `p99` medians flip direction between the counts (`ring` 0.73 against `ring-base` 1.68 ms at 18,000, 2.66 against 1.36 at 96,000), and a build and its byte-identical copy differ by as much (`h1-ring` 2.66 against its copy's 1.65 ms at 96,000, 1.04 against 0.70 at 18,000), so the column is inside its own noise.
 <!-- handler-coalesce:end -->
 
 <!-- mul-high:begin -->
