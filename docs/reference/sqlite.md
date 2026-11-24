@@ -275,6 +275,7 @@ class Cursor
 | `last(): Result<boolean, i32>` | Moves to the last row. |
 | `next(): Result<boolean, i32>` | Moves to the next row. |
 | `previous(): Result<boolean, i32>` | Moves to the row before. |
+| `readRow(cols: readonly i32[], ints: i64[], spans: i32[], text: u8[]): Result<i32, i32>` | Reads the current row's columns `cols` in one call. For column `cols[k]` it writes `ints[k]`, the value `columnI64` answers (0 for text and blob), and `spans[3k]`, `spans[3k + 1]` and `spans[3k + 2]`: the type `columnType` answers, then where its bytes start in `text` and how many there are, which are the bytes `columnInto` copies (0 and 0 for a number or NULL). The row's text and blob bytes sit in `text` in column order. It copies only when all of them fit, so an answer larger than `text.length` means nothing was written to any buffer: grow `text` and call again. It allocates only when `cols` is longer than every list read before. |
 | `rowid(): i64` | The current row's rowid: a table row's key, an index entry's `rowid`. |
 | `seek(op: i32): Result<boolean, i32>` | Moves an index cursor by its seek key, compared with each entry's first key columns, so a key with fewer values than the index is a prefix: `SEEK_GE` and `SEEK_GT` land on the first entry at or after the key, `SEEK_LE` and `SEEK_LT` on the last at or before it, the `E` forms counting an equal entry. The key stays, for the next seek. |
 | `seekRowid(rowid: i64): Result<boolean, i32>` | Moves a table cursor to the row whose rowid is `rowid`. |

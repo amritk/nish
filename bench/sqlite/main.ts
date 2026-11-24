@@ -187,7 +187,9 @@ const walkFeedRows = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: F
       f.span(rr.text, sp[7], sp[8])
       const u = user.seekRowid(rr.ints[0])
       ok = u.isOk() && u.value && user.readRow(rr.user, rr.ints, sp, rr.text).isOk()
-      if (ok) f.span(rr.text, sp[1], sp[2])
+      if (ok) {
+        f.span(rr.text, sp[1], sp[2])
+      }
     }
     let n: i64 = 0
     ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
@@ -231,7 +233,9 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
 
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor-row|feed-cursor|insert|insert-txn> <db> <count>")
+    console.error(
+      "usage: main <lookup|feed|feed-cursor-walk|feed-cursor-row|feed-cursor|insert|insert-txn> <db> <count>"
+    )
     return 2
   }
   const mode: string = process.argv[1]
