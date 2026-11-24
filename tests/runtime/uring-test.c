@@ -109,24 +109,7 @@ static int test_accept_res(int res);
 
 /* What runtime-net.c's ring listener calls (the program's netListen,
  * netAccept, netRead, netWrite, netWrite2 and netClose). */
-typedef struct nish_array {
-  uint64_t len;
-  uint64_t cap;
-  char *data;
-} nish_array;
-typedef struct nish_str {
-  uint64_t len;
-  char data[];
-} nish_str;
-int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags);
-int32_t nish_net_ring_state(void);
-int32_t nish_net_local_port(int32_t fd);
-int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
-int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
-int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
-int32_t nish_net_write2(int32_t fd, const nish_array *a, int64_t aoff, int64_t alen, const nish_array *b,
-                        int64_t boff, int64_t blen);
-int32_t nish_net_close(int32_t fd);
+#include "nish.h"
 
 static struct nish_uring_set *ut_last_set;
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
@@ -1431,10 +1414,7 @@ static int netwrite(void) {
   host->len = 9;
   memcpy(host->data, "127.0.0.1", 9);
   int32_t l = nish_tcp_listen_flags(host, 0, 64, 8);
-  if (l < 0) {
-    fprintf(stderr, "uring-test: a ring listener answered %d\n", l);
-    return 1;
-  }
+  if (l < 0) return fail("a ring listener was refused");
   if (nish_net_ring_state() != 1 || !ut_last_set) {
     printf("runtime-net.c made no ring (state %d)\n", nish_net_ring_state());
     return SKIP;
@@ -1452,10 +1432,7 @@ static int netwrite(void) {
     if (now_ms() > deadline) return fail("the ring listener accepted no client");
     poll(NULL, 0, 1);
   }
-  if (h < 0) {
-    fprintf(stderr, "uring-test: netAccept answered %d\n", h);
-    return 1;
-  }
+  if (h < 0) return fail("netAccept was refused");
   char out[CO_HEAD + CO_BODY];
   uint8_t in[CO_HEAD + CO_BODY];
   nish_array head = {CO_HEAD, CO_HEAD, out}, body = {CO_BODY, CO_BODY, out + CO_HEAD};
@@ -1480,10 +1457,8 @@ static int netwrite(void) {
   if (nish_net_read(h, &rd, 0, sizeof scratch) != -11) return fail("netRead found bytes the client never sent");
   if (read_all(fd, in, 90) != 0 || memcmp(in, out, 90) != 0) return fail("the three netWrites did not arrive in order");
   nish_uring_stats(ut_last_set, &st);
-  if (st.sends - before != 1) {
-    fprintf(stderr, "uring-test: three netWrites in one pass took %ld SENDs, not 1\n", (long)(st.sends - before));
-    return 1;
-  }
+  printf("three netWrites: %ld SENDs\n", (long)(st.sends - before));
+  if (st.sends - before != 1) return fail("three netWrites in one pass took more than one SEND");
   nish_net_close(h);
   nish_net_close(l);
   close(fd);
