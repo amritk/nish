@@ -93,8 +93,16 @@
 # column sums them. The database is bench/sqlite's, made by `node bench/sqlite/run.mjs --validate` and copied
 # here once per run. Needs gcc, node, Linux 6.1 or later and memory for both
 # ends of C connections.
+#
+# BENCH_URING_STATS=1 runs every server with NISH_URING_STATS=1 and, halfway
+# through each measured window, sends SIGUSR1 to each server process whose
+# handler for it is installed (SigCgt in /proc/PID/status), so a ring
+# listener prints its `uring-stats signal` line under load; each round's
+# server stderr is kept as $out/<design>-<C>-<round>.err. A build whose
+# runtime predates the dump installs no handler and is sent nothing.
 set -euo pipefail
 
+if [ -n "${BENCH_URING_STATS:-}" ]; then export NISH_URING_STATS=1; fi
 root=$(cd "$(dirname "$0")/../.." && pwd)
 out="$root/build/bench/handler-ring"
 compiler="$root/build/nish"
@@ -378,11 +386,26 @@ run() {
     exit 2
     ;;
   esac
-  local line segs
+  local line segs poke=""
   ${load_pin[@]+"${load_pin[@]}"} "$out/segs" >"$out/segs.txt" &
   sampler=$!
+  if [ -n "${BENCH_URING_STATS:-}" ]; then
+    (
+      sleep "$(awk -v w="$warmup" -v d="$seconds" 'BEGIN { print w + d / 2 }')"
+      for p in $(pgrep -P "$server") "$server"; do
+        mask=$(awk '/^SigCgt:/ { print $2 }' "/proc/$p/status" 2>/dev/null || true)
+        # SIGUSR1 is signal 10, bit 9 of the mask.
+        if [ -n "$mask" ] && (( (16#$mask >> 9) & 1 )); then kill -USR1 "$p"; fi
+      done
+    ) &
+    poke=$!
+  fi
   line=$(${load_pin[@]+"${load_pin[@]}"} "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
   stop_sampler
+  if [ -n "$poke" ]; then
+    wait "$poke" 2>/dev/null || true
+    cp "$out/server.err" "$out/$design-$c-$r.err"
+  fi
   # The counters at win_lo and win_hi, each interpolated between the samples
   # around it, over the window's responses; n/a if a sample is missing.
   segs=$(awk -v line="$line" '
