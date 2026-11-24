@@ -30,26 +30,40 @@ function gameClamp(v: i32, most: i32): i32 -> @nish.gameClamp
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.smax.i32 llvm.smin.i32
   stackSites=0 stackLocals=0
-function gameSetSize(width: i32, height: i32): void -> @nish.gameSetSize [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function gameInfoWord(info: i32[], word: i32, most: i32): i32 -> @nish.gameInfoWord
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: most word
+  calls: nish.gameClamp
+  pointer info: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:10 gameClamp -> @nish.gameClamp
+function gameInfoPair(info: i32[], at: i32, a: i32, b: i32): void -> @nish.gameInfoPair
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
+  escaping: a at b
+  pointer info: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function gameSetSize(width: i32, height: i32): void -> @nish.gameSetSize [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.gameInfoPair
   escaping: height width
-  calls: nish.gameClamp nish_panic_index
+  calls: nish.gameClamp nish.gameInfoPair
   stackSites=0 stackLocals=0
-  callee +0:32 gameClamp -> @nish.gameClamp
-  callee +1:33 gameClamp -> @nish.gameClamp
+  callee +0:3 gameInfoPair -> @nish.gameInfoPair
+  callee +3:5 gameClamp -> @nish.gameClamp
+  callee +4:5 gameClamp -> @nish.gameClamp
 function gameWidth(): i32 -> @nish.gameWidth [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.gameClamp nish_panic_index
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.gameInfoWord
   stackSites=0 stackLocals=0
-  callee +0:37 gameClamp -> @nish.gameClamp
+  callee +0:37 gameInfoWord -> @nish.gameInfoWord
 function gameHeight(): i32 -> @nish.gameHeight [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.gameClamp nish_panic_index
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.gameInfoWord
   stackSites=0 stackLocals=0
-  callee +0:38 gameClamp -> @nish.gameClamp
+  callee +0:38 gameInfoWord -> @nish.gameInfoWord
 function gameEventOf(): TermEvent | null -> @nish.gameEventOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ringShift
   calls: nish.TermEvent.constructor nish.ringShift nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -84,84 +98,112 @@ function gameReadInput(input: StepInput, nowMs: f64): void -> @nish.gameReadInpu
   callee +10:5 ringClear -> @nish.ringClear
   callee +12:18 KeyState.apply -> @nish.KeyState.apply
 function gamePlaySound(id: i32): boolean -> @nish.gamePlaySound [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ringPush
   escaping: id
   calls: nish.ringPush
   stackSites=0 stackLocals=0
   callee +0:52 ringPush -> @nish.ringPush
-function gameWriteSamples(samples: f64[], sampleRate: i32): i32 -> @nish.gameWriteSamples [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function gameCopySamples(out: f32[], samples: f64[], n: i32): void -> @nish.gameCopySamples
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: sampleRate
-  calls: llvm.smin.i32 nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
   pointer samples: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -11:9 n: i32 (const)
   local -10:12 i: i32 (let)
   local -9:11 s: f64 (const)
   local -8:9 x: f64 (let)
+function gameWriteSamples(samples: f64[], sampleRate: i32): i32 -> @nish.gameWriteSamples [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.gameCopySamples
+  escaping: sampleRate
+  calls: llvm.smin.i32 nish.gameCopySamples nish.gameInfoPair
+  pointer samples: size=0 writesThrough=false captured=false passedTo=nish.gameCopySamples#1
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  callee +1:3 gameCopySamples -> @nish.gameCopySamples
+  callee +2:3 gameInfoPair -> @nish.gameInfoPair
 module std/host/ring.ts [package nish]
-const RING_HEADER: i32 = 2
-function ringCapacity(ring: i32[]): i32 -> @nish.ringCapacity [exported]
+function ringSlots(ring: i32[]): integer<0, 1073741823> -> @nish.ringSlots
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer ring: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
-function ringCount(count: i32, capacity: i32): i32 -> @nish.ringCount
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_div nish_panic_overflow
+  local +7:9 slots: i32 (const)
+function ringCapacity(ring: i32[]): i32 -> @nish.ringCapacity [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ringSlots
+  pointer ring: size=0 writesThrough=false captured=false passedTo=nish.ringSlots#0
   stackSites=0 stackLocals=0
-  local +0:9 m: i32 (const)
-  local +1:9 r: i32 (const)
+  callee +0:56 ringSlots -> @nish.ringSlots
+function ringCount(count: i32, capacity: integer<0, 1073741823>): integer<0, 2147483645> -> @nish.ringCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 span: i32 (const)
+  local +6:7 r: i32 (let)
+function ringWaiting(ring: i32[], capacity: integer<0, 1073741823>): integer<0, 1073741823> -> @nish.ringWaiting
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: capacity
+  calls: nish.ringCount
+  pointer ring: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 tail: integer<0, 2147483645> (const)
+  callee +0:27 ringCount -> @nish.ringCount
+  local +1:9 head: integer<0, 2147483645> (const)
+  callee +1:27 ringCount -> @nish.ringCount
+  local +2:9 size: integer<0, 2147483645> (const)
+  callee +2:27 ringCount -> @nish.ringCount
 function ringSize(ring: i32[]): i32 -> @nish.ringSize [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.ringCapacity nish.ringCount nish_panic_index nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringWaiting#0 nish.ringSlots#0
   stackSites=0 stackLocals=0
-  local +0:9 capacity: i32 (const)
-  callee +0:25 ringCapacity -> @nish.ringCapacity
-  local +4:9 size: i32 (const)
-  callee +4:21 ringCount -> @nish.ringCount
-  callee +4:31 ringCount -> @nish.ringCount
-  callee +4:62 ringCount -> @nish.ringCount
+  callee +0:52 ringWaiting -> @nish.ringWaiting
+  callee +0:70 ringSlots -> @nish.ringSlots
 function ringFree(ring: i32[]): i32 -> @nish.ringFree [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.ringCapacity nish.ringSize nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0 nish.ringSize#0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringSlots#0 nish.ringWaiting#0
   stackSites=0 stackLocals=0
-  callee +0:52 ringCapacity -> @nish.ringCapacity
-  callee +0:73 ringSize -> @nish.ringSize
+  local +0:9 capacity: integer<0, 1073741823> (const)
+  callee +0:31 ringSlots -> @nish.ringSlots
+  local +1:9 waiting: integer<0, 1073741823> (const)
+  callee +1:30 ringWaiting -> @nish.ringWaiting
 function ringPush(ring: i32[], word: i32): boolean -> @nish.ringPush [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: word
-  calls: nish.ringCapacity nish.ringCount nish.ringSize nish_panic_div nish_panic_index nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0 nish.ringSize#0
+  calls: nish.ringCount nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringSlots#0 nish.ringWaiting#0
   stackSites=0 stackLocals=0
-  local -5:9 capacity: i32 (const)
-  callee -5:25 ringCapacity -> @nish.ringCapacity
-  callee -4:25 ringSize -> @nish.ringSize
-  local -1:9 tail: i32 (const)
-  callee -1:21 ringCount -> @nish.ringCount
-  callee +1:13 ringCount -> @nish.ringCount
+  local -22:9 capacity: integer<0, 1073741823> (const)
+  callee -22:31 ringSlots -> @nish.ringSlots
+  callee -21:25 ringWaiting -> @nish.ringWaiting
+  local -15:9 length: i32 (const)
+  local -14:9 tail: integer<0, 2147483645> (const)
+  callee -14:27 ringCount -> @nish.ringCount
+  local -12:7 base: i32 (let)
+  local -11:7 at: i32 (let)
+  local +1:7 next: i32 (let)
 function ringShift(ring: i32[]): i32 -> @nish.ringShift [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.ringCapacity nish.ringCount nish.ringSize nish_panic_div nish_panic_index nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0 nish.ringSize#0
+  calls: nish.ringCount nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringSlots#0 nish.ringWaiting#0
   stackSites=0 stackLocals=0
-  local -6:9 capacity: i32 (const)
-  callee -6:25 ringCapacity -> @nish.ringCapacity
-  callee -5:25 ringSize -> @nish.ringSize
-  local -2:9 head: i32 (const)
-  callee -2:21 ringCount -> @nish.ringCount
-  local -1:9 word: i32 (const)
-  callee +0:13 ringCount -> @nish.ringCount
+  local -26:9 capacity: integer<0, 1073741823> (const)
+  callee -26:31 ringSlots -> @nish.ringSlots
+  callee -25:25 ringWaiting -> @nish.ringWaiting
+  local -19:9 length: i32 (const)
+  local -18:9 head: integer<0, 2147483645> (const)
+  callee -18:27 ringCount -> @nish.ringCount
+  local -16:7 base: i32 (let)
+  local -15:7 at: i32 (let)
+  local -6:9 word: i32 (const)
+  local -5:7 next: i32 (let)
 function ringClear(ring: i32[]): void -> @nish.ringClear [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index
   pointer ring: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 module std/input.ts [package nish]
@@ -1381,9 +1423,9 @@ function rasterPixel(v: f64): i32 -> @nish.rasterPixel [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i32.f64 nish_floor
   stackSites=0 stackLocals=0
-function rasterByte(v: i32): i32 -> @nish.rasterByte
+function rasterByte(v: i32): integer<0, 255> -> @nish.rasterByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.smax.i32 llvm.smin.i32
+  escaping: v
   stackSites=0 stackLocals=0
 function rasterUnit(x: f64): f64 -> @nish.rasterUnit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1399,47 +1441,74 @@ function rasterRgb(r: i32, g: i32, b: i32): i32 -> @nish.rasterRgb [exported]
   callee +0:50 rasterByte -> @nish.rasterByte
 function rasterWeight(t: f64): i32 -> @nish.rasterWeight [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  calls: nish.rasterWeightOf
+  stackSites=0 stackLocals=0
+  callee +0:46 rasterWeightOf -> @nish.rasterWeightOf
+function rasterWeightOf(t: f64): integer<0, 256> -> @nish.rasterWeightOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i32.f64
   stackSites=0 stackLocals=0
-function rasterMixByte(a: i32, b: i32, w: i32): i32 -> @nish.rasterMixByte
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
-  stackSites=0 stackLocals=0
-function rasterMixWeight(a: i32, b: i32, w: i32): i32 -> @nish.rasterMixWeight [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  local +0:9 w: i32 (const)
+function rasterClampWeight(w: i32): integer<0, 256> -> @nish.rasterClampWeight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: w
-  calls: nish.rasterMixByte
+  stackSites=0 stackLocals=0
+function rasterMixByte(a: integer<0, 255>, b: integer<0, 255>, w: integer<0, 256>): i32 -> @nish.rasterMixByte
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function rasterChannel(c: i32, shift: i32): integer<0, 255> -> @nish.rasterChannel
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 v: i32 (const)
+function rasterMixIn(a: i32, b: i32, w: integer<0, 256>): i32 -> @nish.rasterMixIn
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b w
+  calls: nish.rasterChannel nish.rasterMixByte
   stackSites=0 stackLocals=0
   callee +0:4 rasterMixByte -> @nish.rasterMixByte
+  callee +0:18 rasterChannel -> @nish.rasterChannel
+  callee +0:40 rasterChannel -> @nish.rasterChannel
   callee +1:4 rasterMixByte -> @nish.rasterMixByte
+  callee +1:18 rasterChannel -> @nish.rasterChannel
+  callee +1:39 rasterChannel -> @nish.rasterChannel
   callee +2:3 rasterMixByte -> @nish.rasterMixByte
-function rasterMix(a: i32, b: i32, t: f64): i32 -> @nish.rasterMix [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: a b t
-  calls: nish.rasterMixWeight nish.rasterWeight
+  callee +2:17 rasterChannel -> @nish.rasterChannel
+  callee +2:38 rasterChannel -> @nish.rasterChannel
+function rasterMixWeight(a: i32, b: i32, w: i32): i32 -> @nish.rasterMixWeight [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b w
+  calls: nish.rasterClampWeight nish.rasterMixIn
   stackSites=0 stackLocals=0
-  callee +0:59 rasterMixWeight -> @nish.rasterMixWeight
-  callee +0:81 rasterWeight -> @nish.rasterWeight
+  callee +0:65 rasterMixIn -> @nish.rasterMixIn
+  callee +0:83 rasterClampWeight -> @nish.rasterClampWeight
+function rasterMix(a: i32, b: i32, t: f64): i32 -> @nish.rasterMix [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b t
+  calls: nish.rasterMixIn nish.rasterWeightOf
+  stackSites=0 stackLocals=0
+  callee +0:59 rasterMixIn -> @nish.rasterMixIn
+  callee +0:77 rasterWeightOf -> @nish.rasterWeightOf
 function rasterAdd(a: i32, b: i32): i32 -> @nish.rasterAdd [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.smin.i32
   stackSites=0 stackLocals=0
 function rasterDim(c: i32, k: f64): i32 -> @nish.rasterDim [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c k
-  calls: nish.rasterMixWeight nish.rasterWeight
+  calls: nish.rasterMixIn nish.rasterWeightOf
   stackSites=0 stackLocals=0
-  callee +0:51 rasterMixWeight -> @nish.rasterMixWeight
-  callee +0:73 rasterWeight -> @nish.rasterWeight
+  callee +0:51 rasterMixIn -> @nish.rasterMixIn
+  callee +0:69 rasterWeightOf -> @nish.rasterWeightOf
 function rasterHue(h: f64): i32 -> @nish.rasterHue [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.fptosi.sat.i32.f64 nish.rasterByte nish.rasterRgb nish_floor nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish.rasterByte nish.rasterRgb nish_floor
   stackSites=0 stackLocals=0
   local +0:7 turn: f64 (let)
   local +4:9 h6: f64 (const)
   local +5:9 sector: i32 (const)
-  local +6:9 rise: i32 (const)
-  callee +6:21 rasterByte -> @nish.rasterByte
+  local +6:9 rise: integer<0, 255> (const)
+  callee +6:33 rasterByte -> @nish.rasterByte
   local +7:9 fall: i32 (const)
   callee +9:12 rasterRgb -> @nish.rasterRgb
   callee +12:12 rasterRgb -> @nish.rasterRgb
@@ -1452,138 +1521,190 @@ function rasterRows(pixels: i32[], width: i32, height: i32): i32 -> @nish.raster
   calls: llvm.smin.i32
   pointer pixels: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function rasterSpan(pixels: i32[], width: i32, rows: i32, x0: i32, x1: i32, y: i32, colour: i32, w: i32): void -> @nish.rasterSpan
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function rasterAt(size: i32, width: i32, x: i32, y: i32): i32 -> @nish.rasterAt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 at: i64 (const)
+function rasterSpan(pixels: i32[], width: i32, rows: i32, x0: i32, x1: i32, y: i32, colour: i32, w: integer<0, 256>): void -> @nish.rasterSpan
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: colour w
-  calls: llvm.smax.i32 llvm.smin.i32 nish.rasterMixWeight nish_panic_index nish_panic_overflow
+  escaping: colour w width y
+  calls: llvm.smax.i32 llvm.smin.i32 nish.rasterAt nish.rasterMixIn
   pointer pixels: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -5:9 from: i32 (const)
-  local -4:9 to: i32 (const)
-  local -3:9 row: i32 (const)
+  local -12:9 from: i32 (const)
+  local -11:9 to: i32 (const)
+  local -10:9 size: i32 (const)
+  local -6:7 at: i32 (let)
+  callee -6:17 rasterAt -> @nish.rasterAt
   local -1:14 x: i32 (let)
-  local +4:12 x: i32 (let)
-  callee +5:23 rasterMixWeight -> @nish.rasterMixWeight
+  local +5:12 x: i32 (let)
+  callee +6:18 rasterMixIn -> @nish.rasterMixIn
+function rasterEnd(last: i32, limit: i32): i32 -> @nish.rasterEnd
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: limit
+  stackSites=0 stackLocals=0
+function rasterGradientWeight(y: i32, height: i32): integer<0, 256> -> @nish.rasterGradientWeight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local +0:9 w: i32 (const)
 function rasterGradient(pixels: i32[], width: i32, height: i32, top: i32, bottom: i32): void -> @nish.rasterGradient [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterSpan
   escaping: bottom height top width
-  calls: nish.rasterMixWeight nish.rasterRows nish.rasterSpan nish_panic_div nish_panic_overflow
+  calls: nish.rasterGradientWeight nish.rasterMixIn nish.rasterRows nish.rasterSpan
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRows#0 nish.rasterSpan#0
   stackSites=0 stackLocals=0
   local +0:9 rows: i32 (const)
   callee +0:21 rasterRows -> @nish.rasterRows
   local +1:12 y: i32 (let)
   local +2:11 colour: i32 (const)
-  callee +2:25 rasterMixWeight -> @nish.rasterMixWeight
+  callee +2:25 rasterMixIn -> @nish.rasterMixIn
+  callee +2:50 rasterGradientWeight -> @nish.rasterGradientWeight
   callee +3:5 rasterSpan -> @nish.rasterSpan
 function rasterRect(pixels: i32[], width: i32, height: i32, x0: i32, y0: i32, x1: i32, y1: i32, colour: i32, weight: i32): void -> @nish.rasterRect [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterSpan
   escaping: colour height weight width x0 x1
-  calls: llvm.smax.i32 llvm.smin.i32 nish.rasterRows nish.rasterSpan
+  calls: llvm.smax.i32 llvm.smin.i32 nish.rasterClampWeight nish.rasterRows nish.rasterSpan
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRows#0 nish.rasterSpan#0
   stackSites=0 stackLocals=0
-  local +0:9 rows: i32 (const)
-  callee +0:21 rasterRows -> @nish.rasterRows
-  local +1:9 from: i32 (const)
-  local +2:9 to: i32 (const)
-  local +3:12 y: i32 (let)
-  callee +4:5 rasterSpan -> @nish.rasterSpan
+  local +0:9 w: integer<0, 256> (const)
+  callee +0:30 rasterClampWeight -> @nish.rasterClampWeight
+  local +1:9 rows: i32 (const)
+  callee +1:21 rasterRows -> @nish.rasterRows
+  local +2:9 from: i32 (const)
+  local +3:9 to: i32 (const)
+  local +4:12 y: i32 (let)
+  callee +5:5 rasterSpan -> @nish.rasterSpan
 function rasterDisc(pixels: i32[], width: i32, height: i32, cx: f64, cy: f64, r: f64, colour: i32, alpha: f64): void -> @nish.rasterDisc [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  escaping: alpha colour height width
-  calls: llvm.smax.i32 llvm.smin.i32 llvm.sqrt.f64 nish.rasterMixWeight nish.rasterPixel nish.rasterRows nish.rasterUnit nish.rasterWeight nish_panic_index nish_panic_overflow
-  pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRows#0
-  stackSites=0 stackLocals=0
-  local -22:9 a: f64 (const)
-  callee -22:18 rasterUnit -> @nish.rasterUnit
-  callee -22:38 rasterUnit -> @nish.rasterUnit
-  local -18:9 rows: i32 (const)
-  callee -18:21 rasterRows -> @nish.rasterRows
-  local -17:9 inner: f64 (const)
-  local -16:9 outer: f64 (const)
-  local -15:9 fullW: i32 (const)
-  callee -15:22 rasterWeight -> @nish.rasterWeight
-  local -14:9 x0: i32 (const)
-  callee -14:28 rasterPixel -> @nish.rasterPixel
-  local -13:9 x1: i32 (const)
-  callee -13:28 rasterPixel -> @nish.rasterPixel
-  local -12:9 y0: i32 (const)
-  callee -12:28 rasterPixel -> @nish.rasterPixel
-  local -11:9 y1: i32 (const)
-  callee -11:28 rasterPixel -> @nish.rasterPixel
-  local -10:12 y: i32 (let)
-  local -9:11 dy: f64 (const)
-  local -8:11 row: i32 (const)
-  local -7:14 x: i32 (let)
-  local -6:13 dx: f64 (const)
-  local -5:13 d2: f64 (const)
-  local -1:13 w: i32 (const)
-  callee -1:44 rasterWeight -> @nish.rasterWeight
-  callee +0:54 rasterMixWeight -> @nish.rasterMixWeight
-function rasterGlow(pixels: i32[], width: i32, height: i32, cx: f64, cy: f64, r: f64, colour: i32, strength: f64): void -> @nish.rasterGlow [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  escaping: colour height width
-  calls: llvm.smax.i32 llvm.smin.i32 nish.rasterAdd nish.rasterMixWeight nish.rasterPixel nish.rasterRows nish.rasterWeight nish_panic_index nish_panic_overflow
+  escaping: alpha colour height width
+  calls: llvm.smax.i32 llvm.sqrt.f64 nish.rasterAt nish.rasterEnd nish.rasterMixIn nish.rasterPixel nish.rasterRows nish.rasterUnit nish.rasterWeightOf
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRows#0
   stackSites=0 stackLocals=0
-  local -19:9 rows: i32 (const)
-  callee -19:21 rasterRows -> @nish.rasterRows
-  local -18:9 r2: f64 (const)
-  local -17:9 x0: i32 (const)
-  callee -17:28 rasterPixel -> @nish.rasterPixel
-  local -16:9 x1: i32 (const)
+  local -25:9 a: f64 (const)
+  callee -25:18 rasterUnit -> @nish.rasterUnit
+  callee -25:38 rasterUnit -> @nish.rasterUnit
+  local -21:9 rows: i32 (const)
+  callee -21:21 rasterRows -> @nish.rasterRows
+  local -20:9 inner: f64 (const)
+  local -19:9 outer: f64 (const)
+  local -18:9 fullW: integer<0, 256> (const)
+  callee -18:34 rasterWeightOf -> @nish.rasterWeightOf
+  local -17:9 size: i32 (const)
+  local -16:9 x0: i32 (const)
   callee -16:28 rasterPixel -> @nish.rasterPixel
-  local -15:9 y0: i32 (const)
-  callee -15:28 rasterPixel -> @nish.rasterPixel
-  local -14:9 y1: i32 (const)
+  local -15:9 x1: i32 (const)
+  callee -15:19 rasterEnd -> @nish.rasterEnd
+  callee -15:29 rasterPixel -> @nish.rasterPixel
+  local -14:9 y0: i32 (const)
   callee -14:28 rasterPixel -> @nish.rasterPixel
-  local -13:12 y: i32 (let)
-  local -12:11 dy: f64 (const)
-  local -11:11 row: i32 (const)
-  local -10:14 x: i32 (let)
-  local -9:13 dx: f64 (const)
-  local -8:13 d2: f64 (const)
-  local -4:13 near: f64 (const)
-  local -3:13 fall: f64 (const)
-  local -2:13 w: i32 (const)
-  callee -2:22 rasterWeight -> @nish.rasterWeight
-  callee +0:27 rasterAdd -> @nish.rasterAdd
-  callee +0:54 rasterMixWeight -> @nish.rasterMixWeight
-function rasterGlyphRow(c: i32, row: i32): i32 -> @nish.rasterGlyphRow
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  local -13:9 y1: i32 (const)
+  callee -13:19 rasterEnd -> @nish.rasterEnd
+  callee -13:29 rasterPixel -> @nish.rasterPixel
+  local -12:12 y: i32 (let)
+  local -11:11 dy: f64 (const)
+  local -9:9 at: i32 (let)
+  callee -9:19 rasterAt -> @nish.rasterAt
+  local -5:14 x: i32 (let)
+  local -4:13 dx: f64 (const)
+  local -3:13 d2: f64 (const)
+  local -1:15 w: integer<0, 256> (const)
+  callee -1:58 rasterWeightOf -> @nish.rasterWeightOf
+  callee +0:51 rasterMixIn -> @nish.rasterMixIn
+function rasterGlow(pixels: i32[], width: i32, height: i32, cx: f64, cy: f64, r: f64, colour: i32, strength: f64): void -> @nish.rasterGlow [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:11
+  escaping: colour height width
+  calls: llvm.smax.i32 nish.rasterAdd nish.rasterAt nish.rasterEnd nish.rasterMixIn nish.rasterPixel nish.rasterRows nish.rasterWeightOf
+  pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRows#0
+  stackSites=0 stackLocals=0
+  local -22:9 rows: i32 (const)
+  callee -22:21 rasterRows -> @nish.rasterRows
+  local -21:9 r2: f64 (const)
+  local -20:9 size: i32 (const)
+  local -19:9 x0: i32 (const)
+  callee -19:28 rasterPixel -> @nish.rasterPixel
+  local -18:9 x1: i32 (const)
+  callee -18:19 rasterEnd -> @nish.rasterEnd
+  callee -18:29 rasterPixel -> @nish.rasterPixel
+  local -17:9 y0: i32 (const)
+  callee -17:28 rasterPixel -> @nish.rasterPixel
+  local -16:9 y1: i32 (const)
+  callee -16:19 rasterEnd -> @nish.rasterEnd
+  callee -16:29 rasterPixel -> @nish.rasterPixel
+  local -15:12 y: i32 (let)
+  local -14:11 dy: f64 (const)
+  local -12:9 at: i32 (let)
+  callee -12:19 rasterAt -> @nish.rasterAt
+  local -8:14 x: i32 (let)
+  local -7:13 dx: f64 (const)
+  local -6:13 d2: f64 (const)
+  local -4:15 near: f64 (const)
+  local -3:15 fall: f64 (const)
+  local -2:15 w: integer<0, 256> (const)
+  callee -2:36 rasterWeightOf -> @nish.rasterWeightOf
+  callee +0:24 rasterAdd -> @nish.rasterAdd
+  callee +0:46 rasterMixIn -> @nish.rasterMixIn
+function rasterGlyph(c: i32): integer<0, 94> -> @nish.rasterGlyph
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 g: i32 (const)
-  local +1:9 at: i32 (const)
+function rasterGlyphRow(font: string, c: i32, row: i32): i32 -> @nish.rasterGlyphRow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: c
+  calls: nish.rasterGlyph
+  stackSites=0 stackLocals=0
+  local +0:9 at: i32 (const)
+  callee +0:19 rasterGlyph -> @nish.rasterGlyph
 function rasterTextWidth(text: string, scale: i32): i32 -> @nish.rasterTextWidth [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.smin.i32 nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: scale
+  calls: nish.rasterEdge nish.rasterTextScale
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
+  local +5:9 size: integer<0, 1024> (const)
+  callee +5:34 rasterTextScale -> @nish.rasterTextScale
+  local +7:9 advance: i64 (const)
+  callee +8:10 rasterEdge -> @nish.rasterEdge
+function rasterEdge(v: i64): i32 -> @nish.rasterEdge
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function rasterTextScale(scale: i32): integer<0, 1024> -> @nish.rasterTextScale
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: scale
+  stackSites=0 stackLocals=0
 function rasterText(pixels: i32[], width: i32, height: i32, x: i32, y: i32, scale: i32, text: string, colour: i32): void -> @nish.rasterText [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterRect
-  escaping: colour height width x
-  calls: llvm.smin.i32 nish.rasterGlyphRow nish.rasterRect nish_panic_overflow
+  escaping: colour height scale width
+  calls: nish.rasterEdge nish.rasterGlyphRow nish.rasterRect nish.rasterTextScale
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRect#0
   stackSites=0 stackLocals=0
-  local +0:9 size: i32 (const)
-  local +1:9 n: i32 (const)
-  local +2:7 gx: i32 (let)
-  local +3:12 i: i32 (let)
-  local +4:11 c: i32 (const)
-  local +6:16 row: i32 (let)
-  local +7:15 bits: i32 (const)
-  callee +7:27 rasterGlyphRow -> @nish.rasterGlyphRow
-  local +8:15 top: i32 (const)
-  local +9:18 col: i32 (let)
-  local +11:19 left: i32 (const)
-  callee +12:13 rasterRect -> @nish.rasterRect
+  local +0:9 size: integer<0, 1024> (const)
+  callee +0:34 rasterTextScale -> @nish.rasterTextScale
+  local +4:9 n: i32 (const)
+  local +7:9 step: i64 (const)
+  local +10:9 wide: i64 (const)
+  local +11:9 advance: i64 (const)
+  local +12:12 i: i32 (let)
+  local +17:11 gx: i32 (const)
+  callee +17:21 rasterEdge -> @nish.rasterEdge
+  local +21:11 c: i32 (const)
+  local +23:16 row: i32 (let)
+  local +24:15 bits: i32 (const)
+  callee +24:27 rasterGlyphRow -> @nish.rasterGlyphRow
+  local +25:15 top: i32 (const)
+  callee +25:26 rasterEdge -> @nish.rasterEdge
+  local +26:18 col: i32 (let)
+  local +28:19 left: i32 (const)
+  callee +28:31 rasterEdge -> @nish.rasterEdge
+  callee +29:13 rasterRect -> @nish.rasterRect
+  callee +35:15 rasterEdge -> @nish.rasterEdge
+  callee +36:15 rasterEdge -> @nish.rasterEdge
 function RasterTrail.constructor(this: RasterTrail, capacity: i32): void -> @nish.RasterTrail.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: llvm.smax.i32 nish_panic
@@ -1596,30 +1717,36 @@ function RasterTrail.clear(this: RasterTrail): void -> @nish.RasterTrail.clear [
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function rasterPushTrail(trail: RasterTrail, x: f64, y: f64): void -> @nish.rasterPushTrail [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: x y
-  calls: nish_panic_index nish_panic_overflow
   pointer trail: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -2:9 n: i32 (const)
+  local -5:9 xs: f64[] (const)
+  local -4:9 ys: f64[] (const)
+  local -3:9 n: i32 (const)
+  local -2:9 head: i32 (const)
+  local +6:9 count: i32 (const)
 function rasterTrail(pixels: i32[], width: i32, height: i32, trail: RasterTrail, r: f64, colour: i32, alpha: f64, scale: f64, offsetX: f64, offsetY: f64): void -> @nish.rasterTrail [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterDisc
   escaping: colour height width
-  calls: llvm.smin.i32 nish.rasterDisc nish_panic_overflow
+  calls: llvm.smin.i32 nish.rasterDisc
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterDisc#0
   pointer trail: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +1:9 count: i32 (const)
-  local +2:12 i: i32 (let)
-  local +4:9 slot: i32 (let)
-  local +11:11 f: f64 (const)
-  local +12:11 radius: f64 (const)
-  local +13:11 cx: f64 (const)
-  local +14:11 cy: f64 (const)
-  callee +15:5 rasterDisc -> @nish.rasterDisc
+  local +0:9 xs: f64[] (const)
+  local +1:9 ys: f64[] (const)
+  local +2:9 n: i32 (const)
+  local +3:9 count: i32 (const)
+  local +4:9 head: i32 (const)
+  local +10:7 slot: i32 (let)
+  local +14:12 i: i32 (let)
+  local +21:13 f: f64 (const)
+  local +22:13 radius: f64 (const)
+  local +23:13 cx: f64 (const)
+  local +24:13 cy: f64 (const)
+  callee +25:7 rasterDisc -> @nish.rasterDisc
 function RasterParticles.constructor(this: RasterParticles, capacity: i32): void -> @nish.RasterParticles.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: llvm.smax.i32 nish_panic
@@ -1631,12 +1758,13 @@ function RasterParticles.capacity(this: RasterParticles): i32 -> @nish.RasterPar
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RasterParticles.live(this: RasterParticles): i32 -> @nish.RasterParticles.live [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 n: i32 (let)
-  local +1:16 life: f64 (const)
+  local +0:11 lives: f64[] (const)
+  local +1:11 len: i32 (const)
+  local +2:9 n: i32 (let)
+  local +3:16 life: f64 (const)
 function RasterParticles.clear(this: RasterParticles): void -> @nish.RasterParticles.clear [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1650,53 +1778,73 @@ function RasterParticles.has(this: RasterParticles, i: i32): boolean -> @nish.Ra
   local +0:11 n: i32 (const)
   callee +0:20 RasterParticles.capacity -> @nish.RasterParticles.capacity
 function rasterSpawnParticle(pool: RasterParticles, x: f64, y: f64, vx: f64, vy: f64, life: f64, size: f64, colour: i32): void -> @nish.rasterSpawnParticle [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: colour life size vx vy x y
-  calls: nish.RasterParticles.capacity nish.RasterParticles.has nish_panic_index
-  pointer pool: size=88 writesThrough=true captured=false passedTo=nish.RasterParticles.has#0 nish.RasterParticles.capacity#0
+  pointer pool: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -2:9 i: i32 (const)
-  callee -1:8 RasterParticles.has -> @nish.RasterParticles.has
-  callee +13:24 RasterParticles.capacity -> @nish.RasterParticles.capacity
+  local -26:9 xs: f64[] (const)
+  local -25:9 ys: f64[] (const)
+  local -24:9 prevXs: f64[] (const)
+  local -23:9 prevYs: f64[] (const)
+  local -22:9 vxs: f64[] (const)
+  local -21:9 vys: f64[] (const)
+  local -20:9 lives: f64[] (const)
+  local -19:9 spans: f64[] (const)
+  local -18:9 sizes: f64[] (const)
+  local -17:9 colours: i32[] (const)
+  local -16:9 i: i32 (const)
 function rasterStepParticles(pool: RasterParticles, dt: f64, gravity: f64, drag: f64): void -> @nish.rasterStepParticles [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.RasterParticles.capacity nish.RasterParticles.has nish.rasterUnit nish_panic_index
-  pointer pool: size=88 writesThrough=false captured=false passedTo=nish.RasterParticles.capacity#0 nish.RasterParticles.has#0
+  calls: nish.rasterUnit
+  pointer pool: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -6:9 lost: f64 (const)
-  local -5:9 keep: f64 (const)
-  callee -5:21 rasterUnit -> @nish.rasterUnit
-  local -4:12 i: i32 (let)
-  callee -4:28 RasterParticles.capacity -> @nish.RasterParticles.capacity
-  callee -3:10 RasterParticles.has -> @nish.RasterParticles.has
+  local -24:9 lost: f64 (const)
+  local -23:9 keep: f64 (const)
+  callee -23:21 rasterUnit -> @nish.rasterUnit
+  local -22:9 xs: f64[] (const)
+  local -21:9 ys: f64[] (const)
+  local -20:9 prevXs: f64[] (const)
+  local -19:9 prevYs: f64[] (const)
+  local -18:9 vxs: f64[] (const)
+  local -17:9 vys: f64[] (const)
+  local -16:9 lives: f64[] (const)
+  local -15:9 n: i32 (const)
+  local -14:12 i: i32 (let)
 function rasterParticles(pixels: i32[], width: i32, height: i32, pool: RasterParticles, alpha: f64, scale: f64, offsetX: f64, offsetY: f64): void -> @nish.rasterParticles [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterRect
   escaping: height width
-  calls: nish.RasterParticles.capacity nish.RasterParticles.has nish.rasterPixel nish.rasterRect nish.rasterWeight nish_panic_index
+  calls: nish.rasterPixel nish.rasterRect nish.rasterWeight
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRect#0
-  pointer pool: size=88 writesThrough=false captured=false passedTo=nish.RasterParticles.capacity#0 nish.RasterParticles.has#0
+  pointer pool: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:12 i: i32 (let)
-  callee +0:28 RasterParticles.capacity -> @nish.RasterParticles.capacity
-  callee +1:10 RasterParticles.has -> @nish.RasterParticles.has
-  local +4:11 size: f64 (const)
-  local +5:11 half: f64 (const)
-  local +6:11 x: f64 (const)
-  local +7:11 y: f64 (const)
-  local +8:11 x0: i32 (const)
-  callee +8:21 rasterPixel -> @nish.rasterPixel
-  local +9:11 y0: i32 (const)
-  callee +9:21 rasterPixel -> @nish.rasterPixel
-  local +10:11 x1: i32 (const)
-  callee +10:21 rasterPixel -> @nish.rasterPixel
-  local +11:11 y1: i32 (const)
-  callee +11:21 rasterPixel -> @nish.rasterPixel
-  local +12:11 weight: i32 (const)
-  callee +12:25 rasterWeight -> @nish.rasterWeight
-  callee +13:5 rasterRect -> @nish.rasterRect
+  local +0:9 xs: f64[] (const)
+  local +1:9 ys: f64[] (const)
+  local +2:9 prevXs: f64[] (const)
+  local +3:9 prevYs: f64[] (const)
+  local +4:9 lives: f64[] (const)
+  local +5:9 spans: f64[] (const)
+  local +6:9 sizes: f64[] (const)
+  local +7:9 colours: i32[] (const)
+  local +8:9 n: i32 (const)
+  local +9:12 i: i32 (let)
+  local +23:11 size: f64 (const)
+  local +24:11 half: f64 (const)
+  local +25:11 x: f64 (const)
+  local +26:11 y: f64 (const)
+  local +27:11 x0: i32 (const)
+  callee +27:21 rasterPixel -> @nish.rasterPixel
+  local +28:11 y0: i32 (const)
+  callee +28:21 rasterPixel -> @nish.rasterPixel
+  local +29:11 x1: i32 (const)
+  callee +29:21 rasterPixel -> @nish.rasterPixel
+  local +30:11 y1: i32 (const)
+  callee +30:21 rasterPixel -> @nish.rasterPixel
+  local +31:11 weight: i32 (const)
+  callee +31:25 rasterWeight -> @nish.rasterWeight
+  callee +32:5 rasterRect -> @nish.rasterRect
 import GAME_FRAME from "nish/host/game" -> const GAME_FRAME
 import gameHeight from "nish/host/game" -> function @nish.gameHeight
 import gameSetSize from "nish/host/game" -> function @nish.gameSetSize

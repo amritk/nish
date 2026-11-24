@@ -30,26 +30,40 @@ function gameClamp(v: i32, most: i32): i32 -> @nish.gameClamp
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.smax.i32 llvm.smin.i32
   stackSites=0 stackLocals=0
-function gameSetSize(width: i32, height: i32): void -> @nish.gameSetSize [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function gameInfoWord(info: i32[], word: i32, most: i32): i32 -> @nish.gameInfoWord
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: most word
+  calls: nish.gameClamp
+  pointer info: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:10 gameClamp -> @nish.gameClamp
+function gameInfoPair(info: i32[], at: i32, a: i32, b: i32): void -> @nish.gameInfoPair
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
+  escaping: a at b
+  pointer info: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function gameSetSize(width: i32, height: i32): void -> @nish.gameSetSize [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.gameInfoPair
   escaping: height width
-  calls: nish.gameClamp nish_panic_index
+  calls: nish.gameClamp nish.gameInfoPair
   stackSites=0 stackLocals=0
-  callee +0:32 gameClamp -> @nish.gameClamp
-  callee +1:33 gameClamp -> @nish.gameClamp
+  callee +0:3 gameInfoPair -> @nish.gameInfoPair
+  callee +3:5 gameClamp -> @nish.gameClamp
+  callee +4:5 gameClamp -> @nish.gameClamp
 function gameWidth(): i32 -> @nish.gameWidth [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.gameClamp nish_panic_index
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.gameInfoWord
   stackSites=0 stackLocals=0
-  callee +0:37 gameClamp -> @nish.gameClamp
+  callee +0:37 gameInfoWord -> @nish.gameInfoWord
 function gameHeight(): i32 -> @nish.gameHeight [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.gameClamp nish_panic_index
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.gameInfoWord
   stackSites=0 stackLocals=0
-  callee +0:38 gameClamp -> @nish.gameClamp
+  callee +0:38 gameInfoWord -> @nish.gameInfoWord
 function gameEventOf(): TermEvent | null -> @nish.gameEventOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ringShift
   calls: nish.TermEvent.constructor nish.ringShift nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -84,84 +98,112 @@ function gameReadInput(input: StepInput, nowMs: f64): void -> @nish.gameReadInpu
   callee +10:5 ringClear -> @nish.ringClear
   callee +12:18 KeyState.apply -> @nish.KeyState.apply
 function gamePlaySound(id: i32): boolean -> @nish.gamePlaySound [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ringPush
   escaping: id
   calls: nish.ringPush
   stackSites=0 stackLocals=0
   callee +0:52 ringPush -> @nish.ringPush
-function gameWriteSamples(samples: f64[], sampleRate: i32): i32 -> @nish.gameWriteSamples [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function gameCopySamples(out: f32[], samples: f64[], n: i32): void -> @nish.gameCopySamples
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: sampleRate
-  calls: llvm.smin.i32 nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
   pointer samples: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -11:9 n: i32 (const)
   local -10:12 i: i32 (let)
   local -9:11 s: f64 (const)
   local -8:9 x: f64 (let)
+function gameWriteSamples(samples: f64[], sampleRate: i32): i32 -> @nish.gameWriteSamples [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.gameCopySamples
+  escaping: sampleRate
+  calls: llvm.smin.i32 nish.gameCopySamples nish.gameInfoPair
+  pointer samples: size=0 writesThrough=false captured=false passedTo=nish.gameCopySamples#1
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  callee +1:3 gameCopySamples -> @nish.gameCopySamples
+  callee +2:3 gameInfoPair -> @nish.gameInfoPair
 module std/host/ring.ts [package nish]
-const RING_HEADER: i32 = 2
-function ringCapacity(ring: i32[]): i32 -> @nish.ringCapacity [exported]
+function ringSlots(ring: i32[]): integer<0, 1073741823> -> @nish.ringSlots
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer ring: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
-function ringCount(count: i32, capacity: i32): i32 -> @nish.ringCount
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_div nish_panic_overflow
+  local +7:9 slots: i32 (const)
+function ringCapacity(ring: i32[]): i32 -> @nish.ringCapacity [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ringSlots
+  pointer ring: size=0 writesThrough=false captured=false passedTo=nish.ringSlots#0
   stackSites=0 stackLocals=0
-  local +0:9 m: i32 (const)
-  local +1:9 r: i32 (const)
+  callee +0:56 ringSlots -> @nish.ringSlots
+function ringCount(count: i32, capacity: integer<0, 1073741823>): integer<0, 2147483645> -> @nish.ringCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 span: i32 (const)
+  local +6:7 r: i32 (let)
+function ringWaiting(ring: i32[], capacity: integer<0, 1073741823>): integer<0, 1073741823> -> @nish.ringWaiting
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: capacity
+  calls: nish.ringCount
+  pointer ring: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 tail: integer<0, 2147483645> (const)
+  callee +0:27 ringCount -> @nish.ringCount
+  local +1:9 head: integer<0, 2147483645> (const)
+  callee +1:27 ringCount -> @nish.ringCount
+  local +2:9 size: integer<0, 2147483645> (const)
+  callee +2:27 ringCount -> @nish.ringCount
 function ringSize(ring: i32[]): i32 -> @nish.ringSize [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.ringCapacity nish.ringCount nish_panic_index nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringWaiting#0 nish.ringSlots#0
   stackSites=0 stackLocals=0
-  local +0:9 capacity: i32 (const)
-  callee +0:25 ringCapacity -> @nish.ringCapacity
-  local +4:9 size: i32 (const)
-  callee +4:21 ringCount -> @nish.ringCount
-  callee +4:31 ringCount -> @nish.ringCount
-  callee +4:62 ringCount -> @nish.ringCount
+  callee +0:52 ringWaiting -> @nish.ringWaiting
+  callee +0:70 ringSlots -> @nish.ringSlots
 function ringFree(ring: i32[]): i32 -> @nish.ringFree [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.ringCapacity nish.ringSize nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0 nish.ringSize#0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringSlots#0 nish.ringWaiting#0
   stackSites=0 stackLocals=0
-  callee +0:52 ringCapacity -> @nish.ringCapacity
-  callee +0:73 ringSize -> @nish.ringSize
+  local +0:9 capacity: integer<0, 1073741823> (const)
+  callee +0:31 ringSlots -> @nish.ringSlots
+  local +1:9 waiting: integer<0, 1073741823> (const)
+  callee +1:30 ringWaiting -> @nish.ringWaiting
 function ringPush(ring: i32[], word: i32): boolean -> @nish.ringPush [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: word
-  calls: nish.ringCapacity nish.ringCount nish.ringSize nish_panic_div nish_panic_index nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0 nish.ringSize#0
+  calls: nish.ringCount nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringSlots#0 nish.ringWaiting#0
   stackSites=0 stackLocals=0
-  local -5:9 capacity: i32 (const)
-  callee -5:25 ringCapacity -> @nish.ringCapacity
-  callee -4:25 ringSize -> @nish.ringSize
-  local -1:9 tail: i32 (const)
-  callee -1:21 ringCount -> @nish.ringCount
-  callee +1:13 ringCount -> @nish.ringCount
+  local -22:9 capacity: integer<0, 1073741823> (const)
+  callee -22:31 ringSlots -> @nish.ringSlots
+  callee -21:25 ringWaiting -> @nish.ringWaiting
+  local -15:9 length: i32 (const)
+  local -14:9 tail: integer<0, 2147483645> (const)
+  callee -14:27 ringCount -> @nish.ringCount
+  local -12:7 base: i32 (let)
+  local -11:7 at: i32 (let)
+  local +1:7 next: i32 (let)
 function ringShift(ring: i32[]): i32 -> @nish.ringShift [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.ringCapacity nish.ringCount nish.ringSize nish_panic_div nish_panic_index nish_panic_overflow
-  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringCapacity#0 nish.ringSize#0
+  calls: nish.ringCount nish.ringSlots nish.ringWaiting
+  pointer ring: size=0 writesThrough=true captured=false passedTo=nish.ringSlots#0 nish.ringWaiting#0
   stackSites=0 stackLocals=0
-  local -6:9 capacity: i32 (const)
-  callee -6:25 ringCapacity -> @nish.ringCapacity
-  callee -5:25 ringSize -> @nish.ringSize
-  local -2:9 head: i32 (const)
-  callee -2:21 ringCount -> @nish.ringCount
-  local -1:9 word: i32 (const)
-  callee +0:13 ringCount -> @nish.ringCount
+  local -26:9 capacity: integer<0, 1073741823> (const)
+  callee -26:31 ringSlots -> @nish.ringSlots
+  callee -25:25 ringWaiting -> @nish.ringWaiting
+  local -19:9 length: i32 (const)
+  local -18:9 head: integer<0, 2147483645> (const)
+  callee -18:27 ringCount -> @nish.ringCount
+  local -16:7 base: i32 (let)
+  local -15:7 at: i32 (let)
+  local -6:9 word: i32 (const)
+  local -5:7 next: i32 (let)
 function ringClear(ring: i32[]): void -> @nish.ringClear [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index
   pointer ring: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 module std/input.ts [package nish]
@@ -1342,16 +1384,17 @@ function termDecodeEvents(d: KeyDecoder, bytes: u8[], last: boolean, events: Ter
   callee +34:19 termKeyEvent -> @nish.termKeyEvent
 module std/host/text.ts [package nish]
 function textWrite(buf: u8[], at: i32, s: string): i32 -> @nish.textWrite [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
+  escaping: at
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -6:9 length: i32 (const)
-  local -5:9 n: i32 (const)
-  local -1:12 i: i32 (let)
+  local -10:9 length: i32 (const)
+  local -9:9 n: i32 (const)
+  local -3:7 j: i32 (let)
+  local -2:7 i: i32 (let)
 function textWriteInt(buf: u8[], at: i32, n: i64): i32 -> @nish.textWriteInt [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.textWrite
   escaping: at
   calls: nish.textWrite nish_arena_mark nish_arena_release nish_str_from_i64
@@ -1359,7 +1402,7 @@ function textWriteInt(buf: u8[], at: i32, n: i64): i32 -> @nish.textWriteInt [ex
   stackSites=0 stackLocals=0
   callee +0:66 textWrite -> @nish.textWrite
 function textWriteF64(buf: u8[], at: i32, x: f64): i32 -> @nish.textWriteF64 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.textWrite
   escaping: at
   calls: nish.textWrite nish_arena_mark nish_arena_release nish_str_from_f64
@@ -1389,18 +1432,20 @@ function synthXorshift(x: i32): i32 -> @nish.synthXorshift
   stackSites=0 stackLocals=0
   local +0:7 y: i32 (let)
 function synthTone(out: f64[], sampleRate: i32, start: f64, length: f64, f0: f64, f1: f64, wave: i32, volume: f64, decay: f64): void -> @nish.synthTone [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: llvm.exp.f64 llvm.fptosi.sat.i32.f64 llvm.log.f64 llvm.minimum.f64 nish.synthXorshift nish_floor nish_panic_index nish_panic_overflow
+  calls: llvm.exp.f64 llvm.fptosi.sat.i32.f64 llvm.log.f64 llvm.minimum.f64 nish.synthXorshift nish_floor
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -36:9 rate: f64 (const)
-  local -29:9 from: i32 (const)
-  local -28:9 n: i32 (const)
-  local -27:9 ratio: f64 (const)
-  local -26:7 phase: f64 (let)
-  local -25:7 noise: i32 (let)
-  local -24:7 held: f64 (let)
+  local -44:9 rate: f64 (const)
+  local -37:9 from: i32 (const)
+  local -36:9 n: i32 (const)
+  local -30:9 size: i32 (const)
+  local -29:9 ratio: f64 (const)
+  local -28:7 phase: f64 (let)
+  local -27:7 noise: i32 (let)
+  local -26:7 held: f64 (let)
+  local -24:7 at: i32 (let)
   local -23:12 i: i32 (let)
   local -22:11 t: f64 (const)
   local -21:11 f: f64 (const)
