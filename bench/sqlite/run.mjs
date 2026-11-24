@@ -171,11 +171,15 @@ if (baseRev !== null) {
 // and cursors once, outside the timed loop; feed-cursor opens and closes them
 // on every call; feed-cursor-count is feed-cursor-walk with the 20 posts'
 // likes counted in one `Cursor.countRange` over their id span.
+// feed-cursor-row is feed-cursor-walk with each post's and author's columns
+// read by one Cursor.readRow call, each cursor's columns chosen by
+// Cursor.selectRow once, outside the timed loop, timed in the same rounds.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
   { name: "feed-cursor-walk", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor-count", count: validate ? 50 : 10000, same: "feed", noTwin: true },
+  { name: "feed-cursor-row", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
   { name: "insert-txn", count: validate ? 2000 : 100000 },

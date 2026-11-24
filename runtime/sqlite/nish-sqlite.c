@@ -1157,43 +1157,62 @@ static Mem *column_mem(nishsqlite_cursor *cur, int32_t n, int *alias, int *rc) {
   return &cur->row->aMem[n];
 }
 
-/* The column's type, SQLITE_INTEGER to SQLITE_NULL, or the negated code. The
- * type is the stored value's: a REAL column holding a whole number stores it
- * as an integer, and answers SQLITE_INTEGER, where a query would convert it. */
-static int32_t unlocked_cursor_column_type(nishsqlite_cursor *cur, int32_t n) {
+/* Column `n`'s type, SQLITE_INTEGER to SQLITE_NULL, or the negated code, with
+ * `*v` its 8 bytes: with `bytes` set, a TEXT or BLOB column's length, else
+ * the integer `sqlite3_column_int64` would convert the column to, the
+ * INTEGER PRIMARY KEY column's being the row's key. With `bytes` set, a TEXT
+ * or BLOB column's bytes are copied to `buf` when all of them fit in its
+ * `room`. The type is the stored value's: a REAL column holding a whole
+ * number stores it as an integer, and answers SQLITE_INTEGER, where a query
+ * would convert it. */
+static int32_t column_value(nishsqlite_cursor *cur, int32_t n, uint64_t *v, int bytes, uint8_t *buf, uint64_t room) {
   int alias, rc;
   Mem *m = column_mem(cur, n, &alias, &rc);
-  if (alias) return sqlite3BtreeCursorHasMoved(cur->bt) ? -SQLITE_ABORT : SQLITE_INTEGER;
-  return m ? sqlite3_value_type((sqlite3_value *)m) : -rc;
+  if (alias) {
+    if (sqlite3BtreeCursorHasMoved(cur->bt)) return -SQLITE_ABORT;
+    *v = (uint64_t)sqlite3BtreeIntegerKey(cur->bt);
+    return SQLITE_INTEGER;
+  }
+  if (m == NULL) return -rc;
+  sqlite3_value *val = (sqlite3_value *)m;
+  int32_t type = sqlite3_value_type(val);
+  if (bytes && (type == SQLITE_TEXT || type == SQLITE_BLOB)) {
+    /* NULL for no bytes, so an empty value copies nothing. */
+    const void *p = sqlite3_value_blob(val);
+    *v = (uint32_t)sqlite3_value_bytes(val);
+    if (p != NULL && *v <= room) memcpy(buf, p, (size_t)*v);
+  } else {
+    *v = (uint64_t)sqlite3_value_int64(val);
+  }
+  return type;
+}
+
+static int32_t unlocked_cursor_column_type(nishsqlite_cursor *cur, int32_t n) {
+  uint64_t v;
+  return column_value(cur, n, &v, 1, NULL, 0);
 }
 
 /* The column as an integer, converted as `sqlite3_column_int64` converts; 0
  * when it cannot be read. */
 static int64_t unlocked_cursor_column_i64(nishsqlite_cursor *cur, int32_t n) {
-  int alias, rc;
-  Mem *m = column_mem(cur, n, &alias, &rc);
-  if (alias) return sqlite3BtreeCursorHasMoved(cur->bt) ? 0 : sqlite3BtreeIntegerKey(cur->bt);
-  return m ? sqlite3_value_int64((sqlite3_value *)m) : 0;
+  uint64_t v;
+  return column_value(cur, n, &v, 0, NULL, 0) < 0 ? 0 : (int64_t)v;
 }
 
 /* Copies a TEXT or BLOB column's bytes into `buf` at `at`, `n` the buffer's
  * length, and answers their length; as `nishsqlite_column_into`, it copies
- * only when all of them fit. NULL answers 0. An INTEGER or FLOAT column,
- * the INTEGER PRIMARY KEY column among them, is SQLITE_MISMATCH: the cursor
- * answers stored bytes and converts no number to text. Codes are negated. */
+ * only when all of them fit. NULL answers 0. An INTEGER or FLOAT column is
+ * SQLITE_MISMATCH, the INTEGER PRIMARY KEY column among them unless the row
+ * has moved, which is SQLITE_ABORT as columnType answers: the cursor answers
+ * stored bytes and converts no number to text. Codes are negated. */
 static int32_t unlocked_cursor_column_into(nishsqlite_cursor *cur, int32_t c, uint8_t *buf, uint64_t n, int32_t at) {
   if (at < 0 || (uint64_t)at > n) return -SQLITE_MISUSE;
-  int alias, rc;
-  Mem *m = column_mem(cur, c, &alias, &rc);
-  if (alias) return -SQLITE_MISMATCH;
-  if (m == NULL) return -rc;
-  int type = sqlite3_value_type((sqlite3_value *)m);
+  uint64_t len;
+  int32_t type = column_value(cur, c, &len, 1, buf + at, n - (uint64_t)at);
+  if (type < 0) return type;
   if (type == SQLITE_NULL) return 0;
   if (type != SQLITE_TEXT && type != SQLITE_BLOB) return -SQLITE_MISMATCH;
-  const void *p = sqlite3_value_blob((sqlite3_value *)m);
-  int32_t len = sqlite3_value_bytes((sqlite3_value *)m);
-  if (p != NULL && (uint64_t)len <= n - (uint64_t)at) memcpy(buf + at, p, (size_t)len);
-  return len;
+  return (int32_t)len;
 }
 
 /* The current row's rowid: a table row's key, or an index entry's last
@@ -1385,4 +1404,40 @@ int32_t nishsqlite_cursor_column_into(int32_t h, int32_t c, uint8_t *buf, uint64
 
 int64_t nishsqlite_cursor_rowid(int32_t h) {
   NISH_SQLITE_CURSOR(int64_t, unlocked_cursor_rowid(cur));
+}
+
+/* readRow: reads a list of columns of the current row in one call. `io` holds
+ * `n / 11` columns: first their indices, a little-endian u16 each, which it
+ * leaves as they are, then a slot of 9 bytes per column, in order: the type
+ * unlocked_cursor_column_type answers, then 8 bytes, a TEXT or BLOB
+ * column's length, or the value unlocked_cursor_column_i64 answers for the
+ * rest. No TEXT or BLOB is converted to a number. Each column's Mem is
+ * found once, under the one lock the caller holds. The bytes of TEXT and
+ * BLOB columns go to `text` in column order while they fit. Answers the
+ * length they need, SQLITE_TOOBIG past INT32_MAX, or the code column_type
+ * refuses the first bad column with, MISUSE with no row even for an empty
+ * list; after a refusal, or a length over `ntext`, the caller reads nothing
+ * from `io` or `text`. The slots are stored in the machine's order, which
+ * is little-endian on every target the runtime builds for. Codes are
+ * negated. */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "readRow's slots are little-endian"
+#endif
+static int32_t unlocked_cursor_read_row(nishsqlite_cursor *cur, uint8_t *io, uint64_t n, uint8_t *text, uint64_t ntext) {
+  if (cur == NULL || !cur->has_row) return -SQLITE_MISUSE;
+  uint64_t ncols = n / 11, need = 0;
+  uint8_t *out = io + 2 * ncols;
+  for (uint64_t k = 0; k < ncols; k++, out += 9) {
+    uint64_t v;
+    int32_t type = column_value(cur, io[2 * k] | (io[2 * k + 1] << 8), &v, 1, text + need, need <= ntext ? ntext - need : 0);
+    if (type < 0) return type;
+    if (type == SQLITE_TEXT || type == SQLITE_BLOB) need += v;
+    out[0] = (uint8_t)type;
+    memcpy(out + 1, &v, 8);
+  }
+  return need > INT32_MAX ? -SQLITE_TOOBIG : (int32_t)need;
+}
+
+int32_t nishsqlite_cursor_read_row(int32_t h, uint8_t *io, uint64_t n, uint8_t *text, uint64_t ntext) {
+  NISH_SQLITE_CURSOR(int32_t, unlocked_cursor_read_row(cur, io, n, text, ntext));
 }

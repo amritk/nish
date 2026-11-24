@@ -722,6 +722,7 @@ export class Statement {
 // Cursor.countRange's two calls: the count, then each count read back.
 declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
 declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
+declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, text: u8[], ntext: u64): i32
 
 /**
  * A B-tree cursor on a table or index, which reads rows without a statement.
@@ -730,8 +731,12 @@ declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
  * `columnI64`).
  */
 export class Cursor {
+  /** `readRow`'s answers from the adapter, sized by `selectRow`. */
+  private rowIo: u8[]
   /** The adapter's handle. */
   private handle: i32
+  /** The columns `selectRow` chose, -1 before it. */
+  private nsel: i32
 
   /**
    * Wraps an adapter handle. A program gets a `Cursor` from
@@ -741,6 +746,8 @@ export class Cursor {
    */
   constructor(handle: i32) {
     this.handle = handle
+    this.rowIo = []
+    this.nsel = -1
   }
 
   /**
@@ -954,6 +961,126 @@ export class Cursor {
     const n: i32 = nishsqlite_cursor_column_into(this.handle, c, buf, toU64(buf.length), at)
     if (n < 0) {
       return Err(-n)
+    }
+    return Ok(n)
+  }
+
+  /**
+   * Chooses the columns `readRow` reads, in order; a column may repeat. The
+   * list holds until the next `selectRow`, so a loop chooses it once and
+   * calls `readRow` per row. It allocates one buffer of 11 bytes per column
+   * and checks no index: `readRow` answers `SQLITE_RANGE` for one outside the
+   * cursor's columns.
+   *
+   * @param cols The columns' indices, from 0.
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for over 65535 columns,
+   *   which leaves the earlier list chosen.
+   */
+  selectRow(cols: readonly i32[]): Result<void, i32> {
+    const k: i32 = toI32(cols.length)
+    if (k > 0xffff) {
+      return Err(SQLITE_MISUSE)
+    }
+    // Each index goes to the adapter as a little-endian u16; one outside
+    // 0..65535 is sent as 65535, which no cursor has, so it is RANGE there.
+    // A slot of 9 bytes per column follows, which `readRow` fills.
+    const io: u8[] = []
+    for (let i: i32 = 0; i < k && i < toI32(cols.length); i++) {
+      const c: i32 = cols[i] < 0 || cols[i] > 0xffff ? 0xffff : cols[i]
+      io.push(toU8(c & 0xff))
+      io.push(toU8(c >> 8))
+    }
+    for (let i: i32 = 0; i < k; i++) {
+      for (let b: i32 = 0; b < 9; b++) {
+        io.push(0)
+      }
+    }
+    this.rowIo = io
+    this.nsel = k
+    return Ok()
+  }
+
+  /**
+   * Reads the current row's `selectRow` columns in one call. For the `k`th
+   * of them it writes `spans[3k]`, `spans[3k + 1]` and `spans[3k + 2]`: the
+   * type `columnType` answers, then where its bytes start in `text` and how
+   * many there are, which are the bytes `columnInto` copies (0 and 0 for a
+   * number or NULL); and `ints[k]`, the value `columnI64` answers for an
+   * INTEGER or FLOAT column and 0 for TEXT, BLOB and NULL, which it does not
+   * convert. The row's text and blob bytes sit in `text` in column order. A
+   * refusal, or an answer larger than `text.length`, writes no `ints` or
+   * `spans`, and `text` may hold the first columns' bytes: grow `text` and
+   * call again. An empty list answers `Ok(0)` on a row, and `SQLITE_MISUSE`
+   * with no row or a closed cursor, as any list does. It allocates nothing.
+   *
+   * @param ints Receives each column's integer; at least as long as the list.
+   * @param spans Receives each column's type, offset and length; at least
+   *   three times as long as the list.
+   * @param text Receives the text and blob bytes.
+   * @returns The text and blob bytes the row holds, or `Err` with the code
+   *   `columnType` answers for the first column it refuses (`SQLITE_RANGE`
+   *   for an index outside the cursor's columns, `SQLITE_SCHEMA` for a
+   *   record too short for it, `SQLITE_MISUSE` with no row or a closed
+   *   cursor), or `SQLITE_MISUSE` before `selectRow` or when `ints` or
+   *   `spans` is too short, or `SQLITE_TOOBIG` for over 2^31 - 1 bytes.
+   */
+  readRow(ints: i64[], spans: i32[], text: u8[]): Result<i32, i32> {
+    const k: i32 = this.nsel
+    const ni: i32 = toI32(ints.length)
+    const ns: i32 = toI32(spans.length)
+    if (k < 0 || ni < k || ns / 3 < k) {
+      return Err(SQLITE_MISUSE)
+    }
+    const io: u8[] = this.rowIo
+    const n: i32 = nishsqlite_cursor_read_row(this.handle, io, toU64(io.length), text, toU64(text.length))
+    if (n < 0) {
+      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
+      // spelled in u32 so no negation of an i32 can overflow.
+      return Err(toI32(toU32(~n) + toU32(1)))
+    }
+    if (n > toI32(text.length)) {
+      return Ok(n)
+    }
+    // The slots follow the 2k index bytes: a column's type, then 8
+    // little-endian bytes, the integer, or a TEXT or BLOB column's length,
+    // under 2^31 since the row's bytes fit `text`. Those bytes sit in `text`
+    // one column after another, so each starts where the last one ended.
+    const nio: i32 = toI32(io.length)
+    let at: i32 = toI32(toI64(k) + toI64(k))
+    let s: i32 = 0
+    let off: i32 = 0
+    for (
+      let i: i32 = 0;
+      i < k && i < toI32(ints.length) && s >= 0 && s <= toI32(spans.length) - 3 && at >= 0 && at <= nio - 9;
+      i++
+    ) {
+      const ty: i32 = toI32(io[at])
+      spans[s] = ty
+      if (ty === SQLITE_TEXT || ty === SQLITE_BLOB) {
+        const len: i32 =
+          toI32(io[at + 1]) | (toI32(io[at + 2]) << 8) | (toI32(io[at + 3]) << 16) | (toI32(io[at + 4]) << 24)
+        ints[i] = 0
+        spans[s + 1] = off
+        spans[s + 2] = len
+        const end: i64 = toI64(off) + toI64(len)
+        off = len >= 0 && end <= toI64(n) ? toI32(end) : n
+      } else {
+        ints[i] =
+          ty === SQLITE_NULL
+            ? 0
+            : toI64(
+                toU64(io[at + 1]) |
+                  (toU64(io[at + 2]) << toU64(8)) |
+                  ((toU64(io[at + 3]) << toU64(16)) | (toU64(io[at + 4]) << toU64(24))) |
+                  ((toU64(io[at + 5]) << toU64(32)) |
+                    (toU64(io[at + 6]) << toU64(40)) |
+                    ((toU64(io[at + 7]) << toU64(48)) | (toU64(io[at + 8]) << toU64(56))))
+              )
+        spans[s + 1] = 0
+        spans[s + 2] = 0
+      }
+      s += 3
+      at += 9
     }
     return Ok(n)
   }

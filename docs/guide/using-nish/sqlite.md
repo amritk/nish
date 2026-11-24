@@ -306,6 +306,18 @@ export const main = (): i32 => {
   `Err(SQLITE_MISMATCH)`. `columnType` answers what the row stores. A row
   written before `ALTER TABLE ADD COLUMN` added the column answers
   `Err(SQLITE_SCHEMA)` there, not the column's default.
+- **`readRow` reads several columns in one call.**
+  Choose the columns once with `selectRow(cols)`; each `readRow(ints, spans,
+  text)` after it reads them from the current row. For column `cols[i]`,
+  `spans[3 * i]` is its type, `ints[i]` its integer for `INTEGER` and `REAL`
+  and 0 for text, blob and `NULL` (`readRow` does not turn the text `'42'`
+  into 42 the way `columnI64` does), and for text or blob, `spans[3 * i + 1]`
+  and `spans[3 * i + 2]` are the offset and length of its bytes in `text`.
+  It answers the bytes the row needs; when that is more than `text.length`
+  it writes nothing to `ints` or `spans`, so grow `text` and call again. A
+  refusal is the code `columnType` gives the first column it refuses, so a
+  column the cursor does not have is `Err(SQLITE_RANGE)` here, not from
+  `selectRow`; `readRow` before any `selectRow` is `Err(SQLITE_MISUSE)`.
 - **Anything that could change what a cursor reads closes it.** That includes
   `exec`, `commit`, `rollback`, stepping a statement that writes, and
   `endRead`. A closed cursor answers `Err(SQLITE_MISUSE)`, and `rowid` and

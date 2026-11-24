@@ -11293,6 +11293,19 @@ const STD_CIPHER_PANIC_FREE = "ciphers, curves, signatures and password hashing"
 const stdCipherPanicFree = (file, why, entries) =>
   entries.map((program) => ({ program, file, changelog: STD_CIPHER_PANIC_FREE, why }))
 
+/** The changelog words of the sqlite-cursor-speed S3 stage, which adds `Cursor.selectRow` and `Cursor.readRow`. */
+const CURSOR_READ_ROW = "Cursor.readRow decodes the columns selectRow chose in one call"
+/**
+ * Every corpus program that reaches nish/sqlite: Cursor gains its rowIo and
+ * nsel fields, selectRow and readRow, so sqlite.ll and the mains that build a
+ * Cursor move. Compared
+ * only under `--no-sidecars`, where the wasm sidecar no longer hides them.
+ */
+const cursorReadRow = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: CURSOR_READ_ROW, why }))
+  )
+
 const DECLARED = [
   // Batched ring waits: `HandlerLimits` gains `minEvents` and `maxWaitMs`, and
   // `HttpHandler` keeps both, so every program that reaches
@@ -11336,6 +11349,33 @@ const DECLARED = [
     "the release has no minEvents or maxWaitMs on HandlerLimits, so it refuses the program that sets them",
     {
       "tests/link/net_handler_batch_limits/main.ts": ["exit"],
+    }
+  ),
+  ...cursorReadRow(
+    "std/sqlite.ts's Cursor gains rowIo and nsel fields, selectRow and readRow, which call nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
+    {
+      "tests/link/sqlite_busy_backoff/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_caps/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_cursor/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_cursor_feed/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_cursor_schema/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_cursor_shapes/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_cursor_sql/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_cursor_stale/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_excl/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_excl_second/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_norow/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_nul/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_vfs_wasi/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_wasi/main.ts": ["main.ll", "sqlite.ll"],
+    }
+  ),
+  ...cursorReadRow(
+    "the program calls Cursor.selectRow and Cursor.readRow, which the reference's std/sqlite.ts does not have, so only the candidate compiles it",
+    {
+      "bench/sqlite/main.ts": ["exit"],
+      "tests/link/std_sqlite_cursor_row/main.ts": ["exit"],
     }
   ),
   ...wp84Deflate(
