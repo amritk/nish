@@ -1623,6 +1623,8 @@ const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
 const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC panic-free"
 /** The changelog words of WP84 S1: std/compress's checksums, zlib and gzip answer an error where they panicked. */
 const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
+/** The changelog words of WP85 S3: std/term.ts proves its indexes and arithmetic, and `Screen.flush` flushes what every buffer holds where it panicked. */
+const TERM_PANIC_FREE = "std/term.ts panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -22338,6 +22340,63 @@ const DECLARED = [
     changelog: COMPRESS_PANIC_FREE,
     why: "the program reads `GZIP_ERR_FINISHED`, which the seed's std/compress/gzip.ts does not export, so only the candidate compiles it",
   },
+  ...byFinding(TERM_PANIC_FREE)(
+    "std/term.ts guards its indexes and arithmetic where the prover reads them, `KeyState` keeps its held keys as one array of `TermHeldKey` in place of five parallel arrays, and `Screen` gains helpers (WP85 S3), so every module or header that lays out `KeyState` or `TermHeldKey`, or inlines std/term's functions, moves",
+    {
+      "bench/term-io.ts": ["term-io.h", "term-io.ll", "term-rate.ll"],
+      "examples/term-probe.ts": ["term-probe.h", "term-probe.ll", "term-rate.ll"],
+      "src/break-director.ts": [
+        "break-director.h",
+        "break-director.ll",
+        "break-game.ll",
+        "break-menu.ll",
+        "input.ll",
+        "term-rate.ll",
+      ],
+      "src/break-game.ts": ["break-game.h", "input.ll"],
+      "src/break-gfx.ts": ["break-gfx.h"],
+      "src/break-intro.ts": ["break-intro.h", "input.ll"],
+      "src/break-menu.ts": ["break-menu.h", "input.ll"],
+      "src/break-settings-file.ts": ["break-menu.ll", "break-settings-file.h", "input.ll"],
+      "src/break-sound.ts": ["break-sound.h", "input.ll"],
+      "src/break-voices.ts": ["break-game.ll", "break-voices.h", "input.ll"],
+      "src/break.ts": ["break-director.ll", "break.h", "input.ll", "term-rate.ll"],
+      "src/compile.ts": ["break-director.ll", "compile.h", "input.ll", "term-rate.ll"],
+      "tests/link/break_core/main.ts": [
+        "break-director.ll",
+        "break-game.ll",
+        "break-menu.ll",
+        "input.ll",
+        "main.h",
+        "main.ll",
+        "term-rate.ll",
+      ],
+      "tests/link/break_core_wasm/main.ts": ["main.h"],
+      "tests/link/break_gfx/main.ts": ["main.h", "term-rate.ll"],
+      "tests/link/break_intro/main.ts": ["input.ll", "main.h", "main.ll"],
+      "tests/link/break_menu/main.ts": ["input.ll", "main.h", "main.ll"],
+      "tests/link/break_settings/main.ts": ["input.ll", "main.h"],
+      "tests/link/break_sound/main.ts": ["input.ll", "main.h"],
+      "tests/link/break_sound_wav/main.ts": ["break-game.ll", "input.ll", "main.h"],
+      "tests/link/std_host_game/main.ts": ["main.h"],
+      "tests/link/std_input/main.ts": ["input.ll", "main.h", "main.ll"],
+      "tests/link/std_term/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_term_buffers_disagree/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_term_events/main.ts": ["main.h"],
+      "tests/link/std_term_f64/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_term_pixels/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_term_pixels_f64/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_term_pixels_negative_area/main.ts": ["main.h"],
+      "tests/link/std_term_pixels_negative_delete/main.ts": ["main.h"],
+      "tests/link/std_term_pixels_negative_divisor/main.ts": ["main.h"],
+      "tests/link/std_term_pixels_negative_id/main.ts": ["main.h"],
+      "tests/link/std_term_pixels_negative_resize/main.ts": ["main.h"],
+      "tests/link/std_term_pixels_negative_size/main.ts": ["main.h"],
+      "tests/link/std_term_probe/main.ts": ["main.h"],
+      "tests/link/std_term_rate/main.ts": ["main.h", "term-rate.ll"],
+      "tests/link/std_term_rate_f64/main.ts": ["main.h", "term-rate.ll"],
+    }
+  ),
 ]
 
 /**
