@@ -1,0 +1,12 @@
+unix: wal true
+unix: write true
+unix: -wal true
+unix: -shm true
+unix: second process reads true
+unix: close true
+unix-excl: wal true
+unix-excl: write true
+unix-excl: -wal true
+unix-excl: -shm false
+unix-excl: second process is refused with BUSY true
+unix-excl: close true
