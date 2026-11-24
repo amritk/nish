@@ -1002,7 +1002,7 @@ export class Cursor {
     // under 2^31 since the row's bytes fit `text`. Those bytes sit in `text`
     // one column after another, so each starts where the last one ended.
     const nio: i32 = toI32(io.length)
-    let at: i32 = 2 * k
+    let at: i32 = toI32(toI64(k) + toI64(k))
     let s: i32 = 0
     let off: i32 = 0
     for (
@@ -1018,7 +1018,8 @@ export class Cursor {
         ints[i] = 0
         spans[s + 1] = off
         spans[s + 2] = len
-        off = off <= n - len ? off + len : n
+        const end: i64 = toI64(off) + toI64(len)
+        off = len >= 0 && end <= toI64(n) ? toI32(end) : n
       } else {
         ints[i] =
           ty === SQLITE_NULL
