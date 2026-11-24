@@ -4032,6 +4032,21 @@ An integer seek now reuses the cursor's own `UnpackedRecord`, made at open, sett
 The last two columns are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures: from the table's medians `feed-cursor` is −140.
 
 **A gain for the walk is not shown.** At the median, the verdict statistic, the base is 50 ns faster than the build, inside the 422 ns noise band. At the min the base is 2,134 ns slower, outside the 179 ns band but inside the base's IQR (2,881). `feed-cursor` moved −141 ns at the median, inside its 1,226 ns band. `feed`, which makes no cursor call, moved +1,175 ns at the median, inside its 1,242 ns band.
+
+### One call per row: `readRow`
+
+`feed-cursor-row` is `feed-cursor-walk` with each post's `user_id`, `body` and `created_at` read by one `Cursor.readRow` call, and its author's `username` by another (`bench/sqlite/main.ts`, `walkFeedRows`). Each cursor's `selectRow` runs once, before the timed loop. The per-column walk makes four column calls a post: `columnI64` and two `columnInto` on the post, one `columnInto` on the author. The rowid seeks and the likes count are the same in both. All three feed walks run in the same rounds, and every run printed `rows 200000 checksum 1510587328`, `feed`'s line.
+
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench and adapter code of commit `07f7b51a`, where `readRow` finds each column's `Mem` once under one lock, SQLite 3.54.1, on the machine above. ns per call; the band is the build against its byte-identical copy:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 13,902 / 18,090 (3,331) | 15,638 / 19,825 (7,345) | 1,737 / 1,734 |
+| `feed-cursor-walk` | 10,900 / 13,167 (3,638) | 10,567 / 12,867 (1,797) | 333 / 300 |
+| `feed-cursor-count` | 10,264 / 12,112 (532) | 7,906 / 9,965 (2,048) | 2,358 / 2,148 |
+| `feed-cursor-row` | 10,936 / 15,003 (3,041) | 11,752 / 14,096 (2,963) | 816 / 907 |
+
+**A gain from `readRow` is not shown.** `feed-cursor-row` less `feed-cursor-walk` is +1,836 ns at the median and +36 ns at the min; between the copies it is +1,229 and +1,185. At the median the build's difference is more than both noise bands (300 and 907) but less than both builds' IQRs (3,041 and 3,638), so this run shows `readRow` no faster and does not resolve the slowdown beyond that spread. This run was noisier than the one at `143cf516` (`feed`'s band went from 49 to 1,734 ns at the median), so it does not show whether reading each `Mem` once moved the time either. What the row walk still does that the per-column walk does not is decode a 9-byte slot a column into `ints` and `spans`; this run does not measure how much of the time that is.
 <!-- sqlite-cursor:end -->
 
 <!-- sqlite-vfs:begin -->

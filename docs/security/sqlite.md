@@ -157,6 +157,28 @@ Column reads are bounded twice. A column number outside the declared list is
 `SQLITE_SCHEMA`. `columnInto` and `keyTextBytes` bound the caller's buffer as
 `columnInto` and `bindTextBytes` do: an `at` past the buffer, or a window
 outside it, is `SQLITE_MISUSE`, and a value is copied only when it fits.
+`selectRow` and `readRow` keep these bounds, each pinned by a line of
+`tests/link/std_sqlite_cursor_row`'s `expected.out`, so removing it fails
+"link/std_sqlite_cursor_row: exits with 0 and stdout matches
+expected.out":
+
+| Bound | Where | Line that fails without it |
+| --- | --- | --- |
+| A chosen column past the cursor's is `SQLITE_RANGE` when `readRow` reads it, and writes no `ints` or `spans` | `column_mem` in `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "and readRow is RANGE for column 7", "and leaves ints and spans as they were", "selectRow -1, readRow is RANGE", "selectRow 70000, readRow is RANGE" |
+| An index outside 0..65,535 reaches the adapter as 65,535, not as its low 16 bits, so 65,537 and -65,535 do not read column 1 | `Cursor.selectRow` | "selectRow 65537, readRow is RANGE", "selectRow -65535, readRow is RANGE" |
+| Over 65,535 columns is `SQLITE_MISUSE`, so a column index fits the adapter's `u16` | `Cursor.selectRow` | "selectRow of 65536 columns is MISUSE" |
+| A refused list leaves the chosen one | `Cursor.selectRow` refuses before it replaces its buffer | "and a refused list keeps the one chosen" |
+| `ints` shorter than the list or `spans` shorter than 3 a column is `SQLITE_MISUSE`, and nothing is written | `Cursor.readRow` | "ints shorter than the list is MISUSE", "spans shorter than 3 per column is MISUSE", "and none of them writes" |
+| No `selectRow` before it, no row, or a closed cursor is `SQLITE_MISUSE`, an empty list among them | `Cursor.readRow` (`nsel`), `nishsqlite_cursor_read_row` (`has_row`), `NISH_SQLITE_CURSOR` | "readRow before any selectRow is MISUSE", "and no row with no columns is MISUSE", "even with columns chosen", "which readRow refuses with MISUSE" |
+| A record too short for a chosen column is `SQLITE_SCHEMA`, and writes no `ints` or `spans` | `column_mem` in `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "a short record is SCHEMA for the row", "and writes nothing" |
+| A row whose bytes exceed `text` writes nothing to `ints` or `spans` | `Cursor.readRow` (`n > text.length`) | "and writes no ints or spans" |
+
+`readRow`'s answers travel in the `Cursor`'s byte buffer, which `selectRow`
+sizes at 11 bytes a column; the adapter takes the column count from its
+length (`n / 11`) and writes only the slots behind the indices. Its text and
+blob bytes are copied into `text` at the running offset, only while they fit,
+so a row longer than `text`, or a refusal, can leave the columns before it
+there.
 
 A record's length is read with `sqlite3BtreePayloadSize`. Over
 `SQLITE_MAX_LENGTH` it is `SQLITE_CORRUPT`, which keeps the decoder's `u32`
@@ -258,6 +280,16 @@ Tests:
   `-DSQLITE_DEBUG`, and pins `countRange`'s buffer reuse: a second pass of
   integer seeks and counts leaves SQLite's memory in use and its high-water
   mark where the first pass left them.
+- `tests/link/std_sqlite_cursor_row`: `readRow` against `columnType`,
+  `columnI64` and `columnInto` on every row of a table with overflow rows,
+  short records, NULLs, the rowid alias, text that reads as a number and a
+  column chosen twice, and through an index; the bounds in the table above.
+  `tests/run.js` (`sqlite-link`) runs it again with `-DSQLITE_DEBUG`, and
+  checks that two `readRow` walks over 2,000 rows, 500 on overflow pages,
+  keep SQLite's memory in use and its high-water mark where a first pass
+  left them. That check reads `sqlite3_memory_used`, SQLite's allocator
+  only: it says nothing of the Nish heap, where `readRow`'s answer buffer
+  lives.
 
 Untested: a read that answers `SQLITE_ABORT` because the row moved under the
 cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`
@@ -268,6 +300,19 @@ allowlist, which needs another connection to change the schema between a
 prepare and its step. `countRange`'s `SQLITE_TOOBIG` past 2,147,483,647
 counted entries, which needs an index that large; its `SQLITE_CORRUPT` and
 `errCode` stops, which need a corrupt file.
+
+Untested bounds of `readRow`, read only from the code:
+
+- The copy into `text` stops at its length: the adapter copies a column's
+  bytes at the running offset only when the offset is within `ntext` and
+  they fit after it. The test passes a buffer one byte short and checks the answer,
+  but nothing in the suite observes a byte written past the buffer's end, so
+  removing the bound fails no check.
+- A row whose text and blob bytes pass 2^31 - 1 is `SQLITE_TOOBIG`: no test
+  builds a 2 GiB row.
+- The adapter reads `n / 11` columns from a buffer of `n` bytes, so it never
+  reads or writes past it; `std/sqlite.ts` always passes 11 bytes a column,
+  so no test passes another length.
 
 Open: under `-DSQLITE_DEBUG`, a rollback SQLite makes by itself while a
 cursor is open trips SQLite's own assertion in `unlockBtreeIfUnused`, inside
