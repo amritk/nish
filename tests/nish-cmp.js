@@ -1623,6 +1623,8 @@ const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
 const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC panic-free"
 /** The changelog words of WP84 S1: std/compress's checksums, zlib and gzip answer an error where they panicked. */
 const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
+/** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
+const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -22338,6 +22340,68 @@ const DECLARED = [
     changelog: COMPRESS_PANIC_FREE,
     why: "the program reads `GZIP_ERR_FINISHED`, which the seed's std/compress/gzip.ts does not export, so only the candidate compiles it",
   },
+  // WP85 S2: the term modules prove or drop their panic sites.
+  ...byFinding(TERM_PANIC_FREE)(
+    "std/term-rate.ts, std/term-io.ts and std/term-probe.ts prove or drop their panic sites (WP85 S2): `RateController` keeps its fastest, up and level rates as i32 fields and saturates its counters, and the modules' bodies change, so each program's copy of those modules moves",
+    {
+      "bench/term-io.ts": ["term-io.ll", "term-probe.ll", "term-rate.ll"],
+      "examples/term-probe.ts": ["std_term-probe.ll", "term-rate.ll"],
+      "src/break-director.ts": ["term-rate.ll"],
+      "src/break.ts": ["term-probe.ll", "term-rate.ll"],
+      "src/compile.ts": ["term-probe.ll", "term-rate.ll"],
+      "tests/link/break_core/main.ts": ["term-rate.ll"],
+      "tests/link/break_gfx/main.ts": ["term-probe.ll", "term-rate.ll"],
+      "tests/link/std_term_probe/main.ts": ["term-probe.ll"],
+      "tests/link/std_term_rate/main.ts": ["term-rate.ll"],
+      "tests/link/std_term_rate_f64/main.ts": ["term-rate.ll"],
+    }
+  ),
+  ...byFinding(TERM_PANIC_FREE)(
+    "std/term-pixels.ts and std/term-rate.ts no longer panic in `Framebuffer.get`, `Framebuffer.set`, `FixedStep.advance` and their neighbours (WP85 S2), so an importer's declarations of them take another attribute group and its layout of `RateController` gains three i32 fields",
+    {
+      "examples/term-probe.ts": ["term-probe.ll"],
+      "src/break-director.ts": ["break-director.ll", "break-game.ll", "break-gfx.ll", "break-menu.ll"],
+      "src/break-game.ts": ["break-gfx.ll"],
+      "src/break-gfx.ts": ["break-gfx.ll"],
+      "src/break-intro.ts": ["break-gfx.ll"],
+      "src/break-menu.ts": ["break-gfx.ll"],
+      "src/break-settings-file.ts": ["break-gfx.ll", "break-menu.ll"],
+      "src/break-sound.ts": ["break-gfx.ll"],
+      "src/break-voices.ts": ["break-game.ll", "break-gfx.ll"],
+      "src/break.ts": ["break-director.ll", "break-gfx.ll"],
+      "src/compile.ts": ["break-director.ll", "break-gfx.ll"],
+      "tests/link/break_core/main.ts": ["break-director.ll", "break-game.ll", "break-gfx.ll", "break-menu.ll", "main.ll"],
+      "tests/link/break_gfx/main.ts": ["break-gfx.ll", "main.ll"],
+      "tests/link/break_intro/main.ts": ["break-gfx.ll", "main.ll"],
+      "tests/link/break_menu/main.ts": ["break-gfx.ll", "main.ll"],
+      "tests/link/break_settings/main.ts": ["break-gfx.ll"],
+      "tests/link/break_sound/main.ts": ["break-gfx.ll"],
+      "tests/link/break_sound_wav/main.ts": ["break-game.ll", "break-gfx.ll"],
+      "tests/link/std_term_pixels/main.ts": ["main.ll"],
+      "tests/link/std_term_pixels_f64/main.ts": ["main.ll"],
+      "tests/link/std_term_pixels_negative_area/main.ts": ["main.ll"],
+      "tests/link/std_term_pixels_negative_divisor/main.ts": ["main.ll"],
+      "tests/link/std_term_pixels_negative_id/main.ts": ["main.ll"],
+      "tests/link/std_term_pixels_negative_resize/main.ts": ["main.ll"],
+      "tests/link/std_term_pixels_negative_size/main.ts": ["main.ll"],
+      "tests/link/std_term_rate_f64/main.ts": ["main.ll"],
+    }
+  ),
+  ...byFinding(TERM_PANIC_FREE)(
+    "`RateController` gains its fastest, up and level rates as i32 fields (WP85 S2), so each header that lays it out moves",
+    {
+      "bench/term-io.ts": ["term-io.h"],
+      "examples/term-probe.ts": ["term-probe.h"],
+      "src/break-director.ts": ["break-director.h"],
+      "src/break.ts": ["break.h"],
+      "src/compile.ts": ["compile.h"],
+      "tests/link/break_core/main.ts": ["main.h"],
+      "tests/link/break_core_wasm/main.ts": ["main.h"],
+      "tests/link/break_gfx/main.ts": ["main.h"],
+      "tests/link/std_term_rate/main.ts": ["main.h"],
+      "tests/link/std_term_rate_f64/main.ts": ["main.h"],
+    }
+  ),
 ]
 
 /**
