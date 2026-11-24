@@ -81,8 +81,13 @@
  *  - `pool`: a response to each of 64 clients in one pass holds 64 pool
  *    buffers; once sent, no slot holds one and at most UR_SENDPOOL_MAX stay
  *    cached, and steady responses after a warm-up allocate none (NURING-41).
- *  `coalesce`, `inflight` and `pool` drive their set and clients in one
- *  process, as `move` does.
+ *  - `bigsend`: steady head+64 KiB responses leave from chained pool buffers;
+ *    after a warm-up nothing is allocated (malloc, calloc and realloc are
+ *    counted), a response takes at least one SEND per pool buffer it fills,
+ *    and a shutdown takes a pool buffer too (NURING-51). The mode prints
+ *    the SENDs per response.
+ *  `coalesce`, `inflight`, `pool` and `bigsend` drive their set and clients
+ *  in one process, as `move` does.
  */
 #define _GNU_SOURCE
 /* The hooks the layer calls in place of io_uring_setup and io_uring_register,
@@ -95,6 +100,27 @@ static long test_register(int fd, unsigned op, void *arg, unsigned nr);
  * kernel answer. */
 static int test_accept_res(int res);
 #define UR_ACCEPT_RES(res) test_accept_res(res)
+/* `bigsend` counts every heap allocation the process makes while it counts,
+ * whoever makes it: malloc, calloc and realloc are replaced here and pass to
+ * glibc's own, so a plain malloc anywhere in the send path is counted. */
+#include <stdlib.h>
+extern void *__libc_malloc(size_t n);
+extern void *__libc_calloc(size_t k, size_t n);
+extern void *__libc_realloc(void *p, size_t n);
+static volatile int ut_counting;
+static volatile long ut_allocs;
+void *malloc(size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_malloc(n);
+}
+void *calloc(size_t k, size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_calloc(k, n);
+}
+void *realloc(void *p, size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_realloc(p, n);
+}
 /* runtime-net.c, linked beside this file for `netwrite`, opens its sets
  * through the wrapper below, which keeps the last one for its stats. */
 #define nish_uring_open ut_uring_open_real
@@ -1571,13 +1597,94 @@ static int pool(void) {
   return 0;
 }
 
+#define BS_HEAD 160
+#define BS_BODY 65536
+#define BS_WARM 8
+#define BS_ROUNDS 100
+
+/* Head+body responses whose body is 64 KiB, four times a pool buffer, as a
+ * server sends a large file in one `netWrite2`. After a warm-up every record
+ * must come from the pool: the count of record allocations, exact or pooled,
+ * does not move. A write and a shutdown then take two pool buffers and
+ * allocate nothing either. */
+static int bigsend(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(60);
+  struct nish_uring_set *s;
+  int l, fd, ring, slot;
+  struct sockaddr_in a;
+  if (inproc_open(4, &s, &l, &a) != 0) return 1;
+  if (move_accept(s, 0, &a, &fd, &ring, &slot) != 0) return 1;
+  static uint8_t out[BS_HEAD + BS_BODY], in[BS_HEAD + BS_BODY];
+  struct nish_uring_stats st;
+  int64_t sends = 0;
+  for (int r = 0; r < BS_WARM + BS_ROUNDS; r++) {
+    if (r == BS_WARM) {
+      nish_uring_stats(s, &st);
+      sends = st.sends;
+      ut_allocs = 0;
+      ut_counting = 1;
+    }
+    for (int i = 0; i < BS_HEAD + BS_BODY; i++) out[i] = pattern(r, i);
+    if (nish_uring_send(s, ring, slot, out, BS_HEAD) != BS_HEAD ||
+        nish_uring_send(s, ring, slot, out + BS_HEAD, BS_BODY) != BS_BODY)
+      return fail("a 64 KiB response's send was refused");
+    /* The client reads as the ring sends: loopback holds less than a
+       response on some runners. */
+    long long deadline = now_ms() + 10000;
+    int got = 0;
+    while (got < BS_HEAD + BS_BODY) {
+      if (now_ms() > deadline) return fail("a 64 KiB response did not arrive");
+      struct nish_uring_event ev[EVENTS_MAX];
+      if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
+      ssize_t k = recv(fd, in + got, sizeof in - (size_t)got, MSG_DONTWAIT);
+      if (k > 0) got += (int)k;
+      else if (k == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) return fail("the client's read");
+      else poll(NULL, 0, 1);
+    }
+    if (memcmp(in, out, sizeof in) != 0) return fail("a 64 KiB response did not arrive in order");
+    if (drain_slot(s, ring, slot) != 0) return 1;
+  }
+  ut_counting = 0;
+  long steady = ut_allocs;
+  nish_uring_stats(s, &st);
+  /* Each pool buffer is its own SEND, so a response that fills `bufs` buffers
+     takes at least that many; a short send only adds to it. */
+  const int64_t bufs = (BS_HEAD + BS_BODY + UR_CHUNK_DATA - 1) / UR_CHUNK_DATA;
+  printf("64 KiB responses: sends per response %.2f (at least %lld), %ld allocations after the warm-up, %ld held\n",
+         (double)(st.sends - sends) / BS_ROUNDS, (long long)bufs, steady, (long)st.pool_held);
+  if (steady != 0) return fail("a steady 64 KiB response allocated after the warm-up");
+  if (st.sends - sends < bufs * BS_ROUNDS) return fail("a 64 KiB response took fewer SENDs than the pool buffers it fills");
+  if (st.pool_held != 0) return fail("an idle slot held a pool buffer after a 64 KiB response");
+  ut_allocs = 0;
+  ut_counting = 1;
+  if (nish_uring_send(s, ring, slot, out, 1) != 1 || nish_uring_shutdown(s, ring, slot, 1) != 0) {
+    ut_counting = 0;
+    return fail("a write and a shutdown were refused");
+  }
+  ut_counting = 0;
+  nish_uring_stats(s, &st);
+  printf("a write and a shutdown: %ld held, %ld allocations\n", (long)st.pool_held, (long)ut_allocs);
+  if (st.pool_held != 2 || ut_allocs != 0) return fail("a shutdown did not take its record from the pool");
+  if (drain_slot(s, ring, slot) != 0) return 1;
+  if (read_all(fd, in, 1) != 0 || in[0] != out[0]) return fail("the byte before the shutdown did not arrive");
+  if (read(fd, in, 1) != 0) return fail("the client read past the shutdown");
+  nish_uring_destroy(s);
+  close(fd);
+  close(l);
+  return 0;
+}
+
 #define SP_PAIRS 500
 
 /* A write of one byte and a shutdown, again and again with no wait between
  * them (NURING-43): each write lands behind a shutdown record, so without the
  * shutdown's dedup each took a pool buffer of its own, 1,000 of them for 500
  * pairs of each side. A side already queued is not queued again, so the slot
- * holds at most three records with bytes in them; the client still reads every
+ * holds at most three records with bytes in them and two shutdowns, each a
+ * pool buffer (NURING-51); the client still reads every
  * byte queued before the write side's shutdown, then the end of the stream. */
 static int shutpool(void) {
   int p = nish_uring_probe();
@@ -1598,7 +1705,7 @@ static int shutpool(void) {
   struct nish_uring_stats st;
   nish_uring_stats(s, &st);
   printf("%d writes, each behind a shutdown: %ld pool buffers held\n", 2 * SP_PAIRS, (long)st.pool_held);
-  if (st.pool_held > 3) return fail("writes between repeated shutdowns each held a pool buffer");
+  if (st.pool_held > 5) return fail("writes between repeated shutdowns each held a pool buffer");
   long long deadline = now_ms() + 10000;
   while (nish_uring_queued(s, ring, slot) > 0) {
     if (now_ms() > deadline) return fail("the slot's queue did not drain");
@@ -1697,6 +1804,7 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "inflight") == 0) return inflight();
   if (strcmp(argv[1], "pool") == 0) return pool();
   if (strcmp(argv[1], "shutpool") == 0) return shutpool();
+  if (strcmp(argv[1], "bigsend") == 0) return bigsend();
   if (strcmp(argv[1], "netwrite") == 0) return netwrite();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
