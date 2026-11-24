@@ -447,25 +447,25 @@ function sixelFrame(fb: Framebuffer, rect: PixelRect, dither: boolean, out: Pixe
   local +83:15 n: i32 (const)
   local +85:15 slot: i32 (const)
   callee +85:27 pixelsIndex -> @nish.pixelsIndex
-  callee +103:7 PixelBytes.put -> @nish.PixelBytes.put
-  local +105:9 firstColour: boolean (let)
-  local +106:14 n: i32 (let)
-  local +108:13 start: i32 (const)
-  local +109:13 end: i32 (const)
-  callee +114:9 PixelBytes.put -> @nish.PixelBytes.put
-  callee +117:7 PixelBytes.put -> @nish.PixelBytes.put
-  callee +118:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +120:7 pixelsSixelRun -> @nish.pixelsSixelRun
-  local +122:11 runBits: i32 (let)
-  local +123:11 runStart: i32 (let)
-  local +124:11 next: i32 (let)
-  local +125:16 x: i32 (let)
-  local +127:15 slot: i32 (const)
-  callee +127:27 pixelsIndex -> @nish.pixelsIndex
-  local +132:15 sixel: i32 (const)
-  callee +137:13 pixelsSixelRun -> @nish.pixelsSixelRun
-  callee +144:9 pixelsSixelRun -> @nish.pixelsSixelRun
-  callee +149:3 pixelsStringEnd -> @nish.pixelsStringEnd
+  callee +109:7 PixelBytes.put -> @nish.PixelBytes.put
+  local +111:9 firstColour: boolean (let)
+  local +112:14 n: i32 (let)
+  local +114:13 start: i32 (const)
+  local +115:13 end: i32 (const)
+  callee +120:9 PixelBytes.put -> @nish.PixelBytes.put
+  callee +123:7 PixelBytes.put -> @nish.PixelBytes.put
+  callee +124:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +126:7 pixelsSixelRun -> @nish.pixelsSixelRun
+  local +128:11 runBits: i32 (let)
+  local +129:11 runStart: i32 (let)
+  local +130:11 next: i32 (let)
+  local +131:16 x: i32 (let)
+  local +133:15 slot: i32 (const)
+  callee +133:27 pixelsIndex -> @nish.pixelsIndex
+  local +138:15 sixel: i32 (const)
+  callee +143:13 pixelsSixelRun -> @nish.pixelsSixelRun
+  callee +150:9 pixelsSixelRun -> @nish.pixelsSixelRun
+  callee +155:3 pixelsStringEnd -> @nish.pixelsStringEnd
 function drawHalfBlocks(fb: Framebuffer, canvas: Canvas, rect: PixelRect): void -> @nish.drawHalfBlocks [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -474,17 +474,17 @@ function drawHalfBlocks(fb: Framebuffer, canvas: Canvas, rect: PixelRect): void 
   pointer canvas: size=24 writesThrough=false captured=false passedTo=nish.Canvas.paintCell#0
   pointer rect: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -32:9 xs: i32[] (const)
-  callee -32:21 pixelsSampleMap -> @nish.pixelsSampleMap
-  local -31:9 ys: i32[] (const)
-  callee -31:21 pixelsSampleMap -> @nish.pixelsSampleMap
-  local -29:9 left: i32 (const)
-  local -28:9 cw: i32 (const)
-  local -27:9 ch: i32 (const)
-  local -26:9 cpixels: i32[] (const)
-  local -23:9 top: f64 (const)
-  local -22:9 bottom: f64 (const)
-  local -21:9 pyStart: i32 (const)
+  local -37:9 xs: i32[] (const)
+  callee -37:21 pixelsSampleMap -> @nish.pixelsSampleMap
+  local -36:9 ys: i32[] (const)
+  callee -36:21 pixelsSampleMap -> @nish.pixelsSampleMap
+  local -34:9 left: i32 (const)
+  local -33:9 cw: i32 (const)
+  local -32:9 ch: i32 (const)
+  local -31:9 cpixels: i32[] (const)
+  local -28:9 top: f64 (const)
+  local -27:9 bottom: f64 (const)
+  local -26:7 pyStart: i32 (let)
   local -20:9 pxStart: i32 (const)
   local -19:12 py: i32 (let)
   local -17:11 y: i32 (const)
@@ -493,12 +493,12 @@ function drawHalfBlocks(fb: Framebuffer, canvas: Canvas, rect: PixelRect): void 
   local -9:13 at: i32 (const)
   callee -9:23 pixelsIndex -> @nish.pixelsIndex
   local -4:13 sx: i32 (const)
-  callee +1:42 Framebuffer.get -> @nish.Framebuffer.get
-  local +5:9 rowEnd: i64 (const)
-  local +6:9 colEnd: i64 (const)
-  local +7:12 row: i32 (let)
-  local +11:14 col: i32 (let)
-  callee +12:7 Canvas.paintCell -> @nish.Canvas.paintCell
+  callee +0:54 Framebuffer.get -> @nish.Framebuffer.get
+  local +4:9 rowEnd: i64 (const)
+  local +5:9 colEnd: i64 (const)
+  local +6:12 row: i32 (let)
+  local +10:14 col: i32 (let)
+  callee +11:7 Canvas.paintCell -> @nish.Canvas.paintCell
 function pixelsNearestAnsi16(colour: i32): i32 -> @nish.pixelsNearestAnsi16
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pixelsHex
@@ -537,11 +537,11 @@ function drawAscii(fb: Framebuffer, screen: Screen, rect: PixelRect, colors: i32
   local +20:13 c: i32 (const)
   callee +20:22 Framebuffer.get -> @nish.Framebuffer.get
   local +21:13 luma: f64 (const)
-  local +25:13 k: i32 (const)
-  local +30:13 glyph: i32 (const)
-  local +31:13 fg: i32 (const)
-  callee +31:39 pixelsNearestAnsi16 -> @nish.pixelsNearestAnsi16
-  callee +32:7 Screen.set -> @nish.Screen.set
+  local +24:13 k: i32 (const)
+  local +29:13 glyph: i32 (const)
+  local +30:13 fg: i32 (const)
+  callee +30:39 pixelsNearestAnsi16 -> @nish.pixelsNearestAnsi16
+  callee +31:7 Screen.set -> @nish.Screen.set
 module std/base64.ts [package nish]
 const BASE64_ALPHABET: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const BASE64_PAD: i32 = 61

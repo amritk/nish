@@ -4,8 +4,8 @@
   "memory": "32",
   "inputs": {
     "examples/break-web/break.mjs": "96ce2317a65e6d43577d868f96abf6a2939237b39eccc84a57b7b600ab5a83fc",
-    "examples/break-web/build.mjs": "45dd85a1179ba4e8b7c7f8c8ea914c418337d5fd71850cff401cd3279e585bbf",
-    "examples/break-web/game.ts": "cb067f13ccc483bcec22ff23b2b772607cd495845c61eb0c7d6d964ba6001fac",
+    "examples/break-web/build.mjs": "0261813b28ab4e138a26e0cbfbe2347b9552e74f72fe5310e8c7e37e06346e5b",
+    "examples/break-web/game.ts": "8f50c58cd366526bf6f6ed0df0719175254bb1407f808528e4ff9a885a944536",
     "examples/break-web/help.ts": "45ca8bbb0ebd61532854f3b40a3ab13ff3a4b4e6a020522d553ca8f4b3566334",
     "examples/break-web/shell.mjs": "5873f1113a2f30741aab79e723188afdc530b6d9bb06963254d71999d28d4b06",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
@@ -27,12 +27,12 @@
     "std/random.ts": "e7e360a36acfa0e02b8c644c5499e0bc8dc3fada41a36062adeb2dd590c51c13",
     "std/raster.ts": "e6ef8eddbbb09c24384ab6f01ca1f7d826e50e87fc271b3822e4a238340243fa",
     "std/synth.ts": "206f1ab1363011efea8f6b8349cfc35eb52985ad4b8613edf81acd90e4d08762",
-    "std/term-pixels.ts": "0818ca93e979c117b6731fff0fea8fb99a6018686c3a100772125cc5efcae663",
-    "std/term-rate.ts": "c39e79cca5dbb76d91b6bb255d5b460fbca1ed8f8178e5b9c1702f2112432e14",
+    "std/term-pixels.ts": "a85cd5d25acbc0800ea2ff42a02e2a2ae5e48ede9d9479b9a5a6f80eae853a11",
+    "std/term-rate.ts": "6d519b940247a9355cc27a81441fe2e5be28e9d5880945cee660b69f856154a1",
     "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
   },
   "outputs": {
-    "game.wasm": "86a6ae63b04b89f69e6e9d0513bb27fc85e5b2d8e34e117bb34e43734616e797",
+    "game.wasm": "5e9eeb53aff885032213ea9b91b8832d01c20b9cae66cd913a9dd368585c5032",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "dde2d49936cf795ce840e2eaa70092ccffcb8a5ab1655d98f91671766d69e011",

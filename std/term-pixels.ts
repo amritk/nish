@@ -919,7 +919,13 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
         const slot: i32 = pixelsIndex(x, n, w, toI32(bits.length))
         // Never taken (a register is 0 to 251, and `reg` and `bits` are
         // large enough); it proves the reads and stores below in range.
-        if (n < 0 || n >= toI32(first.length) || n >= toI32(last.length) || slot < 0 || slot >= toI32(bits.length)) {
+        if (
+          n < 0 ||
+          n >= toI32(first.length) ||
+          n >= toI32(last.length) ||
+          slot < 0 ||
+          slot >= toI32(bits.length)
+        ) {
           continue
         }
         bits[slot] = bits[slot] | bit
@@ -1006,11 +1012,16 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
   const cw: i32 = canvas.width
   const ch: i32 = canvas.height
   const cpixels: i32[] = canvas.pixels
-  // The rect's canvas rows run from `top` to `bottom`, two to a cell row; i64
+  // The rect's canvas rows run from `top` to `bottom`, two to a cell row; f64
   // holds them exactly for any rect. Walk only the part on the canvas.
   const top: f64 = toF64(rect.row) * 2.0
   const bottom: f64 = top + toF64(rect.rows) * 2.0
-  const pyStart: i32 = top > 0.0 ? (top < toF64(ch) ? toI32(top) : ch) : 0
+  let pyStart: i32 = 0
+  if (top >= toF64(ch)) {
+    pyStart = ch
+  } else if (top > 0.0) {
+    pyStart = toI32(top)
+  }
   const pxStart: i32 = left > 0 ? left : 0
   for (let py: i32 = pyStart; py < ch && toF64(py) < bottom; py++) {
     // `py` is at least `top` and below `ch`, so `y` is a row of the rect.
@@ -1031,8 +1042,7 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
       if (sx < 0 || sx >= toI32(xs.length)) {
         continue
       }
-      cpixels[at] =
-        y >= 0 && y < toI32(ys.length) ? fb.get(xs[sx], ys[y]) : COLOR_DEFAULT
+      cpixels[at] = y >= 0 && y < toI32(ys.length) ? fb.get(xs[sx], ys[y]) : COLOR_DEFAULT
     }
   }
   // The cell rows `rect.row` up to `rect.row + rect.rows`, those on the canvas.
@@ -1114,8 +1124,7 @@ export const drawAscii = (fb: Framebuffer, screen: Screen, rect: PixelRect, colo
       }
       const c: i32 = fb.get(xs[x], sy)
       const luma: f64 = Math.floor(
-        (toF64((c >> 16) & 255) * 299.0 + toF64((c >> 8) & 255) * 587.0 + toF64(c & 255) * 114.0) /
-          1000.0,
+        (toF64((c >> 16) & 255) * 299.0 + toF64((c >> 8) & 255) * 587.0 + toF64(c & 255) * 114.0) / 1000.0
       )
       const k: i32 = toI32(Math.floor((luma * toF64(ramp)) / 256.0))
       // Never taken: `luma` is below 256, so `k` is below `ramp`.

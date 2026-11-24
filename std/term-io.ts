@@ -635,14 +635,14 @@ export class Terminal {
     for (let k: i32 = 0; k < count; k++) {
       this.dropLost()
       const head: i32 = this.ackHead
-      const count: i32 = this.ackCount
+      const pending: i32 = this.ackCount
       const sent: f64[] = this.ackSent
-      if (this.rate.stale === 0 && count > 0 && head >= 0 && head < toI32(sent.length)) {
+      if (this.rate.stale === 0 && pending > 0 && head >= 0 && head < toI32(sent.length)) {
         const sentAtMs: f64 = sent[head]
         this.keys.delivered(sentAtMs)
         this.lastRttMs = nowMs - sentAtMs
         this.ackHead = termIoAckNext(head)
-        this.ackCount = count - 1
+        this.ackCount = pending - 1
       }
       this.rate.ackReceived(nowMs)
     }
