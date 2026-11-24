@@ -10134,6 +10134,7 @@ const PROVER_READS_FILES = {
   "tests/link/std_term_pixels_f64/main.ts": ["term-pixels.ll"],
   "tests/link/std_term_pixels_negative_area/main.ts": ["term-pixels.ll"],
   "tests/link/std_term_pixels_negative_delete/main.ts": ["term-pixels.ll"],
+  "tests/link/std_term_pixels_negative_desync/main.ts": ["term-pixels.ll"],
   "tests/link/std_term_pixels_negative_divisor/main.ts": ["term-pixels.ll"],
   "tests/link/std_term_pixels_negative_id/main.ts": ["term-pixels.ll"],
   "tests/link/std_term_pixels_negative_resize/main.ts": ["term-pixels.ll"],
