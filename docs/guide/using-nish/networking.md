@@ -427,13 +427,14 @@ export const main = (): i32 => {
 - `ready`'s length caps the batch. A `ready` of 8 answers at most 4 pairs
   whatever `minEvents` asks for.
 - `maxWaitMs` is what the batch costs in latency. The second wait sleeps
-  in at most eight slices of `maxWaitMs / 8`, rounded up, and takes what
+  in at most eight slices of `maxWaitMs / 8`, rounded up (one more for
+  each signal that interrupts a slice), and takes what
   the ring finished after each, so the batch can end up to one slice after
   `minEvents` became ready. It watches no other descriptor, so any other
   descriptor in the loop, `signalFd()` included, may be reported up to
   `maxWaitMs` late. On a loop whose only other descriptor is `signalFd()`
-  a signal ends the batch at once, unless the listener has grown a second
-  ring or `signalFd()` was closed; then it too waits up to `maxWaitMs`.
+  a signal ends the batch at once, unless `signalFd()` was closed; then it
+  too waits up to `maxWaitMs`.
 - With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
   on macOS, it is `pollWait`.
 - The runtime fills a batch from at most 64 events, so a `minEvents` above

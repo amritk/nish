@@ -12483,19 +12483,20 @@ batches. It writes and answers as `pollWait` does.
   loop that becomes ready meanwhile, a UDP socket, a timer's pipe or
   `signalFd()`, is reported **at most `maxWaitMs` late**, by this call or the
   next. A loop whose only descriptor is `signalFd()` hears the signal as
-  soon as it arrives (below); where it does not (a second ring, or a
-  `signalFd()` already closed), the signal too waits up to `maxWaitMs`.
+  soon as it arrives (below); where it does not (another descriptor in the
+  loop, or a `signalFd()` already closed), the signal too waits up to `maxWaitMs`.
 - The second wait checks `minEvents` once per slice of `maxWaitMs / 8`,
   rounded up, so a batch may end **up to one slice after** `minEvents`
-  became ready, never after `maxWaitMs`.
+  became ready, and within about a millisecond of `maxWaitMs`.
 - A `minEvents` of 1 or less, a `maxWaitMs` of 0 or less, a loop with no
   live ring listener or with two of them, and Darwin, answer exactly as
   `pollWait` does. A `ready` shorter than 2 answers `-22`.
 - *Lowering:* `nish_poll_wait_batch`; not `willreturn`. The second wait is
-  at most eight `poll(2)` sleeps, one per slice, on `signalFd()` when the
+  at most eight `poll(2)` sleeps, one per slice, plus one for each signal
+  handler that interrupts a slice, on `signalFd()` when the
   loop waits directly and on nothing otherwise, each followed by one pump of
-  the ring and one collect, so a window costs at most eight pumps however
-  its completions trickle in.
+  the ring and one collect, so a window costs at most eight pumps (plus
+  one per interrupting signal) however its completions trickle in.
 - *Tests:* `net_poll_batch`, `link/net_ring_batch`;
   `reject_net_poll_batch_readonly`, `reject_net_poll_batch_arity`,
   `reject_net_poll_batch_wasm`, `reject_net_poll_batch_wasi`.

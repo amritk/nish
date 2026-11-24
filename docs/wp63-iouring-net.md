@@ -507,10 +507,13 @@ makes two waits instead, for three reasons:
 The cost of the second shape is that an ordinary descriptor that becomes
 ready during the second wait is reported up to `maxWaitMs` late. That bound
 is the documented one. A loop whose only descriptor is `signalFd()` hears it
-through a `poll(2)` on it and ends the batch at once, but only on the direct
-wait: wherever the paragraph above sends the wait through epoll, the signal
-too waits up to `maxWaitMs`. The second wait sleeps in at most eight slices
-of `maxWaitMs / 8`, rounded up, without entering the ring, and after each
+through a `poll(2)` on it and ends the batch at once whenever `nr_direct` names the loop's set: one
+live ring set, however many rings it has grown, whatever the kernel or
+`--sandbox`, and no ordinary descriptor but an open `signalFd()`. Otherwise
+the signal too waits up to `maxWaitMs`. The second wait sleeps in at most eight slices
+of `maxWaitMs / 8`, rounded up (plus one for each signal handler that
+interrupts a slice, since `poll(2)`'s `EINTR` starts another), without
+entering the ring, and after each
 pumps the set once and collects once. It first passed the pairs still
 missing as an enter's `min_complete`, but a DEFER_TASKRUN enter wakes to run
 task work for each completion, sends' included, so a window that bytes
