@@ -19347,93 +19347,81 @@ if (dealtHere("runtimeChecks")) {
     // The arena and array assertions are derived, not typed out. The field types come
     // from `ARENA_TYPE` and `ARRAY_TYPE` in src/runtime.ts, the strings the compiler
     // writes into every module. They are laid out the way LLVM lays out a non-packed
-    // struct under each target's datalayout: an `i64` is 8 bytes aligned to 8 on both
-    // targets, and an `i8*` is the target's pointer. The C field names come from
-    // nish.h's own definitions, matched by position. So a field added, dropped or
-    // retyped on one side only fails on wasm32 as well as on the host. The numbers
-    // used to be typed out here, so an `ARENA_TYPE` edit that moves fields only where a
-    // pointer is 4 bytes (`off` turned from `i64` into `i8*`) passed every check: the
-    // C side still matched the old numbers, and nothing moves on the host the smoke
-    // run above links for. A type this layout does not know, or a definition the
-    // patterns no longer find, fails the check rather than shrinking the assertions.
+    // struct: an `i64` is 8 bytes aligned to 8 on both targets, and an `i8*` is the
+    // target's pointer, which clang reports for each target as `__SIZEOF_POINTER__`.
+    // The C names are pinned here by the index the compiler means them at (the
+    // `inlineAllocator` GEPs in src/runtime.ts, the array GEPs, the wasm loader), not
+    // read from nish.h, so reordering nish.h's fields fails too. Each named field is
+    // asserted at its IR offset and with its IR size, and the struct at its IR size.
+    // The numbers used to be typed out here, so an `ARENA_TYPE` edit that moves fields
+    // only where a pointer is 4 bytes (`off` turned from `i64` into `i8*`) passed every
+    // check: the C side still matched the old numbers, and nothing moves on the host
+    // the smoke run above links for. A type this layout does not know, a definition
+    // the pattern no longer finds, or a field count the names do not cover fails the
+    // derivation check. The clang runs below still run then, with what is left.
     const abiRuntimeTs = fs.readFileSync(path.join(root, "src", "runtime.ts"), "utf8")
-    const abiNishH = fs.readFileSync(path.join(root, "runtime", "nish.h"), "utf8")
     const abiIrFields = (constant, struct) => {
       const m = abiRuntimeTs.match(new RegExp(`${constant}: string = "%struct\\.${struct} = type \\{ ([^}]*) \\}"`))
       return m === null ? null : m[1].split(", ")
     }
-    const abiCFields = (pattern) => {
-      const m = abiNishH.match(pattern)
-      if (m === null) return null
-      const decls = m[1]
-        .split(";")
-        .map((decl) => decl.trim())
-        .filter((decl) => decl !== "")
-      const names = decls.map((decl) => /(\w+)$/.exec(decl))
-      return names.every((name) => name !== null) ? names.map((name) => name[1]) : null
-    }
     const abiStructs = [
-      {
-        c: "struct nish_arena",
-        ir: abiIrFields("ARENA_TYPE", "nish_arena"),
-        names: abiCFields(/\nstruct nish_arena \{([^}]*)\};/),
-      },
-      {
-        c: "nish_array",
-        ir: abiIrFields("ARRAY_TYPE", "nish_array"),
-        names: abiCFields(/typedef struct nish_array \{([^}]*)\} nish_array;/),
-      },
+      { c: "struct nish_arena", ir: abiIrFields("ARENA_TYPE", "nish_arena"), names: ["buf", "off", "cap", "chunks"] },
+      { c: "nish_array", ir: abiIrFields("ARRAY_TYPE", "nish_array"), names: ["len", "cap", "data"] },
     ]
-    /** The offsets and size LLVM gives a non-packed struct of `types` when a pointer is `ptr` bytes, or null for a type it does not know. */
+    /** The offsets, field sizes and size LLVM gives a non-packed struct of `types` when a pointer is `ptr` bytes, or null for a type it does not know. */
     const abiIrLayout = (types, ptr) => {
       let at = 0
       let align = 1
       const offsets = []
+      const sizes = []
       for (const type of types) {
         const bytes = type === "i64" ? 8 : type.endsWith("*") ? ptr : 0
         if (bytes === 0) return null
         at = Math.ceil(at / bytes) * bytes
         offsets.push(at)
+        sizes.push(bytes)
         at += bytes
         align = Math.max(align, bytes)
       }
-      return { offsets, size: Math.ceil(at / align) * align }
+      return { offsets, sizes, size: Math.ceil(at / align) * align }
     }
-    // Every native target nish builds for is 64-bit, so the host's pointer is 8 bytes.
-    const abiTargets = [
-      { target: "host", ptr: 8 },
-      { target: "wasm32-unknown-unknown", ptr: 4 },
-    ]
+    const abiInclude = `-I${path.join(root, "runtime")}`
+    const abiTargets = ["host", "wasm32-unknown-unknown"].map((target) => {
+      const flags = target === "host" ? [] : [`--target=${target}`]
+      const macros = spawnSync("clang", [...flags, "-dM", "-E", "-x", "c", "/dev/null"], { encoding: "utf8" })
+      const ptr = /#define __SIZEOF_POINTER__ (\d+)/.exec(String(macros.stdout))
+      return { target, flags, ptr: ptr === null ? null : Number(ptr[1]) }
+    })
     const abiAsserts = (ptr) => {
+      if (ptr === null) return null
       const lines = []
       for (const s of abiStructs) {
         const laid = s.ir === null ? null : abiIrLayout(s.ir, ptr)
-        if (laid === null || s.names === null || s.names.length !== s.ir.length) return null
+        if (laid === null || s.names.length !== s.ir.length) return null
         const irType = `{ ${s.ir.join(", ")} }`
         lines.push(`_Static_assert(sizeof(${s.c}) == ${laid.size}, "${s.c} is the size of ${irType}");`)
         s.names.forEach((name, i) => {
-          lines.push(
-            `_Static_assert(offsetof(${s.c}, ${name}) == ${laid.offsets[i]}, "${s.c}.${name} is field ${i} of ${irType}");`
-          )
+          const what = `${s.c}.${name} is field ${i} of ${irType}`
+          lines.push(`_Static_assert(offsetof(${s.c}, ${name}) == ${laid.offsets[i]}, "${what}");`)
+          lines.push(`_Static_assert(sizeof(((${s.c} *)0)->${name}) == ${laid.sizes[i]}, "${what}");`)
         })
       }
       return lines
     }
     const abiDerived = abiTargets.map(({ ptr }) => abiAsserts(ptr))
     check(
-      "the runtime ABI asserts are read from src/runtime.ts's ARENA_TYPE and ARRAY_TYPE and nish.h's field names",
+      "the runtime ABI asserts are derived from src/runtime.ts's ARENA_TYPE and ARRAY_TYPE on every target",
       abiDerived.every((lines) => lines !== null),
-      abiStructs
-        .map((s) => `${s.c}: IR fields ${JSON.stringify(s.ir)}, nish.h fields ${JSON.stringify(s.names)}`)
-        .join("\n")
+      [
+        ...abiStructs.map((s) => `${s.c}: IR fields ${JSON.stringify(s.ir)}, names ${JSON.stringify(s.names)}`),
+        ...abiTargets.map((t) => `${t.target}: __SIZEOF_POINTER__ ${t.ptr}`),
+      ].join("\n")
     )
-    const abiInclude = `-I${path.join(root, "runtime")}`
     // Each target twice: the ordinary header, and the one a `--threads` host
     // includes. `-DNISH_THREADS` moves the arena into thread-local storage and
     // must move nothing else, so the same assertions have to hold under it —
     // a storage class is not a layout, and this is where that is written down.
-    for (const [at, { target }] of abiTargets.entries()) {
-      if (abiDerived[at] === null) continue
+    for (const [at, { target, flags }] of abiTargets.entries()) {
       const abiSrc = path.join(buildDir, `abi_layout_${target}.c`)
       fs.writeFileSync(
         abiSrc,
@@ -19441,12 +19429,11 @@ if (dealtHere("runtimeChecks")) {
           "/* Generated by tests/run.js: the runtime ABI layouts, asserted per target. */",
           "#include <stddef.h>",
           '#include "nish.h"',
-          ...abiDerived[at],
+          ...(abiDerived[at] ?? []),
           '_Static_assert(offsetof(nish_str, data) == 8, "nish_str = { i64 len, bytes }");',
           "",
         ].join("\n")
       )
-      const flags = target === "host" ? [] : [`--target=${target}`]
       for (const threads of [[], ["-DNISH_THREADS=1"]]) {
         const a = spawnSync(
           "clang",
