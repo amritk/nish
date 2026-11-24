@@ -426,7 +426,12 @@ always ran. A `minEvents` under 1 or a `maxWaitMs` outside 0 to 1000 is a
 panic in `new HttpHandler` and an `Err` naming both from
 `openHttpHandler`. Set them on a ring
 server whose CPU per request matters more to it than `maxWaitMs` of added
-latency on a quiet connection; leave them at the defaults otherwise.
+latency on a quiet connection; leave them at the defaults otherwise. On
+one 4-vCPU box at 30,000 requests a second, `minEvents` 64 with
+`maxWaitMs` 1 cut the server's CPU a request by about a third at 18,000
+connections and by 4% at 96,000, a saving its single rounds did not all
+show, and added about 2 ms to the median latency at both
+([the benchmarks](../../BENCHMARKS.md#batched-ring-waits-minevents-and-maxwaitms)).
 
 A loop that holds nothing but one ring listener's connections, and at most
 `signalFd()`, waits on the ring itself on Linux 5.11 and later, with either

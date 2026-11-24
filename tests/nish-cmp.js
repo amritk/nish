@@ -556,6 +556,11 @@ const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
   )
+const RING_BATCH = "batched ring waits on HttpHandler"
+const ringBatch = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: RING_BATCH, why }))
+  )
 /** WP80 S4's release-note words, lower-case so they match the capitalised CHANGELOG.md line. */
 const HTTP1_SERVER_PANIC_FREE = "the HTTP/1 server panic-free"
 const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
@@ -11289,6 +11294,50 @@ const stdCipherPanicFree = (file, why, entries) =>
   entries.map((program) => ({ program, file, changelog: STD_CIPHER_PANIC_FREE, why }))
 
 const DECLARED = [
+  // Batched ring waits: `HandlerLimits` gains `minEvents` and `maxWaitMs`, and
+  // `HttpHandler` keeps both, so every program that reaches
+  // std/net/handler.ts lays both structs out again.
+  ...ringBatch(
+    "HandlerLimits gains minEvents and maxWaitMs and HttpHandler keeps them, so both structs grow and every module that reaches them moves",
+    {
+      "examples/http-app/main.ts": ["static.ll"],
+      "tests/link/net_grpc/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_grpc_interop/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_handler_bomb/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_open/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_refused/main.ts": ["handler.ll", "main.h", "main.ll", "taken.ll"],
+      "tests/link/net_handler_steps/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["handler.ll", "main.h", "main.ll", "taken.ll"],
+      "tests/link/net_http_app/main.ts": ["static.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_steps_full/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_steps_split/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_stream/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_serve_try/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_static/main.ts": [
+        "client.ll",
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "rig.ll",
+        "static.ll",
+      ],
+    }
+  ),
+  ...ringBatch(
+    "the release has no minEvents or maxWaitMs on HandlerLimits, so it refuses the program that sets them",
+    {
+      "tests/link/net_handler_batch_limits/main.ts": ["exit"],
+    }
+  ),
   ...wp84Deflate(
     "WP84 S2 proves std/compress/deflate.ts's panic sites but its contract's five (guards before each read, a Deflater that marks a store which would not fit and answers DEFLATE_NO_ROOM, a Huffman build that answers DEFLATE_ERR_HUFFMAN), so Deflater gains its overrun field and the deflate and inflate code moves wherever it is reached",
     {

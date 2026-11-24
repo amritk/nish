@@ -3809,6 +3809,53 @@ Medians of 3 (min to max), and `box MB` from the last round of each design, as a
 Medians of 3 (min to max). These rounds also predate the `send_failed` and `closed` counters; each answered 29,998 a second of the offered 30,000. One process held 300,000 connections in every round, under a limit of 20,000, with 47 descriptors. Its PSS was 435.9 to 436.3 MB, about 1.5 KB a connection, about the same as at 96,000. A request cost 23.73 µs against 20.86 at 96,000, though at a different rate, so the two are not a like-for-like comparison.
 
 Opening the connections took 90.6 to 123.7 s. The first run, at `d603893d`, answered no requests at all: past the handler's 60-second default `idleTimeout` the server closed the first connections before the window opened, and the load generator does not reopen a closed connection. `bench/handler-ring/server.ts` now sets `limits.http.idleTimeout` to ten minutes. That is a setting of the bench, not of the ring.
+
+### Batched ring waits: `minEvents` and `maxWaitMs`
+
+**What a batch saves, and what it costs.** `HandlerLimits.minEvents` and `HandlerLimits.maxWaitMs` make the handler's wait `pollWaitBatch` (in [the networking guide](guide/using-nish/networking.md)): after the first event it waits up to `maxWaitMs` more for `minEvents` of them. `bash bench/handler-ring/run.sh --conns "18000 96000" --designs "ring ring-copy" --min-events "1 64 256" --max-wait-ms 1 --rounds 5` at commit `0f851051`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000, at 30,000 req/s, a 3-second warm-up and a 10-second window, the server on CPU 0 and the load on CPUs 1 to 3, a SQLite lookup a request. `ring@N` is the ring server with `minEvents` N and `maxWaitMs` 1; `ring@1` is the handler's default wait, `pollWait`. `ring-copy` is a second, byte-identical build of the same server, so `ring@1` against `ring-copy@1` is the noise band. Server µs a request, per round:
+
+| C | round | ring@1 | ring-copy@1 | ring@64 | ring-copy@64 | ring@256 | ring-copy@256 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 18,000 | 1 | 22.37 | 21.23 | 14.53 | 13.70 | 14.53 | 14.53 |
+| 18,000 | 2 | 21.83 | 22.30 | 13.90 | 14.97 | 14.53 | 14.83 |
+| 18,000 | 3 | 21.23 | 22.03 | 15.27 | 14.67 | 13.97 | 14.44 |
+| 18,000 | 4 | 21.60 | 21.37 | 15.10 | 14.53 | 14.30 | 14.37 |
+| 18,000 | 5 | 22.07 | 21.53 | 13.53 | 14.80 | 14.27 | 14.87 |
+| 96,000 | 1 | 19.40 | 18.70 | 18.60 | 18.07 | 18.90 | 18.03 |
+| 96,000 | 2 | 17.93 | 19.20 | 18.43 | 19.07 | 18.43 | 19.03 |
+| 96,000 | 3 | 17.80 | 19.07 | 19.40 | 18.80 | 17.97 | 19.13 |
+| 96,000 | 4 | 19.63 | 20.30 | 18.20 | 18.47 | 18.27 | 18.36 |
+| 96,000 | 5 | 19.80 | 19.60 | 20.60 | 19.10 | 19.80 | 19.04 |
+
+| C | design | held | fds | server µs/req | user | sys | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 18,000 | ring@1 | 18,000 | 13 | 21.83 (21.23–22.37) | 5.30 | 16.70 | 34.13 | 30,000 | 13.1 | 771 | 0.05 | 0.73 (0.47–1.33) | 4.06 |
+| 18,000 | ring-copy@1 | 18,000 | 13 | 21.53 (21.23–22.30) | 5.07 | 16.43 | 34.27 | 30,000 | 13.1 | 754 | 0.05 | 0.47 (0.44–3.17) | 2.40 |
+| 18,000 | ring@64 | 18,000 | 13 | 14.53 (13.53–15.27) | 3.23 | 11.17 | 24.37 | 30,001 | 13.3 | 790 | 1.97 | 3.36 (3.10–3.62) | 7.23 |
+| 18,000 | ring-copy@64 | 18,000 | 13 | 14.67 (13.70–14.97) | 3.40 | 11.33 | 23.77 | 29,997 | 13.1 | 794 | 1.97 | 3.55 (3.30–4.06) | 7.62 |
+| 18,000 | ring@256 | 18,000 | 13 | 14.30 (13.97–14.53) | 3.33 | 11.07 | 21.07 | 30,001 | 13.4 | 780 | 1.90 | 3.23 (3.23–3.62) | 6.21 |
+| 18,000 | ring-copy@256 | 18,000 | 13 | 14.53 (14.37–14.87) | 3.53 | 10.97 | 22.63 | 29,999 | 13.3 | 793 | 1.94 | 3.49 (3.17–4.42) | 6.08 |
+| 96,000 | ring@1 | 96,000 | 21 | 19.40 (17.80–19.80) | 4.60 | 14.60 | 28.23 | 29,999 | 35.5 | 1,329 | 0.25 | 5.18 (0.92–12.67) | 10.62 |
+| 96,000 | ring-copy@1 | 96,000 | 21 | 19.20 (18.70–20.30) | 4.57 | 14.73 | 27.93 | 30,000 | 36.0 | 1,321 | 0.24 | 4.00 (2.85–4.54) | 8.58 |
+| 96,000 | ring@64 | 96,000 | 21 | 18.60 (18.20–20.60) | 3.33 | 15.17 | 29.73 | 30,001 | 35.7 | 1,357 | 2.08 | 5.06 (4.00–15.23) | 16.64 |
+| 96,000 | ring-copy@64 | 96,000 | 21 | 18.80 (18.07–19.10) | 3.33 | 15.47 | 27.34 | 29,998 | 36.3 | 1,346 | 2.00 | 5.18 (3.49–24.83) | 12.93 |
+| 96,000 | ring@256 | 96,000 | 21 | 18.43 (17.97–19.80) | 3.37 | 15.26 | 28.03 | 30,000 | 35.5 | 1,364 | 1.94 | 7.49 (3.62–16.00) | 11.39 |
+| 96,000 | ring-copy@256 | 96,000 | 21 | 19.03 (18.03–19.13) | 3.07 | 15.76 | 28.46 | 30,002 | 35.7 | 1,357 | 2.00 | 4.00 (3.49–4.93) | 7.36 |
+
+Medians of 5 (min to max) for the server µs and the p99, medians of 5 for the other figures, and `PSS MB` and `box MB` from the last round of each design. Every row is one process; every round held every connection (`up` equal to C, 21 descriptors at 96,000), and lost no timed request (`lat_lost`), failed no send and closed no connection. Each response took 3.00 segments out and 3.00 in at 18,000, 3.02 at 96,000. `run.sh`'s comparison lines, each batch against `ring@1`:
+
+| C | batch | less CPU a request | p50 added | p99 added | band |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 18,000 | `minEvents` 64 | 33.4% | +1.92 ms | +2.63 ms | 1.4% |
+| 18,000 | `minEvents` 256 | 34.5% | +1.85 ms | +2.50 ms | 1.4% |
+| 96,000 | `minEvents` 64 | 4.1% | +1.83 ms | −0.13 ms | 1.0% |
+| 96,000 | `minEvents` 256 | 5.0% | +1.69 ms | +2.30 ms | 1.0% |
+
+At 18,000 connections a batch saves about a third of the server's CPU a request, far outside the 1.4% band: every round of `ring@64` and `ring@256`, and of their copies, was cheaper than every round of `ring@1` and `ring-copy@1`. The saving is in both user and system time, and the box's CPU a request falls with it, 34.13 to 24.37 µs at `minEvents` 64. At 96,000 the medians are 4.1% and 5.0% lower, above the 1.0% band at the medians, but the per-round ranges overlap: in rounds 2, 3 and 5 `ring@1` was cheaper than `ring@64`. So the saving at 96,000 is not shown round by round. The run does not say why it shrinks at the higher C; what the two Cs share is the rate, so the higher C's connections each send less often.
+
+The cost is latency. A batch adds 1.7 to 1.9 ms to the median at both Cs, more than the 1 ms of `maxWaitMs`; the run does not measure where the rest goes. The p99 it adds at 18,000, 2.5 to 2.6 ms, is outside `ring@1`'s own range: every round of `ring@64` and `ring@256` read a higher p99 than every round of `ring@1`. At 96,000 the p99 column is too noisy to read a difference from: `ring@1` alone read 0.92 to 12.67 ms across its rounds.
+
+`minEvents` 256 reads as 64 does, within the band, because the runtime fills a batch from at most 64 events (`NISH_POLL_CHUNK` in `runtime/runtime-net.c`). Profile shares (the share of time in the wait, the handler and the kernel) are not measured: the box has no `perf`. There is no "before" side at the base, `f935868b`: its `std/net/handler.ts` has no `minEvents` or `maxWaitMs`, which the bench's server sets; `ring@1` is the before side, the default the handler ran before this change.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->
