@@ -83,6 +83,13 @@ growth bound) cites the `tests/run.js` check or `tests/link` case that fails
 when the limit is removed; a bound read only from the code goes under the
 record's open findings as untested, not in its bounds table.
 
+**Every property a security row states has its own failing check.** A
+`Holds`, `Fixed` or `Decided` row in `docs/security/*.md` cites, for each
+"never", "only", "none" or "as before" it states, the `tests/run.js` check
+or `tests/link` case that fails when that property's guard is removed. A
+claim that no other route reaches a resource lists the exported functions it
+checked, and how many.
+
 **A bench side is the code it names.** A side called an existing copy calls
 the shipped function itself, with its callers' argument types and input
 shapes, and the native kernel where one replaces it; a loop the bench wrote
