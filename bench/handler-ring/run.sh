@@ -15,6 +15,8 @@
 #   bash bench/handler-ring/run.sh --compiler build/nish
 #   bash bench/handler-ring/run.sh --conns 90000 --think 4 --warmup 4 --designs "ring epoll"
 #   bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "ring epoll1 epoll epoll-copy"
+#   bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler /path/to/older/nish \
+#     --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base"
 #
 # --nodb runs every server with BENCH_NODB=1: /plaintext answers its 129 bytes
 # without a query, so the CPU a request costs is the handler's and the
@@ -35,6 +37,29 @@
 # load-test server, as one process on descriptors, and a byte-identical copy
 # of its build, the band between them. It serves the same 129-byte
 # /plaintext with no database, and with the same L - 64 bound as epoll1.
+# h1-ring and h1-ring-copy are the same two builds with BENCH_RING=1: one
+# process on io_uring slots (`slots` = C + 1,024, as for ring), so
+# Http1Server's head + body go out through the ring's sends. ring-copy is
+# ring's byte-identical copy, its noise band.
+#
+# --base-compiler NISH builds the same two sources a second time with another
+# compiler (an older checkout's build/nish, which links that checkout's
+# runtime/), and the designs ring-base and h1-ring-base run those builds as
+# ring and h1-ring do, interleaved with them in every round. The summary
+# then prints each design against its -base build beside the band between
+# the design and its copy: a before/after of a runtime or compiler change.
+#
+# Packets per response: segs.c (built here) samples /proc/net/snmp's Tcp
+# OutSegs and InSegs every 10 ms while the load runs, and each round's line
+# gains outsegs_rsp and insegs_rsp, the counters' rise over loadgen's
+# measured window [win_lo, win_hi) divided by the responses answered in it
+# (rps x the window). Each edge's value is interpolated between the two
+# samples around it. The counters are the network namespace's, not the
+# server's: they count every TCP segment on the box, the load generator's
+# requests and every pure ACK in either direction included, and anything
+# else the box sends over TCP meanwhile. On loopback each segment is counted
+# once out and once in, so the two figures read alike; a response that
+# leaves as two segments instead of one raises both by one.
 #
 # The box's C is the most connections five descriptor processes hold under
 # the limit L (65535, or this shell's hard limit if lower), each keeping 800
@@ -56,6 +81,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 out="$root/build/bench/handler-ring"
 compiler="$root/build/nish"
+base_compiler=""
 conns=""
 rounds=5
 rate=30000
@@ -80,12 +106,13 @@ while [ $# -gt 0 ]; do
   --seconds) seconds="$2"; shift ;;
   --warmup) warmup="$2"; shift ;;
   --compiler) compiler="$2"; shift ;;
+  --base-compiler) base_compiler="$2"; shift ;;
   --think) think="$2"; shift ;;
   --designs) designs_arg="$2"; shift ;;
   --server-cpus) server_cpus="$2"; shift ;;
   --nodb) export BENCH_NODB=1 ;;
   *)
-    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish]" >&2
+    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish] [--base-compiler nish]" >&2
     exit 2
     ;;
   esac
@@ -126,18 +153,43 @@ fi
 
 mkdir -p "$out"
 gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
+gcc -O2 -Wall -Wextra -o "$out/segs" "$root/bench/handler-ring/segs.c"
 # The server is a bench program, not an example: it builds the way the suite
 # builds its cases (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
 . "$root/scripts/nish-compiler.sh"
 nish_allow_panics "$compiler"
+# shellcheck disable=SC2154 # nish_allow_panics sets allow_panics
 "$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server" >/dev/null
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"
 case " $designs_arg " in
-*" h1 "* | *" h1-copy "*)
+*" h1 "* | *" h1-copy "* | *" h1-ring "* | *" h1-ring-copy "* | *" h1-ring-base "*)
   "$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
   cp "$out/h1" "$out/h1-copy"
   cmp "$out/h1" "$out/h1-copy"
+  ;;
+esac
+case " $designs_arg " in
+*"-base "*)
+  if [ -z "$base_compiler" ]; then
+    echo "run.sh: a -base design needs --base-compiler" >&2
+    exit 2
+  fi
+  nish_allow_panics "$base_compiler"
+  # Build only the base binaries a requested design runs, and refuse a pair
+  # that does not differ: it would measure nothing.
+  for pair in "ring-base server bench/handler-ring/server.ts" "h1-ring-base h1 bench/http1-server.ts"; do
+    read -r design bin src <<<"$pair"
+    case " $designs_arg " in
+    *" $design "*)
+      "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/$src" --link "$out/$bin-base" >/dev/null
+      if cmp -s "$out/$bin" "$out/$bin-base"; then
+        echo "run.sh: --base-compiler builds the same $bin binary as --compiler" >&2
+        exit 2
+      fi
+      ;;
+    esac
+  done
   ;;
 esac
 node "$root/bench/sqlite/run.mjs" --validate --compiler "$compiler" >/dev/null
@@ -160,9 +212,19 @@ if [ "${BENCH_NODB:-}" = 1 ]; then echo "no query a request (BENCH_NODB=1)"; els
 results="$out/results.txt"
 : >"$results"
 
-# The server under test, stopped with its workers when the run ends or fails.
+# The server under test, stopped with its workers when the run ends or fails,
+# and the segment sampler beside it.
 server=""
+sampler=""
+stop_sampler() {
+  if [ -n "$sampler" ]; then
+    kill "$sampler" 2>/dev/null || true
+    wait "$sampler" 2>/dev/null || true
+    sampler=""
+  fi
+}
 stop_server() {
+  stop_sampler
   if [ -n "$server" ]; then
     pkill -P "$server" 2>/dev/null || true
     kill "$server" 2>/dev/null || true
@@ -187,9 +249,11 @@ run() {
   local design=$1 c=$2 r=$3 pids n slots bin=$out/server
   : >"$out/server.out"
   case "$design" in
-  ring)
+  ring | ring-copy | ring-base)
     n=1
     slots=$((c + 1024))
+    if [ "$design" = ring-copy ]; then bin=$out/server-copy; fi
+    if [ "$design" = ring-base ]; then bin=$out/server-base; fi
     env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     # `rings` follows `listening`: wait for the line the check reads.
@@ -224,6 +288,21 @@ run() {
     wait_for listening
     pids=$server
     ;;
+  h1-ring | h1-ring-copy | h1-ring-base)
+    n=1
+    slots=$((c + 1024))
+    bin=$out/h1
+    if [ "$design" = h1-ring-copy ]; then bin=$out/h1-copy; fi
+    if [ "$design" = h1-ring-base ]; then bin=$out/h1-base; fi
+    env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" >"$out/server.out" 2>"$out/server.err" &
+    server=$!
+    wait_for '^rings '
+    if ! grep -q '^rings 1$' "$out/server.out"; then
+      echo "the kernel refused rings: $(cat "$out/server.out")" >&2
+      exit 1
+    fi
+    pids=$server
+    ;;
   h1 | h1-copy)
     n=1
     slots=$((limit - 64))
@@ -241,8 +320,32 @@ run() {
     exit 2
     ;;
   esac
-  local line
+  local line segs
+  ${load_pin[@]+"${load_pin[@]}"} "$out/segs" >"$out/segs.txt" &
+  sampler=$!
   line=$(${load_pin[@]+"${load_pin[@]}"} "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
+  stop_sampler
+  # The counters at win_lo and win_hi, each interpolated between the samples
+  # around it, over the window's responses; n/a if a sample is missing.
+  segs=$(awk -v line="$line" '
+    BEGIN {
+      nf = split(line, f, " ")
+      for (i = 1; i <= nf; i++) { split(f[i], kv, "="); v[kv[1]] = kv[2] }
+      lo = v["win_lo"] + 0; hi = v["win_hi"] + 0; resp = v["rps"] * (hi - lo)
+    }
+    { t[NR] = $1; o[NR] = $2; n[NR] = $3 }
+    function at(e, a,   i) {
+      for (i = 2; i <= NR; i++)
+        if (t[i - 1] <= e && e <= t[i]) return a[i - 1] + (a[i] - a[i - 1]) * (e - t[i - 1]) / (t[i] - t[i - 1])
+      return ""
+    }
+    END {
+      ol = at(lo, o); oh = at(hi, o); il = at(lo, n); ih = at(hi, n)
+      if (ol == "" || oh == "" || resp <= 0) { print "outsegs_rsp=n/a insegs_rsp=n/a"; exit }
+      printf "outsegs_rsp=%.3f insegs_rsp=%.3f\n", (oh - ol) / resp, (ih - il) / resp
+    }
+  ' "$out/segs.txt")
+  line="$line $segs"
   echo "round=$r procs=$n $line" | tee -a "$results"
   if ! [[ $line == *" send_failed=0 closed=0 "* ]]; then
     echo "warning: $design at C=$c round $r lost connections during the load; it offered less than C / think" >&2
@@ -292,7 +395,7 @@ awk '
   }
 ' "$results"
 
-echo "== summary: server CPU µs per request (user + sys), median of $rounds (min-max)"
+echo "== summary: server CPU µs per request (user + sys), median of $rounds (min-max); user, sys, out/rsp and in/rsp (outsegs_rsp, insegs_rsp) are medians too"
 awk -v limit="$limit" '
   function med(a, n,   i, j, t) {
     for (i = 2; i <= n; i++) for (j = i; j > 1 && a[j - 1] > a[j]; j--) { t = a[j]; a[j] = a[j - 1]; a[j - 1] = t }
@@ -302,6 +405,9 @@ awk -v limit="$limit" '
     for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }
     k = v["conns"] SUBSEP v["label"]
     n[k]++; us[k, n[k]] = v["srv_us"]; box[k, n[k]] = v["box_us"]; rps[k, n[k]] = v["rps"]
+    usr[k, n[k]] = v["srv_user_us"]; sys[k, n[k]] = v["srv_sys_us"]
+    oseg[k, n[k]] = v["outsegs_rsp"]; iseg[k, n[k]] = v["insegs_rsp"]
+    if (v["outsegs_rsp"] == "n/a") noseg[k] = 1
     p50[k, n[k]] = v["p50_ms"]; p99[k, n[k]] = v["p99_ms"]; p999[k, n[k]] = v["p999_ms"]
     lost[k] += v["lat_lost"]; if (v["lat_n"] == 0) nolat[k] = 1
     p99lo[k] = (n[k] == 1 || v["p99_ms"] < p99lo[k]) ? v["p99_ms"] : p99lo[k]
@@ -313,21 +419,37 @@ awk -v limit="$limit" '
     if (!(v["conns"] in seen)) { seen[v["conns"]] = 1; order[++nc] = v["conns"] }
   }
   END {
-    printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
+    printf "%-8s %-12s %5s %8s %6s %18s %7s %7s %8s %8s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "user", "sys", "out/rsp", "in/rsp", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      split("ring epoll epoll-copy epoll1 h1 h1-copy", ds, " ")
-      for (di = 1; di <= 6; di++) {
+      nds = split("ring ring-copy ring-base epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", ds, " ")
+      for (di = 1; di <= nds; di++) {
         k = c SUBSEP ds[di]
         if (!(k in n)) continue
-        delete a; delete b; delete q; delete l50; delete l99; delete l999
-        for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i]; l50[i] = p50[k, i]; l99[i] = p99[k, i]; l999[i] = p999[k, i] }
+        delete a; delete b; delete q; delete l50; delete l99; delete l999; delete mu; delete ms; delete so; delete si
+        for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i]; l50[i] = p50[k, i]; l99[i] = p99[k, i]; l999[i] = p999[k, i]; mu[i] = usr[k, i]; ms[i] = sys[k, i]; so[i] = oseg[k, i]; si[i] = iseg[k, i] }
         m[k] = med(a, n[k]); mb = med(b, n[k]); mq = med(q, n[k])
+        mso[k] = (k in noseg) ? "" : med(so, n[k])
+        # A round with no sampler reading prints n/a for the design, as the
+        # percentiles do below.
+        if (k in noseg) { sso = "n/a"; ssi = "n/a" } else { sso = sprintf("%.3f", med(so, n[k])); ssi = sprintf("%.3f", med(si, n[k])) }
         # If any round of a design at this C had no answer in its window, its
         # percentiles print n/a for every round: a median would mix in zeros.
         if (k in nolat) { s50 = "n/a"; s99 = "n/a"; s999 = "n/a" }
         else { s50 = sprintf("%.2f", med(l50, n[k])); s99 = sprintf("%.2f (%.2f-%.2f)", med(l99, n[k]), p99lo[k], p99hi[k]); s999 = sprintf("%.2f", med(l999, n[k])) }
-        printf "%-8s %-10s %5s %8s %6s %7.2f (%.2f-%.2f) %8.2f %8.0f %8s %8s %7s %20s %8s %6d\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], mb, mq, pss[k], mem[k], s50, s99, s999, lost[k]
+        printf "%-8s %-12s %5s %8s %6s %7.2f (%.2f-%.2f) %7.2f %7.2f %8s %8s %8.2f %8.0f %8s %8s %7s %20s %8s %6d\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], med(mu, n[k]), med(ms, n[k]), sso, ssi, mb, mq, pss[k], mem[k], s50, s99, s999, lost[k]
+      }
+      # Each design against its --base-compiler build, beside the band
+      # between the design and its byte-identical copy.
+      split("ring h1-ring", cd, " ")
+      for (ki = 1; ki <= 2; ki++) {
+        x = c SUBSEP cd[ki]; xc = c SUBSEP cd[ki] "-copy"; xb = c SUBSEP cd[ki] "-base"
+        if (!((x in m) && (xc in m) && (xb in m)) || m[xb] <= 0 || m[x] <= 0) continue
+        d = (m[xb] - m[x]) / m[xb] * 100; band = (m[xc] - m[x]) / m[x] * 100
+        if (band < 0) band = -band
+        printf "         %s: %.1f%% %s CPU per request than %s-base; noise band (%s vs its copy) %.1f%%", cd[ki], (d < 0 ? -d : d), (d >= 0 ? "less" : "more"), cd[ki], cd[ki], band
+        if (mso[x] != "" && mso[xb] != "") printf "; out/rsp %.3f against %.3f", mso[x], mso[xb]
+        printf "\n"
       }
       e = c SUBSEP "epoll"; ec = c SUBSEP "epoll-copy"; u = c SUBSEP "ring"
       if ((e in m) && (ec in m) && (u in m)) {
