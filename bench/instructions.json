@@ -54,6 +54,9 @@
     "std-compress-deflate": { "n": 2, "instructions": 166095944 },
     "std-compress-inflate": { "n": 40, "instructions": 219002920 },
     "std-compress-checksum": { "n": 60, "instructions": 106368115 },
-    "std-compress-gzip": { "n": 3, "instructions": 162588277 }
+    "std-compress-gzip": { "n": 3, "instructions": 162588277 },
+    "std-term-frame": { "n": 600, "instructions": 203558989 },
+    "std-raster": { "n": 400, "instructions": 155329840 },
+    "std-synth": { "n": 60, "instructions": 159291666 }
   }
 }
