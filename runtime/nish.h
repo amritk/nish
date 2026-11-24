@@ -927,6 +927,7 @@ int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_remove(int32_t loop, int32_t fd);
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
+int32_t nish_poll_wait_batch(int32_t loop, nish_array *ready, int32_t timeout_ms, int32_t min_events, int32_t max_wait_ms);
 int32_t nish_unix_listen(const nish_str *path, int32_t backlog, int32_t flags);
 int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode);
 int32_t nish_unix_connect(const nish_str *path);

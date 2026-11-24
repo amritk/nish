@@ -159,6 +159,7 @@ for (const name of [
   "pollModify",
   "pollRemove",
   "pollWait",
+  "pollWaitBatch",
   "netSetOption",
   "netMss",
   "unixListen",

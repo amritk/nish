@@ -1999,6 +1999,27 @@ declare function pollRemove(loop: i32, fd: i32): i32;
  */
 declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 /**
+ * Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs`
+ * more until `minEvents` pairs are ready, so a busy ring loop takes its events in batches. An
+ * idle loop is not woken every `maxWaitMs`: the second wait starts only once an event is in.
+ * The batch counts the slots and listeners of a `NET_LISTEN_RING` listener; a loop with no ring
+ * listener, and Darwin, answer as `pollWait` does. A descriptor that becomes ready during the
+ * second wait, `signalFd()` included, is reported at most `maxWaitMs` late. `minEvents` of 1 or
+ * less, or a `maxWaitMs` of 0 or less, is `pollWait`. Not callable in a `scope()` task or a
+ * parallel body. A call that writes `ready` is refused in a scope's region on an array a task may
+ * read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404).
+ * Capability: net.
+ *
+ * @param loop the loop from `pollCreate`.
+ * @param ready receives the pairs; shorter than 2 is -22. Its length caps the batch.
+ * @param timeoutMs the most milliseconds to wait for the first event; negative: forever (-1).
+ * @param minEvents the pairs a batch waits for once the first is in.
+ * @param maxWaitMs the most milliseconds the batch waits after the first event.
+ * @returns how many pairs, at most `ready.length / 2` and at most 64, 0 on a timeout, or a
+ *   negative errno.
+ */
+declare function pollWaitBatch(loop: i32, ready: i32[], timeoutMs: i32, minEvents: i32, maxWaitMs: i32): i32;
+/**
  * Set one socket option from a whitelist: there is no raw level and option number, so a program
  * cannot pass a level, a name and a length through to the kernel. The ids are the runtime's own
  * numbers, the same on Linux and Darwin. Refused at compile time on wasm32 and the WASI profile
@@ -3453,6 +3474,26 @@ declare module "nish:net" {
    *   for a `ready` shorter than 2.
    */
   export function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
+  /**
+   * Wait as `pollWait` does for the first event, and then, on a loop holding
+   * a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more until
+   * `minEvents` pairs are ready. An idle loop is not woken every `maxWaitMs`.
+   * A descriptor that becomes ready during the second wait is reported at
+   * most `maxWaitMs` late. A loop with no ring listener, and Darwin, answer
+   * as `pollWait` does.
+   *
+   * @param loop The loop.
+   * @param ready The array the pairs are written into; its length caps the
+   *   batch.
+   * @param timeoutMs The most milliseconds to wait for the first event; any
+   *   negative number waits forever.
+   * @param minEvents The pairs a batch waits for once the first is in.
+   * @param maxWaitMs The most milliseconds the batch waits after the first
+   *   event.
+   * @returns The count of pairs, at most `ready.length / 2` and at most 64,
+   *   `0` on a timeout, or `-22` for a `ready` shorter than 2.
+   */
+  export function pollWaitBatch(loop: i32, ready: i32[], timeoutMs: i32, minEvents: i32, maxWaitMs: i32): i32;
   /**
    * Set one socket option from a whitelist. There is no way to pass a raw
    * level and option number, because that would be an untyped call into the

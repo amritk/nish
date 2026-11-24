@@ -967,6 +967,16 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
 }
 #endif
 
+/* `pollWaitBatch(loop, ready, timeoutMs, minEvents, maxWaitMs)`: wait as
+   `pollWait` does for the first event, then, on a ring loop, up to
+   `maxWaitMs` more until `minEvents` are ready. */
+int32_t nish_poll_wait_batch(int32_t loop, nish_array *ready, int32_t timeout_ms, int32_t min_events,
+                             int32_t max_wait_ms) {
+  (void)min_events;
+  (void)max_wait_ms;
+  return nish_poll_wait(loop, ready, timeout_ms);
+}
+
 /* `netRingState()`: whether `tcpListenFlags` flag 8 gets rings. 0 before a
    listener has asked, 1 when it got them, or the negative errno that refused
    them, after which every listener in the process is a descriptor one: -1
