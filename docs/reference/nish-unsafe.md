@@ -120,7 +120,7 @@ every pair.
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
+Rules: [`nish:unsafe`: unchecked access and defined wrapping](language/builtins.md#nishunsafe-unchecked-access-and-defined-wrapping)
 
 ## Functions
 

@@ -113,11 +113,25 @@ anything other than a plain read runs:
 - **A re-prepare cannot slip past.** When `sqlite3_step` re-prepares a statement
   after a schema change, the authorizer runs again; outside the adapter's own
   prepare, an action off the allowlist invalidates on the spot.
-- **An end the adapter did not see is caught.** If SQLite rolls the transaction
-  back by itself (an I/O error or out-of-memory during a read), it trips every
-  cursor on the B-tree, ours included. Every cursor call also checks
-  `sqlite3_get_autocommit(db)` and `sqlite3BtreeTxnState` (against
-  `SQLITE_TXN_NONE`), and invalidates when either shows the transaction gone.
+- **An end the adapter did not start is caught.** SQLite rolls the whole
+  transaction back by itself when a statement fails with `SQLITE_NOMEM`,
+  `SQLITE_IOERR` or `SQLITE_FULL`, a plain `SELECT` included. `nishsqlite_open`
+  installs a rollback hook (`sqlite3_rollback_hook`) that SQLite calls at the
+  end of every rollback of the transaction, and it invalidates the cursors. A
+  C helper whose allocator refuses large blocks while one `SELECT` runs checks
+  that its cursor then answers `MISUSE`; without the hook the cursor goes on
+  reading rows.
+
+Since every route that ends the read invalidates as it does so, a cursor whose
+slot is live is inside its read. A cursor call therefore checks one thing: that
+its handle names a live slot (`slot_of`, an index and a generation compare). It
+reads no transaction state. A handle carried to another thread under
+`--threads` indexes that thread's own table: it names that thread's cursor of
+the same index and generation if there is one (a thread's first cursor has the
+same handle value as another's), and otherwise answers `MISUSE`, never reaching
+the first thread's memory. The same helper checks the `MISUSE` answer on a
+thread that has opened no cursor, and that a closed connection's cursor handle
+names none of a later connection's cursors.
 
 The adapter's own statements (the schema check, `beginRead`'s `BEGIN` and
 read) run with the callback told they are internal, so they do not invalidate
@@ -127,9 +141,10 @@ A build with `-DSQLITE_DEBUG` (SQLite's assertions on) runs
 `tests/link/std_sqlite_cursor_stale` without an assertion failure; a test pins
 it.
 
-Every cursor entry point holds the connection's `db->mutex`
-(`sqlite3_db_mutex`, entered and left around the call) as SQLite's own API
-functions do, since the internal functions it calls expect it held. The mutex
+Every cursor entry point holds the connection's `db->mutex` as SQLite's own API
+functions do, since the internal functions it calls expect it held. The cursor
+keeps the mutex (`sqlite3_db_mutex`, read when it opens), so a call looks its
+handle up once and then enters and leaves the mutex around the work. The mutex
 is recursive, and NULL (a no-op) in the default `THREADSAFE=0` build and under
 `--threads` (`THREADSAFE=2`). A `SQLITE_DEBUG`, `THREADSAFE=1` build of the
 adapter with a C helper that walks, reads and seeks asserts it; a test pins it.
@@ -229,7 +244,7 @@ translation unit. The calls, all of them:
 
 - B-tree: `sqlite3DbNameToBtree`, `sqlite3BtreeCursorSize`,
   `sqlite3BtreeCursorZero`, `sqlite3BtreeCursor`, `sqlite3BtreeCloseCursor`,
-  `sqlite3BtreeCursorHasMoved`, `sqlite3BtreeTxnState`, `sqlite3BtreeGetMeta`,
+  `sqlite3BtreeCursorHasMoved`, `sqlite3BtreeGetMeta`,
   `sqlite3BtreeFirst`, `sqlite3BtreeLast`, `sqlite3BtreeNext`,
   `sqlite3BtreePrevious`, `sqlite3BtreeEof`, `sqlite3BtreeTableMoveto`,
   `sqlite3BtreeIndexMoveto`, `sqlite3BtreeIntegerKey`,
@@ -239,7 +254,8 @@ translation unit. The calls, all of them:
   `sqlite3VdbeAllocUnpackedRecord`, `sqlite3VdbeRecordUnpack`,
   `sqlite3VdbeMemInit`, `sqlite3VdbeMemSetInt64`, `sqlite3VdbeMemSetStr`,
   `sqlite3VdbeMemSetNull`, `sqlite3VdbeMemRelease`, `sqlite3DbFree`.
-- Public API: `sqlite3_set_authorizer`, `sqlite3_get_autocommit`,
+- Public API: `sqlite3_set_authorizer`, `sqlite3_rollback_hook`,
+  `sqlite3_get_autocommit`,
   `sqlite3_txn_state`, `sqlite3_db_mutex`, `sqlite3_mutex_enter`,
   `sqlite3_mutex_leave`, `sqlite3_malloc64`, `sqlite3_realloc64`,
   `sqlite3_free`, the `sqlite3_value_*` accessors, and the statement and

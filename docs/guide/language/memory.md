@@ -6,8 +6,8 @@ memory is reused, while it compiles the program; at run time there is nothing
 scanning for garbage and, unless you make a [region](regions.md), nothing for
 you to release. Most programs never need to think about memory at
 all. This page says why, and what the exceptions are. The reference sections
-are [Memory model](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#memory-model) and
-[`using a = arena()`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#using-a--arena).
+are [Memory model](../../reference/language/semantics-decisions.md#memory-model) and
+[`using a = arena()`](../../reference/language/builtins.md#using-a--arena).
 
 ## What the compiler does for you
 
@@ -195,7 +195,7 @@ explain-memory: 1 of 4 allocating loops keep what a pass allocates past the pass
 Read it before you deploy a long-running program: a loop listed here
 allocates on every pass and gives nothing back until the line says it does.
 The flag does not change the program it builds. The rules are in
-[Explaining kept memory](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#explaining-kept-memory).
+[Explaining kept memory](../../reference/language/semantics-decisions.md#explaining-kept-memory).
 
 ### A tree links its children, not an array of them
 

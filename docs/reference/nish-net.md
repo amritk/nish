@@ -304,7 +304,7 @@ leaves a datagram unread, loses nothing.
 
 </scalar-detail>
 
-The rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop
+The rules: [`nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop](language/builtins.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)
 
 ## Functions
 

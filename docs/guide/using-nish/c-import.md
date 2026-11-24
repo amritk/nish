@@ -14,7 +14,7 @@ $ nish c-import wc.h -o wc.ts
 The declarations it writes are the ones
 [Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
 describes, under the rules of
-[LANGUAGE.md → Calling C](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#calling-c).
+[LANGUAGE.md → Calling C](../../reference/language/declarations.md#calling-c).
 The command needs `clang`: it is clang that reads the header, with the same
 preprocessor and the same answers about sizes your C compiler gives. Set `CC`
 to use another clang.

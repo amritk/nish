@@ -3,10 +3,10 @@
 An array holds values of one type and can grow; a string is immutable
 bytes, usually UTF-8 text. Both have a short, fixed list of methods — far
 fewer than in JavaScript — and both are bounds-checked. The normative rules are in the
-reference's [Array literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#array-literals),
-[Element access](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#element-access),
-[Arrays and strings as receivers](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-and-strings-as-receivers)
-and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#template-literals) sections.
+reference's [Array literals](../../reference/language/expressions.md#array-literals),
+[Element access](../../reference/language/expressions.md#element-access),
+[Arrays and strings as receivers](../../reference/language/builtins.md#arrays-and-strings-as-receivers)
+and [Template literals](../../reference/language/expressions.md#template-literals) sections.
 
 ## Arrays
 
@@ -237,7 +237,7 @@ that no class implements stores the records themselves back to back, which
 is why holding one of its elements across a `push` onto the same array is
 refused. An array of class instances, of an interface some class implements,
 or of a `T | null` holds a pointer to each element instead
-([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
+([Arrays of records are contiguous](../../reference/language/expressions.md#arrays-of-records-are-contiguous)).
 
 ### Lookup tables
 
@@ -245,7 +245,7 @@ A top-level `const` declared `readonly u8[]` (or `u16`, `u32`, `i32`, `i64`
 or `f64`) and given an array literal of constants is a *constant table*. Its
 elements are worked out when the program compiles and kept as read-only
 data in the binary: nothing runs to build it, and nothing can write it
-([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
+([Constant tables](../../reference/language/declarations.md#constant-tables)).
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
@@ -291,7 +291,7 @@ A top-level `const` holding a `new` array of a constant length is *module
 storage*: a fixed block of memory, zero-filled when the program starts, that
 keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
-([Module storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#module-storage)).
+([Module storage](../../reference/language/declarations.md#module-storage)).
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->

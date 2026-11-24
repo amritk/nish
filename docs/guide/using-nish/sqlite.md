@@ -16,7 +16,7 @@ of it.
 | what went wrong | [`SqliteError`](#errors) |
 
 The reference is
-[SQLite: `nish/sqlite`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#sqlite-nishsqlite).
+[SQLite: `nish/sqlite`](../../reference/language/declarations.md#sqlite-nishsqlite).
 
 ## Opening a database
 
@@ -146,7 +146,7 @@ call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
 `openDatabase` that holds a NUL byte is a check the module keeps at run time,
 one reason a call to it needs `--allow-panics` for now; there it stops the
 program with the
-[`ffi-nul` panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) rather than cutting the SQL
+[`ffi-nul` panic](../../reference/language/semantics-decisions.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 
 <!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
@@ -399,7 +399,8 @@ module's own checks.
 
 - **A connection belongs to the thread that opened it.** Its statements do too:
   the handles live in tables kept per thread, so a handle passed to another
-  thread names nothing there. Open one connection per thread that needs the
+  thread is read against that thread's table: it names nothing there, or that
+  thread's own object with the same handle value. Open one connection per thread that needs the
   database, and close it before the thread ends: a thread's open connections
   are not closed when it exits, and stay allocated.
 - **It uses `ffi`.** The module calls SQLite's C code, so `--capabilities`

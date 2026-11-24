@@ -152,13 +152,21 @@ who write programs in Nish. A page there follows these rules:
 - **Link pages relatively, everything else on GitHub.** The site serves
   every file `scalar.config.json` routes: the guide, the reference pages
   (`INSTALL.md`, `std/README.md`, ...) and the security records.
-  `LANGUAGE.md` is not one of them yet, so it is linked on GitHub too. A
+  `LANGUAGE.md` itself is not routed: the site has it as the pages
+  `scripts/gen-reference.mjs` cuts it into, one per `##` section, so a
+  routed page links a section's page,
+  `docs/reference/language/<section>.md#<anchor>` (every anchor of the
+  spec holds there), and the whole spec as `docs/reference/language.md`. A
   relative link from a routed file to another opens it on the site, as it
   does on GitHub. A relative link to any other file — a source
   file, a test, a design note — the site serves as a download, so a routed
   page links one as `https://github.com/amritk/nish/blob/main/<path>`
   (`tree/main/` for a directory), anchor and all. `node docs/check-links.mjs`
-  checks those URLs against the files here and refuses the relative form.
+  checks those URLs against the files here, refuses the relative form, and
+  refuses a GitHub URL, bracketed or bare, to a page the site has, naming
+  the relative link to write instead. A doc comment in `std/` or
+  `runtime/nish.d.ts` may keep the GitHub URL an editor's hover opens:
+  `scripts/gen-reference.mjs` rewrites one that names a site page.
 - **An anchor lands on both sites.** The site spells some heading IDs
   differently from GitHub (it drops the doubled and leading hyphens of
   `` `--fix` `` and keeps the dot of "4. Exit codes") and gives a heading

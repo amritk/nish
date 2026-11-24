@@ -12061,6 +12061,117 @@ int main(void) {
       )
     }
 
+    // A cursor call checks its handle alone, so every route that ends the
+    // read must free the cursor first. Two routes no Nish program can provoke
+    // on demand: SQLite rolling a read back on its own (an allocation failing
+    // inside a statement, as NOMEM, IOERR or FULL do), which only the
+    // connection's rollback hook sees; and a handle carried to another thread,
+    // whose cursor table is its own under --threads (-DNISH_THREADS). A helper with an allocator that refuses
+    // large blocks while one statement runs exits 0 only if the cursor then
+    // answers SQLITE_MISUSE (21, negated where a call answers a row) to every
+    // call, a thread given the handle gets
+    // SQLITE_MISUSE, and a handle of a closed connection's cursor names none
+    // of a later connection's. Built without SQLITE_DEBUG: SQLite's own
+    // assert in unlockBtreeIfUnused fires on an automatic rollback with a
+    // cursor open (docs/security/sqlite.md, open findings).
+    {
+      const helper = path.join(sqDir, "rolled-back.c")
+      const exe = path.join(sqDir, "rolled-back")
+      fs.writeFileSync(
+        helper,
+        `#include <pthread.h>
+#include <stdint.h>
+#include "sqlite3.h"
+int32_t nishsqlite_open(const char *, int32_t);
+int32_t nishsqlite_exec(int32_t, const char *);
+int32_t nishsqlite_close(int32_t);
+int32_t nishsqlite_begin_read(int32_t);
+int32_t nishsqlite_end_read(int32_t);
+int32_t nishsqlite_prepare(int32_t, const char *);
+int32_t nishsqlite_step(int32_t);
+int32_t nishsqlite_finalize(int32_t);
+int32_t nishsqlite_cursor_open(int32_t, const char *, const char *);
+int32_t nishsqlite_cursor_first(int32_t);
+int32_t nishsqlite_cursor_next(int32_t);
+int32_t nishsqlite_cursor_close(int32_t);
+int64_t nishsqlite_cursor_column_i64(int32_t, int32_t);
+int32_t nishsqlite_cursor_column_type(int32_t, int32_t);
+int64_t nishsqlite_cursor_rowid(int32_t);
+int32_t nishsqlite_key_i64(int32_t, int64_t);
+static sqlite3_mem_methods real;
+static int refusing;
+static void *m_malloc(int n) { return refusing && n > 4096 ? 0 : real.xMalloc(n); }
+static void *m_realloc(void *p, int n) { return refusing && n > 4096 ? 0 : real.xRealloc(p, n); }
+static void *other_thread(void *h) {
+  int32_t c = *(int32_t *)h;
+  *(int32_t *)h = nishsqlite_cursor_next(c) == -21 && nishsqlite_cursor_close(c) == 21 ? 0 : 1;
+  return 0;
+}
+static int32_t opened(int32_t db) {
+  if (db <= 0 || nishsqlite_exec(db, "CREATE TABLE t (a INTEGER, b TEXT);"
+      " WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 2000)"
+      " INSERT INTO t SELECT x, printf('%050d', x) FROM c") != 0 || nishsqlite_begin_read(db) != 0) return 0;
+  int32_t c = nishsqlite_cursor_open(db, "t", "a,b");
+  return c > 0 && nishsqlite_cursor_first(c) == 1 ? c : 0;
+}
+int main(void) {
+  sqlite3_config(SQLITE_CONFIG_GETMALLOC, &real);
+  sqlite3_mem_methods m = real;
+  m.xMalloc = m_malloc;
+  m.xRealloc = m_realloc;
+  if (sqlite3_config(SQLITE_CONFIG_MALLOC, &m) != 0) return 2;
+  int32_t db = nishsqlite_open(":memory:", 6);
+  int32_t c = opened(db);
+  if (c == 0) return 3;
+  int32_t s = nishsqlite_prepare(db, "SELECT length(group_concat(b)) FROM t");
+  refusing = 1;
+  int32_t stepped = nishsqlite_step(s);
+  refusing = 0;
+  if (stepped != 7) return 4;
+  if (nishsqlite_cursor_next(c) != -21 || nishsqlite_cursor_rowid(c) != 0 || nishsqlite_cursor_column_i64(c, 0) != 0 ||
+      nishsqlite_cursor_column_type(c, 0) != -21 || nishsqlite_key_i64(c, 1) != 21 || nishsqlite_cursor_close(c) != 21) return 5;
+  if (nishsqlite_finalize(s) != 0 || nishsqlite_close(db) != 0) return 6;
+  db = nishsqlite_open(":memory:", 6);
+  c = opened(db);
+  if (c == 0) return 7;
+  int32_t handed = c;
+  pthread_t t;
+  if (pthread_create(&t, 0, other_thread, &handed) != 0 || pthread_join(t, 0) != 0 || handed != 0) return 8;
+  if (nishsqlite_cursor_next(c) != 1 || nishsqlite_close(db) != 0) return 9;
+  int32_t later = nishsqlite_open(":memory:", 6);
+  int32_t d = opened(later);
+  if (d == 0 || d == c || nishsqlite_cursor_next(c) != -21 || nishsqlite_cursor_next(d) != 1) return 10;
+  if (nishsqlite_cursor_close(d) != 0 || nishsqlite_end_read(later) != 0) return 11;
+  return nishsqlite_close(later) == 0 ? 0 : 12;
+}
+`
+      )
+      const built = spawnSync(
+        "clang",
+        [
+          "-O0",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_THREADSAFE=1",
+          "-DNISH_THREADS=1",
+          path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+          helper,
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: a cursor answers SQLITE_MISUSE after SQLite rolls its read back on its own, on another thread, and after its connection closes",
+        ran !== null && ran.status === 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stderr}` : "")
+      )
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
