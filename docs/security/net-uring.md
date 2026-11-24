@@ -370,9 +370,15 @@ verdict, and a kernel that refuses rings, takes no filter or has no
   at ready's room, with every epoll wait refused". `nish_poll_wait_batch`
   writes at most `min(ready.length / 2, 64)` pairs, whatever `minEvents` asks;
   the check requires a `ready` of 8 asked for 16 to answer 4 (`batch: a ready
-  of 8 capped a wait for 16 at 4`).
+  of 8 capped a wait for 16 at 4`). Before/after: with
+  `nish_poll_wait_batch`'s `max` set to 64 whatever `ready` holds, the check
+  fails (the program exits 1 after its third line, `batch: an idle wait
+  answered 0 at its timeout`); restored, it passes.
 - **A signal ends a batch on a direct loop** (NURING-41). "net_ring: a
   SIGTERM ends a pollWaitBatch for 256 events long before its maxWaitMs".
+  Before/after: with `nr_batch`'s break on the `signalFd()` poll removed, the
+  check fails (`signal: SIGTERM ended a wait for 256 after 10010 ms, in 2
+  waits`); restored, it passes.
 - **The calls.** `tests/cases/net_poll_batch` pins the IR of
   `pollWaitBatch`, and `reject_net_poll_batch_arity`, `_readonly`, `_wasm`
   and `_wasi` the programs the checker refuses.
