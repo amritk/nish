@@ -1177,7 +1177,7 @@ static void put_le(uint8_t *p, uint64_t v, int n) {
 /* Reads `ncols` columns of the current row in one call. `io` holds the
  * column indices first, a little-endian u16 each, and gets each column's
  * answer after them, NISH_SQLITE_ROW_SLOT bytes each: the integer as
- * unlocked_cursor_column_i64 answers it (0 for TEXT and BLOB), the type as
+ * unlocked_cursor_column_i64 answers it (TEXT and BLOB converted), the type as
  * unlocked_cursor_column_type answers it, and a TEXT or BLOB column's span
  * in `text`, whose bytes are those unlocked_cursor_column_into copies.
  * Answers the text length the row needs; when it is over `ntext`, nothing
@@ -1211,13 +1211,12 @@ static int32_t unlocked_cursor_read_row(nishsqlite_cursor *cur, uint8_t *io, uin
       v = sqlite3BtreeIntegerKey(cur->bt);
     } else {
       type = sqlite3_value_type((sqlite3_value *)m);
+      v = sqlite3_value_int64((sqlite3_value *)m);
       if (type == SQLITE_TEXT || type == SQLITE_BLOB) {
         const void *p = sqlite3_value_blob((sqlite3_value *)m);
         off = at;
         len = sqlite3_value_bytes((sqlite3_value *)m);
         if (p != NULL) memcpy(text + at, p, (size_t)len);
-      } else {
-        v = sqlite3_value_int64((sqlite3_value *)m);
       }
     }
     put_le(out, (uint64_t)v, 8);

@@ -11304,7 +11304,6 @@ const DECLARED = [
   ...cursorReadRow(
     "std/sqlite.ts's Cursor gains a rowIo field and readRow, which call nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
     {
-      "bench/handler-ring/server.ts": ["server.ll", "sqlite.ll"],
       "tests/link/sqlite_busy_backoff/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_caps/main.ts": ["main.ll", "sqlite.ll"],

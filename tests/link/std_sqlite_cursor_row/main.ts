@@ -39,7 +39,7 @@ const agrees = (cur: Cursor, cols: i32[], text: u8[], buf: u8[]): boolean => {
     if (got.isErr() || spans[3 * k] !== ty.value) return false;
     if (ty.value === SQLITE_TEXT || ty.value === SQLITE_BLOB) {
       const n = cur.columnInto(cols[k], buf, 0).expect("columnInto");
-      if (ints[k] !== toI64(0) || spans[3 * k + 1] !== need || spans[3 * k + 2] !== n) return false;
+      if (ints[k] !== cur.columnI64(cols[k]) || spans[3 * k + 1] !== need || spans[3 * k + 2] !== n) return false;
       for (let i = 0; i < n; i++) {
         if (text[need + i] !== buf[i]) return false;
       }

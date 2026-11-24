@@ -921,7 +921,7 @@ export class Cursor {
 
   /**
    * Reads the current row's columns `cols` in one call. For column `cols[k]`
-   * it writes `ints[k]`, the value `columnI64` answers (0 for text and blob),
+   * it writes `ints[k]`, the value `columnI64` answers (text and blob converted),
    * and `spans[3k]`, `spans[3k + 1]` and `spans[3k + 2]`: the type
    * `columnType` answers, then where its bytes start in `text` and how many
    * there are, which are the bytes `columnInto` copies (0 and 0 for a

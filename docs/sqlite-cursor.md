@@ -68,7 +68,7 @@ class Cursor {
 - `readRow(cols, ints, spans, text)` reads the columns `cols` lists, in that
   order and repeats allowed, with one adapter call. Column `cols[i]` answers
   what the per-column calls answer: its type in `spans[3i]`, its integer in
-  `ints[i]` as `columnI64` reads it (0 for TEXT, BLOB and NULL), and for TEXT
+  `ints[i]` as `columnI64` reads it (TEXT and BLOB converted, NULL 0), and for TEXT
   or BLOB the offset and length of its bytes in `text` in `spans[3i + 1]` and
   `spans[3i + 2]`, each column's bytes after the one before; other types
   answer offset and length 0. It answers `Ok` with the bytes the row's
