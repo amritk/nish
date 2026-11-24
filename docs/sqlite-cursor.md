@@ -122,9 +122,12 @@ Since every route that ends the read invalidates as it does so, a cursor whose
 slot is live is inside its read. A cursor call therefore checks one thing: that
 its handle names a live slot (`slot_of`, an index and a generation compare). It
 reads no transaction state. A handle carried to another thread under
-`--threads` indexes that thread's own table, where it names nothing and answers
-`MISUSE`; the same helper checks that, and that a closed connection's cursor
-handle names none of a later connection's cursors.
+`--threads` indexes that thread's own table: it names that thread's cursor of
+the same index and generation if there is one (a thread's first cursor has the
+same handle value as another's), and otherwise answers `MISUSE`, never reaching
+the first thread's memory. The same helper checks the `MISUSE` answer on a
+thread that has opened no cursor, and that a closed connection's cursor handle
+names none of a later connection's cursors.
 
 The adapter's own statements (the schema check, `beginRead`'s `BEGIN` and
 read) run with the callback told they are internal, so they do not invalidate

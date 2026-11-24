@@ -360,7 +360,8 @@ module's own checks.
 
 - **A connection belongs to the thread that opened it.** Its statements do too:
   the handles live in tables kept per thread, so a handle passed to another
-  thread names nothing there. Open one connection per thread that needs the
+  thread is read against that thread's table: it names nothing there, or that
+  thread's own object with the same handle value. Open one connection per thread that needs the
   database, and close it before the thread ends: a thread's open connections
   are not closed when it exits, and stay allocated.
 - **It uses `ffi`.** The module calls SQLite's C code, so `--capabilities`

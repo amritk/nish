@@ -3933,7 +3933,7 @@ A cursor call used to look its handle up and then ask SQLite whether the read ha
 | `feed-cursor-walk` | 13,671 / 14,338 (1,775) | 13,760 / 14,963 (2,428) | 14,417 / 15,932 (4,323) | 89 / 625 | +745 / +1,594 |
 | `feed-cursor` | 16,384 / 17,397 (2,162) | 16,472 / 17,711 (4,657) | 16,912 / 18,113 (3,476) | 88 / 315 | +529 / +716 |
 
-**The walk is 1,594 ns a call faster than the base at the median (11.1 % of the build's median), and 745 ns at the min.** Both are larger than its noise band (625 and 89), but the median is smaller than the IQRs of the copy (2,428) and the base (4,323), so this run does not resolve it beyond those spreads.
+**The walk's median is 1,594 ns a call below the base's (11.1 % of the build's median), outside the 625 ns noise band but inside the IQRs of the copy (2,428) and the base (4,323), so this run does not resolve the gain beyond those spreads.** At the min the gap is 745 ns, outside its 89 ns band.
 
 **With a request's setup on every call, the gain is 716 ns at the median (4.1 %) and 529 ns at the min.** Both are larger than the noise band (315 and 88) and smaller than every IQR of the row. `feed`, which makes no cursor call, moved 58 ns at the median, inside its 398 ns band.
 
