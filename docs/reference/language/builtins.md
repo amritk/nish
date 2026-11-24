@@ -64,8 +64,8 @@ and `io_nish_import_global` and comparing the two bodies.
 `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`,
 `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`,
 `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`,
-`pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`,
-`unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
+`pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `pollWaitBatch`,
+`unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
 `recvFd`, `peerCredentials`, `netRingState` and the constants
 `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`,
 `NET_LISTEN_RING`. Each is a global too
@@ -2755,7 +2755,7 @@ process's io_uring rings, not a descriptor, so a process holds connections
 past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
 
 - `netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort`,
-  `pollAdd`, `pollModify`, `pollRemove` and `pollWait` take a slot handle as
+  `pollAdd`, `pollModify`, `pollRemove`, `pollWait` and `pollWaitBatch` take a slot handle as
   they take a descriptor, with the same readiness contract: `-11` until
   `pollWait` reports it, then progress. A slot is in one loop at a time: a
   `pollAdd` to a second loop answers `-17` until the first loop removes it
@@ -3003,6 +3003,7 @@ by `tcpAccept` on a datagram socket instead, above.
 | `pollModify` | `i32, i32, i32, i32` | `i32` | write |
 | `pollRemove` | `i32, i32` | `i32` | write |
 | `pollWait` | `i32, i32[], i32` | `i32` | write |
+| `pollWaitBatch` | `i32, i32[], i32, i32, i32` | `i32` | write |
 
 **`pollCreate(): i32`** answers a loop: a descriptor, close-on-exec, that
 watches others.
@@ -3039,6 +3040,43 @@ one**, and writes a token and events pair per ready descriptor into `ready`,
 - *Lowering:* not `willreturn`, because it can wait forever.
 - *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`,
   `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region`.
+
+**`pollWaitBatch(loop: i32, ready: i32[], timeoutMs: i32, minEvents: i32,
+maxWaitMs: i32): i32`** waits as `pollWait` does, up to `timeoutMs` for the
+first event, and then, on a Linux loop that holds a `NET_LISTEN_RING`
+listener's slots, **up to `maxWaitMs` more until `minEvents` pairs are
+ready**, so a busy server takes its connections' events in fewer, larger
+batches. It writes and answers as `pollWait` does.
+
+- An idle loop is not woken every `maxWaitMs`: the second wait starts only
+  once the first event is in, and an idle call answers `0` at `timeoutMs`.
+- `ready`'s length caps the batch: a call never waits for more pairs than
+  `ready.length / 2`, or than 64, holds.
+- The second wait is on the ring alone. A descriptor in the loop that becomes
+  ready meanwhile, a UDP socket, a timer's pipe or `signalFd()`, is reported
+  **at most `maxWaitMs` late**, by this call or the next; on a loop whose
+  only descriptor is `signalFd()` the signal ends the batch as soon as it
+  arrives.
+- A `minEvents` of 1 or less, a `maxWaitMs` of 0 or less, a loop with no
+  live ring listener or with two of them, and Darwin, answer exactly as
+  `pollWait` does. A `ready` shorter than 2 answers `-22`.
+- *Lowering:* `nish_poll_wait_batch`; not `willreturn`. The second wait is
+  one `io_uring_enter` with `IORING_ENTER_EXT_ARG`'s timeout, or the ring's
+  own wait on a kernel before 5.11.
+- *Tests:* `net_poll_batch`, `link/net_ring_batch`;
+  `reject_net_poll_batch_readonly`, `reject_net_poll_batch_arity`,
+  `reject_net_poll_batch_wasm`, `reject_net_poll_batch_wasi`.
+
+**A ring loop sleeps on its ring.** On Linux, a loop whose only sources are
+the slots of one `NET_LISTEN_RING` listener, plus at most `signalFd()`
+watched for reading, sleeps in `io_uring_enter` on that listener's ring
+rather than on an eventfd in its epoll set, for `pollWait` and
+`pollWaitBatch` alike; `signalFd()` is then watched by a poll in the ring.
+Nothing a program sees changes but the cost of a wait. A kernel before 5.11,
+a listener that has grown past its first ring, a second listener, any other
+descriptor in the loop, or `signalFd()` beside a ring a `--sandbox` filter
+restricts (which may not poll) sends the wait back through epoll (`uring`
+"direct", `link/net_ring_batch`).
 
 **Level-triggered.** A descriptor that is still ready when the program waits
 again is reported again, so a loop that handles one pair of several, or leaves

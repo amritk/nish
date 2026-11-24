@@ -408,6 +408,9 @@ descriptor by what `pollWait` reports. The loop's own descriptors are one
 epoll descriptor plus two per ring, so a loop at 300k connections under a
 65,535 limit holds about 15.
 
+A loop that holds one ring and at most `signalFd()` skips step 1's eventfd
+and epoll, and sleeps in `io_uring_enter` on the ring itself (§5.5).
+
 ### 5.3 `nish/net/handler` and `nish/net/prefork`
 
 `nish/net/handler` already drives connections through `pollWait`, `netRead`
@@ -450,6 +453,52 @@ an error, because the server works either way, only capped at
 The fallback is checked by a test that runs the same program with
 `io_uring_setup` refused. The test uses a seccomp filter the harness
 installs, and expects descriptor handles and `netRingState() === -1`.
+
+### 5.5 The batch wait and the direct ring wait
+
+*Landed after S5.* Two changes to how a ring loop sleeps, neither visible in
+what it answers.
+
+**The direct wait.** A loop whose sources are one live ring set with one
+ring, plus at most `signalFd()` watched for reading, sleeps in one
+`io_uring_enter(GETEVENTS | IORING_ENTER_EXT_ARG)` with the wait's timeout in
+the argument struct, rather than on the ring's eventfd through `epoll_wait`.
+The enter flushes the submissions and runs the ring's task work itself, so
+the wait costs one system call where it cost two and an eventfd read.
+`signalFd()` is watched by a one-shot `POLL_ADD` in the same ring, armed
+once and re-armed after it answers; when it answers, the wait reads the
+loop's epoll set without sleeping, and the signal is reported as before.
+NURING-8's bound stays: the timeout given to the enter is what
+`nish_uring_sleep_ms` allows, at most `UR_SLEEP_MAX_MS` (10 ms) while slots
+are live, and NURING-14's re-check of `IORING_SQ_TASKRUN` runs on every pump
+as it did. The wait goes through epoll as before on a kernel without
+`IORING_FEAT_EXT_ARG` (before 5.11), on a set that has grown a second ring,
+with a second live set or any other descriptor in the loop, and when
+`signalFd()` sits beside a ring `--sandbox` restricted, whose restrictions
+refuse `POLL_ADD` (NURING-40).
+
+**`pollWaitBatch(loop, ready, timeoutMs, minEvents, maxWaitMs)`** waits as
+`pollWait` does for the first event, then, with one live ring set, up to
+`maxWaitMs` more until `minEvents` pairs are in or `ready` is full. The
+kernel's own form of this, `min_wait_usec` in the same argument struct
+(6.13), waits for `min_complete` completions or for `min_wait_usec` once the
+first is in, inside one enter. The runtime does not use it, and the call
+makes two waits instead, for three reasons:
+
+- a completion is not a pair: a recv completion and a send completion on one
+  slot are one pair, and an accept is a pair only on the listener, so the
+  count the kernel waits for is not the count the program asked for;
+- `min_wait_usec` needs 6.13, and the batch should behave the same on the
+  6.1 the ring layer needs;
+- the first wait must still hear the loop's ordinary descriptors, which the
+  second wait does not.
+
+The cost of the second shape is that an ordinary descriptor that becomes
+ready during the second wait is reported up to `maxWaitMs` late. That bound
+is the documented one; a loop whose only descriptor is `signalFd()` hears it
+through the ring's poll and ends the batch at once. Tests: `uring`'s
+"direct" mode, `link/net_ring_batch` (run with every epoll wait refused, so
+a batch that fell back to epoll would fail), `net_poll_batch`.
 
 ## 6. The sandbox
 
@@ -721,6 +770,13 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    rerun `wins.sh` on the entry before it adopts either.
 
 ## 11. Open questions
+
+- **D4: the kernel's minimum wait.** `pollWaitBatch` makes two waits rather
+  than one enter with `min_wait_usec` (§5.5). If the ring layer's minimum
+  kernel moves to 6.13, the second wait could become the kernel's, for the
+  case where every completion is one pair. It is not measured whether the
+  saved enter matters next to the batch itself; `pollWaitBatch` keeps its
+  contract either way.
 
 - **D1: opt-in or default.** This note makes the ring bit opt-in (§5.1). If
   S4 shows the ring path no dearer at low C, the bit could become the default
