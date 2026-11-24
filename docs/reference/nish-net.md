@@ -32,6 +32,7 @@ import {
   pollModify,
   pollRemove,
   pollWait,
+  pollWaitBatch,
   recvFd,
   sendFd,
   tcpAccept,
@@ -166,6 +167,12 @@ Stop watching `fd`.
 <scalar-card title="poll​Wait" icon="phosphor/regular/function" href="#pollwait">
 
 Wait until a watched descriptor is ready or the timeout passes, and write one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]` its events, `1` readable and `2` writable, with `4` added for a hang-up or an error.
+
+</scalar-card>
+
+<scalar-card title="poll​Wait​Batch" icon="phosphor/regular/function" href="#pollwaitbatch">
+
+Wait as `pollWait` does for the first event, and then, on a loop holding a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more until `minEvents` pairs are ready.
 
 </scalar-card>
 
@@ -913,6 +920,65 @@ The most milliseconds to wait; any negative number waits
 The count of pairs, at most `ready.length / 2` and at most 64
   (the rest are still ready at the next wait), `0` on a timeout, or `-22`
   for a `ready` shorter than 2.
+
+</scalar-field>
+
+### pollWaitBatch
+
+Wait as `pollWait` does for the first event, and then, on a loop holding
+a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more until
+`minEvents` pairs are ready. An idle loop is not woken every `maxWaitMs`.
+A descriptor that becomes ready during the second wait is reported at
+most `maxWaitMs` late. A loop with no ring listener, and Darwin, answer
+as `pollWait` does.
+
+```ts
+const pollWaitBatch: (
+  loop: i32,
+  ready: i32[],
+  timeoutMs: i32,
+  minEvents: i32,
+  maxWaitMs: i32,
+) => i32
+```
+
+<scalar-field name="loop" type="i32" required>
+
+The loop.
+
+</scalar-field>
+
+<scalar-field name="ready" type="i32[]" required>
+
+The array the pairs are written into; its length caps the
+  batch.
+
+</scalar-field>
+
+<scalar-field name="timeoutMs" type="i32" required>
+
+The most milliseconds to wait for the first event; any
+  negative number waits forever.
+
+</scalar-field>
+
+<scalar-field name="minEvents" type="i32" required>
+
+The pairs a batch waits for once the first is in.
+
+</scalar-field>
+
+<scalar-field name="maxWaitMs" type="i32" required>
+
+The most milliseconds the batch waits after the first
+  event.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The count of pairs, at most `ready.length / 2` and at most 64,
+  `0` on a timeout, or `-22` for a `ready` shorter than 2.
 
 </scalar-field>
 

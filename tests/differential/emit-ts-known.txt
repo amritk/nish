@@ -57,6 +57,7 @@ cases/mul_high_native host  # differ: stdout line 1 differs [mulHighIsNative]
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
 cases/net_loop_calls refused  # refused: NL4011 under --emit-ts
 cases/net_loop_two refused  # refused: NL4011 under --emit-ts
+cases/net_poll_batch refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_calls refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_connect refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_connect_import refused  # refused: NL4011 under --emit-ts

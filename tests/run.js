@@ -3154,6 +3154,7 @@ if (dealtHere("netTcp")) {
       "nish_poll_modify",
       "nish_poll_remove",
       "nish_poll_wait",
+      "nish_poll_wait_batch",
     ]
     const used = [
       "nish_net_local_port",
@@ -19007,6 +19008,7 @@ if (dealtHere("runtimeChecks")) {
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
+        ["direct", "a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, does not sleep while that answer is untaken, and a ring without EXT_ARG is refused it (NURING-45)"],
         ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
@@ -36448,6 +36450,77 @@ if (!only || "net_ring".includes(only)) {
         r !== null && r.status === 0 && r.stdout.startsWith("rings refused with -1; served descriptor "),
         r === null ? `does not build\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
       )
+    }
+    // pollWaitBatch (NURING-45). `batch.ts` runs under `noepoll.c`, whose
+    // filter makes every epoll wait answer EPERM: its loop holds only ring
+    // slots, so it must sleep on its ring directly, and a wait that reached
+    // epoll fails the program. Its exit status is the verdict: 2 says rings
+    // were refused, 3 that the kernel takes no filter, 4 that its io_uring has
+    // no IORING_FEAT_EXT_ARG, each a counted skip. `batch.ts signal` adds
+    // signalFd() to the loop, asks for 256 events with a maxWaitMs of 5,000,
+    // and a SIGTERM sent 300 ms in must end the wait within 2,500 ms.
+    const noepoll = path.join(dir, "noepoll")
+    const ne = known
+      ? spawnSync("clang", ["-O1", "-o", noepoll, path.join(linkDir, "net_ring_batch", "noepoll.c")], {
+          encoding: "utf8",
+        })
+      : null
+    const bb = build("net_ring_batch", "batch.ts")
+    const skips = { 2: "the kernel refused rings", 3: "the kernel takes no seccomp filter", 4: "its io_uring has no IORING_FEAT_EXT_ARG" }
+    const batchName =
+      "net_ring: pollWaitBatch on ring slots answers a full batch at once, a short one at maxWaitMs, an idle one at its timeout and caps a batch at ready's room, with every epoll wait refused"
+    const br = bb.exe !== null && ne !== null && ne.status === 0 ? spawnSync(noepoll, [bb.exe], { encoding: "utf8", timeout: 60000 }) : null
+    if (!known) {
+      skip(`${batchName}: noepoll.c names the epoll waits on x86_64 and aarch64 only, not ${process.arch}`)
+    } else if (br !== null && skips[br.status] !== undefined) {
+      skip(`${batchName}: ${skips[br.status]}`)
+    } else {
+      check(
+        batchName,
+        br !== null && br.status === 0 && br.stdout.includes("batch: a ready of 8 capped a wait for 16 at 4\n"),
+        br === null ? `does not build\n${shown(bb.exe === null ? bb.c : ne)}` : `signal ${br.signal}\n${shown(br)}`
+      )
+    }
+    const sr = bb.exe === null ? null : spawnSync(bb.exe, ["signal"], { encoding: "utf8", timeout: 60000 })
+    const sigName = "net_ring: a SIGTERM ends a pollWaitBatch for 256 events long before its maxWaitMs"
+    if (sr !== null && sr.status === 2) {
+      skip(`${sigName}: the kernel refused rings`)
+    } else {
+      check(
+        sigName,
+        sr !== null && sr.status === 0 && sr.stdout.includes("signal: SIGTERM ended a wait for 256 after "),
+        sr === null ? `does not build\n${shown(bb.c)}` : `signal ${sr.signal}\n${shown(sr)}`
+      )
+    }
+    // `batch.ts apart`: a wait for 8 with a maxWaitMs of 3,000 on a loop no
+    // ring source has joined answers its one datagram at once, though a ring
+    // listener is live elsewhere. `batch.ts reuse`: a UDP socket that takes a
+    // closed signalFd()'s number is reported, though the ring's poll is still
+    // armed on the old pipe; `reusefile` closes it with fileClose, the other
+    // closer that takes a program's number (NURING-49). 5 says the socket took
+    // another number.
+    const cases = [
+      ["apart", "net_ring: pollWaitBatch on a loop no ring source joined answers as pollWait does, not at its maxWaitMs", "apart: "],
+      ["reuse", "net_ring: a socket on a closed signalFd()'s number is reported, not taken for the ring's watch", "reuse: "],
+      [
+        "reusefile",
+        "net_ring: a socket on a signalFd() number fileClose freed is reported, not taken for the ring's watch",
+        "reuse: ",
+      ],
+    ]
+    for (const [mode, name, line] of cases) {
+      const r = bb.exe === null ? null : spawnSync(bb.exe, [mode], { encoding: "utf8", timeout: 60000 })
+      if (r !== null && r.status === 2) {
+        skip(`${name}: the kernel refused rings`)
+      } else if (r !== null && r.status === 5) {
+        skip(`${name}: the socket did not take the closed number`)
+      } else {
+        check(
+          name,
+          r !== null && r.status === 0 && r.stdout.includes(line),
+          r === null ? `does not build\n${shown(bb.c)}` : `signal ${r.signal}\n${shown(r)}`
+        )
+      }
     }
   }
 }

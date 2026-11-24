@@ -307,7 +307,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnPipedWithin, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET, netRingState, NET_LISTEN_RING"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, pollWaitBatch, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET, netRingState, NET_LISTEN_RING"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -389,6 +389,9 @@ export const netSignature = (name: string): string => {
   }
   if (name === "pollWait") {
     return "imi"
+  }
+  if (name === "pollWaitBatch") {
+    return "imiii"
   }
   if (name === "netSetOption") {
     return "iii"

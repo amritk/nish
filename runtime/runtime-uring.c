@@ -134,6 +134,7 @@ struct nish_uring_stats {
   int64_t accept_pauses;
   int64_t bound_violations;
   int64_t max_accepting_rings;
+  int64_t direct_waits; /* sleeps in io_uring_enter on the ring itself, not epoll_wait */
   int64_t sends;       /* SENDs written to an SQ, each a send's first or a requeue */
   int64_t pool_new;    /* send buffers the pools ever allocated */
   int64_t pool_held;   /* pool buffers that queued bytes hold now */
@@ -149,6 +150,8 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
 int32_t nish_uring_fd(const struct nish_uring_set *s);
 int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
+int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32_t min_complete, int32_t timeout_ms);
+int32_t nish_uring_poll_events(struct nish_uring_set *s, int32_t take);
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
 int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
@@ -159,6 +162,7 @@ void nish_uring_destroy(struct nish_uring_set *s);
 
 #if defined(__linux__)
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
@@ -191,11 +195,13 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #define UR_SETUP_DEFER_TASKRUN (1u << 13)
 #define UR_FEAT_SINGLE_MMAP (1u << 0)
 #define UR_FEAT_NODROP (1u << 1)
+#define UR_FEAT_EXT_ARG (1u << 8)
 #define UR_OFF_SQ_RING 0ull
 #define UR_OFF_SQES 0x10000000ull
 #define UR_SQ_CQ_OVERFLOW (1u << 1)
 #define UR_SQ_TASKRUN (1u << 2)
 #define UR_ENTER_GETEVENTS (1u << 0)
+#define UR_ENTER_EXT_ARG (1u << 3)
 #define UR_SQE_FIXED_FILE (1u << 0)
 #define UR_SQE_BUFFER_SELECT (1u << 5)
 #define UR_SQE_CQE_SKIP_SUCCESS (1u << 6)
@@ -203,6 +209,7 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #define UR_CQE_F_MORE (1u << 1)
 #define UR_CQE_BUFFER_SHIFT 16
 #define UR_OP_NOP 0
+#define UR_OP_POLL_ADD 6
 #define UR_OP_ACCEPT 13
 #define UR_OP_ASYNC_CANCEL 14
 #define UR_OP_CLOSE 19
@@ -311,7 +318,7 @@ _Static_assert(sizeof(struct ur_restriction) == 16, "io_uring_restriction is 16 
 /* What a completion's user_data says. A send's is its record's address, which
  * malloc aligns to 8, with UR_SEND in the low three bits; every other op's is
  * the op, the slot's generation and the slot, and none of those ops is 3. */
-enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
+enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5, UR_POLL = 6 };
 
 /* A slot's state word: open, recv armed, recv parked on -ENOBUFS, recv held
  * by its caller (`nish_uring_hold`), hung up (its recv ended for good, so it
@@ -380,6 +387,10 @@ struct ur_ring {
   uint32_t *qbytes;           /* per slot: bytes queued and not yet sent */
   uint32_t *parked;           /* slots whose recv waits for buffers */
   uint32_t nparked;
+  /* IORING_FEAT_EXT_ARG: an enter can carry its own timeout, so a sleeper
+   * can wait on the ring itself (nish_uring_wait_direct). A restricted ring
+   * may not take POLL_ADD, so it watches no descriptor for its caller. */
+  uint8_t ext_arg, restricted;
   /* Slots whose queue gained a record since the ring last submitted: its
    * SEND is written then, so the writes of one pass leave as one (NURING-40).
    * ST_MARKED keeps a slot on `mlist` at most once, across a close too. */
@@ -407,6 +418,12 @@ struct nish_uring_set {
   uint32_t lent_ring[EVENTS_MAX];
   uint16_t lent_bid[EVENTS_MAX];
   int nlent;
+  /* The one-shot POLL_ADD a direct wait arms on its caller's descriptor
+   * (NURING-45): the descriptor, whether the poll is in the kernel, the
+   * events it answered and not yet taken, and whether one failed, after
+   * which no descriptor is watched again. */
+  int poll_fd, poll_armed, poll_broken;
+  int32_t poll_revents;
   struct nish_uring_stats stats;
 };
 
@@ -727,6 +744,8 @@ static int ur_make_ring(const struct ur_sizes *z, int restricted, struct ur_ring
     rc = -EOPNOTSUPP;
     goto fail;
   }
+  r->ext_arg = (p.features & UR_FEAT_EXT_ARG) != 0;
+  r->restricted = restricted != 0;
   if (restricted) {
     rc = ur_ops_ok(r->fd);
     if (rc < 0) goto fail;
@@ -1168,6 +1187,16 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     ur_send_head(r, slot, s);
     return 0;
   }
+  if (ud == UR_POLL) {
+    /* The direct wait's poll on its caller's descriptor ended: its events
+     * wait for nish_uring_poll_events. A failure other than a cancel (the
+     * descriptor closed, a kernel that refuses the opcode) stops the watch
+     * for good, so a poll that cannot work is not re-armed every sleep. */
+    s->poll_armed = 0;
+    if (res > 0) s->poll_revents |= res;
+    else if (res < 0 && res != -ECANCELED) s->poll_broken = 1;
+    return 0;
+  }
   unsigned op = (unsigned)(ud & 0xff);
   uint32_t gen = (uint32_t)(ud >> 8) & GEN_MASK;
   uint32_t slot = (uint32_t)(ud >> 32);
@@ -1343,6 +1372,7 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
   s->buf_count = (uint32_t)d.buf_count;
   s->buf_size = (uint32_t)d.buf_size;
   s->rings = calloc((size_t)d.rings_max, sizeof *s->rings);
+  s->poll_fd = -1;
   s->ep = epoll_create1(EPOLL_CLOEXEC);
   if (!s->rings || s->ep < 0) {
     int rc = s->ep < 0 ? -errno : -ENOMEM;
@@ -1500,6 +1530,80 @@ again:
   ur_submit_queued(s);
   if (n == 0 && timeout_ms < 0) goto again;
   return n;
+}
+
+/* Sleep on the set's one ring itself rather than on `nish_uring_fd`: one
+ * io_uring_enter that submits what is queued and waits for `min_complete`
+ * completions (at least 1, at most the CQ's size) or until a timeout passes,
+ * the timeout `nish_uring_sleep_ms` allows for `timeout_ms`, carried in
+ * IORING_ENTER_EXT_ARG. With DEFER_TASKRUN the enter runs the ring's task
+ * work itself, so no eventfd signal is waited for and none can be lost; the
+ * NURING-8 bound is kept all the same, so a ring the kernel flags without a
+ * completion is still serviced within UR_SLEEP_MAX_MS. A `watch_fd` of 0 or
+ * more is watched by a one-shot POLL_ADD in the ring, armed once and taken
+ * with `nish_uring_poll_events` (NURING-45), so a caller that also waits on one
+ * descriptor, `signalFd()`, needs no epoll set beside the ring.
+ *
+ * Answers 0 after a sleep or when there is work to do now, and the caller
+ * then takes events with `nish_uring_wait(s, 0, ...)`; -EOPNOTSUPP when the
+ * set has more than one ring, the kernel lacks IORING_FEAT_EXT_ARG (before
+ * 5.11), or `watch_fd` cannot be watched (a restricted ring, a poll that
+ * failed, or one still armed on another descriptor), and the caller sleeps on
+ * `nish_uring_fd` as before; or the enter's negative errno. A timeout or a
+ * signal ends the sleep with 0, as epoll_wait's would. */
+int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32_t min_complete, int32_t timeout_ms) {
+  if (s->nrings != 1) return -EOPNOTSUPP;
+  struct ur_ring *r = s->rings[0];
+  if (!r->ext_arg) return -EOPNOTSUPP;
+  if (watch_fd >= 0 && (r->restricted || s->poll_broken || (s->poll_armed && s->poll_fd != watch_fd)))
+    return -EOPNOTSUPP;
+  /* Armed even for a wait that does not sleep, so a loop whose slots are
+   * always ready still hears the descriptor: the caller's pump submits it. */
+  if (watch_fd >= 0 && !s->poll_armed && s->poll_revents == 0) {
+    struct ur_sqe *e = ur_sqe(r);
+    if (!e) return 0; /* a full SQ: the caller pumps, which flushes it */
+    e->opcode = UR_OP_POLL_ADD;
+    e->fd = watch_fd;
+    e->op_flags = POLLIN;
+    e->user_data = UR_POLL;
+    s->poll_armed = 1;
+    s->poll_fd = watch_fd;
+  }
+  /* A poll already answered, by a pump that reaped it before this wait, is
+   * work to do now: sleeping would hold a pending signal for a whole enter. */
+  if (watch_fd >= 0 && s->poll_revents != 0) return 0;
+  /* Coalesced sends wait as marked slots: write their SQEs now, so this
+   * enter submits them and sleeps rather than answering at once for the
+   * caller's pump to send them. */
+  ur_send_marked(s, r);
+  int32_t t = nish_uring_sleep_ms(s, timeout_ms);
+  if (t == 0) return 0;
+  struct {
+    int64_t sec, nsec;
+  } ts = {t / 1000, (int64_t)(t % 1000) * 1000000};
+  struct {
+    uint64_t sigmask;
+    uint32_t sigmask_sz, min_wait_usec;
+    uint64_t ts;
+  } arg = {0, 0, 0, (uint64_t)(uintptr_t)&ts};
+  uint32_t want = min_complete < 1 ? 1 : (uint32_t)min_complete;
+  if (want > s->cq_entries) want = s->cq_entries;
+  s->stats.direct_waits++;
+  int rc = ur_errno(syscall(__NR_io_uring_enter, r->fd, r->to_submit, want, UR_ENTER_GETEVENTS | UR_ENTER_EXT_ARG,
+                            &arg, sizeof arg));
+  if (rc > 0) r->to_submit -= (uint32_t)rc > r->to_submit ? r->to_submit : (uint32_t)rc;
+  if (rc >= 0 || rc == -ETIME || rc == -EINTR || rc == -EBUSY || rc == -EAGAIN) return 0;
+  return rc;
+}
+
+/* The events the direct wait's poll answered since they were last taken
+ * (POLLIN, POLLHUP and POLLERR as poll(2) gives them), or 0; `take` clears
+ * them, so the next direct wait arms the poll again. They say the descriptor
+ * was ready, not that it still is: the caller asks its own epoll set. */
+int32_t nish_uring_poll_events(struct nish_uring_set *s, int32_t take) {
+  int32_t v = s->poll_revents;
+  if (take) s->poll_revents = 0;
+  return v;
 }
 
 static struct ur_ring *ur_open_slot(struct nish_uring_set *s, int32_t ring, int32_t slot) {
@@ -1762,6 +1866,18 @@ int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nis
   (void)ev;
   (void)cap;
   return -38;
+}
+int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32_t min_complete, int32_t timeout_ms) {
+  (void)s;
+  (void)watch_fd;
+  (void)min_complete;
+  (void)timeout_ms;
+  return -38;
+}
+int32_t nish_uring_poll_events(struct nish_uring_set *s, int32_t take) {
+  (void)s;
+  (void)take;
+  return 0;
 }
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
   (void)s;

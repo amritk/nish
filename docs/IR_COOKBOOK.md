@@ -31118,6 +31118,49 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-net-loop -->
 
+### `nish:net`: `pollWaitBatch`
+
+The batch wait (WP63), one call into `runtime/runtime-net.c`'s
+`nish_poll_wait_batch`, answering an `i32` and a write. It waits as `pollWait`
+does, so it is `nounwind` alone and its `ready` loses `readonly`; `timeoutMs`,
+`minEvents` and `maxWaitMs` go through as they are, with no check in the IR:
+the runtime caps the batch at `ready.length / 2` and at 64, and treats a
+`minEvents` of 1 or less or a `maxWaitMs` of 0 or less as `pollWait`
+([LANGUAGE.md](LANGUAGE.md#the-readiness-loop)).
+
+<!-- cookbook:begin builtin-net-poll-batch -->
+```ts
+// WP63: `pollWaitBatch` waits as `pollWait` does for the first event and then,
+// on a ring loop, up to `maxWaitMs` more for `minEvents` pairs. It can wait
+// forever, so it is `nounwind` alone, and its `ready` travels as its header,
+// `nocapture` but not `readonly`; the three counts are plain `i32`s.
+import { pollWaitBatch } from "nish:net"
+
+export const batch = (loop: i32, ready: i32[]): i32 => pollWaitBatch(loop, ready, -1, 16, 2)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i32 @nish_poll_wait_batch(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+
+define noundef i32 @batch(i32 noundef %loop, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %ready) #0 {
+entry:
+  %0 = call i32 @nish_poll_wait_batch(i32 %loop, %struct.nish_array* %ready, i32 -1, i32 16, i32 2)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-poll-batch -->
+
 ### `nish:term`: `readStdin`, `waitStdin` and the terminal
 
 A key-reading loop without the `net` capability: `waitStdin` is a `select` on
@@ -34615,6 +34658,7 @@ declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 no
 declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_poll_wait_batch(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #3
 declare noundef i32 @nish_unix_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_unix_listen_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_unix_connect(i8* noundef nonnull readonly align 8 nocapture) #2

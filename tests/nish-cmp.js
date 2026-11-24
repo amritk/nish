@@ -13964,6 +13964,14 @@ const DECLARED = [
     changelog: "io_uring slot handles in nish:net",
     why: "`NET_LISTEN_RING` is new to `nish:net` in this release, so the 0.41.0 seed has no such export and refuses the program (WP63 S2)",
   },
+  // WP63: `pollWaitBatch` is new to `nish:net`, so the 0.45.1 seed refuses
+  // the case and the cookbook entry that call it.
+  ...["tests/cases/net_poll_batch.ts", "docs/cookbook/builtin-net-poll-batch.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "pollWaitBatch and the direct ring wait",
+    why: "`pollWaitBatch` is new to `nish:net` in this release, so the 0.45.1 seed has no such function and refuses the program",
+  })),
   // #1778 stage A: a guarded `nish:simd` access is a proven index site, so the
   // `--deny-panics` program that calls one compiles; the 0.42.0 seed records
   // it as unproven and stops while it words the advice.

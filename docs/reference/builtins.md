@@ -294,6 +294,12 @@ Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events (1 
 
 </scalar-card>
 
+<scalar-card title="poll​Wait​Batch" icon="phosphor/regular/function" href="#pollwaitbatch">
+
+Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs` more until `minEvents` pairs are ready, so a busy ring loop takes its events in batches.
+
+</scalar-card>
+
 <scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
 The `NUL`-terminated bytes at `p`, copied into a new string of the program's own: undefined behaviour unless `p` is a live C string, since nothing proves the bytes end (a dangling or freed pointer, or a buffer with no `NUL`).
@@ -2409,6 +2415,66 @@ the most milliseconds to wait; negative: forever (-1).
 
 how many pairs, at most `ready.length / 2` and at most 64 (the rest stay ready for
   the next wait), 0 on a timeout, or a negative errno.
+
+</scalar-field>
+
+### pollWaitBatch
+
+Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs`
+more until `minEvents` pairs are ready, so a busy ring loop takes its events in batches. An
+idle loop is not woken every `maxWaitMs`: the second wait starts only once an event is in.
+The batch counts the slots and listeners of a `NET_LISTEN_RING` listener; a loop with no ring
+listener, and Darwin, answer as `pollWait` does. A descriptor that becomes ready during the
+second wait, `signalFd()` included, is reported at most `maxWaitMs` late. `minEvents` of 1 or
+less, or a `maxWaitMs` of 0 or less, is `pollWait`. Not callable in a `scope()` task or a
+parallel body. A call that writes `ready` is refused in a scope's region on an array a task may
+read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404).
+Capability: net.
+
+```ts
+const pollWaitBatch: (
+  loop: i32,
+  ready: i32[],
+  timeoutMs: i32,
+  minEvents: i32,
+  maxWaitMs: i32,
+) => i32
+```
+
+<scalar-field name="loop" type="i32" required>
+
+the loop from `pollCreate`.
+
+</scalar-field>
+
+<scalar-field name="ready" type="i32[]" required>
+
+receives the pairs; shorter than 2 is -22. Its length caps the batch.
+
+</scalar-field>
+
+<scalar-field name="timeoutMs" type="i32" required>
+
+the most milliseconds to wait for the first event; negative: forever (-1).
+
+</scalar-field>
+
+<scalar-field name="minEvents" type="i32" required>
+
+the pairs a batch waits for once the first is in.
+
+</scalar-field>
+
+<scalar-field name="maxWaitMs" type="i32" required>
+
+the most milliseconds the batch waits after the first event.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+how many pairs, at most `ready.length / 2` and at most 64, 0 on a timeout, or a
+  negative errno.
 
 </scalar-field>
 

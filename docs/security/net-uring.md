@@ -81,9 +81,19 @@ ring (NURING-41, decided), a buffer the kernel holds is reused only after its
 completion (NURING-42, decided), and writes between repeated shutdowns each
 held a buffer until a shutdown of a side already queued queued nothing
 (NURING-43, fixed before landing); what bounds the rest of a slot's memory
-is read from the code only (NURING-44, open, untested). Forty-four findings
-(NURING-1 to NURING-44): twenty-two fixed, three open (NURING-12, NURING-13,
-NURING-44), nineteen decided. The
+is read from the code only (NURING-44, open, untested). `pollWaitBatch` and
+the direct ring wait let a loop of ring slots sleep in `io_uring_enter` rather
+than `epoll_wait`, watching `signalFd()` by a `POLL_ADD` in its ring, which a restricted ring is refused (NURING-45,
+decided), and a batch's second wait reads no epoll set, so an ordinary
+descriptor can wait up to the program's `maxWaitMs` (NURING-46, decided).
+Fixed before landing: a batch on a loop no ring source had joined waited out
+its `maxWaitMs` (NURING-47), and a socket that took a closed `signalFd()`'s
+number was taken for the ring's watch and never reported (NURING-48), after
+`netClose` and again after `fileClose`, which the first fix missed
+(NURING-49), and a signal whose poll an earlier pump had reaped waited out
+one whole enter (NURING-50).
+Fifty findings (NURING-1 to NURING-50): twenty-six fixed, three open
+(NURING-12, NURING-13, NURING-44), twenty-one decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -96,6 +106,9 @@ fix them, are under "The kernel's record" below.
 | `runtime/runtime-uring.c`, for S2 | what S2 adds for the slot layer: the bytes a slot has queued (`nish_uring_queued`), whether the set can take no more (`nish_uring_full`), and holding a slot's receive (`nish_uring_hold`, with `ur_complete`'s and `ur_catch_up`'s handling of a held slot) |
 | `runtime/runtime-net.c` | the slot layer: the handle encoding and its checks (`nr_encode`, `nr_decode`, `nr_listener`, `nr_vent_for` and the routing in each `nish_net_*` entry), a ring listener's set (`nr_open`, `nr_close_listener`), accepting (`nr_accept`), the events a wait takes in (`nr_pump`, `nr_pump_all`, `nr_dispatch`), a slot's receive and send queues (`nr_read`, `nr_send`), its close and its lingering sends (`nr_close`, `nr_finish`), readiness in a poll loop (`nr_ctl`, `nr_collect`, `nr_poll_wait` and the readiness list, `nr_append`, `nr_unlist`, `nr_touch`, `nr_unregister`, `nr_bits`), and `nish_net_ring_state` |
 | `runtime/runtime-uring.c`, for S3 | the rings made before the filter: `nish_uring_premake` and the pool it fills, a restricted ring's setup in `ur_make_ring` (`ur_ops_ok`, then `ur_restrict`, then enabling it last), `ur_add_ring` taking a premade ring, the pool's answers to the probe (`nish_uring_probe`) and to a set's open (`nish_uring_pooled`, and `nish_uring_open`'s defaults), and `nish_uring_test_submit`, the test-only hook compiled only with `-DNISH_URING_TEST_HOOKS`, which `scripts/build.sh` never passes |
+| `runtime/runtime-uring.c`, for the direct wait | `nish_uring_wait_direct` (its refusals, the `POLL_ADD` it arms on a watched descriptor, the `IORING_ENTER_EXT_ARG` timeout and the minimum it waits for), `nish_uring_poll_events`, and `ur_complete`'s handling of `UR_POLL` |
+| `runtime/runtime-net.c`, for the direct wait | `nr_direct` (which loops may sleep on their ring) and the descriptor notes it reads (`nr_fd_note`, `nr_fd_forget`, `nr_fds` and its `NR_FDS` overflow), `nr_poll_wait`'s direct path, the ring sets it collects (`nr_collect_from`, `nr_epoch` against each set's `seen`), `nish_net_close`'s call of `nish_signal_fd_closing`, and `pollWaitBatch`: `nish_poll_wait_batch`, which bounds a batch by `ready`'s room, and its second wait, `nr_batch` |
+| `runtime/runtime-host.c` and `runtime/runtime-os.c`, for the direct wait | `nish_signal_fd_made`, which names the descriptor a ring may watch and names none once it is closed, `nish_signal_fd_closing`, which records that close, and `nish_file_close`'s call of it |
 | `runtime/runtime-net.c`, for S3 | `nish_net_ring_premake`, which `nish_sandbox` calls with the soft descriptor limit as each ring's slots (`nr_slots`), and `nr_open`'s use of the pool: the pool's slots, and a failure that latches for good |
 | `tests/link/net_ring_*` | the S2 tests: Nish programs on ring listeners, each judged by its own exit status, and `client.mjs`, the node client that drives them from outside their descriptor limit |
 | `tests/runtime/uring-test.c` | the test: an echo server on the layer in a forked child, driven by plain-socket clients, one mode a check; and the `UR_SYS_SETUP` and `UR_SYS_REGISTER` hooks it compiles the layer with, which stand in for the two syscalls to force the answers a seccomp filter cannot |
@@ -173,6 +186,12 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-42 | Low | `runtime/runtime-uring.c` (`ur_release`, `ur_complete`, `ur_drop_sends`) | A pooled buffer reused while the kernel still read it would put one connection's bytes in another's SEND. A record goes back to the pool only through `ur_release`, which `ur_unlink_all` calls when the record leaves the set's list: on the completion that takes its last byte, on a failed send's completion, or from `ur_drop_sends`, which skips a record in flight; a closed slot's in-flight record is freed by its own completion, as NURING-1 left it. | **Decided**: the pool adds no path that frees a record in the kernel. "uring: runtime-uring.c reset: a send the peer resets fails once as SEND_FAILED, and its record is freed once" runs the failed send's path on a pooled record; no check reuses a buffer while a SEND in flight still names it, so the order is read, not tested, beyond that. |
 | NURING-43 | Low | `runtime/runtime-uring.c` (`nish_uring_send`, `nish_uring_shutdown`), `runtime/runtime-net.c` (`nr_send`) | `NR_AREA` bounds a slot's unsent bytes, not its memory. A record holds its bytes until the kernel has taken all of them, so the head of a short send keeps the bytes already sent, and an append never passes a shutdown, so the last record before each shutdown in the queue can be a pool buffer with room left. Found in review: `nish_uring_shutdown` queued a record for every call, so a program alternating a one-byte write with a repeated `netShutdown` of the same side held a 16 KiB pool buffer for each byte, past any bound `NR_AREA` gives. | **Fixed before landing**: the slot's state keeps the sides a shutdown has queued (`ST_SHUT`), and a shutdown of a side already queued answers 0 and queues nothing, so a slot holds at most two shutdowns and the bytes between them at most three partly filled buffers. Before: "1000 pool buffers held", failing with "writes between repeated shutdowns each held a pool buffer"; after: "uring: runtime-uring.c shutpool: 1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)" reads 3 held, and the peer still reads every byte and then the end of the stream. What bounds the rest of a slot's memory is NURING-44, open. |
 | NURING-44 | Low | `runtime/runtime-uring.c` (`nish_uring_send`, `ur_append`, `ur_record`), `runtime/runtime-net.c` (`nr_send`) | Split from NURING-43: a slot's memory past its unsent bytes is bounded only by reading the code. A slot holds at most its head's sent bytes (under `NR_AREA`), its `NR_AREA` of unsent bytes, under 16 KiB of room in each of the at most three partly filled buffers NURING-43's fix leaves, and a header a record, so under about twice `NR_AREA`, 512 KiB, plus 48 KiB. | **Open, untested.** No check measures a slot's memory under a peer that reads slowly; "net_ring: writes to a peer that does not read answer -11 within the kernel's buffers and the send area, and every byte arrives" bounds the bytes, not the buffers. Trimming a head's sent bytes would cost a copy on each short send. The S1 layer's exact records had the same head term. |
+| NURING-45 | Low | `runtime/runtime-uring.c` (`nish_uring_wait_direct`, `nish_uring_poll_events`, `ur_complete`'s `UR_POLL`), `runtime/runtime-net.c` (`nr_direct`, `nr_poll_wait`) | A loop that holds only ring slots, and at most `signalFd()`, now sleeps in `io_uring_enter` on its ring with an `IORING_ENTER_EXT_ARG` timeout rather than in `epoll_wait` on the ring's eventfd, and watches `signalFd()` by a one-shot `IORING_OP_POLL_ADD` in that ring. That is a new operation in the ring, on a plain descriptor number, not a slot of the registered table, and a new path on which the NURING-8 bound and the signal's wake must still hold. | **Decided.** The poll goes only into an unrestricted ring: `nish_uring_wait_direct` answers `-EOPNOTSUPP` for a watched descriptor on a restricted (`--sandbox`) ring, and the loop sleeps on epoll as before, so the restriction's seven operations are not widened and the seccomp filter sees no new call; were the check gone, the kernel would refuse `POLL_ADD` there with `-EACCES`, which latches `poll_broken`. Only `nr_direct`'s loop watches anything, and only `nish_signal_fd_made()`, the signal pipe's read end, which the runtime never closes and which, once the program closes it with `netClose` or `fileClose`, no loop waits directly on again with it watched (NURING-48, NURING-49); the poll holds a reference to that file until it answers or the ring is destroyed, and a set watches one descriptor at a time (a second answers `-EOPNOTSUPP`). It is armed once and re-armed only after its events are taken, so at most one poll is in the kernel. Its completion carries `user_data` 6 (`UR_POLL`), which no slot's encoding can equal, since a slot's operation in the low byte is 1 to 5. A completion that fails other than by cancel stops the watch for good (`poll_broken`), and the loop falls back to epoll. The `EXT_ARG` argument and its timespec are on the stack for the one `io_uring_enter`, which copies them in. The sleep is `nish_uring_sleep_ms`'s, so NURING-8's bound holds: "uring: runtime-uring.c direct: …" requires an idle direct wait to sleep at least `UR_SLEEP_MAX_MS` less 1 ms and to fail only past 500 ms, to end early on its minimum and wait the bound out short of it, to answer a watched pipe by `POLL_ADD` and refuse a second descriptor, not to re-arm until the events are taken, and a ring without `EXT_ARG` (before 5.11) to be refused. That `pollWait` and `pollWaitBatch` take this path, and never epoll, on a ring-only loop is "net_ring: pollWaitBatch on ring slots answers …, with every epoll wait refused", whose `noepoll.c` makes every epoll wait fail. Read, not tested: the restricted ring's refusal, the `poll_broken` latch, and the clamp of the minimum to the CQ's size; they are listed as untested under "What the batch wait adds" below. |
+| NURING-46 | Low | `runtime/runtime-net.c` (`nr_batch`, `nish_poll_wait_batch`) | `pollWaitBatch`'s second wait, once the first event is in, waits on the one ring set for `minEvents` or `maxWaitMs` and reads no epoll set, so an ordinary descriptor in the same loop that becomes ready meanwhile is reported only by the next call, up to `maxWaitMs` late. A peer that sends nothing more holds every batch for its full `maxWaitMs`. | **Decided.** Both delays are bounded by `maxWaitMs`, which the program chooses, and a batch is the program's choice to trade latency for fewer wakes; `pollWait` is unchanged. A loop with two live ring sets takes no second wait (`nr_batch` answers what the first wait took). The signal is not left to the bound on a direct loop: the ring's poll on `signalFd()` ends the batch as soon as it answers, and the next call reports it. "net_ring: a SIGTERM ends a pollWaitBatch for 256 events long before its maxWaitMs" asks for 256 events with a `maxWaitMs` of 5,000, sends SIGTERM 300 ms in and requires the wait to end within 2,500 ms. Where the loop does not wait directly, the signal waits up to `maxWaitMs`, as any other descriptor does: a loop that also holds other descriptors and so sleeps on epoll, a ring `--sandbox` restricts (which may not poll, NURING-45), a kernel before 5.11, a listener grown past its first ring, and a `signalFd()` the program has closed (NURING-48, NURING-49). |
+| NURING-47 | Low | `runtime/runtime-net.c` (`nr_batch`) | `nr_batch` took its second wait whenever one ring set was live, whatever the loop held, so a batch on a loop of ordinary descriptors, while a ring listener lived in another loop or in none, answered its first event only after `maxWaitMs` of sleeping on a ring that could add nothing to it; `runtime/nish.d.ts` promises such a loop answers as `pollWait` does. | **Fixed before landing**: `nr_batch` answers what the first wait took unless the loop is one a virtual source has joined (`nr_loops`, or any once `nr_loops_spilled` is set). Before: "net_ring: pollWaitBatch on a loop no ring source joined answers as pollWait does, not at its maxWaitMs" failed, the `apart` mode answering its one datagram after 3,000 ms (`a wait for 8 on a loop with no ring source answered 1 after 3000 ms`). After: it passes, the datagram answered in under 1,500 ms. |
+| NURING-48 | Low | `runtime/runtime-net.c` (`nr_direct`, `nish_net_close`) | After `netClose(signalFd())`, `nish_signal_fd_made()` still names the closed number and the ring's `POLL_ADD` stays armed on the old pipe, which it holds a reference to. A socket that took the number and joined the loop for reading was taken for the watch, and since the poll was armed on that number it was not re-armed: the loop slept on its ring and never reported the socket. | **Fixed before landing**: `nish_net_close` notes the close of the signal descriptor (`nish_signal_fd_closing`, which sets `nish_signal_closed` in `runtime-host.c`), and from then on `nr_direct` sends any loop with an ordinary descriptor to epoll; a loop of ring slots alone still waits directly. Before: "net_ring: a socket on a closed signalFd()'s number is reported, not taken for the ring's watch" failed, the `reuse` mode's `pollWait` answering 0 at its 2,000 ms timeout with a datagram due (`a wait on the reused number answered 0 after 2000 ms`). After: it passes, the datagram reported in under 1,000 ms. The fix as first written saw only `netClose`, so a close by `fileClose` still reached the bug (NURING-49). |
+| NURING-49 | Low | `runtime/runtime-host.c` (`nish_signal_fd_made`, `nish_signal_fd_closing`), `runtime/runtime-os.c` (`nish_file_close`), `runtime/runtime-net.c` (`nish_net_close`, `nr_direct`) | NURING-48's fix noted only `netClose`. `fileClose(signalFd())` closed the pipe unseen, so a socket that took the number was taken for the watch exactly as before, and the record claimed no other route existed. | **Fixed before landing**: the close is recorded in `runtime-host.c` (`nish_signal_fd_closing`), which both `nish_net_close` and `nish_file_close` call before they close, and `nish_signal_fd_made` answers -1 from then on, so no loop watches the number again. An audit of the native runtime's 56 `close(` calls finds these two the only exported routes that close a number the program supplies; the rest close descriptors the runtime made (`nishshm_close` and `nish_uring_close` take a handle or a slot, not a number). Before: "net_ring: a socket on a signalFd() number fileClose freed is reported, not taken for the ring's watch" failed, the `reusefile` mode's `pollWait` answering 0 at its timeout with a datagram due (`a wait on the reused number answered 0 after 1999 ms`). After: it passes. |
+| NURING-50 | Low | `runtime/runtime-uring.c` (`nish_uring_wait_direct`) | A reap of the set before the wait (any pump that drains its completions) could take the `signalFd()` poll's completion, leaving its events in `poll_revents` untaken. The next direct wait saw the poll armed-and-answered, did not re-arm it, and slept a whole enter (up to `UR_SLEEP_MAX_MS`) on a signal already in. | **Fixed before landing**: `nish_uring_wait_direct` answers 0 at once, without an enter, while a watched poll's events are untaken, and the loop reports them. Before: "uring: runtime-uring.c direct: a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, does not sleep while that answer is untaken, and a ring without EXT_ARG is refused it (NURING-45)" failed (`a direct wait entered the kernel to sleep with its poll already answered`) with the early answer removed. After: it passes. |
 
 ## Properties verified
 
@@ -370,6 +389,62 @@ unconfined. The filter's rows are `sandbox.md`'s; these are the rings'.
   answers -23 and makes no ring past them" (NURING-31).
 - **The floor.** "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is
   premade and the probe answers EINVAL (NURING-33)".
+
+### What the batch wait adds
+
+The direct wait's tests are the `direct` mode of `tests/runtime/uring-test.c`
+and the `net_ring_batch` link test, which `tests/run.js`'s `net_ring` section
+runs under `tests/link/net_ring_batch/noepoll.c`, a wrapper whose seccomp
+filter makes every epoll wait answer `EPERM`; the program's exit status is the
+verdict, and a kernel that refuses rings, takes no filter or has no
+`IORING_FEAT_EXT_ARG` is a counted skip.
+
+- **The direct wait keeps NURING-8's bound and its minimum.** "uring:
+  runtime-uring.c direct: a direct wait on the ring (IORING_ENTER_EXT_ARG)
+  sleeps its bound idle, ends early on its minimum, waits the bound out short
+  of it, answers a watched pipe by POLL_ADD, does not sleep while that
+  answer is untaken, and a ring without EXT_ARG is refused it (NURING-45)".
+  Its "does not sleep" part (NURING-50) lets a reap take the poll's answer
+  on a readable pipe, leaves its events untaken, and requires the next direct
+  wait, for 1,000 ms on an otherwise idle set, to answer 0 with no enter
+  counted.
+- **A ring-only loop never reaches epoll, and a batch is bounded by
+  `ready`.** "net_ring: pollWaitBatch on ring slots answers a full batch at
+  once, a short one at maxWaitMs, an idle one at its timeout and caps a batch
+  at ready's room, with every epoll wait refused". `nish_poll_wait_batch`
+  writes at most `min(ready.length / 2, 64)` pairs, whatever `minEvents` asks;
+  the check requires a `ready` of 8 asked for 16 to answer 4 (`batch: a ready
+  of 8 capped a wait for 16 at 4`). Before/after: with
+  `nish_poll_wait_batch`'s `max` set to 64 whatever `ready` holds, the check
+  fails (the program exits 1 after its third line, `batch: an idle wait
+  answered 0 at its timeout`); restored, it passes.
+- **A signal ends a batch on a direct loop** (NURING-46). "net_ring: a
+  SIGTERM ends a pollWaitBatch for 256 events long before its maxWaitMs".
+  Before/after: with `nr_batch`'s break on the `signalFd()` poll removed, the
+  check fails (`signal: SIGTERM ended a wait for 256 after 10010 ms, in 2
+  waits`); restored, it passes.
+- **A batch on a loop with no ring source is a `pollWait`** (NURING-47).
+  "net_ring: pollWaitBatch on a loop no ring source joined answers as
+  pollWait does, not at its maxWaitMs" runs `batch.ts apart`, a wait for 8
+  with a `maxWaitMs` of 3,000 on a loop holding one UDP socket with a
+  datagram due, while a ring listener is live outside it.
+- **A closed signal descriptor's number is not the watch** (NURING-48).
+  "net_ring: a socket on a closed signalFd()'s number is reported, not taken
+  for the ring's watch" runs `batch.ts reuse`, and "net_ring: a socket on a
+  signalFd() number fileClose freed is reported, not taken for the ring's
+  watch" runs `batch.ts reusefile` (NURING-49); in each, exit 5, a socket
+  that took another number, is a counted skip.
+- **The calls.** `tests/cases/net_poll_batch` pins the IR of
+  `pollWaitBatch`, and `reject_net_poll_batch_arity`, `_readonly`, `_wasm`
+  and `_wasi` the programs the checker refuses.
+
+Read, not tested: `nish_uring_wait_direct`'s refusal of a watched descriptor
+on a restricted ring (no `--sandbox` program has a direct loop that watches
+one, since the refusal is what sends it to epoll, and the `sandbox` section
+has no check that would see the poll), the `poll_broken` latch after a poll
+that fails, and the clamp of a wait's minimum to the CQ's size, which a batch,
+asking for at most 64 at a time, reaches only on a set whose CQ holds fewer
+(the default is 8,192).
 
 ## The kernel's record
 
