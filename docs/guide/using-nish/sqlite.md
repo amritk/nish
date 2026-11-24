@@ -61,6 +61,44 @@ export const main = (): i32 => {
 };
 ```
 
+### A database only this program opens
+
+When no other process reads the file while the program has it open, SQLite's
+`unix-excl` VFS skips work the default one does for them. It locks the file
+once, at the first statement, and holds the lock until the connection closes.
+A WAL database then keeps its index in memory, so there is no `-shm` file
+beside it. Name the VFS in a `file:` URI and add `OPEN_URI`:
+
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { OPEN_CREATE, OPEN_READWRITE, OPEN_URI, openDatabase } from "nish/sqlite";
+
+export const main = (): i32 => {
+  const db = openDatabase("file:app.db?vfs=unix-excl", OPEN_READWRITE | OPEN_CREATE | OPEN_URI).expect("open");
+  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL").expect("pragmas");
+  db.close().expect("close");
+  return 0;
+};
+```
+
+Three things change:
+
+- **Another process cannot use the file.** While it is open, any other process
+  that reads it gets `SQLITE_BUSY`. That includes the `sqlite3` shell and a
+  backup tool.
+- **The log is checkpointed from inside the program.** Two things can do it:
+  the connection's automatic checkpoint, or a second connection on the same
+  thread that runs `PRAGMA wal_checkpoint`. A `nish:threads` task cannot open a
+  connection.
+- **It does not work under `--profile wasi`.** The open succeeds, then the
+  first statement that locks answers `SQLITE_IOERR_LOCK`.
+
+It saves the lock calls of each short transaction. That is about two system
+calls per read and six per single-statement write, and nothing inside an
+explicit transaction. The figures and the reasons it is not the default are in
+[the VFS decision](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md).
+
 ## Running SQL: `exec`
 
 `exec(sql)` runs every statement in `sql` in turn and discards any rows. It is
