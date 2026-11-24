@@ -25,7 +25,7 @@
     "std/host/ring.ts": "62a49a15338588f0bc2ffe2c3298d01cbd888661b1e033fddcc7ee1de3f795ae",
     "std/input.ts": "3f8c9ab34f172ad387160339f8f2ce35b22f944f02e617c2d26982396563cdc7",
     "std/random.ts": "e7e360a36acfa0e02b8c644c5499e0bc8dc3fada41a36062adeb2dd590c51c13",
-    "std/raster.ts": "a55f9b91b7e7bbb24ce9f5ccd48cfe54a38fb7d539974d01a801597ef4a4af4d",
+    "std/raster.ts": "03d284113140c6d462313102858d3264279bc6b6334653283c56bff4363573b9",
     "std/synth.ts": "fd6b33159aecabc5ba9b0c874d78583ccb386bb41196563fe8497adea5340ba4",
     "std/term-pixels.ts": "0818ca93e979c117b6731fff0fea8fb99a6018686c3a100772125cc5efcae663",
     "std/term-rate.ts": "c39e79cca5dbb76d91b6bb255d5b460fbca1ed8f8178e5b9c1702f2112432e14",

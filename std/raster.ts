@@ -995,7 +995,7 @@ export const rasterStepParticles = (pool: RasterParticles, dt: f64, gravity: f64
   const lives: f64[] = pool.lives
   const n: i32 = toI32(lives.length)
   // A pool whose arrays differ in length steps nothing, as `pool.has` decides.
-  if (!pool.has(0)) {
+  if (!pool.has(toI32(0))) {
     return
   }
   for (let i: i32 = 0; i < n; i++) {
@@ -1056,7 +1056,7 @@ export const rasterParticles = (
   const colours: i32[] = pool.colours
   const n: i32 = toI32(lives.length)
   // As in `rasterStepParticles`: a malformed pool draws nothing.
-  if (!pool.has(0)) {
+  if (!pool.has(toI32(0))) {
     return
   }
   for (let i: i32 = 0; i < n; i++) {
