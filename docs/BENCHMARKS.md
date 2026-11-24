@@ -3957,6 +3957,25 @@ The whole machine ran slower in this run than in the one above (`feed` 21,963 ag
 Against `feed` in the same rounds, `feed-cursor-count` is 6,461 ns less a call at the median (−33.0 % of `feed`'s median), and `feed-cursor-walk` is 4,287 ns less (−21.9 %).
 <!-- sqlite-cursor:end -->
 
+<!-- sqlite-vfs:begin -->
+## SQLite's unix-excl VFS against the default
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs --variant unix-excl` adds a byte-identical copy of the Nish build to the rounds and opens the seed through it as `file:<db>?vfs=unix-excl`, with `OPEN_URI`; the build itself opens the plain path on SQLite's default `unix` VFS. Both keep the seed's WAL and `synchronous=NORMAL`. The decision this feeds is [docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md).
+
+12 rounds with the bench code of commit `f3a10584`, SQLite 3.54.1, on a 4-core cloud container (Intel Xeon @ 2.10GHz). Every workload's rows and checksum match across the binaries. ns per call; the band is the build against its copy.
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | unix-excl min / median (IQR) | unix-excl − build, min / median | Band, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `lookup` | 5,290 / 6,206 (574) | 5,930 / 6,284 (334) | 5,231 / 5,611 (338) | −59 / −595 (−9.6%) | 640 / 78 |
+| `feed` | 14,124 / 18,281 (3,320) | 14,995 / 17,916 (1,175) | 13,474 / 17,632 (1,269) | −649 / −649 (−3.6%) | 871 / 365 |
+| `feed-cursor-walk` | 10,491 / 12,704 (526) | 12,310 / 12,811 (2,490) | 10,572 / 12,692 (2,285) | +81 / −12 (−0.1%) | 1,819 / 107 |
+| `feed-cursor` | 11,802 / 16,981 (5,562) | 12,883 / 15,012 (3,115) | 11,207 / 14,241 (1,624) | −595 / −2,740 (−16.1%) | 1,081 / 1,969 |
+| `insert` | 14,584 / 16,992 (1,308) | 16,338 / 18,215 (1,098) | 13,755 / 15,394 (788) | −829 / −1,599 (−9.4%) | 1,754 / 1,223 |
+| `insert-txn` | 4,463 / 5,336 (478) | 4,552 / 5,392 (462) | 4,670 / 5,451 (423) | +207 / +115 (+2.2%) | 89 / 56 |
+
+The verdict statistic is the median. `lookup` and `insert` are faster on unix-excl by more than the band and both IQRs. `feed` and `feed-cursor` are faster by more than the band but by less than the build's IQR, so this run does not separate them from noise. `feed-cursor-walk` holds one read transaction for the whole loop and does not move. `insert-txn` is 115 ns slower, past its 56 ns band but inside both IQRs; it makes the same system calls on both VFSes, so the run shows no cost and does not bound one smaller than its spread.
+<!-- sqlite-vfs:end -->
+
 <!-- sqlite-pgo:begin -->
 ## PGO and the CPU level on the SQLite feed
 

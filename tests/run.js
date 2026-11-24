@@ -37109,6 +37109,36 @@ for (const name of [
     )
   }
 }
+// `std_sqlite_vfs_wasi` answers differently on wasi, which is its point
+// (docs/sqlite-vfs.md): `?vfs=unix-excl` opens there, but wasi-libc has no
+// record locks, so WAL and the first write answer SQLITE_IOERR_LOCK (3850).
+// Its native run is held to expected.out by the link section, this one to
+// expected.wasi.out.
+if (!only || "std_sqlite_vfs_wasi".includes(only) || "wasi".includes(only)) {
+  const name = "std_sqlite_vfs_wasi"
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, `wasi_${name}`)
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnNish(
+      [path.join(linkDir, name, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.wasi.out"), "utf8")
+    check(
+      `link/${name}: on \`--profile wasi\` \`?vfs=unix-excl\` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
+    )
+  }
+}
 }
 
 // ---- WP50 stage 1: a wasm module for a page, loaded without fetch ------------------

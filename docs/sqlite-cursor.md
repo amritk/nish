@@ -15,6 +15,10 @@ decoded only by `sqlite3VdbeRecordUnpack` and compared only by
 `sqlite3VdbeRecordCompare`, and values are read from the decoded `Mem`s
 through the public `sqlite3_value_*` accessors.
 
+Opening a database on SQLite's `unix-excl` VFS, which drops the per-transaction
+file locks the rest of a short read pays for, is decided in
+[sqlite-vfs.md](sqlite-vfs.md).
+
 ## The surface
 
 A `Cursor` is an `i32` handle, like `Database` and `Statement`. Every call

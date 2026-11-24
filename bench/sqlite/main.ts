@@ -32,13 +32,17 @@
 // `rows R checksum S failed F count N ns T`, the line `twin.c` prints for the
 // same arguments, T the timed loop alone.
 //
+// <db> is opened with OPEN_URI, so a path opens as it always has and a
+// `file:<path>?vfs=unix-excl` URI opens the same file on SQLite's unix-excl
+// VFS: run.mjs's `--variant unix-excl` (docs/sqlite-vfs.md).
+//
 // USERS and POSTS are the sizes of the twelve-dollar server challenge's
 // seed/generate.mjs (https://github.com/arjaythedev/twelve-dollar-server-challenge),
 // which twin.c's seed ports; POST_SQL and INSERT_SQL are the queries of its
 // SPEC.md.
 // Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
 // see bench/sqlite/LICENSE.md.
-import { OPEN_READWRITE, SEEK_GE, Cursor, Database, Statement, openDatabase } from "nish/sqlite"
+import { OPEN_READWRITE, OPEN_URI, SEEK_GE, Cursor, Database, Statement, openDatabase } from "nish/sqlite"
 
 const USERS: i32 = 50000
 const POSTS: i32 = 500000
@@ -180,7 +184,7 @@ export const main = (): number => {
   }
   const mode: string = process.argv[1]
   const count: i32 = toI32(parseInt(process.argv[3]))
-  const opened = openDatabase(process.argv[2], OPEN_READWRITE)
+  const opened = openDatabase(process.argv[2], OPEN_READWRITE | OPEN_URI)
   if (opened.isErr()) {
     console.error(`main: ${opened.error.message}`)
     return 2
