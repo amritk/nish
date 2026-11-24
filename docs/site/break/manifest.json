@@ -4,8 +4,8 @@
   "memory": "32",
   "inputs": {
     "examples/break-web/break.mjs": "96ce2317a65e6d43577d868f96abf6a2939237b39eccc84a57b7b600ab5a83fc",
-    "examples/break-web/build.mjs": "0261813b28ab4e138a26e0cbfbe2347b9552e74f72fe5310e8c7e37e06346e5b",
-    "examples/break-web/game.ts": "8f50c58cd366526bf6f6ed0df0719175254bb1407f808528e4ff9a885a944536",
+    "examples/break-web/build.mjs": "6b9c39794bfdae94f59be676e797c6e423024a83d93f8e591e5615fd31529313",
+    "examples/break-web/game.ts": "ac83507a830cf5c1a8478114c7e24d078dbf7c4817dfe5c93d68cbdeb8460fca",
     "examples/break-web/help.ts": "45ca8bbb0ebd61532854f3b40a3ab13ff3a4b4e6a020522d553ca8f4b3566334",
     "examples/break-web/shell.mjs": "5873f1113a2f30741aab79e723188afdc530b6d9bb06963254d71999d28d4b06",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
@@ -27,12 +27,12 @@
     "std/random.ts": "e7e360a36acfa0e02b8c644c5499e0bc8dc3fada41a36062adeb2dd590c51c13",
     "std/raster.ts": "e6ef8eddbbb09c24384ab6f01ca1f7d826e50e87fc271b3822e4a238340243fa",
     "std/synth.ts": "206f1ab1363011efea8f6b8349cfc35eb52985ad4b8613edf81acd90e4d08762",
-    "std/term-pixels.ts": "6169de07ccb5265fc64458bc53d36c0b6e0749359f8233693c7832aef52a7ddd",
+    "std/term-pixels.ts": "f4493ea279b7ecd51f3bee8f1ab5d7f722ffa46ec5afae3afaae4ee9eed1a73b",
     "std/term-rate.ts": "4a243784275d2dbd6c38e6f146a812e52b3af0b2d0bb0c440074da07da24a7f0",
     "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
   },
   "outputs": {
-    "game.wasm": "96563f8cbc4ed5b85aeda3f4c0a54b844721b81e874e637eb09a63f70164408f",
+    "game.wasm": "a4ebe9553fa72d1f703aed5d3895d1bff9ef9f7141575b7f3b0fea6061979207",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "dde2d49936cf795ce840e2eaa70092ccffcb8a5ab1655d98f91671766d69e011",

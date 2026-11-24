@@ -888,7 +888,8 @@ export class Terminal {
     const bytes: i32 = this.send(withPixels)
     const sentAtMs: f64 = toF64(this.sendStartNs) / 1000000.0
     this.dropLost()
-    // The two clock readings are taken apart in f64, where no difference overflows.
+    // The two clock readings are taken apart in f64, where no difference overflows;
+    // past 2^53 ns (about 104 days of uptime) each reading rounds, by a few ns.
     this.rate.frameSent(bytes, this.workNs + (toF64(this.sendStartNs) - toF64(start)), sentAtMs)
     this.workNs = 0.0
     this.ackPush(sentAtMs)

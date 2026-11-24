@@ -220,12 +220,14 @@ export class Framebuffer {
       return
     }
     const pixels: i32[] = this.pixels
-    // In range while `pixels` holds `width * height`; the fields are public, so
-    // one set out of step with the others makes the pixel off the framebuffer.
     const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
-    if (at >= 0 && at < toI32(pixels.length)) {
-      pixels[at] = colour & 0xffffff
+    // In range while `pixels` holds `width * height`. The fields are public,
+    // and one set out of step with the others is a broken framebuffer, which
+    // panics as indexing past `pixels` did, rather than drop the write.
+    if (at < 0 || at >= toI32(pixels.length)) {
+      panic("Framebuffer.set: pixels does not hold width × height")
     }
+    pixels[at] = colour & 0xffffff
   }
 
   /**
@@ -240,10 +242,14 @@ export class Framebuffer {
       return 0
     }
     const pixels: i32[] = this.pixels
-    // In range while `pixels` holds `width * height`; the fields are public, so
-    // one set out of step with the others makes the pixel off the framebuffer.
     const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
-    return at >= 0 && at < toI32(pixels.length) ? pixels[at] : 0
+    // In range while `pixels` holds `width * height`. The fields are public,
+    // and one set out of step with the others is a broken framebuffer, which
+    // panics as indexing past `pixels` did, rather than read as black.
+    if (at < 0 || at >= toI32(pixels.length)) {
+      panic("Framebuffer.get: pixels does not hold width × height")
+    }
+    return pixels[at]
   }
 
   /**
@@ -285,15 +291,18 @@ export const scaleFramebuffer = (src: Framebuffer, divisor: i32, dst: Framebuffe
   const srcW: i32 = src.width
   // `x * divisor` and `y * divisor` stay below the source's size, as `w` and
   // `h` are its size over `divisor` rounded up; the loops say so for the
-  // prover, and each index is checked against its array as well.
+  // prover. Each index is then in its array while each framebuffer's `pixels`
+  // holds its `width * height`; one whose public fields a caller set out of
+  // step panics, as indexing past `pixels` did, rather than skip the pixel.
   for (let y: i32 = 0; y < h && toI64(y) * toI64(divisor) < toI64(src.height); y++) {
     const sy: i32 = toI32(toI64(y) * toI64(divisor))
     for (let x: i32 = 0; x < w && toI64(x) * toI64(divisor) < toI64(srcW); x++) {
       const s: i32 = pixelsIndex(toI32(toI64(x) * toI64(divisor)), sy, srcW, toI32(from.length))
       const d: i32 = pixelsIndex(x, y, w, toI32(to.length))
-      if (s >= 0 && s < toI32(from.length) && d >= 0 && d < toI32(to.length)) {
-        to[d] = from[s]
+      if (s < 0 || s >= toI32(from.length) || d < 0 || d >= toI32(to.length)) {
+        panic("scaleFramebuffer: pixels does not hold width × height")
       }
+      to[d] = from[s]
     }
   }
 }
@@ -680,14 +689,20 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  */
 export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBytes): void => {
   pixelsCheckImageId("kittyFrame", imageId)
-  // `pixels` holds the `width * height` pixels.
   const pixels: i32[] = fb.pixels
   const count: i32 = toI32(pixels.length)
-  if (count === 0 || rect.cols <= 0 || rect.rows <= 0) {
+  // The header gives `width` and `height`; pixels of another count are a
+  // framebuffer whose public fields a caller set out of step, not an image.
+  if (toI64(count) !== toI64(fb.width) * toI64(fb.height)) {
+    panic("kittyFrame: pixels does not hold width × height")
+  }
+  const raw: u8[] = out.kittyRaw
+  // A `kittyRaw` cut below one pixel's 3 bytes holds none: nothing is drawn,
+  // and the cursor is not moved for it.
+  if (count === 0 || rect.cols <= 0 || rect.rows <= 0 || toI32(raw.length) < 3) {
     return
   }
   pixelsMoveTo(out, rect.col, rect.row)
-  const raw: u8[] = out.kittyRaw
   let pixel: i32 = 0
   while (pixel < count) {
     const first: boolean = pixel === 0
@@ -700,11 +715,6 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
       raw[n + 2] = toU8(c & 255)
       n = n + 3
       pixel = pixel + 1
-    }
-    // Only a `kittyRaw` cut below one pixel's 3 bytes holds none; stop rather
-    // than loop on it.
-    if (n === 0) {
-      return
     }
     pixelsKittyOpen(out)
     if (first) {
@@ -871,11 +881,13 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
         pixelsLevel((c >> 8) & 255, bg, 7),
         pixelsLevel(c & 255, bb, 6)
       )
-      // Always in range: `reg` holds at least `w * h`.
+      // Never taken: `reg` holds at least `w * h`, from `pixelsAtLeast`, which
+      // the prover cannot see past.
       const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
-      if (at >= 0 && at < toI32(reg.length)) {
-        reg[at] = n
+      if (at < 0 || at >= toI32(reg.length)) {
+        panic("sixelFrame: the register array is shorter than the frame")
       }
+      reg[at] = n
       // Always true (a register is 0 to 251, or -1); it proves the store in range.
       if (n >= 0 && n < toI32(used.length)) {
         used[n] = 1
@@ -921,7 +933,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       nextBit = nextBit << 1
       for (let x: i32 = 0; x < w; x++) {
         const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
-        const n: i32 = at >= 0 && at < toI32(reg.length) ? reg[at] : -1
+        // Never taken, as where `reg` was written.
+        if (at < 0 || at >= toI32(reg.length)) {
+          panic("sixelFrame: the register array is shorter than the frame")
+        }
+        const n: i32 = reg[at]
         // `bits` holds a row of `w` for each register.
         const slot: i32 = pixelsIndex(x, n, w, toI32(bits.length))
         // Never taken (a register is 0 to 251, and `reg` and `bits` are
@@ -1044,12 +1060,16 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
         break
       }
       const at: i32 = pixelsIndex(px, py, cw, toI32(cpixels.length))
-      // Taken only when a caller has set `pixels`, `width` or `height` out of
-      // step: `pixels` holds `width * height` otherwise, and `x` is not negative.
-      if (at < 0 || at >= toI32(cpixels.length) || x < toI64(0)) {
-        continue
+      // In range while the canvas's `pixels` holds `width * height`. Its fields
+      // are public, and one set out of step with the others is a broken
+      // canvas, which panics as indexing past `pixels` did, rather than skip
+      // the pixel.
+      if (at < 0 || at >= toI32(cpixels.length)) {
+        panic("drawHalfBlocks: the canvas's pixels does not hold width × height")
       }
-      const sx: i32 = toI32(x)
+      // Never taken: `px` starts at `left` or past it, and `x` is below
+      // `xs.length` from the test above; it proves the read in range.
+      const sx: i32 = x < toI64(0) ? -1 : toI32(x)
       if (sx < 0 || sx >= toI32(xs.length)) {
         continue
       }
