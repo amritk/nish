@@ -1052,11 +1052,6 @@ static int32_t unlocked_key_bytes(nishsqlite_cursor *cur, const uint8_t *buf, ui
   return rc;
 }
 
-/* Moves an index cursor to the first entry at or past the key (`op` GE or
- * GT), or the last at or before it (LE or LT), comparing only the key's
- * values, so a key shorter than the index is a prefix. This is the VDBE's
- * OP_SeekGE/GT/LE/LT: the record's default answer for an equal prefix decides
- * which side of the equal run the B-tree lands on, and one step corrects it. */
 /* The kept key, made at open, readied for a compare of its first `nfield`
  * values: an integer seek sets its Mems in place and builds no record. */
 static UnpackedRecord *seek_key(nishsqlite_cursor *cur, int32_t nfield, int default_rc) {
@@ -1068,6 +1063,11 @@ static UnpackedRecord *seek_key(nishsqlite_cursor *cur, int32_t nfield, int defa
   return k;
 }
 
+/* Moves an index cursor to the first entry at or past the key (`op` GE or
+ * GT), or the last at or before it (LE or LT), comparing only the key's
+ * values, so a key shorter than the index is a prefix. This is the VDBE's
+ * OP_SeekGE/GT/LE/LT: the record's default answer for an equal prefix decides
+ * which side of the equal run the B-tree lands on, and one step corrects it. */
 static int32_t unlocked_cursor_seek(nishsqlite_cursor *cur, int32_t op) {
   if (cur == NULL || !cur->is_index || cur->nkeyparts < 1 || op < NISH_SQLITE_SEEK_GE ||
       op > NISH_SQLITE_SEEK_LT)
@@ -1261,7 +1261,7 @@ static int32_t unlocked_cursor_count_range(nishsqlite_cursor *cur, int64_t lo, i
     while (c > 0) {
       if (desc ? at == 0 : at == span - 1) goto done;
       at = desc ? at - 1 : at + 1;
-      k->u.i = (int64_t)((uint64_t)lo + at);
+      sqlite3VdbeMemSetInt64(k, (int64_t)((uint64_t)lo + at));
       c = sqlite3VdbeRecordCompare((int)sz, p, key);
     }
     if (c == 0) {

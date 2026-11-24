@@ -266,6 +266,7 @@ class Cursor
 | `columnI64(c: i32): i64` | Column `c` of the current row as an integer, converted as SQLite converts. |
 | `columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32>` | Copies a text or blob column's stored bytes into `buf` at `at`, and answers their length, as `Statement.columnInto` does: it copies only when all of them fit, so a length larger than `buf.length - at` means nothing was written. It converts no number to text. |
 | `columnType(c: i32): Result<i32, i32>` | The type the current row stores for column `c`, as written: a REAL column holding a whole number stores an integer, where a query would answer a float. |
+| `countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32>` | Counts an index's entries whose first key column is `k`, for each `k` from `lo` to `hi`, into `out[k - lo]`, in one seek and one walk of the index: what `SELECT count(*) ... WHERE col = k` answers for each `k`, for an index whose first column has INTEGER or NUMERIC affinity. It clears the seek key and leaves the cursor on no row. `out` past the span, and all of it on an `Err`, is left as it was. |
 | `error(code: i32): SqliteError` | The error for `code`, which this cursor's last call answered. Allocates the `SqliteError`. |
 | `first(): Result<boolean, i32>` | Moves to the first row, in the index's order for an index. |
 | `keyI64(v: i64): Result<void, i32>` | Appends an integer to the seek key, for the index's next key column. |

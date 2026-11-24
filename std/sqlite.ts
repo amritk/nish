@@ -126,8 +126,6 @@ declare function nishsqlite_key_i64(h: i32, v: i64): i32
 declare function nishsqlite_key_text(h: i32, text: string): i32
 declare function nishsqlite_key_bytes(h: i32, buf: readonly u8[], n: u64, off: i32, len: i32): i32
 declare function nishsqlite_cursor_seek(h: i32, op: i32): i32
-declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
-declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
 declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
 declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
 declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
@@ -720,6 +718,10 @@ export class Statement {
     return new SqliteError(code, messageFor(code, nishsqlite_stmt_errmsg(this.handle)))
   }
 }
+
+// Cursor.countRange's two calls: the count, then each count read back.
+declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
+declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
 
 /**
  * A B-tree cursor on a table or index, which reads rows without a statement.
