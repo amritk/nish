@@ -36677,6 +36677,31 @@ server.on("exit", (code, sig) => {
         tk === null ? `does not build\n${shown(bb.c)}` : `signal ${tk.signal}\n${shown(tk)}`
       )
     }
+    // `batch.ts unfilled`: one byte into a wait for 16 with a maxWaitMs of
+    // 400, so the window is never filled and sleeps its 400 ms out in slices
+    // of 50: it must wait 6 to 8 times. A window of one 400 ms sleep waits
+    // once and one of 16 slices waits 16 times; both fail.
+    const uf = bb.exe === null ? null : spawnSync(bb.exe, ["unfilled"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const ufName = "net_ring: a pollWaitBatch window that is never filled sleeps its maxWaitMs out in 6 to 8 slices"
+    if (uf !== null && uf.status === 2) {
+      skip(`${ufName}: the kernel refused rings`)
+    } else {
+      const lines = [...(uf?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        ufName,
+        uf !== null &&
+          uf.status === 0 &&
+          uf.stdout.includes("unfilled: one wait for 16 took 1 byte and slept out its 400 ms") &&
+          a !== null &&
+          b[0] - a[0] === 1 &&
+          b[1] - a[1] >= 6 &&
+          b[1] - a[1] <= 8,
+        uf === null ? `does not build\n${shown(bb.c)}` : `signal ${uf.signal}\n${shown(uf)}`
+      )
+    }
   }
 }
 

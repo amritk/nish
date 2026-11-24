@@ -38,6 +38,10 @@
 // window that waits on the ring wakes once per byte; one that sleeps in
 // slices pumps at most eight times.
 //
+// With `unfilled`: the same, but the trickler writes one byte, so the window
+// for 16 is never filled and sleeps its whole `maxWaitMs` of 400 out: the
+// stats lines must show it slept in 6 to 8 slices, not one and not 16.
+//
 // Exit 0 is a pass, 2 says the kernel refused rings (the section's skip), 5
 // that the UDP socket did not take the closed number (`reuse`'s skip), and 1
 // is a failure, with its line.
@@ -137,11 +141,13 @@ const killer = (pid: i32): i32 => {
 
 /**
  * The `trickler` mode: connect `CLIENTS` clients to `port`, then, after
- * 300 ms, write one byte on each, 10 ms apart, and hold them for 2 s.
+ * 300 ms, write one byte on each of the first `bytes`, 10 ms apart, and hold
+ * them for 2 s.
  * @param port the listener's port
+ * @param bytes how many clients write a byte
  * @returns the exit status
  */
-const trickler = (port: i32): i32 => {
+const trickler = (port: i32, bytes: i32): i32 => {
   const addr: u8[] = new Array<u8>(18)
   netAddress(addr, "127.0.0.1", port)
   const clients: i32[] = new Array<i32>(CLIENTS)
@@ -155,7 +161,7 @@ const trickler = (port: i32): i32 => {
   const ready: i32[] = new Array<i32>(2)
   pollWait(idle, ready, 300)
   const one: u8[] = [120]
-  for (let i: i32 = 0; i < CLIENTS; i++) {
+  for (let i: i32 = 0; i < bytes; i++) {
     if (netWrite(clients[i], one, 0, 1) !== 1) {
       return 1
     }
@@ -181,12 +187,14 @@ const askStats = (me: i32): boolean => {
 }
 
 /**
- * The `trickle` mode: one batch window while 16 bytes trickle in.
+ * The `trickle` and `unfilled` modes: one batch window for 16 while `bytes`
+ * bytes trickle in.
  * @param loop the loop, holding the listener
  * @param listener the ring listener
+ * @param bytes how many of the trickler's clients write a byte
  * @returns the exit status
  */
-const trickle = (loop: i32, listener: i32): i32 => {
+const trickle = (loop: i32, listener: i32, bytes: i32): i32 => {
   const pid: string | null = realpathSync("/proc/self")
   const self: string | null = realpathSync("/proc/self/exe")
   if (pid === null || self === null) {
@@ -194,7 +202,7 @@ const trickle = (loop: i32, listener: i32): i32 => {
     return 1
   }
   const me: i32 = parseInt(pid.substring(6))
-  if (spawn([self, "trickler", `${netLocalPort(listener)}`]) <= 0) {
+  if (spawn([self, "trickler", `${netLocalPort(listener)}`, `${bytes}`]) <= 0) {
     console.log("the trickler did not start")
     return 1
   }
@@ -234,6 +242,14 @@ const trickle = (loop: i32, listener: i32): i32 => {
   if (!asked) {
     console.log("kill -USR1 did not run after the window")
     return 1
+  }
+  if (bytes < CLIENTS) {
+    if (n !== bytes || read !== bytes || took < 350) {
+      console.log(`a wait for 16 with ${bytes} bytes sent answered ${n} pairs and ${read} bytes in ${took} ms`)
+      return 1
+    }
+    console.log(`unfilled: one wait for 16 took ${bytes} byte and slept out its 400 ms, in ${took} ms`)
+    return 0
   }
   if (n !== CLIENTS || read !== CLIENTS) {
     console.log(`a wait for 16 with 16 bytes trickling in answered ${n} pairs and ${read} bytes`)
@@ -327,7 +343,7 @@ export const main = (): i32 => {
     return killer(args.length > 2 ? parseInt(args[2]) : 0)
   }
   if (mode === "trickler") {
-    return trickler(args.length > 2 ? parseInt(args[2]) : 0)
+    return trickler(args.length > 2 ? parseInt(args[2]) : 0, args.length > 3 ? parseInt(args[3]) : CLIENTS)
   }
   const listener: i32 = tcpListenFlags("127.0.0.1", 0, 64, NET_LISTEN_RING)
   if (listener < 0) {
@@ -347,8 +363,8 @@ export const main = (): i32 => {
   if (mode === "reuse" || mode === "reusefile") {
     return reuse(loop, mode === "reusefile")
   }
-  if (mode === "trickle") {
-    return trickle(loop, listener)
+  if (mode === "trickle" || mode === "unfilled") {
+    return trickle(loop, listener, mode === "unfilled" ? 1 : CLIENTS)
   }
   const sig: i32 = mode === "signal" ? signalFd() : -1
   if (mode === "signal") {
