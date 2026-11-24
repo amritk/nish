@@ -245,10 +245,11 @@ const termIoOnlyAcks = (buf: u8[], n: i32): i32 => {
   if (n <= 0 || n % 4 !== 0) {
     return -1
   }
-  if (n > toI32(buf.length)) {
+  const len: i32 = toI32(buf.length)
+  if (n > len) {
     return -1
   }
-  for (let i: i32 = 0; i >= 0 && i + 3 < toI32(buf.length) && i < n; i = i + 4) {
+  for (let i: i32 = 0; i >= 0 && i < len - 3 && i < n; i = i + 4) {
     if (buf[i] !== 27 || buf[i + 1] !== 91 || buf[i + 2] !== 48 || buf[i + 3] !== 110) {
       return -1
     }
@@ -502,7 +503,8 @@ export class Terminal {
    * the one known.
    */
   private drainAcks(): void {
-    let owed: i32 = this.rate.unacked() + this.rate.stale
+    // Each count is an i32, so their sum is taken in i64, where it fits.
+    let owed: i64 = toI64(this.rate.unacked()) + toI64(this.rate.stale)
     let rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
     rtt = rtt > this.caps.probeRttMs ? rtt : this.caps.probeRttMs
     let bound: f64 = 2.0 * rtt
@@ -515,13 +517,14 @@ export class Terminal {
       if (left <= 0 || !waitStdin(left)) {
         return
       }
-      const n: i32 = readStdin(this.readBuf, 0, TERM_IO_READ)
+      const buf: u8[] = this.readBuf
+      const n: i32 = readStdin(buf, 0, toI32(buf.length))
       if (n > 0) {
-        const only: i32 = this.decoder.waiting() ? -1 : termIoOnlyAcks(this.readBuf, n)
+        const only: i32 = this.decoder.waiting() ? -1 : termIoOnlyAcks(buf, n)
         if (only > 0) {
-          owed = owed - only
+          owed = owed - toI64(only)
         } else {
-          for (const e of this.decoder.feedEvents(this.readBuf, n, termIoNowMs())) {
+          for (const e of this.decoder.feedEvents(buf, n, termIoNowMs())) {
             if (termIoIsAck(e)) {
               owed = owed - 1
             }
