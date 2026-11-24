@@ -586,13 +586,15 @@ const RUNTIME_HOST_TEXT_BUDGET = 1024
  * slot (+16), NURING-39. It stays here for the reason above. The budget is the next
  * 256-byte boundary, leaving 74.
  * **12,505 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 11,190 before, once
- * `pollWaitBatch` and the direct ring wait landed (11,264 to 12,544):
+ * `pollWaitBatch` and the direct ring wait landed (11,264 to 12,800):
  * `nish_poll_wait_batch` and its batch loop, which waits on the one live ring set for
  * `minEvents` completions or `maxWaitMs`, and the check that sends a loop holding only
  * ring slots and at most the signal descriptor to its ring rather than through the
- * eventfd and epoll (NURING-40 on). It stays here for the reason above.
+ * eventfd and epoll (NURING-40 on), with the batch's check that its loop holds a ring
+ * source (NURING-42) and the note of a closed signal descriptor (NURING-43). It stays
+ * here for the reason above.
  */
-const NET_TEXT_BUDGET = 12544
+const NET_TEXT_BUDGET = 12800
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`

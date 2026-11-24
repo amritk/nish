@@ -16,12 +16,24 @@
 // (this program, `killer <pid>`) sends it SIGTERM 300 ms later. The signal
 // must be reported well before the batch's bound.
 //
-// Exit 0 is a pass, 2 says the kernel refused rings (the section's skip),
-// and 1 is a failure, with its line.
+// With `apart`: the ring listener is in no loop, and a second loop holds only
+// a UDP socket with one datagram due. A wait for 8 with a `maxWaitMs` of
+// 3,000 on that loop must answer the datagram at once: no ring source has
+// joined the loop, so it has no batch to wait for.
+//
+// With `reuse`: the loop holds the listener and `signalFd()`, and one wait
+// arms the ring's poll on the signal descriptor. `netClose` closes it, a UDP
+// socket takes its number, and a datagram sent to it must be reported by the
+// next `pollWait`, though the ring's poll is still armed on the old pipe.
+//
+// Exit 0 is a pass, 2 says the kernel refused rings (the section's skip), 5
+// that the UDP socket did not take the closed number (`reuse`'s skip), and 1
+// is a failure, with its line.
 import { realpathSync } from "nish:fs"
 import {
   NET_LISTEN_RING,
   netAddress,
+  netClose,
   netLocalPort,
   netRead,
   netRingState,
@@ -33,6 +45,8 @@ import {
   tcpAccept,
   tcpConnect,
   tcpListenFlags,
+  udpBind,
+  udpSendTo,
 } from "nish:net"
 import { kill, monotonicNanos, readSignal, signalFd, spawn } from "nish:process"
 
@@ -109,6 +123,76 @@ const killer = (pid: i32): i32 => {
   return kill(pid, 15) === 0 ? 0 : 1
 }
 
+/** The token a UDP socket is reported under. */
+const DATAGRAM: i32 = -3
+
+/**
+ * Bind a UDP receiver and send it one datagram from a second socket.
+ * @param receiver the bound receiver
+ * @returns false when the datagram was not sent
+ */
+const datagram = (receiver: i32): boolean => {
+  const sender: i32 = udpBind("127.0.0.1", 0, 0)
+  const to: u8[] = new Array<u8>(18)
+  netAddress(to, "127.0.0.1", netLocalPort(receiver))
+  const one: u8[] = [120]
+  return sender >= 0 && udpSendTo(sender, one, 0, 1, to, 0, 0) === 1
+}
+
+/**
+ * The `apart` mode: a batch on a loop no ring source has joined.
+ * @returns the exit status
+ */
+const apart = (): i32 => {
+  const other: i32 = pollCreate()
+  const receiver: i32 = udpBind("127.0.0.1", 0, 0)
+  if (receiver < 0 || pollAdd(other, receiver, 1, DATAGRAM) !== 0 || !datagram(receiver)) {
+    console.log("the UDP pair did not start")
+    return 1
+  }
+  const ready: i32[] = new Array<i32>(16)
+  const t0: i64 = monotonicNanos()
+  const n: i32 = pollWaitBatch(other, ready, 2000, 8, 3000)
+  const took: i64 = since(t0)
+  if (n !== 1 || ready[0] !== DATAGRAM || took >= 1500) {
+    console.log(`a wait for 8 on a loop with no ring source answered ${n} after ${took} ms`)
+    return 1
+  }
+  console.log(`apart: a wait for 8 on a loop with no ring source answered 1 after ${took} ms`)
+  return 0
+}
+
+/**
+ * The `reuse` mode: a socket takes a closed `signalFd()`'s number.
+ * @param loop the loop, holding the listener
+ * @returns the exit status
+ */
+const reuse = (loop: i32): i32 => {
+  const sig: i32 = signalFd()
+  pollAdd(loop, sig, 1, SIGNAL)
+  const ready: i32[] = new Array<i32>(16)
+  pollWait(loop, ready, 20)
+  netClose(sig)
+  const receiver: i32 = udpBind("127.0.0.1", 0, 0)
+  if (receiver !== sig) {
+    console.log(`the UDP socket took ${receiver}, not ${sig}`)
+    return 5
+  }
+  if (pollAdd(loop, receiver, 1, DATAGRAM) !== 0 || !datagram(receiver)) {
+    console.log("the UDP pair did not start")
+    return 1
+  }
+  const t0: i64 = monotonicNanos()
+  const n: i32 = pollWait(loop, ready, 2000)
+  const took: i64 = since(t0)
+  if (n !== 1 || ready[0] !== DATAGRAM || took >= 1000) {
+    console.log(`a wait on the reused number answered ${n} after ${took} ms`)
+    return 1
+  }
+  console.log(`reuse: a socket on the closed signal number was reported after ${took} ms`)
+  return 0
+}
+
 export const main = (): i32 => {
   const args: string[] = process.argv
   const mode: string = args.length > 1 ? args[1] : "batch"
@@ -125,8 +209,14 @@ export const main = (): i32 => {
     console.log(`rings refused: ${state}`)
     return 2
   }
+  if (mode === "apart") {
+    return apart()
+  }
   const loop: i32 = pollCreate()
   pollAdd(loop, listener, 1, LISTENER)
+  if (mode === "reuse") {
+    return reuse(loop)
+  }
   const sig: i32 = mode === "signal" ? signalFd() : -1
   if (mode === "signal") {
     pollAdd(loop, sig, 1, SIGNAL)

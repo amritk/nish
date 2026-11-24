@@ -963,7 +963,12 @@ static void nr_fd_forget(int32_t fd) {
    than epoll_wait, and in `*watch` the one descriptor its ring must watch
    for it, or -1: there is one live set, no other loop holds a virtual
    source, and the loop's only ordinary descriptor, if any, is `signalFd()`
-   watched for reading. NULL otherwise, and the wait uses epoll. */
+   watched for reading. NULL otherwise, and the wait uses epoll. Once
+   `netClose` has closed the signal descriptor its number may name a new
+   socket, which the ring's poll, still armed on the old pipe, would never
+   report, so no loop with an ordinary descriptor waits directly again. */
+static int32_t nr_signal_closed;
+
 static struct nr_set *nr_direct(int32_t loop, int32_t *watch) {
   if (nr_fds_spilled || nr_loops_spilled || nr_nloops != 1 || nr_loops[0] != loop) return NULL;
   struct nr_set *D = NULL;
@@ -975,7 +980,8 @@ static struct nr_set *nr_direct(int32_t loop, int32_t *watch) {
   *watch = -1;
   for (int32_t i = 0; i < nr_nfds; i++) {
     if (nr_fds[i].loop != loop) continue;
-    if (*watch >= 0 || nr_fds[i].fd != nish_signal_fd_made() || nr_fds[i].events != 1) return NULL;
+    if (*watch >= 0 || nr_signal_closed || nr_fds[i].fd != nish_signal_fd_made() || nr_fds[i].events != 1)
+      return NULL;
     *watch = nr_fds[i].fd;
   }
   return D;
@@ -1069,6 +1075,12 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
     S = nr_sets[i];
   }
   if (!S) return n;
+  /* A loop no virtual source has joined has nothing the ring can add, so it
+     answers as `pollWait` did rather than sleep out `max_wait_ms`. */
+  int held = nr_loops_spilled;
+  for (int32_t i = 0; i < nr_nloops; i++)
+    if (nr_loops[i] == loop) held = 1;
+  if (!held) return n;
   int32_t watch = -1;
   int direct = nr_direct(loop, &watch) == S;
   int64_t end = nr_now_ms() + max_wait_ms;
@@ -1466,6 +1478,7 @@ int32_t nish_net_close(int32_t fd) {
   if (R) return nr_close_listener(R);
   if (nr_nsets > 0) nr_forget_loop(fd);
   nr_fd_forget(fd);
+  if (fd >= 0 && fd == nish_signal_fd_made()) nr_signal_closed = 1;
 #endif
   return close(fd) != 0 ? nish_net_fail() : 0;
 }

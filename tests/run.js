@@ -36207,6 +36207,29 @@ if (!only || "net_ring".includes(only)) {
         sr === null ? `does not build\n${shown(bb.c)}` : `signal ${sr.signal}\n${shown(sr)}`
       )
     }
+    // `batch.ts apart`: a wait for 8 with a maxWaitMs of 3,000 on a loop no
+    // ring source has joined answers its one datagram at once, though a ring
+    // listener is live elsewhere. `batch.ts reuse`: a UDP socket that takes a
+    // closed signalFd()'s number is reported, though the ring's poll is still
+    // armed on the old pipe. 5 says the socket took another number.
+    const cases = [
+      ["apart", "net_ring: pollWaitBatch on a loop no ring source joined answers as pollWait does, not at its maxWaitMs", "apart: "],
+      ["reuse", "net_ring: a socket on a closed signalFd()'s number is reported, not taken for the ring's watch", "reuse: "],
+    ]
+    for (const [mode, name, line] of cases) {
+      const r = bb.exe === null ? null : spawnSync(bb.exe, [mode], { encoding: "utf8", timeout: 60000 })
+      if (r !== null && r.status === 2) {
+        skip(`${name}: the kernel refused rings`)
+      } else if (r !== null && r.status === 5) {
+        skip(`${name}: the socket did not take the closed number`)
+      } else {
+        check(
+          name,
+          r !== null && r.status === 0 && r.stdout.includes(line),
+          r === null ? `does not build\n${shown(bb.c)}` : `signal ${r.signal}\n${shown(r)}`
+        )
+      }
+    }
   }
 }
 
