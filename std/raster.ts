@@ -90,7 +90,15 @@ export const rasterPixel = (v: f64): i32 => {
 }
 
 /** `v` clamped to a channel's 0..255. */
-const rasterByte = (v: i32): i32 => Math.min(Math.max(v, 0), 255)
+const rasterByte = (v: i32): integer<0, 255> => {
+  if (v < 0) {
+    return 0
+  }
+  if (v > 255) {
+    return 255
+  }
+  return v
+}
 
 /** `x` held to 0..1; NaN becomes 0. */
 const rasterUnit = (x: f64): f64 => {
@@ -117,18 +125,56 @@ export const rasterRgb = (r: i32, g: i32, b: i32): i32 =>
  * @param t - the fraction, clamped to 0..1; NaN is 0
  * @returns the weight, 0 to `RASTER_SOLID`
  */
-export const rasterWeight = (t: f64): i32 => {
+export const rasterWeight = (t: f64): i32 => rasterWeightOf(t)
+
+/** `rasterWeight`, typed as the 0..256 it returns, which is what lets a mix use it unchecked. */
+const rasterWeightOf = (t: f64): integer<0, 256> => {
   if (!(t > 0.0)) {
     return 0
   }
   if (t >= 1.0) {
-    return RASTER_SOLID
+    return 256
   }
-  return toI32(t * 256.0)
+  const w: i32 = toI32(t * 256.0)
+  // Never true: `t` is inside (0, 1), so `w` is 0..255. The test is what
+  // proves the result in range, which the float product cannot.
+  if (w < 0 || w > 256) {
+    return 0
+  }
+  return w
+}
+
+/** A weight clamped to 0..256: at or below 0 is none of the new colour, at or above 256 all of it. */
+const rasterClampWeight = (w: i32): integer<0, 256> => {
+  if (w <= 0) {
+    return 0
+  }
+  if (w >= 256) {
+    return 256
+  }
+  return w
 }
 
 /** Channel `a` moved toward `b` by `w` 256ths. */
-const rasterMixByte = (a: i32, b: i32, w: i32): i32 => a + (((b - a) * w) >> 8)
+const rasterMixByte = (a: integer<0, 255>, b: integer<0, 255>, w: integer<0, 256>): i32 =>
+  a + (((b - a) * w) >> 8)
+
+/** The channel of colour `c` that sits `shift` bits up: 16 red, 8 green, 0 blue. */
+const rasterChannel = (c: i32, shift: i32): integer<0, 255> => {
+  const v: i32 = (c >> shift) & 255
+  // Never true: the mask keeps eight bits. The test is what types the result
+  // as a channel, which the mask alone does not.
+  if (v < 0 || v > 255) {
+    return 0
+  }
+  return v
+}
+
+/** `rasterMixWeight` for a weight already in 0..256, which a per-pixel loop holds once outside it. */
+const rasterMixIn = (a: i32, b: i32, w: integer<0, 256>): i32 =>
+  (rasterMixByte(rasterChannel(a, 16), rasterChannel(b, 16), w) << 16) |
+  (rasterMixByte(rasterChannel(a, 8), rasterChannel(b, 8), w) << 8) |
+  rasterMixByte(rasterChannel(a, 0), rasterChannel(b, 0), w)
 
 /**
  * `a` moved toward `b` by a 0..256 weight, which a per-pixel loop computes
@@ -136,13 +182,10 @@ const rasterMixByte = (a: i32, b: i32, w: i32): i32 => a + (((b - a) * w) >> 8)
  *
  * @param a - the colour at weight 0
  * @param b - the colour at weight 256
- * @param w - the weight, 0 to `RASTER_SOLID`
+ * @param w - the weight, clamped to 0..`RASTER_SOLID`
  * @returns the mixed colour
  */
-export const rasterMixWeight = (a: i32, b: i32, w: i32): i32 =>
-  (rasterMixByte((a >> 16) & 255, (b >> 16) & 255, w) << 16) |
-  (rasterMixByte((a >> 8) & 255, (b >> 8) & 255, w) << 8) |
-  rasterMixByte(a & 255, b & 255, w)
+export const rasterMixWeight = (a: i32, b: i32, w: i32): i32 => rasterMixIn(a, b, rasterClampWeight(w))
 
 /**
  * `a` moved toward `b` by a fraction.
@@ -152,7 +195,7 @@ export const rasterMixWeight = (a: i32, b: i32, w: i32): i32 =>
  * @param t - how far, clamped to 0..1
  * @returns the mixed colour
  */
-export const rasterMix = (a: i32, b: i32, t: f64): i32 => rasterMixWeight(a, b, rasterWeight(t))
+export const rasterMix = (a: i32, b: i32, t: f64): i32 => rasterMixIn(a, b, rasterWeightOf(t))
 
 /**
  * Two colours added channel by channel, each saturating at 255: how light adds.
@@ -173,7 +216,7 @@ export const rasterAdd = (a: i32, b: i32): i32 =>
  * @param k - the factor every channel is multiplied by, clamped to 0..1
  * @returns the dimmed colour
  */
-export const rasterDim = (c: i32, k: f64): i32 => rasterMixWeight(0, c, rasterWeight(k))
+export const rasterDim = (c: i32, k: f64): i32 => rasterMixIn(0, c, rasterWeightOf(k))
 
 /**
  * The fully saturated colour at a hue, so a rainbow is
@@ -189,7 +232,7 @@ export const rasterHue = (h: f64): i32 => {
   }
   const h6: f64 = turn * 6.0
   const sector: i32 = toI32(Math.floor(h6))
-  const rise: i32 = rasterByte(toI32((h6 - Math.floor(h6)) * 255.0))
+  const rise: integer<0, 255> = rasterByte(toI32((h6 - Math.floor(h6)) * 255.0))
   const fall: i32 = 255 - rise
   if (sector === 0) {
     return rasterRgb(255, rise, 0)
@@ -219,6 +262,19 @@ const rasterRows = (pixels: Int32Array, width: i32, height: i32): i32 => {
   return Math.min(height, toI32(pixels.length) / width)
 }
 
+/**
+ * The index of pixel `(x, y)` in a `width`-wide frame of `size` pixels, or -1
+ * when it is before the start or past the end. One past the last pixel is an
+ * index, so a span that ends at the frame's end starts somewhere.
+ */
+const rasterAt = (size: i32, width: i32, x: i32, y: i32): i32 => {
+  const at: i64 = toI64(y) * toI64(width) + toI64(x)
+  if (at < 0 || at > toI64(size)) {
+    return -1
+  }
+  return toI32(at)
+}
+
 /** Pixels `x0..x1` (exclusive) of row `y` set to `colour`, or blended by `w` 256ths below 256, clipped. */
 const rasterSpan = (
   pixels: Int32Array,
@@ -228,23 +284,53 @@ const rasterSpan = (
   x1: i32,
   y: i32,
   colour: i32,
-  w: i32
+  w: integer<0, 256>
 ): void => {
   if (y < 0 || y >= rows) {
     return
   }
   const from: i32 = Math.max(x0, 0)
   const to: i32 = Math.min(x1, width)
-  const row: i32 = y * width
+  const size: i32 = toI32(pixels.length)
+  // `at` walks the row from pixel `from`: the loops end on `x`, and the row
+  // is inside the frame because `y < rows`, so `at < size` never ends one.
+  // It is what proves the index.
+  let at: i32 = rasterAt(size, width, from, y)
+  if (at < 0) {
+    return
+  }
   if (w >= RASTER_SOLID) {
-    for (let x: i32 = from; x < to; x++) {
-      pixels[row + x] = colour
+    for (let x: i32 = from; x < to && at < size; x++) {
+      pixels[at] = colour
+      at = at + 1
     }
     return
   }
-  for (let x: i32 = from; x < to; x++) {
-    pixels[row + x] = rasterMixWeight(pixels[row + x], colour, w)
+  for (let x: i32 = from; x < to && at < size; x++) {
+    pixels[at] = rasterMixIn(pixels[at], colour, w)
+    at = at + 1
   }
+}
+
+/** One past pixel `last`, held to `limit`: the exclusive end of a run that ends on `last`. */
+const rasterEnd = (last: i32, limit: i32): i32 => (last >= limit ? limit : last + 1)
+
+/** The weight of row `y` of a `height`-row gradient: 0 at the top, 256 at the bottom. */
+const rasterGradientWeight = (y: i32, height: i32): integer<0, 256> => {
+  if (height <= 1 || y <= 0) {
+    return 0
+  }
+  if (y >= height - 1) {
+    return 256
+  }
+  // In f64, where `y * 256` cannot overflow; the quotient of two exact
+  // integers rounds to nearest, so truncating it is the integer quotient.
+  const w: i32 = toI32((toF64(y) * 256.0) / toF64(height - 1))
+  // Never true: `y` is inside `1..height - 2`, so `w` is under 256.
+  if (w < 0 || w > 256) {
+    return 0
+  }
+  return w
 }
 
 /**
@@ -259,8 +345,8 @@ const rasterSpan = (
 export const rasterGradient = (pixels: Int32Array, width: i32, height: i32, top: i32, bottom: i32): void => {
   const rows: i32 = rasterRows(pixels, width, height)
   for (let y: i32 = 0; y < rows; y++) {
-    const colour: i32 = rasterMixWeight(top, bottom, height > 1 ? (y * 256) / (height - 1) : 0)
-    rasterSpan(pixels, width, rows, 0, width, y, colour, RASTER_SOLID)
+    const colour: i32 = rasterMixIn(top, bottom, rasterGradientWeight(y, height))
+    rasterSpan(pixels, width, rows, 0, width, y, colour, 256)
   }
 }
 
@@ -292,11 +378,12 @@ export const rasterRect = (
   if (weight <= 0) {
     return
   }
+  const w: integer<0, 256> = rasterClampWeight(weight)
   const rows: i32 = rasterRows(pixels, width, height)
   const from: i32 = Math.max(y0, 0)
   const to: i32 = Math.min(y1, rows)
   for (let y: i32 = from; y < to; y++) {
-    rasterSpan(pixels, width, rows, x0, x1, y, colour, weight)
+    rasterSpan(pixels, width, rows, x0, x1, y, colour, w)
   }
 }
 
@@ -332,22 +419,27 @@ export const rasterDisc = (
   const rows: i32 = rasterRows(pixels, width, height)
   const inner: f64 = r > 0.5 ? (r - 0.5) * (r - 0.5) : 0.0
   const outer: f64 = (r + 0.5) * (r + 0.5)
-  const fullW: i32 = rasterWeight(a)
+  const fullW: integer<0, 256> = rasterWeightOf(a)
+  const size: i32 = toI32(pixels.length)
   const x0: i32 = Math.max(rasterPixel(cx - r - 1.0), 0)
-  const x1: i32 = Math.min(rasterPixel(cx + r + 1.0) + 1, width)
+  const x1: i32 = rasterEnd(rasterPixel(cx + r + 1.0), width)
   const y0: i32 = Math.max(rasterPixel(cy - r - 1.0), 0)
-  const y1: i32 = Math.min(rasterPixel(cy + r + 1.0) + 1, rows)
+  const y1: i32 = rasterEnd(rasterPixel(cy + r + 1.0), rows)
   for (let y: i32 = y0; y < y1; y++) {
     const dy: f64 = toF64(y) + 0.5 - cy
-    const row: i32 = y * width
-    for (let x: i32 = x0; x < x1; x++) {
+    // `at` walks the row as `rasterSpan`'s does.
+    let at: i32 = rasterAt(size, width, x0, y)
+    if (at < 0) {
+      return
+    }
+    for (let x: i32 = x0; x < x1 && at < size; x++) {
       const dx: f64 = toF64(x) + 0.5 - cx
       const d2: f64 = dx * dx + dy * dy
-      if (d2 >= outer) {
-        continue
+      if (d2 < outer) {
+        const w: integer<0, 256> = d2 <= inner ? fullW : rasterWeightOf((r + 0.5 - Math.sqrt(d2)) * a)
+        pixels[at] = w >= RASTER_SOLID ? colour : rasterMixIn(pixels[at], colour, w)
       }
-      const w: i32 = d2 <= inner ? fullW : rasterWeight((r + 0.5 - Math.sqrt(d2)) * a)
-      pixels[row + x] = w >= RASTER_SOLID ? colour : rasterMixWeight(pixels[row + x], colour, w)
+      at = at + 1
     }
   }
 }
@@ -380,25 +472,30 @@ export const rasterGlow = (
   }
   const rows: i32 = rasterRows(pixels, width, height)
   const r2: f64 = r * r
+  const size: i32 = toI32(pixels.length)
   const x0: i32 = Math.max(rasterPixel(cx - r), 0)
-  const x1: i32 = Math.min(rasterPixel(cx + r) + 1, width)
+  const x1: i32 = rasterEnd(rasterPixel(cx + r), width)
   const y0: i32 = Math.max(rasterPixel(cy - r), 0)
-  const y1: i32 = Math.min(rasterPixel(cy + r) + 1, rows)
+  const y1: i32 = rasterEnd(rasterPixel(cy + r), rows)
   for (let y: i32 = y0; y < y1; y++) {
     const dy: f64 = toF64(y) + 0.5 - cy
-    const row: i32 = y * width
-    for (let x: i32 = x0; x < x1; x++) {
+    // `at` walks the row as `rasterSpan`'s does.
+    let at: i32 = rasterAt(size, width, x0, y)
+    if (at < 0) {
+      return
+    }
+    for (let x: i32 = x0; x < x1 && at < size; x++) {
       const dx: f64 = toF64(x) + 0.5 - cx
       const d2: f64 = dx * dx + dy * dy
-      if (d2 >= r2) {
-        continue
+      if (d2 < r2) {
+        const near: f64 = d2 / r2
+        const fall: f64 = 1.0 - near
+        const w: integer<0, 256> = rasterWeightOf(fall * fall * strength)
+        if (w > 0) {
+          pixels[at] = rasterAdd(pixels[at], rasterMixIn(0, colour, w))
+        }
       }
-      const near: f64 = d2 / r2
-      const fall: f64 = 1.0 - near
-      const w: i32 = rasterWeight(fall * fall * strength)
-      if (w > 0) {
-        pixels[row + x] = rasterAdd(pixels[row + x], rasterMixWeight(0, colour, w))
-      }
+      at = at + 1
     }
   }
 }
@@ -428,14 +525,27 @@ const RASTER_FONT: string =
   // t to ~
   "88L889600AAAC=00AAA:400AAEE:00A:4:A00AA?1>00O248O244844244444448442448008E200"
 
-/** The bits of row `row` of the glyph for byte `c`; a byte outside 32..126 draws as `?`. */
-const rasterGlyphRow = (c: i32, row: i32): i32 => {
-  const g: i32 = c >= 32 && c <= 126 ? c - 32 : 31
-  const at: i32 = g * RASTER_GLYPH_H + row
-  if (row < 0 || row >= RASTER_GLYPH_H || at < 0 || at >= toI32(RASTER_FONT.length)) {
+/** The glyph number of byte `c`, its place in the font from 0 for a space; a byte outside 32..126 is `?`'s. */
+const rasterGlyph = (c: i32): integer<0, 94> => {
+  const g: i32 = c - 32
+  if (g < 0 || g > 94) {
+    return 31
+  }
+  return g
+}
+
+/** The bits of row `row` of the glyph for byte `c` in `font`, which is `RASTER_FONT`. */
+const rasterGlyphRow = (font: string, c: i32, row: i32): i32 => {
+  // 7 is `RASTER_GLYPH_H`, written out so the prover sees the product's bound.
+  if (row < 0 || row >= 7) {
     return 0
   }
-  return toI32(RASTER_FONT.charCodeAt(at)) - 48
+  const at: i32 = rasterGlyph(c) * 7 + row
+  // `at < 0` is never true, but the bound on the sum does not survive into `at`.
+  if (at < 0 || at >= toI32(font.length)) {
+    return 0
+  }
+  return toI32(font.charCodeAt(at)) - 48
 }
 
 /**
@@ -451,7 +561,34 @@ export const rasterTextWidth = (text: string, scale: i32): i32 => {
   if (n === 0 || scale < 1) {
     return 0
   }
-  return (n * RASTER_GLYPH_ADVANCE - 1) * Math.min(scale, RASTER_MAX_TEXT_SCALE)
+  // In i64: a string long enough to be wider than an `i32` saturates.
+  const size: integer<0, 1024> = rasterTextScale(scale)
+  // 6 is `RASTER_GLYPH_ADVANCE`, written out so the prover sees the bound.
+  const advance: i64 = toI64(size) * 6
+  return rasterEdge(toI64(n) * advance - toI64(size))
+}
+
+/** `v` held to the `i32` range, which keeps which side of a frame's edge it is on. */
+const rasterEdge = (v: i64): i32 => {
+  if (v < -2147483648) {
+    return -2147483648
+  }
+  if (v > 2147483647) {
+    return 2147483647
+  }
+  return toI32(v)
+}
+
+/** A text scale held to 1..`RASTER_MAX_TEXT_SCALE`, or 0 for one under 1, which draws nothing. */
+const rasterTextScale = (scale: i32): integer<0, 1024> => {
+  if (scale < 0) {
+    return 0
+  }
+  // 1024 is `RASTER_MAX_TEXT_SCALE`, written out because a range takes a literal.
+  if (scale > 1024) {
+    return 1024
+  }
+  return scale
 }
 
 /**
@@ -479,27 +616,50 @@ export const rasterText = (
   text: string,
   colour: i32
 ): void => {
-  if (scale < 1) {
+  const size: integer<0, 1024> = rasterTextScale(scale)
+  if (size < 1) {
     return
   }
-  const size: i32 = Math.min(scale, RASTER_MAX_TEXT_SCALE)
   const n: i32 = toI32(text.length)
-  let gx: i32 = x
-  for (let i: i32 = 0; i < n && gx < width; i++) {
+  // Positions are i64, where a glyph past either edge cannot overflow; each
+  // is held to the `i32` range at the draw, which keeps it past that edge.
+  const step: i64 = toI64(size)
+  // 5 and 6 are `RASTER_GLYPH_W` and `RASTER_GLYPH_ADVANCE`, written out so the
+  // prover sees each product's bound.
+  const wide: i64 = step * 5
+  const advance: i64 = step * 6
+  for (let i: i32 = 0; i < n; i++) {
+    // Held to the `i32` range, which changes nothing drawn: a glyph clamped
+    // to the top is past the right edge and ends the text, and one clamped to
+    // the bottom is wholly left of the frame and skipped. `top` and `left`
+    // are clamped the same way, so their blocks are clipped whole.
+    const gx: i32 = rasterEdge(toI64(x) + toI64(i) * advance)
+    if (gx >= width) {
+      return
+    }
     const c: i32 = toI32(text.charCodeAt(i))
-    if (gx + RASTER_GLYPH_W * size > 0) {
+    if (toI64(gx) + wide > 0) {
       for (let row: i32 = 0; row < RASTER_GLYPH_H; row++) {
-        const bits: i32 = rasterGlyphRow(c, row)
-        const top: i32 = y + row * size
+        const bits: i32 = rasterGlyphRow(RASTER_FONT, c, row)
+        const top: i32 = rasterEdge(toI64(y) + toI64(row) * step)
         for (let col: i32 = 0; col < RASTER_GLYPH_W; col++) {
           if (((bits >> (RASTER_GLYPH_W - 1 - col)) & 1) !== 0) {
-            const left: i32 = gx + col * size
-            rasterRect(pixels, width, height, left, top, left + size, top + size, colour, RASTER_SOLID)
+            const left: i32 = rasterEdge(toI64(gx) + toI64(col) * step)
+            rasterRect(
+              pixels,
+              width,
+              height,
+              left,
+              top,
+              rasterEdge(toI64(left) + step),
+              rasterEdge(toI64(top) + step),
+              colour,
+              RASTER_SOLID
+            )
           }
         }
       }
     }
-    gx = gx + RASTER_GLYPH_ADVANCE * size
   }
 }
 
@@ -550,16 +710,20 @@ export class RasterTrail {
  * @param y - the point's y
  */
 export const rasterPushTrail = (trail: RasterTrail, x: f64, y: f64): void => {
-  const n: i32 = toI32(trail.xs.length)
-  if (trail.head < 0 || trail.head >= n || n !== toI32(trail.ys.length)) {
+  const xs: f64[] = trail.xs
+  const ys: f64[] = trail.ys
+  const n: i32 = toI32(xs.length)
+  const head: i32 = trail.head
+  if (head < 0 || head >= n || head >= toI32(ys.length)) {
     trail.head = 0
     return
   }
-  trail.xs[trail.head] = x
-  trail.ys[trail.head] = y
-  trail.head = trail.head + 1 >= n ? 0 : trail.head + 1
-  if (trail.count < n) {
-    trail.count = trail.count + 1
+  xs[head] = x
+  ys[head] = y
+  trail.head = head + 1 >= n ? 0 : head + 1
+  const count: i32 = trail.count
+  if (count < n) {
+    trail.count = count + 1
   }
 }
 
@@ -591,22 +755,34 @@ export const rasterTrail = (
   offsetX: f64,
   offsetY: f64
 ): void => {
-  const n: i32 = toI32(trail.xs.length)
+  const xs: f64[] = trail.xs
+  const ys: f64[] = trail.ys
+  const n: i32 = toI32(xs.length)
   const count: i32 = Math.min(trail.count, n)
+  const head: i32 = trail.head
+  if (count <= 0 || head < 0 || head >= n) {
+    return
+  }
+  // The oldest point is `count` slots behind the head, wrapping; `slot` walks
+  // forward from it.
+  let slot: i32 = head - count
+  if (slot < 0) {
+    slot = slot + n
+  }
   for (let i: i32 = 0; i < count; i++) {
-    // The oldest point is `count` slots behind the head, wrapping.
-    let slot: i32 = trail.head - count + i
-    if (slot < 0) {
-      slot = slot + n
+    // `slot` is always in the ring, so the first test never ends the walk; it
+    // is what proves the index.
+    if (slot < 0 || slot >= n) {
+      return
     }
-    if (slot < 0 || slot >= n || slot >= toI32(trail.ys.length)) {
-      continue
+    if (slot < toI32(ys.length)) {
+      const f: f64 = (toF64(i) + 1.0) / (toF64(count) + 1.0)
+      const radius: f64 = r * (f * 0.6 + 0.4)
+      const cx: f64 = offsetX + xs[slot] * scale
+      const cy: f64 = offsetY + ys[slot] * scale
+      rasterDisc(pixels, width, height, cx, cy, radius * scale, colour, alpha * f)
     }
-    const f: f64 = toF64(i + 1) / toF64(count + 1)
-    const radius: f64 = r * (f * 0.6 + 0.4)
-    const cx: f64 = offsetX + trail.xs[slot] * scale
-    const cy: f64 = offsetY + trail.ys[slot] * scale
-    rasterDisc(pixels, width, height, cx, cy, radius * scale, colour, alpha * f)
+    slot = slot + 1 >= n ? 0 : slot + 1
   }
 }
 
@@ -689,10 +865,14 @@ export class RasterParticles {
    * @returns the live count
    */
   live(): i32 {
+    const lives: f64[] = this.lives
+    const len: i32 = toI32(lives.length)
     let n: i32 = 0
-    for (const life of this.lives) {
-      if (life > 0.0) {
-        n++
+    for (const life of lives) {
+      // `n < len` is never false: it counts at most the array's elements. It
+      // is what proves the increment.
+      if (life > 0.0 && n < len) {
+        n = n + 1
       }
     }
     return n
@@ -752,22 +932,46 @@ export const rasterSpawnParticle = (
   size: f64,
   colour: i32
 ): void => {
+  const xs: f64[] = pool.xs
+  const ys: f64[] = pool.ys
+  const prevXs: f64[] = pool.prevXs
+  const prevYs: f64[] = pool.prevYs
+  const vxs: f64[] = pool.vxs
+  const vys: f64[] = pool.vys
+  const lives: f64[] = pool.lives
+  const spans: f64[] = pool.spans
+  const sizes: f64[] = pool.sizes
+  const colours: i32[] = pool.colours
   const i: i32 = pool.next
-  if (!pool.has(i)) {
+  // The pool keeps its arrays one length, so this is `pool.has(i)` written
+  // against each array the stores below index.
+  if (
+    i < 0 ||
+    i >= toI32(lives.length) ||
+    i >= toI32(xs.length) ||
+    i >= toI32(ys.length) ||
+    i >= toI32(prevXs.length) ||
+    i >= toI32(prevYs.length) ||
+    i >= toI32(vxs.length) ||
+    i >= toI32(vys.length) ||
+    i >= toI32(spans.length) ||
+    i >= toI32(sizes.length) ||
+    i >= toI32(colours.length)
+  ) {
     pool.next = 0
     return
   }
-  pool.xs[i] = x
-  pool.ys[i] = y
-  pool.prevXs[i] = x
-  pool.prevYs[i] = y
-  pool.vxs[i] = vx
-  pool.vys[i] = vy
-  pool.lives[i] = life > 0.0 ? life : 0.0
-  pool.spans[i] = life > 0.0 ? life : 1.0
-  pool.sizes[i] = size
-  pool.colours[i] = colour
-  pool.next = i + 1 >= pool.capacity() ? 0 : i + 1
+  xs[i] = x
+  ys[i] = y
+  prevXs[i] = x
+  prevYs[i] = y
+  vxs[i] = vx
+  vys[i] = vy
+  lives[i] = life > 0.0 ? life : 0.0
+  spans[i] = life > 0.0 ? life : 1.0
+  sizes[i] = size
+  colours[i] = colour
+  pool.next = i + 1 >= toI32(lives.length) ? 0 : i + 1
 }
 
 /**
@@ -781,17 +985,35 @@ export const rasterSpawnParticle = (
 export const rasterStepParticles = (pool: RasterParticles, dt: f64, gravity: f64, drag: f64): void => {
   const lost: f64 = drag * dt
   const keep: f64 = rasterUnit(1.0 - lost)
-  for (let i: i32 = 0; i < pool.capacity(); i++) {
-    if (!pool.has(i) || pool.lives[i] <= 0.0) {
+  const xs: f64[] = pool.xs
+  const ys: f64[] = pool.ys
+  const prevXs: f64[] = pool.prevXs
+  const prevYs: f64[] = pool.prevYs
+  const vxs: f64[] = pool.vxs
+  const vys: f64[] = pool.vys
+  const lives: f64[] = pool.lives
+  const n: i32 = toI32(lives.length)
+  for (let i: i32 = 0; i < n; i++) {
+    // The pool keeps its arrays one length, so this skips no slot `pool.has`
+    // would take; it is what proves each index.
+    if (
+      i >= toI32(xs.length) ||
+      i >= toI32(ys.length) ||
+      i >= toI32(prevXs.length) ||
+      i >= toI32(prevYs.length) ||
+      i >= toI32(vxs.length) ||
+      i >= toI32(vys.length) ||
+      lives[i] <= 0.0
+    ) {
       continue
     }
-    pool.prevXs[i] = pool.xs[i]
-    pool.prevYs[i] = pool.ys[i]
-    pool.vxs[i] = pool.vxs[i] * keep
-    pool.vys[i] = (pool.vys[i] + gravity * dt) * keep
-    pool.xs[i] = pool.xs[i] + pool.vxs[i] * dt
-    pool.ys[i] = pool.ys[i] + pool.vys[i] * dt
-    pool.lives[i] = pool.lives[i] - dt
+    prevXs[i] = xs[i]
+    prevYs[i] = ys[i]
+    vxs[i] = vxs[i] * keep
+    vys[i] = (vys[i] + gravity * dt) * keep
+    xs[i] = xs[i] + vxs[i] * dt
+    ys[i] = ys[i] + vys[i] * dt
+    lives[i] = lives[i] - dt
   }
 }
 
@@ -819,19 +1041,38 @@ export const rasterParticles = (
   offsetX: f64,
   offsetY: f64
 ): void => {
-  for (let i: i32 = 0; i < pool.capacity(); i++) {
-    if (!pool.has(i) || pool.lives[i] <= 0.0) {
+  const xs: f64[] = pool.xs
+  const ys: f64[] = pool.ys
+  const prevXs: f64[] = pool.prevXs
+  const prevYs: f64[] = pool.prevYs
+  const lives: f64[] = pool.lives
+  const spans: f64[] = pool.spans
+  const sizes: f64[] = pool.sizes
+  const colours: i32[] = pool.colours
+  const n: i32 = toI32(lives.length)
+  for (let i: i32 = 0; i < n; i++) {
+    // As in `rasterStepParticles`: no slot `pool.has` takes is skipped.
+    if (
+      i >= toI32(xs.length) ||
+      i >= toI32(ys.length) ||
+      i >= toI32(prevXs.length) ||
+      i >= toI32(prevYs.length) ||
+      i >= toI32(spans.length) ||
+      i >= toI32(sizes.length) ||
+      i >= toI32(colours.length) ||
+      lives[i] <= 0.0
+    ) {
       continue
     }
-    const size: f64 = pool.sizes[i]
+    const size: f64 = sizes[i]
     const half: f64 = size / 2.0
-    const x: f64 = pool.prevXs[i] + (pool.xs[i] - pool.prevXs[i]) * alpha - half
-    const y: f64 = pool.prevYs[i] + (pool.ys[i] - pool.prevYs[i]) * alpha - half
+    const x: f64 = prevXs[i] + (xs[i] - prevXs[i]) * alpha - half
+    const y: f64 = prevYs[i] + (ys[i] - prevYs[i]) * alpha - half
     const x0: i32 = rasterPixel(offsetX + x * scale + 0.5)
     const y0: i32 = rasterPixel(offsetY + y * scale + 0.5)
     const x1: i32 = rasterPixel(offsetX + (x + size) * scale + 0.5)
     const y1: i32 = rasterPixel(offsetY + (y + size) * scale + 0.5)
-    const weight: i32 = rasterWeight(pool.lives[i] / pool.spans[i])
-    rasterRect(pixels, width, height, x0, y0, x1, y1, pool.colours[i], weight)
+    const weight: i32 = rasterWeight(lives[i] / spans[i])
+    rasterRect(pixels, width, height, x0, y0, x1, y1, colours[i], weight)
   }
 }
