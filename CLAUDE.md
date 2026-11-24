@@ -69,7 +69,9 @@ before pushing.
 and "never" against the code's real match (a seccomp row matches syscall
 numbers, not descriptors), and each route, figure and command against what
 was run. Every `docs/BENCHMARKS.md` table names the commit whose bench code
-produced it and claims only the fields that version prints. A per-second
+produced it, a commit `main` can reach (its own, or the PR's squash commit),
+never a PR branch commit that a squash merge drops, and claims only the
+fields that version prints. A per-second
 maximum is quoted as a maximum, never as a typical cost. Each "up to",
 "every" or "lower than" is checked against the table it summarises. A PR that
 adds to those files or to a WP design note greps every `check(...)` string it
@@ -82,6 +84,13 @@ row in `docs/security/*.md` that states a limit (a cap, a freed buffer, a
 growth bound) cites the `tests/run.js` check or `tests/link` case that fails
 when the limit is removed; a bound read only from the code goes under the
 record's open findings as untested, not in its bounds table.
+
+**Every property a security row states has its own failing check.** A
+`Holds`, `Fixed` or `Decided` row in `docs/security/*.md` cites, for each
+"never", "only", "none" or "as before" it states, the `tests/run.js` check
+or `tests/link` case that fails when that property's guard is removed. A
+claim that no other route reaches a resource lists the exported functions it
+checked, and how many.
 
 **A bench side is the code it names.** A side called an existing copy calls
 the shipped function itself, with its callers' argument types and input
@@ -129,7 +138,14 @@ before it is pushed (read the `wasi` skip line; it needs
 NL9007 warning, and that run's ratchet fails on it. A change to `runtime/*.c`
 runs `node tests/run.js c-symbols`, which fails on a new libc call until
 `src/c-symbols.ts` reserves it (`.claude/selfhost.md` →
-["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)).
+["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)). One
+that grows a unit's `.text` moves its ceiling in `tests/runtime-budgets.js`
+(`node tests/run.js budget`) and its row in `docs/wp7-runtime.md` in the same
+PR, with the measurement, so a plan stage that edits a runtime file owns both.
+A change to `runtime/sqlite/nish-sqlite.c` also runs the `tests/run.js` check
+"sqlite/nish-sqlite.c less sqlite3.c: .text* at -Oz fits the … byte budget"
+before it is pushed: shrink the addition, or raise `RUNTIME_SQLITE_TEXT_BUDGET`
+with its `docs/wp7-runtime.md` row.
 
 **CI's runners are not this container.** A spawn or sandbox check in
 `tests/run.js` runs on ubuntu with uutils coreutils and with descriptors the
@@ -139,7 +155,8 @@ count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 
 **Generated goldens are regenerated, never edited or merged by hand.**
 `tests/self/goldens/checked/` (one file per module) moves with any change to
-`src/`, `std/` or a positive `tests/cases/*.ts`: rewrite it with
+`src/`, `std/`, a positive `tests/cases/*.ts` or a `bench/**/*.ts` program
+(it pins those too): rewrite it with
 `node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
 `build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
 merges, regenerates the goldens and stages them without committing. Sync after

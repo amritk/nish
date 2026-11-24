@@ -1,0 +1,299 @@
+{
+  "version": "0.46.0",
+  "date": "2026-11-24",
+  "tag": "v0.46.0",
+  "range": {
+    "from": "v0.45.1",
+    "to": "1fceb97cd"
+  },
+  "entries": [
+    {
+      "id": "add-wp89-gpu-graphics-and-a-2d-game",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "add WP89, GPU graphics and a 2D game layer in std/",
+      "body": "Plan for std/gpu and std/gfx: a C shim over SDL3 and wgpu-native linked\non demand on Linux and macOS, the same API in the browser over host\nimports, an engine-style step/update/draw runner, an instanced\nSpriteBatch and dynamic-resolution scaling. Windows waits on WP79.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "99d670d"
+      ],
+      "pr": 2246,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-23"
+    },
+    {
+      "id": "link-the-language-reference-on-the-docs-site",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "link the language reference on the docs site, not GitHub",
+      "body": "The guide, std/README.md, docs/RUN_UNDER_NODE.md and the security records linked every section of the language specification as a GitHub URL to docs/LANGUAGE.md, so a reader on nishlang.com who followed \"Top-level code\" left the site for github.com. All 194 such links now point relatively at the per-section pages scripts/gen-reference.mjs publishes, where every anchor of the specification holds; two GitHub links to security records the site serves are relative too.\n\nThe nish: module pages took their links from bare GitHub URLs in runtime/nish.d.ts. Those stay in the doc comments for an editor's hover, and the generator now rewrites a GitHub URL that names a site page into a link to that page.\n\ndocs/check-links.mjs now refuses a GitHub URL, bracketed or bare, from a routed page to a page the site has, and names the relative link to write.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b5bcf9b"
+      ],
+      "pr": 2254,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "a-nish-sqlite-cursor-call-looks-its-handle",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a nish/sqlite cursor call looks its handle up once",
+      "body": "A cursor call used to find its cursor twice (once for the mutex, once for\nthe cursor) and then read sqlite3_get_autocommit and sqlite3BtreeTxnState to\ncatch a transaction that had ended. It now does one O(1) slot lookup, keeps\nthe connection's mutex on the cursor, and drops the per-call transaction\nreads: every route that ends a transaction already invalidates the cursors\nbefore it runs, and the one the adapter does not see, SQLite rolling back on\nits own after an I/O error or out-of-memory, is caught by a rollback hook the\nadapter installs on its connections.\n\nbench/sqlite/run.mjs can now time main.ts built from a base commit's std/\nand runtime/ in the same rounds as the branch build and its copy, so a change\nthat keeps the API is measured before and after inside one run.\n\nMeasured: feed-cursor-walk −1,594 ns a call (−11.1%) against base 99d670d3, noise band 625 ns; feed-cursor −716 ns (−4.1%), band 89 ns; both inside the copy's and base's IQRs, so the run does not resolve them beyond those spreads\nRefs: docs/sqlite-cursor.md, docs/security/sqlite.md, docs/BENCHMARKS.md\nTests: tests/run.js sqlite-link (the cursor rollback-hook helper), tests/link/std_sqlite_cursor_stale\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "abce3b3"
+      ],
+      "pr": 2255,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "sqlite-s-unix-excl-vfs-is-opt-in",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "SQLite's unix-excl VFS is opt-in through openDatabase's URI route",
+      "body": "docs/sqlite-vfs.md records the decision, measured: openDatabase already\nreaches unix-excl through OPEN_URI and `file:<db>?vfs=unix-excl`, so nish/sqlite\nadds no flag for it. Opened that way, SQLite keeps the WAL index in heap and\nwrites no -shm file, takes no file lock per transaction, and holds the file's\nlock until the last connection to it in the process closes, so a second\nprocess is refused. A checkpointer is then a second connection in the same\nprocess; a nish:threads task that opens one is refused by the compiler, so it\nruns on the same thread.\n\nbench/sqlite/run.mjs gains a `--variant unix-excl` that times a copy of the\nbuild opening the database on unix-excl in the same rounds as the default unix\nVFS; the guide, docs/LANGUAGE.md and the SQLite security record describe the\nroute, and tests/link cases pin the no -shm file, the refused second process,\nthe refused task and the WASI answer.\n\nRefs: docs/sqlite-vfs.md, docs/security/sqlite.md, docs/BENCHMARKS.md\nTests: tests/link/std_sqlite_excl, std_sqlite_excl_second, std_sqlite_excl_thread, std_sqlite_vfs_wasi\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b2c5569"
+      ],
+      "pr": 2253,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "coalesce-a-ring-slot-s-queued-sends-into",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "coalesce a ring slot's queued sends into one SEND, from a per-ring buffer pool",
+      "body": "A ring slot's SEND is now written when the ring next submits, not when each write is queued. Writes queued in between join the slot's last record while the kernel does not hold it, so the head and body that netWrite2 writes leave as one IORING_OP_SEND, and so do back-to-back netWrites. Send buffers come from a per-ring pool of 16 KiB buffers that keeps at most 32 free; an idle slot holds none. A close submits a still-unsubmitted head before it cancels the slot (NURING-40), and a repeated shutdown of a side already queued queues nothing (NURING-43).\n\nnish_uring_stats counts SENDs (sends) and the pool (pool_new, pool_held, pool_cached). tests/runtime/uring-test.c adds the modes coalesce, inflight, pool, shutpool and netwrite; netwrite drives nish_net_write2 through runtime-net.c's ring slots. docs/security/net-uring.md records NURING-40 to NURING-44, with NURING-44 (a slot's whole memory bound, read from the code) open and untested. The runtime-uring.c .text budget rises to 9,728 for 9,477 measured (docs/wp7-runtime.md).\n\nMeasured: SENDs per head+body response 2.00 before, 1.00 after (exact counts over 200 responses, uring-test coalesce and netwrite)\nTests: tests/runtime/uring-test.c (coalesce, inflight, pool, shutpool, netwrite)\nRefs: #2247\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c12ccb0"
+      ],
+      "pr": 2252,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "derive-the-per-target-runtime-layout-asserts-from",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "derive the per-target runtime layout asserts from ARENA_TYPE and ARRAY_TYPE",
+      "body": "The nish.h layout check compiled per-target asserts whose offsets were typed into tests/run.js, so an ARENA_TYPE edit that moved fields only on wasm32 passed it. The asserts are now derived from src/runtime.ts's ARENA_TYPE and ARRAY_TYPE, laid out with each target's pointer size from clang, and pinned to the C field names the compiler's GEP indices mean. An unparsable or unknown type fails closed.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js (runtime ABI layout checks)"
+      ],
+      "commits": [
+        "eb2d12f"
+      ],
+      "pr": 2258,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "ring-sends-per-response-packets-per-response-and",
+      "type": "docs",
+      "scope": "bench",
+      "breaking": false,
+      "title": "ring sends per response, packets per response and CPU at 18k and 96k",
+      "body": "bench/handler-ring/run.sh now reports packets per response next to server CPU per request and PSS. segs.c samples /proc/net/snmp's Tcp OutSegs and InSegs over the measured window, so the figure counts the box's segments, the load generator's included. --base-compiler adds ring-base and h1-ring-base designs built by a second compiler, compared against byte-identical copies for the noise band.\n\ndocs/BENCHMARKS.md gains a section measuring the ring send coalescing (#2252) at 18,000 and 96,000 keep-alive connections, before (b2c55694) against after (c12ccb0f), for the ring and h1-ring designs. Packets per response are unchanged at 3.0. Server CPU per request is inside the noise band in three of four comparisons, and the fourth (ring at 96k, 3.9% less against a 3.4% band) is not claimed. PSS is 1.6 to 1.9 MiB higher at 96k.\n\nMeasured: packets/response 3.000 → 3.000 (18k), 3.001–3.002 both sides (96k); CPU/request ring 18k +0.4% (band 2.8%), h1-ring 18k +2.4% (band 4.4%), h1-ring 96k +0.5% (band 3.9%), ring 96k −3.9% (band 3.4%, not claimed); PSS +1.6 to +1.9 MiB at 96k\nRefs: #2247\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "13e3618"
+      ],
+      "pr": 2251,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "integer-index-seeks-reuse-one-key-and-cursor",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "integer index seeks reuse one key, and Cursor.countRange counts an index's keys in one walk",
+      "body": "An index cursor now keeps one UnpackedRecord over its seek key, made at\nopen, and an integer seek sets only its nField, default_rc, errCode and\neqSeen before it moves, instead of building a record per seek.\n\nCursor.countRange(lo, hi, out) counts, for every k in [lo, hi], the entries\nof an index whose first key column is k: one seek and one forward walk,\ncomparing each entry's first field with SQLite's own record compare, into a\nbuffer the cursor keeps and the method copies into the caller's i64[]. It\nrefuses a table cursor, a first key column whose affinity is neither INTEGER\nnor NUMERIC, lo > hi and a span longer than out; a partial index counts only\nits indexed rows. The bench's feed reads its 20 like counts with one call\nover the 20 posts' ids (`feed-cursor-count`) where it used to seek the likes\nindex once per post.\n\nThe adapter's own code grows from 8,230 to 9,307 bytes at -Oz, so\nRUNTIME_SQLITE_TEXT_BUDGET moves to 9,472, recorded in docs/wp7-runtime.md.\n\nMeasured: feed-cursor-count 10,567 ns a call against feed-cursor-walk's 13,311 at the median (−2,744 ns), outside both noise bands and every IQR; the kept-key seek against main 99d670d3+ in the same rounds is not shown (inside the IQRs)\nRefs: docs/sqlite-cursor.md, docs/security/sqlite.md, docs/BENCHMARKS.md, docs/wp7-runtime.md\nTests: tests/link/std_sqlite_cursor_count\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f935868"
+      ],
+      "pr": 2257,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "pollwaitbatch-and-the-direct-ring-wait-for-ring",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "pollWaitBatch and the direct ring wait for ring-only loops",
+      "body": "nish:net gains pollWaitBatch(loop, ready, timeoutMs, minEvents, maxWaitMs). On a loop a ring listener has joined, it waits up to timeoutMs for the first event and then up to maxWaitMs more for minEvents in total, in io_uring_enter with IORING_ENTER_EXT_ARG's timeout. Each enter sleeps at most 10 ms while slots are live. With minEvents 1 or maxWaitMs 0, and on a loop with no ring source, it answers exactly as pollWait does. It is native only; a wasm32 or WASI build refuses it.\n\nA loop that holds only one ring listener's connections and at most signalFd() now waits on the ring itself, for pollWait and pollWaitBatch alike. The signal descriptor is watched by a POLL_ADD on the ring, so the eventfd and epoll_wait hop is gone and a signal still ends the wait at once. Any other descriptor, a second ring, a --sandbox restricted ring, a kernel without EXT_ARG (before 5.11) or a closed signalFd() keeps the epoll path.\n\nnetClose and fileClose of the signal descriptor are both noted, so a socket that later takes its number is never mistaken for the signal watch. The new findings are NURING-45 to NURING-50 in docs/security/net-uring.md, each fixed before landing with a test that fails without it.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/guide/using-nish/networking.md",
+        "docs/wp63-iouring-net.md §5.5"
+      ],
+      "tests": [
+        "tests/link/net_ring_batch",
+        "tests/cases/net_poll_batch",
+        "tests/runtime/uring-test.c direct"
+      ],
+      "commits": [
+        "a6819df"
+      ],
+      "pr": 2256,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "cursor-readrow-decodes-the-columns-selectrow-chose-in",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "Cursor.readRow decodes the columns selectRow chose in one call",
+      "body": "Cursor.selectRow(cols) chooses a cursor's columns once; Cursor.readRow(ints,\nspans, text) then reads every chosen column of the current row in one adapter\ncall: integers into an i64[], text and blob bytes into a u8[] with their\n(type, offset, length) spans. The adapter resolves the cursor once under one\nlock and reads each column's Mem once, through the same column_value helper\nthe per-column calls now share, so readRow refuses exactly what they refuse\n(RANGE, SCHEMA for a short record, MISUSE with no row, ABORT when the cursor\nmoved). A text buffer too small copies nothing and answers the length needed.\nUnlike columnI64, readRow converts no TEXT or BLOB to a number: ints[i] is 0\nfor them, so a row read parses nothing the caller did not ask for.\n\nMeasured: feed-cursor-row against feed-cursor-walk at 07f7b51a, same rounds: +1,836 ns at the median, +36 at the min; outside both noise bands at the median, inside both builds' IQRs, in a noisy run — no gain shown\nRefs: docs/sqlite-cursor.md, docs/security/sqlite.md, docs/BENCHMARKS.md\nTests: tests/link/std_sqlite_cursor_row\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "67ff802"
+      ],
+      "pr": 2259,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "batched-ring-waits-on-httphandler-measured-on-bench",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "batched ring waits on HttpHandler, measured on bench/handler-ring",
+      "body": "HandlerLimits gains minEvents (default 1) and maxWaitMs (default 0, at most 1000). When both are set, HttpHandler.wait calls pollWaitBatch instead of pollWait, so a ring server can reap a batch of events per wake. The defaults, wait(0), a deferred queue, a loop on epoll and two live ring sets all keep pollWait's behaviour, and each of those is pinned by a check. new HttpHandler panics on, and openHttpHandler returns an Err for, a minEvents under 1 or a maxWaitMs outside 0 to 1000 (HANDLER-18).\n\nbench/handler-ring/run.sh takes --min-events and --max-wait-ms and runs the ring design once per batch size. ring-base now builds from a copy of server.ts without the batch lines, so it still builds against an older compiler. docs/BENCHMARKS.md records the ring design at 18,000 and 96,000 connections for minEvents 1, 64 and 256 with maxWaitMs 1, beside ring-base sides from before the direct ring wait. It gives the CPU per request each batch saves, the latency it adds, and the widest identical-build spread as the noise band. minEvents 256 runs the same path as 64, because a pass takes at most 64 events.",
+      "metrics": [],
+      "refs": [
+        "docs/BENCHMARKS.md#batched-ring-waits-minevents-and-maxwaitms",
+        "docs/guide/using-nish/networking.md"
+      ],
+      "tests": [
+        "tests/link/net_handler_batch",
+        "tests/link/net_handler_batch_limits"
+      ],
+      "commits": [
+        "4d557ec"
+      ],
+      "pr": 2261,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "every-property-a-security-row-states-has-its",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "every property a security row states has its own failing check",
+      "body": "A Holds, Fixed or Decided row in docs/security/*.md now cites a failing check for each property it states, and a claim that no other route reaches a resource lists the routes checked. Two PRs of the ring-batch-wait run (#2256, #2261) stated such properties with no check that failed without them; review caught both.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "2d2dfe0"
+      ],
+      "pr": 2264,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "claude-md-names-the-bench-goldens-and-the",
+      "type": "docs",
+      "breaking": false,
+      "title": "CLAUDE.md names the bench goldens and the sqlite adapter's size check",
+      "body": "tests/self/goldens/checked/ also pins every bench/**/*.ts program, and a change\nto runtime/sqlite/nish-sqlite.c meets the adapter's .text budget check. Two of\nthe four PRs in the sqlite-cursor-speed run met each one only in CI (#2253 and\n#2259 on the goldens, #2257 and #2259 on the budget).",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d88189e"
+      ],
+      "pr": 2265,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "send-large-ring-writes-from-pool-buffers-print",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "send large ring writes from pool buffers, print ring stats, attribute the PSS rise",
+      "body": "* perf(runtime): send ring writes past a pool buffer from chained pool buffers\n\nA write that outgrew the slot's last pool buffer took one exact allocation\nof its whole length. It now fills that buffer's room and goes on in pool\nbuffers chained behind it, every one taken before any byte is copied, so\nsteady large responses allocate nothing once the pool is warm. A 64 KiB\nbody behind a head leaves as five SENDs, one per buffer; a head+body that\nfits one buffer still leaves as one. A shutdown's record is a pool buffer\ntoo, in place of a calloc per call.\n\nTests: tests/runtime/uring-test.c bigsend\n\n* feat(runtime): print a ring set's send and pool counters on SIGUSR1 under NISH_URING_STATS\n\nA ring server started with NISH_URING_STATS set (to anything but \"\" or \"0\")\ninstalls a SIGUSR1 handler when its first ring listener opens. The signal\nasks the loop's next pump for one `uring-stats signal` line per open ring set\non stderr: its sends, pool buffers allocated, held and cached, live slots and\nslots. Closing a ring listener prints the same line marked `close`. Without\nthe variable nothing is installed and SIGUSR1 keeps its default action.\n\nTests: tests/run.js net_ring\n\n* docs(runtime): record the chained pool sends (NURING-51) and restate a slot's memory bound\n\nNURING-51 records the exact allocation a large write took and the calloc a\nshutdown took, fixed by chained pool buffers, with the bigsend check's before\nand after. NURING-43's check now reads five held buffers, the two shutdowns'\nincluded; NURING-44's bound is restated for pool-buffer records (at most 23\nbuffers, 368 KiB a slot, still read from the code) and no longer names the\nfolded ur_append; NURING-12 counts its 256 KiB as unsent bytes.\n\n* build(runtime): measure the ring send and stats-dump ceilings\n\nruntime-net.c grows 12,593 → 13,003 bytes of .text at -Oz for the\nNISH_URING_STATS dump, so NET_TEXT_BUDGET moves to 13,056. runtime-uring.c\nshrinks 9,936 → 9,772 now that large writes chain across pool buffers, so\nRUNTIME_URING_TEXT_BUDGET comes down to 9,984. docs/wp7-runtime.md gains the\nrow for this branch and the row the pollWaitBatch/direct-wait merge never\nadded, and its ceiling table names the current figures.\n\nTests: node tests/run.js runtime-budget\n\n* test(runtime): print ring stats under load in the handler-ring bench\n\nBENCH_URING_STATS=1 runs each server with NISH_URING_STATS=1, sends SIGUSR1\nhalfway through the measured window to each server process that installed a\nhandler for it, and keeps that round's server stderr, so a run reads a ring\nlistener's pool and send counters beside its PSS.\n\n* test(runtime): keep each server's smaps at the handler-ring stats signal\n\nThe stats hook now also copies every server process's /proc/PID/smaps,\nthe base build's included, so a PSS rise can be split by mapping.\n\n* docs(runtime): attribute the ring server's PSS rise to the send pool's heap and mark list\n\nThe handler-ring bench's smaps at mid-load split the rise at 96,000\nconnections: 1,728 kB of the 2,392 kB is the malloc heap the pool's\nbuffers live in, and 492 kB is the per-ring mark list. Recorded as decided,\nwith NURING-41's cap.\n\n* test(runtime): fail the ring send pool test on any allocation after its warm-up\n\nThe bigsend mode of tests/runtime/uring-test.c now interposes malloc,\ncalloc and realloc and counts every call while steady 64 KiB responses\ngo out, so a send path that allocates anything, not only a record,\nfails it. It also asserts each response takes at least as many SENDs as\nthe pool buffers it fills, and drops the UR_MALLOC hook from the runtime.\n\n* docs(runtime): state that signalFd reports only SIGINT and SIGTERM beside the stats dump\n\nThe guide and the stats-dump comment said signalFd could take SIGUSR1; its\npipe handles only SIGINT and SIGTERM. The guide also says the SIGUSR1\nhandler stays installed once set.\n\n* test(runtime): send SIGUSR1 to a ring server without NISH_URING_STATS and expect its default action\n\nThe twin of the stats dump check now sends the same SIGUSR1 once its 3,000\nconnections have echoed. Without the knob no handler is installed, so the\nsignal ends the server, and it prints nothing on stderr. Before, the twin\nnever sent the signal and could not tell a handler installed regardless of\nthe knob from none.\n\n* docs(runtime): split the ring server's PSS rise at 18,000 and 96,000 connections and rewrite the send records for the chained pool\n\nnet-uring.md gives the heap, anonymous, file and stack split of the PSS\nrise at both sizes, and reconciles the heap's rise with pool_cached times\n16 KiB: the heap's mapped size grows by more than the cached buffers, its\nresident pages by less, since a short response touches only the start of a\nbuffer. The scope row, NURING-12, NURING-40, NURING-41 and NURING-51 now\ndescribe the append and the chained pool buffers rather than exact records,\neach citing the check that fails when its guard is removed.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0d9684d"
+      ],
+      "pr": 2271,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "pin-the-runtime-budget-to-a-runtime-change",
+      "type": "docs",
+      "breaking": false,
+      "title": "pin the runtime budget to a runtime change and BENCHMARKS commits to main",
+      "body": "Two rules a /feature run (#2247) found missing. A runtime/*.c change that\ngrows a unit's .text moves tests/runtime-budgets.js and its\ndocs/wp7-runtime.md row in the same PR: #2252's first worker stalled at the\nbudget check because its stage did not own the file. A docs/BENCHMARKS.md\ntable names a commit main can reach: #2251's table named a branch commit the\nsquash merge dropped.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8b49fa0"
+      ],
+      "pr": 2266,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "reopen-wp38-with-fast-math-simd128-v4-and",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "reopen WP38 with fast-math, simd128, v4 and recipe stages",
+      "body": "WP38 gains four stages, S14 to S17, filed as #2230 to #2233 under #1865.\nEach one measures its gain before it builds anything, and ships only if\nthe gain clears the bar it states:\n- S14 re-measures x86-64-v4 with 256-bit vectors and with gathers and\n  scatters off.\n- S15 adds a --cpu simd128 level for the wasm and wasi profiles.\n- S16 makes fast-math (reassoc contract arcp afn nsz, never nnan or\n  ninf) the default, with strict IEEE order under a new --strict-float\n  flag that --deterministic implies.\n- S17 gives the guide a measured recipe for float reductions and\n  chunked loops that vectorise.",
+      "metrics": [],
+      "refs": [
+        "docs/wp38-simd.md"
+      ],
+      "tests": [],
+      "commits": [
+        "1fceb97"
+      ],
+      "pr": 2234,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    }
+  ]
+}

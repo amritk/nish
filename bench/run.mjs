@@ -699,6 +699,18 @@ const STD_COUNTED = [
     name: "std-compress-gzip",
     what: "gzip and zlib round trips, one-shot and through GzipWriter and GzipReader",
   },
+  {
+    name: "std-term-frame",
+    what: "Screen text, clear and flush of an 80x24 frame, half of it changed each frame",
+  },
+  {
+    name: "std-raster",
+    what: "rasterGradient, rects, discs, glows, text, a trail and particles into GAME_FRAME at 320x180",
+  },
+  {
+    name: "std-synth",
+    what: "synthSilence and synthTone buffers through gameWriteSamples, the sound ring and host text",
+  },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
@@ -757,7 +769,7 @@ const countInstructions = (valgrind, exe, args, name) => {
 /**
  * `--instructions`: build the eight counted bench/ programs, the four map layout
  * prototypes, the three `Map` measurements, the seven AWFY ports and the
- * crypto families' programs and the six std/ module programs, and run them at the sizes bench/instructions.json
+ * crypto families' programs and the std/ module programs, and run them at the sizes bench/instructions.json
  * names (each crypto kernel once, at its own size and iterations); count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */

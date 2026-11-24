@@ -42,10 +42,16 @@ export const textWrite = (buf: u8[], at: i32, s: string): i32 => {
   if (at < 0 || at > length || n > length - at) {
     return -1
   }
-  for (let i: i32 = 0; i < n; i++) {
-    buf[at + i] = toU8(s.charCodeAt(i))
+  // `j` runs from `at` to `at + n`, which the test above holds inside the
+  // buffer: the loop ends on `i`, and `j < length` is what proves the store.
+  let j: i32 = at
+  let i: i32 = 0
+  while (i < n && j < length) {
+    buf[j] = toU8(s.charCodeAt(i))
+    j = j + 1
+    i = i + 1
   }
-  return at + n
+  return j
 }
 
 /**

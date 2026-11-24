@@ -2128,7 +2128,7 @@ function actOnTap(menu: BreakMenu): i32 -> @actOnTap
   callee +25:12 leaveSettings -> @leaveSettings
   callee +28:10 actOnSettings -> @actOnSettings
 function levelArrowAt(menu: BreakMenu, x: f64): i32 -> @levelArrowAt
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: lineScale menuLevelLabel rasterTextWidth
   pointer menu: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2401,7 +2401,7 @@ function itemsFade(menu: BreakMenu, time: f64, alpha: f64): f64 -> @itemsFade
   local +4:9 out: f64 (const)
   callee +4:20 clamp -> @clamp
 function wallColour(row: i32): i32 -> @wallColour [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: rasterDim rasterHue
   stackSites=0 stackLocals=0
   callee +0:3 rasterDim -> @rasterDim
@@ -2426,7 +2426,7 @@ function menuDrawWall(menu: BreakMenu, view: View, alpha: f64): void -> @menuDra
   callee +17:5 bevelBrick -> @bevelBrick
   callee +17:56 wallColour -> @wallColour
 function drawBall(menu: BreakMenu, view: View, alpha: f64): void -> @drawBall
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via glow
   escaping: alpha
   calls: disc drawTrail glow lerp
@@ -2441,7 +2441,7 @@ function drawBall(menu: BreakMenu, view: View, alpha: f64): void -> @drawBall
   callee +4:5 drawTrail -> @drawTrail
   callee +6:3 disc -> @disc
 function logoColour(column: i32, time: f64): i32 -> @logoColour
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: clamp llvm.fabs.f64 nish_floor rasterHue rasterMix
   stackSites=0 stackLocals=0
   local +0:9 base: i32 (const)
@@ -2531,7 +2531,7 @@ function drawTitle(menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
   callee +31:3 drawTextCentred -> @drawTextCentred
   callee +37:5 rasterMix -> @rasterMix
 function drawBar(view: View, y: f64, width: f64, accent: i32, fade: f64): void -> @drawBar
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via blendRect
   escaping: accent fade width
   calls: blendRect fillRect rasterMix
@@ -2553,7 +2553,7 @@ function menuLevelLabel(level: i32): string -> @menuLevelLabel
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function drawPanel(view: View, time: f64): void -> @drawPanel
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via blendRect
   calls: blendRect fillRect rasterHue
   pointer view: size=64 writesThrough=false captured=false passedTo=blendRect#0 fillRect#0
@@ -2672,7 +2672,7 @@ function capsuleName(k: i32): string -> @capsuleName
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function drawWipe(view: View, t: f64, time: f64): void -> @drawWipe
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fillRect
   calls: clamp fillRect outCubic rasterHue
   pointer view: size=64 writesThrough=false captured=false passedTo=fillRect#0 fillRect#0

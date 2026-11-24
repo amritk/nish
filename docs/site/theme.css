@@ -308,8 +308,18 @@ aside.t-doc__toc .container {
   }
 }
 
+/* A visited link: Scalar greys it to the secondary text colour, which reads
+   as body text. Halfway between the link and that grey still marks it a
+   link, and a visited one (#583d95, 6.31:1 light; #b69adb, 5.81:1 dark, on
+   the gradient's brightest stop). */
+.light-mode,
+.dark-mode {
+  --scalar-link-color-visited: color-mix(in srgb, var(--scalar-link-color), var(--scalar-color-2));
+}
+
 /* Links: the underline thickens instead of the colour jumping. */
 .t-prose a.t-editor__anchor {
+  --font-visited: var(--scalar-link-color-visited);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: text-decoration-thickness 0.15s, color 0.15s;
