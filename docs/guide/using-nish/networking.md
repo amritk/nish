@@ -318,13 +318,16 @@ first ring listener reads it when it opens. Then `kill -USR1` the process and
 the loop's next `pollWait` prints one line a ring listener on stderr:
 
 ```text
-uring-stats signal port=8080 sends=3000 pool_new=497 pool_held=0 pool_cached=68 live=3000 slots=3072
+uring-stats signal port=8080 sends=3000 pool_new=497 pool_held=0 pool_cached=68 live=3000 slots=3072 enters=9120 windows=410 window_waits=820
 ```
 
 `sends` counts the sends the rings have made, `pool_new` the send buffers
 they have allocated, `pool_held` those queued on a connection now and
 `pool_cached` those kept for reuse; `live` is the open connections and
-`slots` the slots the rings hold. Closing a ring listener prints its line
+`slots` the slots the rings hold. `enters` counts the
+`io_uring_enter` calls on the listener's rings, `windows` the
+`pollWaitBatch` calls that opened a batch window on it and `window_waits`
+the sleeps those windows took. Closing a ring listener prints its line
 once more, marked `close`. The handler, once installed, stays for the rest
 of the process; after the last ring listener closes, `SIGUSR1` prints
 nothing. Without the variable the runtime installs no handler and `SIGUSR1`
@@ -423,13 +426,14 @@ export const main = (): i32 => {
   sleeps to `timeoutMs` and answers `0`, as `pollWait` does.
 - `ready`'s length caps the batch. A `ready` of 8 answers at most 4 pairs
   whatever `minEvents` asks for.
-- `maxWaitMs` is what the batch costs in latency. The second wait is on the
-  ring alone, so any other descriptor in the loop, `signalFd()` included,
-  may be reported up to `maxWaitMs` late. On a loop whose only other
-  descriptor is `signalFd()` a signal ends the batch at once on Linux 5.11
-  or later, unless the ring is `--sandbox` restricted, the listener has
-  grown a second ring, or `signalFd()` was closed; then it too waits up to
-  `maxWaitMs`.
+- `maxWaitMs` is what the batch costs in latency. The second wait sleeps
+  in at most eight slices of `maxWaitMs / 8`, rounded up, and takes what
+  the ring finished after each, so the batch can end up to one slice after
+  `minEvents` became ready. It watches no other descriptor, so any other
+  descriptor in the loop, `signalFd()` included, may be reported up to
+  `maxWaitMs` late. On a loop whose only other descriptor is `signalFd()`
+  a signal ends the batch at once, unless the listener has grown a second
+  ring or `signalFd()` was closed; then it too waits up to `maxWaitMs`.
 - With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
   on macOS, it is `pollWait`.
 - The runtime fills a batch from at most 64 events, so a `minEvents` above

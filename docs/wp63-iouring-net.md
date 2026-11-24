@@ -507,13 +507,17 @@ makes two waits instead, for three reasons:
 The cost of the second shape is that an ordinary descriptor that becomes
 ready during the second wait is reported up to `maxWaitMs` late. That bound
 is the documented one. A loop whose only descriptor is `signalFd()` hears it
-through the ring's poll and ends the batch at once, but only on the direct
+through a `poll(2)` on it and ends the batch at once, but only on the direct
 wait: wherever the paragraph above sends the wait through epoll, the signal
-too waits up to `maxWaitMs`. The second wait passes the pairs still missing
-as the enter's `min_complete`, a count of completions: a pair can take two
-completions (a recv and a send on one slot) and an accept is a pair only on
-the listener, so the enter may wake before that many pairs are in, and the
-loop then collects and waits again until `maxWaitMs`. Tests: `uring`'s
+too waits up to `maxWaitMs`. The second wait sleeps in at most eight slices
+of `maxWaitMs / 8`, rounded up, without entering the ring, and after each
+pumps the set once and collects once. It first passed the pairs still
+missing as an enter's `min_complete`, but a DEFER_TASKRUN enter wakes to run
+task work for each completion, sends' included, so a window that bytes
+trickled into woke, pumped and collected once per completion (16 waits and
+62 enters in the trickle check, where the slices take 4 and 39). The cost
+of the slices is that a batch can end up to one slice after `minEvents`
+became ready. Tests: `uring`'s
 "direct" mode, `link/net_ring_batch` (run with every epoll wait refused, so
 a batch that fell back to epoll would fail), `net_poll_batch`.
 
