@@ -11,8 +11,9 @@ The rule that bounds the whole design: **SQLite stays unmodified, and the
 adapter only calls SQLite's functions.** It does not patch `sqlite3.c`. It does
 not read the database file format or the record format itself. It never writes
 a `BtCursor` member, and it reads none except through a function. Records are
-decoded only by `sqlite3VdbeRecordUnpack`, and values are read from the decoded
-`Mem`s through the public `sqlite3_value_*` accessors.
+decoded only by `sqlite3VdbeRecordUnpack` and compared only by
+`sqlite3VdbeRecordCompare`, and values are read from the decoded `Mem`s
+through the public `sqlite3_value_*` accessors.
 
 ## The surface
 
@@ -38,6 +39,7 @@ class Cursor {
   keyText(s: string): Result<void, i32>
   keyTextBytes(buf: readonly u8[], off: i32, len: i32): Result<void, i32>
   seek(op: i32): Result<boolean, i32> // SEEK_GE | SEEK_GT | SEEK_LE | SEEK_LT on the prefix
+  countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32> // index cursor: entries per first key
   rowid(): i64
   columnType(n: i32): Result<i32, i32>
   columnI64(n: i32): i64
@@ -64,6 +66,18 @@ class Cursor {
   calls again. A NULL is 0 bytes. An INTEGER or FLOAT is `Err(SQLITE_MISMATCH)`:
   turning a number into text would allocate inside SQLite, and `columnI64`
   reads it.
+- `countRange(lo, hi, out)` counts an index's entries whose first key column
+  is `k`, for each `k` from `lo` to `hi`, into `out[k - lo]`, and answers their
+  total. It is one seek and one forward walk inside the adapter, each entry's
+  record compared with `k` by `sqlite3VdbeRecordCompare` and never unpacked, so
+  a key with no entries costs nothing and `out` holds 0 for it. It agrees with
+  `SELECT count(*) … WHERE col = k` for every `k`, under an ascending or `DESC`
+  first column. It refuses with `Err(SQLITE_MISUSE)` on a table cursor,
+  `Err(SQLITE_MISMATCH)` when the first key column's affinity is neither
+  INTEGER nor NUMERIC (under TEXT affinity SQL's `col = k` compares as text),
+  and `Err(SQLITE_RANGE)` when `lo > hi` or the span is longer than `out`;
+  `out` is then left as it was, and so is every element past the span. A count
+  clears the seek key and leaves the cursor on no row, as a failed seek does.
 - A cursor call on a closed, stale or invalidated cursor answers `MISUSE`
   (`Err(SQLITE_MISUSE)`, or 0 from `rowid` and `columnI64`). So does `next` or
   `previous` when the cursor has no current row, and a column read then.
@@ -219,16 +233,22 @@ work through SQL in autocommit takes 5.9 and 19.1 µs.
 Per cursor, allocated at open and freed at close: one `sqlite3_malloc64`
 block holding the cursor, its `BtCursor` (`sqlite3BtreeCursorSize` bytes,
 zeroed with `sqlite3BtreeCursorZero`) and the `Mem`s of its seek key
-(`sqlite3VdbeMemInit`); the `KeyInfo` (`sqlite3KeyInfoAlloc`); and one
+(`sqlite3VdbeMemInit`) and the `UnpackedRecord` a seek hands SQLite over
+them, filled once at open; the `KeyInfo` (`sqlite3KeyInfoAlloc`); and one
 `UnpackedRecord` for the current row (`sqlite3VdbeAllocUnpackedRecord`). A
-seek builds its `UnpackedRecord` on the stack over the key's `Mem`s. A payload
+seek on integer key parts therefore allocates nothing and builds no record. A
+count buffer (`sqlite3_realloc64`) is allocated by the first `countRange`,
+grows to the longest span asked (never past `out.length`), and is kept. A payload
 buffer (`sqlite3_realloc64`) is allocated only when a record is not wholly on
 its page, grows geometrically, and keeps 18 zeroed bytes past the record, the
 slack SQLite's record decoder may read past a corrupt record's end. The current row is
 unpacked lazily, on the first column read after a move, and cached until the
 cursor moves. A steady-state row loop therefore allocates nothing; a test
 reads 10,000 rows under `SQLITE_DEFAULT_MEMSTATUS=1` and checks that SQLite's
-memory high-water mark does not move.
+memory high-water mark does not move. Another
+(`tests/link/std_sqlite_cursor_count`, linked with
+`SQLITE_DEFAULT_MEMSTATUS=1`) checks that SQLite's memory in use and its
+high-water mark do not move over two passes of integer seeks and range counts.
 
 `nishsqlite_close` closes a connection's cursors before its statements.
 
@@ -245,9 +265,12 @@ translation unit. The calls, all of them:
   `sqlite3BtreePrevious`, `sqlite3BtreeEof`, `sqlite3BtreeTableMoveto`,
   `sqlite3BtreeIndexMoveto`, `sqlite3BtreeIntegerKey`,
   `sqlite3BtreePayloadSize`, `sqlite3BtreePayloadFetch`, `sqlite3BtreePayload`.
+- Schema: `sqlite3FindIndex` and `sqlite3TableColumnAffinity`, at open, for the
+  affinity of an index's first key column, which `countRange` checks.
 - Records and keys: `sqlite3KeyInfoAlloc`, `sqlite3KeyInfoRef`,
   `sqlite3KeyInfoUnref`,
   `sqlite3VdbeAllocUnpackedRecord`, `sqlite3VdbeRecordUnpack`,
+  `sqlite3VdbeRecordCompare`,
   `sqlite3VdbeMemInit`, `sqlite3VdbeMemSetInt64`, `sqlite3VdbeMemSetStr`,
   `sqlite3VdbeMemSetNull`, `sqlite3VdbeMemRelease`, `sqlite3DbFree`.
 - Public API: `sqlite3_set_authorizer`, `sqlite3_rollback_hook`,
@@ -262,15 +285,24 @@ What it writes, all of it: its own allocations; in the `KeyInfo` it allocated,
 `aSortFlags` (the per-column `DESC` flags `sqlite3KeyInfoAlloc` leaves zero,
 the way SQLite's own code generator fills them; `aColl` stays zero, which is
 `BINARY`); in the row's `UnpackedRecord`, `nField`, which SQLite's caller
-sets before an unpack; and the seek's stack `UnpackedRecord`, zeroed and then
-given `pKeyInfo`, `aMem`, `nField` and `default_rc`, as the VDBE's `OP_SeekGE`
-fills its own. It writes no member of `BtCursor`, `Btree`, `BtShared`,
-`Mem` (only through `sqlite3VdbeMem*`) or `sqlite3`.
+sets before an unpack; and the cursor's seek `UnpackedRecord`, zeroed at open
+and given `pKeyInfo` and `aMem` then, and `nField`, `default_rc`, `errCode` and
+`eqSeen` before each seek or count, as the VDBE's `OP_SeekGE` fills its own.
+It writes no member of `BtCursor`, `Btree`, `BtShared`, `Mem` (only through
+`sqlite3VdbeMem*`) or `sqlite3`.
 
 The seek follows `OP_SeekGE`/`OP_SeekGT`/`OP_SeekLE`/`OP_SeekLT`:
 `sqlite3BtreeIndexMoveto` with `default_rc` +1 for GE and LT and -1 for GT and
 LE, then one `sqlite3BtreeNext` or `sqlite3BtreePrevious` when the cursor
 landed on the wrong side.
+
+`countRange` seeks the same way to the first entry at or after `lo` (`hi`
+under `DESC`), sets `default_rc` to 0, and walks with `sqlite3BtreeNext`. Each
+entry's record (`sqlite3BtreePayloadFetch`, or copied as a column read copies
+it) is compared with the one-value key: equal counts it, after it moves `k` on
+in index order and compares again, and past the last `k` the walk ends. A
+NULL sorts before every number and a TEXT or BLOB after, so neither is
+counted, and a REAL compares with `k` by value; `col = k` counts the same.
 
 ## The build decision
 

@@ -1,6 +1,6 @@
 // The challenge's three queries through `nish/sqlite`, `count` calls each:
 //
-//   main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>
+//   main <lookup|feed|feed-cursor-walk|feed-cursor-count|feed-cursor|insert|insert-txn> <db> <count>
 //
 // `bench/sqlite/run.mjs` builds it with `--link` (the speed profile) and runs
 // it beside `twin.c`, the same loop written against SQLite's own API. Each
@@ -20,6 +20,9 @@
 // - feed-cursor-walk: the same walk on one read transaction and four cursors
 //   opened once, before the timed loop, and closed after it, so a call is the
 //   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
+// - feed-cursor-count: feed-cursor-walk with each post's likes counted by
+//   `Cursor.countRange(id, id, out)`, one seek and one walk inside the
+//   adapter, instead of a seek and a `next` per like from Nish.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -102,10 +105,12 @@ class Fold {
 
 /**
  * The 20 newest posts read through the four cursors, each folded as
- * `Fold.post` folds a row of POST_SQL. Answers the rows read, or -1 when a
- * read failed.
+ * `Fold.post` folds a row of POST_SQL. A post's likes are counted with
+ * `Cursor.countRange` into `counts` when it is not empty, else by seeking the
+ * likes index and stepping over the post's entries. Answers the rows read, or
+ * -1 when a read failed.
  */
-const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold): i32 => {
+const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, counts: i64[], f: Fold): i32 => {
   let rows: i32 = 0
   let ok: boolean = true
   let r = ix.first()
@@ -121,14 +126,20 @@ const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold)
     f.add(toU32(id))
     ok = ok && f.cursorText(post, 2) && f.cursorText(post, 3) && f.cursorText(user, 1)
     let n: i64 = 0
-    ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
-    if (ok) {
-      let l = like.seek(SEEK_GE)
-      while (l.isOk() && l.value && like.columnI64(0) === id) {
-        n += 1
-        l = like.next()
+    if (counts.length > 0) {
+      // One seek and one walk in C, the count left in `counts[0]`.
+      ok = ok && like.countRange(id, id, counts).isOk()
+      n = counts[0]
+    } else {
+      ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
+      if (ok) {
+        let l = like.seek(SEEK_GE)
+        while (l.isOk() && l.value && like.columnI64(0) === id) {
+          n += 1
+          l = like.next()
+        }
+        ok = l.isOk()
       }
-      ok = l.isOk()
     }
     f.add(toU32(n))
     rows += 1
@@ -152,7 +163,7 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
   const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
   let rows: i32 = -1
   if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
-    rows = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+    rows = walkFeed(recent.value, posts.value, users.value, likes.value, new Array<i64>(0), f)
   }
   if (db.endRead().isErr()) {
     return -1
@@ -162,7 +173,7 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
 
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>")
+    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor-count|feed-cursor|insert|insert-txn> <db> <count>")
     return 2
   }
   const mode: string = process.argv[1]
@@ -258,7 +269,8 @@ export const main = (): number => {
       }
     }
     t1 = monotonicNanos()
-  } else if (mode === "feed-cursor-walk") {
+  } else if (mode === "feed-cursor-walk" || mode === "feed-cursor-count") {
+    const counts: i64[] = new Array<i64>(mode === "feed-cursor-count" ? 1 : 0)
     if (db.beginRead().isErr()) {
       return 2
     }
@@ -269,7 +281,7 @@ export const main = (): number => {
     if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
       t0 = monotonicNanos()
       for (let i: i32 = 0; i < count; i += 1) {
-        const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, counts, f)
         if (n < 0) {
           failed += 1
         } else {

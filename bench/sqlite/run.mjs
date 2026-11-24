@@ -65,8 +65,8 @@
 //
 // Each round runs every workload on every binary, in an order that rotates by
 // round, so over a multiple of their number each goes first equally often;
-// feed-cursor-walk and feed-cursor, which the twins have no path for, run on
-// the build and its copy alone, which alternate, so balance needs an even
+// the feed-cursor workloads, which the twins have no path for, run on the
+// build and its copy alone, which alternate, so balance needs an even
 // count: the timed count is rounded up to a multiple of both, and their lines
 // are set against feed's. A run times its own loop and prints a checksum of
 // every value it read; every run of a workload must print the same rows and
@@ -156,15 +156,18 @@ if (baseRev !== null) {
 }
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
-// feed-cursor-walk and feed-cursor read feed's rows through cursors instead
-// of SQL: they run at feed's count and must print feed's line (`same`), and
-// neither twin has a cursor path, so they run on the build and its copy only
-// (`noTwin`). feed-cursor-walk opens its transaction and cursors once, outside
-// the timed loop; feed-cursor opens and closes them on every call.
+// feed-cursor-walk, feed-cursor-count and feed-cursor read feed's rows
+// through cursors instead of SQL: they run at feed's count and must print
+// feed's line (`same`), and neither twin has a cursor path, so they run on the
+// build and its copy only (`noTwin`). feed-cursor-walk opens its transaction
+// and cursors once, outside the timed loop; feed-cursor opens and closes them
+// on every call; feed-cursor-count is feed-cursor-walk with each post's likes
+// counted by `Cursor.countRange`.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
   { name: "feed-cursor-walk", count: validate ? 50 : 10000, same: "feed", noTwin: true },
+  { name: "feed-cursor-count", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
   { name: "insert-txn", count: validate ? 2000 : 100000 },

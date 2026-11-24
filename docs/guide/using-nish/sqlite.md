@@ -251,6 +251,13 @@ export const main = (): i32 => {
   entry at or past it, or the last at or before it.
   A key gets no column affinity: `keyText("5")` on an `INTEGER` column sorts
   after every number, so seek a number with `keyI64`.
+- **`countRange` counts an index's keys in one walk.** On an index whose
+  first column is `INTEGER` or `NUMERIC`, `countRange(lo, hi, out)` writes
+  how many entries have each key `lo`, `lo + 1`, ... `hi` into
+  `out[0..hi - lo]` and answers their total. `lo > hi` or a span longer than
+  `out` is `Err(SQLITE_RANGE)`, a table cursor `Err(SQLITE_MISUSE)`, and
+  another first column `Err(SQLITE_MISMATCH)`; a refusal leaves `out` as it
+  was. The count leaves the cursor on no row, so seek again before reading.
 - **Reads take the stored value.** `columnI64` reads an integer.
   `columnInto` copies text or blob bytes into a buffer, the way
   `Statement.columnInto` does; for a number it answers
