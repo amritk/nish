@@ -99,7 +99,9 @@
 # handler for it is installed (SigCgt in /proc/PID/status), so a ring
 # listener prints its `uring-stats signal` line under load; each round's
 # server stderr is kept as $out/<design>-<C>-<round>.err. A build whose
-# runtime predates the dump installs no handler and is sent nothing.
+# runtime predates the dump installs no handler and is sent nothing. Every
+# server process's /proc/PID/smaps at that moment, the base build's included,
+# is kept as $out/<design>-<C>-<round>.<pid>.smaps, its PSS by mapping.
 set -euo pipefail
 
 if [ -n "${BENCH_URING_STATS:-}" ]; then export NISH_URING_STATS=1; fi
@@ -393,6 +395,7 @@ run() {
     (
       sleep "$(awk -v w="$warmup" -v d="$seconds" 'BEGIN { print w + d / 2 }')"
       for p in $(pgrep -P "$server") "$server"; do
+        cp "/proc/$p/smaps" "$out/$design-$c-$r.$p.smaps" 2>/dev/null || true
         mask=$(awk '/^SigCgt:/ { print $2 }' "/proc/$p/status" 2>/dev/null || true)
         # SIGUSR1 is signal 10, bit 9 of the mask.
         if [ -n "$mask" ] && (( (16#$mask >> 9) & 1 )); then kill -USR1 "$p"; fi
