@@ -20,6 +20,12 @@
 // descriptor limit; worker 0 prints `rings <netRingState()>` after
 // `listening`, 1 when the kernel took rings.
 //
+// BENCH_MIN_EVENTS=M and BENCH_MAX_WAIT_MS=W set `HandlerLimits.minEvents`
+// and `maxWaitMs`, so a turn with fewer than M events waits up to W ms for
+// more (`pollWaitBatch`); unset, they keep the handler's defaults, 1 and 0,
+// and the wait is plain `pollWait`. Under BENCH_RING=1, worker 0 prints
+// `batch <minEvents> <maxWaitMs>` before `rings`.
+//
 // Two knobs for the cheaper wins (WP63 S5; bench/handler-ring/wins.sh):
 // BENCH_MMAP=1 runs `PRAGMA mmap_size=268435456` on each worker's connection
 // after it opens, and worker 0 prints `mmap <the value SQLite reports>`.
@@ -314,6 +320,14 @@ export const main = (): i32 => {
   limits.http.idleTimeout = 600000
   const ring: string | null = getenv("BENCH_RING")
   limits.ring = ring !== null && ring === "1"
+  const minEvents: string | null = getenv("BENCH_MIN_EVENTS")
+  if (minEvents !== null) {
+    limits.minEvents = parseInt(minEvents)
+  }
+  const maxWaitMs: string | null = getenv("BENCH_MAX_WAIT_MS")
+  if (maxWaitMs !== null) {
+    limits.maxWaitMs = parseInt(maxWaitMs)
+  }
   const listener: i32 = limits.listen("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)
   if (listener < 0) {
     console.error(`server: listen failed ${listener}`)
@@ -332,6 +346,7 @@ export const main = (): i32 => {
   if (worker === 0) {
     console.log(`listening ${port}`)
     if (limits.ring) {
+      console.log(`batch ${limits.minEvents} ${limits.maxWaitMs}`)
       console.log(`rings ${netRingState()}`)
     }
   }

@@ -413,6 +413,20 @@ export const main = (): i32 => {
   `maxWaitMs`.
 - With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
   on macOS, it is `pollWait`.
+- The runtime fills a batch from at most 64 events, so a `minEvents` above
+  64 waits as 64 does. A process with two or more open ring listeners does
+  not batch: each call answers as `pollWait` would.
+
+`HttpHandler` takes the same two numbers through its limits:
+`HandlerLimits.minEvents` (default 1) and `HandlerLimits.maxWaitMs` (default
+0). With `minEvents` above 1 and `maxWaitMs` above 0, `h.wait(timeout)` is
+`pollWaitBatch(loop, ready, timeout, minEvents, maxWaitMs)`; a `wait(0)`,
+which must not block, and the defaults are `pollWait`, the loop the handler
+always ran. A `minEvents` under 1 or a `maxWaitMs` outside 0 to 1000 is a
+panic in `new HttpHandler` and an `Err` naming both from
+`openHttpHandler`. Set them on a ring
+server whose CPU per request matters more to it than `maxWaitMs` of added
+latency on a quiet connection; leave them at the defaults otherwise.
 
 A loop that holds nothing but one ring listener's connections, and at most
 `signalFd()`, waits on the ring itself on Linux 5.11 and later, with either

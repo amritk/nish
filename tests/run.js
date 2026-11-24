@@ -36484,6 +36484,41 @@ if (!only || "net_handler_ring".includes(only)) {
     }
   }
 }
+
+// ring-batch-wait: `HandlerLimits.minEvents` and `maxWaitMs` route
+// `HttpHandler.wait` through `pollWaitBatch`. tests/link/net_handler_batch
+// answers 40 connections through a handler at minEvents 64 and maxWaitMs 1
+// (the batched wait must not lose a request), then times one turn with a
+// single request pending: at minEvents 64 and maxWaitMs 400 the turn holds
+// at least 300 ms for a batch that never fills, and at minEvents 1 it does
+// not hold. The second half fails if `wait` ignores the limits; the first if
+// the batched loop drops readiness. 2 says the kernel refused rings, a counted
+// skip.
+if (!only || "net_handler_batch".includes(only)) {
+  const name = "net_handler: minEvents and maxWaitMs batch a ring wait, and minEvents 1 does not wait"
+  if (!HAS_CLANG || process.platform !== "linux") {
+    skip("net_handler: a batched ring wait is io_uring's, and this host has no clang or is not Linux")
+  } else {
+    const dir = path.join(buildDir, "net_handler_batch")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "batch")
+    const c = spawnNish([path.join(linkDir, "net_handler_batch", "batch.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r = c.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 60000 }) : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+    } else {
+      check(
+        name,
+        r !== null && r.status === 0 && r.stdout.includes("batch: 40 answered at minEvents 64, a pending request held"),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
 }
 
 // WP40 §2a at run time: a dependency's grant with arguments, held by the WP37

@@ -124,6 +124,7 @@ import {
   pollModify,
   pollRemove,
   pollWait,
+  pollWaitBatch,
   tcpListenFlags,
 } from "nish:net"
 import {
@@ -136,6 +137,8 @@ import {
   httpContentEncoding,
 } from "nish/net/http-compress"
 
+/** `HandlerLimits.maxWaitMs`' most: a second, the interval `bodyTimeout` is checked at. */
+const HANDLER_MAX_WAIT_MS: i32 = 1000
 /** A core's answer when the call broke its contract: `refusal` says how, and the public method panics with it. */
 const HANDLER_REFUSED: i32 = -24
 /** An answer sent, or queued to be sent. */
@@ -223,6 +226,24 @@ export class HandlerLimits {
   /** The most readiness events one `wait` takes. */
   maxEvents: i32 = 256
   /**
+   * The events one `wait` gathers before it returns, once the first is in:
+   * above 1, a busy ring server takes its connections' events in fewer,
+   * larger batches (`pollWaitBatch`), waiting up to `maxWaitMs` for them. A
+   * batch is at most `maxEvents` and at most 64 events, whatever this says.
+   * It acts only on a listener `listen` opened with `ring` set, on Linux;
+   * elsewhere, and at 1 (the default), `wait` is `pollWait` as before. At
+   * least 1.
+   */
+  minEvents: i32 = 1
+  /**
+   * The most milliseconds one `wait` waits for `minEvents`, after its first
+   * event and on top of its own timeout. It is latency added to the batch's
+   * first request, and a timer or other descriptor the handler watches may
+   * be heard up to this late. 0 (the default) waits no longer than
+   * `pollWait` does. From 0 to 1000.
+   */
+  maxWaitMs: i32 = 0
+  /**
    * Milliseconds from a request's head to the end of its body. A request
    * still reading its body past it has its connection closed: the carrier's
    * `idleTimeout` is refreshed by every byte, so a body trickled a byte at a
@@ -240,9 +261,10 @@ export class HandlerLimits {
   maxDecoded: i32 = 1048576
 
   /**
-   * The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30
-   * second body timeout, a one MiB cap on a decoded body, and the carrier's
-   * own defaults with the body cap lowered to one MiB. Set a field to tune it.
+   * The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn and no
+   * wait for a batch of them, a 30 second body timeout, a one MiB cap on a
+   * decoded body, and the carrier's own defaults with the body cap lowered to
+   * one MiB. Set a field to tune it.
    */
   constructor() {
     this.http = new Http1Config()
@@ -816,6 +838,10 @@ export class HttpHandler {
   private owing: boolean[]
   /** The slots whose send `flush` still owes, `owedCount` of them. */
   private owed: i32[]
+  /** `HandlerLimits.minEvents`: above 1 with `maxWaitMs` above 0, `wait` calls `pollWaitBatch`. */
+  private minEvents: i32 = 1
+  /** `HandlerLimits.maxWaitMs`. */
+  private maxWaitMs: i32 = 0
   /** `pollWait`'s output. */
   private readyFds: i32[]
   /** Per watched id: whether its descriptor was ready in the last `wait`. */
@@ -890,9 +916,9 @@ export class HttpHandler {
    * before the first `wait`. `limits.ring` acts only through the listener:
    * open it with `limits.listen`, since a listener from `tcpListen` stays on
    * descriptors whatever `ring` says.
-   * @param limits the caps and timeouts. `slots`, `jsonBytes`, `maxEvents`
-   *   and `bodyTimeout` are read once here, so changing them later has no
-   *   effect; `http` is kept by the carrier, which reads its timeouts and
+   * @param limits the caps and timeouts. `slots`, `jsonBytes`, `maxEvents`,
+   *   `bodyTimeout`, `minEvents` and `maxWaitMs` are read once here, so
+   *   changing them later has no effect; `http` is kept by the carrier, which reads its timeouts and
    *   caps live
    * @param listener the listening socket's descriptor, still the program's to close
    * @param router the routes, which the handler keeps and consults at each request head
@@ -910,6 +936,8 @@ export class HttpHandler {
     this.maxDecoded = limits.maxDecoded
     this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
     this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
+    this.minEvents = limits.minEvents
+    this.maxWaitMs = limits.maxWaitMs
     this.server = new Http1Server(limits.http, listener, limits.slots)
     this.router = router
     this.listener = listener
@@ -1023,7 +1051,11 @@ export class HttpHandler {
       // is the program's to take, and the turn blocks as it always has.
       timeout = 0
     }
-    const n: i32 = pollWait(this.loop, this.readyFds, timeout)
+    // A turn that must not block (`timeout` 0) never waits for a batch.
+    const n: i32 =
+      this.minEvents > 1 && this.maxWaitMs > 0 && timeout !== 0
+        ? pollWaitBatch(this.loop, this.readyFds, timeout, this.minEvents, this.maxWaitMs)
+        : pollWait(this.loop, this.readyFds, timeout)
     const now: i64 = monotonicNanos()
     this.turnAt = now
     const fds: i32[] = this.readyFds
@@ -2634,6 +2666,9 @@ const handlerLimitsFault = (limits: HandlerLimits): string => {
   }
   if (limits.maxDecoded < 0) {
     return `HttpHandler: maxDecoded ${limits.maxDecoded} is negative`
+  }
+  if (limits.minEvents < 1 || limits.maxWaitMs < 0 || limits.maxWaitMs > HANDLER_MAX_WAIT_MS) {
+    return `HttpHandler: minEvents ${limits.minEvents} and maxWaitMs ${limits.maxWaitMs} need at least 1 and 0 to ${HANDLER_MAX_WAIT_MS}`
   }
   return ""
 }

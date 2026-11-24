@@ -17,6 +17,18 @@
 #   bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "ring epoll1 epoll epoll-copy"
 #   bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler /path/to/older/nish \
 #     --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base"
+#   bash bench/handler-ring/run.sh --conns "18000 96000" --designs "ring ring-copy" \
+#     --min-events "1 64 256" --max-wait-ms 1
+#
+# --min-events "M ..." runs each ring design (ring, ring-copy, ring-base) once
+# per M, as the design ring@M with BENCH_MIN_EVENTS=M and
+# BENCH_MAX_WAIT_MS=--max-wait-ms (default 0): `HttpHandler.wait` waits up to
+# that many ms for M events a turn (`pollWaitBatch`), and M = 1 is the plain
+# `pollWait` loop. The runtime caps a batch at 64 events, so an M above 64
+# waits as 64 does. Every ring@M runs in each round's rotated order with the
+# other designs, and the summary prints each ring@M against ring@1: the p50
+# and p99 the batch adds, its CPU per request, and the band between ring@1
+# and ring-copy@1.
 #
 # --nodb runs every server with BENCH_NODB=1: /plaintext answers its 129 bytes
 # without a query, so the CPU a request costs is the handler's and the
@@ -90,6 +102,8 @@ seconds=10
 port=9312
 think=0
 designs_arg="ring epoll epoll-copy"
+min_events=""
+max_wait_ms=0
 server_cpus=0
 
 while [ $# -gt 0 ]; do
@@ -110,9 +124,11 @@ while [ $# -gt 0 ]; do
   --think) think="$2"; shift ;;
   --designs) designs_arg="$2"; shift ;;
   --server-cpus) server_cpus="$2"; shift ;;
+  --min-events) min_events="$2"; shift ;;
+  --max-wait-ms) max_wait_ms="$2"; shift ;;
   --nodb) export BENCH_NODB=1 ;;
   *)
-    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish] [--base-compiler nish]" >&2
+    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--min-events \"M ...\"] [--max-wait-ms W] [--compiler nish] [--base-compiler nish]" >&2
     exit 2
     ;;
   esac
@@ -123,6 +139,19 @@ done
 # the window opens only after it (loadgen refuses a shorter warm-up too).
 if awk -v t="$think" -v w="$warmup" 'BEGIN { exit !(t > w) }'; then
   echo "run.sh: --warmup $warmup is shorter than --think $think" >&2
+  exit 2
+fi
+
+# HandlerLimits refuses a minEvents under 1 and a maxWaitMs outside 0 to
+# 1000; refuse them here, before a build, rather than as a server that dies.
+for m in $min_events; do
+  if ! [[ $m =~ ^[0-9]+$ ]] || [ "$m" -lt 1 ]; then
+    echo "run.sh: --min-events takes whole numbers of at least 1, not $m" >&2
+    exit 2
+  fi
+done
+if ! [[ $max_wait_ms =~ ^[0-9]+$ ]] || [ "$max_wait_ms" -gt 1000 ]; then
+  echo "run.sh: --max-wait-ms takes a whole number from 0 to 1000, not $max_wait_ms" >&2
   exit 2
 fi
 
@@ -208,6 +237,7 @@ else
 fi
 echo "server cpus ${server_cpus:-unpinned}, load cpus ${load_cpus:-unpinned}; designs $designs_arg"
 if [ "${BENCH_NODB:-}" = 1 ]; then echo "no query a request (BENCH_NODB=1)"; else echo "a SQLite lookup a request"; fi
+if [ -n "$min_events" ]; then echo "ring batches: minEvents $min_events, maxWaitMs $max_wait_ms (a batch is capped at 64 events)"; fi
 
 results="$out/results.txt"
 : >"$results"
@@ -247,19 +277,29 @@ wait_for() {
 # run <design> <conns> <round>: one server, one load, one result line.
 run() {
   local design=$1 c=$2 r=$3 pids n slots bin=$out/server
+  # ring@M is the design ring with minEvents M (--min-events).
+  local kind=${design%@*} me=1 mw=0
+  if [[ $design == *@* ]]; then
+    me=${design##*@}
+    mw=$max_wait_ms
+  fi
   : >"$out/server.out"
-  case "$design" in
+  case "$kind" in
   ring | ring-copy | ring-base)
     n=1
     slots=$((c + 1024))
-    if [ "$design" = ring-copy ]; then bin=$out/server-copy; fi
-    if [ "$design" = ring-base ]; then bin=$out/server-base; fi
-    env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    if [ "$kind" = ring-copy ]; then bin=$out/server-copy; fi
+    if [ "$kind" = ring-base ]; then bin=$out/server-base; fi
+    env -u BENCH_CORES BENCH_RING=1 BENCH_MIN_EVENTS="$me" BENCH_MAX_WAIT_MS="$mw" ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     # `rings` follows `listening`: wait for the line the check reads.
     wait_for '^rings '
     if ! grep -q '^rings 1$' "$out/server.out"; then
       echo "the kernel refused rings: $(cat "$out/server.out")" >&2
+      exit 1
+    fi
+    if ! grep -q "^batch $me $mw\$" "$out/server.out"; then
+      echo "$design did not take minEvents $me and maxWaitMs $mw: $(cat "$out/server.out")" >&2
       exit 1
     fi
     pids=$server
@@ -359,7 +399,20 @@ run() {
   sleep 1
 }
 
-read -r -a designs <<<"$designs_arg"
+# Each ring design runs once per --min-events value, as ring@M.
+read -r -a asked <<<"$designs_arg"
+designs=()
+for d in "${asked[@]}"; do
+  case "$d" in
+  ring | ring-copy | ring-base)
+    if [ -n "$min_events" ]; then
+      for m in $min_events; do designs+=("$d@$m"); done
+      continue
+    fi
+    ;;
+  esac
+  designs+=("$d")
+done
 nd=${#designs[@]}
 for c in $conns; do
   echo "== C=$c"
@@ -417,12 +470,19 @@ awk -v limit="$limit" '
     if (n[k] == 1 || v["up"] < up[k]) up[k] = v["up"]
     fds[k] = v["srv_fds"]; procs[k] = v["procs"]; pss[k] = v["srv_pss_mb"]; mem[k] = v["mem_used_mb"]
     if (!(v["conns"] in seen)) { seen[v["conns"]] = 1; order[++nc] = v["conns"] }
+    if (!(v["label"] in lseen)) { lseen[v["label"]] = 1; lorder[++nl] = v["label"] }
   }
   END {
     printf "%-8s %-12s %5s %8s %6s %18s %7s %7s %8s %8s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "user", "sys", "out/rsp", "in/rsp", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      nds = split("ring ring-copy ring-base epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", ds, " ")
+      nbase = split("ring ring-copy ring-base epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", base, " ")
+      # Each design, then its --min-events runs (ring@M) in the order they ran.
+      nds = 0
+      for (bi = 1; bi <= nbase; bi++) {
+        ds[++nds] = base[bi]
+        for (li = 1; li <= nl; li++) if (index(lorder[li], base[bi] "@") == 1) ds[++nds] = lorder[li]
+      }
       for (di = 1; di <= nds; di++) {
         k = c SUBSEP ds[di]
         if (!(k in n)) continue
@@ -438,6 +498,21 @@ awk -v limit="$limit" '
         if (k in nolat) { s50 = "n/a"; s99 = "n/a"; s999 = "n/a" }
         else { s50 = sprintf("%.2f", med(l50, n[k])); s99 = sprintf("%.2f (%.2f-%.2f)", med(l99, n[k]), p99lo[k], p99hi[k]); s999 = sprintf("%.2f", med(l999, n[k])) }
         printf "%-8s %-12s %5s %8s %6s %7.2f (%.2f-%.2f) %7.2f %7.2f %8s %8s %8.2f %8.0f %8s %8s %7s %20s %8s %6d\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], med(mu, n[k]), med(ms, n[k]), sso, ssi, mb, mq, pss[k], mem[k], s50, s99, s999, lost[k]
+        mp50[k] = (k in nolat) ? "" : med(l50, n[k]); mp99[k] = (k in nolat) ? "" : med(l99, n[k])
+      }
+      # Each batched ring@M against ring@1 at this C: the latency the batch
+      # adds at p50 and p99, its CPU per request, and the noise band between
+      # ring@1 and its byte-identical copy.
+      one = c SUBSEP "ring@1"; onec = c SUBSEP "ring-copy@1"
+      for (li = 1; li <= nl; li++) {
+        if (lorder[li] !~ /^ring@/ || lorder[li] == "ring@1") continue
+        x = c SUBSEP lorder[li]
+        if (!((x in m) && (one in m)) || m[one] <= 0) continue
+        d = (m[one] - m[x]) / m[one] * 100
+        printf "         %s against ring@1: %.1f%% %s CPU per request", lorder[li], (d < 0 ? -d : d), (d >= 0 ? "less" : "more")
+        if (mp50[x] != "" && mp50[one] != "") printf "; p50 %+.2f ms, p99 %+.2f ms", mp50[x] - mp50[one], mp99[x] - mp99[one]
+        if (onec in m) { band = (m[onec] - m[one]) / m[one] * 100; printf "; noise band (ring@1 vs ring-copy@1) %.1f%%", (band < 0 ? -band : band) }
+        printf "\n"
       }
       # Each design against its --base-compiler build, beside the band
       # between the design and its byte-identical copy.

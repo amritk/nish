@@ -1,0 +1,6 @@
+refused 0/1: HttpHandler: minEvents 0 and maxWaitMs 1 need at least 1 and 0 to 1000
+refused -5/1: HttpHandler: minEvents -5 and maxWaitMs 1 need at least 1 and 0 to 1000
+refused 64/-1: HttpHandler: minEvents 64 and maxWaitMs -1 need at least 1 and 0 to 1000
+refused 64/1001: HttpHandler: minEvents 64 and maxWaitMs 1001 need at least 1 and 0 to 1000
+opened 1/0
+opened 64/1000
