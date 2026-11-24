@@ -82,8 +82,9 @@ class Cursor {
   one more when `out` is longer than the span. It refuses with
   `Err(SQLITE_MISUSE)` on a table cursor, `Err(SQLITE_MISMATCH)` when the
   first key column's affinity is neither INTEGER nor NUMERIC (under TEXT
-  affinity SQL's `col = k` compares as text), and `Err(SQLITE_RANGE)` when `lo > hi` or the span is longer than `out`;
-  `out` is then left as it was, and so is every element past the span. A count
+  affinity SQL's `col = k` compares as text), and `Err(SQLITE_RANGE)` when
+  `lo > hi` or the span is longer than `out`; `out` is then left as it was,
+  and so is every element past the span. A count
   that reaches its walk clears the seek key and leaves the cursor on no row,
   as a failed seek does, whatever it answers; a refusal, or `SQLITE_NOMEM` for
   its buffer, comes first and leaves both as they were.

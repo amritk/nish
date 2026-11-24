@@ -976,9 +976,10 @@ export const SQLITE_BUILD_DEFINES = [
  * linux-x64 (561,803 for the unit, 554,239 for `sqlite3.c` alone). Measured **8,213
  * bytes** on 2026-11-19 (562,452 for the unit), with the cursor shape cache and the read
  * transaction's kept statements (docs/wp7-runtime.md, "How the ceilings moved"). Measured
- * **9,307 bytes** on 2026-11-24 (563,546 for the unit), 8,230 on `main` before it, with
- * the index cursor's kept seek key and `countRange`. The budget is the next 256-byte
- * boundary above the measurement, as every ceiling here was set.
+ * **9,307 bytes** on 2026-11-24 (563,546 for the unit), 8,230 on `main` before it (the
+ * single handle lookup per cursor call added 17), with the index cursor's kept seek key
+ * and `countRange`. The budget is the next 256-byte boundary above the measurement, as
+ * every ceiling here was set.
  */
 const RUNTIME_SQLITE_TEXT_BUDGET = 9472
 
