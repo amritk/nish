@@ -1191,35 +1191,31 @@ entry:
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = trunc i64 %1 to i32
   store i32 %2, i32* %held.addr, align 4
-  %3 = icmp slt i32 %n, 0
-  br i1 %3, label %cond.true, label %cond.false
-
-cond.true:
-  br label %cond.end
-
-cond.false:
+  store i32 %n, i32* %end.addr, align 4
+  %3 = load i32, i32* %end.addr, align 4
   %4 = load i32, i32* %held.addr, align 4
-  %5 = icmp slt i32 %n, %4
-  br i1 %5, label %cond.true.1, label %cond.false.1
-
-cond.true.1:
-  br label %cond.end.1
-
-cond.false.1:
-  %6 = load i32, i32* %held.addr, align 4
-  br label %cond.end.1
-
-cond.end.1:
-  %7 = phi i32 [ %n, %cond.true.1 ], [ %6, %cond.false.1 ]
-  br label %cond.end
-
-cond.end:
-  %8 = phi i32 [ 0, %cond.true ], [ %7, %cond.end.1 ]
-  store i32 %8, i32* %end.addr, align 4
-  %9 = call i1 @nish.termNativeStrings()
-  br i1 %9, label %if.then, label %if.end
+  %5 = icmp sgt i32 %3, %4
+  br i1 %5, label %if.then, label %if.end
 
 if.then:
+  %6 = load i32, i32* %held.addr, align 4
+  store i32 %6, i32* %end.addr, align 4
+  br label %if.end
+
+if.end:
+  %7 = load i32, i32* %end.addr, align 4
+  %8 = icmp slt i32 %7, 0
+  br i1 %8, label %if.then.1, label %if.end.1
+
+if.then.1:
+  store i32 0, i32* %end.addr, align 4
+  br label %if.end.1
+
+if.end.1:
+  %9 = call i1 @nish.termNativeStrings()
+  br i1 %9, label %if.then.2, label %if.end.2
+
+if.then.2:
   %10 = load i32, i32* %end.addr, align 4
   %11 = sext i32 %10 to i64
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
@@ -1241,7 +1237,7 @@ bytes.ok:
   %21 = call i8* @nish_str_new(i8* %19, i64 %20)
   ret i8* %21
 
-if.end:
+if.end.2:
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 0, i64* %22, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -1294,9 +1290,9 @@ while.body:
   store i32 %46, i32* %i.addr, align 4
   %47 = load i32, i32* %c.addr, align 4
   %48 = icmp slt i32 %47, 128
-  br i1 %48, label %if.then.1, label %if.end.1
+  br i1 %48, label %if.then.3, label %if.end.3
 
-if.then.1:
+if.then.3:
   %49 = load %struct.nish_array*, %struct.nish_array** %pieces.addr, align 8
   %50 = load i32, i32* %c.addr, align 4
   %51 = sext i32 %50 to i64
@@ -1325,38 +1321,38 @@ push.store:
   %64 = trunc i64 %63 to i32
   br label %while.cond
 
-if.end.1:
+if.end.3:
   %65 = load i32, i32* %c.addr, align 4
   %66 = call i32 @nish.termLeadWidth(i32 %65)
   store i32 %66, i32* %width.addr, align 4
   %67 = load i32, i32* %width.addr, align 4
   %68 = icmp eq i32 %67, 1
-  br i1 %68, label %cond.true.2, label %cond.false.2
+  br i1 %68, label %cond.true, label %cond.false
 
-cond.true.2:
-  br label %cond.end.2
+cond.true:
+  br label %cond.end
 
-cond.false.2:
+cond.false:
   %69 = load i32, i32* %c.addr, align 4
   %70 = load i32, i32* %width.addr, align 4
   %71 = call i32 @nish.termLeadBits(i32 %69, i32 %70)
-  br label %cond.end.2
+  br label %cond.end
 
-cond.end.2:
-  %72 = phi i32 [ 65533, %cond.true.2 ], [ %71, %cond.false.2 ]
+cond.end:
+  %72 = phi i32 [ 65533, %cond.true ], [ %71, %cond.false ]
   store i32 %72, i32* %cp.addr, align 4
   store i32 0, i32* %left.addr, align 4
   %73 = load i32, i32* %width.addr, align 4
   %74 = icmp sgt i32 %73, 1
-  br i1 %74, label %if.then.2, label %if.end.2
+  br i1 %74, label %if.then.4, label %if.end.4
 
-if.then.2:
+if.then.4:
   %75 = load i32, i32* %width.addr, align 4
   %76 = sub nsw i32 %75, 1
   store i32 %76, i32* %left.addr, align 4
-  br label %if.end.2
+  br label %if.end.4
 
-if.end.2:
+if.end.4:
   %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
   %78 = load i64, i64* %77, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %79 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
@@ -1420,9 +1416,9 @@ while.body.1:
 while.end.1:
   %108 = load i32, i32* %cp.addr, align 4
   %109 = icmp sge i32 %108, 65536
-  br i1 %109, label %if.then.3, label %if.else
+  br i1 %109, label %if.then.5, label %if.else
 
-if.then.3:
+if.then.5:
   %110 = load i32, i32* %cp.addr, align 4
   %111 = sub nsw i32 %110, 65536
   store i32 %111, i32* %v.addr, align 4
@@ -1462,7 +1458,7 @@ push.store.1:
   %135 = add i64 %127, 1
   store i64 %135, i64* %126, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %136 = trunc i64 %135 to i32
-  br label %if.end.3
+  br label %if.end.5
 
 if.else:
   %137 = load %struct.nish_array*, %struct.nish_array** %pieces.addr, align 8
@@ -1491,9 +1487,9 @@ push.store.2:
   %151 = add i64 %143, 1
   store i64 %151, i64* %142, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %152 = trunc i64 %151 to i32
-  br label %if.end.3
+  br label %if.end.5
 
-if.end.3:
+if.end.5:
   br label %while.cond
 
 while.end:
@@ -3871,204 +3867,198 @@ cond.end.1:
   %8 = sext i32 %h to i64
   %9 = add nsw i64 %7, %8
   store i64 %9, i64* %b.addr, align 8
+  store i32 0, i32* %right.addr, align 4
   %10 = load i64, i64* %r.addr, align 8
-  %11 = sext i32 0 to i64
-  %12 = icmp sle i64 %10, %11
-  br i1 %12, label %cond.true.2, label %cond.false.2
-
-cond.true.2:
-  br label %cond.end.2
-
-cond.false.2:
-  %13 = load i64, i64* %r.addr, align 8
-  %14 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 1
-  %15 = load i32, i32* %14, align 4, !tbaa !39
-  %16 = sext i32 %15 to i64
-  %17 = icmp sgt i64 %13, %16
-  br i1 %17, label %cond.true.3, label %cond.false.3
-
-cond.true.3:
-  %18 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 1
-  %19 = load i32, i32* %18, align 4, !tbaa !39
-  br label %cond.end.3
-
-cond.false.3:
-  %20 = load i64, i64* %r.addr, align 8
-  %21 = trunc i64 %20 to i32
-  br label %cond.end.3
-
-cond.end.3:
-  %22 = phi i32 [ %19, %cond.true.3 ], [ %21, %cond.false.3 ]
-  br label %cond.end.2
-
-cond.end.2:
-  %23 = phi i32 [ 0, %cond.true.2 ], [ %22, %cond.end.3 ]
-  store i32 %23, i32* %right.addr, align 4
-  %24 = load i64, i64* %b.addr, align 8
-  %25 = sext i32 0 to i64
-  %26 = icmp sle i64 %24, %25
-  br i1 %26, label %cond.true.4, label %cond.false.4
-
-cond.true.4:
-  br label %cond.end.4
-
-cond.false.4:
-  %27 = load i64, i64* %b.addr, align 8
-  %28 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 2
-  %29 = load i32, i32* %28, align 4, !tbaa !40
-  %30 = sext i32 %29 to i64
-  %31 = icmp sgt i64 %27, %30
-  br i1 %31, label %cond.true.5, label %cond.false.5
-
-cond.true.5:
-  %32 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 2
-  %33 = load i32, i32* %32, align 4, !tbaa !40
-  br label %cond.end.5
-
-cond.false.5:
-  %34 = load i64, i64* %b.addr, align 8
-  %35 = trunc i64 %34 to i32
-  br label %cond.end.5
-
-cond.end.5:
-  %36 = phi i32 [ %33, %cond.true.5 ], [ %35, %cond.false.5 ]
-  br label %cond.end.4
-
-cond.end.4:
-  %37 = phi i32 [ 0, %cond.true.4 ], [ %36, %cond.end.5 ]
-  store i32 %37, i32* %bottom.addr, align 4
-  %38 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 3
-  %39 = load %struct.nish_array*, %struct.nish_array** %38, align 8, !tbaa !41
-  store %struct.nish_array* %39, %struct.nish_array** %pixels.addr, align 8
-  %40 = load i32, i32* %top.addr, align 4
-  store i32 %40, i32* %py.addr, align 4
-  %41 = load %struct.nish_array*, %struct.nish_array** %pixels.addr, align 8
-  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 0
-  %43 = load i64, i64* %42, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 2
-  %45 = load i8*, i8** %44, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  br label %for.cond
-
-for.cond:
-  %46 = load i32, i32* %py.addr, align 4
-  %47 = load i32, i32* %bottom.addr, align 4
-  %48 = icmp slt i32 %46, %47
-  br i1 %48, label %for.body, label %for.end
-
-for.body:
-  %49 = load i32, i32* %left.addr, align 4
-  store i32 %49, i32* %px.addr, align 4
-  %50 = load %struct.nish_array*, %struct.nish_array** %pixels.addr, align 8
-  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %50, i64 0, i32 0
-  %52 = load i64, i64* %51, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %50, i64 0, i32 2
-  %54 = load i8*, i8** %53, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  br label %for.cond.1
-
-for.cond.1:
-  %55 = load i32, i32* %px.addr, align 4
-  %56 = load i32, i32* %right.addr, align 4
-  %57 = icmp slt i32 %55, %56
-  br i1 %57, label %for.body.1, label %for.end.1
-
-for.body.1:
-  %58 = load i32, i32* %px.addr, align 4
-  %59 = load i32, i32* %py.addr, align 4
-  %60 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 1
-  %61 = load i32, i32* %60, align 4, !tbaa !39
-  %62 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 2
-  %63 = load i32, i32* %62, align 4, !tbaa !40
-  %64 = trunc i64 %52 to i32
-  %65 = call i32 @nish.termGridAt(i32 %58, i32 %59, i32 %61, i32 %63, i32 %64)
-  store i32 %65, i32* %at.addr, align 4
-  %66 = load i32, i32* %at.addr, align 4
-  %67 = icmp sge i32 %66, 0
-  br i1 %67, label %land.rhs, label %land.end
-
-land.rhs:
-  %68 = load i32, i32* %at.addr, align 4
-  %69 = trunc i64 %52 to i32
-  %70 = icmp slt i32 %68, %69
-  br label %land.end
-
-land.end:
-  %71 = phi i1 [ false, %for.body.1 ], [ %70, %land.rhs ]
-  br i1 %71, label %if.then, label %if.end
+  %11 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 1
+  %12 = load i32, i32* %11, align 4, !tbaa !39
+  %13 = sext i32 %12 to i64
+  %14 = icmp sgt i64 %10, %13
+  br i1 %14, label %if.then, label %if.else
 
 if.then:
-  %72 = load i32, i32* %at.addr, align 4
-  %73 = sext i32 %72 to i64
-  %74 = bitcast i8* %54 to i32*
-  %75 = getelementptr inbounds i32, i32* %74, i64 %73
-  store i32 %colour, i32* %75, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %15 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 1
+  %16 = load i32, i32* %15, align 4, !tbaa !39
+  store i32 %16, i32* %right.addr, align 4
+  br label %if.end
+
+if.else:
+  %17 = load i64, i64* %r.addr, align 8
+  %18 = sext i32 0 to i64
+  %19 = icmp sgt i64 %17, %18
+  br i1 %19, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %20 = load i64, i64* %r.addr, align 8
+  %21 = trunc i64 %20 to i32
+  store i32 %21, i32* %right.addr, align 4
+  br label %if.end.1
+
+if.end.1:
   br label %if.end
 
 if.end:
+  store i32 0, i32* %bottom.addr, align 4
+  %22 = load i64, i64* %b.addr, align 8
+  %23 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 2
+  %24 = load i32, i32* %23, align 4, !tbaa !40
+  %25 = sext i32 %24 to i64
+  %26 = icmp sgt i64 %22, %25
+  br i1 %26, label %if.then.2, label %if.else.1
+
+if.then.2:
+  %27 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 2
+  %28 = load i32, i32* %27, align 4, !tbaa !40
+  store i32 %28, i32* %bottom.addr, align 4
+  br label %if.end.2
+
+if.else.1:
+  %29 = load i64, i64* %b.addr, align 8
+  %30 = sext i32 0 to i64
+  %31 = icmp sgt i64 %29, %30
+  br i1 %31, label %if.then.3, label %if.end.3
+
+if.then.3:
+  %32 = load i64, i64* %b.addr, align 8
+  %33 = trunc i64 %32 to i32
+  store i32 %33, i32* %bottom.addr, align 4
+  br label %if.end.3
+
+if.end.3:
+  br label %if.end.2
+
+if.end.2:
+  %34 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 3
+  %35 = load %struct.nish_array*, %struct.nish_array** %34, align 8, !tbaa !41
+  store %struct.nish_array* %35, %struct.nish_array** %pixels.addr, align 8
+  %36 = load i32, i32* %top.addr, align 4
+  store i32 %36, i32* %py.addr, align 4
+  %37 = load %struct.nish_array*, %struct.nish_array** %pixels.addr, align 8
+  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 0
+  %39 = load i64, i64* %38, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 2
+  %41 = load i8*, i8** %40, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  br label %for.cond
+
+for.cond:
+  %42 = load i32, i32* %py.addr, align 4
+  %43 = load i32, i32* %bottom.addr, align 4
+  %44 = icmp slt i32 %42, %43
+  br i1 %44, label %for.body, label %for.end
+
+for.body:
+  %45 = load i32, i32* %left.addr, align 4
+  store i32 %45, i32* %px.addr, align 4
+  %46 = load %struct.nish_array*, %struct.nish_array** %pixels.addr, align 8
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
+  %48 = load i64, i64* %47, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %49 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 2
+  %50 = load i8*, i8** %49, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  br label %for.cond.1
+
+for.cond.1:
+  %51 = load i32, i32* %px.addr, align 4
+  %52 = load i32, i32* %right.addr, align 4
+  %53 = icmp slt i32 %51, %52
+  br i1 %53, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %54 = load i32, i32* %px.addr, align 4
+  %55 = load i32, i32* %py.addr, align 4
+  %56 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 1
+  %57 = load i32, i32* %56, align 4, !tbaa !39
+  %58 = getelementptr inbounds %struct.Canvas, %struct.Canvas* %this, i32 0, i32 2
+  %59 = load i32, i32* %58, align 4, !tbaa !40
+  %60 = trunc i64 %48 to i32
+  %61 = call i32 @nish.termGridAt(i32 %54, i32 %55, i32 %57, i32 %59, i32 %60)
+  store i32 %61, i32* %at.addr, align 4
+  %62 = load i32, i32* %at.addr, align 4
+  %63 = icmp sge i32 %62, 0
+  br i1 %63, label %land.rhs, label %land.end
+
+land.rhs:
+  %64 = load i32, i32* %at.addr, align 4
+  %65 = trunc i64 %48 to i32
+  %66 = icmp slt i32 %64, %65
+  br label %land.end
+
+land.end:
+  %67 = phi i1 [ false, %for.body.1 ], [ %66, %land.rhs ]
+  br i1 %67, label %if.then.4, label %if.end.4
+
+if.then.4:
+  %68 = load i32, i32* %at.addr, align 4
+  %69 = sext i32 %68 to i64
+  %70 = bitcast i8* %50 to i32*
+  %71 = getelementptr inbounds i32, i32* %70, i64 %69
+  store i32 %colour, i32* %71, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  br label %if.end.4
+
+if.end.4:
   br label %for.inc.1
 
 for.inc.1:
-  %76 = load i32, i32* %px.addr, align 4
-  %77 = add nsw i32 %76, 1
-  store i32 %77, i32* %px.addr, align 4
+  %72 = load i32, i32* %px.addr, align 4
+  %73 = add nsw i32 %72, 1
+  store i32 %73, i32* %px.addr, align 4
   br label %for.cond.1
 
 for.end.1:
   br label %for.inc
 
 for.inc:
-  %78 = load i32, i32* %py.addr, align 4
-  %79 = add nsw i32 %78, 1
-  store i32 %79, i32* %py.addr, align 4
+  %74 = load i32, i32* %py.addr, align 4
+  %75 = add nsw i32 %74, 1
+  store i32 %75, i32* %py.addr, align 4
   br label %for.cond
 
 for.end:
-  %80 = load i32, i32* %bottom.addr, align 4
-  %81 = ashr i32 %80, 1
-  %82 = load i32, i32* %bottom.addr, align 4
-  %83 = and i32 %82, 1
-  %84 = add nsw i32 %81, %83
-  store i32 %84, i32* %end.addr, align 4
-  %85 = load i32, i32* %top.addr, align 4
-  %86 = ashr i32 %85, 1
-  store i32 %86, i32* %row.addr, align 4
+  %76 = load i32, i32* %bottom.addr, align 4
+  %77 = ashr i32 %76, 1
+  %78 = load i32, i32* %bottom.addr, align 4
+  %79 = and i32 %78, 1
+  %80 = add nsw i32 %77, %79
+  store i32 %80, i32* %end.addr, align 4
+  %81 = load i32, i32* %top.addr, align 4
+  %82 = ashr i32 %81, 1
+  store i32 %82, i32* %row.addr, align 4
   br label %for.cond.2
 
 for.cond.2:
-  %87 = load i32, i32* %row.addr, align 4
-  %88 = load i32, i32* %end.addr, align 4
-  %89 = icmp slt i32 %87, %88
-  br i1 %89, label %for.body.2, label %for.end.2
+  %83 = load i32, i32* %row.addr, align 4
+  %84 = load i32, i32* %end.addr, align 4
+  %85 = icmp slt i32 %83, %84
+  br i1 %85, label %for.body.2, label %for.end.2
 
 for.body.2:
-  %90 = load i32, i32* %left.addr, align 4
-  store i32 %90, i32* %col.addr, align 4
+  %86 = load i32, i32* %left.addr, align 4
+  store i32 %86, i32* %col.addr, align 4
   br label %for.cond.3
 
 for.cond.3:
-  %91 = load i32, i32* %col.addr, align 4
-  %92 = load i32, i32* %right.addr, align 4
-  %93 = icmp slt i32 %91, %92
-  br i1 %93, label %for.body.3, label %for.end.3
+  %87 = load i32, i32* %col.addr, align 4
+  %88 = load i32, i32* %right.addr, align 4
+  %89 = icmp slt i32 %87, %88
+  br i1 %89, label %for.body.3, label %for.end.3
 
 for.body.3:
-  %94 = load i32, i32* %col.addr, align 4
-  %95 = load i32, i32* %row.addr, align 4
-  call void @nish.Canvas.paintCell(%struct.Canvas* %this, i32 %94, i32 %95)
+  %90 = load i32, i32* %col.addr, align 4
+  %91 = load i32, i32* %row.addr, align 4
+  call void @nish.Canvas.paintCell(%struct.Canvas* %this, i32 %90, i32 %91)
   br label %for.inc.3
 
 for.inc.3:
-  %96 = load i32, i32* %col.addr, align 4
-  %97 = add nsw i32 %96, 1
-  store i32 %97, i32* %col.addr, align 4
+  %92 = load i32, i32* %col.addr, align 4
+  %93 = add nsw i32 %92, 1
+  store i32 %93, i32* %col.addr, align 4
   br label %for.cond.3
 
 for.end.3:
   br label %for.inc.2
 
 for.inc.2:
-  %98 = load i32, i32* %row.addr, align 4
-  %99 = add nsw i32 %98, 1
-  store i32 %99, i32* %row.addr, align 4
+  %94 = load i32, i32* %row.addr, align 4
+  %95 = add nsw i32 %94, 1
+  store i32 %95, i32* %row.addr, align 4
   br label %for.cond.2
 
 for.end.2:

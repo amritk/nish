@@ -295,7 +295,6 @@ const TERM_SGR_BACKGROUND: i32 = 40
 const TERM_UNSENT: i32 = -1
 const TERM_STYLE_UNKNOWN: i32 = -2
 const TERM_CELL_BYTES: i32 = 64
-const TERM_MAX_SIDE: i32 = 4096
 const TERM_MAX_CELLS: i32 = 1048576
 const TERM_MAX_CSI_PARAMS: i32 = 32
 const TERM_BRIDGE: i32 = 3
@@ -582,17 +581,17 @@ function termBytesText(bytes: u8[], n: i32): string -> @nish.termBytesText
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 held: i32 (const)
-  local +1:9 end: i32 (const)
-  callee +2:7 termNativeStrings -> @nish.termNativeStrings
-  local +5:9 pieces: string[] (const)
-  local +6:7 i: i32 (let)
-  local +8:11 c: i32 (const)
-  local +14:11 width: i32 (const)
-  callee +14:24 termLeadWidth -> @nish.termLeadWidth
-  local +15:9 cp: i32 (let)
-  callee +15:52 termLeadBits -> @nish.termLeadBits
-  local +17:9 left: i32 (let)
-  local +27:13 v: i32 (const)
+  local +1:7 end: i32 (let)
+  callee +8:7 termNativeStrings -> @nish.termNativeStrings
+  local +11:9 pieces: string[] (const)
+  local +12:7 i: i32 (let)
+  local +14:11 c: i32 (const)
+  local +20:11 width: i32 (const)
+  callee +20:24 termLeadWidth -> @nish.termLeadWidth
+  local +21:9 cp: i32 (let)
+  callee +21:52 termLeadBits -> @nish.termLeadBits
+  local +23:9 left: i32 (let)
+  local +33:13 v: i32 (const)
 function Screen.constructor(this: Screen, width: i32, height: i32, palette256: boolean): void -> @nish.Screen.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height palette256 width
@@ -640,13 +639,13 @@ function Screen.set(this: Screen, x: i32, y: i32, glyph: i32, fg: i32, bg: i32, 
   calls: nish.termGridAt nish.termShortest
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -6:11 glyphs: i32[] (const)
-  local -5:11 fgs: i32[] (const)
-  local -4:11 bgs: i32[] (const)
-  local -3:11 kept: i32[] (const)
-  local -2:11 i: i32 (const)
-  callee -2:20 termGridAt -> @nish.termGridAt
-  callee -2:62 termShortest -> @nish.termShortest
+  local -12:11 glyphs: i32[] (const)
+  local -11:11 fgs: i32[] (const)
+  local -10:11 bgs: i32[] (const)
+  local -9:11 kept: i32[] (const)
+  local -8:11 i: i32 (const)
+  callee -8:20 termGridAt -> @nish.termGridAt
+  callee -8:62 termShortest -> @nish.termShortest
 function Screen.text(this: Screen, x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32 -> @nish.Screen.text [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.Screen.set
@@ -885,12 +884,12 @@ function Canvas.fillRect(this: Canvas, x: i32, y: i32, w: i32, h: i32, colour: i
   calls: nish.Canvas.paintCell nish.termGridAt
   pointer this: size=24 writesThrough=false captured=false passedTo=nish.Canvas.paintCell#0
   stackSites=0 stackLocals=0
-  local -12:11 left: i32 (const)
-  local -11:11 top: i32 (const)
-  local -9:11 r: i64 (const)
-  local -8:11 b: i64 (const)
-  local -7:11 right: i32 (const)
-  local -6:11 bottom: i32 (const)
+  local -22:11 left: i32 (const)
+  local -21:11 top: i32 (const)
+  local -19:11 r: i64 (const)
+  local -18:11 b: i64 (const)
+  local -17:9 right: i32 (let)
+  local -11:9 bottom: i32 (let)
   local -5:11 pixels: i32[] (const)
   local -4:14 py: i32 (let)
   local -3:16 px: i32 (let)
@@ -1203,26 +1202,26 @@ function termDecodeKeys(bytes: u8[], last: boolean, events: KeyEvent[]): i32 -> 
   local +4:13 next: i32 (const)
   local +6:13 j: i32 (let)
   local +7:13 run: i32 (let)
-  callee +16:23 new KeyEvent -> @nish.KeyEvent.constructor
-  callee +24:23 new KeyEvent -> @nish.KeyEvent.constructor
-  local +28:15 final: i32 (const)
+  callee +22:23 new KeyEvent -> @nish.KeyEvent.constructor
   callee +30:23 new KeyEvent -> @nish.KeyEvent.constructor
-  callee +30:36 termArrowKind -> @nish.termArrowKind
-  callee +33:23 new KeyEvent -> @nish.KeyEvent.constructor
-  local +39:15 at: i32 (const)
-  callee +44:23 new KeyEvent -> @nish.KeyEvent.constructor
-  local +48:15 final: i32 (const)
+  local +34:15 final: i32 (const)
+  callee +36:23 new KeyEvent -> @nish.KeyEvent.constructor
+  callee +36:36 termArrowKind -> @nish.termArrowKind
+  callee +39:23 new KeyEvent -> @nish.KeyEvent.constructor
+  local +45:15 at: i32 (const)
   callee +50:23 new KeyEvent -> @nish.KeyEvent.constructor
-  callee +50:36 termArrowKind -> @nish.termArrowKind
-  callee +53:23 new KeyEvent -> @nish.KeyEvent.constructor
-  callee +58:19 new KeyEvent -> @nish.KeyEvent.constructor
-  callee +63:19 new KeyEvent -> @nish.KeyEvent.constructor
-  callee +63:32 termAsciiKind -> @nish.termAsciiKind
-  local +67:11 char: i32 (const)
-  callee +67:23 termUtf8At -> @nish.termUtf8At
-  callee +71:17 new KeyEvent -> @nish.KeyEvent.constructor
-  local +73:11 used: i32 (const)
-  local +74:14 k: i32 (let)
+  local +54:15 final: i32 (const)
+  callee +56:23 new KeyEvent -> @nish.KeyEvent.constructor
+  callee +56:36 termArrowKind -> @nish.termArrowKind
+  callee +59:23 new KeyEvent -> @nish.KeyEvent.constructor
+  callee +64:19 new KeyEvent -> @nish.KeyEvent.constructor
+  callee +69:19 new KeyEvent -> @nish.KeyEvent.constructor
+  callee +69:32 termAsciiKind -> @nish.termAsciiKind
+  local +73:11 char: i32 (const)
+  callee +73:23 termUtf8At -> @nish.termUtf8At
+  callee +77:17 new KeyEvent -> @nish.KeyEvent.constructor
+  local +79:11 used: i32 (const)
+  local +80:14 k: i32 (let)
 function termUtf8At(bytes: u8[], i: i32, last: boolean): i32 -> @nish.termUtf8At
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
