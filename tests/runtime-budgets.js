@@ -853,8 +853,8 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
  * 8,448). **8,274 bytes** on 2026-11-17 once that `dup3` is tried again on `EINTR`
  * and `EBUSY`. **9,412 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64 once a ring
- * slot's sends coalesce from a per-ring buffer pool (8,448 to 9,472; main measured
- * 8,446): `nish_uring_send` 202 to 802, which appends to the slot's unsubmitted last
+ * slot's sends coalesce from a per-ring buffer pool (8,448 to 9,472, and to 9,728 by
+ * the NURING-43 fix below; main measured 8,446): `nish_uring_send` 202 to 802, which appends to the slot's unsubmitted last
  * record, moves its unsent bytes to the front to make room, replaces an overflowed pool
  * buffer with one exact record, and takes buffers from the pool (`ur_record` and the
  * replace are inlined into it); `ur_mark` 49 and `ur_send_marked` 86, the deferred
