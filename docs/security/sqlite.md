@@ -164,18 +164,20 @@ expected.out":
 
 | Bound | Where | Line that fails without it |
 | --- | --- | --- |
-| A chosen column past the cursor's is `SQLITE_RANGE`, checked once when the list is chosen; -1 and 70,000 reach the adapter as 65,535 | `unlocked_cursor_select_row`, `Cursor.selectRow` | "selectRow column 7 is RANGE", "selectRow column -1 is RANGE", "selectRow column 70000 is RANGE" |
+| A chosen column past the cursor's is `SQLITE_RANGE` when `readRow` reads it, and writes no `ints` or `spans`; -1 and 70,000 reach the adapter as 65,535 | `nishsqlite_cursor_column_type`, `Cursor.selectRow` | "and readRow is RANGE for column 7", "and leaves ints and spans as they were", "selectRow -1, readRow is RANGE", "selectRow 70000, readRow is RANGE" |
 | Over 65,535 columns is `SQLITE_MISUSE`, so a column index fits the adapter's `u16` | `Cursor.selectRow` | "selectRow of 65536 columns is MISUSE" |
-| A refused list leaves the chosen one | `unlocked_cursor_select_row` frees the old list only after the new one is checked and allocated | "and a refused list keeps the one chosen" |
+| A refused list leaves the chosen one | `Cursor.selectRow` refuses before it replaces its buffer | "and a refused list keeps the one chosen" |
 | `ints` shorter than the list or `spans` shorter than 3 a column is `SQLITE_MISUSE`, and nothing is written | `Cursor.readRow` | "ints shorter than the list is MISUSE", "spans shorter than 3 per column is MISUSE", "and none of them writes" |
-| No `selectRow` before it, no row, or a closed cursor is `SQLITE_MISUSE` | `unlocked_cursor_read_row`, `NISH_SQLITE_CURSOR` | "readRow before any selectRow is MISUSE", "and no row is MISUSE", "and readRow on it is MISUSE" |
-| A record too short for a chosen column is `SQLITE_SCHEMA`, decided before any write | `unlocked_cursor_read_row` (`selmax`) | "a short record is SCHEMA for the row", "and writes nothing" |
+| No `selectRow` before it, no row, or a closed cursor is `SQLITE_MISUSE` | `Cursor.readRow` (`nsel`), `nishsqlite_cursor_column_type`, `NISH_SQLITE_CURSOR` | "readRow before any selectRow is MISUSE", "even with columns chosen", "which readRow refuses with MISUSE" |
+| A record too short for a chosen column is `SQLITE_SCHEMA`, and writes no `ints` or `spans` | `nishsqlite_cursor_column_type`, `Cursor.readRow` (`n < 0`) | "a short record is SCHEMA for the row", "and writes nothing" |
 | A row whose bytes exceed `text` writes nothing to `ints` or `spans` | `Cursor.readRow` (`n > text.length`) | "and writes no ints or spans" |
 
-`readRow`'s answers travel in a byte buffer of at most 9 bytes a column
-(`NISH_SQLITE_ROW_SLOT`), which `selectRow` sizes for its list; its text and
-blob bytes are copied into `text` only while they fit, so a row longer than
-`text` leaves the columns that fit before it there.
+`readRow`'s answers travel in the `Cursor`'s byte buffer, which `selectRow`
+sizes at 11 bytes a column; the adapter takes the column count from its
+length (`n / 11`) and writes only the slots behind the indices. Its text and
+blob bytes are copied into `text` through `columnInto`, only while they fit,
+so a row longer than `text`, or a refusal, can leave the columns before it
+there.
 
 A record's length is read with `sqlite3BtreePayloadSize`. Over
 `SQLITE_MAX_LENGTH` it is `SQLITE_CORRUPT`, which keeps the decoder's `u32`
@@ -266,17 +268,16 @@ prepare and its step.
 
 Untested bounds of `readRow`, read only from the code:
 
-- The copy into `text` stops at its length (`need + len <= ntext`). The test
-  passes a buffer one byte short and checks the answer, but nothing in the
-  suite observes a byte written past the buffer's end, so removing the bound
-  fails no check.
+- The copy into `text` stops at its length: `readRow` copies through
+  `columnInto` at the running offset, clamped to `ntext`, which copies only
+  what fits. The test passes a buffer one byte short and checks the answer,
+  but nothing in the suite observes a byte written past the buffer's end, so
+  removing the bound fails no check.
 - A row whose text and blob bytes pass 2^31 - 1 is `SQLITE_TOOBIG`: no test
   builds a 2 GiB row.
-- The adapter's own `SQLITE_MISUSE` for an answer buffer shorter than 9 bytes
-  a chosen column, and for a column list shorter than 2 bytes a column, is
-  unreachable through `std/sqlite.ts`, which sizes both from the same count;
-  only a caller of the C functions could meet it.
-- `selectRow`'s `SQLITE_NOMEM`, with the other `SQLITE_NOMEM` paths above.
+- The adapter reads `n / 11` columns from a buffer of `n` bytes, so it never
+  reads or writes past it; `std/sqlite.ts` always passes 11 bytes a column,
+  so no test passes another length.
 
 Open: under `-DSQLITE_DEBUG`, a rollback SQLite makes by itself while a
 cursor is open trips SQLite's own assertion in `unlockBtreeIfUnused`, inside

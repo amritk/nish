@@ -67,9 +67,10 @@ class Cursor {
   turning a number into text would allocate inside SQLite, and `columnI64`
   reads it.
 - `selectRow(cols)` chooses the columns `readRow` reads, in that order and
-  repeats allowed, once for every row after it: the adapter keeps the list.
-  A column past the cursor's is `RANGE`, and over 65,535 columns is `MISUSE`;
-  a refused list leaves the one chosen before.
+  repeats allowed, once for every row after it: the `Cursor` keeps the list,
+  with no adapter call. Over 65,535 columns is `MISUSE`, and a refused list
+  leaves the one chosen before; it checks no index, so a column past the
+  cursor's is `RANGE` from `readRow`.
 - `readRow(ints, spans, text)` reads the chosen columns of the current row
   with one adapter call, in one pass over them. Column `cols[i]` answers its
   type in `spans[3i]`; an INTEGER or FLOAT its integer in `ints[i]` as
@@ -79,12 +80,15 @@ class Cursor {
   for TEXT, BLOB and NULL: unlike `columnI64`, `readRow` converts no TEXT or
   BLOB to a number, so a caller that wants `'42'` as 42 calls `columnI64`.
   Other types answer offset and length 0. It answers `Ok` with the bytes the
-  row's columns hold. When that is more than `text.length` it writes nothing
-  to `ints` or `spans` (`text` may hold the columns that fit before it), so
-  a caller grows `text` and calls again. A refusal is the code `columnType`
-  answers for the first column it refuses, and writes nothing; no
-  `selectRow` before it, `ints` shorter than the list or `spans` shorter than
-  3 per column is `MISUSE`, and over 2^31 - 1 bytes is `TOOBIG`. On the feed
+  row's columns hold, 0 for an empty list. When that is more than
+  `text.length` it writes nothing to `ints` or `spans` (`text` may hold the
+  columns that fit before it), so a caller grows `text` and calls again. A
+  refusal is the code `columnType` answers for the first column it refuses
+  (`RANGE`, `SCHEMA`, or `MISUSE` with no row or a closed cursor), and
+  writes nothing to `ints` or `spans`, though `text` may hold the bytes of
+  the columns before it; no `selectRow` before it, `ints` shorter than the
+  list or `spans` shorter than 3 per column is `MISUSE`, and over 2^31 - 1
+  bytes is `TOOBIG`. On the feed
   walk it replaces a post's four column calls (three on the post, one on its
   author) with two
   ([docs/BENCHMARKS.md](BENCHMARKS.md#one-call-per-row-readrow) has what that
@@ -253,11 +257,11 @@ slack SQLite's record decoder may read past a corrupt record's end. The current 
 unpacked lazily, on the first column read after a move, and cached until the
 cursor moves. A steady-state row loop therefore allocates nothing; a test
 reads 10,000 rows under `SQLITE_DEFAULT_MEMSTATUS=1` and checks that SQLite's
-memory high-water mark does not move. `selectRow` allocates the adapter's
-copy of its column list (`sqlite3_malloc64`, freed by the next `selectRow` or
-the cursor's close) and the `Cursor`'s byte buffer for `readRow`'s answers,
-9 bytes a column, once; `readRow` then copies text and blob bytes into the
-caller's `text` and allocates nothing. A test walks 2,000 rows, one in four
+memory high-water mark does not move. `selectRow` allocates the `Cursor`'s
+byte buffer, 11 bytes a column: the list's indices, 2 bytes each, then a
+9-byte slot each for `readRow`'s answers. It allocates once per
+`selectRow`; `readRow` then copies text and blob bytes into the caller's
+`text` and allocates nothing. A test walks 2,000 rows, one in four
 on overflow pages, with `readRow` twice after a first pass and checks the
 same high-water mark, which counts SQLite's allocator only, not the Nish
 heap.
@@ -290,12 +294,10 @@ translation unit. The calls, all of them:
   `sqlite3_str` API for the schema check (with `sqlite3_prepare_v3` for
   `beginRead`'s and `endRead`'s kept statements).
 
-`selectRow` (`nishsqlite_cursor_select_row`) and `readRow`
-(`nishsqlite_cursor_read_row`) call nothing the per-column reads do not but
-`sqlite3_malloc64` and `sqlite3_free` for the column list: `readRow` reads
-each column through the same unpacked row `columnType` reads, its integer
-with `sqlite3_value_int64` and its bytes with `sqlite3_value_blob` and
-`memcpy`.
+`readRow` (`nishsqlite_cursor_read_row`) calls nothing the per-column reads
+do not: it calls the adapter's own `columnType`, `columnI64` and
+`columnInto` functions for each chosen column, under the connection's
+mutex, which is recursive. `selectRow` calls no adapter function.
 
 What it writes, all of it: its own allocations, and the caller's buffers a
 `readRow` passes; in the `KeyInfo` it allocated,

@@ -556,10 +556,6 @@ typedef struct nishsqlite_cursor {
   int32_t has_row;   /* the last move answered a row */
   int32_t unpacked;  /* `row` holds the current row */
   int32_t nfields;   /* the fields the current row's record holds */
-  u16 *sel;          /* readRow's columns, from selectRow; NULL before it */
-  int32_t nsel;
-  int32_t selmax;    /* the largest of them that is a record field, -1 when none */
-  int32_t selalias;  /* whether they name the INTEGER PRIMARY KEY column */
 } nishsqlite_cursor;
 
 static void cursor_free(nishsqlite_cursor *cur) {
@@ -569,7 +565,6 @@ static void cursor_free(nishsqlite_cursor *cur) {
   if (cur->row) sqlite3DbFree(db, cur->row);
   sqlite3KeyInfoUnref(cur->ki);
   sqlite3_free(cur->buf);
-  sqlite3_free(cur->sel);
   sqlite3_free(cur);
 }
 
@@ -1170,90 +1165,6 @@ static int32_t unlocked_cursor_column_into(nishsqlite_cursor *cur, int32_t c, ui
   return len;
 }
 
-/* The most bytes one column's answer takes in readRow's io buffer: its type
- * (1 byte), then the integer (8) for INTEGER and FLOAT or the byte length
- * (4) for TEXT and BLOB, little-endian; NULL is the type alone. */
-#define NISH_SQLITE_ROW_SLOT 9
-
-static void put_le(uint8_t *p, uint64_t v, int n) {
-  for (int i = 0; i < n; i++) p[i] = (uint8_t)(v >> (8 * i));
-}
-
-/* Sets the columns readRow reads: `ncols` indices in `io`, a little-endian
- * u16 each. An index past the cursor's columns is SQLITE_RANGE and leaves
- * the earlier list as it was. Codes are negated. */
-static int32_t unlocked_cursor_select_row(nishsqlite_cursor *cur, const uint8_t *io, uint64_t n, int32_t ncols) {
-  if (cur == NULL || ncols < 0 || (uint64_t)ncols * 2 > n) return -SQLITE_MISUSE;
-  int32_t selmax = -1, selalias = 0;
-  for (int32_t k = 0; k < ncols; k++) {
-    int32_t c = io[2 * k] | (io[2 * k + 1] << 8);
-    if (c >= cur->ncol) return -SQLITE_RANGE;
-    if (c == cur->alias) selalias = 1;
-    else if (c > selmax) selmax = c;
-  }
-  u16 *sel = sqlite3_malloc64((uint64_t)ncols * 2 + 2);
-  if (sel == NULL) return -SQLITE_NOMEM;
-  for (int32_t k = 0; k < ncols; k++) sel[k] = (u16)(io[2 * k] | (io[2 * k + 1] << 8));
-  sqlite3_free(cur->sel);
-  cur->sel = sel;
-  cur->nsel = ncols;
-  cur->selmax = selmax;
-  cur->selalias = selalias;
-  return SQLITE_OK;
-}
-
-/* Reads the selectRow columns of the current row in one pass. Each refusal
- * is decided before anything is written: no row or no selectRow is
- * SQLITE_MISUSE, a moved row SQLITE_ABORT, a record too short for a column
- * SQLITE_SCHEMA. Then `io` gets each column's answer in order,
- * NISH_SQLITE_ROW_SLOT bytes at most: the type as
- * unlocked_cursor_column_type answers it, then an INTEGER's value (the rowid
- * for the alias), a FLOAT's as unlocked_cursor_column_i64 converts it, or a
- * TEXT or BLOB column's length; no TEXT or BLOB is converted to a number.
- * Their bytes go to `text` in column order while they fit. Answers the
- * text length the row needs, SQLITE_TOOBIG past INT32_MAX; when it is over
- * `ntext`, `text` holds only the columns that fit before it and the caller
- * reads nothing from `io`. Codes are negated. */
-static int32_t unlocked_cursor_read_row(nishsqlite_cursor *cur, uint8_t *io, uint64_t n, uint8_t *text, uint64_t ntext) {
-  if (cur == NULL || !cur->has_row || cur->sel == NULL || (uint64_t)cur->nsel * NISH_SQLITE_ROW_SLOT > n) {
-    return -SQLITE_MISUSE;
-  }
-  if (cur->selalias && sqlite3BtreeCursorHasMoved(cur->bt)) return -SQLITE_ABORT;
-  if (cur->selmax >= 0) {
-    int rc = row_of(cur);
-    if (rc != SQLITE_OK) return -rc;
-    if (cur->selmax >= cur->nfields) return -SQLITE_SCHEMA;
-  }
-  uint64_t need = 0;
-  uint8_t *out = io;
-  for (int32_t k = 0; k < cur->nsel; k++) {
-    int32_t c = cur->sel[k];
-    if (c == cur->alias) {
-      *out = SQLITE_INTEGER;
-      put_le(out + 1, (uint64_t)sqlite3BtreeIntegerKey(cur->bt), 8);
-      out += 9;
-      continue;
-    }
-    sqlite3_value *m = (sqlite3_value *)&cur->row->aMem[c];
-    int type = sqlite3_value_type(m);
-    *out = (uint8_t)type;
-    if (type == SQLITE_INTEGER || type == SQLITE_FLOAT) {
-      put_le(out + 1, (uint64_t)sqlite3_value_int64(m), 8);
-      out += 9;
-    } else if (type == SQLITE_TEXT || type == SQLITE_BLOB) {
-      const void *p = sqlite3_value_blob(m);
-      uint32_t len = (uint32_t)sqlite3_value_bytes(m);
-      if (p != NULL && need + len <= ntext) memcpy(text + need, p, len);
-      need += len;
-      put_le(out + 1, len, 4);
-      out += 5;
-    } else {
-      out += 1;
-    }
-  }
-  return need > INT32_MAX ? -SQLITE_TOOBIG : (int32_t)need;
-}
-
 /* The current row's rowid: a table row's key, or an index entry's last
  * field. 0 when there is no row or it cannot be read. */
 static int64_t unlocked_cursor_rowid(nishsqlite_cursor *cur) {
@@ -1353,10 +1264,43 @@ int64_t nishsqlite_cursor_rowid(int32_t h) {
   NISH_SQLITE_CURSOR(int64_t, unlocked_cursor_rowid(cur));
 }
 
-int32_t nishsqlite_cursor_select_row(int32_t h, uint8_t *io, uint64_t n, int32_t ncols) {
-  NISH_SQLITE_CURSOR(int32_t, unlocked_cursor_select_row(cur, io, n, ncols));
+/* readRow: reads a list of columns of the current row in one call. `io` holds
+ * `n / 11` columns: first their indices, a little-endian u16 each, which it
+ * leaves as they are, then a slot of 9 bytes per column, in order: the type
+ * nishsqlite_cursor_column_type answers, then 8 bytes, a TEXT or BLOB
+ * column's length, or the value nishsqlite_cursor_column_i64 answers for the
+ * rest. No TEXT or BLOB is converted to a number. The bytes of TEXT and BLOB
+ * columns go to `text` in column order while they fit. Answers the length
+ * they need, SQLITE_TOOBIG past INT32_MAX, or the code column_type refuses
+ * the first bad column with; after a refusal, or a length over `ntext`, the
+ * caller reads nothing from `io` or `text`. It calls the locked column
+ * functions, whose mutex, the connection's, is recursive, so the adapter
+ * holds each column's code once. The slots are stored in the machine's
+ * order, which is little-endian on every target the runtime builds for.
+ * Codes are negated. */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "readRow's slots are little-endian"
+#endif
+static int32_t unlocked_cursor_read_row(int32_t h, uint8_t *io, uint64_t n, uint8_t *text, uint64_t ntext) {
+  uint64_t ncols = n / 11, need = 0;
+  uint8_t *out = io + 2 * ncols;
+  for (uint64_t k = 0; k < ncols; k++, out += 9) {
+    int32_t c = io[2 * k] | (io[2 * k + 1] << 8);
+    int32_t type = nishsqlite_cursor_column_type(h, c);
+    if (type < 0) return type;
+    uint64_t v;
+    if (type == SQLITE_TEXT || type == SQLITE_BLOB) {
+      v = (uint32_t)nishsqlite_cursor_column_into(h, c, text, ntext, (int32_t)(need < ntext ? need : ntext));
+      need += v;
+    } else {
+      v = (uint64_t)nishsqlite_cursor_column_i64(h, c);
+    }
+    out[0] = (uint8_t)type;
+    memcpy(out + 1, &v, 8);
+  }
+  return need > INT32_MAX ? -SQLITE_TOOBIG : (int32_t)need;
 }
 
 int32_t nishsqlite_cursor_read_row(int32_t h, uint8_t *io, uint64_t n, uint8_t *text, uint64_t ntext) {
-  NISH_SQLITE_CURSOR(int32_t, unlocked_cursor_read_row(cur, io, n, text, ntext));
+  NISH_SQLITE_CURSOR(int32_t, unlocked_cursor_read_row(h, io, n, text, ntext));
 }

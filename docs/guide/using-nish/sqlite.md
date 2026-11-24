@@ -266,8 +266,9 @@ export const main = (): i32 => {
   and `spans[3 * i + 2]` are the offset and length of its bytes in `text`.
   It answers the bytes the row needs; when that is more than `text.length`
   it writes nothing to `ints` or `spans`, so grow `text` and call again. A
-  refusal is the code `columnType` gives the first column it refuses;
-  `readRow` before any `selectRow` is `Err(SQLITE_MISUSE)`.
+  refusal is the code `columnType` gives the first column it refuses, so a
+  column the cursor does not have is `Err(SQLITE_RANGE)` here, not from
+  `selectRow`; `readRow` before any `selectRow` is `Err(SQLITE_MISUSE)`.
 - **Anything that could change what a cursor reads closes it.** That includes
   `exec`, `commit`, `rollback`, stepping a statement that writes, and
   `endRead`. A closed cursor answers `Err(SQLITE_MISUSE)`, and `rowid` and

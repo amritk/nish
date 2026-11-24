@@ -11303,7 +11303,7 @@ const cursorReadRow = (why, filesByProgram) =>
 
 const DECLARED = [
   ...cursorReadRow(
-    "std/sqlite.ts's Cursor gains rowIo and nsel fields, selectRow and readRow, which call nishsqlite_cursor_select_row and nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
+    "std/sqlite.ts's Cursor gains rowIo and nsel fields, selectRow and readRow, which call nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
     {
       "tests/link/sqlite_busy_backoff/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite/main.ts": ["main.ll", "sqlite.ll"],

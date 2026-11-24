@@ -154,9 +154,12 @@ export const main = (): i32 => {
   t.ok("  selectRow late, 0, s", cur.selectRow(late).isOk());
   t.ok("  a short record is SCHEMA for the row", i32Err(cur.readRow(ints, spans, text), SQLITE_SCHEMA));
   t.ok("  and writes nothing", allI64(ints, toI64(-7)) && allI32(spans, -7));
-  t.ok("  selectRow column 7 is RANGE", voidErr(cur.selectRow([1, 7]), SQLITE_RANGE));
-  t.ok("  selectRow column -1 is RANGE", voidErr(cur.selectRow([-1]), SQLITE_RANGE));
-  t.ok("  selectRow column 70000 is RANGE", voidErr(cur.selectRow([70000]), SQLITE_RANGE));
+  t.ok("  selectRow 1, 7 takes the list", cur.selectRow([1, 7]).isOk());
+  t.ok("  and readRow is RANGE for column 7", i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
+  t.ok("  and leaves ints and spans as they were", allI64(ints, toI64(-7)) && allI32(spans, -7));
+  t.ok("  selectRow -1, readRow is RANGE", cur.selectRow([-1]).isOk() && i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
+  t.ok("  selectRow 70000, readRow is RANGE", cur.selectRow([70000]).isOk() && i32Err(cur.readRow(ints, spans, text), SQLITE_RANGE));
+  t.ok("  selectRow late, 0, s again", cur.selectRow(late).isOk());
   const wide = new Array<i32>(65536);
   t.ok("  selectRow of 65536 columns is MISUSE", voidErr(cur.selectRow(wide), SQLITE_MISUSE));
   t.ok("  and a refused list keeps the one chosen", i32Err(cur.readRow(ints, spans, text), SQLITE_SCHEMA));
@@ -168,7 +171,8 @@ export const main = (): i32 => {
   const none = cur.readRow(ints, spans, text);
   t.ok("  no columns answers 0", none.isOk() && none.value === 0);
   t.ok("seekRowid 1000 is not there", !cur.seekRowid(toI64(1000)).expect("seek"));
-  t.ok("  and no row is MISUSE", i32Err(cur.readRow(ints, spans, text), SQLITE_MISUSE));
+  const gone = cur.readRow(ints, spans, text);
+  t.ok("  and no row with no columns still answers 0", gone.isOk() && gone.value === 0);
   t.ok("  selectRow every column", cur.selectRow(every).isOk());
   t.ok("  even with columns chosen", i32Err(cur.readRow(ints, spans, text), SQLITE_MISUSE));
 
@@ -187,7 +191,8 @@ export const main = (): i32 => {
   t.ok("index: readRow answers what the per-column calls answer, the rowid among them", same2);
   t.ok("close the index cursor", idx.close().isOk());
   t.ok("  and readRow on it is MISUSE", i32Err(idx.readRow(ints, spans, text), SQLITE_MISUSE));
-  t.ok("  and selectRow on it is MISUSE", voidErr(idx.selectRow(pair), SQLITE_MISUSE));
+  t.ok("  and selectRow on it takes the list", idx.selectRow(pair).isOk());
+  t.ok("  which readRow refuses with MISUSE", i32Err(idx.readRow(ints, spans, text), SQLITE_MISUSE));
   t.ok("close", cur.close().isOk());
   t.ok("endRead", db.endRead().isOk());
   t.ok("close the database", db.close().isOk());
