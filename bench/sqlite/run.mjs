@@ -22,6 +22,13 @@
 //                   c-native       the C twin compiled and linked with
 //                                  -march=native, against the C twin (nish
 //                                  refuses --cpu native, so this is C only)
+//                   unix-excl      a byte-identical copy of the build that
+//                                  opens the database as
+//                                  `file:<db>?vfs=unix-excl`: SQLite's
+//                                  unix-excl VFS, the wal-index in heap and
+//                                  no -shm, against the default unix VFS,
+//                                  still WAL and synchronous=NORMAL
+//                                  (docs/sqlite-vfs.md)
 //                 With --validate, the variant must read what every side reads.
 //     --base REV  the variant is main.ts built by the same compiler against
 //                 commit REV's std/ and runtime/ (and its scripts/build.sh),
@@ -65,8 +72,8 @@
 //
 // Each round runs every workload on every binary, in an order that rotates by
 // round, so over a multiple of their number each goes first equally often;
-// the feed-cursor workloads, which the twins have no path for, run on
-// the build and its copy alone, which alternate, so balance needs an even
+// the feed-cursor workloads, which the twins have no path for, run on the
+// build and its copy alone, which alternate, so balance needs an even
 // count: the timed count is rounded up to a multiple of both, and their lines
 // are set against feed's. A run times its own loop and prints a checksum of
 // every value it read; every run of a workload must print the same rows and
@@ -142,6 +149,7 @@ const VARIANTS = {
   "x86-64-v3": { pgo: false, cpu: ["--cpu", "x86-64-v3"] },
   "pgo-x86-64-v3": { pgo: true, cpu: ["--cpu", "x86-64-v3"] },
   "c-native": { native: true },
+  "unix-excl": { vfs: "unix-excl" },
 }
 if (variant !== null && !Object.hasOwn(VARIANTS, variant)) {
   fail(`--variant takes ${Object.keys(VARIANTS).join(", ")}, not ${variant}`)
@@ -156,11 +164,13 @@ if (baseRev !== null) {
 }
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
-// feed-cursor-walk and feed-cursor read feed's rows through cursors instead
-// of SQL: they run at feed's count and must print feed's line (`same`), and
-// neither twin has a cursor path, so they run on the build and its copy only
-// (`noTwin`). feed-cursor-walk opens its transaction and cursors once, outside
-// the timed loop; feed-cursor opens and closes them on every call.
+// feed-cursor-walk, feed-cursor-count and feed-cursor read feed's rows
+// through cursors instead of SQL: they run at feed's count and must print
+// feed's line (`same`), and neither twin has a cursor path, so they run on the
+// build and its copy only (`noTwin`). feed-cursor-walk opens its transaction
+// and cursors once, outside the timed loop; feed-cursor opens and closes them
+// on every call; feed-cursor-count is feed-cursor-walk with the 20 posts'
+// likes counted in one `Cursor.countRange` over their id span.
 // feed-cursor-row is feed-cursor-walk with each post's and author's columns
 // read by one Cursor.readRow call, each cursor's columns chosen by
 // Cursor.selectRow once, outside the timed loop, timed in the same rounds.
@@ -168,6 +178,7 @@ const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
   { name: "feed-cursor-walk", count: validate ? 50 : 10000, same: "feed", noTwin: true },
+  { name: "feed-cursor-count", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor-row", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
@@ -391,6 +402,8 @@ if (spec?.base !== undefined) {
 } else if (spec?.native === true) {
   copyOf(twin, twinCopy)
   cTwin("st", twinNative, ["-march=native"])
+} else if (spec?.vfs !== undefined) {
+  copyOf(exe, exeVariant)
 } else if (spec !== null) {
   const pgo = spec.pgo ? ["--pgo-use", trainedProfile(spec.cpu)] : []
   nishBuild(exeVariant, [...pgo, ...spec.cpu], `the ${variant} build`)
@@ -481,9 +494,16 @@ if (!fs.existsSync(db) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8"
   fs.writeFileSync(stamp, want)
 }
 
+// What the variant binary opens: the seed as a `file:` URI on its VFS, the
+// path's `?` and `#` escaped so they stay in it. Every other binary opens
+// the path.
+const dbVariant =
+  spec?.vfs === undefined
+    ? db
+    : `file:${encodeURI(db).replace(/\?/g, "%3F").replace(/#/g, "%23")}?vfs=${spec.vfs}`
 /** One run of `bin` on workload `w`: what it read, and its ns per call. */
 const runOnce = (bin, w) => {
-  const m = parsed(bin, w.name, runWorkload(bin, w.name, db, w.count))
+  const m = parsed(bin, w.name, runWorkload(bin, w.name, bin === exeVariant ? dbVariant : db, w.count))
   return { answer: `rows ${m[1]} checksum ${m[2]} count ${m[4]}`, ns: Number(m[5]) / w.count }
 }
 

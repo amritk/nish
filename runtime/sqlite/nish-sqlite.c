@@ -88,6 +88,7 @@ typedef struct nishsqlite_shape {
   char *columns;
   u32 cookie;
   int32_t is_index, ncol, nkey, alias;
+  int32_t int_first; /* an index whose first key column has INTEGER or NUMERIC affinity */
   Pgno root;
   KeyInfo *ki; /* one reference, the entry's */
 } nishsqlite_shape;
@@ -546,13 +547,18 @@ typedef struct nishsqlite_cursor {
   KeyInfo *ki;         /* the record's fields, for the decoder and a seek */
   UnpackedRecord *row; /* the current row, decoded on the first read of it */
   Mem *key;            /* the seek key's `nkeyfields` values, in the block */
+  UnpackedRecord seek; /* the key a seek or count hands SQLite: `key`, under `ki` */
   int32_t nkeyparts;   /* how many of them are set */
   int32_t nkeyfields;  /* an index's key columns; a table's columns */
   u8 *buf;             /* a record that is not all on its page, copied */
   u32 cap;
+  int64_t *counts;     /* the last `count_range`'s answer, per key */
+  uint64_t ncounts;    /* how many of them it answered */
+  uint64_t counts_cap;
   int32_t ncol;      /* columns the program reads: a table's, or an index's key and rowid */
   int32_t alias;     /* a table's INTEGER PRIMARY KEY column, -1 when none */
   int32_t is_index;
+  int32_t int_first; /* an index whose first key column stores integers as integers */
   int32_t has_row;   /* the last move answered a row */
   int32_t unpacked;  /* `row` holds the current row */
   int32_t nfields;   /* the fields the current row's record holds */
@@ -565,6 +571,7 @@ static void cursor_free(nishsqlite_cursor *cur) {
   if (cur->row) sqlite3DbFree(db, cur->row);
   sqlite3KeyInfoUnref(cur->ki);
   sqlite3_free(cur->buf);
+  sqlite3_free(cur->counts);
   sqlite3_free(cur);
 }
 
@@ -827,7 +834,7 @@ static int main_is_utf8(nishsqlite_conn *c) {
  * has other columns, and SQLITE_NOMEM, all negated. */
 static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *columns) {
   sqlite3 *db = c->db;
-  int32_t is_index = 0, ncol = 0, alias = -1, nkey = 0;
+  int32_t is_index = 0, ncol = 0, alias = -1, nkey = 0, int_first = 0;
   Pgno root = 0;
   char *table = NULL;
   KeyInfo *ki = NULL;
@@ -842,6 +849,7 @@ static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *co
       ncol = s->ncol;
       nkey = s->nkey;
       alias = s->alias;
+      int_first = s->int_first;
       root = s->root;
       ki = sqlite3KeyInfoRef(s->ki);
       goto build;
@@ -862,6 +870,14 @@ static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *co
       rc = ki ? index_shape(c, name, want, &nkey, ki) : SQLITE_NOMEM;
       ncol = nkey + 1;
     }
+    /* A first key column with INTEGER or NUMERIC affinity holds an integer
+     * value as an integer, so `count_range`'s integer compare agrees with SQL's
+     * `col = k`; TEXT affinity would compare k as text. */
+    Index *ix = rc == SQLITE_OK ? sqlite3FindIndex(db, name, "main") : NULL;
+    if (ix) {
+      char aff = sqlite3TableColumnAffinity(ix->pTable, ix->aiColumn[0]);
+      int_first = aff == SQLITE_AFF_INTEGER || aff == SQLITE_AFF_NUMERIC;
+    }
   }
   sqlite3_free(table);
   if (rc == SQLITE_OK && sqlite3_str_errcode(want) != SQLITE_OK) rc = SQLITE_NOMEM;
@@ -880,7 +896,7 @@ static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *co
       sqlite3_free(s->name);
       sqlite3_free(s->columns);
       sqlite3KeyInfoUnref(s->ki);
-      *s = (nishsqlite_shape){n, cols, cookie, is_index, ncol, nkey, alias, root, sqlite3KeyInfoRef(ki)};
+      *s = (nishsqlite_shape){n, cols, cookie, is_index, ncol, nkey, alias, int_first, root, sqlite3KeyInfoRef(ki)};
       c->shape_next = (c->shape_next + 1) % NISH_SQLITE_SHAPES;
     } else {
       sqlite3_free(n);
@@ -910,6 +926,9 @@ build:;
   cur->ncol = ncol;
   cur->alias = alias;
   cur->is_index = is_index;
+  cur->int_first = int_first;
+  cur->seek.pKeyInfo = ki;
+  cur->seek.aMem = cur->key;
   cur->row = sqlite3VdbeAllocUnpackedRecord(ki);
   rc = cur->row ? SQLITE_OK : SQLITE_NOMEM;
   if (rc == SQLITE_OK) rc = sqlite3BtreeCursor(cur->btree, root, 0, is_index ? ki : NULL, cur->bt);
@@ -1033,6 +1052,17 @@ static int32_t unlocked_key_bytes(nishsqlite_cursor *cur, const uint8_t *buf, ui
   return rc;
 }
 
+/* The kept key, made at open, readied for a compare of its first `nfield`
+ * values: an integer seek sets its Mems in place and builds no record. */
+static UnpackedRecord *seek_key(nishsqlite_cursor *cur, int32_t nfield, int default_rc) {
+  UnpackedRecord *k = &cur->seek;
+  k->nField = (u16)nfield;
+  k->default_rc = (i8)default_rc;
+  k->errCode = 0;
+  k->eqSeen = 0;
+  return k;
+}
+
 /* Moves an index cursor to the first entry at or past the key (`op` GE or
  * GT), or the last at or before it (LE or LT), comparing only the key's
  * values, so a key shorter than the index is a prefix. This is the VDBE's
@@ -1042,14 +1072,8 @@ static int32_t unlocked_cursor_seek(nishsqlite_cursor *cur, int32_t op) {
   if (cur == NULL || !cur->is_index || cur->nkeyparts < 1 || op < NISH_SQLITE_SEEK_GE ||
       op > NISH_SQLITE_SEEK_LT)
     return -SQLITE_MISUSE;
-  UnpackedRecord key;
-  memset(&key, 0, sizeof key);
-  key.pKeyInfo = cur->ki;
-  key.aMem = cur->key;
-  key.nField = (u16)cur->nkeyparts;
-  key.default_rc = op == NISH_SQLITE_SEEK_GT || op == NISH_SQLITE_SEEK_LE ? -1 : 1;
   int res = 0;
-  int rc = sqlite3BtreeIndexMoveto(cur->bt, &key, &res);
+  int rc = sqlite3BtreeIndexMoveto(cur->bt, seek_key(cur, cur->nkeyparts, op == NISH_SQLITE_SEEK_GT || op == NISH_SQLITE_SEEK_LE ? -1 : 1), &res);
   if (rc != SQLITE_OK) return moved(cur, rc, 0);
   if (op == NISH_SQLITE_SEEK_GE || op == NISH_SQLITE_SEEK_GT) {
     if (res < 0 || (res == 0 && op == NISH_SQLITE_SEEK_GT)) return stepped(cur, sqlite3BtreeNext(cur->bt, 0));
@@ -1061,35 +1085,42 @@ static int32_t unlocked_cursor_seek(nishsqlite_cursor *cur, int32_t op) {
 
 /* ---- Cursor columns ----------------------------------------------------- */
 
-/* The current row's record decoded into `row`, once per row. A record that
- * is all on its page is decoded where it lies; one that spills onto overflow
- * pages is copied whole into the cursor's buffer first, with zeroed slack
- * past it. SQLITE_MISUSE with no row, SQLITE_CORRUPT for a record longer than
- * SQLite allows. */
+/* The current entry's record: where it lies when it is all on its page,
+ * else copied whole into the cursor's buffer with zeroed slack past it.
+ * SQLITE_CORRUPT for a record longer than SQLite allows. */
+static int record_of(nishsqlite_cursor *cur, u32 *sz, const void **p) {
+  *sz = sqlite3BtreePayloadSize(cur->bt);
+  if (*sz > SQLITE_MAX_LENGTH) return SQLITE_CORRUPT;
+  u32 amt = 0;
+  *p = sqlite3BtreePayloadFetch(cur->bt, &amt);
+  if (amt >= *sz) return SQLITE_OK;
+  if (cur->cap < *sz + NISH_SQLITE_SLACK) {
+    u64 cap = (u64)cur->cap * 2;
+    if (cap < (u64)*sz + NISH_SQLITE_SLACK) cap = (u64)*sz + NISH_SQLITE_SLACK;
+    u8 *buf = sqlite3_realloc64(cur->buf, cap);
+    if (buf == NULL) return SQLITE_NOMEM;
+    cur->buf = buf;
+    cur->cap = (u32)cap;
+  }
+  int rc = sqlite3BtreePayload(cur->bt, 0, *sz, cur->buf);
+  if (rc != SQLITE_OK) return rc;
+  memset(cur->buf + *sz, 0, NISH_SQLITE_SLACK);
+  *p = cur->buf;
+  return SQLITE_OK;
+}
+
+/* The current row's record decoded into `row`, once per row. SQLITE_MISUSE
+ * with no row, SQLITE_CORRUPT for a record longer than SQLite allows. */
 static int row_of(nishsqlite_cursor *cur) {
   if (!cur->has_row) return SQLITE_MISUSE;
   if (cur->unpacked) return SQLITE_OK;
   if (sqlite3BtreeCursorHasMoved(cur->bt)) return SQLITE_ABORT;
-  u32 sz = sqlite3BtreePayloadSize(cur->bt);
-  if (sz > SQLITE_MAX_LENGTH) return SQLITE_CORRUPT;
+  u32 sz = 0;
+  const void *p = NULL;
+  int rc = record_of(cur, &sz, &p);
+  if (rc != SQLITE_OK) return rc;
   cur->nfields = 0;
   if (sz > 0) {
-    u32 amt = 0;
-    const void *p = sqlite3BtreePayloadFetch(cur->bt, &amt);
-    if (amt < sz) {
-      if (cur->cap < sz + NISH_SQLITE_SLACK) {
-        u64 cap = (u64)cur->cap * 2;
-        if (cap < (u64)sz + NISH_SQLITE_SLACK) cap = (u64)sz + NISH_SQLITE_SLACK;
-        u8 *buf = sqlite3_realloc64(cur->buf, cap);
-        if (buf == NULL) return SQLITE_NOMEM;
-        cur->buf = buf;
-        cur->cap = (u32)cap;
-      }
-      int rc = sqlite3BtreePayload(cur->bt, 0, sz, cur->buf);
-      if (rc != SQLITE_OK) return rc;
-      memset(cur->buf + sz, 0, NISH_SQLITE_SLACK);
-      p = cur->buf;
-    }
     cur->row->nField = (u16)(cur->nkeyfields + 1);
     sqlite3VdbeRecordUnpack((int)sz, p, cur->row);
     cur->nfields = cur->row->nField;
@@ -1174,6 +1205,92 @@ static int64_t unlocked_cursor_rowid(nishsqlite_cursor *cur) {
   return sqlite3_value_int64((sqlite3_value *)&cur->row->aMem[cur->ncol - 1]);
 }
 
+/* ---- Range counts ------------------------------------------------------- */
+
+/* Counts an index's entries whose first key column is k, for each k in
+ * [lo, hi], into the cursor's `counts[k - lo]` (read back with
+ * `count_at`), in one seek and one forward walk: each entry's record is
+ * compared with k by SQLite's record compare, never unpacked. It uses the
+ * kept key's first value, so it leaves no seek key set, and leaves the cursor
+ * on no row. `n` is the caller's room, which bounds the buffer: it grows to
+ * the largest span asked and is kept. It answers the entries counted, or
+ * negated: SQLITE_MISUSE for a table cursor, SQLITE_MISMATCH for an index
+ * whose first key column does not store integers as integers, SQLITE_RANGE
+ * for lo > hi or a span longer than `n`, SQLITE_NOMEM, SQLITE_TOOBIG past
+ * INT32_MAX entries, and SQLite's code when a page cannot be read. */
+static int32_t unlocked_cursor_count_range(nishsqlite_cursor *cur, int64_t lo, int64_t hi, uint64_t n) {
+  if (cur == NULL || !cur->is_index) return -SQLITE_MISUSE;
+  if (!cur->int_first) return -SQLITE_MISMATCH;
+  if (lo > hi || (uint64_t)hi - (uint64_t)lo >= n) return -SQLITE_RANGE;
+  uint64_t span = (uint64_t)hi - (uint64_t)lo + 1;
+  cur->ncounts = 0;
+  if (span > cur->counts_cap) {
+    int64_t *counts = sqlite3_realloc64(cur->counts, span * sizeof *counts);
+    if (counts == NULL) return -SQLITE_NOMEM;
+    cur->counts = counts;
+    cur->counts_cap = span;
+  }
+  int64_t *out = cur->counts;
+  memset(out, 0, (size_t)span * sizeof *out);
+  (void)unlocked_key_reset(cur);
+  /* In index order: lo up to hi, or hi down to lo under DESC. */
+  int desc = (cur->ki->aSortFlags[0] & KEYINFO_ORDER_DESC) != 0;
+  uint64_t at = desc ? span - 1 : 0; /* k - lo for the k the walk is on */
+  Mem *k = &cur->key[0];
+  sqlite3VdbeMemSetInt64(k, desc ? hi : lo);
+  UnpackedRecord *key = seek_key(cur, 1, 1);
+  int res = 0;
+  int rc = sqlite3BtreeIndexMoveto(cur->bt, key, &res);
+  if (rc == SQLITE_OK && res < 0) rc = sqlite3BtreeNext(cur->bt, 0);
+  key->default_rc = 0;
+  int32_t total = 0;
+  while (rc == SQLITE_OK) {
+    u32 sz = 0;
+    const void *p = NULL;
+    if ((rc = record_of(cur, &sz, &p)) != SQLITE_OK) break;
+    /* row_of reads an empty record as zero fields, but a compare reads the
+     * record's header size from its first byte, which an empty one does not
+     * have; and an index entry always holds at least its rowid. */
+    if (sz == 0) {
+      rc = SQLITE_CORRUPT;
+      break;
+    }
+    int c = sqlite3VdbeRecordCompare((int)sz, p, key);
+    if (key->errCode) {
+      rc = key->errCode;
+      break;
+    }
+    /* The entry sorts after k: move k on in index order until it does not. */
+    while (c > 0) {
+      if (desc ? at == 0 : at == span - 1) goto done;
+      at = desc ? at - 1 : at + 1;
+      sqlite3VdbeMemSetInt64(k, (int64_t)((uint64_t)lo + at));
+      c = sqlite3VdbeRecordCompare((int)sz, p, key);
+    }
+    if (c == 0) {
+      if (total == INT32_MAX) {
+        rc = SQLITE_TOOBIG;
+        break;
+      }
+      out[at]++;
+      total++;
+    }
+    rc = sqlite3BtreeNext(cur->bt, 0);
+  }
+done:
+  sqlite3VdbeMemSetNull(k);
+  moved(cur, SQLITE_OK, 0);
+  if (rc != SQLITE_OK && rc != SQLITE_DONE) return -rc;
+  cur->ncounts = span;
+  return total;
+}
+
+/* The last successful count's entry `i`: -1 past its span, and for every
+ * `i` after a count that failed past its refusals. */
+static int64_t unlocked_cursor_count_at(nishsqlite_cursor *cur, uint64_t i) {
+  return cur != NULL && i < cur->ncounts ? cur->counts[i] : -1;
+}
+
 /* ---- Locking ------------------------------------------------------------ */
 
 /* Every cursor entry point holds its connection's `db->mutex` around the
@@ -1244,6 +1361,12 @@ int32_t nishsqlite_key_bytes(int32_t h, const uint8_t *buf, uint64_t n, int32_t 
   NISH_SQLITE_CURSOR(int32_t, unlocked_key_bytes(cur, buf, n, off, len));
 }
 
+int32_t nishsqlite_cursor_count_range(int32_t h, int64_t lo, int64_t hi, uint64_t n) {
+  NISH_SQLITE_CURSOR(int32_t, unlocked_cursor_count_range(cur, lo, hi, n));
+}
+int64_t nishsqlite_cursor_count_at(int32_t h, uint64_t i) {
+  NISH_SQLITE_CURSOR(int64_t, unlocked_cursor_count_at(cur, i));
+}
 int32_t nishsqlite_cursor_seek(int32_t h, int32_t op) {
   NISH_SQLITE_CURSOR(int32_t, unlocked_cursor_seek(cur, op));
 }

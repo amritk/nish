@@ -719,6 +719,9 @@ export class Statement {
   }
 }
 
+// Cursor.countRange's two calls: the count, then each count read back.
+declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
+declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
 declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, text: u8[], ntext: u64): i32
 
 /**
@@ -860,6 +863,46 @@ export class Cursor {
    */
   seek(op: i32): Result<boolean, i32> {
     return moved(nishsqlite_cursor_seek(this.handle, op))
+  }
+
+  /**
+   * Counts an index's entries whose first key column is `k`, for each `k`
+   * from `lo` to `hi`, into `out[k - lo]`, in one seek and one walk of the
+   * index, for an index whose first column has INTEGER or NUMERIC affinity.
+   * On a full index that is what `SELECT count(*) ... WHERE col = k` answers
+   * for each `k`; a partial index holds only the rows its WHERE admits, and
+   * counts only those. A count that reaches its walk clears the seek key and
+   * leaves the cursor on no row, whatever it answers; one refused first leaves
+   * both as they were. Copying the counts into `out` takes one call per key,
+   * and one more when `out` is longer than the span. `out` past the span, and
+   * all of it on an `Err`, is left as it was.
+   *
+   * @param lo The first key counted.
+   * @param hi The last key counted, at least `lo`.
+   * @param out Where the counts go; at least `hi - lo + 1` long.
+   * @returns The number of entries counted, or `Err` with `SQLITE_MISUSE` for
+   *   a table cursor, `SQLITE_MISMATCH` for an index whose first column has
+   *   another affinity, `SQLITE_RANGE` when `lo > hi` or the span is longer
+   *   than `out`, or the code SQLite fails with, as for `first`.
+   */
+  countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32> {
+    const n: i32 = nishsqlite_cursor_count_range(this.handle, lo, hi, toU64(out.length))
+    if (n < 0) {
+      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
+      // spelled in u32 so no negation of an i32 can overflow.
+      return Err(toI32(toU32(~n) + toU32(1)))
+    }
+    for (let i = 0; i < out.length; i++) {
+      const c: i64 = nishsqlite_cursor_count_at(this.handle, toU64(i))
+      if (c < 0) {
+        break
+      }
+      // The call above ends what the loop proved of `i`.
+      if (i < out.length) {
+        out[i] = c
+      }
+    }
+    return Ok(n)
   }
 
   /**

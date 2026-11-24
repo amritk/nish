@@ -3857,6 +3857,64 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
 
+<!-- handler-coalesce:begin -->
+## Coalesced ring sends, before and after (uring-send-coalesce S2)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. The stand-in is S4's ([above](#io_uring-under-the-handler-wp63-s4)): `bench/handler-ring/server.ts` on rings (`ring`), and the `Http1Server` design on rings (`h1-ring`: `bench/http1-server.ts`, the HTTP/1.1 load-test server, as one process under `BENCH_RING=1`, so its head and body go out through the ring's sends). The change measured is #2252 (`c12ccb0f`), whose only `src/`, `std/` or `runtime/` file is `runtime/runtime-uring.c`: a ring slot's queued sends go out as one SEND from a per-ring buffer pool. `src/` is the same on both sides, so the two compilers build the same code and link different runtimes:
+
+- **ring**, **h1-ring**: built by `build/nish` at the bench commit, whose `runtime/` is `c12ccb0f`'s (after).
+- **ring-copy**, **h1-ring-copy**: a byte-identical copy of the after build; its gap to the after build is the noise band.
+- **ring-base**, **h1-ring-base**: built by a compiler from a worktree at `b2c55694` (`c12ccb0f^`, before), passed as `--base-compiler`. `run.sh` builds the base binary of each requested `-base` design and refuses to go on if it matches its after build byte for byte.
+
+`run.sh` runs the arms in interleaved rounds, with the order rotated each round. `out/rsp` and `in/rsp` are the TCP segments `/proc/net/snmp` counted (`OutSegs`, `InSegs`) over loadgen's window, divided by the responses in it, as `bench/handler-ring/segs.c` samples them every 10 ms. The counters belong to the network namespace, so they count the server's segments and the load generator's, data and pure ACKs alike, on loopback.
+
+Bench code as #2251 adds it (`bench/handler-ring/run.sh` and `segs.c`; the run used them at that pull request's branch commit `c664c0ed`, and the one later change, which narrows `run.sh`'s identical-build check to the requested `-base` designs, changes no binary or printed field), on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The server is pinned to CPU 0 and the load to CPUs 1 to 3, with `--nodb` (`BENCH_NODB=1`: every server answers `/plaintext`'s 129 bytes without a query). 5 rounds at each count:
+
+```sh
+bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler <before>/build/nish \
+  --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base h1"
+bash bench/handler-ring/run.sh --nodb --conns 96000 --think 4 --warmup 4 --base-compiler <before>/build/nish \
+  --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base"
+```
+
+At 18,000 connections the load is 30,000 requests a second, a 3-second warm-up and a 10-second window. At 96,000 it is a closed loop with 4 seconds' think time, about 24,000 requests a second, with a 4-second warm-up. The epoll `h1` design runs only at 18,000: one process under the 20,000 limit cannot hold 96,000 descriptors. Every arm held every connection in every round, and none lost a request (`send_failed`, `closed` and `lat_lost` were 0 in every round).
+
+Medians of 5 (min to max). `user` and `sys` are medians of the server's user and system CPU a request. `PSS MB` is the median of the five rounds' `srv_pss_mb` (MiB) with its range, read from the per-round lines; the summary's own `PSS MB` column is the last round's. `p99` is the median of the rounds' p99 latency, and no latency comparison is claimed from it (below):
+
+| C | design | server µs/req | user | sys | out/rsp | in/rsp | box µs/req | req/s | PSS MB | p99 ms |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 18,000 | ring | 17.07 (16.30–17.44) | 2.23 | 14.57 | 3.000 | 3.000 | 33.07 | 30,000 | 11.1 (11.1–11.2) | 0.73 |
+| 18,000 | ring-copy | 16.60 (16.00–18.17) | 2.30 | 14.23 | 3.000 | 3.000 | 32.64 | 29,998 | 11.2 (11.0–11.3) | 0.73 |
+| 18,000 | ring-base | 17.00 (16.27–18.00) | 2.40 | 14.60 | 3.000 | 3.000 | 33.27 | 30,000 | 10.7 (10.6–10.7) | 1.68 |
+| 18,000 | h1-ring | 17.13 (16.17–18.20) | 2.23 | 14.70 | 3.000 | 3.000 | 31.57 | 30,000 | 10.0 (9.9–10.0) | 1.04 |
+| 18,000 | h1-ring-copy | 16.37 (15.93–18.03) | 2.53 | 13.79 | 3.000 | 3.000 | 32.57 | 30,000 | 10.1 (9.9–10.6) | 0.70 |
+| 18,000 | h1-ring-base | 16.73 (16.53–17.67) | 3.00 | 14.23 | 3.000 | 3.000 | 32.07 | 30,000 | 9.6 (9.5–9.7) | 1.00 |
+| 18,000 | h1 (epoll) | 11.90 (10.87–13.27) | 1.57 | 10.20 | 3.000 | 3.000 | 27.73 | 30,000 | 3.0 (3.0–3.0) | 0.76 |
+| 96,000 | ring | 14.26 (14.25–15.71) | 2.25 | 12.13 | 3.002 | 3.002 | 27.25 | 23,995 | 33.3 (32.9–33.8) | 2.66 |
+| 96,000 | ring-copy | 14.75 (13.75–15.09) | 2.33 | 12.21 | 3.003 | 3.003 | 27.96 | 23,995 | 32.8 (32.5–34.5) | 2.27 |
+| 96,000 | ring-base | 14.84 (14.38–15.97) | 2.29 | 12.54 | 3.002 | 3.002 | 27.63 | 23,995 | 31.4 (31.1–31.5) | 1.36 |
+| 96,000 | h1-ring | 15.00 (14.50–15.50) | 2.21 | 12.88 | 3.001 | 3.001 | 28.84 | 23,996 | 32.0 (31.5–32.5) | 2.66 |
+| 96,000 | h1-ring-copy | 14.42 (13.71–14.97) | 2.17 | 12.51 | 3.001 | 3.001 | 27.17 | 23,994 | 31.9 (31.8–32.0) | 1.65 |
+| 96,000 | h1-ring-base | 14.92 (14.80–15.29) | 2.25 | 12.63 | 3.001 | 3.001 | 28.46 | 23,995 | 30.4 (30.3–30.8) | 1.94 |
+
+After against before, as `run.sh` prints it (the change in server CPU a request at the medians, and the noise band, the after build against its copy):
+
+| C | design | after vs before | band |
+| ---: | --- | ---: | ---: |
+| 18,000 | ring | 0.4% more | 2.8% |
+| 18,000 | h1-ring | 2.4% more | 4.4% |
+| 96,000 | ring | 3.9% less | 3.4% |
+| 96,000 | h1-ring | 0.5% more | 3.9% |
+
+**Packets per response: no change.** The before and after builds counted the same segments per response at each count: 3.000 at 18,000 connections, and 3.001 to 3.002 at 96,000 (the copy, 3.001 to 3.003). On this loopback route, before #2252 already sent no more segments a response than after it, so this run shows nothing the coalescing removed from the wire. The run does not count SENDs (it reads no `nish_uring_stats`), so it does not show how many the after build coalesced on this route either. These counts are the namespace's, request and ACKs included; a route that splits a response's sends across segments, which this one does not show, is where a change would appear.
+
+**CPU per request: three of four comparisons inside the noise band, and no gain claimed.** The fourth, `ring` at 96,000, is 3.9% less against a 3.4% band; the same design at 18,000 is 0.4% more, and the per-round figures overlap (after 14.25 to 15.71 µs, before 14.38 to 15.97), so this run does not claim it as a gain.
+
+**PSS: up after #2252, in every round.** At 96,000 connections `ring` rose 1.9 MiB at the medians (33.3 against 31.4, 6.1%) and `h1-ring` 1.6 MiB (32.0 against 30.4, 5.3%); at 18,000 both rose 0.4 MiB (11.1 against 10.7, and 10.0 against 9.6). At both counts and in both designs, every after round is above every before round, and the copy's range sits with the after build's, not the before's. The rise grows with the connection count, about 16 to 22 bytes a connection at 96,000 and 18 to 29 at 18,000 (PSS is printed to 0.1 MiB, so each difference is ±0.1 MiB). The send buffer pool #2252 adds is capped at 32 buffers of 16 KiB, 0.5 MiB a ring (`UR_SENDPOOL_MAX`, `UR_CHUNK`), so it alone does not account for 1.9 MiB; #2252 also adds per-slot state. This run measures that the process is larger; it does not attribute the bytes.
+
+What this does not say: these are one server process each on loopback, and only `--nodb`; a route over a real network, or a response large enough to need more than one segment, was not measured. Nor does it claim a latency change either way. The `p99` medians flip direction between the counts (`ring` 0.73 against `ring-base` 1.68 ms at 18,000, 2.66 against 1.36 at 96,000), and a build and its byte-identical copy differ by as much (`h1-ring` 2.66 against its copy's 1.65 ms at 96,000, 1.04 against 0.70 at 18,000), so the column is inside its own noise.
+<!-- handler-coalesce:end -->
+
 <!-- mul-high:begin -->
 ## The `mulHigh` builtin in P-256 and the JSON tokenizer (WP41 S1)
 
@@ -3892,13 +3950,14 @@ The wasm32 build of the tokenizer was not timed and is not byte-identical. After
 <!-- sqlite-cursor:begin -->
 ## The feed through cursors against SQL
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed three ways through `nish/sqlite`. All three read the 20 newest posts with each author's username and like count, and fold them the same way:
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed four ways through `nish/sqlite`. All four read the 20 newest posts with each author's username and like count, and fold them the same way:
 
 - **`feed`** is SQL. One statement is prepared once; each call steps it 21 times, reads every column and resets. The statement has no parameters, so nothing is bound.
-- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx`.
-- **`feed-cursor`** is the same walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
+- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx` by a `seek` and then a `next` and a `columnI64` per like.
+- **`feed-cursor-count`** is the same walk with the likes counted in one `countRange` call for the whole feed ([below](#like-counts-in-one-call)).
+- **`feed-cursor`** is the `feed-cursor-walk` walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
 
-Every run of all three printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the two cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy.
+Every run of every workload printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy. The first two tables predate `feed-cursor-count` and time the other three.
 
 `node bench/sqlite/run.mjs` (12 rounds after a warm-up round) with the bench code of commit `c940ecb3`, which includes #1801 (`9996c9b1`): `openCursor` caches checked cursor shapes, and `beginRead`/`endRead` keep `BEGIN`, the schema read and `COMMIT` prepared. The machine is an Intel Xeon @ 2.10GHz with 4 logical cores, Linux 6.18.44, Ubuntu clang 18.1.3 and SQLite 3.54.1. ns per call:
 
@@ -3939,6 +3998,41 @@ A cursor call used to look its handle up and then ask SQLite whether the read ha
 
 The whole machine ran slower in this run than in the one above (`feed` 21,963 against 18,082 ns at the median), so its figures compare with each other, not with that table.
 
+### Like counts in one call
+
+`feed-cursor-count` reads the posts and authors as `feed-cursor-walk` does, then counts all 20 posts' likes in one `Cursor.countRange(minId, maxId, counts)` call over the posts' id span and reads each post's count as `counts[id - minId]`: one seek and one walk of `likes_post_id_idx` inside the adapter for the whole feed, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeedCounted` and `walkFeed`). When the span does not fit the 1,024-entry buffer it falls back to one `countRange(id, id, counts)` per post. The bench database's 20 newest posts are ids 499,981 to 500,000, so every call, timed or `--validate`, takes the one-call path: the fallback is unexercised. `feed-cursor-walk` is the per-like walk, unchanged from `main`.
+
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `a2f87c15`, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 17,739 / 18,900 (2,323) | 17,763 / 18,909 (3,385) | 25 / 9 |
+| `feed-cursor-walk` | 12,534 / 13,311 (1,406) | 11,341 / 13,033 (958) | 1,193 / 277 |
+| `feed-cursor-count` | 9,758 / 10,567 (979) | 7,821 / 10,484 (1,218) | 1,936 / 82 |
+| `feed-cursor` | 12,380 / 16,660 (2,618) | 14,979 / 15,953 (3,090) | 2,599 / 706 |
+
+The noise bands are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures.
+
+**`feed-cursor-count` less `feed-cursor-walk` is −2,744 ns at the median and −2,776 ns at the min, both on the build.** This is derived: it is the difference of two rows of the table, not a timed row of its own. The median gap is larger than both noise bands (277 and 82) and every IQR of the two rows (1,406, 958, 979 and 1,218), and the walk's copy (13,033 ns) is slower than the count's build (10,567 ns). The min gap is larger than both min bands (1,193 and 1,936).
+
+Against `feed` in the same rounds, `feed-cursor-count` is 8,333 ns less a call at the median (−44.1 % of `feed`'s median, 18,900 ns), and `feed-cursor-walk` is 5,589 ns less (−29.6 %).
+
+#### The integer seek against `main`
+
+An integer seek now reuses the cursor's own `UnpackedRecord`, made at open, setting only its `nField`, `default_rc`, `errCode` and `eqSeen` before each seek, instead of building one per seek ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `main`'s seek also builds its record on the stack and allocates nothing, so what changes is the per-seek setup, not an allocation. `feed-cursor-walk` and `feed-cursor` reach it on every like count's `seek`.
+
+`node bench/sqlite/run.mjs --base origin/main --rounds 12 --no-rust`, base `b2c55694`, with this branch's `std/` and `runtime/` at commit `88a30a8a` and `main`'s `bench/sqlite/main.ts` and `run.mjs` checked out for the run: `--base` builds this tree's `main.ts` against the base's `std/`, which has no `countRange`. `walkFeed` is byte-identical on both sides. The build, its copy and the base were timed in the same rounds, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Base min / median (IQR) | Noise band, min / median | Base less build, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `feed` (SQL) | 15,065 / 19,846 (3,481) | 13,837 / 21,088 (5,025) | 16,876 / 21,021 (4,824) | 1,228 / 1,242 | +1,811 / +1,175 |
+| `feed-cursor-walk` | 9,994 / 13,291 (2,065) | 9,816 / 12,868 (856) | 12,128 / 13,241 (2,881) | 179 / 422 | +2,134 / −50 |
+| `feed-cursor` | 11,520 / 17,408 (3,913) | 14,847 / 16,183 (2,660) | 14,205 / 17,268 (4,011) | 3,327 / 1,226 | +2,685 / −141 |
+
+The last two columns are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures: from the table's medians `feed-cursor` is −140.
+
+**A gain for the walk is not shown.** At the median, the verdict statistic, the base is 50 ns faster than the build, inside the 422 ns noise band. At the min the base is 2,134 ns slower, outside the 179 ns band but inside the base's IQR (2,881). `feed-cursor` moved −141 ns at the median, inside its 1,226 ns band. `feed`, which makes no cursor call, moved +1,175 ns at the median, inside its 1,242 ns band.
+
 ### One call per row: `readRow`
 
 `feed-cursor-row` is `feed-cursor-walk` with each post's `user_id`, `body` and `created_at` read by one `Cursor.readRow` call, and its author's `username` by another (`bench/sqlite/main.ts`, `walkFeedRows`). The per-column walk makes four column calls a post: `columnI64` and two `columnInto` on the post, one `columnInto` on the author. The rowid seeks and the likes count are the same in both. Both run in the same rounds, and every run of both printed `rows 200000 checksum 1510587328`, `feed`'s line.
@@ -3953,6 +4047,25 @@ The whole machine ran slower in this run than in the one above (`feed` 21,963 ag
 
 **`readRow` was slower here: `feed-cursor-row` less `feed-cursor-walk` is +5,048 ns at the median and +2,728 ns at the min; between the copies it is +4,178 and +1,195.** At the median the gap is larger than both noise bands (343 and 529) and than `feed-cursor-row`'s IQR (4,949), but smaller than its copy's (5,580), so this run does not resolve it beyond that spread. Two calls a post in place of four do not show as a gain at this row width: each `readRow` encodes its column list into a byte buffer, the adapter reads the columns twice (once to size the text, once to copy it) and converts each TEXT column's bytes to an integer the walk never asks for, and the method decodes 20 bytes a column back into `ints` and `spans`.
 <!-- sqlite-cursor:end -->
+
+<!-- sqlite-vfs:begin -->
+## SQLite's unix-excl VFS against the default
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs --variant unix-excl` adds a byte-identical copy of the Nish build to the rounds and opens the seed through it as `file:<db>?vfs=unix-excl`, with `OPEN_URI`; the build itself opens the plain path on SQLite's default `unix` VFS. Both keep the seed's WAL and `synchronous=NORMAL`. The decision this feeds is [docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md).
+
+12 rounds with the bench code of commit `f3a10584`, SQLite 3.54.1, on a 4-core cloud container (Intel Xeon @ 2.10GHz). Every workload's rows and checksum match across the binaries. ns per call; the band is the build against its copy.
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | unix-excl min / median (IQR) | unix-excl − build, min / median | Band, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `lookup` | 5,290 / 6,206 (574) | 5,930 / 6,284 (334) | 5,231 / 5,611 (338) | −59 / −595 (−9.6%) | 640 / 78 |
+| `feed` | 14,124 / 18,281 (3,320) | 14,995 / 17,916 (1,175) | 13,474 / 17,632 (1,269) | −649 / −649 (−3.6%) | 871 / 365 |
+| `feed-cursor-walk` | 10,491 / 12,704 (526) | 12,310 / 12,811 (2,490) | 10,572 / 12,692 (2,285) | +81 / −12 (−0.1%) | 1,819 / 107 |
+| `feed-cursor` | 11,802 / 16,981 (5,562) | 12,883 / 15,012 (3,115) | 11,207 / 14,241 (1,624) | −595 / −2,740 (−16.1%) | 1,081 / 1,969 |
+| `insert` | 14,584 / 16,992 (1,308) | 16,338 / 18,215 (1,098) | 13,755 / 15,394 (788) | −829 / −1,599 (−9.4%) | 1,754 / 1,223 |
+| `insert-txn` | 4,463 / 5,336 (478) | 4,552 / 5,392 (462) | 4,670 / 5,451 (423) | +207 / +115 (+2.2%) | 89 / 56 |
+
+The verdict statistic is the median. `lookup` and `insert` are faster on unix-excl by more than the band and both IQRs. `feed` and `feed-cursor` are faster by more than the band but by less than the build's IQR, so this run does not separate them from noise. `feed-cursor-walk` holds one read transaction for the whole loop and does not move. `insert-txn` is 115 ns slower, past its 56 ns band but inside both IQRs; it makes the same system calls on both VFSes, so the run shows no cost and does not bound one smaller than its spread.
+<!-- sqlite-vfs:end -->
 
 <!-- sqlite-pgo:begin -->
 ## PGO and the CPU level on the SQLite feed

@@ -12531,6 +12531,24 @@ int main(void) {
         shapesRun.stdout === fs.readFileSync(path.join(root, shapesDir, "expected.out"), "utf8"),
       shapesDebug.stderr + (shapesRun ? shapesRun.stdout.slice(-2000) + shapesRun.stderr : "")
     )
+    // countRange's program with SQLite's counters and asserts on. Its steady
+    // seek and count loop is then measured, not trivially flat: its last line
+    // says the counters ran, and the rest is the default build's output.
+    const countDir = path.join("tests", "link", "std_sqlite_cursor_count")
+    const countDebug = link(path.join(countDir, "main.ts"), "count-memstatus", [], {
+      NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1 -DSQLITE_DEBUG",
+    })
+    const countRun = countDebug.status === 0 ? runOut("count-memstatus") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_count's countRange reuses its buffer: no allocation after the first pass (SQLITE_DEFAULT_MEMSTATUS=1, -DSQLITE_DEBUG)",
+      countRun !== null &&
+        countRun.status === 0 &&
+        countRun.stdout ===
+          fs
+            .readFileSync(path.join(root, countDir, "expected.out"), "utf8")
+            .replace("memory counted: false\n", "memory counted: true\n"),
+      countDebug.stderr + (countRun ? countRun.stdout.slice(-2000) + countRun.stderr : "")
+    )
     // The default build has no virtual-table module, so the schema program
     // makes an rtree only when SQLite is built with one.
     const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {
@@ -18979,10 +18997,10 @@ if (dealtHere("runtimeChecks")) {
       const exe = path.join(buildDir, "uring-test")
       const cc = spawnSync(
         "clang",
-        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "-o", exe],
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "runtime/runtime-net.c", "-Iruntime", "-o", exe],
         { cwd: root, encoding: "utf8" }
       )
-      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
+      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
         ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
@@ -18997,6 +19015,11 @@ if (dealtHere("runtimeChecks")) {
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
         ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+        ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
+        ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
+        ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)"],
+        ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
         const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })
@@ -19428,31 +19451,97 @@ if (dealtHere("runtimeChecks")) {
     // to bytes 4 and 8. That mismatch made the wasi profile hand out wild pointers for any
     // program allocating from compiled code. -fsyntax-only needs no sysroot and no linker,
     // so the guard runs wherever clang does.
-    const abiSrc = path.join(buildDir, "abi_layout.c")
+    //
+    // The arena and array assertions are derived, not typed out. The field types come
+    // from `ARENA_TYPE` and `ARRAY_TYPE` in src/runtime.ts, the strings the compiler
+    // writes into every module. They are laid out the way LLVM lays out a non-packed
+    // struct: an `i64` is 8 bytes aligned to 8 on both targets, and an `i8*` is the
+    // target's pointer, which clang reports for each target as `__SIZEOF_POINTER__`.
+    // The C names are pinned here by the index the compiler means them at (the
+    // `inlineAllocator` GEPs in src/runtime.ts, the array GEPs, the wasm loader), not
+    // read from nish.h, so reordering nish.h's fields fails too. Each named field is
+    // asserted at its IR offset and with its IR size, and the struct at its IR size.
+    // The numbers used to be typed out here, so an `ARENA_TYPE` edit that moves fields
+    // only where a pointer is 4 bytes (`off` turned from `i64` into `i8*`) passed every
+    // check: the C side still matched the old numbers, and nothing moves on the host
+    // the smoke run above links for. A type this layout does not know, a definition
+    // the pattern no longer finds, or a field count the names do not cover fails the
+    // derivation check. The clang runs below still run then, with what is left.
+    const abiRuntimeTs = fs.readFileSync(path.join(root, "src", "runtime.ts"), "utf8")
+    const abiIrFields = (constant, struct) => {
+      const m = abiRuntimeTs.match(new RegExp(`${constant}: string = "%struct\\.${struct} = type \\{ ([^}]*) \\}"`))
+      return m === null ? null : m[1].split(", ")
+    }
+    const abiStructs = [
+      { c: "struct nish_arena", ir: abiIrFields("ARENA_TYPE", "nish_arena"), names: ["buf", "off", "cap", "chunks"] },
+      { c: "nish_array", ir: abiIrFields("ARRAY_TYPE", "nish_array"), names: ["len", "cap", "data"] },
+    ]
+    /** The offsets, field sizes and size LLVM gives a non-packed struct of `types` when a pointer is `ptr` bytes, or null for a type it does not know. */
+    const abiIrLayout = (types, ptr) => {
+      let at = 0
+      let align = 1
+      const offsets = []
+      const sizes = []
+      for (const type of types) {
+        const bytes = type === "i64" ? 8 : type.endsWith("*") ? ptr : 0
+        if (bytes === 0) return null
+        at = Math.ceil(at / bytes) * bytes
+        offsets.push(at)
+        sizes.push(bytes)
+        at += bytes
+        align = Math.max(align, bytes)
+      }
+      return { offsets, sizes, size: Math.ceil(at / align) * align }
+    }
     const abiInclude = `-I${path.join(root, "runtime")}`
-    fs.writeFileSync(
-      abiSrc,
+    const abiTargets = ["host", "wasm32-unknown-unknown"].map((target) => {
+      const flags = target === "host" ? [] : [`--target=${target}`]
+      const macros = spawnSync("clang", [...flags, "-dM", "-E", "-x", "c", "/dev/null"], { encoding: "utf8" })
+      const ptr = /#define __SIZEOF_POINTER__ (\d+)/.exec(String(macros.stdout))
+      return { target, flags, ptr: ptr === null ? null : Number(ptr[1]) }
+    })
+    const abiAsserts = (ptr) => {
+      if (ptr === null) return null
+      const lines = []
+      for (const s of abiStructs) {
+        const laid = s.ir === null ? null : abiIrLayout(s.ir, ptr)
+        if (laid === null || s.names.length !== s.ir.length) return null
+        const irType = `{ ${s.ir.join(", ")} }`
+        lines.push(`_Static_assert(sizeof(${s.c}) == ${laid.size}, "${s.c} is the size of ${irType}");`)
+        s.names.forEach((name, i) => {
+          const what = `${s.c}.${name} is field ${i} of ${irType}`
+          lines.push(`_Static_assert(offsetof(${s.c}, ${name}) == ${laid.offsets[i]}, "${what}");`)
+          lines.push(`_Static_assert(sizeof(((${s.c} *)0)->${name}) == ${laid.sizes[i]}, "${what}");`)
+        })
+      }
+      return lines
+    }
+    const abiDerived = abiTargets.map(({ ptr }) => abiAsserts(ptr))
+    check(
+      "the runtime ABI asserts are derived from src/runtime.ts's ARENA_TYPE and ARRAY_TYPE on every target",
+      abiDerived.every((lines) => lines !== null),
       [
-        "/* Generated by tests/run.js: the runtime ABI layouts, asserted per target. */",
-        "#include <stddef.h>",
-        '#include "nish.h"',
-        '_Static_assert(sizeof(struct nish_arena) == 32, "arena: %struct.nish_arena = { i8*, i64, i64, i8* }");',
-        '_Static_assert(offsetof(struct nish_arena, off) == 8, "arena.off is the field the inlined allocator bumps");',
-        '_Static_assert(offsetof(struct nish_arena, cap) == 16, "arena.cap is the field the inlined allocator compares");',
-        '_Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena.chunks");',
-        '_Static_assert(offsetof(nish_str, data) == 8, "nish_str = { i64 len, bytes }");',
-        '_Static_assert(sizeof(nish_array) == 24, "nish_array = { i64, i64, i8* }");',
-        '_Static_assert(offsetof(nish_array, cap) == 8, "nish_array.cap");',
-        '_Static_assert(offsetof(nish_array, data) == 16, "nish_array.data, the offset the wasm loader reads");',
-        "",
+        ...abiStructs.map((s) => `${s.c}: IR fields ${JSON.stringify(s.ir)}, names ${JSON.stringify(s.names)}`),
+        ...abiTargets.map((t) => `${t.target}: __SIZEOF_POINTER__ ${t.ptr}`),
       ].join("\n")
     )
     // Each target twice: the ordinary header, and the one a `--threads` host
     // includes. `-DNISH_THREADS` moves the arena into thread-local storage and
     // must move nothing else, so the same assertions have to hold under it —
     // a storage class is not a layout, and this is where that is written down.
-    for (const target of ["host", "wasm32-unknown-unknown"]) {
-      const flags = target === "host" ? [] : [`--target=${target}`]
+    for (const [at, { target, flags }] of abiTargets.entries()) {
+      const abiSrc = path.join(buildDir, `abi_layout_${target}.c`)
+      fs.writeFileSync(
+        abiSrc,
+        [
+          "/* Generated by tests/run.js: the runtime ABI layouts, asserted per target. */",
+          "#include <stddef.h>",
+          '#include "nish.h"',
+          ...(abiDerived[at] ?? []),
+          '_Static_assert(offsetof(nish_str, data) == 8, "nish_str = { i64 len, bytes }");',
+          "",
+        ].join("\n")
+      )
       for (const threads of [[], ["-DNISH_THREADS=1"]]) {
         const a = spawnSync(
           "clang",
@@ -37167,6 +37256,36 @@ for (const name of [
     const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
     check(
       `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
+    )
+  }
+}
+// `std_sqlite_vfs_wasi` answers differently on wasi, which is its point
+// (docs/sqlite-vfs.md): `?vfs=unix-excl` opens there, but wasi-libc has no
+// record locks, so WAL and the first write answer SQLITE_IOERR_LOCK (3850).
+// Its native run is held to expected.out by the link section, this one to
+// expected.wasi.out.
+if (!only || "std_sqlite_vfs_wasi".includes(only) || "wasi".includes(only)) {
+  const name = "std_sqlite_vfs_wasi"
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, `wasi_${name}`)
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnNish(
+      [path.join(linkDir, name, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.wasi.out"), "utf8")
+    check(
+      `link/${name}: on \`--profile wasi\` \`?vfs=unix-excl\` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )

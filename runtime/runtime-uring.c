@@ -134,6 +134,10 @@ struct nish_uring_stats {
   int64_t accept_pauses;
   int64_t bound_violations;
   int64_t max_accepting_rings;
+  int64_t sends;       /* SENDs written to an SQ, each a send's first or a requeue */
+  int64_t pool_new;    /* send buffers the pools ever allocated */
+  int64_t pool_held;   /* pool buffers that queued bytes hold now */
+  int64_t pool_cached; /* pool buffers on the rings' free lists now */
 };
 
 struct nish_uring_set;
@@ -318,6 +322,8 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 #define ST_PARKED 4u
 #define ST_HELD 8u
 #define ST_HUP 16u
+#define ST_MARKED 32u /* on its ring's `mlist`; a close keeps it (NURING-40) */
+#define ST_SHUT(how) (((uint32_t)(how) + 1) << 6) /* the sides a shutdown queued (NURING-43) */
 #define ST_GEN(st) ((st) >> 8)
 #define GEN_MASK 0xffffffu
 
@@ -339,10 +345,20 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 struct ur_send {
   struct ur_send *next, *prev_all, *next_all;
   uint32_t slot, gen;
-  uint32_t off, len;
+  uint32_t off, len, cap; /* `data` holds `cap` bytes; [off, len) are unsent */
   int in_flight, how;
+  int pooled;             /* a UR_CHUNK buffer from its ring's pool */
   uint8_t data[];
 };
+
+/* A pool buffer: a record and the bytes it carries. 16 KiB holds a response
+ * head and a typical body, so a head+body write fits one buffer and leaves as
+ * one SEND, and NR_AREA's 256 KiB is 16 of them. Bytes that outgrow it take
+ * one exact allocation instead. A ring keeps at most UR_SENDPOOL_MAX buffers
+ * free, 512 KiB, and frees what comes back past that (NURING-41). */
+#define UR_CHUNK 16384
+#define UR_CHUNK_DATA ((uint32_t)(UR_CHUNK - sizeof(struct ur_send)))
+#define UR_SENDPOOL_MAX 32
 
 struct ur_ring {
   int fd, efd;
@@ -364,6 +380,13 @@ struct ur_ring {
   uint32_t *qbytes;           /* per slot: bytes queued and not yet sent */
   uint32_t *parked;           /* slots whose recv waits for buffers */
   uint32_t nparked;
+  /* Slots whose queue gained a record since the ring last submitted: its
+   * SEND is written then, so the writes of one pass leave as one (NURING-40).
+   * ST_MARKED keeps a slot on `mlist` at most once, across a close too. */
+  uint32_t *mlist;
+  uint32_t nmarked;
+  struct ur_send *pool; /* free send buffers, linked by `next` */
+  uint32_t npool;
 };
 
 struct nish_uring_set {
@@ -624,6 +647,12 @@ static void ur_free_ring(struct ur_ring *r) {
   free(r->sq_last);
   free(r->parked);
   free(r->qbytes);
+  free(r->mlist);
+  while (r->pool) {
+    struct ur_send *q = r->pool;
+    r->pool = q->next;
+    free(q);
+  }
   free(r);
 }
 
@@ -763,7 +792,8 @@ static int ur_make_ring(const struct ur_sizes *z, int restricted, struct ur_ring
   r->sq_last = calloc(z->slots, sizeof *r->sq_last);
   r->parked = calloc(z->slots, sizeof *r->parked);
   r->qbytes = calloc(z->slots, sizeof *r->qbytes);
-  if (!r->st || !r->sq_first || !r->sq_last || !r->parked || !r->qbytes) {
+  r->mlist = calloc(z->slots, sizeof *r->mlist);
+  if (!r->st || !r->sq_first || !r->sq_last || !r->parked || !r->qbytes || !r->mlist) {
     rc = -ENOMEM;
     goto fail;
   }
@@ -986,6 +1016,7 @@ static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set
     e->len = (uint32_t)q->how;
   } else {
     e->opcode = UR_OP_SEND;
+    s->stats.sends++;
     e->addr = (uint64_t)(uintptr_t)(q->data + q->off);
     e->len = q->len - q->off;
     e->op_flags = MSG_NOSIGNAL;
@@ -994,11 +1025,77 @@ static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set
   q->in_flight = 1;
 }
 
-static void ur_unlink_all(struct nish_uring_set *s, struct ur_send *q) {
+/* Note that (r, slot) has a record to submit; the ring writes its SEND when
+ * it next submits. */
+static void ur_mark(struct ur_ring *r, uint32_t slot) {
+  if (r->st[slot] & ST_MARKED) return;
+  r->st[slot] |= ST_MARKED;
+  r->mlist[r->nmarked++] = slot;
+}
+
+/* Write the SEND or SHUTDOWN of every marked slot whose head is not in the
+ * kernel, from the head's whole unsent length. A slot closed since it was
+ * marked has no queue, and is skipped. */
+static void ur_send_marked(struct nish_uring_set *s, struct ur_ring *r) {
+  uint32_t n = r->nmarked;
+  r->nmarked = 0;
+  for (uint32_t i = 0; i < n; i++) {
+    uint32_t slot = r->mlist[i];
+    r->st[slot] &= ~ST_MARKED;
+    ur_send_head(r, slot, s);
+  }
+}
+
+/* A record whose bytes fit `cap`: a pool buffer when they fit one, taken
+ * from the ring's free list before a new one is allocated, else one exact
+ * allocation. NULL when memory is short. */
+static struct ur_send *ur_record(struct nish_uring_set *s, struct ur_ring *r, size_t cap) {
+  struct ur_send *q;
+  if (cap > UR_CHUNK_DATA) {
+    q = malloc(sizeof *q + cap);
+    if (!q) return NULL;
+    q->cap = (uint32_t)cap;
+    q->pooled = 0;
+    return q;
+  }
+  if (r->pool) {
+    q = r->pool;
+    r->pool = q->next;
+    r->npool--;
+    s->stats.pool_cached--;
+  } else {
+    q = malloc(UR_CHUNK);
+    if (!q) return NULL;
+    s->stats.pool_new++;
+  }
+  s->stats.pool_held++;
+  q->cap = UR_CHUNK_DATA;
+  q->pooled = 1;
+  return q;
+}
+
+/* Give a record's memory back: a pool buffer to its ring's free list while
+ * that holds fewer than UR_SENDPOOL_MAX, anything else to the allocator. Only a
+ * record the kernel no longer holds comes here (NURING-42). */
+static void ur_release(struct nish_uring_set *s, struct ur_ring *r, struct ur_send *q) {
+  if (q->pooled) {
+    s->stats.pool_held--;
+    if (r->npool < UR_SENDPOOL_MAX) {
+      q->next = r->pool;
+      r->pool = q;
+      r->npool++;
+      s->stats.pool_cached++;
+      return;
+    }
+  }
+  free(q);
+}
+
+static void ur_unlink_all(struct nish_uring_set *s, struct ur_ring *r, struct ur_send *q) {
   if (q->prev_all) q->prev_all->next_all = q->next_all;
   else s->all = q->next_all;
   if (q->next_all) q->next_all->prev_all = q->prev_all;
-  free(q);
+  ur_release(s, r, q);
 }
 
 /* Drop a slot's queued sends. The one the kernel holds, if any, is left on
@@ -1011,7 +1108,7 @@ static void ur_drop_sends(struct nish_uring_set *s, struct ur_ring *r, uint32_t 
   while (q) {
     struct ur_send *next = q->next;
     q->next = NULL;
-    if (!q->in_flight) ur_unlink_all(s, q);
+    if (!q->in_flight) ur_unlink_all(s, r, q);
     q = next;
   }
 }
@@ -1044,7 +1141,7 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     q->in_flight = 0;
     uint32_t slot = q->slot;
     if ((r->st[slot] & ST_OPEN) == 0 || ST_GEN(r->st[slot]) != q->gen || r->sq_first[slot] != q) {
-      ur_unlink_all(s, q);
+      ur_unlink_all(s, r, q);
       return 0;
     }
     if (q->how >= 0) {
@@ -1066,7 +1163,7 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     } else {
       r->sq_first[slot] = q->next;
       if (!q->next) r->sq_last[slot] = NULL;
-      ur_unlink_all(s, q);
+      ur_unlink_all(s, r, q);
     }
     ur_send_head(r, slot, s);
     return 0;
@@ -1185,6 +1282,7 @@ static int ur_reap(struct nish_uring_set *s, int ri, struct nish_uring_event *ev
 static int ur_service(struct nish_uring_set *s, int ri, struct nish_uring_event *ev, int cap) {
   struct ur_ring *r = s->rings[ri];
   int n = 0;
+  ur_send_marked(s, r);
   for (int guard = 0; guard < 1 << 16; guard++) {
     n += ur_reap(s, ri, ev + n, cap - n);
     int rc = ur_flush(r);
@@ -1312,6 +1410,7 @@ int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms) 
   for (int ri = 0; ri < s->nrings; ri++) {
     const struct ur_ring *r = s->rings[ri];
     if (ur_flagged(r) || *r->cq_head != __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE)) return 0;
+    if (r->nmarked) return 0;
     if (r->to_submit) room = 0;
     if (r->nparked) parked = 1;
   }
@@ -1359,8 +1458,10 @@ static void ur_catch_up(struct nish_uring_set *s) {
  * user space while the caller sleeps on `nish_uring_fd`. A refused flush
  * leaves them queued for the next wait, as ur_flush says. */
 static void ur_submit_queued(struct nish_uring_set *s) {
-  for (int ri = 0; ri < s->nrings; ri++)
+  for (int ri = 0; ri < s->nrings; ri++) {
+    ur_send_marked(s, s->rings[ri]);
     if (s->rings[ri]->to_submit) (void)ur_flush(s->rings[ri]);
+  }
 }
 
 /* Wait for events and write at most `cap` of them, at most 256. Answers the
@@ -1408,7 +1509,7 @@ static struct ur_ring *ur_open_slot(struct nish_uring_set *s, int32_t ring, int3
 }
 
 /* Put `q` on the set's list of records and behind the slot's queue, and
- * submit it if it is now the head. */
+ * mark the slot, so the ring submits it once it is the head. */
 static void ur_enqueue(struct nish_uring_set *s, struct ur_ring *r, uint32_t slot, struct ur_send *q) {
   q->next = NULL;
   q->prev_all = NULL;
@@ -1421,53 +1522,107 @@ static void ur_enqueue(struct nish_uring_set *s, struct ur_ring *r, uint32_t slo
     r->sq_first[slot] = q;
   }
   r->sq_last[slot] = q;
-  ur_send_head(r, slot, s);
+  ur_mark(r, slot);
+}
+
+/* Put `q` where the slot's last record `t` was, on both lists, and give `t`
+ * back. `t` is not in the kernel. */
+static void ur_replace(struct nish_uring_set *s, struct ur_ring *r, uint32_t slot, struct ur_send *t, struct ur_send *q) {
+  q->next = NULL;
+  q->prev_all = t->prev_all;
+  q->next_all = t->next_all;
+  if (q->prev_all) q->prev_all->next_all = q;
+  else s->all = q;
+  if (q->next_all) q->next_all->prev_all = q;
+  if (r->sq_first[slot] == t) {
+    r->sq_first[slot] = q;
+  } else {
+    struct ur_send *p = r->sq_first[slot];
+    while (p->next != t) p = p->next;
+    p->next = q;
+  }
+  r->sq_last[slot] = q;
+  ur_release(s, r, t);
 }
 
 /* Queue `n` bytes for (ring, slot). They are copied, so the caller's buffer
- * is free on return; a failure comes back later as a SEND_FAILED event. */
+ * is free on return; a failure comes back later as a SEND_FAILED event.
+ * Bytes queued before the ring next submits join the slot's last record
+ * while the kernel does not hold it (NURING-40): in its room, after moving
+ * its unsent bytes to the front if that makes room. A pool buffer they
+ * overflow is replaced by one exact record of its unsent bytes and these, so
+ * a head and a large body still leave as one SEND; an exact record's
+ * capacity never grows, and the bytes start a new record behind it instead. */
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
   if (n < 0) return -EINVAL;
   if (n == 0) return 0;
-  struct ur_send *q = malloc(sizeof *q + (size_t)n);
+  struct ur_send *t = r->sq_last[slot];
+  size_t pre = 0;
+  if (t && !t->in_flight && t->how < 0) {
+    size_t unsent = (size_t)t->len - t->off;
+    if (t->cap - t->len < (uint32_t)n && unsent + (uint32_t)n <= t->cap) {
+      memmove(t->data, t->data + t->off, unsent);
+      t->off = 0;
+      t->len = (uint32_t)unsent;
+    }
+    if (t->cap - t->len >= (uint32_t)n) {
+      memcpy(t->data + t->len, p, (size_t)n);
+      t->len += (uint32_t)n;
+      goto queued;
+    }
+    pre = unsent;
+    if (!t->pooled || pre + (uint32_t)n > INT32_MAX) t = NULL, pre = 0;
+  } else {
+    t = NULL;
+  }
+  struct ur_send *q = ur_record(s, r, pre + (uint32_t)n);
   if (!q) return -ENOMEM;
-  memcpy(q->data, p, (size_t)n);
+  if (t) memcpy(q->data, t->data + t->off, pre);
+  memcpy(q->data + pre, p, (size_t)n);
   q->slot = (uint32_t)slot;
   q->gen = ST_GEN(r->st[slot]);
   q->off = 0;
-  q->len = (uint32_t)n;
+  q->len = (uint32_t)(pre + (uint32_t)n);
   q->in_flight = 0;
   q->how = -1;
+  if (t) ur_replace(s, r, (uint32_t)slot, t, q);
+  else ur_enqueue(s, r, (uint32_t)slot, q);
+queued:
   r->qbytes[slot] += (uint32_t)n;
-  ur_enqueue(s, r, (uint32_t)slot, q);
+  ur_mark(r, (uint32_t)slot);
   return n;
 }
 
 /* Queue a shutdown of (ring, slot)'s `how` side (0 read, 1 write, 2 both)
  * behind the bytes already queued for it, so they reach the peer first. Its
  * answer is not reported: a shutdown that fails, as on a peer already gone,
- * leaves a connection whose next read or write says so. */
+ * leaves a connection whose next read or write says so. A side already
+ * queued is not queued again, so a slot holds at most two shutdowns and the
+ * bytes between them at most three partly filled records (NURING-43). */
 int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t how) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
   if ((uint32_t)how > 2) return -EINVAL;
-  struct ur_send *q = malloc(sizeof *q);
+  uint32_t *st = &r->st[slot];
+  if (!(ST_SHUT(how) & ~*st)) return 0;
+  struct ur_send *q = calloc(1, sizeof *q);
   if (!q) return -ENOMEM;
   q->slot = (uint32_t)slot;
-  q->gen = ST_GEN(r->st[slot]);
-  q->off = q->len = 0;
-  q->in_flight = 0;
+  q->gen = ST_GEN(*st);
   q->how = how;
   ur_enqueue(s, r, (uint32_t)slot, q);
+  *st |= ST_SHUT(how);
   return 0;
 }
 
 /* Cancel the slot's recv, close the slot, and move its generation on, so
  * every completion still on its way for it is stale. The freed slot goes to
- * the accepting job. -EAGAIN, with nothing changed, when the SQ has no room
- * for both entries or while the slot's shutdown is in flight: a SHUTDOWN runs
+ * the accepting job. A head send the ring has not submitted yet is written
+ * first (NURING-40). -EAGAIN, with the slot still open, when the SQ has no
+ * room for the entries or while any shutdown is at the slot's queue's head,
+ * which it then submits if it has not: a SHUTDOWN runs
  * on io-wq, which looks the slot's file up only when it runs, and the cancel
  * below cannot match a request that has no file yet, so a slot freed before
  * it ran could take a new connection that the shutdown then reaches
@@ -1476,13 +1631,18 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
   const struct ur_send *h = r->sq_first[slot];
-  if (h && h->in_flight && h->how >= 0) return -EAGAIN;
+  if (h && h->how >= 0) {
+    ur_send_head(r, (uint32_t)slot, s);
+    return -EAGAIN;
+  }
+  uint32_t need = h && !h->in_flight ? 3 : 2;
   uint32_t head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
-  if (r->sq_local_tail - head + 2 > r->sq_entries) {
+  if (r->sq_local_tail - head + need > r->sq_entries) {
     (void)ur_flush(r);
     head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
-    if (r->sq_local_tail - head + 2 > r->sq_entries) return -EAGAIN;
+    if (r->sq_local_tail - head + need > r->sq_entries) return -EAGAIN;
   }
+  ur_send_head(r, (uint32_t)slot, s);
   uint32_t st = r->st[slot];
   struct ur_sqe *e = ur_sqe(r);
   e->opcode = UR_OP_ASYNC_CANCEL;
@@ -1496,7 +1656,7 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   e->flags = UR_SQE_CQE_SKIP_SUCCESS;
   e->user_data = ur_tag(UR_CLOSE, st, (uint32_t)slot);
   ur_drop_sends(s, r, (uint32_t)slot);
-  r->st[slot] = ((ST_GEN(st) + 1) & GEN_MASK) << 8;
+  r->st[slot] = (((ST_GEN(st) + 1) & GEN_MASK) << 8) | (st & ST_MARKED);
   r->live--;
   s->stats.live--;
   ur_top_up(s);

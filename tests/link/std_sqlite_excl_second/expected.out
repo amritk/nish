@@ -1,0 +1,8 @@
+wal true
+write true
+the log holds frames true
+a second connection read and checkpointed: 0
+the log is truncated true
+no -shm true
+write again true
+close true
