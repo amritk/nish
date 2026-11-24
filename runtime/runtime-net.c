@@ -76,6 +76,8 @@ typedef int nish_net_unused;
 #if defined(__linux__)
 #include <linux/filter.h>
 #include <netinet/udp.h>
+#include <signal.h>
+#include <stdio.h>
 #include <sys/epoll.h>
 #include <time.h>
 /* glibc before 2.29 names neither; the numbers are the kernel's ABI. */
@@ -301,6 +303,13 @@ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t 
 int32_t nish_uring_full(const struct nish_uring_set *s);
 int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
 void nish_uring_destroy(struct nish_uring_set *s);
+/* runtime-uring.c's counters; the dump below prints six of them. */
+struct nish_uring_stats {
+  int64_t rings, live, accepting, slots, taskrun_reentries, overflow_drains, nobufs_rearms, send_requeues;
+  int64_t accept_errors, accept_pauses, bound_violations, max_accepting_rings, direct_waits, sends;
+  int64_t pool_new, pool_held, pool_cached;
+};
+void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 
 #define NR_BASE (1 << 20)
 #define NR_RINGS 64
@@ -593,9 +602,50 @@ static void nr_pump(struct nr_set *S) {
   S->npend = keep;
 }
 
+/* The stats dump. With NISH_URING_STATS set to a value other than "" or
+   "0" when the first ring listener opens, SIGUSR1 asks for one line per
+   open set on stderr, printed by the next pump of the loop, and closing a
+   ring listener prints its set's line before the set goes. Without it no
+   handler is installed and SIGUSR1 keeps its default action; a program that
+   blocks SIGUSR1 (`signalFd`) never runs the handler. */
+static int nr_stats_on = -1; /* -1 until the first open reads the knob */
+static volatile sig_atomic_t nr_stats_asked;
+
+static void nr_stats_signal(int sig) {
+  (void)sig;
+  nr_stats_asked = 1;
+}
+
+static void nr_stats_setup(void) {
+  if (nr_stats_on >= 0) return;
+  const char *v = getenv("NISH_URING_STATS");
+  nr_stats_on = v && v[0] && !(v[0] == '0' && !v[1]);
+  if (!nr_stats_on) return;
+  struct sigaction sa;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_handler = nr_stats_signal;
+  sa.sa_flags = SA_RESTART;
+  sigemptyset(&sa.sa_mask);
+  if (sigaction(SIGUSR1, &sa, NULL) != 0) nr_stats_on = 0;
+}
+
+static void nr_stats_print(const struct nr_set *S, const char *why) {
+  struct nish_uring_stats st;
+  nish_uring_stats(S->u, &st);
+  dprintf(2,
+          "uring-stats %s port=%d sends=%lld pool_new=%lld pool_held=%lld pool_cached=%lld live=%lld slots=%lld\n",
+          why, (int)S->port, (long long)st.sends, (long long)st.pool_new, (long long)st.pool_held,
+          (long long)st.pool_cached, (long long)st.live, (long long)st.slots);
+}
+
 static void nr_pump_all(void) {
   for (int32_t i = 0; i < nr_nsets; i++)
     if (!nr_sets[i]->dead) nr_pump(nr_sets[i]);
+  if (nr_stats_asked) {
+    nr_stats_asked = 0;
+    for (int32_t i = 0; i < nr_nsets; i++)
+      if (!nr_sets[i]->dead) nr_stats_print(nr_sets[i], "signal");
+  }
 }
 
 static struct nr_set *nr_listener(int32_t fd) {
@@ -653,6 +703,7 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   /* Only an open set decides for rings: a probe that passed before a set
      that ran short leaves the state at 0 (NURING-26). */
   nr_state = 1;
+  nr_stats_setup();
   S->listener = fd;
   S->port = port;
   S->slots = o.slots;
@@ -666,6 +717,7 @@ static int32_t nr_open(int32_t fd, int32_t port) {
 /* Closes a ring listener: the set and every slot in it, then the descriptor.
    The record stays, dead, so its handles answer -9. */
 static int32_t nr_close_listener(struct nr_set *S) {
+  if (nr_stats_on > 0) nr_stats_print(S, "close");
   nr_unregister(&S->v);
   for (int ri = 0; ri < NR_RINGS; ri++) {
     if (!S->conns[ri]) continue;
