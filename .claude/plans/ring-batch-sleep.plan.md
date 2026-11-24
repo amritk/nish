@@ -7,7 +7,7 @@ stages:
   - id: batch-sleep
     title: pollWaitBatch sleeps its window out and pumps once, measured against the nap
     goal: On bench/handler-ring, pollWaitBatch(loop, ready, 1000, 64, 1) costs no more CPU per request than pollWait plus a 1 ms empty-loop nap after a short pass, at 18,000 and 96,000 connections, within the noise band; its window no longer services completions as they trickle in; the result, p50/p99 and the send pool's PSS are recorded in docs/BENCHMARKS.md.
-    verification: node tests/run.js uring && node tests/run.js net_ring && node tests/run.js net_poll_batch && node tests/run.js net_handler && node tests/run.js handler-ring && node tests/run.js runtime-budget && node tests/run.js c-symbols && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && bash bench/handler-ring/run.sh --conns "18000 96000" --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1
+    verification: node tests/run.js uring && node tests/run.js net_ring && node tests/run.js net_poll_batch && node tests/run.js net_handler && node tests/run.js handler-ring && node tests/run.js runtime-budget && node tests/run.js c-symbols && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && bash bench/handler-ring/run.sh --conns "18000 90000" --think 4.5 --warmup 4 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1
     status: pending
     todos:
       - id: diagnose
@@ -23,7 +23,13 @@ stages:
         content: A uring-test or tests/run.js check that fails when the window enters the ring or pumps once per trickling completion (count enters/pumps per batch window under a steady trickle), plus the existing batch checks (idle blocks timeoutMs, ≤ maxWaitMs after the first event, prompt SIGTERM) still passing
         status: pending
       - id: measure
-        content: Run bench/handler-ring at 18,000 and 96,000 connections, interleaved rounds, designs ring@1, ring@64 (maxWaitMs 1), ring-nap and ring-copy for the band; record CPU µs/request, p50 and p99 per design with the noise band and the commit in docs/BENCHMARKS.md, and state whether pollWaitBatch is now at or below the nap
+        content: Real-world first, not --nodb. Run bench/handler-ring with its SQLite lookup per request (the default, not --nodb) as a closed-loop keep-alive load shaped like the entry — 90,000 connections, --think 4.5 (≈20k req/s offered), server on one core — and at 18,000 connections with the same think time; interleaved rounds, designs ring@1, ring@64 (maxWaitMs 1), ring-nap, and ring-copy for the band. Record CPU µs/request, achieved req/s, p50, p99 and p99.9 per design with the noise band and the commit in docs/BENCHMARKS.md, and state whether pollWaitBatch is now at or below the nap. A --nodb run may sit beside it as a codec-only control, never as the headline
+        status: pending
+      - id: no-regress
+        content: Show the change is not tuned to one load point — (a) a light load (18,000 connections, --think 30, ≈600 req/s) where the window cannot fill, recording the p50/p99 the 1 ms window adds against ring@1; (b) a load near the core's saturation (raise --rate or lower --think until ring@1 is CPU-bound), recording max sustained req/s per design; (c) ring@1 (plain pollWait, which every default HttpHandler uses) unchanged against a --base-compiler build of main within the band. A design that wins the 20k point but loses (a), (b) or (c) beyond the band is not shipped
+        status: pending
+      - id: owner-check
+        content: In the PR body, give the owner the exact one-line HandlerLimits change and the NISH_URING_STATS command to confirm the gain on the entry (nish-std-amritk), which no session here can reach; the run's close-out lists it as a human action item
         status: pending
       - id: pss
         content: With BENCH_URING_STATS=1, report the ring server's PSS at 18k and 96k (heap, anon, pool_cached × 16 KiB, the mlist) beside the #2271 note in docs/security/net-uring.md, and reconcile it with the entry's 55 → 75 MB rise at 90k under 0.46.0 — say what of the 20 MB the pool explains and what it does not; report only, no cap change unless the figures show the cache is the whole rise
@@ -52,4 +58,4 @@ Built by the ring-batch-wait run (#2249, PRs #2256 and #2261); its open follow-u
 Owns: `runtime/runtime-net.c` `runtime/runtime-uring.c` `runtime/nish.d.ts` `tests/**` `bench/handler-ring/**` `docs/BENCHMARKS.md` `docs/LANGUAGE.md` `docs/guide/using-nish/networking.md` `docs/reference/**` `docs/security/net-uring.md` `docs/security/README.md` `docs/wp63-iouring-net.md` `docs/wp7-runtime.md` `scalar.config.json`
 Model: lead (judgement on a kernel interaction and a perf claim).
 
-The fix is measurement-gated: the stage is done when the recorded table shows ring@64 at or below ring-nap's CPU per request within the ring/ring-copy band at both connection counts. If no design reaches it, the PR records the data and the best design found, and says so.
+The fix is measurement-gated, and on a realistic load: the stage is done when the recorded table — SQLite per request, closed-loop keep-alive with think time, one server core — shows ring@64 at or below ring-nap's CPU per request within the ring/ring-copy band at 18,000 and 90,000 connections, without losing latency at light load, throughput at saturation, or plain pollWait's cost (todo no-regress). A gain that shows only under --nodb or an open-loop --rate load is not the deliverable. If no design reaches it, the PR records the data and the best design found, and says so.
