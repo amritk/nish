@@ -86,11 +86,25 @@ host/game, host/ring, host/text, raster and synth are cleared; the frame-render 
 
 Sites as of 071ed014 (120): host/game 7, host/ring 17, host/text 4, raster 86, synth 6. Kinds: index 53, overflow 49, array-length 13, divide 4, slice 1.
 
+**Owns:** `std/host/game.ts`, `std/host/ring.ts`, `std/host/text.ts`, `std/raster.ts`, `std/synth.ts`, `bench/std-term-*`, `bench/std-raster*`, `bench/std-synth*`, `bench/run.mjs`, `bench/README.md`, `tests/link/std_host_*/**`, `tests/link/std_raster*/**`, `tests/link/std_synth*/**`, `tests/host-import/text/**`, `docs/security/wasm-host.md`, and the shared-row files (below): `tests/std-panics.json`, `bench/instructions.json`, `tests/nish-cmp.js`, `docs/guide/using-nish/standard-library.md`, `docs/guide/using-nish/terminal.md`, `docs/guide/using-nish/browser-games.md`, `docs/security/README.md`
+
+**Model:** lead (the bench design and the proofs are judgement).
+
+**Runs with:** S2 and S3 in parallel. Merges first.
+
 ### S2 — term-pixels, term-io, term-rate and term-probe
 
 The pixel, input/output, rate-limit and probe sites are cleared, so break-web and term-probe build without --allow-panics.
 
 Sites as of 071ed014 (171): term-pixels 101, term-io 24, term-rate 44, term-probe 2. Kinds: overflow 105, index 43, array-length 6, divide 6, slice 5, panic 4, pop 2.
+
+**Owns:** `std/term-pixels.ts`, `std/term-io.ts`, `std/term-rate.ts`, `std/term-probe.ts`, `examples/break-web/game.ts`, `examples/break-web/build.mjs`, `examples/term-probe.ts`, `tests/link/std_term_pixels*/**`, `tests/link/std_term_io*/**`, `tests/link/std_term_rate*/**`, `tests/link/std_term_probe*/**`, `tests/link/break_*/**`, and the shared-row files (below): `tests/std-panics.json`, `bench/instructions.json`, `tests/nish-cmp.js`, `docs/guide/using-nish/standard-library.md`, `docs/guide/using-nish/terminal.md`, `docs/guide/using-nish/browser-games.md`, `docs/security/README.md`
+
+**Model:** lead.
+
+**Runs with:** S1 and S3 in parallel. Merges after S1 (it updates from main first, so S1's benches are on its base and its counts are measured against them).
+
+A break-web or term-probe opt-out that cannot be dropped only because a call still reaches a `std/term.ts` site stays, and the PR body names the site; S3 drops it.
 
 ### S3 — term
 
@@ -99,3 +113,31 @@ term.ts is cleared, so game-starter builds without --allow-panics.
 Sites as of 071ed014 (171): term 171. Kinds: overflow 105, index 38, array-length 11, panic 5, pop 5, divide 4, slice 3.
 
 Explicit panics to fix, not kept (their reasons were internal invariants or unreachable guards, not a contract the doc states): `KeyDecoder.keep`, `Screen.flush`, `termBytesText`, `termDecodeEvents`, `termDecodeKeys`.
+
+**Owns:** `std/term.ts`, `examples/game-starter/**`, `tests/link/std_term/**`, `tests/link/std_term_events/**`, `tests/link/std_term_f64/**`, `tests/link/std_term_buffers_disagree/**`, `tests/link/reject_term_feed_string/**`, `tests/link/std_term_neg_*/**` for new term.ts negatives, `docs/security/term.md`, and the shared-row files (below): `tests/std-panics.json`, `bench/instructions.json`, `tests/nish-cmp.js`, `docs/guide/using-nish/standard-library.md`, `docs/guide/using-nish/terminal.md`, `docs/guide/using-nish/browser-games.md`, `docs/security/README.md`; after S2 has merged and S3 has taken in main, also the opt-out lines S2 left in `examples/break-web/game.ts`, `examples/break-web/build.mjs` and `examples/term-probe.ts`.
+
+**Model:** lead.
+
+**Runs with:** S1 and S2 in parallel. Merges last.
+
+## Running the stages together (refined for `/feature`)
+
+The three stages are written at once and merge in order S1 → S2 → S3.
+
+- **Shared-row files.** `tests/std-panics.json`, `bench/instructions.json`, `tests/nish-cmp.js`, the three guide pages and `docs/security/README.md` are in every stage's Owns, because each stage must write its own modules' rows there. A stage edits only the rows, entries and guide sections that name its own modules and examples. The stage that merges later takes in main before it merges and resolves the conflict in those rows; nothing else is shared.
+- **Generated files** (regenerated with the repo's tooling, never hand-merged, in any stage): `tests/self/goldens/checked/**`, `docs/reference/**`, `scalar.config.json`, `tests/differential/goldens/**`, `docs/IR_COOKBOOK.md`, `tests/wordings/*.err`, `tests/link/*/expected.caps.json`, `docs/reference/diagnostics/**`, `examples/break-web/help.ts`, `docs/site/break/**`.
+- **Exports another stage calls keep their signatures.** `std/host/game.ts` (S1) and `std/term-pixels.ts`, `std/term-io.ts`, `std/term-rate.ts`, `std/term-probe.ts` (S2) import `nish/term` (S3); `examples/game-starter` (S3) imports `nish/raster` and `nish/synth` (S1). A stage does not change the signature of an export whose callers sit outside its Owns. Where a site's only honest fix is such a change, the site stays, counted, and the PR body lists it as a follow-up.
+- **A wrapping cast or a mask is not a proof** unless the value is modular by meaning (a hash, a PRNG step, a checksum). Do not remove an overflow site by rewriting a checked sum as `toI32(toU32(a) + toU32(b))` or by masking a value the code expects to stay in range: whether that idiom counts is the open question in #2219. Such a site stays, counted, and the PR body lists it.
+
+## Acceptance criteria
+
+Derived from the plan's goals and rules, not given separately.
+
+1. On main after the last merge, `node tests/run.js std-panics` passes and every one of the ten modules' counts in `tests/std-panics.json` is lower than at 071ed014 (462 sites in all); each site that remains is listed in a PR body with its reason.
+2. `examples/game-starter/game.ts`, `examples/break-web/game.ts` and `examples/term-probe.ts` carry no `--allow-panics` opt-out (header comment or `// smoke: args`) and build without it; `node tests/run.js performance` (the stale opt-out check) passes.
+3. The five explicit panics in `std/term.ts` (`KeyDecoder.keep`, `Screen.flush`, `termBytesText`, `termDecodeEvents`, `termDecodeKeys`) are gone, and a test shows what each now does on the input that used to reach it.
+4. `bench/instructions.json` counts a term frame render and flush, a raster fill and blit, and a synth buffer fill, baselined from CI's table before any site changed; no count in it rose across the run's merges.
+5. No `nish:unsafe` import and no made-up-value guard was added to the ten modules, and no site was removed by a wrapping cast or mask the compiler did not prove.
+6. `node tests/run.js term` and the `std_term*`, `std_raster`, `std_synth`, `std_host_*` and `break_*` link cases pass on main.
+7. The guide no longer says these modules keep panic sites where they no longer do, and states every changed public API; `node scripts/gen-reference.mjs --check` passes.
+8. CI is green on main after the last merge, and every nish-cmp IR move the run caused is declared.
