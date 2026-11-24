@@ -19020,7 +19020,8 @@ if (dealtHere("runtimeChecks")) {
         ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
         ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
         ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
-        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most five pool buffers (NURING-43)"],
+        ["bigsend", "steady 64 KiB responses leave from chained pool buffers and allocate no record after a warm-up, a shutdown's included (NURING-51)"],
         ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
