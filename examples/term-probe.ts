@@ -1,6 +1,7 @@
-// Opt-out (`--allow-panics`): calls into `std/term-io` and `std/term-pixels`
-// reach their panic sites; this file keeps none of its own. Follow-up: make
-// those modules panic-free, then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): `runTerminal` reaches the `panic` in `std/term`
+// (std/term.ts), the one site left between this file and the no-panic
+// default; this file keeps none of its own. Follow-up: make `std/term`
+// panic-free, then build this file without `--allow-panics`.
 //
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws

@@ -1,8 +1,19 @@
-// Opt-out (`--allow-panics`): the `Framebuffer` from `std/term-pixels` reaches
-// its panic sites, and the director's tables are indexed in root storage, which
-// the checker cannot yet prove in range. Follow-up: make that module panic-free
-// and teach the prover root-storage bounds, then build this file without
-// `--allow-panics`.
+// Opt-out (`--allow-panics`), for these sites (370 in all), none of which
+// this file can discharge without `nish:unsafe`:
+// - 42 `index` sites here, each a read or write of module storage
+//   (`BREAK_LINK`, `BREAK_HELP_IN`, `BOX`, `ROOT`, `GAME_FRAME`): the checker
+//   keeps no length for a module's array, so even a constant index under a
+//   `K < BREAK_LINK.length` test stays unproven;
+// - the `slice` in `String.fromBytes` in `startHelp`;
+// - `gameReadInput`, which reaches an `index` site in std/term.ts (WP85 S3);
+// - `new Framebuffer(1, 1)`, which reaches `pixelsArea`'s size panic in
+//   std/term-pixels.ts: a call reaches every site of the function it calls,
+//   whatever constants it passes;
+// - 325 sites in the director and the libraries it uses: src/break-game.ts,
+//   break-intro.ts, break-menu.ts, break-gfx.ts, break-director.ts,
+//   break-levels.ts, break-voices.ts, std/raster.ts and std/synth.ts.
+// Follow-up: lengths for module storage in the checker, and the director's
+// own sites, then build this file without `--allow-panics`.
 //
 // The game behind the docs hero terminal, as a page runs it: the terminal
 // game's director and scenes (src/break-director.ts), stepped and drawn over
@@ -101,7 +112,7 @@ class BreakPage {
   /** What the stats overlay shows, and the rate auto resolution reads. */
   stats: TermStats
   /** The page's clock, the frames' times added up, in nanoseconds. */
-  clockNs: i64
+  clockNs: f64
   /** The frame time, smoothed, in milliseconds. */
   frameMs: f64
   /** BREAK_LINK's tap and menu-button counts as last acted on. */
@@ -115,7 +126,7 @@ class BreakPage {
     this.input = new StepInput(new KeyState())
     this.fb = new Framebuffer(1, 1)
     this.stats = new TermStats()
-    this.clockNs = toI64(0)
+    this.clockNs = 0.0
     this.frameMs = FIRST_FRAME_MS
     this.taps = BREAK_LINK[LINK_TAPS]
     this.menus = BREAK_LINK[LINK_MENU]
@@ -151,7 +162,10 @@ const keepSettings = (s: BreakSettings): void => {
   BREAK_LINK[LINK_SETTINGS + 4] = s.smoothing ? 1 : 0
   BREAK_LINK[LINK_SETTINGS + 5] = s.stats ? 1 : 0
   BREAK_LINK[LINK_SETTINGS + 6] = s.sound ? 1 : 0
-  BREAK_LINK[LINK_SAVES] = BREAK_LINK[LINK_SAVES] + 1
+  // The page only compares the count with the one it last saw, so past
+  // 2^31 - 1 saves it wraps to 0, which is still a change.
+  const saves: i32 = BREAK_LINK[LINK_SAVES]
+  BREAK_LINK[LINK_SAVES] = saves < 2147483647 ? saves + 1 : 0
 }
 
 /** The help the intro breaks apart: BREAK_HELP_IN's when it holds one, else the compiler's. */
@@ -227,7 +241,8 @@ const pressFor = (input: StepInput, key: i32): void => {
 const frameX = (run: BreakPage, x: i32, y: i32): f64 => toF64(run.turned ? y : x)
 
 /** The frame row under the shown frame's pixel `x`, `y`; turned, its top is the shown frame's right. */
-const frameY = (run: BreakPage, x: i32, y: i32): f64 => toF64(run.turned ? run.fb.height - 1 - x : y)
+const frameY = (run: BreakPage, x: i32, y: i32): f64 =>
+  run.turned ? toF64(run.fb.height) - 1.0 - toF64(x) : toF64(y)
 
 /**
  * What the page's touch asks this step. Its menu button is Escape, which
@@ -249,8 +264,9 @@ const touchInput = (run: BreakPage): void => {
       pressFor(run.input, KEY_SPACE)
     }
   }
-  const aim: i32 = BREAK_LINK[LINK_AIM] - 1
-  aimBreakDirector(d, aim < 0 ? -1.0 : frameX(run, aim, BREAK_LINK[LINK_AIM_Y]))
+  // The held finger's column plus 1, or 0 (or less) while none is held.
+  const held: i32 = BREAK_LINK[LINK_AIM]
+  aimBreakDirector(d, held <= 0 ? -1.0 : frameX(run, held - 1, BREAK_LINK[LINK_AIM_Y]))
 }
 
 /** One fixed step of 1/120 s on the page's input; `nowMs` is its step clock. */
@@ -292,13 +308,15 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   const fb: Framebuffer = run.fb
   if (frameMs > 0.0 && frameMs < 1000.0) {
     run.frameMs = run.frameMs + (frameMs - run.frameMs) * 0.1
-    run.clockNs = run.clockNs + toI64(frameMs * 1000000.0)
+    // Whole nanoseconds a frame, added in f64: exact for the first 2^53 ns
+    // (about 104 days), where an i64 sum is one the checker cannot bound.
+    run.clockNs = run.clockNs + Math.floor(frameMs * 1000000.0)
   }
   const fps: i32 = toI32(Math.round(1000.0 / run.frameMs))
   run.stats.tier = fps
   run.stats.frameCostMs = run.frameMs
   // A page has no link: a frame is on the screen when it is drawn.
-  adaptBreakResolution(d, fps, 0.0, fb.height, run.clockNs)
+  adaptBreakResolution(d, fps, 0.0, fb.height, toI64(run.clockNs))
   // A portrait screen touched: the frame turned, so a phone held sideways shows it upright and large.
   const turn: boolean = BREAK_LINK[LINK_TOUCH] === 1 && BOX[1] > BOX[0]
   sizeBreakFramebuffer(
@@ -311,18 +329,23 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   const w: i32 = fb.width
   const h: i32 = fb.height
   if (!turn) {
-    const n: i32 = w * h
+    // `pixels` holds the frame's `w * h`.
+    const n: i32 = toI32(fb.pixels.length)
     for (let i: i32 = 0; i < n; i++) {
       GAME_FRAME[i] = fb.pixels[i]
     }
     gameSetSize(w, h)
   } else {
-    // A quarter turn clockwise: fb's row y becomes the shown frame's column h - 1 - y.
+    // A quarter turn clockwise: fb's row y becomes the shown frame's column
+    // h - 1 - y. `src` walks `pixels` row by row; the shown frame's index is
+    // in f64, which no frame's size overflows.
+    const pixels: i32[] = fb.pixels
+    let src: i32 = 0
     for (let y: i32 = 0; y < h; y++) {
-      const row: i32 = y * w
-      const column: i32 = h - 1 - y
-      for (let x: i32 = 0; x < w; x++) {
-        GAME_FRAME[x * h + column] = fb.pixels[row + x]
+      const column: f64 = toF64(h) - 1.0 - toF64(y)
+      for (let x: i32 = 0; x < w && src < toI32(pixels.length); x++) {
+        GAME_FRAME[toI32(toF64(x) * toF64(h) + column)] = pixels[src]
+        src = src + 1
       }
     }
     gameSetSize(h, w)
