@@ -638,3 +638,28 @@ no signal was delivered. `nr_poll_wait` takes `EINTR` as a wake, takes in the
 rings' events and waits again for what is left of its timeout, so a program's
 `pollWait` does not answer -4 for an event of the layer's own. Found by
 `echo.ts` while S2 was written.
+
+**What the send pool costs a ring process (issue #2260).** The
+handler-ring bench measured it with `BENCH_URING_STATS=1 bash
+bench/handler-ring/run.sh --nodb --server-cpus 0 --compiler build/nish-test
+--base-compiler <base>`, at `--conns 18000` and at `--conns 96000 --think 4
+--warmup 4`. The runtime was this branch's at ebbeca4e. The base build was
+b2c55694, the commit before the send pool. Over three rounds, the median PSS
+of a `ring` server was 11.3 MB against 10.6 MB at 18,000 connections, and
+34.1 MB against 31.7 MB at 96,000. For `h1-ring` it was 10.1 against 9.5,
+and 32.9 against 30.6. The stats line printed mid-load read `pool_held=0`,
+with `pool_cached` at 64 and at 187 to 192. `pool_new` read 504 to 1,746
+over the warm-up and the first half of the run: the buffers in use at a
+pass's peak are more than the cache keeps, and the rest go back to malloc.
+At fb400a0d, one round at 96,000 connections saved each server's
+`/proc/PID/smaps` at the same moment. Total PSS was 34,214 kB against
+31,822 kB, a rise of 2,392 kB. Of that, 1,728 kB was the malloc heap
+(`[heap]`, 5,344 kB against 3,616 kB), where the pool's 16 KiB buffers
+live: the cached ones, and the freed ones malloc keeps. A further 652 kB was
+in anonymous mappings outside the heap (26,048 kB against 25,396 kB). The
+four mappings of 3,332 kB each grew by 128 KiB, 492 kB of PSS among them.
+That is the size of one ring's `mlist` at 32,768 slots, 4 bytes a slot, the one
+per-slot array the send pool added. The mapped files differed by 8 kB. This
+is decided, as NURING-41's cap is: about 25 bytes a connection at 96,000,
+for one SEND a response (NURING-40) and no allocation on a steady
+connection (NURING-41).
