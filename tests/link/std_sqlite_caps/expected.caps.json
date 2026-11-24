@@ -44,7 +44,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Cursor.close", "at": "std/sqlite.ts:966:17", "calls": "nishsqlite_cursor_close" }
+                  { "function": "Cursor.close", "at": "std/sqlite.ts:968:17", "calls": "nishsqlite_cursor_close" }
                 ]
               },
               "panics": []
@@ -55,7 +55,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Cursor.columnI64", "at": "std/sqlite.ts:935:12", "calls": "nishsqlite_cursor_column_i64" }
+                  { "function": "Cursor.columnI64", "at": "std/sqlite.ts:937:12", "calls": "nishsqlite_cursor_column_i64" }
                 ]
               },
               "panics": []
@@ -66,12 +66,12 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Cursor.columnInto", "at": "std/sqlite.ts:952:20", "calls": "nishsqlite_cursor_column_into" }
+                  { "function": "Cursor.columnInto", "at": "std/sqlite.ts:954:20", "calls": "nishsqlite_cursor_column_into" }
                 ]
               },
               "panics": [
-                { "kind": "ffi-length", "at": "std/sqlite.ts:952:66", "proven": true },
-                { "kind": "overflow", "at": "std/sqlite.ts:954:18", "proven": false }
+                { "kind": "ffi-length", "at": "std/sqlite.ts:954:66", "proven": true },
+                { "kind": "overflow", "at": "std/sqlite.ts:956:18", "proven": false }
               ]
             },
             {
@@ -80,11 +80,11 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Cursor.columnType", "at": "std/sqlite.ts:920:20", "calls": "nishsqlite_cursor_column_type" }
+                  { "function": "Cursor.columnType", "at": "std/sqlite.ts:922:20", "calls": "nishsqlite_cursor_column_type" }
                 ]
               },
               "panics": [
-                { "kind": "overflow", "at": "std/sqlite.ts:922:18", "proven": false }
+                { "kind": "overflow", "at": "std/sqlite.ts:924:18", "proven": false }
               ]
             },
             {
@@ -104,9 +104,8 @@
                 ]
               },
               "panics": [
-                { "kind": "overflow", "at": "std/sqlite.ts:884:18", "proven": false },
-                { "kind": "overflow", "at": "std/sqlite.ts:886:37", "proven": true },
-                { "kind": "index", "at": "std/sqlite.ts:893:9", "proven": true }
+                { "kind": "overflow", "at": "std/sqlite.ts:888:37", "proven": true },
+                { "kind": "index", "at": "std/sqlite.ts:895:9", "proven": true }
               ]
             },
             {
@@ -115,13 +114,13 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Cursor.error", "at": "std/sqlite.ts:977:34", "calls": "sqlite3_errstr" }
+                  { "function": "Cursor.error", "at": "std/sqlite.ts:979:34", "calls": "sqlite3_errstr" }
                 ]
               },
               "panics": [
-                { "kind": "oom", "at": "std/sqlite.ts:977:12", "allowed": true },
-                { "kind": "ffi-null", "at": "std/sqlite.ts:977:34", "proven": false },
-                { "kind": "oom", "at": "std/sqlite.ts:977:34", "allowed": true }
+                { "kind": "oom", "at": "std/sqlite.ts:979:12", "allowed": true },
+                { "kind": "ffi-null", "at": "std/sqlite.ts:979:34", "proven": false },
+                { "kind": "oom", "at": "std/sqlite.ts:979:34", "allowed": true }
               ]
             },
             {
@@ -230,7 +229,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Cursor.rowid", "at": "std/sqlite.ts:905:12", "calls": "nishsqlite_cursor_rowid" }
+                  { "function": "Cursor.rowid", "at": "std/sqlite.ts:907:12", "calls": "nishsqlite_cursor_rowid" }
                 ]
               },
               "panics": []

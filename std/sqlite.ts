@@ -881,7 +881,9 @@ export class Cursor {
   countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32> {
     const n: i32 = nishsqlite_cursor_count_range(this.handle, lo, hi, toU64(out.length))
     if (n < 0) {
-      return Err(-n)
+      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
+      // spelled in u32 so no negation of an i32 can overflow.
+      return Err(toI32(toU32(~n) + toU32(1)))
     }
     for (let i = 0; i < out.length; i++) {
       const c: i64 = nishsqlite_cursor_count_at(this.handle, toU64(i))
