@@ -72,6 +72,7 @@ gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
 # builds its cases (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
 . "$root/scripts/nish-compiler.sh"
 nish_allow_panics "$compiler"
+# shellcheck disable=SC2154 # nish_allow_panics sets allow_panics
 "$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server" >/dev/null
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"

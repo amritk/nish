@@ -53,6 +53,7 @@ trap 'git -C "$root" apply -R bench/handler-ring/trace.patch' EXIT
 # builds its cases (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
 . "$root/scripts/nish-compiler.sh"
 nish_allow_panics "$compiler"
+# shellcheck disable=SC2154 # nish_allow_panics sets allow_panics
 "$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/handler-ring/server.ts" --link "$out/server-trace" >/dev/null
 git -C "$root" apply -R bench/handler-ring/trace.patch
 trap - EXIT
