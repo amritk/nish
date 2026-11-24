@@ -130,7 +130,6 @@ declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
 declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
 declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
 declare function nishsqlite_cursor_rowid(h: i32): i64
-declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, ncols: i32, text: u8[], ntext: u64): i32
 declare function sqlite3_errstr(code: i32): string
 declare function sqlite3_libversion(): string
 
@@ -719,6 +718,8 @@ export class Statement {
     return new SqliteError(code, messageFor(code, nishsqlite_stmt_errmsg(this.handle)))
   }
 }
+
+declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, ncols: i32, text: u8[], ntext: u64): i32
 
 /**
  * A B-tree cursor on a table or index, which reads rows without a statement.
