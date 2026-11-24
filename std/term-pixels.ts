@@ -210,6 +210,8 @@ export class Framebuffer {
 
   /**
    * Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn.
+   * Panics when `pixels` does not hold `width × height`, as after setting those public fields
+   * out of step.
    *
    * @param x The pixel column, from 0 at the left.
    * @param y The pixel row, from 0 at the top.
@@ -231,7 +233,8 @@ export class Framebuffer {
   }
 
   /**
-   * The colour of the pixel at `x`, `y`, or black off the framebuffer.
+   * The colour of the pixel at `x`, `y`, or black off the framebuffer. Panics when `pixels` does
+   * not hold `width × height`, as after setting those public fields out of step.
    *
    * @param x The pixel column, from 0 at the left.
    * @param y The pixel row, from 0 at the top.
@@ -680,7 +683,8 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  * is done with it.
  *
  * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
- * else panics. An empty framebuffer or rect writes nothing.
+ * else panics. So does a framebuffer whose `pixels` does not hold
+ * `width × height`. An empty framebuffer or rect writes nothing.
  *
  * @param fb The frame's pixels, at its own size.
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_KITTY`.

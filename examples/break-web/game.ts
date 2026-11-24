@@ -1,16 +1,15 @@
-// Opt-out (`--allow-panics`), for these sites (457 in all), none of which
+// Opt-out (`--allow-panics`), for these sites (370 in all), none of which
 // this file can discharge without `nish:unsafe`:
 // - 42 `index` sites here, each a read or write of module storage
 //   (`BREAK_LINK`, `BREAK_HELP_IN`, `BOX`, `ROOT`, `GAME_FRAME`): the checker
 //   keeps no length for a module's array, so even a constant index under a
 //   `K < BREAK_LINK.length` test stays unproven;
 // - the `slice` in `String.fromBytes` in `startHelp`;
-// - 8 calls into nish/host (`gameSetSize`, `gameWriteSamples`,
-//   `gameReadInput`, `gamePlaySound`), which index its module storage;
+// - `gameReadInput`, which reaches an `index` site in std/term.ts (WP85 S3);
 // - `new Framebuffer(1, 1)`, which reaches `pixelsArea`'s size panic in
 //   std/term-pixels.ts: a call reaches every site of the function it calls,
 //   whatever constants it passes;
-// - 406 sites in the director and the libraries it uses: src/break-game.ts,
+// - 325 sites in the director and the libraries it uses: src/break-game.ts,
 //   break-intro.ts, break-menu.ts, break-gfx.ts, break-director.ts,
 //   break-levels.ts, break-voices.ts, std/raster.ts and std/synth.ts.
 // Follow-up: lengths for module storage in the checker, and the director's

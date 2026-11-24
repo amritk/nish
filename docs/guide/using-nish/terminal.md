@@ -30,8 +30,9 @@ and the `nish/term` code they reach keeps panic sites no proof removes yet.
 `nish/term-probe` keeps none; `nish/term-rate` keeps only its frame counters,
 which overflow past 2^31 - 1 frames; `nish/term-io` keeps only the
 slices that copy what stdin read, and `nish/term-pixels` only the panics a
-negative or too large size, a zero scale or a bad image id trips, its arrays
-sized by a count and its slices. A guard such as `i < xs.length` before an
+negative or too large size, a zero scale, a bad image id or a framebuffer
+whose `pixels` no longer holds `width × height` trips, its arrays sized by a
+count and its slices. A guard such as `i < xs.length` before an
 index, or a bound on a position, proves your own code; the slices and the
 library calls build under the default once the standard library is made
 panic-free.

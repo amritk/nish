@@ -1597,7 +1597,7 @@
     {
       "module": "std/term-pixels.ts",
       "function": "sixelFrame",
-      "reason": "never taken: the register array comes from pixelsAtLeast(w * h), a length the prover cannot see past"
+      "reason": "the working register array must hold w × h entries; sixelFrame sizes it itself with pixelsAtLeast(w * h), a length the prover cannot see past, and a Result would hand every caller a made-up pixel"
     },
     {
       "module": "std/term-pixels.ts",
