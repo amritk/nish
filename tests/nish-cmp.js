@@ -11314,8 +11314,11 @@ const DECLARED = [
       "tests/link/std_sqlite_cursor_shapes/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_cursor_sql/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_cursor_stale/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_excl/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_excl_second/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_norow/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_nul/main.ts": ["main.ll", "sqlite.ll"],
+      "tests/link/std_sqlite_vfs_wasi/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_wasi/main.ts": ["main.ll", "sqlite.ll"],
     }
   ),

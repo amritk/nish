@@ -441,11 +441,14 @@ export const main = (): number => {
     if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk() && chosen) {
       t0 = monotonicNanos()
       for (let i: i32 = 0; i < count; i += 1) {
-        const n: i32 = counted
-          ? walkFeedCounted(recent.value, posts.value, users.value, likes.value, ids, counts, f)
-          : byRow
-            ? walkFeedRows(recent.value, posts.value, users.value, likes.value, f, rr)
-            : walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        let n: i32 = 0
+        if (counted) {
+          n = walkFeedCounted(recent.value, posts.value, users.value, likes.value, ids, counts, f)
+        } else if (byRow) {
+          n = walkFeedRows(recent.value, posts.value, users.value, likes.value, f, rr)
+        } else {
+          n = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        }
         if (n < 0) {
           failed += 1
         } else {
