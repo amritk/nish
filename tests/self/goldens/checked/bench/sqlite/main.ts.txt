@@ -93,6 +93,7 @@ struct Cursor (class) size=4 align=4 exported
   method keyText -> @nish.Cursor.keyText
   method keyTextBytes -> @nish.Cursor.keyTextBytes
   method seek -> @nish.Cursor.seek
+  method countRange -> @nish.Cursor.countRange
   method rowid -> @nish.Cursor.rowid
   method columnType -> @nish.Cursor.columnType
   method columnI64 -> @nish.Cursor.columnI64
@@ -587,6 +588,14 @@ function Statement.error(this: Statement, code: i32): SqliteError -> @nish.State
   callee +0:12 new SqliteError -> @nish.SqliteError.constructor
   callee +0:34 messageFor -> @nish.messageFor
   callee +0:51 nishsqlite_stmt_errmsg -> @nishsqlite_stmt_errmsg
+function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32 -> @nishsqlite_cursor_count_range
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function nishsqlite_cursor_count_at(h: i32, i: u64): i64 -> @nishsqlite_cursor_count_at
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
 function Cursor.constructor(this: Cursor, handle: i32): void -> @nish.Cursor.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: handle
@@ -678,6 +687,19 @@ function Cursor.seek(this: Cursor, op: i32): Result<boolean, i32> -> @nish.Curso
   stackSites=1 stackLocals=0
   callee +0:12 moved -> @nish.moved
   callee +0:18 nishsqlite_cursor_seek -> @nishsqlite_cursor_seek
+function Cursor.countRange(this: Cursor, lo: i64, hi: i64, out: i64[]): Result<i32, i32> -> @nish.Cursor.countRange [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=12
+  sharedWrite: +0:9
+  escaping: hi lo
+  calls: nish_panic_overflow nishsqlite_cursor_count_at nishsqlite_cursor_count_range
+  pointer this: size=4 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=2 stackLocals=0
+  local -11:11 n: i32 (const)
+  callee -11:20 nishsqlite_cursor_count_range -> @nishsqlite_cursor_count_range
+  local -7:14 i: i32 (let)
+  local -6:13 c: i64 (const)
+  callee -6:22 nishsqlite_cursor_count_at -> @nishsqlite_cursor_count_at
 function Cursor.rowid(this: Cursor): i64 -> @nish.Cursor.rowid [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nishsqlite_cursor_rowid
@@ -803,16 +825,17 @@ function Fold.post(this: Fold, st: Statement): boolean -> @Fold.post [method]
   callee +1:65 Fold.text -> @Fold.text
   callee +2:5 Fold.add -> @Fold.add
   callee +2:20 Statement.columnI64 -> @nish.Statement.columnI64
-function walkFeed(ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold): i32 -> @walkFeed
+function walkFeed(ix: Cursor, post: Cursor, user: Cursor, like: Cursor, counts: i64[], f: Fold): i32 -> @walkFeed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.Cursor.first
-  calls: Fold.add Fold.cursorText nish.Cursor.columnI64 nish.Cursor.first nish.Cursor.keyI64 nish.Cursor.keyReset nish.Cursor.next nish.Cursor.rowid nish.Cursor.seek nish.Cursor.seekRowid nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_overflow
+  calls: Fold.add Fold.cursorText nish.Cursor.columnI64 nish.Cursor.countRange nish.Cursor.first nish.Cursor.keyI64 nish.Cursor.keyReset nish.Cursor.next nish.Cursor.rowid nish.Cursor.seek nish.Cursor.seekRowid nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
   pointer ix: size=4 writesThrough=false captured=false passedTo=nish.Cursor.first#0 nish.Cursor.rowid#0 nish.Cursor.next#0
   pointer post: size=4 writesThrough=false captured=false passedTo=nish.Cursor.seekRowid#0 nish.Cursor.columnI64#0 Fold.cursorText#1 Fold.cursorText#1
   pointer user: size=4 writesThrough=false captured=false passedTo=nish.Cursor.seekRowid#0 Fold.cursorText#1
-  pointer like: size=4 writesThrough=false captured=false passedTo=nish.Cursor.keyReset#0 nish.Cursor.keyI64#0 nish.Cursor.seek#0 nish.Cursor.columnI64#0 nish.Cursor.next#0
+  pointer like: size=4 writesThrough=false captured=false passedTo=nish.Cursor.countRange#0 nish.Cursor.keyReset#0 nish.Cursor.keyI64#0 nish.Cursor.seek#0 nish.Cursor.columnI64#0 nish.Cursor.next#0
+  pointer counts: size=0 writesThrough=true captured=false passedTo=nish.Cursor.countRange#3
   pointer f: size=16 writesThrough=true captured=false passedTo=Fold.add#0 Fold.cursorText#0 Fold.cursorText#0 Fold.cursorText#0 Fold.add#0
-  stackSites=5 stackLocals=2
+  stackSites=6 stackLocals=2
   local +0:7 rows: i32 (let)
   local +1:7 ok: boolean (let)
   local +2:7 r: Result<boolean, i32> (let)
@@ -829,21 +852,22 @@ function walkFeed(ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold)
   callee +13:41 Fold.cursorText -> @Fold.cursorText
   callee +13:66 Fold.cursorText -> @Fold.cursorText
   local +14:9 n: i64 (let)
-  callee +15:16 Cursor.keyReset -> @nish.Cursor.keyReset
-  callee +15:42 Cursor.keyI64 -> @nish.Cursor.keyI64
-  local +17:11 l: Result<boolean, i32> (let)
-  callee +17:15 Cursor.seek -> @nish.Cursor.seek
-  callee +18:37 Cursor.columnI64 -> @nish.Cursor.columnI64
-  callee +20:13 Cursor.next -> @nish.Cursor.next
-  callee +24:5 Fold.add -> @Fold.add
-  callee +26:9 Cursor.next -> @nish.Cursor.next
+  callee +17:18 Cursor.countRange -> @nish.Cursor.countRange
+  callee +20:18 Cursor.keyReset -> @nish.Cursor.keyReset
+  callee +20:44 Cursor.keyI64 -> @nish.Cursor.keyI64
+  local +22:13 l: Result<boolean, i32> (let)
+  callee +22:17 Cursor.seek -> @nish.Cursor.seek
+  callee +23:39 Cursor.columnI64 -> @nish.Cursor.columnI64
+  callee +25:15 Cursor.next -> @nish.Cursor.next
+  callee +30:5 Fold.add -> @Fold.add
+  callee +32:9 Cursor.next -> @nish.Cursor.next
 function feedByCursors(db: Database, f: Fold): i32 -> @feedByCursors
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Database.beginRead
   calls: nish.Database.beginRead nish.Database.endRead nish.Database.openCursor walkFeed
   pointer db: size=4 writesThrough=false captured=false passedTo=nish.Database.beginRead#0 nish.Database.openCursor#0 nish.Database.openCursor#0 nish.Database.openCursor#0 nish.Database.openCursor#0 nish.Database.endRead#0
-  pointer f: size=16 writesThrough=true captured=false passedTo=walkFeed#4
-  stackSites=2 stackLocals=0
+  pointer f: size=16 writesThrough=true captured=false passedTo=walkFeed#5
+  stackSites=3 stackLocals=0
   callee +0:7 Database.beginRead -> @nish.Database.beginRead
   local +3:9 recent: Result<Cursor, SqliteError> (const)
   callee +3:18 Database.openCursor -> @nish.Database.openCursor
@@ -897,43 +921,44 @@ function main(): i32 -> @nish_main [exported entry]
   local +84:14 i: i32 (let)
   local +85:13 n: i32 (const)
   callee +85:22 feedByCursors -> @feedByCursors
-  callee +94:9 Database.beginRead -> @nish.Database.beginRead
-  local +97:11 recent: Result<Cursor, SqliteError> (const)
-  callee +97:20 Database.openCursor -> @nish.Database.openCursor
-  local +98:11 posts: Result<Cursor, SqliteError> (const)
-  callee +98:19 Database.openCursor -> @nish.Database.openCursor
-  local +99:11 users: Result<Cursor, SqliteError> (const)
+  local +94:11 counts: i64[] (const)
+  callee +95:9 Database.beginRead -> @nish.Database.beginRead
+  local +98:11 recent: Result<Cursor, SqliteError> (const)
+  callee +98:20 Database.openCursor -> @nish.Database.openCursor
+  local +99:11 posts: Result<Cursor, SqliteError> (const)
   callee +99:19 Database.openCursor -> @nish.Database.openCursor
-  local +100:11 likes: Result<Cursor, SqliteError> (const)
+  local +100:11 users: Result<Cursor, SqliteError> (const)
   callee +100:19 Database.openCursor -> @nish.Database.openCursor
-  local +103:16 i: i32 (let)
-  local +104:15 n: i32 (const)
-  callee +104:24 walkFeed -> @walkFeed
-  callee +115:9 Database.endRead -> @nish.Database.endRead
-  local +119:11 txn: boolean (const)
-  local +122:11 bodies: u8[] (const)
-  local +123:14 k: i32 (let)
-  local +124:13 len: i32 (const)
-  local +125:16 j: i32 (let)
-  callee +131:9 Database.exec -> @nish.Database.exec
-  local +134:11 prepared: Result<Statement, SqliteError> (const)
-  callee +134:22 Database.prepare -> @nish.Database.prepare
-  local +139:11 st: Statement (const)
-  callee +141:16 Database.begin -> @nish.Database.begin
-  local +144:14 i: i32 (let)
-  local +145:13 k: i32 (const)
-  callee +146:11 Statement.bindI64 -> @nish.Statement.bindI64
-  callee +149:11 Statement.bindTextBytes -> @nish.Statement.bindTextBytes
-  local +152:13 r: Result<boolean, i32> (const)
-  callee +152:17 Statement.step -> @nish.Statement.step
-  callee +155:9 Fold.add -> @Fold.add
-  callee +155:21 Statement.columnI64 -> @nish.Statement.columnI64
-  local +157:15 n: Result<i32, i32> (const)
-  callee +157:19 Statement.columnInto -> @nish.Statement.columnInto
-  callee +159:11 Fold.add -> @Fold.add
-  callee +166:11 Statement.reset -> @nish.Statement.reset
-  callee +170:16 Database.commit -> @nish.Database.commit
-  callee +174:9 Statement.finalize -> @nish.Statement.finalize
-  callee +177:9 Database.exec -> @nish.Database.exec
-  callee +180:9 Database.exec -> @nish.Database.exec
-  callee +187:7 Database.close -> @nish.Database.close
+  local +101:11 likes: Result<Cursor, SqliteError> (const)
+  callee +101:19 Database.openCursor -> @nish.Database.openCursor
+  local +104:16 i: i32 (let)
+  local +105:15 n: i32 (const)
+  callee +105:24 walkFeed -> @walkFeed
+  callee +116:9 Database.endRead -> @nish.Database.endRead
+  local +120:11 txn: boolean (const)
+  local +123:11 bodies: u8[] (const)
+  local +124:14 k: i32 (let)
+  local +125:13 len: i32 (const)
+  local +126:16 j: i32 (let)
+  callee +132:9 Database.exec -> @nish.Database.exec
+  local +135:11 prepared: Result<Statement, SqliteError> (const)
+  callee +135:22 Database.prepare -> @nish.Database.prepare
+  local +140:11 st: Statement (const)
+  callee +142:16 Database.begin -> @nish.Database.begin
+  local +145:14 i: i32 (let)
+  local +146:13 k: i32 (const)
+  callee +147:11 Statement.bindI64 -> @nish.Statement.bindI64
+  callee +150:11 Statement.bindTextBytes -> @nish.Statement.bindTextBytes
+  local +153:13 r: Result<boolean, i32> (const)
+  callee +153:17 Statement.step -> @nish.Statement.step
+  callee +156:9 Fold.add -> @Fold.add
+  callee +156:21 Statement.columnI64 -> @nish.Statement.columnI64
+  local +158:15 n: Result<i32, i32> (const)
+  callee +158:19 Statement.columnInto -> @nish.Statement.columnInto
+  callee +160:11 Fold.add -> @Fold.add
+  callee +167:11 Statement.reset -> @nish.Statement.reset
+  callee +171:16 Database.commit -> @nish.Database.commit
+  callee +175:9 Statement.finalize -> @nish.Statement.finalize
+  callee +178:9 Database.exec -> @nish.Database.exec
+  callee +181:9 Database.exec -> @nish.Database.exec
+  callee +188:7 Database.close -> @nish.Database.close
