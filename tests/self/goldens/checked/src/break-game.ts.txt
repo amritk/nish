@@ -2587,7 +2587,7 @@ function stepClear(game: BreakGame, input: StepInput): void -> @stepClear
   callee +7:5 enterPhase -> @enterPhase
   callee +9:5 loadLevel -> @loadLevel
 function stepLastScreen(game: BreakGame, input: StepInput): void -> @stepLastScreen
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: confirmPressed firework nish.Rng.nextF64 queueSound rasterHue
   pointer game: size=328 writesThrough=true captured=false passedTo=firework#0 queueSound#0
@@ -2608,7 +2608,7 @@ function particleCount(game: BreakGame, n: i32): i32 -> @particleCount
   pointer game: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function burst(game: BreakGame, x: f64, y: f64, n: i32, colour: i32): void -> @burst
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Rng.nextF64
   escaping: colour n x y
   calls: llvm.cos.f64 llvm.sin.f64 nish.Rng.nextF64 particleCount rasterSpawnParticle
@@ -2626,7 +2626,7 @@ function burst(game: BreakGame, x: f64, y: f64, n: i32, colour: i32): void -> @b
   callee +5:5 rasterSpawnParticle -> @rasterSpawnParticle
   callee +12:7 Rng.nextF64 -> @nish.Rng.nextF64
 function firework(game: BreakGame, x: f64, y: f64, colour: i32): void -> @firework
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Rng.nextF64
   escaping: colour x y
   calls: llvm.cos.f64 llvm.sin.f64 nish.Rng.nextF64 particleCount rasterRgb rasterSpawnParticle
@@ -2652,7 +2652,7 @@ function floatScore(game: BreakGame, x: f64, y: f64, points: i32, colour: i32): 
   local -6:7 slot: Floater (let)
   local -5:14 f: Floater (const)
 function stepEffects(game: BreakGame): void -> @stepEffects
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: llvm.maximum.f64 nish.Rng.nextF64 stepParticles
   pointer game: size=328 writesThrough=true captured=false
@@ -2808,7 +2808,7 @@ function drawBreakGame(game: BreakGame, fb: Framebuffer, alpha: f64): void -> @d
   callee +17:3 fillLetterbox -> @fillLetterbox
   callee +17:23 rasterRgb -> @rasterRgb
 function drawField(view: View, base: f64): void -> @drawField
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fillRect
   escaping: base
   calls: add2 fillRect rasterHue rasterMix rasterRgb
@@ -2828,7 +2828,7 @@ function drawField(view: View, base: f64): void -> @drawField
   callee +6:3 fillRect -> @fillRect
   callee +6:68 add2 -> @add2
 function add2(c: i32): i32 -> @add2
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
   calls: rasterMix rasterRgb
   stackSites=0 stackLocals=0
@@ -3170,7 +3170,7 @@ function drawCompactScreen(game: BreakGame, view: View, t: f64, big: i32, small:
   callee +42:7 drawTextCentred -> @drawTextCentred
   callee +42:79 rasterDim -> @rasterDim
 function breakTextWidth(text: string, scale: i32): i32 -> @breakTextWidth [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: scale text
   calls: rasterTextWidth
   stackSites=0 stackLocals=0

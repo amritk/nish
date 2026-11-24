@@ -1795,7 +1795,7 @@ function pentatonic(step: i32): i32 -> @pentatonic
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function arpeggio(out: f64[], base: f64, a: i32, b: i32, c: i32, d: i32, each: f64, last: f64, wave: i32, volume: f64): void -> @arpeggio
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via synthTone
   escaping: a b base c d each last volume wave
   calls: synthSemitone synthTone

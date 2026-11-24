@@ -546,7 +546,7 @@ the colour at weight 256
 
 <scalar-field name="w" type="i32" required>
 
-the weight, 0 to `RASTER_SOLID`
+the weight, clamped to 0..`RASTER_SOLID`
 
 </scalar-field>
 
