@@ -27,12 +27,12 @@
     "std/random.ts": "e7e360a36acfa0e02b8c644c5499e0bc8dc3fada41a36062adeb2dd590c51c13",
     "std/raster.ts": "e6ef8eddbbb09c24384ab6f01ca1f7d826e50e87fc271b3822e4a238340243fa",
     "std/synth.ts": "206f1ab1363011efea8f6b8349cfc35eb52985ad4b8613edf81acd90e4d08762",
-    "std/term-pixels.ts": "a85cd5d25acbc0800ea2ff42a02e2a2ae5e48ede9d9479b9a5a6f80eae853a11",
-    "std/term-rate.ts": "6d519b940247a9355cc27a81441fe2e5be28e9d5880945cee660b69f856154a1",
+    "std/term-pixels.ts": "6169de07ccb5265fc64458bc53d36c0b6e0749359f8233693c7832aef52a7ddd",
+    "std/term-rate.ts": "4a243784275d2dbd6c38e6f146a812e52b3af0b2d0bb0c440074da07da24a7f0",
     "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
   },
   "outputs": {
-    "game.wasm": "5e9eeb53aff885032213ea9b91b8832d01c20b9cae66cd913a9dd368585c5032",
+    "game.wasm": "96563f8cbc4ed5b85aeda3f4c0a54b844721b81e874e637eb09a63f70164408f",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "dde2d49936cf795ce840e2eaa70092ccffcb8a5ab1655d98f91671766d69e011",

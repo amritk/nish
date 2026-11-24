@@ -2368,10 +2368,6 @@ function rateLevelScale(from: i32, to: i32): f64 -> @nish.rateLevelScale
   callee +4:21 rateLevelFactor -> @nish.rateLevelFactor
   local +7:12 k: i32 (let)
   callee +8:21 rateLevelFactor -> @nish.rateLevelFactor
-function rateCount(count: i32): i32 -> @nish.rateCount
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: count
-  stackSites=0 stackLocals=0
 function rateFinite(x: f64): boolean -> @nish.rateFinite
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -2421,10 +2417,10 @@ function RateController.unacked(this: RateController): i32 -> @nish.RateControll
   local +0:11 head: i32 (const)
   local +1:11 length: i32 (const)
 function RateController.mayDraw(this: RateController, nowMs: f64): boolean -> @nish.RateController.mayDraw [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: nish.FixedStep.advance nish.RateController.unacked nish.rateCount nish.rateFinite
+  calls: nish.FixedStep.advance nish.RateController.unacked nish.rateFinite nish_panic_overflow
   pointer this: size=272 writesThrough=true captured=false passedTo=nish.RateController.unacked#0
   stackSites=0 stackLocals=0
   callee -7:10 rateFinite -> @nish.rateFinite
@@ -2432,7 +2428,6 @@ function RateController.mayDraw(this: RateController, nowMs: f64): boolean -> @n
   callee -2:13 FixedStep.advance -> @nish.FixedStep.advance
   callee +1:7 FixedStep.advance -> @nish.FixedStep.advance
   callee +6:9 RateController.unacked -> @nish.RateController.unacked
-  callee +7:22 rateCount -> @nish.rateCount
 function RateController.frameSent(this: RateController, bytes: i32, costNs: f64, nowMs: f64): void -> @nish.RateController.frameSent [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
@@ -2620,10 +2615,10 @@ function RateController.stepUp(this: RateController): boolean -> @nish.RateContr
   local -2:11 level: i32 (const)
   callee +0:20 RateController.fasterTier -> @nish.RateController.fasterTier
 function RateController.tick(this: RateController, nowMs: f64): void -> @nish.RateController.tick [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: nish.RateController.ageRate nish.RateController.decide nish.RateController.publish nish.rateCount nish.rateFinite
+  calls: nish.RateController.ageRate nish.RateController.decide nish.RateController.publish nish.rateFinite nish_panic_overflow
   pointer this: size=272 writesThrough=true captured=false passedTo=nish.RateController.publish#0 nish.RateController.ageRate#0 nish.RateController.decide#0 nish.RateController.publish#0
   stackSites=0 stackLocals=0
   callee -7:10 rateFinite -> @nish.rateFinite
@@ -2631,8 +2626,6 @@ function RateController.tick(this: RateController, nowMs: f64): void -> @nish.Ra
   local -3:11 wait: f64 (const)
   local +3:11 sent: f64[] (const)
   local +4:9 head: i32 (let)
-  callee +8:19 rateCount -> @nish.rateCount
-  callee +9:20 rateCount -> @nish.rateCount
   callee +12:5 RateController.ageRate -> @nish.RateController.ageRate
   callee +14:7 RateController.decide -> @nish.RateController.decide
   callee +16:5 RateController.publish -> @nish.RateController.publish
@@ -2809,7 +2802,7 @@ function Framebuffer.set(this: Framebuffer, x: i32, y: i32, colour: i32): void -
   calls: nish.pixelsIndex
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -4:11 pixels: i32[] (const)
+  local -5:11 pixels: i32[] (const)
   local -2:11 at: i32 (const)
   callee -2:21 pixelsIndex -> @nish.pixelsIndex
 function Framebuffer.get(this: Framebuffer, x: i32, y: i32): i32 -> @nish.Framebuffer.get [exported method]
@@ -2819,8 +2812,8 @@ function Framebuffer.get(this: Framebuffer, x: i32, y: i32): i32 -> @nish.Frameb
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 pixels: i32[] (const)
-  local +2:11 at: i32 (const)
-  callee +2:21 pixelsIndex -> @nish.pixelsIndex
+  local +3:11 at: i32 (const)
+  callee +3:21 pixelsIndex -> @nish.pixelsIndex
 function Framebuffer.fill(this: Framebuffer, colour: i32): void -> @nish.Framebuffer.fill [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -3017,23 +3010,23 @@ function kittyFrame(fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBy
   local -5:11 first: boolean (const)
   local -3:9 n: i32 (let)
   local -1:13 c: i32 (const)
-  callee +6:5 pixelsKittyOpen -> @nish.pixelsKittyOpen
-  callee +8:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +9:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +10:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +11:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +12:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +13:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +14:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +15:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +16:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +17:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +18:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +20:5 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +21:5 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +22:5 PixelBytes.reserve -> @nish.PixelBytes.reserve
-  callee +23:18 base64EncodeInto -> @nish.base64EncodeInto
-  callee +24:5 pixelsStringEnd -> @nish.pixelsStringEnd
+  callee +11:5 pixelsKittyOpen -> @nish.pixelsKittyOpen
+  callee +13:7 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +14:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +15:7 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +16:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +17:7 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +18:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +19:7 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +20:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +21:7 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +22:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +23:7 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +25:5 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +26:5 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +27:5 PixelBytes.reserve -> @nish.PixelBytes.reserve
+  callee +28:18 base64EncodeInto -> @nish.base64EncodeInto
+  callee +29:5 pixelsStringEnd -> @nish.pixelsStringEnd
 function pixelsCheckImageId(who: string, imageId: i32): void -> @nish.pixelsCheckImageId
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
@@ -3172,24 +3165,25 @@ function drawHalfBlocks(fb: Framebuffer, canvas: Canvas, rect: PixelRect): void 
   pointer canvas: size=24 writesThrough=false captured=false passedTo=nish.Canvas.paintCell#0
   pointer rect: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -37:9 xs: i32[] (const)
-  callee -37:21 pixelsSampleMap -> @nish.pixelsSampleMap
-  local -36:9 ys: i32[] (const)
-  callee -36:21 pixelsSampleMap -> @nish.pixelsSampleMap
-  local -34:9 left: i32 (const)
-  local -33:9 cw: i32 (const)
-  local -32:9 ch: i32 (const)
-  local -31:9 cpixels: i32[] (const)
-  local -28:9 top: f64 (const)
-  local -27:9 bottom: f64 (const)
-  local -26:7 pyStart: i32 (let)
-  local -20:9 pxStart: i32 (const)
-  local -19:12 py: i32 (let)
-  local -17:11 y: i32 (const)
-  local -16:14 px: i32 (let)
-  local -15:13 x: i64 (const)
-  local -9:13 at: i32 (const)
-  callee -9:23 pixelsIndex -> @nish.pixelsIndex
+  local -41:9 xs: i32[] (const)
+  callee -41:21 pixelsSampleMap -> @nish.pixelsSampleMap
+  local -40:9 ys: i32[] (const)
+  callee -40:21 pixelsSampleMap -> @nish.pixelsSampleMap
+  local -38:9 left: i32 (const)
+  local -37:9 cw: i32 (const)
+  local -36:9 ch: i32 (const)
+  local -35:9 cpixels: i32[] (const)
+  local -32:9 top: f64 (const)
+  local -31:9 bottom: f64 (const)
+  local -30:7 pyStart: i32 (let)
+  local -24:9 pxStart: i32 (const)
+  local -23:12 py: i32 (let)
+  local -19:11 yRow: f64 (const)
+  local -18:11 y: i32 (const)
+  local -17:14 px: i32 (let)
+  local -16:13 x: i64 (const)
+  local -10:13 at: i32 (const)
+  callee -10:23 pixelsIndex -> @nish.pixelsIndex
   local -4:13 sx: i32 (const)
   callee +0:54 Framebuffer.get -> @nish.Framebuffer.get
   local +4:9 rowEnd: i64 (const)
