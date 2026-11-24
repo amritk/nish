@@ -1090,6 +1090,92 @@ static int nomem(void) {
   return 0;
 }
 
+/* An in-process set on a loopback listener, for the modes that drive the set
+ * and their clients from one process. */
+static int inproc_open(int32_t slots, struct nish_uring_set **s, int *l, struct sockaddr_in *a) {
+  *l = socket(AF_INET, SOCK_STREAM, 0);
+  *a = (struct sockaddr_in){.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+  socklen_t al = sizeof *a;
+  if (*l < 0 || bind(*l, (struct sockaddr *)a, sizeof *a) != 0 || listen(*l, 64) != 0 ||
+      getsockname(*l, (struct sockaddr *)a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_opts o = {slots, 1, 0, 0, 0, 0};
+  int rc = nish_uring_open(s, *l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  return 0;
+}
+
+/* Waits of 0 until the slot has nothing queued. Any event but an accept is a
+ * failure: these modes' clients send nothing and do not close. */
+static int drain_slot(struct nish_uring_set *s, int ring, int slot) {
+  long long deadline = now_ms() + 10000;
+  while (nish_uring_queued(s, ring, slot) > 0) {
+    if (now_ms() > deadline) return fail("the slot's queue did not drain");
+    struct nish_uring_event ev[EVENTS_MAX];
+    int n = nish_uring_wait(s, 10, ev, EVENTS_MAX);
+    if (n < 0) return fail("wait");
+    for (int i = 0; i < n; i++)
+      if (ev[i].kind != NISH_URING_ACCEPTED) {
+        fprintf(stderr, "uring-test: event kind %d res %d while a slot drained\n", (int)ev[i].kind, ev[i].res);
+        return 1;
+      }
+  }
+  return 0;
+}
+
+#define CO_RESPONSES 200
+#define CO_HEAD 96
+#define CO_BODY 1200
+
+/* A head+body response is two sends in one pass, as `netWrite2` and two
+ * back-to-back `netWrite`s make them. The ring must hand the kernel one SEND
+ * for both; the mode prints the SENDs per response and fails above 1. Then
+ * three writes in one pass must also leave as one SEND. */
+static int coalesce(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(60);
+  struct nish_uring_set *s;
+  int l, fd, ring, slot;
+  struct sockaddr_in a;
+  if (inproc_open(4, &s, &l, &a) != 0) return 1;
+  if (move_accept(s, 0, &a, &fd, &ring, &slot) != 0) return 1;
+  struct nish_uring_stats st;
+  nish_uring_stats(s, &st);
+  int64_t before = st.sends;
+  uint8_t out[CO_HEAD + CO_BODY], in[CO_HEAD + CO_BODY];
+  for (int r = 0; r < CO_RESPONSES; r++) {
+    for (int i = 0; i < CO_HEAD + CO_BODY; i++) out[i] = pattern(r, i);
+    if (nish_uring_send(s, ring, slot, out, CO_HEAD) != CO_HEAD) return fail("the head's send was refused");
+    if (nish_uring_send(s, ring, slot, out + CO_HEAD, CO_BODY) != CO_BODY) return fail("the body's send was refused");
+    if (drain_slot(s, ring, slot) != 0) return 1;
+    if (read_all(fd, in, CO_HEAD + CO_BODY) != 0 || memcmp(in, out, sizeof in) != 0)
+      return fail("the client did not read the head and the body in order");
+  }
+  nish_uring_stats(s, &st);
+  double per = (double)(st.sends - before) / CO_RESPONSES;
+  printf("sends per response %.2f\n", per);
+  if (per > 1.0) return fail("a head+body response took more than one SEND");
+  before = st.sends;
+  for (int k = 0; k < 3; k++)
+    if (nish_uring_send(s, ring, slot, out + k * 100, 100) != 100) return fail("a back-to-back send was refused");
+  if (drain_slot(s, ring, slot) != 0) return 1;
+  if (read_all(fd, in, 300) != 0 || memcmp(in, out, 300) != 0) return fail("the three writes did not arrive in order");
+  nish_uring_stats(s, &st);
+  if (st.sends - before != 1) {
+    fprintf(stderr, "uring-test: three writes in one pass took %ld SENDs, not 1\n", (long)(st.sends - before));
+    return 1;
+  }
+  nish_uring_destroy(s);
+  close(fd);
+  close(l);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
   signal(SIGPIPE, SIG_IGN);
@@ -1100,6 +1186,7 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "hupheld") == 0) return hupheld();
   if (strcmp(argv[1], "nomem") == 0) return nomem();
   if (strcmp(argv[1], "shutclose") == 0) return shutclose();
+  if (strcmp(argv[1], "coalesce") == 0) return coalesce();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},

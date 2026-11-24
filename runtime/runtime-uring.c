@@ -134,6 +134,7 @@ struct nish_uring_stats {
   int64_t accept_pauses;
   int64_t bound_violations;
   int64_t max_accepting_rings;
+  int64_t sends;
 };
 
 struct nish_uring_set;
@@ -986,6 +987,7 @@ static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set
     e->len = (uint32_t)q->how;
   } else {
     e->opcode = UR_OP_SEND;
+    s->stats.sends++;
     e->addr = (uint64_t)(uintptr_t)(q->data + q->off);
     e->len = q->len - q->off;
     e->op_flags = MSG_NOSIGNAL;
