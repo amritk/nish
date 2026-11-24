@@ -22,6 +22,13 @@
 //                   c-native       the C twin compiled and linked with
 //                                  -march=native, against the C twin (nish
 //                                  refuses --cpu native, so this is C only)
+//                   unix-excl      a byte-identical copy of the build that
+//                                  opens the database as
+//                                  `file:<db>?vfs=unix-excl`: SQLite's
+//                                  unix-excl VFS, the wal-index in heap and
+//                                  no -shm, against the default unix VFS,
+//                                  still WAL and synchronous=NORMAL
+//                                  (docs/sqlite-vfs.md)
 //                 With --validate, the variant must read what every side reads.
 //
 // PGO's training: an instrumented build (`--link --pgo-generate`, with the
@@ -129,6 +136,7 @@ const VARIANTS = {
   "x86-64-v3": { pgo: false, cpu: ["--cpu", "x86-64-v3"] },
   "pgo-x86-64-v3": { pgo: true, cpu: ["--cpu", "x86-64-v3"] },
   "c-native": { native: true },
+  "unix-excl": { vfs: "unix-excl" },
 }
 if (variant !== null && !Object.hasOwn(VARIANTS, variant)) {
   fail(`--variant takes ${Object.keys(VARIANTS).join(", ")}, not ${variant}`)
@@ -336,6 +344,8 @@ const spec = variant === null ? null : VARIANTS[variant]
 if (spec?.native === true) {
   copyOf(twin, twinCopy)
   cTwin("st", twinNative, ["-march=native"])
+} else if (spec?.vfs !== undefined) {
+  copyOf(exe, exeVariant)
 } else if (spec !== null) {
   const pgo = spec.pgo ? ["--pgo-use", trainedProfile(spec.cpu)] : []
   nishBuild(exeVariant, [...pgo, ...spec.cpu], `the ${variant} build`)
@@ -424,9 +434,16 @@ if (!fs.existsSync(db) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8"
   fs.writeFileSync(stamp, want)
 }
 
+// What the variant binary opens: the seed as a `file:` URI on its VFS, the
+// path's `?` and `#` escaped so they stay in it. Every other binary opens
+// the path.
+const dbVariant =
+  spec?.vfs === undefined
+    ? db
+    : `file:${encodeURI(db).replace(/\?/g, "%3F").replace(/#/g, "%23")}?vfs=${spec.vfs}`
 /** One run of `bin` on workload `w`: what it read, and its ns per call. */
 const runOnce = (bin, w) => {
-  const m = parsed(bin, w.name, runWorkload(bin, w.name, db, w.count))
+  const m = parsed(bin, w.name, runWorkload(bin, w.name, bin === exeVariant ? dbVariant : db, w.count))
   return { answer: `rows ${m[1]} checksum ${m[2]} count ${m[4]}`, ns: Number(m[5]) / w.count }
 }
 
