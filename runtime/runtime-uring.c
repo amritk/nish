@@ -323,6 +323,7 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 #define ST_HELD 8u
 #define ST_HUP 16u
 #define ST_MARKED 32u /* on its ring's `mlist`; a close keeps it (NURING-40) */
+#define ST_SHUT(how) (((uint32_t)(how) + 1) << 6) /* the sides a shutdown queued (NURING-43) */
 #define ST_GEN(st) ((st) >> 8)
 #define GEN_MASK 0xffffffu
 
@@ -1550,8 +1551,8 @@ static void ur_replace(struct nish_uring_set *s, struct ur_ring *r, uint32_t slo
  * while the kernel does not hold it (NURING-40): in its room, after moving
  * its unsent bytes to the front if that makes room. A pool buffer they
  * overflow is replaced by one exact record of its unsent bytes and these, so
- * a head and a large body still leave as one SEND; an exact record is never
- * copied again, and the bytes start a new record behind it instead. */
+ * a head and a large body still leave as one SEND; an exact record's
+ * capacity never grows, and the bytes start a new record behind it instead. */
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
@@ -1597,20 +1598,22 @@ queued:
 /* Queue a shutdown of (ring, slot)'s `how` side (0 read, 1 write, 2 both)
  * behind the bytes already queued for it, so they reach the peer first. Its
  * answer is not reported: a shutdown that fails, as on a peer already gone,
- * leaves a connection whose next read or write says so. */
+ * leaves a connection whose next read or write says so. A side already
+ * queued is not queued again, so a slot holds at most two shutdowns and the
+ * bytes between them at most three partly filled records (NURING-43). */
 int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t how) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
   if ((uint32_t)how > 2) return -EINVAL;
-  struct ur_send *q = malloc(sizeof *q);
+  uint32_t *st = &r->st[slot];
+  if (!(ST_SHUT(how) & ~*st)) return 0;
+  struct ur_send *q = calloc(1, sizeof *q);
   if (!q) return -ENOMEM;
   q->slot = (uint32_t)slot;
-  q->gen = ST_GEN(r->st[slot]);
-  q->off = q->len = q->cap = 0;
-  q->pooled = 0;
-  q->in_flight = 0;
+  q->gen = ST_GEN(*st);
   q->how = how;
   ur_enqueue(s, r, (uint32_t)slot, q);
+  *st |= ST_SHUT(how);
   return 0;
 }
 
@@ -1618,7 +1621,7 @@ int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot
  * every completion still on its way for it is stale. The freed slot goes to
  * the accepting job. A head send the ring has not submitted yet is written
  * first (NURING-40). -EAGAIN, with the slot still open, when the SQ has no
- * room for the entries or while the slot's shutdown is at its queue's head,
+ * room for the entries or while any shutdown is at the slot's queue's head,
  * which it then submits if it has not: a SHUTDOWN runs
  * on io-wq, which looks the slot's file up only when it runs, and the cancel
  * below cannot match a request that has no file yet, so a slot freed before
