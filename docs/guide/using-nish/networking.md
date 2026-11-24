@@ -312,6 +312,25 @@ A listener whose rings fail for want of descriptors or memory serves
 descriptors itself, and a later listener asks again.
 On macOS the flag is accepted and does nothing.
 
+To see what a ring server's rings are doing, start it with the environment
+variable `NISH_URING_STATS` set to anything but an empty string or `0`. The
+first ring listener reads it when it opens. Then `kill -USR1` the process and
+the loop's next `pollWait` prints one line a ring listener on stderr:
+
+```text
+uring-stats signal port=8080 sends=3000 pool_new=497 pool_held=0 pool_cached=68 live=3000 slots=3072
+```
+
+`sends` counts the sends the rings have made, `pool_new` the send buffers
+they have allocated, `pool_held` those queued on a connection now and
+`pool_cached` those kept for reuse; `live` is the open connections and
+`slots` the slots the rings hold. Closing a ring listener prints its line
+once more, marked `close`. The handler, once installed, stays for the rest
+of the process; after the last ring listener closes, `SIGUSR1` prints
+nothing. Without the variable the runtime installs no handler and `SIGUSR1`
+ends the process, as it would anyway. `signalFd()` reports only `SIGINT`
+and `SIGTERM`, so it never takes `SIGUSR1` from the dump.
+
 <!-- nish:ok -->
 ```ts
 import { NET_LISTEN_RING, netClose, netRingState, tcpListenFlags } from "nish:net";

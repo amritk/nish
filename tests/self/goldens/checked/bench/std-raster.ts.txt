@@ -1781,8 +1781,30 @@ function rasterSpawnParticle(pool: RasterParticles, x: f64, y: f64, vx: f64, vy:
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: colour life size vx vy x y
-  pointer pool: size=88 writesThrough=true captured=false
+  calls: nish.RasterParticles.has
+  pointer pool: size=88 writesThrough=true captured=false passedTo=nish.RasterParticles.has#0
   stackSites=0 stackLocals=0
+  local -27:9 xs: f64[] (const)
+  local -26:9 ys: f64[] (const)
+  local -25:9 prevXs: f64[] (const)
+  local -24:9 prevYs: f64[] (const)
+  local -23:9 vxs: f64[] (const)
+  local -22:9 vys: f64[] (const)
+  local -21:9 lives: f64[] (const)
+  local -20:9 spans: f64[] (const)
+  local -19:9 sizes: f64[] (const)
+  local -18:9 colours: i32[] (const)
+  local -17:9 i: i32 (const)
+  callee -13:6 RasterParticles.has -> @nish.RasterParticles.has
+function rasterStepParticles(pool: RasterParticles, dt: f64, gravity: f64, drag: f64): void -> @nish.rasterStepParticles [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.RasterParticles.has nish.rasterUnit
+  pointer pool: size=88 writesThrough=false captured=false passedTo=nish.RasterParticles.has#0
+  stackSites=0 stackLocals=0
+  local -28:9 lost: f64 (const)
+  local -27:9 keep: f64 (const)
+  callee -27:21 rasterUnit -> @nish.rasterUnit
   local -26:9 xs: f64[] (const)
   local -25:9 ys: f64[] (const)
   local -24:9 prevXs: f64[] (const)
@@ -1790,35 +1812,16 @@ function rasterSpawnParticle(pool: RasterParticles, x: f64, y: f64, vx: f64, vy:
   local -22:9 vxs: f64[] (const)
   local -21:9 vys: f64[] (const)
   local -20:9 lives: f64[] (const)
-  local -19:9 spans: f64[] (const)
-  local -18:9 sizes: f64[] (const)
-  local -17:9 colours: i32[] (const)
-  local -16:9 i: i32 (const)
-function rasterStepParticles(pool: RasterParticles, dt: f64, gravity: f64, drag: f64): void -> @nish.rasterStepParticles [exported]
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish.rasterUnit
-  pointer pool: size=88 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local -24:9 lost: f64 (const)
-  local -23:9 keep: f64 (const)
-  callee -23:21 rasterUnit -> @nish.rasterUnit
-  local -22:9 xs: f64[] (const)
-  local -21:9 ys: f64[] (const)
-  local -20:9 prevXs: f64[] (const)
-  local -19:9 prevYs: f64[] (const)
-  local -18:9 vxs: f64[] (const)
-  local -17:9 vys: f64[] (const)
-  local -16:9 lives: f64[] (const)
-  local -15:9 n: i32 (const)
+  local -19:9 n: i32 (const)
+  callee -17:8 RasterParticles.has -> @nish.RasterParticles.has
   local -14:12 i: i32 (let)
 function rasterParticles(pixels: i32[], width: i32, height: i32, pool: RasterParticles, alpha: f64, scale: f64, offsetX: f64, offsetY: f64): void -> @nish.rasterParticles [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterRect
   escaping: height width
-  calls: nish.rasterPixel nish.rasterRect nish.rasterWeight
+  calls: nish.RasterParticles.has nish.rasterPixel nish.rasterRect nish.rasterWeight
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterRect#0
-  pointer pool: size=88 writesThrough=false captured=false
+  pointer pool: size=88 writesThrough=false captured=false passedTo=nish.RasterParticles.has#0
   stackSites=0 stackLocals=0
   local +0:9 xs: f64[] (const)
   local +1:9 ys: f64[] (const)
@@ -1829,22 +1832,23 @@ function rasterParticles(pixels: i32[], width: i32, height: i32, pool: RasterPar
   local +6:9 sizes: f64[] (const)
   local +7:9 colours: i32[] (const)
   local +8:9 n: i32 (const)
-  local +9:12 i: i32 (let)
-  local +23:11 size: f64 (const)
-  local +24:11 half: f64 (const)
-  local +25:11 x: f64 (const)
-  local +26:11 y: f64 (const)
-  local +27:11 x0: i32 (const)
-  callee +27:21 rasterPixel -> @nish.rasterPixel
-  local +28:11 y0: i32 (const)
-  callee +28:21 rasterPixel -> @nish.rasterPixel
-  local +29:11 x1: i32 (const)
-  callee +29:21 rasterPixel -> @nish.rasterPixel
-  local +30:11 y1: i32 (const)
-  callee +30:21 rasterPixel -> @nish.rasterPixel
-  local +31:11 weight: i32 (const)
-  callee +31:25 rasterWeight -> @nish.rasterWeight
-  callee +32:5 rasterRect -> @nish.rasterRect
+  callee +10:8 RasterParticles.has -> @nish.RasterParticles.has
+  local +13:12 i: i32 (let)
+  local +27:11 size: f64 (const)
+  local +28:11 half: f64 (const)
+  local +29:11 x: f64 (const)
+  local +30:11 y: f64 (const)
+  local +31:11 x0: i32 (const)
+  callee +31:21 rasterPixel -> @nish.rasterPixel
+  local +32:11 y0: i32 (const)
+  callee +32:21 rasterPixel -> @nish.rasterPixel
+  local +33:11 x1: i32 (const)
+  callee +33:21 rasterPixel -> @nish.rasterPixel
+  local +34:11 y1: i32 (const)
+  callee +34:21 rasterPixel -> @nish.rasterPixel
+  local +35:11 weight: i32 (const)
+  callee +35:25 rasterWeight -> @nish.rasterWeight
+  callee +36:5 rasterRect -> @nish.rasterRect
 import GAME_FRAME from "nish/host/game" -> const GAME_FRAME
 import gameHeight from "nish/host/game" -> function @nish.gameHeight
 import gameSetSize from "nish/host/game" -> function @nish.gameSetSize

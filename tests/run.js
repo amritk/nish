@@ -19020,7 +19020,8 @@ if (dealtHere("runtimeChecks")) {
         ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
         ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
         ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
-        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most five pool buffers (NURING-43)"],
+        ["bigsend", "steady 64 KiB responses leave as one SEND per chained pool buffer and allocate nothing after a warm-up, a shutdown's included (NURING-51)"],
         ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
@@ -36280,6 +36281,126 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
+    // The stats dump (runtime-net.c, NISH_URING_STATS): `echo.ts` again,
+    // driven by a client written here, which reads the server's stderr. Once
+    // all 3,000 connections have echoed it sends SIGUSR1 and one more byte,
+    // so a loop asleep in its wait pumps again, and ends the connections once
+    // the `signal` line is out; closing the listener prints `close`. The
+    // figures pin the struct runtime-net.c declares against runtime-uring.c's:
+    // a field out of place reads another counter. The twin runs without the
+    // knob and sends the same SIGUSR1, which must end the server by its
+    // default action, with nothing on stderr: no handler was installed.
+    if (room >= 1024) {
+      const b = build("net_ring_beyond_limit", "echo.ts")
+      const stats = path.join(dir, "stats.mjs")
+      fs.writeFileSync(
+        stats,
+        `import { spawn } from "node:child_process"
+import net from "node:net"
+const [exe, knob] = process.argv.slice(2)
+const env = { ...process.env }
+delete env.NISH_URING_STATS
+if (knob) env.NISH_URING_STATS = knob
+const server = spawn("bash", ["-c", 'ulimit -n 1024 && exec "$0"', exe], { stdio: ["ignore", "pipe", "pipe"], env })
+let out = "", err = "", echoed = 0, asked = false
+const sockets = []
+const finish = (why) => {
+  process.stdout.write(JSON.stringify({ why, out, err }))
+  process.exit(0)
+}
+const timer = setTimeout(() => {
+  server.kill("SIGKILL")
+  finish("timed out")
+}, 120000)
+server.stderr.setEncoding("utf8")
+server.stderr.on("data", (d) => {
+  err += d
+  if (asked && /^uring-stats signal /m.test(err)) {
+    asked = false
+    for (const s of sockets) s.end()
+  }
+})
+server.stdout.setEncoding("utf8")
+server.stdout.on("data", (d) => {
+  out += d
+  const m = sockets.length > 0 ? null : /^port (\\d+)\\n/.exec(out)
+  if (m === null) return
+  for (let k = 0; k < 3000; k++) {
+    const s = net.connect({ host: "127.0.0.1", port: Number(m[1]) })
+    sockets.push(s)
+    let got = 0
+    s.on("error", () => {})
+    s.on("connect", () => s.write("ping\\n"))
+    s.on("data", (x) => {
+      got += x.length
+      if (got !== 5 || ++echoed !== 3000) return
+      if (!knob) {
+        server.kill("SIGUSR1")
+        return
+      }
+      asked = true
+      server.kill("SIGUSR1")
+      sockets[0].write("x")
+    })
+  }
+})
+server.on("exit", (code, sig) => {
+  clearTimeout(timer)
+  finish(sig === null ? \`exit \${code}\` : \`signal \${sig}\`)
+})
+`
+      )
+      const drive = (knob) => {
+        if (b.exe === null) return null
+        const r = spawnSync(process.execPath, [stats, b.exe, knob], { encoding: "utf8", timeout: 180000 })
+        try {
+          return JSON.parse(r.stdout)
+        } catch {
+          return { why: `the driver failed: ${shown(r)}`, out: "", err: "" }
+        }
+      }
+      const on = drive("1")
+      if (on !== null && on.why === "exit 2" && on.out.includes("rings refused: ")) {
+        skip("net_ring: NISH_URING_STATS: this kernel refuses io_uring")
+      } else {
+        const line = (why) => {
+          const m = new RegExp(
+            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+)$`,
+            "m"
+          ).exec(on?.err ?? "")
+          return m === null ? null : m.slice(1).map(Number)
+        }
+        const sig = line("signal")
+        const end = line("close")
+        // [sends, pool_new, pool_held, pool_cached, live, slots]
+        check(
+          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots and slots on SIGUSR1 and at the listener's close",
+          on !== null &&
+            on.why === "exit 0" &&
+            sig !== null &&
+            end !== null &&
+            sig[0] >= 3000 &&
+            sig[1] >= 1 &&
+            sig[4] === 3000 &&
+            sig[5] >= 3000 &&
+            end[0] >= sig[0] &&
+            end[2] === 0 &&
+            end[3] >= 1 &&
+            end[3] <= end[1] &&
+            end[4] === 0 &&
+            end[5] === sig[5],
+          on === null ? `does not compile and link\n${shown(b.c)}` : `${on.why}\nstdout: ${on.out}\nstderr: ${on.err}`
+        )
+        const off = drive("")
+        check(
+          "net_ring: without NISH_URING_STATS a ring server installs no SIGUSR1 handler: the signal ends it and it prints no ring stats",
+          off !== null && off.why === "signal SIGUSR1" && off.err === "",
+          off === null ? `does not compile and link\n${shown(b.c)}` : `${off.why}\nstdout: ${off.out}\nstderr: ${off.err}`
+        )
+      }
+    } else {
+      skip(`net_ring: NISH_URING_STATS: the hard descriptor limit here is ${hard.stdout.trim()}, under 1,024`)
+    }
     // NURING-38: a slot that read its request to -11 holds no receive queue.
     // Under a limit of 4,096 the 3,000 slots share one ring, whose 2 MiB of
     // provided buffers and the slots' table entries come to about 800 bytes
