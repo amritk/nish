@@ -52,6 +52,16 @@
  *    does not ask its caller to wake at once, and resumes when the back-off
  *    ends; and a client that connects afterwards is still accepted. The set
  *    does not stop accepting for good (NURING-28).
+ *  - `direct`: one ring slept on with `nish_uring_wait_direct`, the
+ *    IORING_ENTER_EXT_ARG enter that pollWait and pollWaitBatch use on a
+ *    ring-only loop. Idle, it sleeps its whole bound and counts one direct
+ *    wait. With two recvs' data in, a minimum of 2 is met before the bound,
+ *    and a minimum of 4 with one in waits the bound out. A pipe watched by its
+ *    POLL_ADD is answered with POLLIN, held until taken, armed again after,
+ *    and a second descriptor is refused while it is armed. A ring without
+ *    IORING_FEAT_EXT_ARG (a kernel before 5.11, forced by the setup hook)
+ *    answers -EOPNOTSUPP, and its set still accepts through `nish_uring_wait`
+ *    (NURING-40).
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer
@@ -93,7 +103,7 @@ static int test_accept_res(int res);
 #define UR_UNREGISTER_EVENTFD 5 /* IORING_UNREGISTER_EVENTFD, which only `nowake` calls */
 
 /* What the hooks force. HOOK_NONE passes every call to the kernel. */
-enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND };
+enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG };
 static enum hook hook;
 static int setup_calls;
 static uint32_t setup_flags_seen[4];
@@ -108,6 +118,7 @@ static long test_setup(unsigned entries, void *p) {
   }
   long rc = syscall(__NR_io_uring_setup, entries, p);
   if (rc >= 0 && hook == HOOK_NO_NODROP) pp->features &= ~UR_FEAT_NODROP;
+  if (rc >= 0 && hook == HOOK_NO_EXT_ARG) pp->features &= ~UR_FEAT_EXT_ARG;
   return rc;
 }
 
@@ -906,6 +917,177 @@ static int nowake(void) {
   return 0;
 }
 
+/* Open a one-ring set of 8 slots on a new loopback listener. */
+static int direct_open(int *l, struct sockaddr_in *a, struct nish_uring_set **s) {
+  socklen_t al = sizeof *a;
+  *l = socket(AF_INET, SOCK_STREAM, 0);
+  memset(a, 0, sizeof *a);
+  a->sin_family = AF_INET;
+  a->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  if (*l < 0 || bind(*l, (struct sockaddr *)a, sizeof *a) != 0 || listen(*l, 64) != 0 ||
+      getsockname(*l, (struct sockaddr *)a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  int rc = nish_uring_open(s, *l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  return 0;
+}
+
+/* Sleep directly and take events until one of `kind` arrives, within 2
+ * seconds: answers its slot, or -1. */
+static int direct_until(struct nish_uring_set *s, int watch, int kind) {
+  long long deadline = now_ms() + 2000;
+  while (now_ms() < deadline) {
+    int rc = nish_uring_wait_direct(s, watch, 1, 1000);
+    if (rc < 0) {
+      fprintf(stderr, "uring-test: a direct wait answered %d\n", rc);
+      return -1;
+    }
+    struct nish_uring_event ev[EVENTS_MAX];
+    int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+    for (int i = 0; i < n; i++)
+      if (ev[i].kind == kind) return ev[i].slot;
+  }
+  return -1;
+}
+
+static int direct(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(30);
+  int l;
+  struct sockaddr_in a;
+  struct nish_uring_set *s;
+  if (direct_open(&l, &a, &s) != 0) return 1;
+  if (!s->rings[0]->ext_arg) {
+    printf("skip: this kernel has no IORING_FEAT_EXT_ARG (before 5.11)\n");
+    return SKIP;
+  }
+  struct nish_uring_event ev[EVENTS_MAX];
+  if (nish_uring_wait(s, 0, ev, EVENTS_MAX) != 0) return fail("a wait found events with no client connecting");
+
+  /* Idle: the enter sleeps its bound, UR_SLEEP_MAX_MS, not the 1,000 asked. */
+  struct nish_uring_stats st;
+  nish_uring_stats(s, &st);
+  int64_t before = st.direct_waits;
+  long long t0 = now_ms();
+  if (nish_uring_wait_direct(s, -1, 1, 1000) != 0) return fail("an idle direct wait answered an error");
+  long long took = now_ms() - t0;
+  nish_uring_stats(s, &st);
+  if (st.direct_waits != before + 1) return fail("an idle direct wait did not count one direct wait");
+  if (took < UR_SLEEP_MAX_MS - 1 || took > 500) {
+    fprintf(stderr, "uring-test: an idle direct wait slept %lld ms, not its bound of %d\n", took, UR_SLEEP_MAX_MS);
+    return 1;
+  }
+
+  /* Two clients, accepted by direct waits alone. */
+  int c[2];
+  for (int i = 0; i < 2; i++) {
+    c[i] = socket(AF_INET, SOCK_STREAM, 0);
+    if (c[i] < 0 || connect(c[i], (const struct sockaddr *)&a, sizeof a) != 0) return fail("client connect");
+    if (direct_until(s, -1, NISH_URING_ACCEPTED) < 0) return fail("a client was not accepted by direct waits");
+  }
+
+  /* A minimum the ring meets ends the sleep before its bound: both clients'
+     bytes are in before the enter, and the enter runs their recvs. An attempt
+     the scheduler stretches past the bound is tried again, up to 5 times. */
+  long long deadline;
+  int met = 0;
+  for (int attempt = 0; attempt < 5 && !met; attempt++) {
+    for (int i = 0; i < 2; i++)
+      if (write(c[i], "m", 1) != 1) return fail("client write");
+    struct timespec d = {0, 20 * 1000 * 1000};
+    nanosleep(&d, NULL);
+    t0 = now_ms();
+    if (nish_uring_wait_direct(s, -1, 2, 1000) != 0) return fail("a direct wait for 2 answered an error");
+    took = now_ms() - t0;
+    int data = 0;
+    deadline = now_ms() + 2000;
+    while (data < 2 && now_ms() < deadline) {
+      int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+      for (int i = 0; i < n; i++) data += ev[i].kind == NISH_URING_DATA;
+      if (data < 2 && nish_uring_wait_direct(s, -1, 1, 100) < 0) return fail("direct wait");
+    }
+    if (data != 2) return fail("the two clients' bytes did not both arrive");
+    met = took < UR_SLEEP_MAX_MS - 2;
+  }
+  if (!met) return fail("a direct wait for 2 with 2 completions due slept its whole bound 5 times");
+
+  /* A minimum the ring cannot meet waits the bound out: a child writes one
+     byte 3 ms into the sleep, and a wait for 4 sleeps on past it. A CQ that
+     already holds a completion is not slept on at all, so the byte comes
+     after the enter, and the buffers the last wait lent are given back first. */
+  if (nish_uring_wait(s, 0, ev, EVENTS_MAX) != 0 || nish_uring_sleep_ms(s, 1000) == 0)
+    return fail("the set was not idle before the wait for 4");
+  pid_t kid = fork();
+  if (kid < 0) return fail("fork");
+  if (kid == 0) {
+    struct timespec d = {0, 3 * 1000 * 1000};
+    nanosleep(&d, NULL);
+    _exit(write(c[0], "t", 1) == 1 ? 0 : 1);
+  }
+  t0 = now_ms();
+  if (nish_uring_wait_direct(s, -1, 4, 1000) != 0) return fail("a direct wait for 4 answered an error");
+  took = now_ms() - t0;
+  int ks;
+  if (waitpid(kid, &ks, 0) != kid || !WIFEXITED(ks) || WEXITSTATUS(ks) != 0) return fail("the writing child");
+  if (took < UR_SLEEP_MAX_MS - 1) {
+    fprintf(stderr, "uring-test: a direct wait for 4 with 1 due returned after %lld ms, before its bound\n", took);
+    return 1;
+  }
+  if (direct_until(s, -1, NISH_URING_DATA) < 0) return fail("the one client's byte did not arrive");
+
+  /* The watched descriptor: a pipe, as `signalFd()` is. */
+  int pp[2];
+  if (pipe(pp) != 0) return fail("pipe");
+  if (nish_uring_wait_direct(s, pp[0], 1, 0) != 0) return fail("arming the poll answered an error");
+  if (!s->poll_armed || s->poll_fd != pp[0]) return fail("a direct wait watching a pipe armed no poll");
+  if (nish_uring_wait_direct(s, pp[1], 1, 0) != -EOPNOTSUPP)
+    return fail("a second descriptor was taken while the poll was armed on the first");
+  if (write(pp[1], "s", 1) != 1) return fail("pipe write");
+  deadline = now_ms() + 2000;
+  while (!(nish_uring_poll_events(s, 0) & POLLIN) && now_ms() < deadline)
+    if (nish_uring_wait_direct(s, pp[0], 1, 1000) < 0 || nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0)
+      return fail("direct wait");
+  if (!(nish_uring_poll_events(s, 0) & POLLIN)) return fail("the poll did not answer a readable pipe");
+  if (nish_uring_wait_direct(s, pp[0], 1, 0) != 0 || s->poll_armed)
+    return fail("a poll answered and not taken was armed again");
+  if (!(nish_uring_poll_events(s, 1) & POLLIN) || nish_uring_poll_events(s, 0) != 0)
+    return fail("taking the poll's events did not clear them");
+  if (nish_uring_wait_direct(s, pp[0], 1, 0) != 0 || !s->poll_armed)
+    return fail("a taken poll was not armed again");
+  nish_uring_destroy(s);
+  for (int i = 0; i < 2; i++) close(c[i]);
+  close(pp[0]);
+  close(pp[1]);
+  close(l);
+
+  /* No EXT_ARG: the caller is sent back to `nish_uring_fd`, and the set works. */
+  hook = HOOK_NO_EXT_ARG;
+  if (direct_open(&l, &a, &s) != 0) return 1;
+  hook = HOOK_NONE;
+  if (nish_uring_wait_direct(s, -1, 1, 0) != -EOPNOTSUPP) return fail("a ring without EXT_ARG took a direct wait");
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0 || connect(fd, (const struct sockaddr *)&a, sizeof a) != 0) return fail("client connect");
+  int got = 0;
+  deadline = now_ms() + 2000;
+  while (!got && now_ms() < deadline) {
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    if (poll(&q, 1, nish_uring_sleep_ms(s, -1)) < 0) return fail("poll on the set's descriptor");
+    int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+    for (int i = 0; i < n; i++) got |= ev[i].kind == NISH_URING_ACCEPTED;
+  }
+  if (!got) return fail("a set without EXT_ARG did not accept through its descriptor");
+  nish_uring_destroy(s);
+  close(fd);
+  close(l);
+  return 0;
+}
+
 /* A slot whose recv the reset ended is held and let go: no event may follow
  * the first hangup, which must carry the reset's errno. */
 static int hupheld(void) {
@@ -1100,6 +1282,7 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "hupheld") == 0) return hupheld();
   if (strcmp(argv[1], "nomem") == 0) return nomem();
   if (strcmp(argv[1], "shutclose") == 0) return shutclose();
+  if (strcmp(argv[1], "direct") == 0) return direct();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},

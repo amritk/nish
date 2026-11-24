@@ -793,6 +793,10 @@ double nish_stat_mtime(const nish_str *path);
  * or a read that fails. */
 int32_t nish_signal_fd(void);
 int32_t nish_read_signal(int32_t fd);
+/* The runtime's own, with no builtin: the read end `signalFd()` made, or -1
+ * while none is made, without making one. A loop's wait asks it to tell the
+ * signal descriptor from any other (runtime-net.c, the direct ring wait). */
+int32_t nish_signal_fd_made(void);
 /* Who owns a path, and whether it runs (docs/security/runtime.md, RT-9; the
  * builtins `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`, #386).
  * `nish_lstat_owner_mode(path)`: `lstat`, so a
