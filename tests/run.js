@@ -19021,7 +19021,7 @@ if (dealtHere("runtimeChecks")) {
         ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
         ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
         ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most five pool buffers (NURING-43)"],
-        ["bigsend", "steady 64 KiB responses leave from chained pool buffers and allocate no record after a warm-up, a shutdown's included (NURING-51)"],
+        ["bigsend", "steady 64 KiB responses leave as one SEND per chained pool buffer and allocate nothing after a warm-up, a shutdown's included (NURING-51)"],
         ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
@@ -36288,7 +36288,8 @@ if (!only || "net_ring".includes(only)) {
     // the `signal` line is out; closing the listener prints `close`. The
     // figures pin the struct runtime-net.c declares against runtime-uring.c's:
     // a field out of place reads another counter. The twin runs without the
-    // knob and no signal, and prints nothing.
+    // knob and sends the same SIGUSR1, which must end the server by its
+    // default action, with nothing on stderr: no handler was installed.
     if (room >= 1024) {
       const b = build("net_ring_beyond_limit", "echo.ts")
       const stats = path.join(dir, "stats.mjs")
@@ -36334,7 +36335,7 @@ server.stdout.on("data", (d) => {
       got += x.length
       if (got !== 5 || ++echoed !== 3000) return
       if (!knob) {
-        for (const t of sockets) t.end()
+        server.kill("SIGUSR1")
         return
       }
       asked = true
@@ -36392,8 +36393,8 @@ server.on("exit", (code, sig) => {
         )
         const off = drive("")
         check(
-          "net_ring: without NISH_URING_STATS a ring server prints no ring stats",
-          off !== null && off.why === "exit 0" && off.err === "",
+          "net_ring: without NISH_URING_STATS a ring server installs no SIGUSR1 handler: the signal ends it and it prints no ring stats",
+          off !== null && off.why === "signal SIGUSR1" && off.err === "",
           off === null ? `does not compile and link\n${shown(b.c)}` : `${off.why}\nstdout: ${off.out}\nstderr: ${off.err}`
         )
       }
