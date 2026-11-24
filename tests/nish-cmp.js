@@ -14983,6 +14983,25 @@ const DECLARED = [
     changelog: module,
     why: `the program imports ${module}, which the seed's standard library does not have, so only the candidate compiles it`,
   })),
+  // WP85 S1: nish/host/ring, nish/host/game, nish/raster and nish/synth prove
+  // their indexes and counts, through ranged helpers and local copies of
+  // their arrays, so each module's own file, and the declarations a caller
+  // writes for the functions whose attributes move, change.
+  ...Object.entries({
+    "bench/std-raster.ts": ["game.ll", "ring.ll", "std-raster.ll"],
+    "bench/std-synth.ts": ["game.ll", "ring.ll", "std-synth.ll", "synth.ll"],
+    "tests/link/std_host_game/main.ts": ["ring.ll"],
+    "tests/link/std_host_ring/main.ts": ["main.ll", "ring.ll"],
+    "tests/link/std_raster/main.ts": ["main.ll"],
+    "tests/link/std_synth/main.ts": ["synth.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: "host, raster and synth",
+      why: "nish/host/ring, nish/host/game, nish/raster and nish/synth prove every index and count the std-panics ratchet counted, so the modules gain range guards and helpers and drop panic paths, and a caller's declarations of the moved functions change attributes",
+    }))
+  ),
   // forEach on an array, a Map or a Set is new, so the seed refuses the
   // programs that call it.
   ...[
