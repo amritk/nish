@@ -1593,14 +1593,8 @@ export class KeyState {
    * @internal Used by `Terminal` in term-io.ts.
    */
   downKeys: i32[]
-  /** When each key down last pressed or repeated. */
-  private downSince: f64[]
-  /** Whether each key down has repeated. */
-  private downRepeated: boolean[]
-  /** The code each key down last came with, which its synthesized release carries. */
-  private downCodes: i32[]
-  /** The `MOD_` bits each key down last came with, which its synthesized release carries. */
-  private downMods: i32[]
+  /** Each key down, in the order they went down, as `downKeys` lists their names. */
+  private held: TermHeldKey[]
   /**
    * Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on.
    */
@@ -1619,10 +1613,7 @@ export class KeyState {
     this.watermarked = false
     this.quitOnCtrlC = true
     this.downKeys = []
-    this.downSince = []
-    this.downRepeated = []
-    this.downCodes = []
-    this.downMods = []
+    this.held = []
   }
 
   /**
@@ -1635,7 +1626,7 @@ export class KeyState {
    * @returns True from the key's press until its release, real or synthetic, or a loss of focus.
    */
   isDown(key: i32, code: i32): boolean {
-    return this.find(termKeyId(key, code)) >= 0
+    return this.find(termKeyId(key, code)) !== null
   }
 
   /**
@@ -1659,9 +1650,8 @@ export class KeyState {
     for (let k: i32 = 0; k < toI32(events.length); k++) {
       const e: TermEvent = events[k]
       if (e.type === EVENT_FOCUS && !e.gained) {
-        const first: i32 = 0
-        while (toI32(this.downKeys.length) > 0) {
-          this.release(first, out)
+        for (const h of this.held) {
+          this.release(h, out)
         }
       } else if (e.type === EVENT_KEY && this.quitOnCtrlC && termIsCtrlC(e)) {
         if (e.action === ACTION_PRESS) {
@@ -1723,13 +1713,10 @@ export class KeyState {
       return out
     }
     const clock: f64 = this.watermarked ? this.watermarkMs : nowMs
-    let k: i32 = 0
-    while (k < toI32(this.downKeys.length)) {
-      const gap: f64 = this.downRepeated[k] ? this.releaseGapMs : this.firstRepeatMs
-      if (clock - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
-        this.release(k, out)
-      } else {
-        k = k + 1
+    for (const h of this.held) {
+      const gap: f64 = h.repeated ? this.releaseGapMs : this.firstRepeatMs
+      if (clock - h.since >= gap && !termNamesKey(batch, h.id)) {
+        this.release(h, out)
       }
     }
     return out
@@ -1737,77 +1724,93 @@ export class KeyState {
 
   /** Record key event `e` at `nowMs`; false for a release of a key not down, which `apply` drops. */
   private press(e: TermEvent, nowMs: f64): boolean {
-    const at: i32 = this.find(termKeyId(e.key, e.code))
+    const id: i32 = termKeyId(e.key, e.code)
+    const at: TermHeldKey | null = this.find(id)
     if (e.action === ACTION_RELEASE) {
       this.releasesAreSynthetic = false
-      if (at < 0) {
+      if (at === null) {
         return false
       }
       this.remove(at)
       return true
     }
     const known: boolean = termFinite(nowMs)
-    if (at < 0) {
+    if (at === null) {
       let since: f64 = known ? nowMs : toF64(0)
       if (!known && this.watermarked) {
         since = this.watermarkMs
       }
-      this.downKeys.push(termKeyId(e.key, e.code))
-      this.downSince.push(since)
-      this.downRepeated.push(false)
-      this.downCodes.push(e.code)
-      this.downMods.push(e.modifiers)
+      this.held.push(new TermHeldKey(id, since, e.code, e.modifiers))
+      this.downKeys.push(id)
       return true
     }
     if (known) {
-      this.downSince[at] = nowMs
+      at.since = nowMs
     }
-    this.downRepeated[at] = true
-    this.downCodes[at] = e.code
-    this.downMods[at] = e.modifiers
+    at.repeated = true
+    at.code = e.code
+    at.modifiers = e.modifiers
     if (this.releasesAreSynthetic) {
       e.action = ACTION_REPEAT
     }
     return true
   }
 
-  /** Let key `at` go, appending its release to `out`. */
-  private release(at: i32, out: TermEvent[]): void {
-    const id: i32 = this.downKeys[at]
+  /** Let key `h` go, appending its release to `out`. */
+  private release(h: TermHeldKey, out: TermEvent[]): void {
     const e: TermEvent = new TermEvent(EVENT_KEY)
-    e.key = id >> 21
-    e.code = this.downCodes[at]
-    e.modifiers = this.downMods[at]
+    e.key = h.id >> 21
+    e.code = h.code
+    e.modifiers = h.modifiers
     e.action = ACTION_RELEASE
     out.push(e)
-    this.remove(at)
+    this.remove(h)
   }
 
-  /** Where key `id` is in `downKeys`, or -1. */
-  private find(id: i32): i32 {
-    for (let k: i32 = 0; k < toI32(this.downKeys.length); k++) {
-      if (this.downKeys[k] === id) {
-        return k
+  /** The key named `id` among those down, or null. */
+  private find(id: i32): TermHeldKey | null {
+    for (const h of this.held) {
+      if (h.id === id) {
+        return h
       }
     }
-    return -1
+    return null
   }
 
-  /** Drop key `at`, keeping the others in order. */
-  private remove(at: i32): void {
-    const last: i32 = toI32(this.downKeys.length) - 1
-    for (let k: i32 = at; k < last; k++) {
-      this.downKeys[k] = this.downKeys[k + 1]
-      this.downSince[k] = this.downSince[k + 1]
-      this.downRepeated[k] = this.downRepeated[k + 1]
-      this.downCodes[k] = this.downCodes[k + 1]
-      this.downMods[k] = this.downMods[k + 1]
+  /** Drop key `gone`, keeping the others in order, and `downKeys` with them. */
+  private remove(gone: TermHeldKey): void {
+    const held: TermHeldKey[] = []
+    const ids: i32[] = []
+    for (const h of this.held) {
+      if (h !== gone) {
+        held.push(h)
+        ids.push(h.id)
+      }
     }
-    this.downKeys.pop()
-    this.downSince.pop()
-    this.downRepeated.pop()
-    this.downCodes.pop()
-    this.downMods.pop()
+    this.held = held
+    this.downKeys = ids
+  }
+}
+
+/** A key `KeyState` holds down: its name, as `termKeyId` makes it, and what its synthesized release carries. */
+class TermHeldKey {
+  /** The key's name, as `termKeyId` makes it. */
+  id: i32
+  /** When the key last pressed or repeated. */
+  since: f64
+  /** Whether the key has repeated. */
+  repeated: boolean
+  /** The code the key last came with. */
+  code: i32
+  /** The `MOD_` bits the key last came with. */
+  modifiers: i32
+
+  constructor(id: i32, since: f64, code: i32, modifiers: i32) {
+    this.id = id
+    this.since = since
+    this.repeated = false
+    this.code = code
+    this.modifiers = modifiers
   }
 }
 
