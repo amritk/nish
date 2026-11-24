@@ -3938,6 +3938,20 @@ A cursor call used to look its handle up and then ask SQLite whether the read ha
 **With a request's setup on every call, the gain is 716 ns at the median (4.1 %) and 529 ns at the min.** Both are larger than the noise band (315 and 88) and smaller than every IQR of the row. `feed`, which makes no cursor call, moved 58 ns at the median, inside its 398 ns band.
 
 The whole machine ran slower in this run than in the one above (`feed` 21,963 against 18,082 ns at the median), so its figures compare with each other, not with that table.
+
+### One call per row: `readRow`
+
+`feed-cursor-row` is `feed-cursor-walk` with each post's `user_id`, `body` and `created_at` read by one `Cursor.readRow` call, and its author's `username` by another (`bench/sqlite/main.ts`, `walkFeedRows`). The per-column walk makes four column calls a post: `columnI64` and two `columnInto` on the post, one `columnInto` on the author. The rowid seeks and the likes count are the same in both. Both run in the same rounds, and every run of both printed `rows 200000 checksum 1510587328`, `feed`'s line.
+
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `ebdd2e71`, on the machine above. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 14,187 / 18,498 (1,118) | 13,997 / 18,461 (5,994) | 190 / 37 |
+| `feed-cursor-walk` | 10,084 / 12,359 (1,327) | 9,835 / 12,080 (1,832) | 249 / 279 |
+| `feed-cursor-row` | 11,550 / 14,148 (2,737) | 11,418 / 14,976 (4,604) | 132 / 828 |
+
+**`readRow` was not faster here: `feed-cursor-row` less `feed-cursor-walk` is +1,789 ns at the median and +1,466 ns at the min.** At the median the gap is larger than both noise bands (279 and 828), but smaller than the IQRs of `feed-cursor-row` (2,737) and its copy (4,604), so this run does not resolve it beyond those spreads. Two calls a post in place of four do not show as a gain at this row width: each `readRow` encodes its column list into a byte buffer, the adapter reads the columns twice (once to size the text, once to copy it), and the method decodes 20 bytes a column back into `ints` and `spans`.
 <!-- sqlite-cursor:end -->
 
 <!-- sqlite-pgo:begin -->

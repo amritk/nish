@@ -77,8 +77,9 @@ class Cursor {
   again. A refusal is the code `columnType` answers for the first column it
   refuses, and writes nothing; `ints` shorter than `cols`, `spans` shorter
   than `3 * cols.length` or over 65,535 columns is `MISUSE`, and over 2^31 - 1
-  bytes is `TOOBIG`. On the feed walk it replaces six column calls a post
-  with two (see [docs/BENCHMARKS.md](BENCHMARKS.md#the-feed-through-cursors-against-sql)).
+  bytes is `TOOBIG`. On the feed walk it replaces a post's four column
+  calls (three on the post, one on its author) with two; that measured no
+  faster ([docs/BENCHMARKS.md](BENCHMARKS.md#one-call-per-row-readrow)).
 - A cursor call on a closed, stale or invalidated cursor answers `MISUSE`
   (`Err(SQLITE_MISUSE)`, or 0 from `rowid` and `columnI64`). So does `next` or
   `previous` when the cursor has no current row, and a column read then.
