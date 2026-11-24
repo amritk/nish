@@ -173,7 +173,9 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
 
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor-count|feed-cursor|insert|insert-txn> <db> <count>")
+    console.error(
+      "usage: main <lookup|feed|feed-cursor-walk|feed-cursor-count|feed-cursor|insert|insert-txn> <db> <count>"
+    )
     return 2
   }
   const mode: string = process.argv[1]

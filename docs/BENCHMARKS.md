@@ -3938,6 +3938,23 @@ A cursor call used to look its handle up and then ask SQLite whether the read ha
 **With a request's setup on every call, the gain is 716 ns at the median (4.1 %) and 529 ns at the min.** Both are larger than the noise band (315 and 88) and smaller than every IQR of the row. `feed`, which makes no cursor call, moved 58 ns at the median, inside its 398 ns band.
 
 The whole machine ran slower in this run than in the one above (`feed` 21,963 against 18,082 ns at the median), so its figures compare with each other, not with that table.
+
+### Like counts in one call
+
+`feed-cursor-count` is `feed-cursor-walk` with each post's likes counted by `Cursor.countRange(id, id, counts)`. That is one seek and one walk of `likes_post_id_idx` inside the adapter, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeed`). Both workloads also reach the kept seek key: an integer seek now sets the cursor's own `UnpackedRecord` and builds no record ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `feed-cursor-walk` is still the old per-like walk.
+
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `3e3444ad`, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 14,590 / 19,588 (5,225) | 16,284 / 22,154 (7,089) | 1,694 / 2,566 |
+| `feed-cursor-walk` | 12,193 / 15,300 (5,988) | 10,556 / 13,232 (5,937) | 1,637 / 2,069 |
+| `feed-cursor-count` | 11,568 / 13,126 (3,637) | 11,195 / 13,948 (4,321) | 373 / 821 |
+| `feed-cursor` | 13,479 / 16,284 (3,544) | 14,462 / 17,428 (7,312) | 983 / 1,144 |
+
+**`feed-cursor-count` less `feed-cursor-walk` is −2,174 ns at the median and −625 ns at the min, both on the build.** This is derived: it is the difference of two rows of the table, not a timed row of its own. The median gap is larger than both noise bands (2,069 and 821). It is smaller than every IQR of the two rows (5,988, 5,937, 3,637 and 4,321). The walk's copy (13,232 ns) is faster than the count's build. So this run does not resolve the gain beyond those spreads. The machine was noisy in this run: `feed`'s noise band is 2,566 ns at the median, against 564 ns in the first table.
+
+Against `feed` in the same rounds, `feed-cursor-count` is 6,461 ns less a call at the median (−33.0 % of `feed`'s median), and `feed-cursor-walk` is 4,287 ns less (−21.9 %).
 <!-- sqlite-cursor:end -->
 
 <!-- sqlite-pgo:begin -->
