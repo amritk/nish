@@ -12662,6 +12662,87 @@ int main(void) {
         seekAfter === seekUsed,
       mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
     )
+    // Cursor.readRow under SQLite's asserts: its columns are read through
+    // the same record the per-column calls unpack, overflow copy included.
+    const rowDir = path.join("tests", "link", "std_sqlite_cursor_row")
+    const rowDebug = link(path.join(rowDir, "main.ts"), "row-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const rowDebugRun = rowDebug.status === 0 ? runOut("row-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_row passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      rowDebugRun !== null &&
+        rowDebugRun.status === 0 &&
+        rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
+      rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
+    )
+    // A readRow walk allocates nothing once warm. The first pass reads every
+    // row, the 5,000-byte overflow ones among them, so the cursor's record
+    // buffer, SQLite's overflow cache and readRow's exchange buffer reach
+    // their size; two more passes then keep SQLite's memory where it was,
+    // and both the text bytes and the integers sum to what the rows hold.
+    const rowMemTs = path.join(sqDir, "cursor-row-memory.ts")
+    fs.writeFileSync(
+      rowMemTs,
+      [
+        'import { Cursor, OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";',
+        "",
+        "declare function sqlite3_memory_used(): i64;",
+        "declare function sqlite3_memory_highwater(reset: i32): i64;",
+        "",
+        "const pass = (cur: Cursor, cols: i32[], ints: i64[], spans: i32[], text: u8[]): i64 => {",
+        "  let got = toI64(0);",
+        '  let more = cur.first().expect("first");',
+        "  while (more) {",
+        '    got = got + toI64(cur.readRow(cols, ints, spans, text).expect("readRow")) + ints[0] + ints[1];',
+        '    more = cur.next().expect("next");',
+        "  }",
+        "  return got;",
+        "};",
+        "",
+        "export const main = (): i32 => {",
+        '  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");',
+        "  db.exec(",
+        '    "CREATE TABLE w (id INTEGER PRIMARY KEY, a INTEGER, big TEXT, s TEXT);" +',
+        '      "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 2000)" +',
+        "      \" INSERT INTO w SELECT x, x * 3, CASE WHEN x % 4 = 0 THEN printf('%05000d', x) ELSE 'ab' END, NULL FROM c\"",
+        '  ).expect("fill");',
+        '  db.beginRead().expect("beginRead");',
+        '  const cur = db.openCursor("w", "id,a,big,s").expect("open w");',
+        "  const cols: i32[] = [0, 1, 2, 3];",
+        "  const ints = new Array<i64>(4);",
+        "  const spans = new Array<i32>(12);",
+        "  const text = new Array<u8>(8192);",
+        "  const once = pass(cur, cols, ints, spans, text);",
+        "  const used = sqlite3_memory_used();",
+        "  sqlite3_memory_highwater(1);",
+        "  const twice = pass(cur, cols, ints, spans, text) + pass(cur, cols, ints, spans, text);",
+        "  const peak = sqlite3_memory_highwater(0);",
+        "  const after = sqlite3_memory_used();",
+        "  console.log(`${once} ${twice} ${used} ${peak} ${after}`);",
+        '  cur.close().expect("close");',
+        '  db.endRead().expect("endRead");',
+        '  db.close().expect("close the database");',
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const rowMem = link(rowMemTs, "cursor-row-memory", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1" })
+    const rowMemRun = rowMem.status === 0 ? runOut("cursor-row-memory") : null
+    const [rowOnce, rowTwice, rowUsed, rowPeak, rowAfter] = (rowMemRun ? rowMemRun.stdout.trim() : "").split(" ")
+    // Rows 1..2000: id + 3 * id each, and text of 5,000 bytes on every
+    // fourth row and 2 bytes on the rest.
+    const rowWant = 4 * ((2000 * 2001) / 2) + 500 * 5000 + 1500 * 2
+    check(
+      "sqlite-link: after a first pass, two readRow walks over overflow rows keep SQLite's memory flat",
+      rowMemRun !== null &&
+        rowMemRun.status === 0 &&
+        rowOnce === String(rowWant) &&
+        rowTwice === String(2 * rowWant) &&
+        Number(rowUsed) > 0 &&
+        rowPeak === rowUsed &&
+        rowAfter === rowUsed,
+      rowMem.stderr + (rowMemRun ? rowMemRun.stdout + rowMemRun.stderr : "")
+    )
 
     // A Node addon links SQLite too, and keeps its API to itself: a Node that
     // links a system libsqlite3 exports the same names.

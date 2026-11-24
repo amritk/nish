@@ -42,6 +42,7 @@ class Cursor {
   columnType(n: i32): Result<i32, i32>
   columnI64(n: i32): i64
   columnInto(n: i32, buf: u8[], at: i32): Result<i32, i32>
+  readRow(cols: readonly i32[], ints: i64[], spans: i32[], text: u8[]): Result<i32, i32>
   close(): Result<void, i32>
 }
 ```
@@ -64,6 +65,20 @@ class Cursor {
   calls again. A NULL is 0 bytes. An INTEGER or FLOAT is `Err(SQLITE_MISMATCH)`:
   turning a number into text would allocate inside SQLite, and `columnI64`
   reads it.
+- `readRow(cols, ints, spans, text)` reads the columns `cols` lists, in that
+  order and repeats allowed, with one adapter call. Column `cols[i]` answers
+  what the per-column calls answer: its type in `spans[3i]`, its integer in
+  `ints[i]` as `columnI64` reads it (0 for TEXT, BLOB and NULL), and for TEXT
+  or BLOB the offset and length of its bytes in `text` in `spans[3i + 1]` and
+  `spans[3i + 2]`, each column's bytes after the one before; other types
+  answer offset and length 0. It answers `Ok` with the bytes the row's
+  columns hold. When that is more than `text.length` it copies nothing and
+  writes nothing to `ints` or `spans`, so a caller grows `text` and calls
+  again. A refusal is the code `columnType` answers for the first column it
+  refuses, and writes nothing; `ints` shorter than `cols`, `spans` shorter
+  than `3 * cols.length` or over 65,535 columns is `MISUSE`, and over 2^31 - 1
+  bytes is `TOOBIG`. On the feed walk it replaces six column calls a post
+  with two (see [docs/BENCHMARKS.md](BENCHMARKS.md#the-feed-through-cursors-against-sql)).
 - A cursor call on a closed, stale or invalidated cursor answers `MISUSE`
   (`Err(SQLITE_MISUSE)`, or 0 from `rowid` and `columnI64`). So does `next` or
   `previous` when the cursor has no current row, and a column read then.
@@ -228,7 +243,12 @@ slack SQLite's record decoder may read past a corrupt record's end. The current 
 unpacked lazily, on the first column read after a move, and cached until the
 cursor moves. A steady-state row loop therefore allocates nothing; a test
 reads 10,000 rows under `SQLITE_DEFAULT_MEMSTATUS=1` and checks that SQLite's
-memory high-water mark does not move.
+memory high-water mark does not move. `readRow` passes its column list and
+reads its answers through one byte buffer the `Cursor` keeps, grown only when
+a call lists more columns than any before; the adapter copies text and blob
+bytes into the caller's `text` and allocates nothing. A test walks 2,000 rows,
+one in four on overflow pages, with `readRow` twice after a first pass and
+checks the same high-water mark.
 
 `nishsqlite_close` closes a connection's cursors before its statements.
 
@@ -258,7 +278,12 @@ translation unit. The calls, all of them:
   `sqlite3_str` API for the schema check (with `sqlite3_prepare_v3` for
   `beginRead`'s and `endRead`'s kept statements).
 
-What it writes, all of it: its own allocations; in the `KeyInfo` it allocated,
+`readRow` (`nishsqlite_cursor_read_row`) calls nothing the per-column reads do
+not: it reads each column as `columnType`, `columnI64` and `columnInto` do,
+through the same unpacked row, and copies the bytes with `memcpy`.
+
+What it writes, all of it: its own allocations, and the caller's buffers a
+`readRow` passes; in the `KeyInfo` it allocated,
 `aSortFlags` (the per-column `DESC` flags `sqlite3KeyInfoAlloc` leaves zero,
 the way SQLite's own code generator fills them; `aColl` stays zero, which is
 `BINARY`); in the row's `UnpackedRecord`, `nField`, which SQLite's caller

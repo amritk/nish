@@ -157,6 +157,13 @@ Column reads are bounded twice. A column number outside the declared list is
 `SQLITE_SCHEMA`. `columnInto` and `keyTextBytes` bound the caller's buffer as
 `columnInto` and `bindTextBytes` do: an `at` past the buffer, or a window
 outside it, is `SQLITE_MISUSE`, and a value is copied only when it fits.
+`readRow` reads each listed column through the same bounds and copies into
+`text` only when the whole row's text and blob bytes fit; otherwise it
+answers their length and writes none of the caller's buffers. Its column list
+and answers travel in a byte buffer of 2 bytes a column and 20 a slot, which
+the adapter checks against the column count before it reads or writes it;
+`ints` or `spans` shorter than the list is `SQLITE_MISUSE`, and a row over
+2^31 - 1 bytes is `SQLITE_TOOBIG`.
 
 A record's length is read with `sqlite3BtreePayloadSize`. Over
 `SQLITE_MAX_LENGTH` it is `SQLITE_CORRUPT`, which keeps the decoder's `u32`
@@ -226,6 +233,15 @@ Tests:
   with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
 - `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
   equal byte for byte to SQL's.
+- `tests/link/std_sqlite_cursor_row`: `readRow` against `columnType`,
+  `columnI64` and `columnInto` on every row of a table with overflow rows,
+  short records, NULLs and the rowid alias, and through an index; a text
+  buffer one byte short, a short record, columns out of range, `ints` or
+  `spans` too short, no row and a closed cursor, each answering its code and
+  leaving the caller's buffers as they were. `tests/run.js` (`sqlite-link`)
+  runs it again with `-DSQLITE_DEBUG`, and checks that two `readRow` walks
+  over 2,000 rows, 500 on overflow pages, keep SQLite's memory and its
+  high-water mark where a first pass left them.
 
 Untested: a read that answers `SQLITE_ABORT` because the row moved under the
 cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`

@@ -1,6 +1,6 @@
 // The challenge's three queries through `nish/sqlite`, `count` calls each:
 //
-//   main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>
+//   main <lookup|feed|feed-cursor-walk|feed-cursor-row|feed-cursor|insert|insert-txn> <db> <count>
 //
 // `bench/sqlite/run.mjs` builds it with `--link` (the speed profile) and runs
 // it beside `twin.c`, the same loop written against SQLite's own API. Each
@@ -20,6 +20,9 @@
 // - feed-cursor-walk: the same walk on one read transaction and four cursors
 //   opened once, before the timed loop, and closed after it, so a call is the
 //   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
+// - feed-cursor-row: feed-cursor-walk with each post's and each author's
+//   columns read by one `Cursor.readRow` call instead of one call a column;
+//   the likes count still reads its key with `columnI64`.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -91,6 +94,15 @@ class Fold {
     this.sum = sum
   }
 
+  /** The `n` bytes of `text` at `at` folded, as `bytes` folds `buf`'s. */
+  span(text: u8[], at: i32, n: i32): void {
+    let sum: u32 = this.sum * 31 + toU32(n)
+    for (let k: i32 = 0; k < n && at >= 0 && at + k < toI32(text.length); k += 1) {
+      sum = sum * 31 + toU32(text[at + k])
+    }
+    this.sum = sum
+  }
+
   /** One row of POST_SQL: id, body, created_at, username, like count. */
   post(st: Statement): boolean {
     this.add(toU32(st.columnI64(0)))
@@ -137,6 +149,63 @@ const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold)
   return ok && r.isOk() ? rows : -1
 }
 
+/** What `walkFeedRows` reads a row into: the column lists and the buffers `Cursor.readRow` fills. */
+class RowReads {
+  /** posts' user_id, body and created_at. */
+  post: i32[]
+  /** users' username. */
+  user: i32[]
+  ints: i64[]
+  spans: i32[]
+  text: u8[]
+
+  constructor() {
+    this.post = [1, 2, 3]
+    this.user = [1]
+    this.ints = new Array<i64>(3)
+    this.spans = new Array<i32>(9)
+    this.text = new Array<u8>(1024)
+  }
+}
+
+/**
+ * `walkFeed` with each post's and each author's columns read by one
+ * `readRow` call; it folds the same values in the same order.
+ */
+const walkFeedRows = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold, rr: RowReads): i32 => {
+  let rows: i32 = 0
+  let ok: boolean = true
+  const sp: i32[] = rr.spans
+  let r = ix.first()
+  while (ok && r.isOk() && r.value && rows < FEED) {
+    const id: i64 = ix.rowid()
+    const p = post.seekRowid(id)
+    ok = p.isOk() && p.value && post.readRow(rr.post, rr.ints, sp, rr.text).isOk()
+    f.add(toU32(id))
+    if (ok && sp.length >= 9) {
+      f.span(rr.text, sp[4], sp[5])
+      f.span(rr.text, sp[7], sp[8])
+      const u = user.seekRowid(rr.ints[0])
+      ok = u.isOk() && u.value && user.readRow(rr.user, rr.ints, sp, rr.text).isOk()
+      if (ok) f.span(rr.text, sp[1], sp[2])
+    }
+    let n: i64 = 0
+    ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
+    if (ok) {
+      let l = like.seek(SEEK_GE)
+      while (l.isOk() && l.value && like.columnI64(0) === id) {
+        n += 1
+        l = like.next()
+      }
+      ok = l.isOk()
+    }
+    f.add(toU32(n))
+    rows += 1
+    r = ix.next()
+  }
+  return ok && r.isOk() ? rows : -1
+}
+
 /**
  * One feed call through cursors, as a request makes it: `beginRead`, open the
  * four cursors, walk them, `endRead`, which closes them. Answers the rows
@@ -162,7 +231,7 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
 
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>")
+    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor-row|feed-cursor|insert|insert-txn> <db> <count>")
     return 2
   }
   const mode: string = process.argv[1]
@@ -258,7 +327,7 @@ export const main = (): number => {
       }
     }
     t1 = monotonicNanos()
-  } else if (mode === "feed-cursor-walk") {
+  } else if (mode === "feed-cursor-walk" || mode === "feed-cursor-row") {
     if (db.beginRead().isErr()) {
       return 2
     }
@@ -266,7 +335,19 @@ export const main = (): number => {
     const posts = db.openCursor("posts", "id,user_id,body,created_at")
     const users = db.openCursor("users", "id,username,created_at")
     const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
-    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
+    const rr = new RowReads()
+    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk() && mode === "feed-cursor-row") {
+      t0 = monotonicNanos()
+      for (let i: i32 = 0; i < count; i += 1) {
+        const n: i32 = walkFeedRows(recent.value, posts.value, users.value, likes.value, f, rr)
+        if (n < 0) {
+          failed += 1
+        } else {
+          rows += n
+        }
+      }
+      t1 = monotonicNanos()
+    } else if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
       t0 = monotonicNanos()
       for (let i: i32 = 0; i < count; i += 1) {
         const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, f)
