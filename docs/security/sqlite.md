@@ -229,7 +229,7 @@ fails without it:
 | A WAL database makes no `-shm` file, so no other process can map its wal-index | "link/std_sqlite_excl: exits with 0 and stdout matches expected.out" |
 | A second process that reads the file while it is open is refused with `SQLITE_BUSY`; on the default VFS the same read succeeds | the same check |
 | A same-process second connection shares the file and can checkpoint it | "link/std_sqlite_excl_second: exits with 0 and stdout matches expected.out" |
-| Under `--profile wasi` it opens and the first lock answers `SQLITE_IOERR_LOCK`, so a WAL database there takes no write; an unknown VFS name fails the open | ``link/std_sqlite_vfs_wasi: on `--profile wasi` `?vfs=unix-excl` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)`` |
+| Under `--profile wasi` it opens and the first lock answers `SQLITE_IOERR_LOCK`, so a WAL database there takes no write; an unknown VFS name fails the open | ``link/std_sqlite_vfs_wasi: on `--profile wasi` `?vfs=unix-excl` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)``; the unknown name natively, "link/std_sqlite_vfs_wasi: exits with 0 and stdout matches expected.out" |
 
 The exclusive lock is advisory, like every SQLite lock: it keeps out another
 SQLite, not a process that writes the file without locking.
