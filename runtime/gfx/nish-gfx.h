@@ -97,7 +97,9 @@ void nishgfx_instance_release(NishGfxInstance *instance);
 int32_t nishgfx_instance_error_next(NishGfxInstance *instance, void *msg, size_t cap);
 
 /* An SDL3 window of width x height pixels; `title` is NUL-terminated UTF-8.
- * Answers null when SDL has no video driver. */
+ * Answers null for a 0 side or one past INT32_MAX, when SDL has no video
+ * driver, when memory or SDL's window properties run out, and when SDL
+ * refuses the window; SDL_GetError() says why for the SDL failures. */
 NishGfxWindow *nishgfx_window_create(const char *title, uint32_t width, uint32_t height);
 /* Release a surface made on the window first: it reads the window's size. */
 void nishgfx_window_release(NishGfxWindow *window);

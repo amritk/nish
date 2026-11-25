@@ -254,6 +254,25 @@ int main(void) {
     }
     printf("triangle: a resize to -5 x 7 reads 0 x 7\n");
   }
+
+  /* The offscreen driver is none of wayland, x11 or cocoa, so there is no
+   * WebGPU surface to make on its window: surface_create answers null and
+   * reports why on the instance's ring. */
+  {
+    char msg[NISHGFX_ERROR_MESSAGE_MAX + 1] = "";
+    while (nishgfx_instance_error_next(inst, msg, sizeof msg) != 0) {
+    }
+    NishGfxSurface *surf = nishgfx_surface_create(inst, win);
+    int32_t kind = nishgfx_instance_error_next(inst, msg, sizeof msg);
+    if (surf != NULL || kind != NISHGFX_ERROR_INTERNAL ||
+        strcmp(msg, "no WebGPU surface for SDL video driver \"offscreen\"") != 0) {
+      fprintf(stderr, "triangle: surface_create on the offscreen driver answered %p, %d \"%s\"\n", (void *)surf,
+              kind, msg);
+      if (surf != NULL) nishgfx_surface_release(surf);
+      return 1;
+    }
+    printf("triangle: the offscreen driver gets no surface, and the instance is told why\n");
+  }
   nishgfx_window_release(win);
 
   nishgfx_offscreen_release(off);

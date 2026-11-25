@@ -98,14 +98,20 @@ fetch() {
   fi
 }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/fetch-gfx.XXXXXX")"
+# The work directory is inside build/gfx/, so the last step's mv is a rename
+# on one filesystem, never a copy an interrupt can stop halfway. Its name
+# starts with a dot, which the run cache's stamp scan skips.
+mkdir -p build/gfx
+work="$(mktemp -d build/gfx/.fetch-gfx.XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 
 fetch "$wgpu_base/$wgpu_zip" "$work/wgpu.zip" "$wgpu_sha256"
 fetch "$sdl_base/$sdl_tarball" "$work/sdl.tar.gz" "$sdl_sha256"
 
-# Everything is built into a staging prefix and moved into place last, so a
-# failed build leaves the previous install, or none, never half of one.
+# Everything is built into a staging prefix and renamed into place last, so a
+# failed build leaves the previous install, or none, never half of one. The
+# stamp is written only after the rename, so an install without it is fetched
+# again.
 stage="$work/prefix"
 mkdir -p "$stage/include/webgpu" "$stage/lib" "$work/wgpu"
 unzip -q "$work/wgpu.zip" -d "$work/wgpu"
@@ -131,8 +137,7 @@ cmake -S "$work/SDL3-$sdl_version" -B "$work/sdl-build" -G Ninja \
 cmake --build "$work/sdl-build" >"$work/build.log" 2>&1 || { cat "$work/build.log" >&2; exit 1; }
 cmake --install "$work/sdl-build" >/dev/null
 
-printf '%s\n' "$want" > "$stage/.fetched"
-mkdir -p build/gfx
 rm -rf "$dest"
 mv "$stage" "$dest"
+printf '%s\n' "$want" > "$stamp"
 printf 'fetch-gfx: %s in %s\n' "$want" "$dest"

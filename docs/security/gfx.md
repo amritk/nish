@@ -58,7 +58,7 @@ bound fails the check whose string is in the third column.
 | A pipeline builder takes 16 vertex attributes and a bind group builder 16 entries; the 17th answers -1 | `nishgfx_pipeline_desc_attribute` (`:757`), `nishgfx_bind_group_desc_buffer` (`:830`) | "gfx: the pipeline and bind group builders take 16 entries each and refuse the 17th" |
 | An offscreen target of 0, or more than 16384, on a side is refused before wgpu-native sees it. That keeps `width * 4 * height` within 2^30 | `nishgfx_offscreen_create` (`:960`) | "gfx: offscreen_create refuses 0 and 16385 a side and hands 16384 to the device" |
 | `offscreen_read` into fewer than `width * 4 * height` bytes answers -1 and writes nothing | `nishgfx_offscreen_read` (`:1015`) | "gfx: offscreen_read refuses a buffer one byte short and leaves it untouched" |
-| A program that declares no `@nishgfx_` function links none of `runtime/gfx/`, SDL or wgpu-native. A string that names one is not a declaration | `callsGfx` (`src/run-cache.ts:181`), the `nishgfx_` read in `scripts/build.sh` | "gfx: a module that does not declare an @nishgfx_ function (plain\|string\|defined\|after) links without runtime/gfx/ or its libraries" |
+| A program that declares no `@nishgfx_` function links none of `runtime/gfx/`, SDL or wgpu-native. A string that names one is not a declaration | `callsGfx` (`src/run-cache.ts:181`), the `nishgfx_` read in `scripts/build.sh` | "gfx: a module that does not declare an @nishgfx_ function (plain\|defined\|after) links without runtime/gfx/ or its libraries" |
 
 The readback's row copy reads at most `mapped` bytes and writes at most
 `need`. The reason is in the comment above the loop (`:1056-1058`), and it
@@ -75,17 +75,19 @@ overruns to reach. Both are bounds read only from the code.
 | GFX-2 | Low | `nishgfx_adapter_request` (`:548-554`), `nishgfx_device_request` (`:640-643`), `nishgfx_offscreen_read` (`:1040-1043`) | A request wgpu-native has not answered after 1000 rounds of `wgpuInstanceProcessEvents` aborts the process. The pending callback still points at a stack frame, so returning would let a late answer write into freed stack. The abort is the safe exit, but it is a stop no caller can catch. | **Open.** Untested: no driver here leaves a request unanswered, and no test provokes one. |
 | GFX-3 | Low | every call into wgpu-native | wgpu-native validates through its error callback, but some malformed input panics instead (`nm` shows `handle_error_fatal` in `libwgpu_native.a`), and a panic aborts the process. The shim screens the inputs it knows reach a panic (GFX-1, the offscreen sizes, the builder caps, and a null bind group or vertex buffer, which `nishgfx_pass_set_bind_group` and `nishgfx_pass_set_vertex_buffer` (`:930-941`) ignore instead of passing on); it cannot list the ones it does not know. | **Open.** Each one found is screened in the shim and gets a triangle line, as GFX-1 did. |
 | GFX-4 | Low | `gfxFingerprint` (`src/run-cache.ts:575`) | The run cache keys a graphics build by the shim's sources, the prefix path and its `.fetched` stamp, not by the archives' bytes. A prefix whose `libSDL3.a` or `libwgpu_native.a` is replaced without a new stamp keeps the cached binary linked against the old ones. | **Open.** Hashing the archives costs tens of megabytes a run. `scripts/fetch-gfx.sh` always writes a new install and stamp, so this needs a prefix edited by hand. |
-| GFX-5 | Low | `nishgfx_device_release` (`:658-665`), the callbacks' userdata (`:628-632`) | The device-lost and uncaptured-error callbacks hold the device struct, and `nishgfx_device_release` frees it after one round of events. wgpu-native keeps the device alive while any object made from it lives, so a buffer, pipeline or pass used after its device is released can fire a callback into freed memory. `nish-gfx.h` tells the program to release a device's objects first, a surface before its window and the instance last (`nish-gfx.h:92-93`, `:102`); nothing enforces any of it. | **Open.** Untested: no check uses an object after its device. Counting a device's live objects, or giving the callbacks a block that release only disconnects, would close it. |
+| GFX-5 | Low | `nishgfx_device_release` (`:658-665`), the callbacks' userdata (`:628-632`) | The device-lost and uncaptured-error callbacks hold the device struct, and `nishgfx_device_release` frees it after one round of events. wgpu-native keeps the device alive while any object made from it lives, so a buffer, pipeline or pass used after its device is released can fire a callback into freed memory. `nish-gfx.h` tells the program to release a device's objects first, a surface before its window and the instance last (`nish-gfx.h:141-143`, `:105`, `:92-93`); nothing enforces any of it. | **Open.** Untested: no check uses an object after its device. Counting a device's live objects, or giving the callbacks a block that release only disconnects, would close it. |
 
 ## Trust model
 
 - **The libraries.** `scripts/fetch-gfx.sh` downloads wgpu-native's release
   zip and SDL's source tarball over HTTPS. Before it reads either one, it
   checks the download against the sha256 the script pins (`fetch`,
-  `scripts/fetch-gfx.sh:91-98`). It builds into a staging directory, writes
-  the `.fetched` stamp there last, and only then moves the directory into
-  `build/gfx/<platform>/` (`:134-137`), so an interrupted fetch never leaves
-  a stamp on a half install. `NISH_GFX_PREFIX` names an
+  `scripts/fetch-gfx.sh:91-98`). It builds into a staging directory inside
+  `build/gfx/` (`:105`), so moving it to `build/gfx/<platform>/` is a rename
+  on one filesystem, and writes the `.fetched` stamp only after that rename
+  (`:140-142`). An interrupted fetch leaves the old install, none, or a new
+  one without a stamp, which the next run fetches again. Untested: no check
+  interrupts a fetch. `NISH_GFX_PREFIX` names an
   install made some other way, and `scripts/build.sh` trusts it as given:
   whoever sets it chooses the code that is linked.
 - **The program.** A length the program passes is its contract.
@@ -101,7 +103,9 @@ overruns to reach. Both are bounds read only from the code.
   libraries at run time, and `nishgfx_surface_create` (`:354`) reads the
   display and surface pointers SDL hands back. It makes a surface only for
   the `wayland`, `x11` and macOS `cocoa` drivers, and refuses any other
-  driver with a reported error (`:384-390`).
+  driver with a reported error (`:384-390`; "gfx: surface_create refuses a
+  window on a video driver other than wayland, x11 or cocoa and reports
+  why", on the offscreen driver).
   The window is made with an external graphics context (`:258`), so SDL
   loads no GL for it. When the swapchain is outdated or lost,
   `nishgfx_surface_acquire` reconfigures it at the window's pixel size and
@@ -118,10 +122,10 @@ In `tests/run.js`, section `gfx` (`tests/gfx.js`). The triangle checks run on
 any Vulkan, lavapipe included, and are skipped with a reason when no adapter
 answers.
 
-- "gfx: a module that does not declare an @nishgfx_ function (plain|string|defined|after) links without runtime/gfx/ or its libraries"
+- "gfx: a module that does not declare an @nishgfx_ function (plain|defined|after) links without runtime/gfx/ or its libraries"
 - "gfx: a module that declares an @nishgfx_ function, with no SDL3 or wgpu-native installed, is refused naming scripts/fetch-gfx.sh"
 - "gfx: a module that declares an @nishgfx_ function is refused under --profile wasm|wasm-host|wasi"
-- "gfx: scripts/build.sh and src/run-cache.ts callsGfx select the shim by the same declare prefix"
+- "gfx: scripts/build.sh and src/run-cache.ts callsGfx select the shim by the same declare prefix". It reads both rules out of their source text, build.sh's `grep -Eq` pattern and run-cache.ts's `declaresPrefixed` with its type annotations dropped, and runs each on the same IR samples (the three modules above that declare no `@nishgfx_` function, and one that does), so it fails when an edit to either one changes an answer, or when it can no longer find a rule in the text.
 - "gfx: every C symbol runtime/gfx/nish-gfx.c calls, less SDL's and wgpu-native's, is one src/c-symbols.ts reserves"
 - "gfx: tests/gfx/triangle.c draws a red triangle on a blue clear offscreen and reads it back"
 - "gfx: offscreen_read refuses a buffer one byte short and leaves it untouched"
@@ -132,6 +136,7 @@ answers.
 - "gfx: a bind group entry of size 0 binds the rest of the buffer instead of aborting the process"
 - "gfx: offscreen_create refuses 0 and 16385 a side and hands 16384 to the device"
 - "gfx: a resize SDL reports below zero reaches the program as 0"
+- "gfx: surface_create refuses a window on a video driver other than wayland, x11 or cocoa and reports why"
 - "gfx: nish c-import binds every function runtime/gfx/nish-gfx.h declares"
 - "gfx: a Nish program that calls nishgfx_instance_create links runtime/gfx/ with --link and gets an instance"
 

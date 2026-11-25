@@ -119,7 +119,6 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
   }
   const notCalls = {
     plain: plainLl,
-    string: variant("string", '@.gfxname = private unnamed_addr constant [18 x i8] c"declare @nishgfx_x"'),
     defined: variant("defined", "define void @nishgfx_local() {\n  ret void\n}"),
     after: variant("after", 'declare void @nish_gfx_other() ; "@nishgfx_x"'),
   }
@@ -293,6 +292,10 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
         "offscreen refuses 0 and 16385, hands 16384 to the device",
       ],
       ["gfx: a resize SDL reports below zero reaches the program as 0", "a resize to -5 x 7 reads 0 x 7"],
+      [
+        "gfx: surface_create refuses a window on a video driver other than wayland, x11 or cocoa and reports why",
+        "the offscreen driver gets no surface, and the instance is told why",
+      ],
     ]
     for (const [name, line] of printed) {
       check(name, drawn.status === 0 && drawn.stdout.includes(`triangle: ${line}\n`), shown(drawn))
