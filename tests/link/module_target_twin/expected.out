@@ -1,0 +1,12 @@
+PASS  a module's wasm32 twin is <name>.wasm32.ts beside it
+PASS  a path that is not a .ts file has no twin name
+PASS  a twin with the same exports agrees, however it is laid out
+PASS  a twin that drops an export is refused, naming it
+PASS  a twin that adds an export is refused, naming it
+PASS  a function parameter's type is compared
+PASS  a method's parameter is compared
+PASS  a field's type is compared
+PASS  a twin that does not parse is left to the build that compiles it
+PASS  nish-wasm32 is not the i32 mode's condition
+PASS  nish-wasm32 is not the f64 mode's condition
+module_target_twin: 11 passed, 0 failed, 0 skipped
