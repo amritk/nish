@@ -697,7 +697,9 @@ const refuseHostParameter = (ctx: CheckContext, sig: FunctionSig, decl: Node, na
  *
  * WP53 B1.1 adds a `u8[]` or `readonly u8[]` parameter, in a run of one or more
  * that a single `u64` closes: the count C may touch in every buffer of the run
- * (`docs/wp53-ffi-buffers-handles.md` §3a). `syscall` is refused by its name
+ * (`docs/wp53-ffi-buffers-handles.md` §3a). WP89 S2 widens the buffer to an
+ * array of `u16`, `u32`, `i32` or `f32` too (`isForeignBuffer`); the count is
+ * in elements, so every buffer of one run has the same element type. `syscall` is refused by its name
  * (§10 Q11(a)), because no fixed arity declares a variadic C function soundly.
  */
 const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
@@ -716,15 +718,26 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       "`declare function syscall` is refused: `syscall` is variadic in C and bypasses libc, so declare the libc function that wraps the system call instead"
     )
   }
-  // The buffers of the run not yet closed by a count, and the last one's
-  // name, which the refusal of a run left open names.
+  // The buffers of the run not yet closed by a count, the last one's name,
+  // which the refusal of a run left open names, and the first one's element,
+  // which every later buffer of the run must share: one count in elements
+  // cannot bound a `u8[]` and an `f32[]` at once.
   let run = 0
   let lastBuffer = ""
+  let runElem = -1
+  let runFirst = ""
   let i = 0
   while (i < sig.paramTypes.length) {
     if (isForeignBuffer(ctx.table, sig.paramTypes[i])) {
       // WP66 S5: a buffer that names its count is outside every run.
       if (sig.countedBuffers.indexOf(i) < 0) {
+        const elem = ctx.table.refOf(sig.paramTypes[i])
+        if (run === 0) {
+          runElem = elem
+          runFirst = sig.paramNames[i]
+        } else if (elem !== runElem) {
+          refuseMixedRun(ctx, sig, decl, name, i, runFirst, runElem)
+        }
         run = run + 1
         lastBuffer = sig.paramNames[i]
       }
@@ -747,7 +760,7 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       // a `CPtr` or a `string` there is refused rather than read as the next
       // parameter and the run reported as missing its count.
       if (sig.paramTypes[i] !== T_U64) {
-        rule = "the parameter after a run of `u8[]` buffers is their byte count, a `u64`"
+        rule = "the parameter after a run of buffers is their element count, a `u64`"
       }
       run = 0
     } else if (bare === T_STRING) {
@@ -763,14 +776,14 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
     } else if (bare >= 0 && ctx.table.kindOf(bare) === K_ARRAY) {
       rule =
-        "the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target"
+        "the only arrays a declared C function takes are of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, whose elements have one layout on every target"
     } else if (!isForeignType(ctx.table, sig.paramTypes[i])) {
       // S3.3: `CPtr | null` passes, because the call site is where a null is
       // held to the literal one (`refuseForeignNullable` in `expressions.ts`,
       // `docs/wp27-ffi.md` §8g): the declaration cannot tell `realpath(p, null)`
       // from handing C back a null it gave out.
       rule =
-        "a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare class` it borrows by pointer"
+        "a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]`, `u16[]`, `u32[]`, `i32[]` or `f32[]` buffer followed by its `u64` count, or a `declare class` it borrows by pointer"
     }
     if (rule !== "") {
       ctx.error(
@@ -783,7 +796,7 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
   if (run > 0) {
     ctx.error(
       decl,
-      `\`declare function ${name}\` takes the buffer \`${lastBuffer}\` with no count after it: a run of \`u8[]\` parameters is followed by one \`u64\`, the byte count C may touch in each`
+      `\`declare function ${name}\` takes the buffer \`${lastBuffer}\` with no count after it: a run of buffers is followed by one \`u64\`, the count of elements C may touch in each`
     )
   }
   checkCountedBuffers(ctx, sig, decl, name)
@@ -817,6 +830,28 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
   }
 }
 
+/**
+ * WP89 S2: parameter `i` of `declare function name` is a buffer whose element
+ * is not `elem`, the element of the buffer `first` that opened its run. One
+ * count in elements cannot bound both, so the run is refused rather than the
+ * count read in the first one's units. Its own function for the reason
+ * `refuseUnknownCount` is.
+ */
+const refuseMixedRun = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  decl: Node,
+  name: string,
+  i: i32,
+  first: string,
+  elem: i32
+): void => {
+  ctx.error(
+    decl,
+    `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${ctx.table.typeName(sig.paramTypes[i])} in a run that \`${first}\` opened as ${ctx.table.typeName(elem)}[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first`
+  )
+}
+
 /** The type name a buffer's count is named with (WP66 S5). */
 const COUNTED_BY: string = "CountedBy"
 
@@ -826,11 +861,12 @@ const COUNTED_BY_PLACE_MESSAGE: string =
 
 /** `CountedBy` with other than a buffer and a string literal. */
 const COUNTED_BY_FORM_MESSAGE: string =
-  '`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`'
+  '`CountedBy` takes a buffer of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`'
 
 /**
  * WP66 S5: each `CountedBy<u8[], "n">` names a parameter `n` of the same
- * declaration that is the buffer's byte count: `u8`, `u16`, `u32` or `u64`,
+ * declaration that is the buffer's element count (WP89 S2: bytes for a
+ * `u8[]`, `f32`s for an `f32[]`): `u8`, `u16`, `u32` or `u64`,
  * or an out class holding one (`foreignCountWidth`), which C reads through
  * its pointer. The call holds the count to the buffer's length as WP53 holds
  * a positional `u64` (`emitForeignBuffers` in `src/emit-strings.ts`).
