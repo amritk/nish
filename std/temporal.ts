@@ -2584,8 +2584,9 @@ export class Duration {
   /**
    * The duration, as `new Temporal.Duration(...)`; every field defaults to 0.
    * Panics with a `RangeError` when two fields have different signs, when
-   * `years`, `months` or `weeks` reaches 2^32, or when the rest comes to 2^53
-   * seconds or more.
+   * `years`, `months` or `weeks` reaches 2^32, when the rest comes to 2^53
+   * seconds or more, or when `microseconds` or `nanoseconds` is the least
+   * `i64`, whose negation does not fit.
    *
    * @param years years
    * @param months months
@@ -2613,7 +2614,8 @@ export class Duration {
     // The checks are written out here, not a call of `temporalDurationProblem`,
     // because every `until` and `add` builds a `Duration`: as a call they cost
     // `until` on a date 70% (bench/temporal.ts). Each bound is tested on both
-    // sides, so the least `i64`, whose magnitude does not fit, is refused too.
+    // sides. The least `i64` as microseconds or nanoseconds is within them, so
+    // a guard after them refuses it.
     let sign: i32 = temporalSignOf(0, years)
     sign = temporalSignOf(sign, months)
     sign = temporalSignOf(sign, weeks)
@@ -2866,8 +2868,9 @@ const temporalWholeSeconds = (
  * where the constructor would panic:
  * two non-zero fields with different signs, `years`, `months` or `weeks` at
  * 2^32 or past, or the rest coming to 2^53 seconds or more (Temporal's
- * IsValidDuration). Every bound is tested on both sides, so the least `i64`,
- * whose magnitude does not fit, is refused too.
+ * IsValidDuration). Every bound is tested on both sides. The least `i64` as
+ * microseconds or nanoseconds is within them; the constructor refuses it, and
+ * `durationFromOrNull` never reads it, as every field it reads is below 10^16.
  */
 const temporalDurationProblem = (
   years: i64,

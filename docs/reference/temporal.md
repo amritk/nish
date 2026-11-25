@@ -729,7 +729,7 @@ class Duration
 
 | Member | |
 | --- | --- |
-| `new Duration(years: i64 = 0, months: i64 = 0, weeks: i64 = 0, days: i64 = 0, hours: i64 = 0, minutes: i64 = 0, seconds: i64 = 0, milliseconds: i64 = 0, microseconds: i64 = 0, nanoseconds: i64 = 0)` | The duration, as `new Temporal.Duration(...)`; every field defaults to 0. Panics with a `RangeError` when two fields have different signs, when `years`, `months` or `weeks` reaches 2^32, or when the rest comes to 2^53 seconds or more. |
+| `new Duration(years: i64 = 0, months: i64 = 0, weeks: i64 = 0, days: i64 = 0, hours: i64 = 0, minutes: i64 = 0, seconds: i64 = 0, milliseconds: i64 = 0, microseconds: i64 = 0, nanoseconds: i64 = 0)` | The duration, as `new Temporal.Duration(...)`; every field defaults to 0. Panics with a `RangeError` when two fields have different signs, when `years`, `months` or `weeks` reaches 2^32, when the rest comes to 2^53 seconds or more, or when `microseconds` or `nanoseconds` is the least `i64`, whose negation does not fit. |
 | `readonly blank: boolean` | Whether every field is zero. |
 | `readonly days: i64` | Days. |
 | `readonly hours: i64` | Hours. |
