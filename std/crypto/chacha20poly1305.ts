@@ -98,15 +98,19 @@ const POLY1305_HIGH_BIT: i32 = 0x1000000
 const chacha20Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
 
 /**
- * The little-endian `u32` at `buf[at]` to `buf[at + 3]`. The last byte is read
- * first, so that its bounds check covers the other three; every caller passes
- * a window inside `buf`. `poly1305Le64` and `chacha20Poly1305TagMatch` read
- * theirs the same way. The copy `tests/cases/ct_asm_chacha20poly1305` holds to
- * the disassembly check reads with `uncheckedGet` and `wrappingAdd` instead,
- * because a bounds or overflow check is a branch that check refuses; the ones
- * here test only the public offset.
+ * The little-endian `u32` at `buf[at]` to `buf[at + 3]`, or 0 for a window
+ * outside `buf`, which no caller passes: the guard lets the range prover
+ * discharge every index, and the last byte is read first so that one check
+ * covers the other three. `poly1305Le64` reads its eight bytes the same way.
+ * The copy `tests/cases/ct_asm_chacha20poly1305` holds to the disassembly
+ * check reads with `uncheckedGet` and `wrappingAdd` instead, because a bounds
+ * or overflow check is a branch that check refuses; the ones here test only
+ * the public offset.
  */
 const chacha20Word = (buf: u8[], at: i32): u32 => {
+  if (at < 0 || at > toI32(buf.length) - 4) {
+    return 0
+  }
   const b3: u32 = toU32(buf[at + 3])
   return toU32(buf[at]) | (toU32(buf[at + 1]) << 8) | (toU32(buf[at + 2]) << 16) | (b3 << 24)
 }
@@ -417,8 +421,11 @@ export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[]
   return out
 }
 
-/** The little-endian `u64` at `buf[at]` to `buf[at + 7]`. */
+/** The little-endian `u64` at `buf[at]` to `buf[at + 7]`, or 0 for a window outside `buf`, as in `chacha20Word`. */
 const poly1305Le64 = (buf: u8[], at: i32): u64 => {
+  if (at < 0 || at > toI32(buf.length) - 8) {
+    return 0
+  }
   const b7: u64 = toU64(buf[at + 7])
   return (
     toU64(buf[at]) |
@@ -702,7 +709,8 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], len: i32): u8[]
  * first difference is.
  *
  * Written out byte by byte and without a length check so that `tests/cases/ct_asm_chacha20poly1305` can hold a copy of it to the
- * disassembly check; the caller has checked that `sealed` holds the window.
+ * disassembly check. Its one caller passes the received tag copied into a
+ * 16-byte array, at 0, so the range prover discharges every index.
  */
 const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
   const last: u32 = toU32(tag[15] ^ sealed[at + 15])
@@ -806,9 +814,20 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
   const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, len)
+  // The received tag, copied out so that the compare reads two 16-byte arrays
+  // at offsets the range prover can see; `len` is `total - 16`, so every
+  // guard holds.
+  const received: u8[] = new Array<u8>(16)
+  let j: i32 = len
+  for (let i: i32 = 0; i < 16 && i < toI32(received.length); i++) {
+    if (j >= 0 && j < toI32(sealed.length)) {
+      received[i] = sealed[j]
+      j = j + 1
+    }
+  }
   // The one branch on the comparison, and it is on the answer the caller is
   // about to learn anyway.
-  const match: u32 = chacha20Poly1305TagMatch(tag, sealed, len)
+  const match: u32 = chacha20Poly1305TagMatch(tag, received, 0)
   wipe(polyKey)
   wipe(tag)
   let plaintext: u8[] | null = null
