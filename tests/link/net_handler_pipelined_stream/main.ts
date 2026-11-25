@@ -12,7 +12,7 @@
 // the request pool flat. Last, `GET /` sent in its own write while the stream
 // is held must not wake the handler's `wait` until the `end`.
 import { copyBytes } from "nish/bytes"
-import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
+import { HANDLER_DROPPED, HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { Router, RouterLimits } from "nish/net/router"
 import {
   connectResult,
@@ -312,6 +312,25 @@ export const main = (): i32 => {
   t.ok("a request sent behind a held stream does not wake the handler's wait", monotonicNanos() - before >= toI64(200000000))
   const late: boolean = app.endLate() && response(app, c) && answered(c, "abcde")
   t.ok("and is answered after the stream's end", late && response(app, c) && answered(c, "hello"))
+
+  // A second client hangs up while its stream is held: the late `end` finds
+  // the connection gone, and the handler keeps answering the first.
+  const gone: Client = connect(app)
+  sendAll(app, gone, ascii("GET /stream HTTP/1.1\r\nHost: t\r\n\r\nGET / HTTP/1.1\r\nHost: t\r\n\r\n"))
+  const goneBy: i64 = monotonicNanos() + FIVE_SECONDS
+  while (app.held === null && monotonicNanos() < goneBy) {
+    app.turn()
+  }
+  netClose(gone.fd)
+  for (let k: i32 = 0; k < HELD_TURNS; k++) {
+    app.turn()
+  }
+  const orphan: HttpRequest | null = app.held
+  app.held = null
+  t.ok("a stream held past its peer's hang-up ends as dropped", orphan !== null && app.h.end(orphan) === HANDLER_DROPPED)
+  t.ok("with the request pipelined behind it never taken", app.home === null && app.early === 0)
+  t.ok("and the other connection still answers a pair in order", pair(app, c, both))
+  t.eqI32("with the pool at its warm size", app.h.pooled(), pooled)
   netClose(c.fd)
   return t.done()
 }
