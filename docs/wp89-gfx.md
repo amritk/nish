@@ -176,8 +176,8 @@ wgpu-native's default uncaptured-error and device-lost handlers `panic!`
 default"), which would end a Nish program from inside Rust. So
 `nishgfx_device_request` always installs both callbacks in the device
 descriptor (`webgpu.h:4589`, `4598`). The uncaptured-error callback may fire
-at any time, like `AllowSpontaneous`, and webgpu.h forbids calling back into
-the API from it, so each callback only copies the kind and up to 255 bytes
+at any time, like `AllowSpontaneous` (`webgpu.h:478`), so each callback
+only copies the kind and up to 255 bytes
 of the message into a fixed 16-entry ring in the shim's static storage, and
 counts what did not fit. Nish drains it:
 
@@ -309,36 +309,74 @@ the page side hands each to the same JavaScript dispatcher:
 - **ring**: four `ringPush` calls per command, then one `flush()` import
   whose JavaScript walks the slots once and publishes the head once (the
   fast way to drain it; `ringOver`'s word-at-a-time `shift`,
-  `runtime/page.mjs:119`, measured about 3.5 times slower again: 2,665,471 ns
+  `runtime/page.mjs:119`, measured about 3.5 times slower again: 2,650,672 ns
   for 10,000);
 - **array**: the best case for any batching transport, four plain stores
   per command into an `Int32Array` in module storage, then one
   `flushArray(k)` import that walks the `k` words.
 
-Built with the 0.46.0 seed, `nish cmds.ts --target wasm32 --host
+The bench's Nish side, `cmds.ts`, with the page side's three imports
+declared in `web/host.ts` (`draw(op, a, b, c)`, `flush()`, `flushArray(n)`):
+
+```typescript
+import { draw, flush, flushArray } from "./web/host.ts";
+import { ringPush } from "nish/host/ring";
+
+export const RING = new Int32Array(2 + 4 * 32768);
+export const CMDS = new Int32Array(4 * 32768);
+
+export const viaImports = (n: integer<0, 100000>): void => {
+  for (let i: i32 = 0; i < n; i++) {
+    draw(7, i, i + 1, i + 2);
+  }
+};
+
+export const viaRing = (n: integer<0, 100000>): void => {
+  for (let i: i32 = 0; i < n; i++) {
+    ringPush(RING, 7);
+    ringPush(RING, i);
+    ringPush(RING, i + 1);
+    ringPush(RING, i + 2);
+  }
+  flush();
+};
+
+export const viaArray = (n: integer<0, 32768>): void => {
+  let k: i32 = 0;
+  for (let i: i32 = 0; i < n; i++) {
+    CMDS[k] = 7; CMDS[k + 1] = i; CMDS[k + 2] = i + 1; CMDS[k + 3] = i + 2;
+    k = k + 4;
+  }
+  flushArray(k);
+};
+```
+
+It was built with the 0.46.0 seed, `nish cmds.ts --target wasm32 --host
 web/host.ts --allow-panics -o out/` then
-`bash scripts/build.sh out/cmds.ll out/ring.ll -o out/cmds.wasm --profile wasm-host`,
-and run under Node v22.23.5 (V8, the engine of Chromium's WebGPU) on one
-core of an Intel Xeon at 2.10 GHz. Each figure is the median of 7 runs, each
-the mean over 500 frames (200,000 for `n = 8`), after one warm-up run:
+`bash scripts/build.sh out/cmds.ll out/ring.ll -o out/cmds.wasm --profile wasm-host`
+(2,641 bytes), and driven by a Node script that instantiates it with the
+three imports and times each export. That ran under Node v22.23.5 (V8, the
+engine Chromium runs a page's wasm on) on an Intel Xeon at 2.10 GHz. Each
+figure is the median of 7 samples, each the mean over 500 frames (200,000
+for `n = 8`), after one warm-up sample; the range is the 7 samples' minimum
+to maximum:
 
 | Commands a frame | imports | array | ring |
 | --- | --- | --- | --- |
-| 8 (the triangle's pass, with headroom) | 54 ns | 96 ns | 672 ns |
-| 10,000 (10,000 sprites, one draw each: the worst case) | 80,954 ns | 88,889 ns | 757,492 ns |
-| 20,000 | 163,960 ns | 183,249 ns | 1,538,305 ns |
+| 8 (the triangle's pass, with headroom) | 52 ns (49–54) | 98 ns (97–105) | 637 ns (632–676) |
+| 10,000 (10,000 sprites, one draw each: the worst case) | 84,914 ns (83,517–98,214) | 89,937 ns (87,896–97,038) | 749,112 ns (718,359–783,280) |
+| 20,000 | 174,490 ns (165,527–279,737) | 182,239 ns (176,574–193,719) | 1,545,910 ns (1,490,486–1,611,094) |
 
-Across the runs the spread (min to max of the 7) was 50–59 ns, 79,909–83,550
-ns and 159,643–211,944 ns for imports, and 95–103 ns, 86,948–90,827 ns and
-176,768–204,602 ns for the array. An import costs about 8 ns a call (80,954 /
-10,000 = 8.1); the ring costs about 76 ns a command (757,492 / 10,000 = 75.7),
-nine times as much, because each of its four `ringPush` calls reduces both
-counts modulo twice the capacity and bounds-checks the slot
+An import costs about 8.5 ns a call (84,914 / 10,000); the ring costs about
+75 ns a command (749,112 / 10,000 = 74.9), nearly nine times as much,
+because each of its four `ringPush` calls is an out-of-line call that
+reduces both counts modulo twice the capacity and bounds-checks the slot
 (`std/host/ring.ts`). Even the plain array, which no ring can beat, is
-slower than imports at every size (by 10% at 10,000 commands), since it pays
-a store in wasm and a load in JavaScript where the import pays one call. A
-batched sprite frame (§7) is a handful of commands, where the table's first
-row says the transport costs well under a microsecond either way.
+slower than imports at every size (by 6% at 10,000 commands and 88% at 8),
+since it pays a store in wasm and a load in JavaScript where the import pays
+one call. A batched sprite frame (§7) is a handful of commands, where the
+table's first row says the transport costs well under a microsecond either
+way.
 
 ## 6. The auto-scaling controller
 
@@ -382,7 +420,7 @@ It pins two numbers, each a failing check:
 - **CPU time per frame: at most 1 ms** at 10,000 sprites, the median over
   1,000 offscreen frames on the CI runner, GPU time excluded. That is a
   quarter of a 240 Hz frame (4.17 ms) and 100 ns a sprite. The transport is
-  not where it goes: §5 measured 54 ns for a frame of 8 commands. S9 records
+  not where it goes: §5 measured 52 ns for a frame of 8 commands. S9 records
   the measured figure beside the bound in its PR.
 - **Allocations per frame: zero.** After the first frame, the bench's count
   of arena and heap allocations across 1,000 frames is unchanged. Everything
