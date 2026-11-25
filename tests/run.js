@@ -38924,8 +38924,8 @@ if (!only || "host-import".includes(only)) {
       ],
       [
         "examples/arrays.ts",
-        "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
+        "7dc834476d88c90760e9de579ad9ae7d2ede58e3e709a0614bd68f7d6b17c89d",
+        "7e3db328ba5975f0ad3a14cd62f4c22660ce254dcfb697ba46a646f6a8921293",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
