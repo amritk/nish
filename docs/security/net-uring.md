@@ -429,8 +429,8 @@ verdict, and a kernel that refuses rings, takes no filter or has no
 - **A signal ends a batch on a direct loop** (NURING-46). "net_ring: a
   SIGTERM ends a pollWaitBatch for 256 events long before its maxWaitMs".
   Before/after: with `nr_batch`'s break on the `signalFd()` poll removed, the
-  check fails (`signal: SIGTERM ended a wait for 256 after 10010 ms, in 2
-  waits`); restored, it passes.
+  check fails (`signal: SIGTERM ended a wait for 256 after 9999 ms, in 2
+  waits`, on the sliced window); restored, it passes.
 - **A batch window pumps at most eight times** (NURING-46). "net_ring: a
   pollWaitBatch window that bytes trickle into waits and pumps at most 8
   times and enters the ring fewer than 50 times" reads the stats line's
@@ -438,7 +438,12 @@ verdict, and a kernel that refuses rings, takes no filter or has no
   bytes trickle into. Before/after: on the window that slept on the ring
   for the rest of `minEvents` the check fails, 16 waits and 62 enters in
   each of 10 runs; on the slices it passes, 4 waits and 39 enters in each
-  of 10 runs.
+  of 10 runs. That window fills before its slices run out, so the cap
+  itself is "net_ring: a pollWaitBatch window that is never filled sleeps
+  its maxWaitMs out in 6 to 8 slices", one byte into a wait for 16 with a
+  `maxWaitMs` of 400. Before/after: with slices of `maxWaitMs / 16` it
+  fails, 16 waits; with one slice of `maxWaitMs` it fails, 1 wait;
+  restored, it passes.
 - **A batch on a loop with no ring source is a `pollWait`** (NURING-47).
   "net_ring: pollWaitBatch on a loop no ring source joined answers as
   pollWait does, not at its maxWaitMs" runs `batch.ts apart`, a wait for 8
