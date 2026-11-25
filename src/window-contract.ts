@@ -97,7 +97,7 @@ const isPanicBlock = (program: CheckedProgram, node: Node): boolean => {
 }
 
 /** Whether `name` is one of `sig`'s parameters. */
-const isParam = (sig: FunctionSig, name: string): boolean => {
+const namesParam = (sig: FunctionSig, name: string): boolean => {
   for (const param of sig.paramNames) {
     if (param === name) {
       return true
@@ -194,7 +194,7 @@ const noteGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig):
     return
   }
   const off = diff.children[1]
-  if (isParam(sig, size) || !isLengthOf(program, init, buf) || !isWindowTest(cond, off.text, len.text, size)) {
+  if (namesParam(sig, size) || !isLengthOf(program, init, buf) || !isWindowTest(cond, off.text, len.text, size)) {
     return
   }
   const b = paramAt(table, sig, buf, -1)
@@ -254,7 +254,7 @@ const noteForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig
   }
   const call = first.children[0]
   const callee = call.children[0]
-  if (callee.kind !== NodeKind.Ident || isParam(sig, callee.text)) {
+  if (callee.kind !== NodeKind.Ident || namesParam(sig, callee.text)) {
     return
   }
   const guard = guardNamed(program, callee.text)
@@ -287,7 +287,7 @@ const noteForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig
     if (arg.kind !== NodeKind.String && arg.kind !== NodeKind.Ident) {
       return
     }
-    if (arg.kind === NodeKind.Ident && !isParam(sig, arg.text)) {
+    if (arg.kind === NodeKind.Ident && !namesParam(sig, arg.text)) {
       return
     }
   }

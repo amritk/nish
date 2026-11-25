@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1037,
+  "total": 1049,
   "explicit": {
     "kept": 364,
     "toFix": 7
@@ -115,7 +115,8 @@
       "panic": 9
     },
     "std/net/handler.ts": {
-      "panic": 9
+      "panic": 9,
+      "window": 2
     },
     "std/net/hpack.ts": {
       "panic": 8
@@ -127,7 +128,8 @@
       "array-length": 3,
       "io-exit": 2,
       "panic": 43,
-      "slice": 1
+      "slice": 1,
+      "window": 2
     },
     "std/net/http1-client-codec.ts": {
       "panic": 1
@@ -137,7 +139,8 @@
     },
     "std/net/http1-server.ts": {
       "panic": 2,
-      "slice": 1
+      "slice": 1,
+      "window": 6
     },
     "std/net/http2-cleartext.ts": {
       "panic": 2,
@@ -200,7 +203,8 @@
     },
     "std/net/serve.ts": {
       "panic": 3,
-      "slice": 8
+      "slice": 8,
+      "window": 2
     },
     "std/net/static.ts": {
       "panic": 1,

@@ -1529,6 +1529,33 @@ not a slot of `dst`, which `spawn` checks before it takes the task
   check itself stays in `std/threads.ts`; a call no longer reaches it, so the
   site at the call is the only one the caller answers for
 
+**`window`**: a call to a *window guard* whose `[off, off + len)` is not inside
+its `buf`, or to a method that hands its own window to one first. A guard is
+a free function returning `void` whose body is exactly
+`const size: i32 = toI32(buf.length)` and then
+`if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }`, with
+`buf` an array parameter and `off` and `len` `i32` ones; a forwarding method's
+first statement is the guard's call on its own parameters, each window
+parameter named once and the others string literals or parameters. Any other
+shape, the tests reordered (`tests/link/window_contract_not_a_guard`) or a
+statement before the call, is no contract, and its check is followed as any
+call's is
+
+- *What proves it away:* what proves `buf.slice(off, off + len)` at the call:
+  `off` and `len` literals or the whole `buf.length` behind a length test, or
+  `end - off` behind `off >= 0 && off <= end && end <= buf.length`
+  (`tests/link/window_contract_proven`, `window_contract_unproven`); an
+  assignment between the test and the call undoes it
+  (`window_contract_guard_then_mutate`). A forwarding method's own call is
+  proven, because each of its callers holds the window
+  (`window_contract_late_forward` is a method that writes first and forwards
+  nothing). A guard named only
+  as a value, never called, holds nothing: the instance it is passed into
+  answers for it (`window_contract_unnamed`). The guard's `panic` stays listed
+  at its own line; a call no longer reaches it, so the site at the call is the
+  only one the caller answers for. `std/net/http1-server.ts` writes through
+  one (`http1ServerCheckWindow`)
+
 **`ffi-nul`**: a `string` argument to a [`declare function`](declarations.md#calling-c) that
 holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
@@ -1776,7 +1803,8 @@ site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is
 refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
 caller in the scope calls the checked twin where there is one, or proves the
 contract at the call where the site is the caller's own, as a
-[`spawn-slot`](#panic-sites) or a [`parallel-length`](#panic-sites) is.
+[`spawn-slot`](#panic-sites), a [`parallel-length`](#panic-sites) or a
+[`window`](#panic-sites) is.
 
 ## The compatibility dialect
 
