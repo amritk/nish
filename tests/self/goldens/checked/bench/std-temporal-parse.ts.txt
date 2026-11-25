@@ -402,6 +402,9 @@ function temporalMonthCode(month: i32): string -> @nish.temporalMonthCode
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: month
   stackSites=0 stackLocals=0
+function temporalYearInRange(year: i32): boolean -> @nish.temporalYearInRange
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function temporalEpochDay(year: i32, month: i32, day: i32): i64 -> @nish.temporalEpochDay
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.temporalRangeError
@@ -934,12 +937,13 @@ function temporalFastTime(text: string, end: i32): i64 -> @nish.temporalFastTime
   local +31:16 k: i32 (let)
 function temporalReadInRange(r: TemporalReader, withTime: boolean): boolean -> @nish.temporalReadInRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalEpochDay
+  calls: nish.temporalEpochDay nish.temporalYearInRange
   pointer r: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 day: i64 (const)
-  callee +0:20 temporalEpochDay -> @nish.temporalEpochDay
-  local +4:9 midnight: boolean (const)
+  callee +0:8 temporalYearInRange -> @nish.temporalYearInRange
+  local +3:9 day: i64 (const)
+  callee +3:20 temporalEpochDay -> @nish.temporalEpochDay
+  local +7:9 midnight: boolean (const)
 function temporalReadDateTime(text: string): TemporalReader -> @nish.temporalReadDateTime
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
   escaping: text
@@ -1401,7 +1405,7 @@ function plainDateTimeCompare(a: PlainDateTime, b: PlainDateTime): i32 -> @nish.
 function Duration.constructor(this: Duration, years: i64, months: i64, weeks: i64, days: i64, hours: i64, minutes: i64, seconds: i64, milliseconds: i64, microseconds: i64, nanoseconds: i64): void -> @nish.Duration.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: days hours microseconds milliseconds minutes months nanoseconds seconds weeks years
-  calls: nish.temporalRangeError nish.temporalSignOf nish.temporalWholeSeconds
+  calls: nish.temporalNegField nish.temporalRangeError nish.temporalSignOf nish.temporalWholeSeconds
   pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:9 sign: i32 (let)
@@ -1422,6 +1426,9 @@ function Duration.constructor(this: Duration, years: i64, months: i64, weeks: i6
   callee +26:7 temporalRangeError -> @nish.temporalRangeError
   callee +28:9 temporalWholeSeconds -> @nish.temporalWholeSeconds
   callee +29:7 temporalRangeError -> @nish.temporalRangeError
+  callee +35:28 temporalNegField -> @nish.temporalNegField
+  callee +36:27 temporalNegField -> @nish.temporalNegField
+  callee +38:7 temporalRangeError -> @nish.temporalRangeError
 function Duration.toString(this: Duration): string -> @nish.Duration.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.temporalMagnitude nish.temporalPutByte nish.temporalPutField nish.temporalPutFraction nish.temporalPutNumber nish.temporalText
@@ -1726,7 +1733,7 @@ function instantFrom(text: string): Instant -> @nish.instantFrom [exported]
 function instantFromOrNull(text: string): Instant | null -> @nish.instantFromOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: nish.Instant.constructor nish.temporalCharAt nish.temporalCivilDay nish.temporalCivilMonth nish.temporalCivilYear nish.temporalEpochDay nish.temporalFastDate nish.temporalFastTime nish.temporalFastTwo nish.temporalFloorDiv nish.temporalFloorMod nish.temporalInstantInRange nish.temporalIsTimeDesignator nish.temporalReadDateTime nish_alloc_struct
+  calls: nish.Instant.constructor nish.temporalCharAt nish.temporalCivilDay nish.temporalCivilMonth nish.temporalCivilYear nish.temporalEpochDay nish.temporalFastDate nish.temporalFastTime nish.temporalFastTwo nish.temporalFloorDiv nish.temporalFloorMod nish.temporalInstantInRange nish.temporalIsTimeDesignator nish.temporalReadDateTime nish.temporalYearInRange nish_alloc_struct
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
   local +1:9 last: i32 (const)
@@ -1755,6 +1762,7 @@ function instantFromOrNull(text: string): Instant | null -> @nish.instantFromOrN
   callee +35:14 new Instant -> @nish.Instant.constructor
   local +41:9 r: TemporalReader (const)
   callee +41:29 temporalReadDateTime -> @nish.temporalReadDateTime
+  callee +42:59 temporalYearInRange -> @nish.temporalYearInRange
   local +45:9 day: i64 (const)
   callee +45:20 temporalEpochDay -> @nish.temporalEpochDay
   local +48:9 seconds: u64 (const)

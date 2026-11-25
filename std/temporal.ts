@@ -105,9 +105,9 @@ const TEMPORAL_UNIT_MONTH: i32 = 8
 const TEMPORAL_UNIT_YEAR: i32 = 9
 
 // ---------------------------------------------------------------------------
-// Integer helpers. Every division here is written `toI64(a / b)` so that it
-// truncates under Node exactly as the native `sdiv` does, and every value that
-// is divided stays below 2^53 so that Node's doubles hold it exactly.
+// Integer helpers. Every divisor in this file is a positive constant, so an
+// `i64` division truncates under Node exactly as the native `sdiv` does, and
+// the floor helpers below build on that truncation.
 // ---------------------------------------------------------------------------
 
 /** Panic with Temporal's `RangeError`, naming `what`. */
@@ -141,7 +141,8 @@ const temporalSub = (a: i64, b: i64): i64 => {
 
 /**
  * A `Duration` field negated. The constructor refuses the least `i64` in every
- * field, so the wrapping negation is exact.
+ * field (its bounds, or for microseconds and nanoseconds, a test of its own),
+ * so the wrapping negation is exact.
  */
 const temporalNegField = (x: i64): i64 => toI64(0 - toU64(x))
 
@@ -230,7 +231,7 @@ const temporalPutByte = (out: u8[], at: i32, c: i32): i32 => {
   return at + 1
 }
 
-/** Write `n`, which is not negative, in decimal; the digits that fall outside `out` are not written. */
+/** Write `n`, which is not negative, in decimal; when the digits would run past `out`, none are written. */
 const temporalPutNumber = (out: u8[], at: i32, n: i64): i32 => {
   let count: i32 = 1
   let rest: i64 = n
@@ -544,9 +545,13 @@ const temporalMonthCode = (month: i32): string => {
   }
 }
 
+/** Whether `year` is inside Temporal's range of -271821 to 275760. */
+const temporalYearInRange = (year: i32): boolean => year >= -271821 && year <= 275760
+
 /**
  * The days from 1970-01-01 to the given date, negative before it. Every
- * caller has checked the date, so the test is never true for one here; it is
+ * caller has checked the date, its year with `temporalYearInRange` or a
+ * four-digit read, so the test is never true for one here; it is
  * what bounds each term below. The years count from 1 March of the year
  * 400,000 years before 0, a whole number of 400-year eras, so every term is
  * nonnegative and the divisions need no floor.
@@ -1564,9 +1569,13 @@ const temporalFastTime = (text: string, end: i32): i64 => {
 /**
  * Whether the date `r` read is inside Temporal's range: a date from
  * -271821-04-19 to +275760-09-13, and with `withTime`, a date-time after
- * -271821-04-19T00:00. The reader has already checked the fields.
+ * -271821-04-19T00:00. The reader has already checked the month and day,
+ * and reads a year of up to six digits.
  */
 const temporalReadInRange = (r: TemporalReader, withTime: boolean): boolean => {
+  if (!temporalYearInRange(r.year)) {
+    return false
+  }
   const day: i64 = temporalEpochDay(r.year, r.month, r.day)
   if (day < TEMPORAL_MIN_EPOCH_DAY || day > TEMPORAL_MAX_EPOCH_DAY) {
     return false
@@ -2633,6 +2642,15 @@ export class Duration {
     if (temporalWholeSeconds(days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds) > m) {
       temporalRangeError("Duration: the time fields come to 2^53 seconds or more")
     }
+    // The least `i64` is under 2^53 seconds as microseconds or nanoseconds, but
+    // its negation does not fit, so `negated` and `abs` could not answer it. It
+    // is the one negative value whose wrapping negation is negative too.
+    if (
+      (microseconds < 0 && temporalNegField(microseconds) < 0) ||
+      (nanoseconds < 0 && temporalNegField(nanoseconds) < 0)
+    ) {
+      temporalRangeError("Duration: microseconds and nanoseconds must be above the least i64")
+    }
     this.years = years
     this.months = months
     this.weeks = weeks
@@ -3397,11 +3415,11 @@ export const instantFromOrNull = (text: string): Instant | null => {
     }
   }
   const r: TemporalReader = temporalReadDateTime(text)
-  if (!r.ok || !r.hasTime || (!r.utc && !r.hasOffset)) {
+  if (!r.ok || !r.hasTime || (!r.utc && !r.hasOffset) || !temporalYearInRange(r.year)) {
     return null
   }
   const day: i64 = temporalEpochDay(r.year, r.month, r.day)
-  // The reader's six-digit years keep `day` within ±4 × 10^8 and the offset is
+  // The years in range keep `day` within ±4 × 10^8 and the offset is
   // below a day, so these wrapping sums are the exact ones.
   const seconds: u64 = toU64(day) * 86400 + toU64(r.hour) * 3600 + toU64(r.minute) * 60 + toU64(r.second)
   const nanos: i64 = toI64(toU64(r.fraction) - toU64(r.offsetNanos))

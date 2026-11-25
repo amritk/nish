@@ -21,6 +21,8 @@ export const main = (): i32 => {
   show('tryPlainDateFrom("2024-01-15")', tryPlainDateFrom("2024-01-15"))
   show('tryPlainDateFrom("2024-13-45")', tryPlainDateFrom("2024-13-45"))
   show('tryPlainDateFrom("not a date")', tryPlainDateFrom("not a date"))
+  show('tryPlainDateFrom("+999999-01-01")', tryPlainDateFrom("+999999-01-01"))
+  show('tryPlainDateFrom("-500000-01-01")', tryPlainDateFrom("-500000-01-01"))
   show("2024-01-31.tryAdd(P1M)", new PlainDate(2024, 1, 31).tryAdd(new Duration(0, 1)))
   show("+275760-09-13.tryAdd(P1D)", new PlainDate(275760, 9, 13).tryAdd(new Duration(0, 0, 0, 1)))
   show("2024-01-01.tryAdd(P4000000Y)", new PlainDate(2024, 1, 1).tryAdd(new Duration(4000000)))
