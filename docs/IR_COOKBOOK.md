@@ -16573,6 +16573,146 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-buffer -->
 
+### `f32[]`: a typed buffer counts elements
+
+`u16[]`, `u32[]`, `i32[]` and `f32[]` (and their `readonly` forms) cross the
+same way as a `u8[]` (WP89 S2): the data pointer, loaded from the header's
+third field, passes as `i8*`, and the count is checked against the header's
+length before C runs. The header's length is an element count, so the
+compare is the same `icmp ule` against it with no scaling: the count after
+a typed run is in elements, not bytes, and the panic says so,
+`` `scale`: argument 3 (n) counts more elements than argument 1 (dst) holds ``.
+A run checks its count against every buffer in it, here `dst` and then `src`,
+and every buffer of one run has the same element type (NL2824). `f64[]` and
+`i64[]` stay refused: an 8-byte element's alignment is not one rule on every
+target.
+
+<!-- cookbook:begin decl-ffi-buffer-f32 -->
+```ts
+declare function scale(dst: f32[], src: readonly f32[], n: u64): void
+
+export const main = (): i32 => {
+  const src: f32[] = [1.5, -2.0, 4.0]
+  const dst: f32[] = [0.0, 0.0, 0.0]
+  scale(dst, src, 2)
+  return 0
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [73 x i8] } { i64 72, [73 x i8] c"`scale`: argument 3 (n) counts more elements than argument 1 (dst) holds\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [73 x i8] } { i64 72, [73 x i8] c"`scale`: argument 3 (n) counts more elements than argument 2 (src) holds\00" }, align 8
+
+declare void @scale(i8*, i8*, i64)
+declare void @nish_free_arena() #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %src.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x float], align 8
+  %dst.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.1 = alloca %struct.nish_array, align 8
+  %arr.data.1 = alloca [3 x float], align 8
+  %0 = fneg float 0x4000000000000000
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %3 = bitcast [3 x float]* %arr.data to i8*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %5 = bitcast i8* %3 to float*
+  %6 = getelementptr inbounds float, float* %5, i64 0
+  store float 0x3FF8000000000000, float* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds float, float* %5, i64 1
+  store float %0, float* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %8 = getelementptr inbounds float, float* %5, i64 2
+  store float 0x4010000000000000, float* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %src.addr, align 8
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
+  store i64 3, i64* %9, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 1
+  store i64 3, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %11 = bitcast [3 x float]* %arr.data.1 to i8*
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
+  store i8* %11, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %13 = bitcast i8* %11 to float*
+  %14 = getelementptr inbounds float, float* %13, i64 0
+  store float 0x0000000000000000, float* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %15 = getelementptr inbounds float, float* %13, i64 1
+  store float 0x0000000000000000, float* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %16 = getelementptr inbounds float, float* %13, i64 2
+  store float 0x0000000000000000, float* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %dst.addr, align 8
+  %17 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
+  %18 = load %struct.nish_array*, %struct.nish_array** %src.addr, align 8
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %21 = icmp ule i64 2, %20
+  br i1 %21, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [73 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.ok:
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0
+  %25 = load i64, i64* %24, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %26 = icmp ule i64 2, %25
+  br i1 %26, label %ffi.ok.1, label %ffi.length.1
+
+ffi.length.1:
+  call void @nish_panic(i8* bitcast ({ i64, [73 x i8] }* @.str.1 to i8*))
+  unreachable
+
+ffi.ok.1:
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 2
+  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  call void @scale(i8* %23, i8* %28, i64 2)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element float", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-buffer-f32 -->
+
 ### `CountedBy`: a buffer that names its count
 
 A `declare function` parameter written `CountedBy<u8[], "len">` (or

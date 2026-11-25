@@ -1398,6 +1398,22 @@ const protobufModule = () =>
     why: "the program tests nish/net/protobuf, which is new in this release, so the seed's standard library has no such module and refuses it",
   }))
 
+/** The changelog words of WP89 S2, typed arrays a declared C function borrows. */
+const TYPED_BUFFERS = "numeric typed arrays as buffers a declared C function borrows"
+const typedBuffers = () =>
+  [
+    "tests/cases/ffi_buffer_f32.ts",
+    "tests/cases/ffi_buffer_i32.ts",
+    "tests/cases/ffi_buffer_u16.ts",
+    "tests/cases/ffi_buffer_u32.ts",
+    "docs/cookbook/decl-ffi-buffer-f32.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: TYPED_BUFFERS,
+    why: "the program passes an f32[], i32[], u16[] or u32[] buffer to a declared C function, which the reference refuses because it lends only u8[]",
+  }))
+
 /** The changelog words of the stage that adds `nish proto`. */
 const PROTO_CLASSES = "proto writes message classes from a .proto file"
 const protoClasses = () =>
@@ -13003,6 +13019,7 @@ const DECLARED = [
   ...scramModule(),
   ...protobufModule(),
   ...protoClasses(),
+  ...typedBuffers(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",

@@ -44,6 +44,7 @@ import {
   T_I64,
   T_STRING,
   T_U64,
+  T_U8,
   TypeTable,
 } from "./types"
 
@@ -736,8 +737,9 @@ export const emitForeignString = (
 }
 
 /**
- * WP53 B1.2: the `u8[]` and `readonly u8[]` arguments of the call `call` to the
- * `declare function` `callee`, whose evaluated operands are `operands` and
+ * WP53 B1.2: the buffer arguments (`isForeignBuffer`: a `u8[]`, or since WP89
+ * S2 a `u16[]`, `u32[]`, `i32[]` or `f32[]`, readonly or not) of the call
+ * `call` to the `declare function` `callee`, whose evaluated operands are `operands` and
  * `values`, lowered to the `i8*` C takes: the array's `data`, rewritten into
  * `operands` in place. Each is read here, after every argument is evaluated and
  * with nothing of the program's between the read and the call, because an
@@ -779,8 +781,10 @@ export const emitForeignBuffers = (
           const failBlock = fn.newBlock("ffi.length")
           fn.emit(`br i1 ${fits}, label %${okBlock.label}, label %${failBlock.label}`)
           fn.placeBlock(failBlock)
+          // WP89 S2: the count is in elements, which for a `u8[]` are bytes.
+          const unit = emitter.table.refOf(callee.paramTypes[i]) === T_U8 ? "bytes" : "elements"
           const message =
-            `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more bytes than ` +
+            `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more ${unit} than ` +
             `argument ${i + 1} (${callee.paramNames[i]}) holds`
           emitPanicTail(emitter, emitter.stringConstant(message))
           fn.placeBlock(okBlock)
