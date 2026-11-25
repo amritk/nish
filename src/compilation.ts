@@ -90,6 +90,7 @@ import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
 import { noteWindowContracts } from "./window-contract"
+import { noteFaultContracts } from "./fault-contract"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import { CalleeDrops, arenaJson, unboundedPassFindings } from "./arena-report"
 import {
@@ -1592,12 +1593,13 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.foldConstants()
     }
-    // The window contracts (#2296) before any body: bounds reads them at each call.
+    // The window and fault contracts (#2296) before any body: bounds reads them at each call.
     const contracted: CheckedProgram[] = []
     for (const unit of this.modules) {
       contracted.push(unit.checker.program)
     }
     noteWindowContracts(contracted, this.table)
+    noteFaultContracts(contracted)
     for (const unit of this.modules) {
       unit.checker.checkBodies()
     }

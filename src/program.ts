@@ -242,6 +242,20 @@ export class FunctionSig {
   /** #2296: the forwarding method's call into its guard. */
   windowForward: Node | null
   /**
+   * #2296: for a fault guard (`src/fault-contract.ts`), the function whose
+   * non-empty answer it panics with; for a constructor or method that
+   * forwards to one, its guard's; else null.
+   */
+  fault: FunctionSig | null
+  /** #2296: the call argument (`this` left out) the fault function is run on, or -1. */
+  faultAt: i32
+  /** #2296: a fault guard's branch, the part that runs on a fault. */
+  faultCheck: Node | null
+  /** #2296: the fault guard a forwarding constructor or method hands its argument to, else null. */
+  faultGuard: FunctionSig | null
+  /** #2296: the forwarding call into the fault guard. */
+  faultForward: Node | null
+  /**
    * WP28 `overloads`: the bodiless signatures written before this
    * implementation under `--compat`, each collected as a signature of its
    * own (`src/overloads.ts`). Empty for every other function. A call is
@@ -393,6 +407,11 @@ export class FunctionSig {
     this.windowCheck = null
     this.windowGuard = null
     this.windowForward = null
+    this.fault = null
+    this.faultAt = -1
+    this.faultCheck = null
+    this.faultGuard = null
+    this.faultForward = null
     this.overloads = []
   }
 }

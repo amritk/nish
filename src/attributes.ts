@@ -200,9 +200,11 @@ import {
   PANIC_REGION,
   PANIC_SLICE,
   PANIC_SPAWN_SLOT,
+  PANIC_FAULT,
   PANIC_WINDOW,
   PanicSite,
 } from "./panics"
+import { faultProven, isFaultGuard } from "./fault-contract"
 import { isWindowGuard } from "./window-contract"
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
@@ -957,13 +959,14 @@ export class FunctionFacts {
    * at its own line. An atomic array's element method is one too: its index
    * check is listed at each call, proven by the guard or loop test around the
    * call (#2206). So is a window guard, whose check is listed at each call
-   * into it or into a method that forwards to it (`PANIC_WINDOW`, #2296).
+   * into it or into a method that forwards to it (`PANIC_WINDOW`, #2296), and
+   * a fault guard, whose check is listed the same way (`PANIC_FAULT`).
    * Beside `onCycleStack`, so the two share a word.
    */
   callerProven: boolean
   /**
-   * #2296: for a method that forwards its window to a guard, the guard's
-   * symbol, else `""`: a route into the method that no call names reaches the
+   * #2296: for a method that forwards its window or its fault value to a
+   * guard, the guard's symbol, else `""`: a route into the method that no call names reaches the
    * guard's check (`src/panics.ts`).
    */
   windowGuard: string
@@ -2241,7 +2244,7 @@ class FactCollector {
    * dst.length` (`PANIC_PARALLEL_LENGTH`), and an atomic array's element
    * method's index, proven by the guard or loop test around the call
    * (`PANIC_INDEX`, #2206). A window contract's check is one more
-   * (`PANIC_WINDOW`, #2296).
+   * (`PANIC_WINDOW`, #2296), and a fault contract's (`PANIC_FAULT`).
    */
   noteCall(node: Node, callee: FunctionSig): void {
     const proven = this.unit.program.nodeProvenIndex[node.id]
@@ -2267,6 +2270,16 @@ class FactCollector {
       const forwards =
         guard !== null && forward !== null && guard === callee && forward === node && isWindowGuard(callee)
       this.noteSite(node, PANIC_WINDOW, proven || forwards, "")
+    }
+    // A fault contract's check (#2296), proven where the caller has run the
+    // same fault function on the same value and left, and at a forwarder's own
+    // call into its guard, whose callers hold it.
+    if (callee.fault !== null) {
+      const guard = this.sig.faultGuard
+      const forward = this.sig.faultForward
+      const forwards =
+        guard !== null && forward !== null && guard === callee && forward === node && isFaultGuard(callee)
+      this.noteSite(node, PANIC_FAULT, forwards || faultProven(this.unit.program, this.sig, node, callee), "")
     }
     this.noteSite(node, PANIC_CALL, false, callee.name)
   }
@@ -4595,8 +4608,9 @@ const collectStatedFacts = (
     ((sig.sourceName === "slotOutOfRange" || sig.sourceName === "dstTooShort") && isThreadsModule(program)) ||
     isArraySliceInstance(sig) ||
     isAtomicArrayMethod(sig) ||
-    isWindowGuard(sig)
-  const windowGuard = sig.windowGuard
+    isWindowGuard(sig) ||
+    isFaultGuard(sig)
+  const windowGuard = sig.windowGuard !== null ? sig.windowGuard : sig.faultGuard
   facts.windowGuard = windowGuard === null ? "" : windowGuard.name
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)

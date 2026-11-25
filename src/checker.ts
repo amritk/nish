@@ -2511,7 +2511,7 @@ const isNameDeclaration = (node: Node): boolean => {
  * reasoning about scopes. A question about the whole module goes through
  * `shadowsGuardName`, which walks it once.
  */
-const declaresName = (node: Node, name: string): boolean => {
+export const declaresName = (node: Node, name: string): boolean => {
   if (isNameDeclaration(node)) {
     for (const child of node.children) {
       if (child.kind === NodeKind.Ident && child.text === name) {

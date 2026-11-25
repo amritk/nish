@@ -929,10 +929,7 @@ export class HttpHandler {
    *   `openHttpHandler` for a `Result`.
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
-    const fault: string = handlerLimitsFault(limits)
-    if (fault.length > 0) {
-      panic(fault)
-    }
+    handlerCheckLimits(limits)
     this.maxDecoded = limits.maxDecoded
     this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
     this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
@@ -2657,6 +2654,14 @@ export const openHttpHandler = (
     return Err(`HttpHandler: pollCreate failed: ${loop}`)
   }
   return Ok(new HttpHandler(limits, listener, router, loop))
+}
+
+/** Panics unless `limits` can make a handler: a limit below its least is the program's mistake. */
+const handlerCheckLimits = (limits: HandlerLimits): void => {
+  const fault: string = handlerLimitsFault(limits)
+  if (fault.length > 0) {
+    panic(fault)
+  }
 }
 
 /** Why `limits` cannot make a handler, or `""` when it can. */

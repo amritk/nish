@@ -15,14 +15,14 @@ import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD } from "./progr
 import { T_I32, T_VOID, TypeTable } from "./types"
 
 /** Whether `node` is the identifier `name`. */
-const isName = (node: Node, name: string): boolean => node.kind === NodeKind.Ident && node.text === name
+const windowIsName = (node: Node, name: string): boolean => node.kind === NodeKind.Ident && node.text === name
 
 /** Whether `node` is the binary `left op right`, with `left` and `right` the identifiers named. */
-const isCompare = (node: Node, op: string, left: string, right: string): boolean =>
+const windowIsCompare = (node: Node, op: string, left: string, right: string): boolean =>
   node.kind === NodeKind.Binary &&
   node.text === op &&
-  isName(node.children[0], left) &&
-  isName(node.children[1], right)
+  windowIsName(node.children[0], left) &&
+  windowIsName(node.children[1], right)
 
 /**
  * `off < 0 || len < 0 || off > size || len > size - off`, as the parser
@@ -37,9 +37,9 @@ const isWindowTest = (node: Node, off: string, len: string, size: string): boole
   if (
     last.kind !== NodeKind.Binary ||
     last.text !== ">" ||
-    !isName(last.children[0], len) ||
+    !windowIsName(last.children[0], len) ||
     last.children[1].kind !== NodeKind.Binary ||
-    !isCompare(last.children[1], "-", size, off)
+    !windowIsCompare(last.children[1], "-", size, off)
   ) {
     return false
   }
@@ -47,7 +47,7 @@ const isWindowTest = (node: Node, off: string, len: string, size: string): boole
   if (
     third.kind !== NodeKind.Binary ||
     third.text !== "||" ||
-    !isCompare(third.children[1], ">", off, size)
+    !windowIsCompare(third.children[1], ">", off, size)
   ) {
     return false
   }
@@ -64,7 +64,7 @@ const isWindowTest = (node: Node, off: string, len: string, size: string): boole
 const isBelowZero = (node: Node, name: string): boolean =>
   node.kind === NodeKind.Binary &&
   node.text === "<" &&
-  isName(node.children[0], name) &&
+  windowIsName(node.children[0], name) &&
   node.children[1].kind === NodeKind.Number &&
   node.children[1].text === "0"
 
@@ -72,7 +72,7 @@ const isBelowZero = (node: Node, name: string): boolean =>
 const isLengthOf = (program: CheckedProgram, node: Node, buf: string): boolean => {
   if (
     node.kind !== NodeKind.Call ||
-    !isName(node.children[0], "toI32") ||
+    !windowIsName(node.children[0], "toI32") ||
     shadowsGuardName(program, "toI32")
   ) {
     return false
@@ -82,7 +82,7 @@ const isLengthOf = (program: CheckedProgram, node: Node, buf: string): boolean =
     args.length === 1 &&
     args[0].kind === NodeKind.Member &&
     args[0].text === "length" &&
-    isName(args[0].children[0], buf)
+    windowIsName(args[0].children[0], buf)
   )
 }
 
@@ -95,7 +95,7 @@ const isPanicBlock = (program: CheckedProgram, node: Node): boolean => {
   return (
     stmt.kind === NodeKind.ExprStmt &&
     stmt.children[0].kind === NodeKind.Call &&
-    isName(stmt.children[0].children[0], "panic") &&
+    windowIsName(stmt.children[0].children[0], "panic") &&
     stmt.children[0].children[1].children.length === 1
   )
 }
@@ -140,7 +140,7 @@ const takesArgumentsAsWritten = (sig: FunctionSig): boolean => {
  * an array parameter `buf` and `i32` parameters `off` and `len`. It returns
  * exactly when the window is inside the buffer. Records `window` on the signature; the branch is its `windowCheck`.
  */
-const noteGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
+const noteWindowGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
   if (
     sig.role !== ROLE_FUNCTION ||
     sig.instance !== null ||
@@ -232,7 +232,7 @@ export const isWindowGuard = (sig: FunctionSig): boolean =>
   sig.window.length === 3 && sig.windowGuard === null
 
 /** The guard `name` calls in `program`: its one free function of that name, when it is a window guard. */
-const guardNamed = (program: CheckedProgram, name: string): FunctionSig | null => {
+const windowGuardNamed = (program: CheckedProgram, name: string): FunctionSig | null => {
   let found: FunctionSig | null = null
   for (const sig of program.functions) {
     if (sig.sourceName === name) {
@@ -252,7 +252,7 @@ const guardNamed = (program: CheckedProgram, name: string): FunctionSig | null =
  * argument each window parameter is (the call's arguments leave `this` out),
  * and the forwarding call.
  */
-const noteForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
+const noteWindowForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
   if (
     sig.role !== ROLE_METHOD ||
     sig.instance !== null ||
@@ -278,7 +278,7 @@ const noteForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig
   if (callee.kind !== NodeKind.Ident || namesParam(sig, callee.text)) {
     return
   }
-  const guard = guardNamed(program, callee.text)
+  const guard = windowGuardNamed(program, callee.text)
   if (guard === null) {
     return
   }
@@ -288,6 +288,9 @@ const noteForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig
   }
   const window: i32[] = []
   for (const k of guard.window) {
+    if (k < 0 || k >= args.length) {
+      return
+    }
     const arg = args[k]
     if (arg.kind !== NodeKind.Ident) {
       return
@@ -325,12 +328,12 @@ const noteForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig
 export const noteWindowContracts = (programs: CheckedProgram[], table: TypeTable): void => {
   for (const program of programs) {
     for (const sig of program.functions) {
-      noteGuard(program, table, sig)
+      noteWindowGuard(program, table, sig)
     }
   }
   for (const program of programs) {
     for (const sig of program.functions) {
-      noteForward(program, table, sig)
+      noteWindowForward(program, table, sig)
     }
   }
 }
