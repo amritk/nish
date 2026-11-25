@@ -153,13 +153,17 @@ server.listenHttp2Tls(h2Fd, tls, new Http2Config(), 64);
 
 - `tls1` is a `TlsServerConfig` with ALPN `["http/1.1"]`. A client that
   offers no ALPN is served too.
-- One port serves one protocol: a client whose handshake chooses `h2` on
-  this listener is shut down, not handed to the HTTP/2 one. To offer both,
-  give each its own port; there is no ALPN fallback on one port.
+- One port serves one protocol. A client that offers only `h2` is never
+  handed to the HTTP/2 listener: it gets a fatal `no_application_protocol`
+  alert when `tls1` offers `http/1.1` alone, and a `close_notify` right
+  after the handshake when `tls1` offers `h2` too. To offer both, give each
+  its own port; there is no ALPN fallback on one port.
 - Its requests say `r.version` 1 and `r.secure` true, and its responses
   carry `Alt-Svc` as HTTP/2 over TLS ones do.
-- It panics as `listenHttp1` does, on a second call, or when its `slots`
-  and `listenHttp1`'s together pass 1048576. Serve it with `waitSigned`.
+- It panics as `listenHttp1` does, on a second call, or when its `slots`,
+  with `listenHttp1`'s if there is one, pass 1048576: a server holds at most
+  1048576 HTTP/1.1 connections over both listeners. Serve it with
+  `waitSigned`.
 
 ## Reading a request
 

@@ -14,8 +14,13 @@
 //      to one offering both, it is shut down with close_notify after the
 //      handshake. No request is taken from either.
 //   5. Timeouts: a connection silent after its handshake is closed by the
-//      carrier's `idleTimeout`, and one whose body stops by `bodyTimeout`.
-//   6. `drain` closes an idle TLS connection.
+//      carrier's `idleTimeout`, one whose head stops by its `headTimeout`,
+//      and one whose body stops by the server's `bodyTimeout`.
+//   6. `drain` closes an idle TLS connection, and one answering an 8 MiB
+//      body to a client reading slowly only after its last byte is sent.
+//   7. The TLS listener listened first, so its records start at 0: a second
+//      connection on record 1, a `Connection: close` answered and shut down
+//      with close_notify, and a cleartext request on the records after.
 import { Secret, secret, wipe } from "nish:secret"
 import { netAddress, netRead, netWrite, tcpConnect } from "nish:net"
 import { Suite } from "nish/testing"
@@ -25,8 +30,9 @@ import { H2_ALPN } from "nish/net/http2-tls"
 import { leafPrivate } from "../net_tls_common/server"
 import { ZERO, ascii } from "../net_tls_record_common/bytes"
 import { textOf } from "../crypto_x509/hex"
+import { headerOf } from "../net_serve/client"
 import { H1TlsClient } from "./client"
-import { Rig } from "./rig"
+import { BIG_LENGTH, Rig } from "./rig"
 
 /** Whether `response` is a 200 whose body is `body`, with `alt-svc` naming `quicPort`. */
 const okWith = (response: string, body: string, quicPort: i32): boolean =>
@@ -120,15 +126,57 @@ const served = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.ok("drain closes the idle TLS connections", settles(rig, key) && c.untilClosed(key) && bare.untilClosed(key))
 }
 
+/** 6: a drain while a response larger than the socket buffers is in flight. */
+const drainsLarge = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(new HttpServerLimits(), [H1_ALPN], new Http1Config(), 4, false)
+  const c = new H1TlsClient(rig)
+  t.ok("a TLS handshake, then a GET of an 8 MiB body", c.handshake(rig.port, [H1_ALPN], key) && c.verified)
+  c.request("GET /big HTTP/1.1\r\nHost: a\r\n\r\n", key)
+  // The client reads nothing yet, so the server's socket fills.
+  for (let turn: i32 = 0; turn < 50; turn++) {
+    rig.step(5, key)
+  }
+  rig.h.drain()
+  const total: i32 = c.count(key)
+  const head: string = textOf(c.plain)
+  const end: i32 = toI32(head.indexOf("\r\n\r\n"))
+  t.ok("drained meanwhile, the server ends the connection once the client has read it all", c.closed)
+  c.hangUp()
+  t.ok("and closes the slot once the client hangs up", settles(rig, key))
+  t.ok("a 200 declaring the whole body", head.startsWith("HTTP/1.1 200") && end > 0 && headerOf(head.slice(0, end), "content-length") === `${BIG_LENGTH}`)
+  t.eqI32("every body byte arrived", total - (end + 4), BIG_LENGTH)
+  t.eqStr("then close_notify", c.alerts.join(","), "1 0")
+}
+
+/** 7: the TLS listener listened before the cleartext one. */
+const tlsFirst = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(new HttpServerLimits(), [H1_ALPN], new Http1Config(), 4, true)
+  const a = new H1TlsClient(rig)
+  const b = new H1TlsClient(rig)
+  t.ok("TLS listened first: two TLS handshakes", a.handshake(rig.port, [H1_ALPN], key) && b.handshake(rig.port, [H1_ALPN], key))
+  b.request("GET /users/7 HTTP/1.1\r\nHost: a\r\n\r\n", key)
+  t.ok("the second connection, on the TLS carrier's record 1, is answered", okWith(b.response(key), `{"id":7}`, rig.quicPort))
+  a.request("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n", key)
+  const closing: string = a.response(key)
+  t.ok("the first, asking Connection: close, is answered", okWith(closing, "hello", rig.quicPort))
+  t.ok("then shut down with close_notify", a.untilClosed(key) && a.alerts.join(",") === "1 0")
+  a.hangUp()
+  const plain: string = plainGet(rig, rig.plainPort, key)
+  t.ok("a cleartext GET, on the records after the TLS ones: 200 hello", plain.startsWith("HTTP/1.1 200") && plain.endsWith("\r\n\r\nhello"))
+  t.ok("3 taken, the 2 over TLS secure", rig.taken === 3 && rig.secure === 2)
+  rig.h.drain()
+  t.ok("drain closes the idle TLS connection left", settles(rig, key) && b.untilClosed(key))
+}
+
 /** 4: a client offering only h2. */
 const mismatched = (t: Suite, key: Secret<u8[]>): void => {
-  const only = new Rig(new HttpServerLimits(), [H1_ALPN], new Http1Config(), 4)
+  const only = new Rig(new HttpServerLimits(), [H1_ALPN], new Http1Config(), 4, false)
   const a = new H1TlsClient(only)
   t.ok("ALPN h2 to a listener offering http/1.1 alone: no handshake", !a.handshake(only.port, [H2_ALPN], key))
   t.eqStr("but a fatal no_application_protocol alert", a.alerts.join(","), "2 120")
   t.ok("and the connection closed, no request taken", a.untilClosed(key) && settles(only, key) && only.taken === 0)
 
-  const both = new Rig(new HttpServerLimits(), [H1_ALPN, H2_ALPN], new Http1Config(), 4)
+  const both = new Rig(new HttpServerLimits(), [H1_ALPN, H2_ALPN], new Http1Config(), 4, false)
   const b = new H1TlsClient(both)
   t.ok("ALPN h2 to a listener offering http/1.1 and h2: the handshake completes", b.handshake(both.port, [H2_ALPN], key) && b.verified)
   b.request("GET /hello HTTP/1.1\r\nHost: a\r\n\r\n", key)
@@ -141,14 +189,23 @@ const mismatched = (t: Suite, key: Secret<u8[]>): void => {
 const timeouts = (t: Suite, key: Secret<u8[]>): void => {
   const config = new Http1Config()
   config.idleTimeout = 100
-  const idle = new Rig(new HttpServerLimits(), [H1_ALPN], config, 4)
+  const idle = new Rig(new HttpServerLimits(), [H1_ALPN], config, 4, false)
   const a = new H1TlsClient(idle)
   t.ok("idleTimeout 100: a handshake, then silence", a.handshake(idle.port, [H1_ALPN], key))
   t.ok("is closed by the server", a.untilClosed(key) && settles(idle, key))
 
+  const heads = new Http1Config()
+  heads.headTimeout = 100
+  const late = new Rig(new HttpServerLimits(), [H1_ALPN], heads, 4, false)
+  const h = new H1TlsClient(late)
+  t.ok("headTimeout 100: a handshake", h.handshake(late.port, [H1_ALPN], key))
+  h.request("GET /hello HTTP/1.1\r\nHo", key)
+  t.ok("a head that stops part way is closed by the server", h.untilClosed(key) && settles(late, key))
+  t.eqI32("and not handed to the program", late.taken, 0)
+
   const limits = new HttpServerLimits()
   limits.bodyTimeout = 100
-  const slow = new Rig(limits, [H1_ALPN], new Http1Config(), 4)
+  const slow = new Rig(limits, [H1_ALPN], new Http1Config(), 4, false)
   const b = new H1TlsClient(slow)
   t.ok("bodyTimeout 100: a handshake", b.handshake(slow.port, [H1_ALPN], key))
   b.request("POST /echo HTTP/1.1\r\nHost: a\r\nContent-Length: 10\r\n\r\nab", key)
@@ -159,11 +216,13 @@ const timeouts = (t: Suite, key: Secret<u8[]>): void => {
 export const main = (): i32 => {
   const t = new Suite("net_http_server_h1_tls")
   const key: Secret<u8[]> = secret(leafPrivate())
-  const rig = new Rig(new HttpServerLimits(), [H1_ALPN], new Http1Config(), 4)
+  const rig = new Rig(new HttpServerLimits(), [H1_ALPN], new Http1Config(), 4, false)
   t.ok("the server listens: HTTP/1.1, HTTP/1.1 over TLS and HTTP/3", rig.port > 0 && rig.plainPort > 0 && rig.quicPort > 0)
   served(t, rig, key)
   mismatched(t, key)
   timeouts(t, key)
+  drainsLarge(t, key)
+  tlsFirst(t, key)
   wipe(key)
   return t.done()
 }

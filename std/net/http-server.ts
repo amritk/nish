@@ -1,9 +1,9 @@
 /**
- * `nish/net/http-server` — one handler for HTTP/1.1, HTTP/2 (over TLS and
- * cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
+ * `nish/net/http-server` — one handler for HTTP/1.1 and HTTP/2 (each over TLS
+ * or cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
  *
  * `HttpServer` is `HttpHandler`'s pull loop (`nish/net/handler`) over up to
- * four listeners at once. The program builds a `Router`, configures the
+ * five listeners at once. The program builds a `Router`, configures the
  * listeners, and loops on `waitSigned` (or `wait`, when every listener is
  * cleartext), `ready` and `take`, switching on `r.route`; one route body
  * answers every version.
@@ -943,9 +943,10 @@ class HttpServerH1Slot {
 
 /**
  * One handler for HTTP/1.1 (cleartext and over TLS), HTTP/2 (over TLS and
- * cleartext) and HTTP/3: configure up to one listener of each kind, then loop on `waitSigned` (or `wait`), `ready` and
- * `take`, answering each request with `send`, `json` and `sendJson`,
- * `problem`, `refuse`, or `start`, `write` and `end`.
+ * cleartext) and HTTP/3: configure up to one listener of each kind, then
+ * loop on `waitSigned` (or `wait`), `ready` and `take`, answering each
+ * request with `send`, `json` and `sendJson`, `problem`, `refuse`, or
+ * `start`, `write` and `end`.
  */
 export class HttpServer {
   private router: Router
@@ -1187,8 +1188,8 @@ export class HttpServer {
    * to `slots` connections. Panics on a second cleartext HTTP/1.1 listener,
    * when `config` would let in a head past `limits.maxHead` (its `maxTarget`,
    * its `maxHeaderBytes` and 44 bytes of request line) or more fields than
-   * `limits.maxFields`, or when the two HTTP/1.1 listeners' slots together
-   * pass 1048576. `config.maxBody` is set to `limits.maxBody`.
+   * `limits.maxFields`, or when `slots`, with the TLS listener's if it came
+   * first, pass 1048576. `config.maxBody` is set to `limits.maxBody`.
    * @param fd the listening socket's descriptor, still the program's to close
    * @param config the carrier's caps and timeouts, kept by the carrier
    * @param slots the most connections held at once
@@ -1210,9 +1211,9 @@ export class HttpServer {
    * its own: a client that offers only another protocol is shut down, never
    * handed to the HTTP/2 listener. Its requests say `secure` true and its
    * responses carry Alt-Svc as HTTP/2 over TLS ones do. Panics as
-   * `listenHttp1` does, on a second listener of this kind, or when the two
-   * HTTP/1.1 listeners' slots together pass 1048576. `config.maxBody` is set
-   * to `limits.maxBody`. Serve it with `waitSigned`.
+   * `listenHttp1` does, on a second listener of this kind, or when `slots`,
+   * with the cleartext listener's if it came first, pass 1048576.
+   * `config.maxBody` is set to `limits.maxBody`. Serve it with `waitSigned`.
    * @param fd the listening socket's descriptor, still the program's to close
    * @param tls the certificate chain and TLS settings
    * @param config the carrier's caps and timeouts, kept by the carrier
@@ -1252,7 +1253,9 @@ export class HttpServer {
     }
     // A slot's record index is its poll token, which must stay below the HTTP/2 tokens.
     if (toI64(toI32(this.h1Slots.length)) + toI64(slots) > toI64(HTTP_SERVER_H2_BASE)) {
-      panic(`HttpServer.${name}: slots ${slots} with the other HTTP/1.1 listener's is more than 1048576`)
+      panic(
+        `HttpServer.${name}: slots ${slots} and the ${this.h1Slots.length} HTTP/1.1 slots listened before are more than 1048576`
+      )
     }
     config.maxBody = this.maxBody
   }
@@ -1667,7 +1670,10 @@ export class HttpServer {
     for (const s of this.h1Slots) {
       const conn: Http1Connection | null = s.open ? this.h1Conn(s) : null
       if (conn !== null && this.h1Holds(s)) {
-        if (s.current === null && (this.h1Resting(s) || !conn.wantsWrite())) {
+        if (s.tls && s.current === null && !conn.wantsWrite()) {
+          // TLS may still hold sealed records: `settle` closes once they are sent.
+          this.settle(s, conn)
+        } else if (s.current === null && (this.h1Resting(s) || !conn.wantsWrite())) {
           this.h1Close(s)
         } else {
           conn.closeAfter = true
@@ -1878,6 +1884,17 @@ export class HttpServer {
     return h1 !== null ? h1.flush(s.carrier) : H1_DONE
   }
 
+  /**
+   * Whether TLS slot `s`, whose flush answered `wants`, still has sealed
+   * records to send or is shutting down after `conn` ended: closing it now
+   * would drop what `TlsTcpServer.close` cannot send in one attempt, so a
+   * draining server waits for `H1_DONE`. Always false for a cleartext slot,
+   * whose unsent bytes are `conn`'s own.
+   */
+  private h1Sealing(s: HttpServerH1Slot, conn: Http1Connection, wants: i32): boolean {
+    return s.tls && ((wants & H1_WANT_WRITE) !== 0 || conn.isDone())
+  }
+
   /** Whether `s` rests its buffers while idle; a TLS slot never does. */
   private h1Resting(s: HttpServerH1Slot): boolean {
     const h1: Http1Server | null = this.h1
@@ -2032,7 +2049,7 @@ export class HttpServer {
       this.h1Close(s)
       return
     }
-    if (this.draining && s.current === null && !conn.wantsWrite()) {
+    if (this.draining && s.current === null && !conn.wantsWrite() && !this.h1Sealing(s, conn, wants)) {
       this.h1Close(s)
       return
     }

@@ -23,7 +23,24 @@ PASS  with close_notify, and no HTTP byte
 PASS  no request taken
 PASS  idleTimeout 100: a handshake, then silence
 PASS  is closed by the server
+PASS  headTimeout 100: a handshake
+PASS  a head that stops part way is closed by the server
+PASS  and not handed to the program
 PASS  bodyTimeout 100: a handshake
 PASS  a body that stops after 2 of 10 bytes is closed by the server
 PASS  never handed to the program
-net_http_server_h1_tls: 28 passed, 0 failed, 0 skipped
+PASS  a TLS handshake, then a GET of an 8 MiB body
+PASS  drained meanwhile, the server ends the connection once the client has read it all
+PASS  and closes the slot once the client hangs up
+PASS  a 200 declaring the whole body
+PASS  every body byte arrived
+PASS  then close_notify
+PASS  TLS listened first: two TLS handshakes
+PASS  the second connection, on the TLS carrier's record 1, is answered
+PASS  the first, asking Connection: close, is answered
+PASS  then shut down with close_notify
+PASS  a cleartext GET, on the records after the TLS ones: 200 hello
+PASS  3 taken, the 2 over TLS secure
+PASS  drain closes the idle TLS connection left
+net_http_server_h1_tls: 44 passed, 0 failed, 0 skipped
+

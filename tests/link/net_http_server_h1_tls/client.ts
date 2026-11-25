@@ -5,7 +5,7 @@
 // application-data records. Each call sends, then turns the server's loop
 // until the answer it waits for has come.
 import { Secret } from "nish:secret"
-import { netAddress, netRead, netWrite, tcpConnect } from "nish:net"
+import { netAddress, netClose, netRead, netWrite, tcpConnect } from "nish:net"
 import { TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule"
 import { TLS_CONTENT_ALERT, TLS_CONTENT_APPLICATION_DATA, TLS_CONTENT_HANDSHAKE, TlsRecordProtection } from "nish/net/tls/record"
 import { TLS_GROUP_X25519, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec"
@@ -206,6 +206,56 @@ export class H1TlsClient {
       }
     }
     return ""
+  }
+
+  /**
+   * Reads until the server closes, one buffer a turn, keeping the alerts and
+   * the first 1024 plaintext bytes in `plain` and counting the rest: how many
+   * application-data bytes came. A large response is read as slowly as the
+   * loop turns, so the server's socket stays full until its last record.
+   */
+  count(key: Secret<u8[]>): i32 {
+    let total: i32 = 0
+    let at: i32 = 0
+    for (let turn: i32 = 0; turn < 200000; turn++) {
+      const held: i32 = toI32(this.got.length) - at
+      const length: i32 = held >= 5 ? 5 + ((toI32(this.got[at + 3]) << 8) | toI32(this.got[at + 4])) : 0
+      if (held >= 5 && held >= length) {
+        const opened: Opened = openOne(this.read, range(this.got, at, at + length))
+        const c: u8[] = opened.content
+        if (opened.type === TLS_CONTENT_ALERT && toI32(c.length) === 2) {
+          this.alerts.push(`${c[0]} ${c[1]}`)
+        } else if (opened.type === TLS_CONTENT_APPLICATION_DATA) {
+          for (let k: i32 = 0; k < toI32(c.length) && toI32(this.plain.length) < 1024; k++) {
+            this.plain.push(c[k])
+          }
+          total = total + toI32(c.length)
+        }
+        at = at + length
+      } else if (this.closed) {
+        break
+      } else {
+        this.got = range(this.got, at, toI32(this.got.length))
+        at = 0
+        this.server.step(1, key)
+        const n: i32 = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length))
+        for (let k: i32 = 0; k < n; k++) {
+          this.got.push(this.buf[k])
+        }
+        if (n !== WOULD_BLOCK && n <= 0) {
+          this.closed = true
+        }
+      }
+    }
+    return total
+  }
+
+  /** Closes the client's end, as a client does once the server has closed its own; a lingering server slot is then done. */
+  hangUp(): void {
+    if (this.fd >= 0) {
+      netClose(this.fd)
+      this.fd = -1
+    }
   }
 
   /** Reads until the server closes, keeping what it sends; whether it closed within the turns. */
