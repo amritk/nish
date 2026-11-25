@@ -105,8 +105,19 @@ which Nish could not pass anyway: a reference to a declared C function is
 refused, NL2728, `reject_fnref_ffi`, [LANGUAGE.md](LANGUAGE.md#function-references)),
 and nothing variadic. Every exported name starts `nishgfx_`, which is how
 `scripts/build.sh` decides to link the shim, the rule it already has for
-SQLite's `nishsqlite_` (`scripts/build.sh` beside `callsSqlite` in
-`src/run-cache.ts`).
+SQLite's adapter (a declared `nishsqlite_*` or `sqlite3_*` name in the IR;
+`callsSqlite` in `src/run-cache.ts`).
+
+`nishgfx.h` does not include webgpu.h. c-import skips a function from an
+included header unless `allow` names it, and binds a struct from one as a
+`CPtr` rather than a class
+([c-import](guide/using-nish/c-import.md#what-is-not-bound)), so the shim
+declares its own opaque types, `typedef struct NishGfxDevice NishGfxDevice;`
+and one per WebGPU object, and each binds as its own handle class. The header
+ships with `nishgfx.overrides.json`: `"allow": ["nishgfx_*"]`, and
+`"buffer"` on each data and message pointer, naming the `size_t` length
+straight after it so the binding keeps the plain `(data: u8[], len: u64)`
+form ([c-import, the overrides file](guide/using-nish/c-import.md#overrides-what-the-header-cannot-say)).
 
 webgpu.h itself breaks every one of those rules: `wgpuAdapterRequestDevice`
 (`webgpu.h:6020`) takes its callback info by value and answers a
@@ -127,8 +138,9 @@ typedef struct NishGfxBufferDesc {
   uint32_t mapped_at_creation;
 } NishGfxBufferDesc;
 
-WGPUBuffer nishgfx_buffer_create(WGPUDevice device, const NishGfxBufferDesc *desc,
-                                 const char *label);
+NishGfxBuffer *nishgfx_buffer_create(NishGfxDevice *device,
+                                     const NishGfxBufferDesc *desc,
+                                     const char *label);
 ```
 
 A descriptor that holds a list (a pipeline's vertex attributes, a bind
@@ -154,7 +166,9 @@ The per-frame calls take scalars and handles only:
 
 The brief allowed `wgpuInstanceWaitAny` or a poll loop. It is the poll loop:
 in the pinned wgpu-native, `wgpuInstanceWaitAny` is `unimplemented!()`
-(`src/unimplemented.rs:227`), so calling it aborts the process.
+(`src/unimplemented.rs:227`), so calling it aborts the process, and asking
+`wgpuCreateInstance` for timed waits panics ("Unsupported timed WaitAny
+features specified", `src/lib.rs:653`–`680`); the shim asks for neither.
 
 `nishgfx_adapter_request(instance, surface, power)` calls
 `wgpuInstanceRequestAdapter` (`webgpu.h:6417`) with
@@ -176,22 +190,27 @@ wgpu-native's default uncaptured-error and device-lost handlers `panic!`
 default"), which would end a Nish program from inside Rust. So
 `nishgfx_device_request` always installs both callbacks in the device
 descriptor (`webgpu.h:4589`, `4598`). The uncaptured-error callback may fire
-at any time, like `AllowSpontaneous` (`webgpu.h:478`), so each callback
-only copies the kind and up to 255 bytes
-of the message into a fixed 16-entry ring in the shim's static storage, and
-counts what did not fit. Nish drains it:
+at any time and on wgpu's own thread, like `AllowSpontaneous`
+(`webgpu.h:478`), so each callback only copies the kind and up to 255 bytes
+of the message into a fixed 16-entry ring held in the shim's per-device
+struct (allocated with the device, so two devices never share one), under
+that struct's mutex, and counts what did not fit. Nish drains it:
 
 ```c
 /* Answers 0 when the queue is empty, else the kind
  * (1 validation, 2 out of memory, 3 internal, 4 device lost),
  * and copies the message, NUL-terminated, into msg. */
-int32_t nishgfx_error_next(WGPUDevice device, uint8_t *msg, uint32_t cap);
-uint32_t nishgfx_errors_dropped(WGPUDevice device);
+int32_t nishgfx_error_next(NishGfxDevice *device, uint8_t *msg, size_t cap);
+uint32_t nishgfx_errors_dropped(NishGfxDevice *device);
 ```
 
 `std/gpu` calls it once per frame inside `endFrame` and answers a
-`Result` for a device loss, so a lost device is a value the game handles,
-never a panic.
+`Result` for a device loss, so a lost device is a value the game handles.
+That covers what wgpu-native reports through these two callbacks; it does not
+cover wgpu-native's own fatal paths, which stay fatal: a poll error inside
+`wgpuInstanceProcessEvents` goes to `handle_error_fatal` (`src/lib.rs`, near
+line 2836), and an entry point given a handle it cannot use `expect`s.
+`docs/security/gfx.md` (S3) records them as open findings.
 
 ## 3. The surface
 
@@ -206,16 +225,18 @@ the shim chains the matching source onto a `WGPUSurfaceDescriptor`:
 
 The shim reads the video driver SDL chose (`SDL_GetCurrentVideoDriver`) and
 takes the Wayland row or the X11 row from it. `wgpuSurfaceConfigure`
-(`webgpu.h:6654`) picks the present mode from the `vsync` option: `Mailbox`
-when the surface offers it, `Immediate` when `vsync: false`, else `Fifo`,
-which every surface offers. A frame takes `wgpuSurfaceGetCurrentTexture`
+(`webgpu.h:6654`) picks the present mode from the `vsync` option: with
+`vsync` on (the default) `Fifo`, which every surface offers; with it off, `Mailbox` when the
+surface's capabilities list it, else `Immediate` when they list that, else
+`Fifo`. A frame takes `wgpuSurfaceGetCurrentTexture`
 (`webgpu.h:6680`): on `SuccessOptimal` or `SuccessSuboptimal` it draws and
 presents (`wgpuSurfacePresent`, `webgpu.h:6688`); on `Timeout` or `Outdated`
 it reconfigures at the window's new size and skips the frame; on `Lost` it
 makes the surface again; on `Error` it queues an error (§2.3).
 
-**Offscreen.** `runApp({ offscreen: { width, height, frames } })`, and every
-test, make no window and initialise no SDL video at all: the shim renders
+**Offscreen.** An app whose `offscreen` field is set
+(`app.offscreen = offscreen(width, height, frames)`), and every test,
+make no window and initialise no SDL video at all: the shim renders
 into an `RGBA8Unorm` texture of that size, copies it to a buffer whose rows
 are padded to WebGPU's 256-byte `bytesPerRow` multiple, maps it
 (`wgpuBufferMapAsync`, `webgpu.h:6119`, completed by `wgpuDevicePoll` with
@@ -229,36 +250,48 @@ A game is three hooks and its settings. The same source builds for both
 targets with no edit:
 
 ```typescript
-import { runApp } from "nish/gfx";
+import { App, runApp } from "nish/gfx";
 
 export const step = (): void => { /* one fixed step: physics, input */ };
 export const update = (dt: f64): void => { /* once a frame, dt in seconds */ };
 export const draw = (alpha: f64): void => { /* once a frame */ };
 
 export const main = (): void => {
-  runApp({ step, update, draw, stepsPerSecond: 60 });
+  const app = new App(draw);
+  app.step = step;
+  app.update = update;
+  app.stepsPerSecond = 60;
+  runApp(app);
 };
 ```
 
 **Natively** the hooks are function references
 ([LANGUAGE.md](LANGUAGE.md#function-references), WP51 S1/S2), held in the
-fields of `runApp`'s options class and called from a loop written in Nish in
+fields of the `App` class and called from a loop written in Nish in
 `std/gfx/app.ts`. Their limits are the language's: each hook names a
 top-level function that is not generic (NL2725), not `async` (NL2727), not
-declared in C (NL2728), and whose arrow captures nothing (NL2731); an
+declared in C (NL2728), takes no rest parameter (NL2729), and whose arrow
+captures nothing (NL2731); an
 optional hook is a field typed `Hook | null`, which a class field may be but
 module storage may not (NL2686, `reject_fnref_storage_nullable`); a module
-constant may not hold a reference at all. An arrow written inline at the
-call, even one capturing nothing, is refused today (NL2336,
-`reject_fnarg_arrow_value`) and waits on WP51 S3, which is why the hooks
-above are top-level `const`s.
+constant may not hold a reference at all. An arrow bound to a local is a value, which
+WP51's first stage does not lift: even one capturing nothing is refused
+today (NL2336, `reject_fnarg_arrow_value`). That, and the browser's need to
+call them by export name, is why the hooks above are top-level `const`s.
+The settings are an `App` built by its constructor and set field by field,
+not an object literal, because a literal must set every field (optional
+fields are refused) and a class with methods is not built from one
+([LANGUAGE.md](LANGUAGE.md#interfaces-and-object-literals)); every field
+but `draw` has a default.
 
-The loop is the one the browser page already runs
+The loop's clock and limits are the ones the browser page already uses
 ([browser-games.md](guide/using-nish/browser-games.md#120-and-240-hz-displays)):
 `step` at a fixed rate, at most `maxStepsPerFrame` of them a frame (8 by
 default, `runtime/page-frame.mjs:646`), a frame longer than a quarter of a
 second counted as a quarter second (`LONGEST_FRAME_MS = 250`,
-`runtime/page-frame.mjs:617`), then `update(dt)` once and `draw(alpha)` once.
+`runtime/page-frame.mjs:617`), then `update(dt)` once and `draw(alpha)`
+once. The `update` hook is new work: the page's `runFixedStep` (`runtime/page-frame.mjs:641`) has only a
+step and a render, so S6 and S7 add the per-frame call on both sides.
 
 **In the browser** the module is compiled for wasm32 and the page drives its
 exports; no function reference crosses, because the page calls `step`,
@@ -276,7 +309,7 @@ and returns. That is why the hooks must be exported: S7's
 
 | `nish/page/game` | `nish/page/gfx` |
 | --- | --- |
-| `init(seed)` once | `main()` once, after the adapter and device are awaited; a seed is the program's own (`nish:random`) |
+| `init(seed)` once | `main()` once, after the adapter and device are awaited; a seed is the program's own (`nish/random`'s `Rng`) |
 | `step(nowMs)` per fixed step | `step()`: the step's time is its count times the interval, so it is not passed |
 | — | `update(dt)` once per frame, `dt` the clamped frame time in seconds |
 | `draw(alpha, frameMs)` per frame | `draw(alpha)`; the frame time is `update`'s `dt` |
@@ -378,12 +411,18 @@ one call. A batched sprite frame (§7) is a handful of commands, where the
 table's first row says the transport costs well under a microsecond either
 way.
 
+The bench's commands are four `i32`s. The encoder calls that take a `u64`
+offset or size (`setVertexBuffer`, `writeBuffer`) cross a wasm import as a
+`BigInt`, which V8 boxes; S7 measures that shape with the same driver before
+it lands, and the choice is revisited if it costs more than a ring command.
+
 ## 6. The auto-scaling controller
 
 `std/gfx/scale.ts` (S9) renders the scene into an offscreen target at an
 internal scale `s` of the surface's size and upscales it to the surface. The
-target is allocated once at the largest scale and drawn through a viewport,
-so changing `s` allocates nothing.
+target is allocated at the largest scale of the surface's size and drawn
+through a viewport, so changing `s` allocates nothing; only a resize
+allocates it again.
 
 - **Input.** GPU time per frame where the adapter has
   `WGPUFeatureName_TimestampQuery` (`webgpu.h:650`; `"timestamp-query"` in
@@ -422,10 +461,13 @@ It pins two numbers, each a failing check:
   quarter of a 240 Hz frame (4.17 ms) and 100 ns a sprite. The transport is
   not where it goes: §5 measured 52 ns for a frame of 8 commands. S9 records
   the measured figure beside the bound in its PR.
-- **Allocations per frame: zero.** After the first frame, the bench's count
-  of arena and heap allocations across 1,000 frames is unchanged. Everything
-  a frame needs (the instance array, the encoder state, the error message
-  buffer, the scale target) is made before the first frame.
+- **Allocations per frame: zero.** After the first frame, a count of arena
+  and heap allocations across 1,000 frames is unchanged. No such counter
+  exists today; S9 adds it to the bench, and the bound is checked only from
+  then. Everything a frame needs (the instance array, the encoder state, the
+  error message buffer, the scale target) is made before the first frame;
+  the scale target is made again only on a resize, never in a steady-state
+  frame.
 
 ## 8. Capabilities and the security scope
 
