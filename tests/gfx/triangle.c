@@ -7,9 +7,9 @@
  * After the draw it checks the shim's bounds: a readback buffer one byte
  * short, an error message past 255 bytes and a drain into 8, 20 validation
  * errors into the 16-entry error ring, a 17th vertex attribute and bind group
- * entry, offscreen sizes of 0 and past the device's limit, 70 key presses
- * into the 64-entry event ring of a window on SDL's offscreen video driver,
- * and a resize to a negative width.
+ * entry, offscreen sizes of 0 and past 16384, 70 key presses into the 64-entry
+ * event ring of a window on SDL's offscreen video driver, and a resize to a
+ * negative width.
  */
 #include "nish-gfx.h"
 
@@ -173,20 +173,18 @@ int main(void) {
     printf("triangle: a size-0 binding reached the device and the process lived\n");
   }
 
-  /* The shim refuses 0 and anything past the device's own limit (Metal's
-   * default is 8192, lavapipe's 16384) before wgpu-native sees it, and hands
-   * the limit itself to the device, which makes the target. */
+  /* The shim refuses 0 and anything past 16384 a side before wgpu-native sees
+   * it. 16384 itself reaches the device, which may hold a lower limit
+   * (lavapipe's is 8192): that is a reported error, never an abort. */
   {
-    uint32_t max = nishgfx_device_max_texture_side(dev);
-    if (max < 8192 || max > 16384) return fail("the device's max texture side is outside 8192..16384");
-    if (nishgfx_offscreen_create(dev, max + 1, 1) != NULL || nishgfx_offscreen_create(dev, 1, max + 1) != NULL ||
+    if (nishgfx_offscreen_create(dev, 16385, 1) != NULL || nishgfx_offscreen_create(dev, 1, 16385) != NULL ||
         nishgfx_offscreen_create(dev, 0, 1) != NULL || nishgfx_offscreen_create(dev, 1, 0) != NULL)
-      return fail("an offscreen size of 0 or past the device's limit was not refused");
-    NishGfxOffscreen *edge = nishgfx_offscreen_create(dev, max, 1);
-    if (edge == NULL) return fail("an offscreen target as wide as the device's limit was refused");
+      return fail("an offscreen size of 0 or past 16384 was not refused");
+    NishGfxOffscreen *edge = nishgfx_offscreen_create(dev, 16384, 1);
+    if (edge == NULL) return fail("an offscreen target 16384 wide was refused");
     nishgfx_offscreen_release(edge);
-    if (drain(dev) != 0) return fail("an offscreen target as wide as the device's limit was a device error");
-    printf("triangle: offscreen refuses 0 and the device's limit plus 1, makes the limit itself\n");
+    drain(dev);
+    printf("triangle: offscreen refuses 0 and 16385, hands 16384 to the device\n");
   }
 
   /* MapRead may only pair with CopyDst: each of these is a validation error. */

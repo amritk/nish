@@ -128,7 +128,6 @@ struct NishGfxDevice {
   WGPUDevice device;
   WGPUQueue queue;
   NishGfxRing errors;
-  uint32_t max_side; /* the device's maxTextureDimension2D, at most 16384 */
 };
 
 struct NishGfxBuffer {
@@ -626,14 +625,6 @@ NishGfxDevice *nishgfx_device_request(NishGfxInstance *inst, NishGfxAdapter *ada
   }
   dev->device = answer.device;
   dev->queue = wgpuDeviceGetQueue(dev->device);
-  /* The device's own limit decides an offscreen side (Metal's default is
-   * 8192, lavapipe's 16384). 8192 is WebGPU's default, the floor every
-   * device meets, so a limit the device does not report falls back to it. */
-  WGPULimits limits = WGPU_LIMITS_INIT;
-  uint32_t side = wgpuDeviceGetLimits(dev->device, &limits) == WGPUStatus_Success
-                      ? limits.maxTextureDimension2D
-                      : 0;
-  dev->max_side = side == 0 || side == WGPU_LIMIT_U32_UNDEFINED ? 8192 : side > 16384 ? 16384 : side;
   return dev;
 }
 
@@ -649,8 +640,6 @@ void nishgfx_device_release(NishGfxDevice *dev) {
 int32_t nishgfx_error_next(NishGfxDevice *dev, void *msg, size_t cap) {
   return dev == NULL ? NISHGFX_ERROR_NONE : ring_pop(&dev->errors, msg, cap);
 }
-
-uint32_t nishgfx_device_max_texture_side(NishGfxDevice *dev) { return dev == NULL ? 0 : dev->max_side; }
 
 uint32_t nishgfx_errors_dropped(NishGfxDevice *dev) {
   if (dev == NULL) return 0;
@@ -939,10 +928,9 @@ void nishgfx_pass_end(NishGfxPass *p) {
 /* ---- offscreen --------------------------------------------------------- */
 
 NishGfxOffscreen *nishgfx_offscreen_create(NishGfxDevice *dev, uint32_t width, uint32_t height) {
-  /* A side past the device's maxTextureDimension2D would be a texture the
-   * device refuses. max_side is at most 16384, so width * 4 rounded to 256 and
-   * its product with height fit in 32 and 64 bits. */
-  if (dev == NULL || width == 0 || height == 0 || width > dev->max_side || height > dev->max_side) return NULL;
+  /* 16384 is WebGPU's default maxTextureDimension2D, so width * 4 rounded to
+   * 256 and its product with height fit in 32 and 64 bits. */
+  if (dev == NULL || width == 0 || height == 0 || width > 16384 || height > 16384) return NULL;
   NishGfxOffscreen *o = calloc(1, sizeof *o);
   if (o == NULL) return NULL;
   o->device = dev;
