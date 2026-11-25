@@ -76,7 +76,7 @@ export const arenaDecimal = (buf: u8[], start: i32, end: i32, fallback: i32): i6
       v = v * 10 + toI64(c - 48)
       digits++
       phase = 1
-    } else if (space && phase !== 1 || space && phase === 1) {
+    } else if (space) {
       phase = phase === 0 ? 0 : 2
     } else if ((c === 45 || c === 43) && phase === 0 && digits === 0 && !negative) {
       negative = c === 45
@@ -457,7 +457,9 @@ export const arenaMain = (
   const server = new ArenaServer(listener, h2c, slots, arenaDataset(text), db)
   server.h.watch(signalFd(), SIGNAL_ID)
   listening(worker, netLocalPort(listener), netLocalPort(h2c))
-  while (server.turn()) {}
+  while (server.turn()) {
+    // Each turn serves one poll's worth of events; the loop ends on SIGTERM.
+  }
   stopped(worker, server)
   return 0
 }

@@ -1,9 +1,11 @@
-# The HttpArena image of the Nish entry, in the upstream layout: HttpArena
-# builds frameworks/nish/Dockerfile and runs its CMD with no arguments under
-# --network host, with the dataset mounted at /data/dataset.json and Postgres
-# named by DATABASE_URL. It installs a released compiler with install.sh, which
-# checks the download's SHA-256 before unpacking it, and LLVM 18 for the link.
-# install.sh is fetched from the release's own tag, not from `main`.
+# The HttpArena image of the Nish entry. HttpArena builds
+# frameworks/nish/Dockerfile, so this file is copied there under that name (the
+# repository's file-name lint keeps it lower-case here). HttpArena runs its CMD
+# with no arguments under --network host, with the dataset mounted at
+# /data/dataset.json and Postgres named by DATABASE_URL. It installs a released
+# compiler with install.sh, which checks the download's SHA-256 before
+# unpacking it, and LLVM 18 for the link. install.sh is fetched from the
+# release's own tag, not from `main`.
 FROM ubuntu:24.04
 
 # A failed download fails the build rather than piping nothing into sh.

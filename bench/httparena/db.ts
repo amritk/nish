@@ -281,7 +281,7 @@ export class ArenaDb {
     job.r = r
     job.min = min
     job.max = max
-    job.limit = limit < 1 ? 1 : limit > 50 ? 50 : limit
+    job.limit = Math.min(Math.max(limit, 1), 50)
     job.count = 0
     job.failed = false
     const w: JsonWriter = job.w

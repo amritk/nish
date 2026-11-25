@@ -375,4 +375,4 @@ function arenaMain<(worker, port, h2cPort) => ..., (worker, server) => ...>(args
   callee +39:3 HttpServer.watch -> @nish.HttpServer.watch
   callee +40:3 (worker, port, h2cPort) => ... -> @nish_main$arrow0
   callee +41:10 ArenaServer.turn -> @ArenaServer.turn
-  callee +42:3 (worker, server) => ... -> @nish_main$arrow1
+  callee +44:3 (worker, server) => ... -> @nish_main$arrow1
