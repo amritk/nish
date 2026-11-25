@@ -77,7 +77,10 @@
 // Word access, as fdlibm's GET_HIGH_WORD and GET_LOW_WORD.
 const hiWord = (x: f64): i32 => toI32(f64ToBits(x) >> toI64(32))
 const loWord = (x: f64): u32 => toU32(toU64(f64ToBits(x)))
-const pow2 = (n: i32): f64 => bitsToF64(toI64(n + 1023) << toI64(52))
+// 2^(biased - 1023) for a biased exponent from 1 to 2046, the double whose exponent field is `biased`.
+const exp2Bits = (biased: i64): f64 => bitsToF64(biased << toI64(52))
+// 2^n for n from -1022 to 1023, the exponent sum taken in i64 where it is exact.
+const pow2 = (n: i32): f64 => exp2Bits(toI64(n) + toI64(1023))
 
 // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
 const isNan = (v: f64): boolean => v !== v
@@ -227,7 +230,7 @@ const ipio2 = (i: i32): i32 => {
 // Integer Payne-Hanek: 64 bits of 2/pi starting at fraction bit p (b_1 first).
 const pio2Word = (p: i32): u64 => {
   if (p < 1) {
-    return pio2Word(1) >> toU64(1 - p)
+    return pio2Word(1) >> toU64(toI64(1) - toI64(p))
   }
   const j: i32 = (p - 1) / 24
   const off: i32 = p - 1 - j * 24
@@ -237,7 +240,8 @@ const pio2Word = (p: i32): u64 => {
   const c3: u64 = toU64(ipio2(j + 3))
   const top: u64 = (c0 << toU64(40)) | (c1 << toU64(16)) | (c2 >> toU64(8))
   const low: u64 = ((c2 & toU64(255)) << toU64(24)) | c3
-  return (top << toU64(off)) | (low >> toU64(32 - off))
+  // low is below 2^32, so shifting it up by off and down by 32 is low >> (32 - off).
+  return (top << toU64(off)) | ((low << toU64(off)) >> toU64(32))
 }
 // The high 64 bits of a * b.
 const mulHi = (a: u64, b: u64): u64 => {
@@ -254,17 +258,19 @@ const mulHi = (a: u64, b: u64): u64 => {
 }
 const clz64 = (v: u64): i32 => {
   const h: u32 = toU32(v >> toU64(32))
-  return h !== toU32(0) ? Math.clz32(h) : Math.clz32(toU32(v)) + 32
+  if (h !== toU32(0)) {
+    return Math.clz32(h)
+  }
+  return Math.clz32(toU32(v)) + 32
 }
 // The trigonometric function `mode` names (0 tan, 1 sin, 2 cos) of x,
 // for |x| >= 2^20 * pi/2 (finite): x * 2/pi mod 4 from a 192-bit window.
 const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
-  const e: i32 = (ix >> 20) - 1023
   const m: u64 = (toU64(f64ToBits(x)) & ((toU64(1) << toU64(52)) - toU64(1))) | (toU64(1) << toU64(52))
-  const p: i32 = e - 53
-  const w0: u64 = pio2Word(p)
-  const w1: u64 = pio2Word(p + 64)
-  const w2: u64 = pio2Word(p + 128)
+  // The words start at fraction bit e - 53, for the unbiased exponent e = (ix >> 20) - 1023.
+  const w0: u64 = pio2Word((ix >> 20) - 1076)
+  const w1: u64 = pio2Word((ix >> 20) - 1012)
+  const w2: u64 = pio2Word((ix >> 20) - 948)
   const lo2: u64 = m * w2
   const hi2: u64 = mulHi(m, w2)
   const lo1: u64 = m * w1
@@ -275,14 +281,14 @@ const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
   const p2: u64 = hi1 + m * w0 + c
   // Integer part mod 4 is the top two bits; the fraction is the rest, as a
   // signed 192-bit number q2:q1:q0 in [-1/2, 1/2).
-  let n: i32 = toI32(p2 >> toU64(62))
   let q2: u64 = (p2 << toU64(2)) | (p1 >> toU64(62))
   let q1: u64 = (p1 << toU64(2)) | (p0 >> toU64(62))
   let q0: u64 = p0 << toU64(2)
-  let neg: boolean = false
-  if (q2 >> toU64(63) !== toU64(0)) {
-    n += 1
-    neg = true
+  // A negative fraction rounds the quadrant up one, to the nearer multiple of pi/2.
+  const neg: boolean = q2 >> toU64(63) !== toU64(0)
+  const n0: i32 = toI32(p2 >> toU64(62)) & 3
+  const n: i32 = neg ? n0 + 1 : n0
+  if (neg) {
     q0 = ~q0 + toU64(1)
     const k0: u64 = q0 === toU64(0) ? toU64(1) : toU64(0)
     q1 = ~q1 + k0
@@ -304,8 +310,8 @@ const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
     q1 = (q1 << toU64(lz)) | (q0 >> toU64(64 - lz))
   }
   // f = (q2 * 2^-64 + q1 * 2^-128) * 2^-(sh + lz)
-  const a: f64 = toF64(q2 >> toU64(11)) * pow2(-53 - sh - lz)
-  const b: f64 = toF64(((q2 & toU64(2047)) << toU64(53)) | (q1 >> toU64(11))) * pow2(-117 - sh - lz)
+  const a: f64 = toF64(q2 >> toU64(11)) * exp2Bits(toI64(970) - toI64(sh) - toI64(lz))
+  const b: f64 = toF64(((q2 & toU64(2047)) << toU64(53)) | (q1 >> toU64(11))) * exp2Bits(toI64(906) - toI64(sh) - toI64(lz))
   // r = (a + b) * pi/2 as y0 + y1.
   const p1h: f64 = 1.570796326794896558
   const p1l: f64 = 6.12323399573676603587e-17
@@ -325,8 +331,9 @@ const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
     y0 = -y0
     y1 = -y1
   }
-  // x * 2/pi is -(n + f) for a negative x, so its quadrant is -n.
-  return trigKernel(y0, y1, hx < 0 ? -n : n, mode)
+  // x * 2/pi is -(n + f) for a negative x, so its quadrant is -n, which is 4 - n mod 4.
+  const quadrant: i32 = neg ? 3 - n0 : 4 - n0
+  return trigKernel(y0, y1, hx < 0 ? quadrant : n, mode)
 }
 
 // fdlibm's __kernel_tan: tan(x0 + y0) for |x0 + y0| <= pi/4, or -1/tan when `odd`.
@@ -621,9 +628,8 @@ export const atan2F64 = (y: f64, x: f64): f64 => {
   let a: f64 = Math.abs(y)
   let b: f64 = Math.abs(x)
   if (ix < 0x23d00000 || ix > 0x5c100000) {
-    const h: i32 = -((ix >> 20) - 1023)
-    const h1: i32 = h >> 1
-    const s: f64 = pow2(h1) * pow2(h - h1)
+    // 2^h for h = 1023 - (ix >> 20), as 2^(h >> 1) * 2^(h - (h >> 1)) so neither factor overflows.
+    const s: f64 = pow2((1023 - (ix >> 20)) >> 1) * pow2((1024 - (ix >> 20)) >> 1)
     a = a * s
     b = b * s
   }
@@ -760,7 +766,7 @@ export const hypotF64 = (x: f64, y: f64): f64 => {
 
 // fdlibm's SET_HIGH_WORD and SET_LOW_WORD.
 const withHi = (x: f64, hi: i32): f64 =>
-  bitsToF64((toI64(hi) << toI64(32)) | (f64ToBits(x) & ((toI64(1) << toI64(32)) - toI64(1))))
+  bitsToF64((toI64(hi) << toI64(32)) | toI64(loWord(x)))
 const withLo = (x: f64, lo: u32): f64 => bitsToF64((f64ToBits(x) & (toI64(-1) << toI64(32))) | toI64(lo))
 
 // The rational approximation e_exp.c and e_pow.c share: P1 + t * (P2 + ... + t * P5).
@@ -833,7 +839,7 @@ export const expF64 = (x: f64): f64 => {
     }
     return y * pow2(k)
   }
-  return y * pow2(k + 1000) * 9.332636185032189e-302
+  return y * exp2Bits(toI64(k) + toI64(2023)) * 9.332636185032189e-302
 }
 
 /**
@@ -847,7 +853,8 @@ export const expF64 = (x: f64): f64 => {
 export const logF64 = (x: f64): f64 => {
   let v: f64 = x
   let hx: i32 = hiWord(v)
-  let k: i32 = 0
+  // A subnormal x is scaled by 2^54 first, and its exponent k takes the 54 back.
+  let scaled: boolean = false
   if (hx < 0x00100000) {
     if (((hx & 0x7fffffff) | toI32(loWord(v))) === 0) {
       return -overflow(1.0)
@@ -855,18 +862,21 @@ export const logF64 = (x: f64): f64 => {
     if (hx < 0) {
       return (v - v) / (v - v)
     }
-    k = -54
+    scaled = true
     v = v * 1.8014398509481984e16
     hx = hiWord(v)
   }
   if (hx >= 0x7ff00000) {
     return v + v
   }
-  k += (hx >> 20) - 1023
+  // hx is not negative here, so this is its exponent field.
+  const field: i32 = hx >>> 20
   hx = hx & 0x000fffff
   const i: i32 = (hx + 0x95f64) & 0x100000
   v = withHi(v, hx | (i ^ 0x3ff00000))
-  k += i >> 20
+  // The exponent field, one more when the fraction is halved to put 1 + f near 1.
+  const e: i32 = field + (i >> 20)
+  const k: i32 = scaled ? e - 1077 : e - 1023
   const f: f64 = v - 1.0
   const dk: f64 = toF64(k)
   if (((hx + 2) & 0x000fffff) < 3) {
@@ -902,7 +912,7 @@ export const logF64 = (x: f64): f64 => {
 }
 
 // 2^n * z for a z near 1 whose product is subnormal, as fdlibm's scalbn, rounded once.
-const scaleDown = (z: f64, n: i32): f64 => z * pow2(-1000) * pow2(n + 1000)
+const scaleDown = (z: f64, n: i32): f64 => z * pow2(-1000) * exp2Bits(toI64(n) + toI64(2023))
 
 // pow's |y| > 2^31 case when x is not within 2^-20 of 1: an overflow or an underflow.
 const powHugeY = (ix: i32, hy: i32, iy: i32, s: f64): f64 => {
@@ -924,29 +934,29 @@ const powExp2 = (ph0: f64, pl: f64, s: f64): f64 => {
   const z0: f64 = pl + ph
   const j: i32 = hiWord(z0)
   const i: i32 = toI32(loWord(z0))
-  if (j >= 0x40900000) {
-    if (((j - 0x40900000) | i) !== 0 || pl + 8.0085662595372944372e-17 > z0 - ph) {
-      return overflow(s)
-    }
-  } else if ((j & 0x7fffffff) >= 0x4090cc00) {
-    // 0xc090cc00, the high word of -1075, as an i32.
-    if (j !== -1064252416 || i !== 0 || pl <= z0 - ph) {
-      return underflow(s)
-    }
-  }
   const ij: i32 = j & 0x7fffffff
-  let k: i32 = (ij >> 20) - 0x3ff
+  // z0 at least 1024 overflows, but for exactly 1024 that rounds down; z0 at
+  // most -1075 underflows, but for exactly -1075 that rounds up.
+  if (j > 0x40900000) {
+    return overflow(s)
+  }
+  if (j === 0x40900000 && (i !== 0 || pl + 8.0085662595372944372e-17 > z0 - ph)) {
+    return overflow(s)
+  }
+  if (ij > 0x4090cc00) {
+    return underflow(s)
+  }
+  // 0xc090cc00, the high word of -1075, as an i32.
+  if (j === -1064252416 && (i !== 0 || pl <= z0 - ph)) {
+    return underflow(s)
+  }
   let n: i32 = 0
   if (ij > 0x3fe00000) {
-    const unit: i32 = 0x00100000
-    n = j + (unit >> (k + 1))
-    k = ((n & 0x7fffffff) >> 20) - 0x3ff
-    const t: f64 = withHi(0.0, n & ~(0x000fffff >> k))
-    n = ((n & 0x000fffff) | 0x00100000) >> (20 - k)
-    if (j < 0) {
-      n = -n
-    }
-    ph = ph - t
+    // z0 rounded half away from zero, from its high word as fdlibm does: exact,
+    // as |z0| is below 1076 and its high word keeps 20 fraction bits.
+    const zh: f64 = withLo(z0, toU32(0))
+    n = toI32(j < 0 ? zh - 0.5 : zh + 0.5)
+    ph = ph - toF64(n)
   }
   const t: f64 = withLo(pl + ph, toU32(0))
   const u: f64 = t * 6.93147182464599609375e-1
@@ -1000,15 +1010,16 @@ export const powF64 = (x: f64, y: f64): f64 => {
     if (iy >= 0x43400000) {
       yisint = 2
     } else if (iy >= 0x3ff00000) {
-      const k: i32 = (iy >> 20) - 0x3ff
-      if (k > 20) {
-        const j: u32 = ly >> toU32(52 - k)
-        if (j << toU32(52 - k) === ly) {
+      // iy's biased exponent; 52 - k and 20 - k below are 0x433 - e and 0x413 - e.
+      const e: i32 = iy >>> 20
+      if (e > 0x413) {
+        const j: u32 = ly >> toU32(0x433 - e)
+        if (j << toU32(0x433 - e) === ly) {
           yisint = 2 - toI32(j & toU32(1))
         }
       } else if (ly === toU32(0)) {
-        const j: i32 = iy >> (20 - k)
-        if (j << (20 - k) === iy) {
+        const j: i32 = iy >> (0x413 - e)
+        if (j << (0x413 - e) === iy) {
           const odd: i32 = j & 1
           yisint = 2 - odd
         }
@@ -1061,26 +1072,18 @@ export const powF64 = (x: f64, y: f64): f64 => {
     t1 = withLo(u + v, toU32(0))
     t2 = v - (t1 - u)
   } else {
-    let n: i32 = 0
-    let jx: i32 = ix
-    if (jx < 0x00100000) {
+    // A subnormal x is scaled by 2^53 first, and its exponent lowered by 53.
+    const subnormal: boolean = ix < 0x00100000
+    if (subnormal) {
       ax = ax * 9007199254740992.0
-      n = -53
-      jx = hiWord(ax)
     }
-    n += (jx >> 20) - 0x3ff
-    const j: i32 = jx & 0x000fffff
-    jx = j | 0x3ff00000
-    let k: i32 = 0
-    if (j <= 0x3988e) {
-      k = 0
-    } else if (j < 0xbb67a) {
-      k = 1
-    } else {
-      n += 1
-      jx -= 0x00100000
-    }
-    ax = withHi(ax, jx)
+    const hix: i32 = subnormal ? hiWord(ax) : ix
+    const j: i32 = hix & 0x000fffff
+    // A mantissa at least sqrt(3) is halved, and its exponent raised by one.
+    const big: boolean = j >= 0xbb67a
+    const k: i32 = j > 0x3988e && !big ? 1 : 0
+    const dn: f64 = toF64((hix >>> 20) - 0x3ff) - (subnormal ? 53.0 : 0.0) + (big ? 1.0 : 0.0)
+    ax = withHi(ax, j | (big ? 0x3fe00000 : 0x3ff00000))
     const bp: f64 = k === 0 ? 1.0 : 1.5
     const dph: f64 = k === 0 ? 0.0 : 5.84962487220764160156e-1
     const dpl: f64 = k === 0 ? 0.0 : 1.35003920212974897128e-8
@@ -1089,7 +1092,12 @@ export const powF64 = (x: f64, y: f64): f64 => {
     const v: f64 = one / (ax + bp)
     const ss: f64 = u * v
     const sh: f64 = withLo(ss, toU32(0))
-    let th: f64 = withHi(0.0, ((jx >> 1) | 0x20000000) + 0x00080000 + (k << 18))
+    // fdlibm's th, the high word of ax halved plus bp's: 0x3ff80000 + (j >> 1)
+    // when ax was halved, and 0x80000 or 0xc0000 more otherwise; the last is
+    // 0.5 more than the second.
+    const half: i32 = j >>> 1
+    const thn: f64 = withHi(0.0, half + 0x40000000)
+    let th: f64 = big ? withHi(0.0, half + 0x3ff80000) : k === 0 ? thn : thn + 0.5
     let tl: f64 = ax - (th - bp)
     const sl: f64 = v * (u - sh * th - sh * tl)
     let s2: f64 = ss * ss
@@ -1109,7 +1117,7 @@ export const powF64 = (x: f64, y: f64): f64 => {
     const pl: f64 = pv - (ph - pu)
     const zh: f64 = ph * 9.61796700954437255859e-1
     const zl: f64 = ph * -7.02846165095275826516e-9 + pl * 9.61796693925975554329e-1 + dpl
-    const t: f64 = toF64(n)
+    const t: f64 = dn
     t1 = withLo(zh + zl + dph + t, toU32(0))
     t2 = zl - (t1 - t - dph - zh)
   }
@@ -1131,8 +1139,8 @@ export const powF64 = (x: f64, y: f64): f64 => {
 export const fmodF64 = (x: f64, y: f64): f64 => {
   let ux: u64 = toU64(f64ToBits(x))
   let uy: u64 = toU64(f64ToBits(y))
-  let ex: i32 = toI32((ux >> toU64(52)) & toU64(0x7ff))
-  let ey: i32 = toI32((uy >> toU64(52)) & toU64(0x7ff))
+  const ex: i32 = toI32((ux >> toU64(52)) & toU64(0x7ff))
+  const ey: i32 = toI32((uy >> toU64(52)) & toU64(0x7ff))
   const sign: u64 = ux & (toU64(1) << toU64(63))
   if (uy << toU64(1) === toU64(0) || isNan(y) || ex === 0x7ff) {
     return (x * y) / (x * y)
@@ -1142,52 +1150,42 @@ export const fmodF64 = (x: f64, y: f64): f64 => {
   }
   const mant: u64 = (toU64(1) << toU64(52)) - toU64(1)
   const implicit: u64 = toU64(1) << toU64(52)
-  // Each significand to an integer with its leading one at bit 52, the exponent lowered
-  // past zero for a subnormal.
-  if (ex === 0) {
-    let i: u64 = ux << toU64(12)
-    while (i >> toU64(63) === toU64(0)) {
-      ex -= 1
-      i = i << toU64(1)
-    }
-    ux = ux << toU64(1 - ex)
-  } else {
-    ux = (ux & mant) | implicit
-  }
-  if (ey === 0) {
-    let i: u64 = uy << toU64(12)
-    while (i >> toU64(63) === toU64(0)) {
-      ey -= 1
-      i = i << toU64(1)
-    }
-    uy = uy << toU64(1 - ey)
-  } else {
-    uy = (uy & mant) | implicit
-  }
-  while (ex > ey) {
-    if (ux >= uy) {
-      if (ux === uy) {
-        return 0.0 * x
-      }
-      ux = ux - uy
-    }
-    ux = ux << toU64(1)
-    ex -= 1
+  // Each significand to an integer with its leading one at bit 52. A
+  // subnormal's is shifted up past its leading zeros, lz of them, and its
+  // exponent taken as -lz. Both are nonzero here.
+  const lzx: i32 = ex === 0 ? clz64(ux << toU64(12)) : 0
+  const lzy: i32 = ey === 0 ? clz64(uy << toU64(12)) : 0
+  ux = ex === 0 ? (ux << toU64(lzx)) << toU64(1) : (ux & mant) | implicit
+  uy = ey === 0 ? (uy << toU64(lzy)) << toU64(1) : (uy & mant) | implicit
+  // The exponents' difference, at least 0 as |x| > |y|. The exponent sums are
+  // of integers below 2^12, taken in f64, where they are exact.
+  const steps: i32 = toI32(toF64(ex) - toF64(lzx) - (toF64(ey) - toF64(lzy)))
+  // Long division one bit a step, down to y's exponent. A remainder that
+  // reaches zero stays zero, so that is checked once, after.
+  let step: i32 = 0
+  while (step < steps) {
+    ux = (ux >= uy ? ux - uy : ux) << toU64(1)
+    step = step + 1
   }
   if (ux >= uy) {
-    if (ux === uy) {
-      return 0.0 * x
-    }
     ux = ux - uy
   }
-  while (ux >> toU64(52) === toU64(0)) {
-    ux = ux << toU64(1)
-    ex -= 1
+  if (ux === toU64(0)) {
+    return 0.0 * x
   }
-  if (ex > 0) {
-    ux = (ux - implicit) | (toU64(ex) << toU64(52))
+  // The remainder, nonzero and below 2^53, back to its leading one at bit 52,
+  // and its exponent lowered by as much: up is at most 52, which the first
+  // compare says to the prover.
+  let up: i32 = 0
+  while (up < 53 && ux >> toU64(52) === toU64(0)) {
+    ux = ux << toU64(1)
+    up = up + 1
+  }
+  const e: f64 = toF64(ey) - toF64(lzy) - toF64(up)
+  if (e > 0.0) {
+    ux = (ux - implicit) | (toU64(toI32(e)) << toU64(52))
   } else {
-    ux = ux >> toU64(1 - ex)
+    ux = ux >> toU64(toI32(1.0 - e))
   }
   return bitsToF64(toI64(ux | sign))
 }
@@ -1254,13 +1252,15 @@ const hexEnd = (s: string, at: i32): i32 => {
 // bit, so a hex integer of any length rounds once, as a correct strtod does.
 const hexValue = (s: string, start: i32, end: i32): f64 => {
   let m: u64 = toU64(0)
-  let scale: i32 = 0
+  // The power of two the kept digits are scaled by: four for each digit
+  // dropped, fewer than 2^33 in all, so the f64 sums are exact.
+  let scale: f64 = 0.0
   let sticky: boolean = false
   let k: i32 = start
   while (k >= 0 && k < end && k < toI32(s.length)) {
     const d: i32 = hexDigit(toI32(s.charCodeAt(k)))
     if (m >> toU64(60) !== toU64(0)) {
-      scale = scale + 4
+      scale = scale + 4.0
       sticky = sticky || d !== 0
     } else {
       m = (m << toU64(4)) | toU64(d)
@@ -1276,20 +1276,32 @@ const hexValue = (s: string, start: i32, end: i32): f64 => {
     if (low > half || (low === half && (sticky || (m & toU64(1)) !== toU64(0)))) {
       m = m + toU64(1)
     }
-    scale = scale + shift
+    scale = scale + toF64(shift)
   }
   // At most 2^53, so exact; each doubling is exact until it overflows.
   let v: f64 = toF64(m)
-  while (scale > 0 && v <= 1.7976931348623157e308) {
+  while (scale > 0.0 && v <= 1.7976931348623157e308) {
     v = v * 2.0
-    scale = scale - 1
+    scale = scale - 1.0
   }
   return v
 }
 
-// Whether `s` holds `0x` or `0X` at `at`.
-const isHexPrefix = (s: string, at: i32): boolean =>
-  at + 1 < toI32(s.length) && toI32(s.charCodeAt(at)) === 48 && (toI32(s.charCodeAt(at + 1)) | 32) === 120
+// Where the digits after a `0x` or `0X` at `at` start, or -1 when `s` holds
+// neither there.
+const hexDigitsAt = (s: string, at: i32): i32 => {
+  if (at >= 0 && at < toI32(s.length) - 1 && toI32(s.charCodeAt(at)) === 48 && (toI32(s.charCodeAt(at + 1)) | 32) === 120) {
+    return at + 2
+  }
+  return -1
+}
+
+// Where the number after `s`'s leading whitespace and one optional sign starts.
+const signEnd = (s: string, p: i32): i32 =>
+  p >= 0 && p < toI32(s.length) && (toI32(s.charCodeAt(p)) === 45 || toI32(s.charCodeAt(p)) === 43) ? p + 1 : p
+
+// Whether a `-` sits at `p`.
+const isMinus = (s: string, p: i32): boolean => p >= 0 && p < toI32(s.length) && toI32(s.charCodeAt(p)) === 45
 
 /**
  * `Number(s)` of a string under `--deterministic` (WP50 §9): the grammar the
@@ -1304,17 +1316,17 @@ const isHexPrefix = (s: string, at: i32): boolean =>
  */
 export const numberExact = (s: string): f64 => {
   const p: i32 = skipSpaces(s, 0)
-  const negative: boolean = p < toI32(s.length) && toI32(s.charCodeAt(p)) === 45
-  const q: i32 = p < toI32(s.length) && (negative || toI32(s.charCodeAt(p)) === 43) ? p + 1 : p
-  if (!isHexPrefix(s, q)) {
+  const negative: boolean = isMinus(s, p)
+  const h: i32 = hexDigitsAt(s, signEnd(s, p))
+  if (h < 0) {
     return Number(s)
   }
-  const end: i32 = hexEnd(s, q + 2)
-  if (end === q + 2 || skipSpaces(s, end) !== toI32(s.length)) {
+  const end: i32 = hexEnd(s, h)
+  if (end === h || skipSpaces(s, end) !== toI32(s.length)) {
     const zero: f64 = 0.0
     return zero / zero
   }
-  const v: f64 = hexValue(s, q + 2, end)
+  const v: f64 = hexValue(s, h, end)
   return negative ? -v : v
 }
 
@@ -1331,12 +1343,12 @@ export const numberExact = (s: string): f64 => {
  */
 export const parseFloatExact = (s: string): f64 => {
   const p: i32 = skipSpaces(s, 0)
-  const negative: boolean = p < toI32(s.length) && toI32(s.charCodeAt(p)) === 45
-  const q: i32 = p < toI32(s.length) && (negative || toI32(s.charCodeAt(p)) === 43) ? p + 1 : p
-  if (!isHexPrefix(s, q)) {
+  const negative: boolean = isMinus(s, p)
+  const h: i32 = hexDigitsAt(s, signEnd(s, p))
+  if (h < 0) {
     return parseFloat(s)
   }
-  const end: i32 = hexEnd(s, q + 2)
-  const v: f64 = end === q + 2 ? 0.0 : hexValue(s, q + 2, end)
+  const end: i32 = hexEnd(s, h)
+  const v: f64 = end === h ? 0.0 : hexValue(s, h, end)
   return negative ? -v : v
 }
