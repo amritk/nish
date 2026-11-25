@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 61 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 62 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -756,4 +756,12 @@ The message of an error contains:
 
 ```text
 …: a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build
+```
+
+## NL3063
+
+The message of an error contains:
+
+```text
+` and must export the same names with the same signatures, because a wasm32 build compiles it in its place: …
 ```

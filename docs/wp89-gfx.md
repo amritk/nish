@@ -554,6 +554,24 @@ user shipping one which notices to carry; if a header is ever vendored, it
 goes into [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) per
 [.claude/licensing.md](../.claude/licensing.md).
 
+## 10. A module file chosen by target (S6)
+
+S6 shipped the rule §4 leans on. A wasm32 build asks a package's `exports`
+for `nish-wasm32` before `nish-<mode>` and `nish`, and resolves a library
+module `nish/<name>` to `std/<name>.wasm32.ts` when that file is beside
+`std/<name>.ts`. A native build reads neither. The target outranks the mode
+because the two files differ in what they can link against (the operating
+system against the host page), while the mode only changes how one source
+compiles. `nish-wasm32` cannot be a mode's condition, because the modes are
+`i32` and `f64`. The pair must export the same names with the same
+signatures, and both builds compare it at the import (`NL3063`). The rule,
+its wording and its cases are in
+[LANGUAGE.md](LANGUAGE.md#export-and-import), in its package bullets.
+
+No library module has a twin yet, and S6 adds none, so the library half is
+pinned at the unit level by `tests/link/module_target_twin`. Its first end to
+end case lands with the first twin, in S7.
+
 ## Stages
 
 | Stage | What |
