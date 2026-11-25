@@ -807,6 +807,13 @@ was read from `--emit-panics` and is pinned by no check. The connection's
 constructor still panics on a cap out of range (`http1-server.ts:499:5`): an
 `Http1Config` is a mutable object the constructor stores as given, so no
 caller makes the check, and every program that serves HTTP/1.1 reaches it.
+The [`fault`](../reference/language/semantics-decisions.md#panic-sites)
+contract that proves `HttpHandler`'s limit check (`handler.md`) is not used
+here: the constructor's callers are the connection pool's `build` and
+`make`, which must answer an `Http1Connection` (the public `connection(slot)`
+among their callers), so checking the config there and refusing it would need
+a nullable answer, a change to a public signature, and panicking there
+instead only moves the panic.
 
 **`websocket.ts` panics only in those two window checks.** Every index,
 overflow, slice and array-length site in the module is proven by a guard, by

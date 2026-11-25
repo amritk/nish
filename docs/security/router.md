@@ -91,7 +91,9 @@ the properties below.
 not the window guard shape the checker reads as a contract a caller proves
 ([`window`](../reference/language/semantics-decisions.md#panic-sites)), so a program that calls `match` or
 `paramCount` reaches `std/net/router.ts:1290:3` and `1304:5` and builds with
-`--allow-panics`. Untested: these two routes were read from `--emit-panics`
+`--allow-panics`. A window contract read on a `start`/`end` pair rather than
+`off`/`len` would prove `match`'s `enter` checks where `match`'s callers have
+checked the range; #2296's caller stage does not add it. Untested: these two routes were read from `--emit-panics`
 on `examples/http-app/main.ts` and are pinned by no check.
 
 ## Properties verified
