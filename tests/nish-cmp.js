@@ -22955,6 +22955,30 @@ const DECLARED = [
       "tests/link/std_term_pixels/main.ts": ["testing.ll"],
     }
   ),
+  // Reported only under `--no-sidecars`, where the WP8 sidecars no longer hide
+  // the sqlite and sync programs.
+  ...s2RestPanicFree(
+    "std/testing's `Suite` stops its tallies at the largest `i32` through `testingCount`, and std/sqlite reads a NULL message as the code's description and its version from `sqlite3_libversion_number`, so testing.ll and sqlite.ll move (WP87 S2)",
+    {
+      "bench/sqlite/main.ts": ["sqlite.ll"],
+      "tests/link/std_sqlite/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_cursor/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_cursor_count/main.ts": ["sqlite.ll", "testing.ll"],
+      "tests/link/std_sqlite_cursor_feed/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_cursor_row/main.ts": ["sqlite.ll", "testing.ll"],
+      "tests/link/std_sqlite_cursor_schema/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_cursor_shapes/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_cursor_sql/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_cursor_stale/main.ts": ["testing.ll"],
+      "tests/link/std_sqlite_norow/main.ts": ["testing.ll"],
+      "tests/link/sync_ring/main.ts": ["testing.ll"],
+      "tests/link/sync_ring_checked/main.ts": ["testing.ll"],
+      "tests/link/sync_ring_inplace/main.ts": ["testing.ll"],
+      "tests/link/sync_ring_inplace_memmove/main.ts": ["testing.ll"],
+      "tests/link/sync_ring_inplace_partial/main.ts": ["testing.ll"],
+      "tests/link/sync_shm/main.ts": ["testing.ll"],
+    }
+  ),
 ]
 
 /**
