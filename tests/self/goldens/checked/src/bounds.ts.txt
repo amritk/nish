@@ -1864,10 +1864,10 @@ function provesWithin(walk: BoundsWalk, state: State, bound: Node, w: Local): bo
 function provesOrdered(walk: BoundsWalk, state: State, from: Node, to: Node, w: Local): boolean -> @provesOrdered
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via exactLengthOf
-  calls: boundCeiling boundFloor exactLengthOf impliesNonNegative indexLocal isLocal knownOrdered minusLiteral offsetIndex provesWithin sameBase
+  calls: boundCeiling boundFloor exactLengthOf impliesNonNegative indexLocal isLocal knownOrdered offsetIndex provesWithin sameBase
   pointer walk: size=200 writesThrough=false captured=false passedTo=exactLengthOf#0 provesWithin#0 boundCeiling#0 impliesNonNegative#0 boundFloor#0
   pointer state: size=136 writesThrough=false captured=false passedTo=provesWithin#1 knownOrdered#0 boundCeiling#1 impliesNonNegative#1 boundFloor#1
-  pointer from: size=40 writesThrough=true captured=true passedTo=provesWithin#2 indexLocal#1 minusLiteral#1 boundCeiling#2
+  pointer from: size=40 writesThrough=true captured=true passedTo=provesWithin#2 indexLocal#1 boundCeiling#2
   pointer to: size=40 writesThrough=true captured=true passedTo=exactLengthOf#1 indexLocal#1 offsetIndex#1 impliesNonNegative#2 boundFloor#2
   pointer w: size=64 writesThrough=false captured=false passedTo=isLocal#1 provesWithin#3
   stackSites=0 stackLocals=0
@@ -1883,14 +1883,10 @@ function provesOrdered(walk: BoundsWalk, state: State, from: Node, to: Node, w: 
   callee +6:58 knownOrdered -> @knownOrdered
   local +9:9 sum: Offset | null (const)
   callee +9:15 offsetIndex -> @offsetIndex
-  local +13:9 minus: MinusLiteral | null (const)
-  callee +13:17 minusLiteral -> @minusLiteral
-  callee +14:39 isLocal -> @isLocal
-  callee +14:47 indexLocal -> @indexLocal
-  local +17:9 ceiling: i32 (const)
-  callee +17:19 boundCeiling -> @boundCeiling
-  callee +19:12 impliesNonNegative -> @impliesNonNegative
-  callee +21:37 boundFloor -> @boundFloor
+  local +13:9 ceiling: i32 (const)
+  callee +13:19 boundCeiling -> @boundCeiling
+  callee +15:12 impliesNonNegative -> @impliesNonNegative
+  callee +17:37 boundFloor -> @boundFloor
 function provesRange(walk: BoundsWalk, state: State, w: Local, from: Node, to: Node): boolean -> @provesRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via isQuietBound
