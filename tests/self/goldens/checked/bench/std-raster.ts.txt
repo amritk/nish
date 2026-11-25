@@ -1931,7 +1931,7 @@ function rasterTrail(pixels: i32[], width: i32, height: i32, trail: RasterTrail,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rasterDisc
   escaping: colour height width
-  calls: llvm.smin.i32 nish.rasterDisc
+  calls: llvm.fptosi.sat.i32.f64 llvm.smin.i32 nish.rasterDisc
   pointer pixels: size=0 writesThrough=true captured=false passedTo=nish.rasterDisc#0
   pointer trail: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1940,13 +1940,16 @@ function rasterTrail(pixels: i32[], width: i32, height: i32, trail: RasterTrail,
   local +2:9 n: i32 (const)
   local +3:9 count: i32 (const)
   local +4:9 head: i32 (const)
-  local +10:7 slot: i32 (let)
+  local +12:9 size: f64 (const)
+  local +13:7 raw: f64 (let)
   local +14:12 i: i32 (let)
-  local +21:13 f: f64 (const)
-  local +22:13 radius: f64 (const)
-  local +23:13 cx: f64 (const)
-  local +24:13 cy: f64 (const)
-  callee +25:7 rasterDisc -> @nish.rasterDisc
+  local +15:11 at: f64 (const)
+  local +17:13 slot: i32 (const)
+  local +21:15 f: f64 (const)
+  local +22:15 radius: f64 (const)
+  local +23:15 cx: f64 (const)
+  local +24:15 cy: f64 (const)
+  callee +25:9 rasterDisc -> @nish.rasterDisc
 function RasterParticles.constructor(this: RasterParticles, capacity: i32): void -> @nish.RasterParticles.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: llvm.smax.i32 nish_panic

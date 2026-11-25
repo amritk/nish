@@ -981,7 +981,9 @@ the width in frame pixels, 0 for empty text or a scale under 1
 
 A trail as a line of discs from oldest to newest, each larger and more
 opaque than the one before: a streak that fades out behind what made it.
-A point at `v` is drawn at pixel `offset + v * scale`.
+A point at `v` is drawn at pixel `offset + v * scale`. A `head` set
+outside the ring still draws the points `count` slots behind it that land
+in the ring, as an in-range head does, and no others.
 
 ```ts
 const rasterTrail: (
