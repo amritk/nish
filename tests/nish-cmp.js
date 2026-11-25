@@ -575,8 +575,6 @@ const sliceWindows = (why, filesByProgram) =>
   )
 /** WP80 S4's release-note words, lower-case so they match the capitalised CHANGELOG.md line. */
 const HTTP1_SERVER_PANIC_FREE = "the HTTP/1 server panic-free"
-/** WP80 S4's (#2296) release-note words: a caller's proof discharges a window guard's panic. */
-const WINDOW_CONTRACT = "record a window contract's check at its callers"
 const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
 const betweenRequests = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -22656,15 +22654,6 @@ const DECLARED = [
     file,
     changelog: HTTP1_SERVER_PANIC_FREE,
     why: "the reference compiles the bench against the 0.44.0 seed's std/bytes.ts, std/http-compress.ts and std/zlib.ts, which differ from this tree's (the seed emits no zlib.ll for it); the bench reaches them through this change's std/net/http1-server.ts (WP80 S4)",
-  })),
-  // WP80 S4 (#2296): src/window-contract.ts is a new compiler module, so the
-  // program is new to the corpus; the compiler modules it imports are this
-  // tree's, which differ from the 0.46.0 seed's.
-  ...["bounds.ll", "constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"].map((file) => ({
-    program: "src/window-contract.ts",
-    file,
-    changelog: WINDOW_CONTRACT,
-    why: "the program is the window contract's new compiler module; the reference compiles the compiler modules it imports from this tree too, but the 0.46.0 seed's code generation differs from the candidate's, so their IR differs as every compiler module's does (WP80 S4)",
   })),
   // WP82 S3: the HTTP/1 client codec refuses more than 2^30 buffered bytes
   // with the new `HTTP1_E_MEMORY_LIMIT` code where it used to panic, and
