@@ -1,6 +1,6 @@
 ---
 name: WP34 — the network stack, the open follow-ups
-overview: All 24 WP34 stages have landed. Six issues remain, one for each loose end the earlier stages left, in nish:net, the TLS server, the PostgreSQL batcher and async pool, and the PostgreSQL bench and guide.
+overview: All 24 WP34 stages have landed. Five issues remain here (a sixth, RSA certificates on the TLS server, moved to tls-rsa-server.plan.md), one for each loose end the earlier stages left, in nish:net, the PostgreSQL batcher and async pool, and the PostgreSQL bench and guide.
 spec: docs/wp34-network-stack.md
 priority: 80
 issue: 1852
@@ -24,10 +24,9 @@ stages:
         status: pending
   - id: s26-tls-rsa-server
     title: WP34 S26 — RSA certificates on the TLS server
-    goal: The TLS server signs CertificateVerify with RSA-PSS under an RSA certificate that curl and Chrome accept, with constant-time big-number arithmetic, Wycheproof vectors and a docs/security record.
+    goal: Moved to its own plan, tls-rsa-server.plan.md (stage s1-rsa-server), which now holds issue 481, so it can be placed on the Roadmap beside WP71's HttpArena entry.
     verification: node tests/run.js tls && node tests/run.js ct_asm && node scripts/security-scope.mjs && npm run lint
-    status: pending
-    issue: 481
+    status: cancelled
     todos:
       - id: s26-confirm-rest
         content: Confirm P-256 key shares, session tickets and record_size_limit are done in std/net/tls and close those items on the issue — see WP34 S26 — RSA certificates on the TLS server
@@ -118,6 +117,9 @@ All 24 of 24 roadmap stages have landed (the crypto kernels, TLS 1.3 server and 
 Close #357 as done for tcpConnect and DNS and open one issue per remaining item (recommended, as the issue itself instructs), or keep it as the umbrella. Batching is measured against GSO before anything is added.
 
 ## WP34 S26 — RSA certificates on the TLS server
+
+**Moved** to [`tls-rsa-server.plan.md`](tls-rsa-server.plan.md), which holds #481 now: HttpArena mounts an RSA-2048 pair, so every TLS profile of [WP71](../../docs/wp71-httparena.md) waits on it, and it is placed on the Roadmap after WP71. The text below is the record of what was planned here.
+
 #481 lists four server gaps. On main three look done: secp256r1 key shares (roadmap T1 row, #1449), session tickets (`std/net/tls/ticket.ts`, `docs/security/tls.md` resumption) and `record_size_limit` (WP39 G3). What stays: the server signs only with P-256 ECDSA, and `std/crypto/rsa.ts` says it is verification only. That needs RSA-PSS signing with constant-time big numbers, a new crypto lane with its own vectors and audit. Acceptance from the issue: an RSA-certificate server accepted by `curl` and Chrome, plus Wycheproof vectors and a `docs/security/` record. Client authentication stays out of scope. Reads: `docs/security/crypto-rsa.md`, `docs/security/tls.md`.
 Likely files: `std/crypto/rsa.ts`, `std/crypto/x509.ts`, `std/net/tls.ts`.
 
