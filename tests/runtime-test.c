@@ -59,6 +59,7 @@ nish_str *nish_str_from_f64(double);
 #define NISH_F64_MAX 32
 int nish_f64_format(double, char[NISH_F64_MAX]);
 int32_t nish_json_put_f64(uint8_t *, int32_t, int32_t, double);
+int32_t nish_json_put_string(uint8_t *, int32_t, int32_t, const uint8_t *, int64_t, int64_t);
 int64_t nish_str_index_of(const nish_str *, const nish_str *);
 double nish_random(void);
 /* runtime-parallel.c. Declared here like every other symbol this file calls:
@@ -2282,6 +2283,33 @@ int main(void) {
     memset(buf, '#', sizeof buf);
     assert(nish_json_put_f64(buf, 29, 5, -0.0000012345678901234567) == -1);
     for (size_t i = 0; i < sizeof buf; i++) assert(buf[i] == '#');
+  }
+
+  /* nish_json_put_string: `src[from .. to)` quoted and escaped at `at`, or
+     -1. tests/link/std_json_writer/put-string.ts compares its bytes with
+     JsonWriter.stringBytes; these rows hold the cursor and the room: an exact
+     fit, one byte short in the plain run, in an escape and at the closing
+     quote, a negative `at`, `at == len`, a wrapped length, an empty array,
+     and an empty window. No byte before `at` moves. */
+  {
+    uint8_t buf[40];
+    const uint8_t *s = (const uint8_t *)"ab\ncd\"e\001"; /* 8 bytes, "ab\ncd\"e\u0001" quoted: 17 */
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_string(buf, 40, 2, s, 0, 8) == 19);
+    assert(memcmp(buf, "##\"ab\\ncd\\\"e\\u0001\"#", 20) == 0);
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_string(buf, 19, 2, s, 0, 8) == 19);        /* fits exactly */
+    assert(nish_json_put_string(buf, 18, 2, s, 0, 8) == -1);        /* the closing quote short */
+    assert(nish_json_put_string(buf, 17, 2, s, 0, 8) == -1);        /* inside \u0001 */
+    assert(nish_json_put_string(buf, 6, 2, s, 0, 8) == -1);         /* inside \n */
+    assert(nish_json_put_string(buf, 4, 2, s, 0, 8) == -1);         /* in the plain run */
+    assert(buf[0] == '#' && buf[1] == '#');
+    assert(nish_json_put_string(buf, 40, -1, s, 0, 2) == -1);       /* `at` negative */
+    assert(nish_json_put_string(buf, 40, 40, s, 0, 0) == -1);       /* `at == len` */
+    assert(nish_json_put_string(buf, -3, 0, s, 0, 2) == -1);        /* a wrapped length */
+    assert(nish_json_put_string(NULL, 0, 0, s, 0, 0) == -1);        /* an empty array */
+    assert(nish_json_put_string(buf, 2, 0, NULL, 0, 0) == 2 && buf[0] == '"' && buf[1] == '"');
+    assert(nish_json_put_string(buf, 1, 0, NULL, 0, 0) == -1);
   }
 
   /* Math.random: doubles in [0, 1) that are not all equal. */

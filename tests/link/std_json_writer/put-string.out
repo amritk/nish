@@ -1,0 +1,9 @@
+every byte at every offset: 209920 cases, 0 disagree
+random strings: 2000 cases, 0 disagree
+""
+"plain"
+"say \"hi\""
+"back\\slash"
+"tab\there\nline"
+"\u0001\u001f"
+-1 -1 -1 2 -1 -1 -1 2

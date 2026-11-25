@@ -1,0 +1,45 @@
+PASS  fill
+PASS  beginRead
+PASS  table: the walk ends at its last row
+PASS  table: 310 rows
+PASS  table: every field answers what its column answers
+PASS  table: the 300 records written before ALTER TABLE hold 6 fields
+PASS  table: an overflow row grew the buffer
+PASS  table: the 75 rows with x % 4 = 1 hold a REAL; whole ones are stored as integers
+PASS  seekRowid 150
+PASS    record into no room answers the length
+PASS    one byte short answers it too and copies nothing
+PASS    an exact fit copies the record
+PASS    whose header length is its first byte
+PASS    and the row reads
+PASS    n, 150 % 9 = 6, is 0 * 10^15
+PASS  seekRowid 141, n = -9 * 10^15 in 8 bytes
+PASS    n
+PASS  seekRowid 8, the smallest i64
+PASS    n
+PASS  seekRowid 25, a 25-byte text
+PASS    s is TEXT
+PASS  seekRowid 295, a 295-byte text
+PASS    s is TEXT with a two-byte serial type
+PASS    past the fields is NULL
+PASS  index: the walk ends at its last entry
+PASS  index: 310 entries
+PASS  index: each record is its key, then its rowid
+PASS  close
+PASS  record on a closed cursor is MISUSE
+PASS  and RowRecord.read hands it on
+PASS  endRead
+PASS  a cursor outside a read is refused
+PASS  beginRead
+PASS  endRead
+PASS  200 passes reopen both and read
+PASS    each seek finds its row
+PASS  reopen while the cursor is still open
+PASS    closes the old one and reads
+PASS  reopen with other columns is SCHEMA
+PASS    and leaves the cursor closed
+PASS    which reopens
+PASS  endRead
+PASS  finalize
+PASS  close the database
+std_sqlite_cursor_record: 44 passed, 0 failed, 0 skipped
