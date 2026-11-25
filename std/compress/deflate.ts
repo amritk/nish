@@ -359,8 +359,20 @@ const deflateLengthBase = (s: i32): i32 => {
   if (s >= 28) {
     return 258
   }
-  // At most 7 << 5, so the mask keeps every bit; it bounds the sum.
-  return (((toI32(4) + (s & 3)) << ((s >> 2) - 1)) & 255) + 3
+  // 4 to 7 times 2^((s >> 2) - 1), plus 3.
+  const mant: i32 = toI32(4) + (s & 3)
+  switch (s >> 2) {
+    case 2:
+      return mant * 2 + 3
+    case 3:
+      return mant * 4 + 3
+    case 4:
+      return mant * 8 + 3
+    case 5:
+      return mant * 16 + 3
+    default:
+      return mant * 32 + 3
+  }
 }
 
 /**
@@ -380,9 +392,36 @@ const deflateDistBase = (d: i32): i32 => {
   if (d >= 29) {
     return 24577
   }
-  const extra: i32 = (d >> 1) - 1
-  // At most 3 << 13, so the mask keeps every bit; it bounds the sum.
-  return (((toI32(2) + (d & 1)) << extra) & 32767) + 1
+  // 2 or 3 times 2^((d >> 1) - 1), plus 1.
+  const mant: i32 = toI32(2) + (d & 1)
+  switch (d >> 1) {
+    case 2:
+      return mant * 2 + 1
+    case 3:
+      return mant * 4 + 1
+    case 4:
+      return mant * 8 + 1
+    case 5:
+      return mant * 16 + 1
+    case 6:
+      return mant * 32 + 1
+    case 7:
+      return mant * 64 + 1
+    case 8:
+      return mant * 128 + 1
+    case 9:
+      return mant * 256 + 1
+    case 10:
+      return mant * 512 + 1
+    case 11:
+      return mant * 1024 + 1
+    case 12:
+      return mant * 2048 + 1
+    case 13:
+      return mant * 4096 + 1
+    default:
+      return mant * 8192 + 1
+  }
 }
 
 /** The extra bits of each distance symbol (§3.2.5). */
@@ -468,8 +507,10 @@ const deflateFixedLitCode = (s: i32): i32 => {
  * Fills `codes[0 .. n)` with the canonical code (§3.2.2) of the lengths
  * `lens[0 .. n)`, each already bit-reversed for the LSB-first stream. `count`
  * and `next` are scratch of at least 16 entries. A length of 0 gets code 0.
- * Answers false, filling nothing, when a table is smaller than that or `n`
- * is past 288, the largest alphabet, which every caller's tables rule out.
+ * Answers false, filling nothing, when a table is smaller than that, `n`
+ * is past 288, the largest alphabet, or the lengths oversubscribe the code;
+ * the lengths `deflateLengths` sets and every caller's tables rule all three
+ * out.
  */
 const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next: i32[]): boolean => {
   if (
@@ -488,17 +529,24 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
   for (let s: i32 = 0; s < n; s += 1) {
     const l: i32 = lens[s]
     if (l >= 0 && l < 16) {
-      // A count is at most n <= 288: the mask keeps every bit, and tells
-      // the bounds prover so.
-      count[l] = (count[l] & 511) + 1
+      const c: i32 = count[l]
+      if (c >= 288) {
+        return false
+      }
+      count[l] = c + 1
     }
   }
   count[0] = 0
   let code: i32 = 0
   for (let l: i32 = 1; l < 16; l += 1) {
-    // Only a code's low `l` bits are written, and they depend only on the
-    // low bits of the sum: the mask keeps 16 of them.
-    code = ((code + (count[l - 1] & 511)) << 1) & 0xffff
+    // The codes of lengths below `l` take at most the first 2^(l - 1) of
+    // its prefixes, so a code that fits never passes 2^14 here; lengths
+    // that oversubscribe the code fail.
+    const c: i32 = count[l - 1]
+    if (c < 0 || c > 288 || code < 0 || code > 16384) {
+      return false
+    }
+    code = (code + c) << 1
     next[l] = code
   }
   // Each length's next code is kept bit-reversed, as it is written, and
@@ -511,12 +559,12 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
     if (l > 0 && l < 16) {
       const r: i32 = next[l]
       codes[s] = r
-      // `l` is below 16, so `r` and `top` are below 2^16 and the masks keep
-      // every bit.
-      const top: i32 = ((toI32(1) << l) & 0xffff) - 1
+      // `top` is the `l` low bits. Flipping `r` from its highest zero below
+      // `l` up clears the ones above that zero and sets it.
+      const top: i32 = ~(toI32(-1) << l)
       if (r !== top) {
-        const bit: i32 = (toI32(1) << (31 - toI32(Math.clz32(toU32(r ^ top))))) & 0xffff
-        next[l] = (r & (bit - 1)) | bit
+        const from: i32 = toI32(-1) << (31 - toI32(Math.clz32(toU32(r ^ top))))
+        next[l] = r ^ (top & from)
       }
     } else {
       codes[s] = 0
@@ -539,7 +587,7 @@ export class DeflateHuffmanScratch {
   /** @internal Used by `deflateLengths`. */
   readonly tmpKeys: i32[]
   /** @internal Used by `deflateLengths`. The radix pass's 256 buckets. */
-  readonly buckets: i32[]
+  readonly buckets: u16[]
   /** @internal Used by `deflateLengths`. How many codes have each length, 0 to 32. */
   readonly perLength: i32[]
 
@@ -549,7 +597,7 @@ export class DeflateHuffmanScratch {
     this.keys = new Array<i32>(288)
     this.tmpSyms = new Array<i32>(288)
     this.tmpKeys = new Array<i32>(288)
-    this.buckets = new Array<i32>(256)
+    this.buckets = new Array<u16>(256)
     this.perLength = new Array<i32>(33)
   }
 }
@@ -564,15 +612,16 @@ export class DeflateHuffmanScratch {
  * one, so the code is always complete. Answers false, setting nothing, when
  * the alphabet or `limit` is outside the scratch's sizes or a frequency is
  * 2^16 or more, which every caller's tables and blocks rule out. Those
- * bounds keep every weight below 2^25 and every count below 2^9, which the
- * masks below keep whole and tell the bounds prover.
+ * bounds keep every weight below 2^25 and every count at most 288, which
+ * the guards below check where the bounds prover reads them; one that fails
+ * answers false with `lens[0 .. n)` already zeroed.
  */
 const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: DeflateHuffmanScratch): boolean => {
   const syms: i32[] = w.syms
   const keys: i32[] = w.keys
   const tsyms: i32[] = w.tmpSyms
   const tkeys: i32[] = w.tmpKeys
-  const buckets: i32[] = w.buckets
+  const buckets: u16[] = w.buckets
   const per: i32[] = w.perLength
   if (
     n < 2 ||
@@ -592,12 +641,14 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   }
   // The used symbols, by a two-pass radix sort on the 16-bit frequency.
   let used: i32 = 0
+  let wide: i32 = 0
   for (let s: i32 = 0; s < n; s += 1) {
     const f: i32 = freq[s]
     if (f > 65535) {
       return false
     }
     if (f > 0) {
+      wide = wide | f
       uncheckedSet(tsyms, used, s)
       uncheckedSet(tkeys, used, f)
       used += 1
@@ -624,10 +675,12 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
     }
     return true
   }
-  for (let pass: i32 = 0; pass < 2; pass += 1) {
-    const shift: i32 = pass * 8
+  // Every frequency below 256 needs only the low pass.
+  const passes: i32 = wide > 255 ? 2 : 1
+  for (let pass: i32 = 0; pass < passes; pass += 1) {
+    const shift: i32 = pass === 0 ? 0 : 8
     for (let b: i32 = 0; b < 256; b += 1) {
-      uncheckedSet(buckets, b, 0)
+      uncheckedSet(buckets, b, toU16(0))
     }
     const fromSyms: i32[] = pass === 0 ? tsyms : syms
     const fromKeys: i32[] = pass === 0 ? tkeys : keys
@@ -635,65 +688,106 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
     const toKeys: i32[] = pass === 0 ? keys : tkeys
     for (let i: i32 = 0; i < used; i += 1) {
       const b: i32 = (uncheckedGet(fromKeys, i) >> shift) & 255
-      uncheckedSet(buckets, b, (uncheckedGet(buckets, b) & 511) + 1)
+      // A bucket holds at most `used`, at most 288, symbols.
+      const c: i32 = toI32(uncheckedGet(buckets, b))
+      if (c >= 288) {
+        return false
+      }
+      uncheckedSet(buckets, b, toU16(c + 1))
     }
+    // Each bucket's first slot. The counts are 16-bit, so 256 of them cannot
+    // overflow `sum`. They are never negative, so every prefix is at most the
+    // total: when that is `used`, at most 288, no slot stored here lost a
+    // bit to `toU16`, and when it is not, the sort fails.
     let sum: i32 = 0
     for (let b: i32 = 0; b < 256; b += 1) {
-      const c: i32 = uncheckedGet(buckets, b) & 511
-      uncheckedSet(buckets, b, sum)
-      sum = (sum + c) & 511
+      const c: u16 = uncheckedGet(buckets, b)
+      uncheckedSet(buckets, b, toU16(sum))
+      sum += toI32(c)
+    }
+    if (sum !== used) {
+      return false
     }
     for (let i: i32 = 0; i < used; i += 1) {
       const k: i32 = uncheckedGet(fromKeys, i)
       const b: i32 = (k >> shift) & 255
-      const at: i32 = uncheckedGet(buckets, b) & 511
-      uncheckedSet(buckets, b, at + 1)
+      // Each bucket's next slot is below `used`, so inside the 288 entries
+      // `toSyms` and `toKeys` hold.
+      const at: i32 = toI32(uncheckedGet(buckets, b))
+      if (at >= 288) {
+        return false
+      }
+      uncheckedSet(buckets, b, toU16(at + 1))
       uncheckedSet(toSyms, at, uncheckedGet(fromSyms, i))
       uncheckedSet(toKeys, at, k)
     }
   }
   // Two passes leave the sorted run back in `tsyms` / `tkeys`.
-  for (let i: i32 = 0; i < used; i += 1) {
-    uncheckedSet(syms, i, uncheckedGet(tsyms, i))
-    uncheckedSet(keys, i, uncheckedGet(tkeys, i))
+  if (passes === 2) {
+    for (let i: i32 = 0; i < used; i += 1) {
+      uncheckedSet(syms, i, uncheckedGet(tsyms, i))
+      uncheckedSet(keys, i, uncheckedGet(tkeys, i))
+    }
   }
   // Moffat and Katajainen, phase 1: each internal node's weight, and each
-  // node's parent, in place over the ascending weights.
-  uncheckedSet(keys, 0, (uncheckedGet(keys, 0) & 0x1ffffff) + (uncheckedGet(keys, 1) & 0x1ffffff))
+  // node's parent, in place over the ascending weights. A weight is at most
+  // the sum of 288 frequencies below 2^16, so below 2^25.
+  const w0: i32 = uncheckedGet(keys, 0)
+  const w1: i32 = uncheckedGet(keys, 1)
+  if (w0 < 0 || w0 > 33554431 || w1 < 0 || w1 > 33554431) {
+    return false
+  }
+  uncheckedSet(keys, 0, w0 + w1)
   let root: i32 = 0
   let leaf: i32 = 2
   for (let next: i32 = 1; next < used - 1; next += 1) {
+    // `root` names an internal node, below `next`, so below 287.
+    if (root > 286) {
+      return false
+    }
     if (leaf >= used || uncheckedGet(keys, root) < uncheckedGet(keys, leaf)) {
       uncheckedSet(keys, next, uncheckedGet(keys, root))
       uncheckedSet(keys, root, next)
-      root = (root + 1) & 511
+      root += 1
     } else {
       uncheckedSet(keys, next, uncheckedGet(keys, leaf))
       leaf += 1
     }
+    if (root > 286) {
+      return false
+    }
+    const first: i32 = uncheckedGet(keys, next)
     if (leaf >= used || (root < next && uncheckedGet(keys, root) < uncheckedGet(keys, leaf))) {
-      uncheckedSet(
-        keys,
-        next,
-        (uncheckedGet(keys, next) & 0x1ffffff) + (uncheckedGet(keys, root) & 0x1ffffff)
-      )
+      const second: i32 = uncheckedGet(keys, root)
+      if (first < 0 || first > 33554431 || second < 0 || second > 33554431) {
+        return false
+      }
+      uncheckedSet(keys, next, first + second)
       uncheckedSet(keys, root, next)
-      root = (root + 1) & 511
+      root += 1
     } else {
-      uncheckedSet(
-        keys,
-        next,
-        (uncheckedGet(keys, next) & 0x1ffffff) + (uncheckedGet(keys, leaf) & 0x1ffffff)
-      )
+      const second: i32 = uncheckedGet(keys, leaf)
+      if (first < 0 || first > 33554431 || second < 0 || second > 33554431) {
+        return false
+      }
+      uncheckedSet(keys, next, first + second)
       leaf += 1
     }
   }
-  // Phase 2: each internal node's depth.
+  // Phase 2: each internal node's depth, one more than its parent's, which
+  // is below the 287 internal nodes.
   uncheckedSet(keys, used - 2, 0)
   for (let next: i32 = used - 3; next >= 0; next -= 1) {
-    uncheckedSet(keys, next, (uncheckedGet(keys, uncheckedGet(keys, next)) & 511) + 1)
+    const up: i32 = uncheckedGet(keys, uncheckedGet(keys, next))
+    if (up > 286) {
+      return false
+    }
+    uncheckedSet(keys, next, up + 1)
   }
-  // Phase 3: how many leaves sit at each depth.
+  // Phase 3: how many leaves sit at each depth, every depth past `limit`
+  // counted at `limit + 1`, which the length limit below folds into `limit`
+  // whatever the depth. A tree of at most 288 leaves is under 288 deep and
+  // has under 288 internal nodes at any depth.
   for (let l: i32 = 0; l < 33; l += 1) {
     per[l] = 0
   }
@@ -701,18 +795,28 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   let usedHere: i32 = 0
   let depth: i32 = 0
   root = used - 2
-  // A tree of at most 288 leaves is under 288 deep and has under 288
-  // internal nodes, so the bounds on `depth` and `usedHere` never stop a loop.
-  while (avail > 0 && depth < 288) {
-    while (root >= 0 && usedHere < 288 && uncheckedGet(keys, root) === depth) {
+  while (avail > 0) {
+    if (depth < 0 || depth >= 288) {
+      return false
+    }
+    while (root >= 0 && uncheckedGet(keys, root) === depth) {
+      if (usedHere >= 288) {
+        return false
+      }
       usedHere += 1
       root -= 1
     }
+    let slot: i32 = limit + 1
+    if (depth <= limit) {
+      slot = depth
+    }
     // `usedHere` is never negative, so `avail > 0` only restates the first test.
     while (avail > usedHere && avail > 0) {
-      if (depth < 33) {
-        per[depth] = (per[depth] & 511) + 1
+      const c: i32 = per[slot]
+      if (c >= 288) {
+        return false
       }
+      per[slot] = c + 1
       avail -= 1
     }
     avail = usedHere << 1
@@ -721,42 +825,71 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   }
   // The length limit: fold the deeper codes into `limit`, then lengthen
   // shorter codes until the Kraft sum is exactly 2^limit again.
-  if (per[limit + 1] > 0 || depth > limit + 1) {
-    for (let l: i32 = limit + 1; l < 33; l += 1) {
-      per[limit] = (per[limit] & 511) + (per[l] & 511)
-      per[l] = 0
+  const over: i32 = per[limit + 1]
+  if (over > 0) {
+    const kept: i32 = per[limit]
+    if (kept > 288 || over > 288) {
+      return false
     }
-    // At most 288 codes of at most 15 bits: the Kraft sum is below 2^23.
+    per[limit] = kept + over
+    per[limit + 1] = 0
+    // The Kraft sum in units of 2^-limit, by Horner's rule: after length
+    // `l` it is at most 288 << (l - 1), below 2^23 for `l` up to 15.
     let total: i32 = 0
-    for (let l: i32 = limit; l > 0; l -= 1) {
-      total = (total + (((per[l] & 511) << (limit - l)) & 0x7fffff)) & 0x7fffff
-    }
-    // Each pass takes one off a sum above 2^limit, so it stays positive.
-    while (total !== 1 << limit && total > 0) {
-      per[limit] = (per[limit] & 511) - 1
-      for (let l: i32 = limit - 1; l > 0; l -= 1) {
-        const c: i32 = per[l] & 511
-        if (c !== 0) {
-          per[l] = c - 1
-          per[l + 1] = (per[l + 1] & 511) + 2
-          break
-        }
+    for (let l: i32 = 1; l <= limit; l += 1) {
+      const c: i32 = per[l]
+      if (c < 0 || c > 288 || total < 0 || total > 8388607) {
+        return false
       }
+      total = total * 2 + c
+    }
+    // Each pass takes one off the sum: a code of `limit` bits goes, and one
+    // of a shorter length `l` becomes two of `l + 1`.
+    const want: i32 = toI32(1) << limit
+    // `want` is at least 2, so `total > 0` only restates the first test.
+    while (total > want && total > 0) {
+      const most: i32 = per[limit]
+      if (most < 1) {
+        return false
+      }
+      per[limit] = most - 1
+      let l: i32 = limit - 1
+      while (l > 0 && per[l] === 0) {
+        l -= 1
+      }
+      if (l <= 0) {
+        return false
+      }
+      const c: i32 = per[l]
+      const below: i32 = per[l + 1]
+      if (c < 1 || below > 286) {
+        return false
+      }
+      per[l] = c - 1
+      per[l + 1] = below + 2
       total -= 1
     }
-  }
-  // The most frequent symbols take the shortest lengths.
-  let j: i32 = used
-  for (let l: i32 = 1; l <= limit; l += 1) {
-    for (let c: i32 = per[l]; c > 0 && j > 0; c -= 1) {
-      j -= 1
-      const s: i32 = uncheckedGet(syms, j)
-      if (s >= 0 && s < n) {
-        lens[s] = l
-      }
+    if (total !== want) {
+      return false
     }
   }
-  return true
+  // The most frequent symbols take the shortest lengths; the counts per
+  // length add up to `used`.
+  let j: i32 = used
+  for (let l: i32 = 1; l <= limit; l += 1) {
+    for (let c: i32 = per[l]; c > 0; c -= 1) {
+      if (j <= 0) {
+        return false
+      }
+      j -= 1
+      const s: i32 = uncheckedGet(syms, j)
+      if (s < 0 || s >= n) {
+        return false
+      }
+      lens[s] = l
+    }
+  }
+  return j === 0
 }
 
 /**
