@@ -240,52 +240,44 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
   if (triangleCc.status === 0 && drawn.status === 77) {
     skip(`gfx: no GPU adapter answered (${drawn.stdout.trim()}), so the triangle is not drawn`)
   } else {
-    check(
-      "gfx: tests/gfx/triangle.c draws a red triangle on a blue clear offscreen and reads it back",
-      drawn.status === 0 && drawn.stdout.includes("triangle: centre red, corner blue\n"),
-      shown(drawn)
-    )
+    // Each bound the triangle exercises is one line it prints on stdout.
+    const printed = [
+      [
+        "gfx: tests/gfx/triangle.c draws a red triangle on a blue clear offscreen and reads it back",
+        "centre red, corner blue",
+      ],
+      [
+        "gfx: the device's error ring keeps 16 reports and counts the 4 past it as dropped",
+        "error ring kept 16, dropped 4",
+      ],
+      [
+        "gfx: a window's event ring keeps the first 64 events in order and counts the 6 past it as dropped",
+        "event ring kept 64 in order, dropped 6",
+      ],
+      [
+        "gfx: an error message is kept to 255 bytes and drained to the caller's cap less its NUL",
+        "a long error keeps 255 bytes, a drain into 8 keeps 7",
+      ],
+      [
+        "gfx: the pipeline and bind group builders take 16 entries each and refuse the 17th",
+        "builders took 16 attributes and 16 bindings",
+      ],
+      [
+        "gfx: a bind group entry of size 0 binds the rest of the buffer instead of aborting the process",
+        "a size-0 binding reached the device and the process lived",
+      ],
+      [
+        "gfx: offscreen_create refuses 0 and 16385 a side and hands 16384 to the device",
+        "offscreen refuses 0 and 16385, hands 16384 to the device",
+      ],
+      ["gfx: a resize SDL reports below zero reaches the program as 0", "a resize to -5 x 7 reads 0 x 7"],
+    ]
+    for (const [name, line] of printed) {
+      check(name, drawn.status === 0 && drawn.stdout.includes(`triangle: ${line}\n`), shown(drawn))
+    }
     check(
       "gfx: offscreen_read refuses a buffer one byte short and leaves it untouched",
       drawn.status === 0 && !drawn.stderr.includes("a short buffer was not refused"),
-      shown(drawn)
-    )
-    check(
-      "gfx: the device's error ring keeps 16 reports and counts the 4 past it as dropped",
-      drawn.status === 0 && drawn.stdout.includes("triangle: error ring kept 16, dropped 4\n"),
-      shown(drawn)
-    )
-    check(
-      "gfx: a window's event ring keeps the first 64 events in order and counts the 6 past it as dropped",
-      drawn.status === 0 && drawn.stdout.includes("triangle: event ring kept 64 in order, dropped 6\n"),
-      shown(drawn)
-    )
-    check(
-      "gfx: an error message is kept to 255 bytes and drained to the caller's cap less its NUL",
-      drawn.status === 0 &&
-        drawn.stdout.includes("triangle: a long error keeps 255 bytes, a drain into 8 keeps 7\n"),
-      shown(drawn)
-    )
-    check(
-      "gfx: the pipeline and bind group builders take 16 entries each and refuse the 17th",
-      drawn.status === 0 && drawn.stdout.includes("triangle: builders took 16 attributes and 16 bindings\n"),
-      shown(drawn)
-    )
-    check(
-      "gfx: a bind group entry of size 0 binds the rest of the buffer instead of aborting the process",
-      drawn.status === 0 &&
-        drawn.stdout.includes("triangle: a size-0 binding reached the device and the process lived\n"),
-      shown(drawn)
-    )
-    check(
-      "gfx: offscreen_create refuses 0 and 16385 a side and hands 16384 to the device",
-      drawn.status === 0 &&
-        drawn.stdout.includes("triangle: offscreen refuses 0 and 16385, hands 16384 to the device\n"),
-      shown(drawn)
-    )
-    check(
-      "gfx: a resize SDL reports below zero reaches the program as 0",
-      drawn.status === 0 && drawn.stdout.includes("triangle: a resize to -5 x 7 reads 0 x 7\n"),
       shown(drawn)
     )
   }
