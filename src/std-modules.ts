@@ -45,7 +45,7 @@ export const stdModulePath = (root: string, specifier: string): string =>
   normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`)
 
 /** The file name a module's wasm32 twin ends in, in place of `.ts` (WP89 S6). */
-export const WASM_TWIN_EXTENSION: string = ".wasm32.ts"
+const WASM_TWIN_EXTENSION: string = ".wasm32.ts"
 
 /**
  * `std/gfx.ts` -> `std/gfx.wasm32.ts`: the twin a wasm build compiles in place
