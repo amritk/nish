@@ -1566,6 +1566,17 @@ const PACKAGE_LINK = "A package links a C library or its own C sources"
 /** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
 const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
 const s1PanicFree = byFinding(S1_PANIC_FREE)
+/** The changelog words of WP80 S6, which spells std/net's read windows as the panic prover reads them. */
+const S6_READ_WINDOWS = "read windows the prover reads"
+/** WP80 S6's moves: `preforkDiscard` reads into `buf` at its own length and drops its `size` local, so prefork.ll's values after it renumber. */
+const s6ReadWindowsDeclared = () =>
+  byFinding(S6_READ_WINDOWS)(
+    "preforkDiscard reads into its buffer at the buffer's own length and drops its `size` local, so its body and the values after it in the module renumber (WP80 S6)",
+    {
+      "examples/prefork-jobs.ts": ["prefork.ll"],
+      "tests/link/net_prefork_checked/main.ts": ["prefork.ll"],
+    }
+  )
 /** The changelog words of WP80 S5, which makes nish/net's handler, serve and static panic-free for http-app. */
 const S5_PANIC_FREE = "handler, serve and static panic-free for http-app"
 /** WP80 S5's programs: one new negative, and four that call the checked forms the seed's std/net does not have. */
@@ -11608,6 +11619,7 @@ const DECLARED = [
     { "tests/link/crypto_pki_malformed/main.ts": ["main.ll"] }
   ),
   ...s5PanicFreeDeclared(),
+  ...s6ReadWindowsDeclared(),
   ...wirePanicFreeDeclared(),
   ...hashMacKdfDeclared(),
   {

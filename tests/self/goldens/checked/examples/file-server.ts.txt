@@ -1367,14 +1367,16 @@ function Http1Server.readable(this: Http1Server, slot: i32): i32 -> @nish.Http1S
   calls: nish.Http1Connection.abort nish.Http1Connection.endInput nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Server.attach nish.Http1Server.settle nish.HttpDate.hold nish_monotonic_nanos nish_net_read nish_panic_slice
   pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.attach#0 nish.Http1Server.settle#0
   stackSites=0 stackLocals=0
-  local -13:11 conn: Http1Connection | null (const)
-  callee -13:42 Http1Server.attach -> @nish.Http1Server.attach
-  callee -9:5 HttpDate.hold -> @nish.HttpDate.hold
-  local -8:11 fd: i32 (const)
-  local -7:9 moved: boolean (let)
-  local -5:13 room: i32 (const)
-  callee -5:25 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  local -4:13 want: i32 (const)
+  local -16:11 conn: Http1Connection | null (const)
+  callee -16:42 Http1Server.attach -> @nish.Http1Server.attach
+  callee -12:5 HttpDate.hold -> @nish.HttpDate.hold
+  local -11:11 fd: i32 (const)
+  local -10:9 moved: boolean (let)
+  local -9:11 scratch: u8[] (const)
+  local -7:13 room: i32 (const)
+  callee -7:25 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  local -6:13 size: i32 (const)
+  local -5:13 want: i32 (const)
   local +0:13 n: i32 (const)
   callee +3:11 Http1Connection.endInput -> @nish.Http1Connection.endInput
   callee +5:11 Http1Connection.abort -> @nish.Http1Connection.abort
@@ -1431,7 +1433,8 @@ function Http1Server.drain(this: Http1Server, conn: Http1Connection): i32 -> @ni
   pointer this: size=160 writesThrough=false captured=false
   pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.drained#0
   stackSites=0 stackLocals=0
-  local -7:11 fd: i32 (const)
+  local -8:11 fd: i32 (const)
+  local -7:11 scratch: u8[] (const)
   local -5:13 size: i32 (const)
   local +0:13 n: i32 (const)
   callee +4:22 Http1Connection.drained -> @nish.Http1Connection.drained
@@ -35937,17 +35940,19 @@ function pump(conn: Http1Connection, served: Served, at: i64): i64 -> @pump
   sharedWrite: +0:20
   escaping: at
   calls: nish.Http1Connection.abort nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.methodIs nish_file_read_at nish_panic_slice
-  pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0 nish.Http1Connection.abort#0 nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0
+  pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0 nish.Http1Connection.abort#0 nish.Http1Connection.abort#0 nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0
   pointer served: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -21:7 pos: i64 (let)
-  local -19:11 head: i32 (const)
-  callee -19:23 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee -14:7 Http1Connection.abort -> @nish.Http1Connection.abort
-  callee -11:9 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  callee -10:7 Http1Connection.end -> @nish.Http1Connection.end
-  local -2:11 left: i64 (const)
-  local -1:11 want: i32 (const)
+  local -26:7 pos: i64 (let)
+  local -24:11 head: i32 (const)
+  callee -24:23 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee -19:7 Http1Connection.abort -> @nish.Http1Connection.abort
+  callee -16:9 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee -15:7 Http1Connection.end -> @nish.Http1Connection.end
+  local -7:11 left: i64 (const)
+  local -6:11 want: i32 (const)
+  local -5:11 window: u8[] (const)
+  callee -3:7 Http1Connection.abort -> @nish.Http1Connection.abort
   local +0:11 n: i32 (const)
   callee +2:7 Http1Connection.abort -> @nish.Http1Connection.abort
   local +5:11 took: i32 (const)

@@ -194,7 +194,10 @@ export class App {
         return OK
       }
       case CREATE: {
-        const text: string | null = jsonField(String.fromBytes(req.body, ZERO, req.bodyLength), "text")
+        const body: u8[] = req.body
+        const end: i32 = req.bodyLength
+        const text: string | null =
+          end >= 0 && end <= toI32(body.length) ? jsonField(String.fromBytes(body, 0, end), "text") : null
         if (text === null) {
           logRefusal(
             h,
