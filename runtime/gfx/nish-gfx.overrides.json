@@ -1,0 +1,14 @@
+{
+  "header": "nish-gfx.h",
+  "allow": ["nishgfx_*"],
+  "functions": {
+    "nishgfx_instance_error_next": { "msg": { "buffer": "cap" } },
+    "nishgfx_error_next": { "msg": { "buffer": "cap" } },
+    "nishgfx_queue_write": { "data": { "buffer": "len" } },
+    "nishgfx_offscreen_read": { "dst": { "buffer": "cap" } },
+    "nishgfx_buffer_create": { "label": { "nullable": true } },
+    "nishgfx_adapter_request": { "surface": { "nullable": true } },
+    "nishgfx_pass_set_bind_group": { "group": { "nullable": true } },
+    "nishgfx_pass_set_vertex_buffer": { "buffer": { "nullable": true } }
+  }
+}

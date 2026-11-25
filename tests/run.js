@@ -80,6 +80,7 @@ import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
 import { runFfiAbiChecks } from "./ffi-abi.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
+import { runGfxChecks } from "./gfx.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
 import { runFfiStructChecks } from "./ffi-struct.js"
@@ -5312,7 +5313,7 @@ if (dealtHere("diagnostics")) {
   const scopeScript = path.join(root, "scripts", "security-scope.mjs")
   const scopeLive = spawnSync("node", [scopeScript], { cwd: root, encoding: "utf8" })
   check(
-    "security-scope: every std/net, std/crypto and runtime C file is in a record or listed as not yet audited",
+    "security-scope: every std/net, std/crypto, runtime and runtime/gfx C file is in a record or listed as not yet audited",
     scopeLive.status === 0,
     scopeLive.stdout + scopeLive.stderr
   )
@@ -5326,6 +5327,8 @@ if (dealtHere("diagnostics")) {
     put("std/net/new.ts", "")
     put("std/crypto/listed.ts", "")
     put("runtime/runtime.c", "")
+    // `runtime/*.c` stops at the slash, so a graphics shim unit needs its own row.
+    put("runtime/gfx/new.c", "")
     put("docs/security/r.md", "## Scope\n\n| File | Functions |\n| --- | --- |\n| `runtime/*.c` | all |\n| `std/crypto/listed.ts` | all |\n")
     put(
       "docs/security/README.md",
@@ -5334,9 +5337,10 @@ if (dealtHere("diagnostics")) {
     const scopeBad = spawnSync("node", [scopeScript, "--root", tree], { encoding: "utf8" })
     fs.rmSync(tree, { recursive: true, force: true })
     check(
-      "security-scope: refuses a file in no record's scope and a listed file a record now covers",
+      "security-scope: refuses a file in no record's scope (std/net, runtime/gfx) and a listed file a record now covers",
       scopeBad.status === 1 &&
         scopeBad.stderr.includes("std/net/new.ts: in no record's scope") &&
+        scopeBad.stderr.includes("runtime/gfx/new.c: in no record's scope") &&
         scopeBad.stderr.includes("std/crypto/listed.ts: in a record's scope") &&
         !scopeBad.stderr.includes("runtime/runtime.c"),
       scopeBad.stdout + scopeBad.stderr
@@ -46584,6 +46588,8 @@ runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir }
 runFfiHandleChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir, wasiSysroot: WASI_SYSROOT })
 
 runFfiAbiChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
+
+runGfxChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`
