@@ -1414,6 +1414,47 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     package write `nish` above `nish-f64` and never have its f64 source
     compiled, with nothing said about it — the silent mismatch this spelling
     exists to make loud.
+  - **The target rides in the condition too** (WP89 S6). A wasm32 build
+    (either wasm32 triple, `--target wasm32` or `--target wasm32-unknown-wasi`,
+    or `--profile wasi`) asks for `nish-wasm32` before
+    `nish-<mode>` and `nish`, again in the compiler's order rather than the
+    manifest's; a native build never reads it. `nish-wasm32` outranks the
+    mode because what it replaces cannot link: a native file may reach the
+    operating system and a wasm32 file the host page, and neither has the
+    other to reach, while the number mode only changes how the same source is
+    compiled. Were the mode first, a package declaring `nish-i32` could never
+    have its wasm32 file compiled in i32 mode. It cannot collide with a
+    mode-qualified condition, because the only modes are `i32` and `f64`
+    (`tests/link/package_target_wasm32`, which runs natively from its
+    `nish-i32` file and compiles for wasm32 only from its `nish-wasm32` one).
+    A package that declares `nish-wasm32` alone has no entry point for a native
+    build (`NL3020`). The standard library does the same by file name: under a
+    wasm32 target, `nish/<name>` compiles `std/<name>.wasm32.ts` in place of
+    `std/<name>.ts` when it is there (`tests/link/module_target_std_twin`,
+    which resolves both builds' paths and compares their pairs). A `nish:`
+    builtin module has no such twin: its source is the compiler's own.
+  - **The two files of a target pair export the same names with the same
+    signatures** (`NL3063`). An importer is checked against whichever file
+    its build picked, so a drift between them would break a program on one
+    target at a call site far from the file that changed. Both builds compare
+    the pair at the import, the one that never compiles the other file
+    included: `` `…/wasm.ts` is the wasm32 twin of `…/native.ts` and must export
+    the same names with the same signatures, because a wasm32 build compiles it
+    in its place: `scale` is `export const scale = (x: i32): i32 =>` in
+    `…/native.ts` and `export const scale = (x: f64): i32 =>` in `…/wasm.ts` ``
+    (`tests/link/package_target_mismatch`,
+    `tests/link/package_target_mismatch_native`). A signature is the
+    declaration's text up to its body or initializer, with blank runs
+    collapsed: a function's or method's parameters and return type, a field's
+    or constant's type, a class's heritage and its public members in the
+    order they are written, and an interface, type alias or enum whole.
+    Bodies and initializers may differ, and so may a class's `private`
+    members. A constant with no type annotation has no cut, since its type is
+    whatever its initializer gives: it is compared whole, so annotate it to
+    let the initializers differ
+    (`tests/link/module_target_twin`). The pair is compared once, at the first
+    import that reaches it, and the refusal points there. A file that does not
+    parse is not compared, and the build that compiles it says why.
   - **Presence of the condition is the claim, and every failure to find it
     names its cause** (`docs/wp21-packages.md` §6, §11). Each is refused at
     the import, before a byte of the package is checked, with its own `--json`
@@ -1423,7 +1464,8 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
       `".": "./index.js"` — is `` Package `plainjs` has no Nish entry point:
       its `exports` gave this compiler no file to compile for `.`, because that
       entry declares none of the conditions this compiler compiles source from
-      (`nish`, `nish-i32`, `nish-f64`) `` (`NL3020`,
+      (`nish`, `nish-i32`, `nish-f64`) `` — a wasm32 build adds `` `nish-wasm32` `` to
+      the list — (`NL3020`,
       `tests/link/package_not_nish`, `tests/link/package_no_condition`).
     - A package that offers only the *other* mode's condition is
       `` Package `pkg_f64` supports Nish in f64 mode only: its `exports` offers
@@ -4402,7 +4444,27 @@ export const main = (): i32 => {
 - **An index is checked as an array index is**: one out of range stops the
   program with `index out of range: 16 >= 16` and exit status 1, and never
   touches memory outside the buffer (`tests/link/atomic_array_out_of_range`).
-  The check is an ordinary one, which the prover may discharge.
+  The check is judged at each call, from the facts a guard or a loop leaves
+  on `i` and `a.length`: a call
+  under `i >= 0 && i < a.length`, or in a loop that keeps `i < a.length`, is a
+  proven `index` site of its caller, so `--deny-panics` accepts it
+  (`tests/link/atomic_index_proven`). Each fact is needed: a call with only
+  the lower bound, only the upper bound, or the upper bound against another
+  array's `length` stays unproven and is refused (`atomic_index_no_lower`,
+  `atomic_index_no_upper`, `atomic_index_other_length`, and
+  `atomic_index_unproven` with no guard at all). The index is judged as it
+  stands once it is evaluated, before the later arguments run, so a later
+  argument that rebinds it proves nothing (`atomic_index_later_arg`). The
+  method checks it in its body, after every argument has run, so what that
+  check passes on is known only past the call: a later argument's `x[i]`
+  learns nothing from it (`atomic_index_later_read`), and the call leaves
+  `0 <= i < a.length` behind only when no later argument assigns or calls
+  anything. Rebinding `a` after the guard drops its facts, as for an array
+  (`atomic_index_rebound`). The
+  method itself still lists its own `index` site, at its declaration, since
+  its body is the check; a caller does not inherit it (`callerProven`), so
+  the call is refused or accepted on its own proof, not as a `call` into the
+  method.
 - **Natively each method is the bounds check and then one instruction** on a
   `getelementptr` into the buffer: a `load atomic` or `store atomic ...
   seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a
@@ -5221,19 +5283,20 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
-with its count or a borrowed `declare class`; a return is a scalar, a `CPtr` or
+**A parameter is a scalar, a `CPtr`, a borrowed `string`, a typed-array
+buffer with its count or a borrowed `declare class`; a return is a scalar, a `CPtr` or
 a copied `string`** — `i32`,
 `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `boolean`, `void`, the foreign
 pointer below, `string` and `string | null` in either position, and
-[a buffer](#a-u8-parameter-a-buffer-and-its-count) and
+[a buffer](#a-typed-array-parameter-a-buffer-and-its-count) and
 [a C struct](#a-declare-class-a-c-struct-lent-by-pointer) as a parameter. Any
 other class or an interface is rejected with
 `` and a declared C function takes scalars, `CPtr`, a `string` it borrows as
-`const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare
-class` it borrows by pointer `` in a
-parameter (`reject_ffi_class_param`), any other array with
-`` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
+`const char *` and a `u8[]`, `u16[]`, `u32[]`, `i32[]` or `f32[]` buffer
+followed by its `u64` count, or a `declare class` it borrows by pointer `` in
+a parameter (`reject_ffi_class_param`), any other array with
+`` the only arrays a declared C function takes are of `u8`, `u16`, `u32`,
+`i32` or `f32`, readonly or not ``
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
 a `char **` the compiler built per call) and
 `` returns a scalar, a `CPtr` or a `string` it copies from a `const char *` ``
@@ -5561,11 +5624,14 @@ ffi.ok:
 - **It is `nish:unsafe` and an `unsafe` call** to `--deny unsafe`, like every
   export of the module; it reads a defined value and is no panic site.
 
-### A `u8[]` parameter: a buffer and its count
+### A typed-array parameter: a buffer and its count
 
-**A `u8[]` or `readonly u8[]` parameter is a buffer C reads or writes, and a
-run of one or more of them is followed by exactly one `u64`: the byte count C
-may touch in every buffer of the run.** Pairing the count by position is the
+**A `u8[]`, `u16[]`, `u32[]`, `i32[]` or `f32[]` parameter, readonly or not,
+is a buffer C reads or writes, and a run of one or more of them is followed
+by exactly one `u64`: the count of elements C may touch in every buffer of
+the run.** The count is in elements, not bytes: for a `u8[]` the two are the
+same, and an `f32[]` of 4 elements is passed with a count of 4, which C reads
+as 4 `float`s, 16 bytes. Pairing the count by position is the
 declaration's word, not a proof. `fwrite(ptr, size, nmemb, stream)` touches
 `size * nmemb` bytes, so declared as `fwrite(buf: readonly u8[], size: u64,
 nmemb: u64, f: CPtr)` it pairs `size` with the buffer, and `fwrite(buf, 1,
@@ -5579,6 +5645,8 @@ with two parameters.
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
 declare function getentropy(buf: u8[], n: u64): i32;
 declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): i32;
+declare function scale(xs: f32[], n: u64, k: f32): void;
+declare function sum(xs: readonly u16[], n: u64): u32;
 ```
 
 - **`memcpy(dst, src, n)` is one run of two buffers sharing a count**, and
@@ -5586,28 +5654,47 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   The same array passed twice in one run, `memcpy(a, a, n)`, is not refused:
   C sees two pointers to one block, and overlapping `memcpy` is undefined in C
   (`memmove` is the one that allows it).
-- **`readonly u8[]` is C's `const`.** A `u8[]` parameter says C may write the
-  bytes; a `readonly u8[]` says it only reads them. C can cast the `const`
+- **`readonly` is C's `const`.** A `u8[]` or `f32[]` parameter says C may
+  write the elements; a `readonly u8[]` or `readonly f32[]` says it only reads
+  them. C can cast the `const`
   away, and the compiler cannot check that.
 - **A run with no count after it is refused**, with `` takes the buffer `md`
-  with no count after it: a run of `u8[]` parameters is followed by one `u64` ``
-  (`reject_ffi_buffer_length_missing`, `SHA256(d, n, md)`'s fixed-size output),
-  and so is a count of any other type, `` and the parameter after a run of
-  `u8[]` buffers is their byte count, a `u64` `` (`reject_ffi_buffer_length_type`).
-- **Only `u8` crosses.** `i32[]` or `f64[]` is
-  `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
-  (`reject_ffi_buffer_element`).
+  with no count after it: a run of buffers is followed by one `u64`, the count
+  of elements C may touch in each `` (`reject_ffi_buffer_length_missing`,
+  `SHA256(d, n, md)`'s fixed-size output), and so is a count of any other
+  type, `` and the parameter after a run of buffers is their element count, a
+  `u64` `` (`reject_ffi_buffer_length_type`, and
+  `reject_ffi_buffer_f32_count_type` for an `i32` count after an `f32[]`).
+- **Every buffer of a run has one element type**, because its one count is in
+  elements and would otherwise mean two sizes. `blend(dst: f32[], mask:
+  readonly u8[], n: u64)` is NL2824, `` is readonly u8[] in a run that `dst`
+  opened as f32[]: the one count after a run is in elements, so every buffer
+  of a run has the same element type; close the run with its count first ``
+  (`reject_ffi_buffer_mixed_run`, `tests/link/ffi_buffer_mixed_run`). Give
+  each buffer its own count, or name it with `CountedBy`. `readonly` does not
+  split a run: `memcpy`'s `u8[]` and `readonly u8[]` share one.
+- **Five elements cross: `u8`, `u16`, `u32`, `i32` and `f32`**, C's
+  `uint8_t`, `uint16_t`, `uint32_t`, `int32_t` and `float`, whose size and
+  alignment are the same on every target the compiler emits for. `f64[]`,
+  `i64[]` and `u64[]` are refused: an 8-byte element is 4-byte aligned inside
+  an i386 struct and 8-byte aligned elsewhere, so a later stage takes them with
+  that answer. An `f64[]` is `` the only arrays a declared C function takes
+  are of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, whose elements
+  have one layout on every target `` (`reject_ffi_buffer_element`), and so is
+  a `boolean[]` or a `string[]`.
 - **A buffer is never null and never a result.** `u8[] | null` is refused
   (`reject_ffi_buffer_nullable`, and `reject_ffi_buffer_nullable_in_run` for one
   inside a run): it has no length to hold the count to, so the
-  `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A `u8[]`
+  `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A buffer
   result is refused by the return rule above (`reject_ffi_buffer_return`).
 - **A call passes the array's data block, and checks the count against every
-  buffer of its run first.** Each buffer is lowered to its data pointer, a
-  `uint8_t *` (`i8*` in the IR), and the count is compared, unsigned, with the
-  buffer's length before C runs. A count larger than one of them stops the
+  buffer of its run first.** Each buffer is lowered to its data pointer (`i8*`
+  in the IR, whatever the element; C's prototype gives it the element type),
+  and the count is compared, unsigned, with the buffer's length, which is an
+  element count too, before C runs. A count larger than one of them stops the
   program with an `ffi-length` panic, `` `write`: argument 3 (n) counts more
-  bytes than argument 2 (buf) holds ``, exit 1 (`tests/cases/panics_ffi_length`,
+  bytes than argument 2 (buf) holds `` for a `u8[]` and `` counts more
+  elements than `` for any other buffer, exit 1 (`tests/cases/panics_ffi_length`,
   and `panics_ffi_length_memcpy` for the shorter buffer of a run). The count is
   a `u64`, so `toU64(0) - toU64(1)` is the largest count there is, and fails
   (`panics_ffi_length_wrapped`).
@@ -5623,11 +5710,12 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   checked (`tests/cases/ffi_buffer_count_proved`). The scope refuses
   any other count and names the one it accepts: `` pass `toU64(buf.length)`
   of the buffer itself, which needs no check ``.
-- **C borrows the bytes for the call, and writes through a `u8[]`.** As with
+- **C borrows the elements for the call, and writes through a buffer that is
+  not `readonly`.** As with
   a `string`, the pointer is lent for the length of the call and C may not
   keep it, so a buffer made in the call's arena scope is released after it
-  (`tests/cases/ffi_buffer_read`). A `u8[]` argument is written by the call
-  and a `readonly u8[]` one is not, and the compiler records it as it records
+  (`tests/cases/ffi_buffer_read`). A `u8[]` or `f32[]` argument is written by
+  the call and a `readonly` one is not, and the compiler records it as it records
   a store. An exported function that hands its own `u8[]` parameter to such a
   call writes that parameter: its header drops the `const`, the wasm glue
   copies the bytes back, and its `define` loses `readonly`
@@ -5638,6 +5726,18 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   `reject_ffi_buffer_scope_race`, `reject_ffi_buffer_scope_field_race` and
   `reject_ffi_buffer_scope_element_race` for a call reached through a
   function).
+- **Each element type round-trips through C**: `tests/cases/ffi_buffer_f32`
+  scales an `f32[]` in place and sums it through a `readonly f32[]` and a
+  `CountedBy<readonly f32[], "n">`, `ffi_buffer_u16` sums a prefix of a
+  `u16[]` under a checked count, `ffi_buffer_u32` has C fill a `u32[]`, and
+  `ffi_buffer_i32` adds one `readonly i32[]` into another `i32[]` of the same
+  run.
+- **Module storage does not lend to C.** A `Float32Array` or `Int32Array`
+  module storage lends only to a parameter of a function written in Nish
+  (see "Module storage"), whose body the compiler reads; a declared C
+  function's is unseen, so passing the storage itself is `` Module storage
+  `store` is a place, not a value `` (`tests/cases/reject_ffi_buffer_storage`).
+  Copy it into an `f32[]` or `i32[]` local and pass that.
 - **Every kind of call site lowers the same way**: a call by name, through a
   function parameter bound to the declaration, in a constructor reached by
   `new` and in a method (`tests/cases/ffi_buffer_call_sites`), and a call that
@@ -5653,7 +5753,8 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
 ### `CountedBy`: a buffer that names its count
 
 **A buffer parameter written `CountedBy<u8[], "n">` (or `CountedBy<readonly
-u8[], "n">`) names its count parameter, `n`, which may stand anywhere in the
+u8[], "n">`, or the same over `u16`, `u32`, `i32` or `f32`) names its count
+parameter, a count of elements, `n`, which may stand anywhere in the
 declaration and be a `u8`, `u16`, `u32` or `u64`, or an out class whose one
 field is one.** It is how a C library's own count is declared when it is not a
 `u64` straight after the buffer: zlib's `uInt` (a `u32`), a count before its
@@ -5710,9 +5811,10 @@ declare function compress(
   (`tests/link/ffi_buffer_counted_by_place`). On a host module's function,
   whose buffers are windows, it does not cross, as every other non-scalar the
   page cannot pass (NL2661, pinned in `tests/ffi-buffer.js`). A missing name, a name that is
-  not a string literal, or a buffer that is not a `u8[]`: `` `CountedBy` takes
-  a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a
-  string literal `` (`ffi_buffer_counted_by_form`); so is an empty name or
+  not a string literal, or a buffer that is not one of the five: `` `CountedBy`
+  takes a buffer of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, and
+  the name of its count parameter as a string literal ``
+  (`ffi_buffer_counted_by_form`); so is an empty name or
   `"?"`, neither of which a parameter can have. A name that is not a
   parameter: `` counts the buffer `dst` by `len`, which is not one of its
   parameters `` (`ffi_buffer_counted_by_unknown`). A signed, nullable or

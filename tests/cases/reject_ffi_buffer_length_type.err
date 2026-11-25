@@ -1,1 +1,1 @@
-Parameter `n` of `declare function write` is i32, and the parameter after a run of `u8[]` buffers is their byte count, a `u64`
+Parameter `n` of `declare function write` is i32, and the parameter after a run of buffers is their element count, a `u64`

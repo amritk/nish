@@ -76,6 +76,9 @@ typedef int nish_net_unused;
 #if defined(__linux__)
 #include <linux/filter.h>
 #include <netinet/udp.h>
+#include <poll.h>
+#include <signal.h>
+#include <stdio.h>
 #include <sys/epoll.h>
 #include <time.h>
 /* glibc before 2.29 names neither; the numbers are the kernel's ABI. */
@@ -284,6 +287,7 @@ struct nish_uring_opts {
   int32_t cq_entries;
   int32_t buf_count;
   int32_t buf_size;
+  int32_t taskrun_worth;
 };
 int32_t nish_uring_probe(void);
 int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds);
@@ -301,6 +305,13 @@ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t 
 int32_t nish_uring_full(const struct nish_uring_set *s);
 int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
 void nish_uring_destroy(struct nish_uring_set *s);
+/* runtime-uring.c's counters; the dump below prints seven of them. */
+struct nish_uring_stats {
+  int64_t rings, live, accepting, slots, taskrun_reentries, overflow_drains, nobufs_rearms, send_requeues;
+  int64_t accept_errors, accept_pauses, bound_violations, max_accepting_rings, direct_waits, sends;
+  int64_t pool_new, pool_held, pool_cached, enters;
+};
+void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 
 #define NR_BASE (1 << 20)
 #define NR_RINGS 64
@@ -351,7 +362,36 @@ struct nr_set {
   uint32_t fhead, flen, fcap;
   uint32_t *pend; /* wblocked or lingering slots, checked after each pump */
   uint32_t npend, pcap;
+  int64_t windows, window_waits; /* batch windows, and the ring waits inside them, for the stats line */
+  uint8_t **rcache; /* first-size receive queues given back, reused last in, first out */
+  uint32_t nrcache;
 };
+
+/* Receive queues of NR_RECV_FIRST bytes a set keeps for reuse. Nearly every
+   request is one receive into a fresh queue that its read drains and frees,
+   and a pass holds more of them than malloc's per-thread cache keeps, so
+   kept here they come back hot and cost no allocator call. */
+#define NR_RCACHE 4096
+
+/* A queue of NR_RECV_FIRST bytes: a kept one, else malloc's. */
+static uint8_t *nr_rbuf_take(struct nr_set *S) {
+  if (S->nrcache > 0) return S->rcache[--S->nrcache];
+  return malloc(NR_RECV_FIRST);
+}
+
+/* `c`'s queue given back: kept when it is first-size and there is room. */
+static void nr_rbuf_give(struct nr_set *S, struct nr_conn *c) {
+  if (c->rbuf && c->rcap == NR_RECV_FIRST) {
+    if (!S->rcache) S->rcache = malloc(NR_RCACHE * sizeof *S->rcache);
+    if (S->rcache && S->nrcache < NR_RCACHE) {
+      S->rcache[S->nrcache++] = c->rbuf;
+      c->rbuf = NULL;
+      return;
+    }
+  }
+  free(c->rbuf);
+  c->rbuf = NULL;
+}
 
 static struct nr_set *nr_sets[NR_SETS];
 static int32_t nr_nsets;
@@ -530,7 +570,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
       if (c->rlen + n > c->rcap) {
         uint32_t nc = c->rcap ? c->rcap : NR_RECV_FIRST;
         while (nc < c->rlen + n) nc *= 2;
-        uint8_t *p = realloc(c->rbuf, nc);
+        uint8_t *p = c->rcap == 0 && nc == NR_RECV_FIRST ? nr_rbuf_take(S) : realloc(c->rbuf, nc);
         if (!p) {
           c->hup = 1;
           c->hup_res = -12;
@@ -593,9 +633,54 @@ static void nr_pump(struct nr_set *S) {
   S->npend = keep;
 }
 
+/* The stats dump. With NISH_URING_STATS set to a value other than "" or
+   "0" when the first ring listener opens, SIGUSR1 asks for one line per
+   open set on stderr, printed by the next pump of the loop, and closing a
+   ring listener prints its set's line before the set goes. Without it no
+   handler is installed and SIGUSR1 keeps its default action. The handler
+   stays installed once set; with no set open, a signal prints nothing.
+   signalFd's pipe (runtime-host.c) handles only SIGINT and SIGTERM, so it
+   never claims SIGUSR1. */
+static int nr_stats_on = -1; /* -1 until the first open reads the knob */
+static volatile sig_atomic_t nr_stats_asked;
+
+static void nr_stats_signal(int sig) {
+  (void)sig;
+  nr_stats_asked = 1;
+}
+
+static void nr_stats_setup(void) {
+  if (nr_stats_on >= 0) return;
+  const char *v = getenv("NISH_URING_STATS");
+  nr_stats_on = v && v[0] && !(v[0] == '0' && !v[1]);
+  if (!nr_stats_on) return;
+  struct sigaction sa;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_handler = nr_stats_signal;
+  sa.sa_flags = SA_RESTART;
+  sigemptyset(&sa.sa_mask);
+  if (sigaction(SIGUSR1, &sa, NULL) != 0) nr_stats_on = 0;
+}
+
+static void nr_stats_print(const struct nr_set *S, const char *why) {
+  struct nish_uring_stats st;
+  nish_uring_stats(S->u, &st);
+  dprintf(2,
+          "uring-stats %s port=%d sends=%lld pool_new=%lld pool_held=%lld pool_cached=%lld live=%lld slots=%lld "
+          "enters=%lld windows=%lld window_waits=%lld\n",
+          why, (int)S->port, (long long)st.sends, (long long)st.pool_new, (long long)st.pool_held,
+          (long long)st.pool_cached, (long long)st.live, (long long)st.slots, (long long)st.enters,
+          (long long)S->windows, (long long)S->window_waits);
+}
+
 static void nr_pump_all(void) {
   for (int32_t i = 0; i < nr_nsets; i++)
     if (!nr_sets[i]->dead) nr_pump(nr_sets[i]);
+  if (nr_stats_asked) {
+    nr_stats_asked = 0;
+    for (int32_t i = 0; i < nr_nsets; i++)
+      if (!nr_sets[i]->dead) nr_stats_print(nr_sets[i], "signal");
+  }
 }
 
 static struct nr_set *nr_listener(int32_t fd) {
@@ -653,6 +738,7 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   /* Only an open set decides for rings: a probe that passed before a set
      that ran short leaves the state at 0 (NURING-26). */
   nr_state = 1;
+  nr_stats_setup();
   S->listener = fd;
   S->port = port;
   S->slots = o.slots;
@@ -666,6 +752,7 @@ static int32_t nr_open(int32_t fd, int32_t port) {
 /* Closes a ring listener: the set and every slot in it, then the descriptor.
    The record stays, dead, so its handles answer -9. */
 static int32_t nr_close_listener(struct nr_set *S) {
+  if (nr_stats_on > 0) nr_stats_print(S, "close");
   nr_unregister(&S->v);
   for (int ri = 0; ri < NR_RINGS; ri++) {
     if (!S->conns[ri]) continue;
@@ -681,6 +768,10 @@ static int32_t nr_close_listener(struct nr_set *S) {
   free(S->fifo);
   free(S->pend);
   S->fifo = S->pend = NULL;
+  for (uint32_t i = 0; i < S->nrcache; i++) free(S->rcache[i]);
+  free(S->rcache);
+  S->rcache = NULL;
+  S->nrcache = 0;
   S->dead = 1;
   return close(S->listener) != 0 ? nish_net_fail() : 0;
 }
@@ -722,9 +813,13 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     /* A drained queue is freed and emptied, so an idle slot holds none
        (NURING-38) and a receive never finds roff at rlen past 0. */
     if (c->roff == c->rlen) {
-      free(c->rbuf);
-      c->rbuf = NULL;
+      nr_rbuf_give(S, c);
       c->rcap = c->roff = c->rlen = 0;
+      /* Drained, the slot is not ready, so it leaves the ready list now,
+         while its entry is in cache, rather than when the next collect
+         walks to it to find that out (one cache miss a request at
+         150,000 connections). */
+      if (c->v.listed && !(nr_bits(&c->v) & (c->v.events | 4))) nr_unlist(&c->v);
     }
     return (int32_t)n;
   }
@@ -783,8 +878,7 @@ static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32
   nr_unregister(&c->v);
   c->gen++;
   c->roff = c->rlen = 0;
-  free(c->rbuf);
-  c->rbuf = NULL;
+  nr_rbuf_give(S, c);
   c->rcap = 0;
   int64_t q = nish_uring_queued(S->u, ring, slot);
   /* A peer that only stopped sending (a FIN) still takes what is queued, so
@@ -1061,12 +1155,19 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
 #endif
 
 #if defined(__linux__)
-/* A batch's second wait: `n` pairs are in `out`, and it waits on the one live
-   set's ring, up to `max_wait_ms`, until `min` are ready or `max` fill it. It
-   reads no epoll set, so an ordinary descriptor that becomes ready meanwhile
-   waits for the next call, at most `max_wait_ms`; on a direct loop the
-   ring's poll on `signalFd()` ends the batch as soon as it answers, and the
-   next call reports it. */
+/* A batch's second wait: `n` pairs are in `out`, and it sleeps on the one
+   live set, up to `max_wait_ms`, until `min` are ready or `max` fill it. It
+   sleeps in at most eight slices, each an eighth of `max_wait_ms` rounded
+   up, without entering the ring, and after each slice pumps the set once and
+   collects once, so a window costs at most eight pumps however its
+   completions trickle in: a wait on the ring itself would wake, run its
+   deferred task work and pump once per completion, sends' included. Its
+   `min` is checked at the end of a slice, so a window can outlast the moment
+   `min` became ready by up to one slice. It reads no epoll set, so an
+   ordinary descriptor that becomes ready meanwhile waits for the next call,
+   at most `max_wait_ms`; on a direct loop the slice's poll(2) on
+   `signalFd()` ends the batch as soon as it answers, and the next call
+   reports it. */
 static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int32_t max_wait_ms) {
   struct nr_set *S = NULL;
   for (int32_t i = 0; i < nr_nsets; i++) {
@@ -1084,21 +1185,18 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
   int32_t watch = -1;
   int direct = nr_direct(loop, &watch) == S;
   int64_t end = nr_now_ms() + max_wait_ms;
+  int64_t slice = (max_wait_ms + 7) / 8;
+  S->windows++;
   while (n < min && n < max) {
     int64_t left = end - nr_now_ms();
     if (left <= 0) break;
-    int rc = direct ? nish_uring_wait_direct(S->u, watch, min - n, (int32_t)left) : -EOPNOTSUPP;
-    if (rc == -EOPNOTSUPP) {
-      struct nish_uring_event ev[NR_EVENTS];
-      int k = nish_uring_wait(S->u, (int32_t)left, ev, NR_EVENTS);
-      if (k < 0) break;
-      for (int i = 0; i < k; i++) nr_dispatch(S, &ev[i]);
-    } else if (rc < 0) {
-      break;
-    }
+    S->window_waits++;
+    /* poll(2) ignores a negative descriptor, so with no watch this sleeps. */
+    struct pollfd p = {direct ? watch : -1, POLLIN, 0};
+    int woke = poll(&p, 1, (int)(left < slice ? left : slice)) > 0;
     nr_pump(S);
     n += nr_collect_from(loop, out + 2 * n, max - n, 1);
-    if (direct && watch >= 0 && nish_uring_poll_events(S->u, 0)) break;
+    if (woke) break;
   }
   return n;
 }

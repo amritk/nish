@@ -63,47 +63,47 @@ unsafe call 232:3 uncheckedSet (node 1968)
 unsafe call 233:3 uncheckedSet (node 1986)
 unsafe call 234:3 uncheckedSet (node 2002)
 unsafe call 235:3 uncheckedSet (node 2018)
-unsafe call 240:3 uncheckedSet (node 2055)
-unsafe call 240:22 uncheckedGet (node 2061)
-unsafe call 240:43 uncheckedGet (node 2067)
-unsafe call 241:3 uncheckedSet (node 2075)
-unsafe call 241:22 uncheckedGet (node 2081)
-unsafe call 241:43 uncheckedGet (node 2087)
-unsafe call 241:60 wrappingAdd (node 2092)
-unsafe call 242:3 uncheckedSet (node 2100)
-unsafe call 242:22 uncheckedGet (node 2106)
-unsafe call 242:43 uncheckedGet (node 2112)
-unsafe call 242:60 wrappingAdd (node 2117)
-unsafe call 243:3 uncheckedSet (node 2125)
-unsafe call 243:22 uncheckedGet (node 2131)
-unsafe call 243:43 uncheckedGet (node 2137)
-unsafe call 243:60 wrappingAdd (node 2142)
-unsafe call 244:3 uncheckedSet (node 2150)
-unsafe call 244:22 uncheckedGet (node 2156)
-unsafe call 244:43 uncheckedGet (node 2162)
-unsafe call 244:60 wrappingAdd (node 2167)
-unsafe call 245:3 uncheckedSet (node 2175)
-unsafe call 245:22 uncheckedGet (node 2181)
-unsafe call 245:43 uncheckedGet (node 2187)
-unsafe call 245:60 wrappingAdd (node 2192)
-unsafe call 246:3 uncheckedSet (node 2200)
-unsafe call 246:22 uncheckedGet (node 2206)
-unsafe call 246:43 uncheckedGet (node 2212)
-unsafe call 246:60 wrappingAdd (node 2217)
-unsafe call 247:3 uncheckedSet (node 2225)
-unsafe call 247:22 uncheckedGet (node 2231)
-unsafe call 247:43 uncheckedGet (node 2237)
-unsafe call 247:60 wrappingAdd (node 2242)
-unsafe call 287:19 uncheckedGet (node 2647)
-unsafe call 288:19 uncheckedGet (node 2659)
-unsafe call 327:3 uncheckedSet (node 3098)
-unsafe call 328:3 uncheckedSet (node 3131)
-unsafe call 457:33 uncheckedGet (node 4256)
-unsafe call 458:5 uncheckedSet (node 4269)
-unsafe call 458:30 uncheckedGet (node 4279)
-unsafe call 464:5 uncheckedSet (node 4326)
-unsafe call 464:32 uncheckedGet (node 4336)
-unsafe call 464:58 uncheckedGet (node 4345)
+unsafe call 241:3 uncheckedSet (node 2064)
+unsafe call 241:22 uncheckedGet (node 2070)
+unsafe call 241:43 uncheckedGet (node 2076)
+unsafe call 242:3 uncheckedSet (node 2084)
+unsafe call 242:22 uncheckedGet (node 2090)
+unsafe call 242:43 uncheckedGet (node 2096)
+unsafe call 242:60 wrappingAdd (node 2101)
+unsafe call 243:3 uncheckedSet (node 2109)
+unsafe call 243:22 uncheckedGet (node 2115)
+unsafe call 243:43 uncheckedGet (node 2121)
+unsafe call 243:60 wrappingAdd (node 2126)
+unsafe call 244:3 uncheckedSet (node 2134)
+unsafe call 244:22 uncheckedGet (node 2140)
+unsafe call 244:43 uncheckedGet (node 2146)
+unsafe call 244:60 wrappingAdd (node 2151)
+unsafe call 245:3 uncheckedSet (node 2159)
+unsafe call 245:22 uncheckedGet (node 2165)
+unsafe call 245:43 uncheckedGet (node 2171)
+unsafe call 245:60 wrappingAdd (node 2176)
+unsafe call 246:3 uncheckedSet (node 2184)
+unsafe call 246:22 uncheckedGet (node 2190)
+unsafe call 246:43 uncheckedGet (node 2196)
+unsafe call 246:60 wrappingAdd (node 2201)
+unsafe call 247:3 uncheckedSet (node 2209)
+unsafe call 247:22 uncheckedGet (node 2215)
+unsafe call 247:43 uncheckedGet (node 2221)
+unsafe call 247:60 wrappingAdd (node 2226)
+unsafe call 248:3 uncheckedSet (node 2234)
+unsafe call 248:22 uncheckedGet (node 2240)
+unsafe call 248:43 uncheckedGet (node 2246)
+unsafe call 248:60 wrappingAdd (node 2251)
+unsafe call 288:19 uncheckedGet (node 2656)
+unsafe call 289:19 uncheckedGet (node 2668)
+unsafe call 328:3 uncheckedSet (node 3107)
+unsafe call 329:3 uncheckedSet (node 3140)
+unsafe call 459:33 uncheckedGet (node 4274)
+unsafe call 460:5 uncheckedSet (node 4287)
+unsafe call 460:30 uncheckedGet (node 4297)
+unsafe call 466:5 uncheckedSet (node 4344)
+unsafe call 466:32 uncheckedGet (node 4354)
+unsafe call 466:58 uncheckedGet (node 4363)
 function aesLanes(pattern: u64): u64 -> @aesLanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -317,6 +317,7 @@ function aesAddRoundKey(q: u64[], rk: u64[], at: i32): void -> @aesAddRoundKey
   pointer q: size=0 writesThrough=true captured=false
   pointer rk: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local -1:9 base: i32 (const)
 function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @aesBitslicedRound [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via aesSbox
@@ -461,21 +462,22 @@ function aesUnpack(buf: u8[], q: u64[]): void -> @aesUnpack [exported]
   local -2:11 high: u64 (const)
   local -1:14 c: i32 (let)
 function aesEncryptBatch(rk: u64[], rounds: i32, buf: u8[], q: u64[]): void -> @aesEncryptBatch [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via aesPack
-  calls: aesAddRoundKey aesBitslicedRound aesPack aesSbox aesShiftRows aesUnpack nish_panic_overflow
+  calls: aesAddRoundKey aesBitslicedRound aesPack aesSbox aesShiftRows aesUnpack
   pointer rk: size=0 writesThrough=false captured=false passedTo=aesAddRoundKey#1 aesBitslicedRound#1 aesAddRoundKey#1
   pointer buf: size=0 writesThrough=true captured=false passedTo=aesPack#1 aesUnpack#0
   pointer q: size=0 writesThrough=true captured=false passedTo=aesPack#0 aesAddRoundKey#0 aesBitslicedRound#0 aesSbox#0 aesShiftRows#0 aesAddRoundKey#0 aesUnpack#1
   stackSites=0 stackLocals=0
   callee +0:3 aesPack -> @aesPack
   callee +1:3 aesAddRoundKey -> @aesAddRoundKey
-  local +2:12 round: i32 (let)
-  callee +3:5 aesBitslicedRound -> @aesBitslicedRound
-  callee +5:3 aesSbox -> @aesSbox
-  callee +6:3 aesShiftRows -> @aesShiftRows
-  callee +7:3 aesAddRoundKey -> @aesAddRoundKey
-  callee +8:3 aesUnpack -> @aesUnpack
+  local +2:9 last: i32 (const)
+  local +3:12 round: i32 (let)
+  callee +4:5 aesBitslicedRound -> @aesBitslicedRound
+  callee +6:3 aesSbox -> @aesSbox
+  callee +7:3 aesShiftRows -> @aesShiftRows
+  callee +8:3 aesAddRoundKey -> @aesAddRoundKey
+  callee +9:3 aesUnpack -> @aesUnpack
 function aesSubWord(w: u32, q: u64[]): u32 -> @aesSubWord [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

@@ -10,10 +10,10 @@
 //   node examples/node-addon.mjs build/arrays.node
 //
 // Opt-out (`--allow-panics`): the host passes any length and any i32, so
-// `sumI32`'s and `sumI64`'s `+=` and `squares`' `i * i` may overflow, `squares(-1)`
-// traps on purpose (a pinned test), and `new Float64Array(xs.length)` checks a
-// length typed `i32`. Follow-up: a length type the array constructors need not
-// check (in `src/`), then build this file without `--allow-panics`.
+// `sumI32`'s and `sumI64`'s `+=` and `squares`' `i * i` may overflow, and
+// `squares(-1)` traps on purpose (a pinned test): `new Int32Array(n)` checks an
+// `n` nothing proves non-negative. `new Float64Array(xs.length)` needs no check,
+// since a length is never negative.
 //
 // The types are spelled explicitly (i32 / f64) so the module means the same
 // thing in both number modes.

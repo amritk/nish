@@ -35,7 +35,7 @@ export const tick = (): void => {
 
 <scalar-card title="ring​Capacity" icon="phosphor/regular/function" href="#ringcapacity">
 
-The number of slots, the ring's length less its header.
+The number of slots, the ring's length less its header, at most 2^30 - 1.
 
 </scalar-card>
 
@@ -97,7 +97,7 @@ and a size past the capacity reads as full, so `ringPush` refuses and
 
 ### ringCapacity
 
-The number of slots, the ring's length less its header.
+The number of slots, the ring's length less its header, at most 2^30 - 1.
 
 ```ts
 const ringCapacity: (ring: Int32Array) => i32

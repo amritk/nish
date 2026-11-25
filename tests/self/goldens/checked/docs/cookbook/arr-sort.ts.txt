@@ -23,7 +23,7 @@ function sortWith<i32, ascending>(xs: i32[], cmp: void): i32[] -> @nish.sortWith
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$i32
   escaping: xs
-  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.9.ascending nish.mergePass$i32$fn.9.ascending nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.9.ascending nish.mergePass$i32$fn.9.ascending nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$i32#0 nish.insertionRun$i32$fn.9.ascending#1 nish.mergePass$i32$fn.9.ascending#1 nish.mergePass$i32$fn.9.ascending#0 nish.copyRun$i32#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)

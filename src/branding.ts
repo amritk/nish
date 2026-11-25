@@ -75,13 +75,24 @@ export const PACKAGE_CONDITION: string = "nish"
 export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CONDITION}-${numberMode}`
 
 /**
+ * The target-qualified condition a wasm build asks for before the two above:
+ * `nish-wasm32`, the file a package offers for a wasm build in place of its
+ * native one (WP89 S6). A wasm build takes the target row over the
+ * mode-qualified and the plain rows, because the target is the one choice a
+ * file cannot paper over: a native file reaches the OS and a wasm file the
+ * host, and neither links in the other build. The suffix cannot be a number
+ * mode's, since `--number-mode` is `i32` or `f64` and `wasm32` names neither.
+ */
+export const WASM_PACKAGE_CONDITION: string = "nish-wasm32"
+
+/**
  * The package version, baked in rather than read from `package.json`: stage1
  * has no JSON parser and no way to find the package root from a binary that
  * may have been copied anywhere. `tests/run.js` fails when this and
  * `package.json` disagree, which is the check that keeps a `npm version` bump
  * from going stale here.
  */
-export const VERSION: string = "0.45.1"
+export const VERSION: string = "0.46.0"
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
 export const RUNTIME_HEADER: string = "nish.h"

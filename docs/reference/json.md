@@ -19,6 +19,7 @@ import {
   JsonWriter,
   jsonField,
   jsonFields,
+  jsonPutString,
   jsonStringifyString,
 } from "nish/json";
 ```
@@ -52,6 +53,12 @@ The value of `name` in `object`, or `null` when the object does not have that fi
 <scalar-card title="json​Fields" icon="phosphor/regular/function" href="#jsonfields">
 
 The value of every one of `names` in `object`, in the order of `names`: slot `k` is exactly what `jsonField(object, names[k])` answers.
+
+</scalar-card>
+
+<scalar-card title="json​Put​String" icon="phosphor/regular/function" href="#jsonputstring">
+
+`src[from .. from + len)`, UTF-8 or any bytes, as a JSON string with its quotes, written into `dst` from `at`, as `JsonWriter.stringBytes` writes a string value: `"`, `\` and the bytes below a space are escaped, the five with a short form as `\n`, `\t`, `\r`, `\b` and `\f` and the rest as `\u00XX`, and every other byte is copied as it is.
 
 </scalar-card>
 
@@ -278,6 +285,66 @@ the fields to look for.
 
 one value per name, in the order of `names`, each `null` when that
   field is missing.
+
+</scalar-field>
+
+### jsonPutString
+
+`src[from .. from + len)`, UTF-8 or any bytes, as a JSON string with its
+quotes, written into `dst` from `at`, as `JsonWriter.stringBytes` writes a
+string value: `"`, `\` and the bytes below a space are escaped, the five
+with a short form as `\n`, `\t`, `\r`, `\b` and `\f` and the rest as
+`\u00XX`, and every other byte is copied as it is. It writes no comma or
+key, so a program that builds its JSON from pre-encoded pieces writes its
+strings with it. Natively the copy is the runtime's
+`nish_json_put_string`, sixteen bytes a block, and allocates nothing.
+
+```ts
+const jsonPutString: (
+  dst: u8[],
+  at: i32,
+  src: readonly u8[],
+  from: i32,
+  len: i32,
+) => i32
+```
+
+<scalar-field name="dst" type="u8[]" required>
+
+the buffer written into; it is never grown.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+where the opening quote goes.
+
+</scalar-field>
+
+<scalar-field name="src" type="readonly u8[]" required>
+
+the bytes of the string.
+
+</scalar-field>
+
+<scalar-field name="from" type="i32" required>
+
+the offset in `src` of its first byte.
+
+</scalar-field>
+
+<scalar-field name="len" type="i32" required>
+
+how many bytes it is.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The index after the closing quote, or -1 when a window lies
+  outside its array or the string does not fit in `dst`: then the bytes
+  of `dst` from `at` may have been written, and the caller grows `dst` and
+  writes again from `at`.
 
 </scalar-field>
 

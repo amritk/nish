@@ -1,7 +1,7 @@
-// Opt-out (`--allow-panics`): calls into `std/host/game`, `std/host/ring`,
-// `std/math`, `std/raster`, `std/synth` and `std/term` reach their panic sites;
-// this file keeps none of its own. Follow-up: make those modules panic-free,
-// then build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`): calls into `std/synth` reach four panic sites,
+// `synthSilence` its array-length one and `synthTone` the overflow in
+// `std/math`; this file keeps none of its own. Follow-up: make those two
+// modules panic-free, then build this file without `--allow-panics`.
 //
 // A small browser game over nish/host/game: keep the ball in play with the
 // paddle. The page that runs it is index.html, one startGame call from

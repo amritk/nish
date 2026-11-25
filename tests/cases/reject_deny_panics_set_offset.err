@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`set` panics when `src` does not fit in `dst` from its offset, and nothing proves it fits here: copy from offset 0 behind a guard — `if (src.length <= dst.length)` proves `dst.set(src, 0)`; no proof reaches another offset yet, so for one make the call from a module `noPanic` does not list, and build with `--allow-panics`

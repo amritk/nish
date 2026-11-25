@@ -37,7 +37,7 @@ function relayIsAddress(text: string): boolean -> @relayIsAddress [exported]
 function relaySplitSans(text: string, into: string[]): void -> @relaySplitSans [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish_array_grow nish_panic_index nish_panic_overflow nish_str_new
   pointer into: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -13:7 start: i32 (let)

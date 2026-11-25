@@ -600,8 +600,22 @@ const RUNTIME_HOST_TEXT_BUDGET = 1024
  * eventfd and epoll (NURING-45 on), with the batch's check that its loop holds a ring
  * source (NURING-47) and the note of a closed signal descriptor (NURING-48). It stays
  * here for the reason above.
+ * **13,003 bytes** on 2026-11-24 with clang 18.1.3 on linux-x64, 12,593 before, once a
+ * ring listener prints its counters on `SIGUSR1` under `NISH_URING_STATS` (12,800 to
+ * 13,056): `nr_stats_print` 106, the `uring-stats` line; `nr_stats_signal` 11, the
+ * handler, which only sets a flag; `nr_pump_all` 65 to 140, which prints the lines once
+ * the flag is set; `nish_tcp_listen_flags` +194, which reads the variable and installs
+ * the handler when the first ring listener opens; and `nish_net_close` +24, the `close`
+ * line. The budget is the next 256-byte boundary, leaving 53.
+ * **13,290 bytes** on 2026-11-25 with clang 18.1.3 on linux-x64, 13,014 on `main` before,
+ * once a ring set keeps its receive queues for reuse and a drained slot leaves the ready
+ * list at once (13,056 to 13,312): `nr_rbuf_give` 114, which keeps a first-size queue
+ * on the set's stack of 4,096 rather than freeing it; `nr_pump` +66, which takes one
+ * from it; `nish_net_close` +53, which gives the slot's back and frees the stack with
+ * its set; `nish_net_read` +44, which gives a drained queue back and unlists the slot.
+ * The budget is the next 256-byte boundary, leaving 22.
  */
-const NET_TEXT_BUDGET = 12800
+const NET_TEXT_BUDGET = 13312
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -765,8 +779,15 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * own measured ceiling, never a raised one. Apart, a program that searches text carries
  * no JSON run and one that tokenizes JSON no byte-set search. The budget is the next
  * 256-byte boundary above the measurement, as every ceiling here was set.
+ * **2,961 bytes** on 2026-11-25 with clang 18.1.3 on linux-x64, 1,891 before, with
+ * `nish_json_put_string`, `nish/json`'s `jsonPutString` (2,048 to 3,072): its 964, the
+ * SSE2 and NEON finds of the next byte to escape, a 4- to 16-byte overlapping copy of
+ * the run before it and the escape itself, all inlined into the one entry point; and
+ * `nish_plain_base` 110 to 216, whose last partial block is now one overlapping load
+ * rather than a byte loop. It is a fifth class beside the four, so no program that
+ * does not write JSON strings this way carries more than the base path's growth.
  */
-const RUNTIME_BYTES_TEXT_BUDGET = 2048
+const RUNTIME_BYTES_TEXT_BUDGET = 3072
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sandbox.c`
  * -- the confinement `--sandbox` applies (WP37, docs/security/sandbox.md):
@@ -893,10 +914,16 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * `IORING_ENTER_EXT_ARG` enter with its timeout and the `IORING_FEAT_EXT_ARG` probe, the
  * `POLL_ADD` that watches the signal descriptor from the ring, and the write of the
  * marked slots' sends before the enter (+20), so a coalesced send goes out in the wait's
- * own enter. The budget is the next 256-byte boundary, leaving 304. A unit of its own beside runtime-net.c, so that a
- * build whose probe fails runs the epoll path alone.
+ * own enter. The budget is the next 256-byte boundary, leaving 304. A unit of its own
+ * beside runtime-net.c, so that a build whose probe fails runs the epoll path alone.
+ * **9,772 bytes** on 2026-11-24 once a write over one buffer's room chains across pool
+ * buffers, each its own SEND, rather than taking an exact record from `malloc`, and a
+ * shutdown takes a pool buffer too (NURING-12, NURING-44; 10,240 to 9,984):
+ * `nish_uring_send` 802 to 541, with the fill out of line as `ur_record` 84;
+ * `nish_uring_shutdown` +12, `ur_unlink_all` +7 and `ur_release` -6. The budget is the
+ * 256-byte boundary above it, leaving 212.
  */
-const RUNTIME_URING_TEXT_BUDGET = 10240
+const RUNTIME_URING_TEXT_BUDGET = 9984
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
@@ -1004,9 +1031,19 @@ export const SQLITE_BUILD_DEFINES = [
  * **9,307 bytes** on 2026-11-24 (563,546 for the unit), 8,230 on `main` before it (the
  * single handle lookup per cursor call added 17), with the index cursor's kept seek key
  * and `countRange`. The budget is the next 256-byte boundary above the measurement, as
- * every ceiling here was set.
+ * every ceiling here was set. Measured **10,631 bytes** on 2026-11-25, 9,462 on `main`
+ * before it, once a cursor reads its record's header itself rather than through
+ * `sqlite3VdbeRecordUnpack` and a Mem a field, with `Cursor.record` (9,472 to 10,752):
+ * `field_value` 236, the in-place decode of an integer, NULL, text or blob; `row_of`
+ * 149 to 379, the header walk; `nishsqlite_cursor_rowid` 104 to 340, an index entry's
+ * rowid read off the record's end without the walk; `nishsqlite_cursor_record` 175;
+ * `nishsqlite_cursor_read_row` 200 to 333, with the per-row checks made once;
+ * `nishsqlite_cursor_open` +88, the two field tables in the cursor's block; less
+ * `column_value` 299 to 174 and `cursor_free` -29, which no longer build or free Mems.
+ * The serial types' integer decode is one function, `serial_int`, inlined into both of
+ * its callers at -Oz as at -O2; out of line it would be a call per field read.
  */
-const RUNTIME_SQLITE_TEXT_BUDGET = 9472
+const RUNTIME_SQLITE_TEXT_BUDGET = 10752
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -1395,6 +1432,12 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * runtime-wasm.c defines nish_arena_keep, the call-site reclaim's keep, as the
  * identity, so string code reached from wasm (nish/term) links
  * (docs/wp6-memory.md §2a), and `--export-all` keeps it in every module.
+ *
+ * #2207 moved arrays.ts's `--profile wasm` and `wasm-host` digests, and the
+ * native and wasm32 IR digests in tests/run.js: `new Float64Array(xs.length)`
+ * and `new BigInt64Array(xs.length)` are proven non-negative, so their length
+ * checks and panic blocks leave the IR (`squares`' `new Int32Array(n)` keeps
+ * its own). The `.d.ts` and the loader are unchanged.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
@@ -1408,8 +1451,8 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
     loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "bb48e976a4bf87d39260add7b57da65f45387a1b822e144d902ae94417a4b004",
-    host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
+    wasm: "0072d08fedfcfc3c994874791197b1dbe78b12549cefb12d8338ce545036d9f3",
+    host: "887b960efd3aafb2ae62bfcf0a49e8d3a146a8afaef7ab1fe96111295e5eba67",
   },
   {
     src: "examples/results.ts",

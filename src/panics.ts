@@ -41,7 +41,7 @@ import { ALLOW_PANICS_FLAG } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
-import { TypeTable, isUnsigned } from "./types"
+import { T_I32, T_STRING, TypeTable, isUnsigned } from "./types"
 
 // The kinds. The number is internal and never reused, so a kind added later
 // takes the next one wherever docs/LANGUAGE.md lists it; the name
@@ -834,10 +834,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_RANGE:
       return rangeAdvice(program, table, site)
     case PANIC_ARRAY_LENGTH:
-      return (
-        "`new Array` checks a length of this type before it allocates: give the length a type that needs no " +
-        "check — `u8`, `u16` or a range starting at 0, `integer<0, N>` — or write it as a literal"
-      )
+      return arrayLengthAdvice(program, table, node)
     case PANIC_PANIC:
       return "`panic` stops the program, and no proof removes a call to it: return a `Result` and let the caller decide"
     case PANIC_EXPECT:
@@ -885,6 +882,35 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.
       return ""
   }
+}
+
+/**
+ * The way to an unchecked `new Array<T>(n)`. An `i32` length is checked only
+ * for being negative (`judgeArrayLength` in `src/bounds.ts`), so the guard
+ * that proves it is `n >= 0`, and a local of a range from 0 is proven as it
+ * stands; any other type is checked whatever is known about it.
+ */
+const arrayLengthAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
+  const length = unwrapBoundsParens(node.children[2].children[0])
+  const type = program.nodeTypes[length.id]
+  const n = length.kind === NodeKind.Ident ? length.text : "n"
+  const constant = program.nodeConstants[length.id]
+  if (constant !== null && constant.folded && constant.intValue < toI64(0)) {
+    return `\`${n}\` is a negative constant, and \`new Array\` panics on a negative length: give it a value of 0 or more`
+  }
+  if (type >= 0 && table.baseOf(type) === T_I32) {
+    return (
+      `\`new Array\` panics on a negative length, and \`${n}\` is not proven non-negative here: guard it with a ` +
+      `test that reaches the call — \`if (${n} >= 0)\` proves it — or give the local a range from 0, ` +
+      "`integer<0, N>`, or write the length as a literal"
+    )
+  }
+  const spelled = type >= 0 ? table.typeName(type) : "this type"
+  return (
+    `\`new Array\` checks a length of type \`${spelled}\` before it allocates, whatever is known about it: convert it to ` +
+    `an \`i32\` proven non-negative — \`const m = toI32(${n})\` and then \`if (m >= 0)\` — or give it a type ` +
+    "that needs no check, `u8` or `u16`, or write it as a literal"
+  )
 }
 
 /** The guard for an element access or a `charCodeAt`, and for the second check of a compound store. */
@@ -962,20 +988,147 @@ const vectorAdvice = (program: CheckedProgram, call: Node, lanes: i32): string =
   )
 }
 
-/** A `slice`, an array `set`, a `String.fromBytes` or a socket call whose buffer range is checked: no proof removes any of them. */
+/** The local argument `k` of `call` names, or the literal it is, or `fallback` for any other expression. */
+const argumentName = (program: CheckedProgram, call: Node, k: i32, fallback: string): string => {
+  const args = call.children[1].children
+  if (k < 0 || k >= args.length) {
+    return fallback
+  }
+  const arg = unwrapBoundsParens(args[k])
+  if (arg.kind === NodeKind.Number) {
+    return arg.text
+  }
+  if (arg.kind === NodeKind.Member && arg.text === "length") {
+    const holder = siteLocalName(program, arg.children[0])
+    if (holder.length > 0) {
+      return `${holder}.length`
+    }
+  }
+  const name = siteLocalName(program, arg)
+  return name.length > 0 ? name : fallback
+}
+
+/** The local a method call's receiver names, or `fallback`. */
+const receiverName = (program: CheckedProgram, call: Node, fallback: string): string => {
+  const callee = unwrapBoundsParens(call.children[0])
+  if (callee.kind !== NodeKind.Member) {
+    return fallback
+  }
+  const name = siteLocalName(program, callee.children[0])
+  return name.length > 0 ? name : fallback
+}
+
+/** Whether `text` is a decimal literal, which a guard need not test. */
+const isLiteralText = (text: string): boolean => {
+  if (text.length === 0) {
+    return false
+  }
+  for (let k = 0; k < text.length; k++) {
+    const c = text.charCodeAt(k)
+    if (c < 48 || c > 57) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The guard `0 <= start <= end <= xs.length` spelled over the call's own
+ * names, less what a literal already says: no `0 >= 0`, and no `start <= end`
+ * between two literals. `end` may be `xs.length` itself.
+ */
+const rangeGuard = (start: string, end: string, xs: string): string => {
+  const parts: string[] = []
+  const literalStart = isLiteralText(start)
+  if (!literalStart) {
+    parts.push(`${start} >= 0`)
+  }
+  if (end === `${xs}.length`) {
+    if (start !== "0") {
+      parts.push(`${start} <= ${end}`)
+    }
+    return parts.join(" && ")
+  }
+  if (start === "0" && !isLiteralText(end)) {
+    parts.push(`${end} >= 0`)
+  } else if (!literalStart || !isLiteralText(end)) {
+    parts.push(`${start} <= ${end}`)
+  }
+  parts.push(`${end} <= ${xs}.length`)
+  return parts.join(" && ")
+}
+
+/**
+ * A range check not proven: `slice`, an array `set`, `String.fromBytes` or a
+ * buffer call's window. Each names the guard `judgeRangeCheck` in
+ * `src/bounds.ts` reads, over the call's own locals where it has them.
+ */
 const sliceAdvice = (program: CheckedProgram, node: Node): string => {
   const name = calledName(program, node)
-  if (name === "slice") {
-    return "`slice` panics when its range is outside the string, and no proof removes that check yet: `substring` clamps the range instead"
+  // An array's `slice` is `std/array.ts`'s, by the name the checker routed it to.
+  const routed = name === "Array.prototype.slice" || name === "Array.prototype.sliceFrom"
+  if (name === "slice" || routed) {
+    // A routed one has its receiver as argument 0 (`checkAsTemplateCall` in `src/arrays.ts`).
+    const first = routed ? 1 : 0
+    const xs = routed ? argumentName(program, node, 0, "xs") : receiverName(program, node, "xs")
+    const start = argumentName(program, node, first, "start")
+    if (node.children[1].children.length < first + 2) {
+      return (
+        `\`slice\` panics when \`${start}\` is outside \`${xs}\`, and nothing proves it in range here: guard the ` +
+        `call — \`if (${rangeGuard(start, `${xs}.length`, xs)})\` proves it`
+      )
+    }
+    const end = argumentName(program, node, first + 1, "end")
+    const guard =
+      `\`slice\` panics when \`[${start}, ${end})\` is outside \`${xs}\`, and nothing proves it in range here: guard ` +
+      `the call — \`if (${rangeGuard(start, end, xs)})\` proves it`
+    const callee = unwrapBoundsParens(node.children[0])
+    const onString = callee.kind === NodeKind.Member && program.nodeTypes[callee.children[0].id] === T_STRING
+    return onString ? guard + ", or `substring` clamps the range instead" : guard
   }
   // A user method cannot be a slice site, so the member name alone is `String.fromBytes`.
   if (name === "fromBytes") {
+    const bytes = argumentName(program, node, 0, "bytes")
+    const start = argumentName(program, node, 1, "start")
+    const end = argumentName(program, node, 2, "end")
     return (
-      "`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: " +
-      OUT_OF_SCOPE
+      `\`String.fromBytes\` panics when \`[${start}, ${end})\` is outside \`${bytes}\`, and nothing proves it in ` +
+      `range here: guard the call — \`if (${rangeGuard(start, end, bytes)})\` proves it`
     )
   }
-  return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: ${OUT_OF_SCOPE}`
+  if (name === "set") {
+    const dst = receiverName(program, node, "dst")
+    const src = argumentName(program, node, 0, "src")
+    return (
+      `\`set\` panics when \`${src}\` does not fit in \`${dst}\` from its offset, and nothing proves it fits here: ` +
+      `copy from offset 0 behind a guard — \`if (${src}.length <= ${dst}.length)\` proves \`${dst}.set(${src}, 0)\`; ` +
+      `no proof reaches another offset yet, so for one ${OUT_OF_SCOPE}`
+    )
+  }
+  const at = netRangeBuffer(name)
+  const buf = argumentName(program, node, at, "buf")
+  const off = argumentName(program, node, at + 1, "off")
+  const len = argumentName(program, node, at + 2, "len")
+  // A window of the whole buffer from 0 fails only by what a later argument does.
+  if (off === "0" && len === `${buf}.length`) {
+    return (
+      `\`${name}\` panics when its window is outside \`${buf}\`, and a later argument may call something that ` +
+      `changes \`${buf}\` after \`${buf}.length\` was read: compute that argument into a \`const\` before the call`
+    )
+  }
+  if (off === "0") {
+    return (
+      `\`${name}\` panics when \`[0, ${len})\` is outside \`${buf}\`, and nothing proves it in range here: guard the ` +
+      `count — \`if (${rangeGuard("0", len, buf)})\` proves it`
+    )
+  }
+  return (
+    `\`${name}\` panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it in range ` +
+    `here: pass an offset of 0 and guard the count — \`if (${len} >= 0 && ${len} <= ${buf}.length)\` proves it — ` +
+    `or pass the rest of the buffer, \`${buf}.length - ${off}\`, with \`${off}\` guarded by ` +
+    `\`if (${off} >= 0 && ${off} <= ${buf}.length)\`, or a window \`end - ${off}\`, with ` +
+    `\`if (${off} >= 0 && ${off} <= end && end <= ${buf}.length)\``
+  )
 }
 
 /**

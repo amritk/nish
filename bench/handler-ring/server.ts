@@ -39,6 +39,12 @@
 // either, each worker prints `cache <worker> <hits> <misses>` every 4,096
 // requests.
 //
+// BENCH_NAP=1 is the ring-nap design run.sh compares pollWaitBatch with: the
+// plain pollWait turn, and after a pass that answered fewer than NAP_BELOW
+// requests a pollWait of NAP_MS on a pollCreate() loop nothing joined, so the
+// next turn finds more ready. Worker 0 prints `nap <NAP_BELOW> <NAP_MS>`
+// before `rings`.
+//
 // BENCH_NODB=1 is the no-database route (bench/http1-request's breakdown in
 // docs/BENCHMARKS.md, "A minimal GET on Http1Server"): /plaintext answers the
 // same 129 bytes with the random id and a like count of 0 and makes no query
@@ -49,13 +55,17 @@ import { PREFORK_STOPPED, PreforkConfig, preforkArgs, preforkIndex, preforkWith 
 import { Router, RouterLimits } from "nish/net/router"
 import { OPEN_READWRITE, Statement, openDatabase } from "nish/sqlite"
 import { RELAXED, SharedRegion, createRegion, openRegion, unlinkRegion } from "nish/sync/shm"
-import { netRingState } from "nish:net"
+import { netRingState, pollCreate, pollWait } from "nish:net"
 import { getenv } from "nish:process"
 
 const OK: i32 = 200
 const ERROR: i32 = 500
 const ROUTE_PLAINTEXT: i32 = 0
 const TURN_MS: i32 = 1000
+/** BENCH_NAP=1: a pass under this many requests naps; pollWaitBatch's minEvents in the comparison. */
+const NAP_BELOW: i32 = 64
+/** BENCH_NAP=1: the nap, pollWaitBatch's maxWaitMs in the comparison. */
+const NAP_MS: i32 = 1
 /** bench/sqlite's post count; ids run from 1 to it. */
 const POSTS: i32 = 500000
 const LOOKUP_SQL: string =
@@ -110,12 +120,16 @@ class Entry {
   worker: i32
   hits: i64
   misses: i64
+  /** BENCH_NAP=1's empty loop, or -1 when the turn does not nap. */
+  napLoop: i32 = -1
+  napReady: i32[]
 
   constructor(h: HttpHandler, st: Statement, seed: u32, mode: i32, worker: i32) {
     this.h = h
     this.st = st
     this.mode = mode
     this.own = new Array<i32>(mode === CACHE_PRIVATE ? POSTS + 1 : 0)
+    this.napReady = new Array<i32>(2)
     this.worker = worker
     this.hits = 0
     this.misses = 0
@@ -200,8 +214,10 @@ class Entry {
   run(): void {
     while (true) {
       this.h.wait(TURN_MS)
+      let taken: i32 = 0
       while (this.h.ready()) {
         const r: HttpRequest = this.h.take()
+        taken = taken + 1
         if (r.route !== ROUTE_PLAINTEXT) {
           this.h.refuse(r)
         } else if (this.lookup()) {
@@ -209,6 +225,9 @@ class Entry {
         } else {
           this.h.sendFields(r, ERROR, this.names, this.values, this.oops, 0, toI32(this.oops.length))
         }
+      }
+      if (this.napLoop >= 0 && taken < NAP_BELOW) {
+        pollWait(this.napLoop, this.napReady, NAP_MS)
       }
     }
   }
@@ -347,12 +366,23 @@ export const main = (): i32 => {
     worker
   )
   entry.shared = region
+  const nap: string | null = getenv("BENCH_NAP")
+  if (nap !== null && nap === "1") {
+    entry.napLoop = pollCreate()
+    if (entry.napLoop < 0) {
+      console.error(`server: pollCreate failed ${entry.napLoop}`)
+      return 1
+    }
+  }
   if (worker === 0) {
     console.log(`listening ${port}`)
     if (limits.ring) {
       // bench:batch begin
       console.log(`batch ${limits.minEvents} ${limits.maxWaitMs}`)
       // bench:batch end
+      if (entry.napLoop >= 0) {
+        console.log(`nap ${NAP_BELOW} ${NAP_MS}`)
+      }
       console.log(`rings ${netRingState()}`)
     }
   }

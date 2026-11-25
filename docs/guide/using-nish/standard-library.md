@@ -237,8 +237,9 @@ default until the library is made panic-free. Many examples also index
 arrays, add numbers or size new arrays without a guard the compiler reads,
 which a test such as `i < xs.length` before an index, or a bound on a sum or
 a length, proves in your own code; a few copy a range of bytes (`set`,
-`String.fromBytes`), which no proof covers yet, or call `panic`, which no
-proof removes.
+`String.fromBytes`) whose bounds they do not test, which a guard such as
+`start >= 0 && start <= end && end <= bytes.length` proves, or call `panic`,
+which no proof removes.
 
 <!-- allow-panics: does integer arithmetic nothing bounds; calls `std/testing.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
@@ -432,8 +433,7 @@ such a string counts its UTF-8 bytes there.
 Regular expressions in JavaScript's syntax. `regexCompile(pattern, flags)`
 answers a `Result`: the `Regex`, or the reason the pattern is refused.
 
-<!-- allow-panics: calls `std/regex.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Regex, RegexMatch, regexCompile } from "nish/regex";
 
@@ -1298,8 +1298,7 @@ compare values, not doubles, and `0.3` is a multiple of `0.1` though
 `0.3 / 0.1` is `2.9999999999999996`. This module reads the decimal digits
 themselves and never makes an `f64`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_NUMBER_ERR_GAP, jsonNumberCanonical, jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number";
 
@@ -1431,8 +1430,7 @@ A JSON Schema names a string's shape with `format`: `"date-time"`, `"email"`,
 `"ipv6"`, `"uri"`. `nish/json-format` checks the formats of draft 2020-12, one
 predicate each, and a dispatcher for a format named in a schema.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_FORMAT_UNKNOWN, JSON_FORMAT_VALID, isEmail, isIpv6, jsonFormatCheck, jsonFormatId, jsonFormatValidate } from "nish/json-format";
 
@@ -2355,7 +2353,7 @@ the timeout you gave the constructor passes. While `waiting()` is true, call
 followed by more than 32 parameter bytes is no key, so the decoder gives the
 ESC up as `KEY_ESCAPE` at once rather than holding what follows.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { KEY_LEFT, KeyDecoder } from "nish/term";

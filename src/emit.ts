@@ -72,6 +72,7 @@ import {
   emitElementAccess,
   emitForOf,
   emitJsonPutF64Kernel,
+  emitJsonPutStringKernel,
   storageDeclaration,
   storageGlobals,
   tableDeclaration,
@@ -210,6 +211,7 @@ import {
   isAdler32Seam,
   isIndexOfAnyWalk,
   isJsonPutF64Walk,
+  isJsonPutStringWalk,
   isRegexScanWalk,
   isSha256Seam,
   SHA256_HW,
@@ -2104,6 +2106,11 @@ export class Emitter {
     // allocates nothing.
     if (isJsonPutF64Walk(this.program, sig)) {
       return emitJsonPutF64Kernel(this, operandValues)
+    }
+    // Its string walk is a kernel that copies and escapes into the array and
+    // allocates nothing.
+    if (isJsonPutStringWalk(this.program, sig)) {
+      return emitJsonPutStringKernel(this, operandValues)
     }
     // WP38 S5: a seam of `nish/crypto/aes`, `nish/crypto/sha256`'s block
     // function or `nish/crypto/chacha20poly1305`'s keystream loop (S10) runs

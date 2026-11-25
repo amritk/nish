@@ -396,9 +396,16 @@ runtime keeps. `pollWait(loop, ready, timeoutMs)` works like this:
    guarantees (NURING-8); the bound is. A `pollWait` of -1 that wakes by
    the bound with nothing ready sleeps again.
 2. On wake, for each ring whose eventfd fired, or whose `IORING_SQ_TASKRUN`
-   is set (§2, item 4), it enters the ring with `GETEVENTS` and reaps. A recv
-   CQE marks its handle readable, and a send's completion that frees area
-   marks it writable.
+   is set (§2, item 4), it enters the ring with `GETEVENTS` and reaps. It
+   enters again while the flag stays up only as long as each entry pays:
+   one that reaps fewer than the set's `taskrun_worth` completions (16
+   unless `nish_uring_opts` says) ends the re-entries, and the rest waits
+   for the next wait, which does not sleep on a flagged ring. Under steady
+   load new task work is always arriving, so re-entering until the flag
+   dropped chased it one completion at a time: 7.8 enters a request at
+   48,000 requests a second, 1.5 with the bound. A recv CQE marks its
+   handle readable, and a send's completion that frees area marks it
+   writable.
 3. It fills `ready` with the handle and event pairs for both kinds, in the
    order they arrived, up to its length.
 
@@ -507,13 +514,20 @@ makes two waits instead, for three reasons:
 The cost of the second shape is that an ordinary descriptor that becomes
 ready during the second wait is reported up to `maxWaitMs` late. That bound
 is the documented one. A loop whose only descriptor is `signalFd()` hears it
-through the ring's poll and ends the batch at once, but only on the direct
-wait: wherever the paragraph above sends the wait through epoll, the signal
-too waits up to `maxWaitMs`. The second wait passes the pairs still missing
-as the enter's `min_complete`, a count of completions: a pair can take two
-completions (a recv and a send on one slot) and an accept is a pair only on
-the listener, so the enter may wake before that many pairs are in, and the
-loop then collects and waits again until `maxWaitMs`. Tests: `uring`'s
+through a `poll(2)` on it and ends the batch at once whenever `nr_direct` names the loop's set: one
+live ring set, however many rings it has grown, whatever the kernel or
+`--sandbox`, and no ordinary descriptor but an open `signalFd()`. Otherwise
+the signal too waits up to `maxWaitMs`. The second wait sleeps in at most eight slices
+of `maxWaitMs / 8`, rounded up (plus one for each signal handler that
+interrupts a slice, since `poll(2)`'s `EINTR` starts another), without
+entering the ring, and after each
+pumps the set once and collects once. It first passed the pairs still
+missing as an enter's `min_complete`, but a DEFER_TASKRUN enter wakes to run
+task work for each completion, sends' included, so a window that bytes
+trickled into woke, pumped and collected once per completion (16 waits and
+62 enters in the trickle check, where the slices take 4 and 39). The cost
+of the slices is that a batch can end up to one slice after `minEvents`
+became ready. Tests: `uring`'s
 "direct" mode, `link/net_ring_batch` (run with every epoll wait refused, so
 a batch that fell back to epoll would fail), `net_poll_batch`.
 

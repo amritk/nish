@@ -17,8 +17,7 @@ import unixListen from "nish:net" -> builtin unixListen
 import unixListenMode from "nish:net" -> builtin unixListenMode
 import unixSocketPair from "nish:net" -> builtin unixSocketPair
 function bytesOf(s: string): u8[] -> @bytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)

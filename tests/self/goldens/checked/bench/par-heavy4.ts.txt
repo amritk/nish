@@ -186,7 +186,7 @@ function negativeAtomicLength(): void -> @nish.negativeAtomicLength
 function AtomicI32Array.constructor(this: AtomicI32Array, length: i32): void -> @nish.AtomicI32Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength nish_panic
+  calls: nish.negativeAtomicLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
@@ -239,7 +239,7 @@ function AtomicI32Array.compareExchange(this: AtomicI32Array, i: i32, expected: 
 function AtomicI64Array.constructor(this: AtomicI64Array, length: i32): void -> @nish.AtomicI64Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength nish_panic
+  calls: nish.negativeAtomicLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
@@ -292,7 +292,7 @@ function AtomicI64Array.compareExchange(this: AtomicI64Array, i: i32, expected: 
 function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
-  calls: nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 nish_panic
+  calls: nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0#0
   stackSites=0 stackLocals=0
   local +0:9 dst: i32[] (const)
@@ -336,7 +336,7 @@ function fold(ys: i32[]): i32 -> @fold
 function onceSeq(xs: i32[], k: i32): i32 -> @onceSeq
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: k
-  calls: fold nish_arena_mark nish_arena_release nish_panic work
+  calls: fold nish_arena_mark nish_arena_release work
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:9 ys: i32[] (const)
@@ -357,7 +357,7 @@ function oncePar(xs: i32[], k: i32): i32 -> @oncePar
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32 oncePar onceSeq
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32 oncePar onceSeq
   stackSites=0 stackLocals=0
   local -5:9 par: boolean (const)
   local -4:9 calls: i32 (const)

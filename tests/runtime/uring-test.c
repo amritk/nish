@@ -22,7 +22,9 @@
  *    runs at most 20 queued completions per enter (6.13 and later), so the
  *    set enters again while IORING_SQ_TASKRUN is up. On 6.18 and later the
  *    re-entry counter must also move; an older kernel without the cap passes
- *    either way.
+ *    either way. `taskrun1` is the same burst with `taskrun_worth` 1, which
+ *    re-enters while any entry reaps a completion: the burst is still taken
+ *    by one wait.
  *  - `overflow`: a CQ of 8 entries under 256 clients; FEAT_NODROP keeps what
  *    did not fit and the set drains it.
  *  - `nobufs`: 2 provided buffers under 64 clients; a recv the kernel ends
@@ -70,7 +72,9 @@
  *    opcode. The probe and the open answer what sends a caller to epoll
  *    (the errno, or -EOPNOTSUPP for a missing feature), with no set, the
  *    process alive and no descriptor leaked. A kernel that wants
- *    COOP_TASKRUN takes the second setup and the set opens on it.
+ *    COOP_TASKRUN takes the second setup and the set opens on it, and one
+ *    that refuses a provided-buffer ring with zero reserved words (Ubuntu's
+ *    6.8.0-136 and later) takes the retry with resv[0] set.
  *  - `coalesce`: 200 head+body responses, each two sends in one pass, as
  *    `netWrite2` makes them, and then three writes in one pass. Each leaves
  *    as one SEND; the mode prints the SENDs per response (NURING-40).
@@ -81,8 +85,13 @@
  *  - `pool`: a response to each of 64 clients in one pass holds 64 pool
  *    buffers; once sent, no slot holds one and at most UR_SENDPOOL_MAX stay
  *    cached, and steady responses after a warm-up allocate none (NURING-41).
- *  `coalesce`, `inflight` and `pool` drive their set and clients in one
- *  process, as `move` does.
+ *  - `bigsend`: steady head+64 KiB responses leave from chained pool buffers;
+ *    after a warm-up nothing is allocated (malloc, calloc and realloc are
+ *    counted), a response takes at least one SEND per pool buffer it fills,
+ *    and a shutdown takes a pool buffer too (NURING-51). The mode prints
+ *    the SENDs per response.
+ *  `coalesce`, `inflight`, `pool` and `bigsend` drive their set and clients
+ *  in one process, as `move` does.
  */
 #define _GNU_SOURCE
 /* The hooks the layer calls in place of io_uring_setup and io_uring_register,
@@ -95,6 +104,27 @@ static long test_register(int fd, unsigned op, void *arg, unsigned nr);
  * kernel answer. */
 static int test_accept_res(int res);
 #define UR_ACCEPT_RES(res) test_accept_res(res)
+/* `bigsend` counts every heap allocation the process makes while it counts,
+ * whoever makes it: malloc, calloc and realloc are replaced here and pass to
+ * glibc's own, so a plain malloc anywhere in the send path is counted. */
+#include <stdlib.h>
+extern void *__libc_malloc(size_t n);
+extern void *__libc_calloc(size_t k, size_t n);
+extern void *__libc_realloc(void *p, size_t n);
+static volatile int ut_counting;
+static volatile long ut_allocs;
+void *malloc(size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_malloc(n);
+}
+void *calloc(size_t k, size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_calloc(k, n);
+}
+void *realloc(void *p, size_t n) {
+  if (ut_counting) ut_allocs++;
+  return __libc_realloc(p, n);
+}
 /* runtime-net.c, linked beside this file for `netwrite`, opens its sets
  * through the wrapper below, which keeps the last one for its stats. */
 #define nish_uring_open ut_uring_open_real
@@ -136,7 +166,7 @@ void nish_signal_fd_closing(int32_t fd) { (void)fd; }
 #define UR_UNREGISTER_EVENTFD 5 /* IORING_UNREGISTER_EVENTFD, which only `nowake` calls */
 
 /* What the hooks force. HOOK_NONE passes every call to the kernel. */
-enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG };
+enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG, HOOK_PBUF_RESV };
 static enum hook hook;
 static int setup_calls;
 static uint32_t setup_flags_seen[4];
@@ -166,7 +196,25 @@ static int test_accept_res(int res) {
   return res;
 }
 
+/* PBUF_RING registrations HOOK_PBUF_RESV refused for all-zero reserved
+ * words, and those it passed on. */
+static int pbuf_zero_refused, pbuf_resv_passed;
+
 static long test_register(int fd, unsigned op, void *arg, unsigned nr) {
+  /* Ubuntu's 6.8.0-136 and later (Launchpad #2162843): all-zero reserved
+   * words are -EINVAL and a nonzero resv[0] is taken. The kernel underneath
+   * checks the other way, so what it is handed has them zeroed. */
+  if (hook == HOOK_PBUF_RESV && op == UR_REGISTER_PBUF_RING) {
+    struct ur_buf_reg reg = *(const struct ur_buf_reg *)arg;
+    if (reg.resv[0] == 0 && reg.resv[1] == 0 && reg.resv[2] == 0) {
+      pbuf_zero_refused++;
+      errno = EINVAL;
+      return -1;
+    }
+    pbuf_resv_passed++;
+    memset(reg.resv, 0, sizeof reg.resv);
+    return syscall(__NR_io_uring_register, fd, op, &reg, nr);
+  }
   long rc = syscall(__NR_io_uring_register, fd, op, arg, nr);
   if (rc >= 0 && hook == HOOK_NO_SEND && op == UR_REGISTER_PROBE)
     ((struct ur_probe *)arg)->ops[UR_OP_SEND].flags &= (uint16_t)~UR_OP_SUPPORTED;
@@ -404,6 +452,8 @@ static int serve(const struct mode *m, int listener, int base_fds) {
   }
   if (strcmp(m->name, "bound") == 0 && peak_live > 8) return fail("the bound let more than 8 in");
   if (m->hold) {
+    if (s->taskrun_worth != (m->opts.taskrun_worth ? (uint32_t)m->opts.taskrun_worth : UR_TASKRUN_WORTH))
+      return fail("the set did not take its taskrun_worth, or its default");
     if (st.rings != 1) return fail("the burst did not stay on one ring");
     /* The cap is measured on v6.18 (docs/wp63-iouring-net.md §2, item 4). */
     if (kernel_at_least(6, 18) && st.taskrun_reentries == 0)
@@ -597,7 +647,7 @@ static int fallback_coop(void) {
       _exit(1);
     }
     struct nish_uring_set *s = NULL;
-    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
     int rc = nish_uring_open(&s, l, &o);
     if (rc != 0 || s == NULL) {
       fprintf(stderr, "uring-test: a kernel that wants COOP_TASKRUN made the open answer %d\n", rc);
@@ -612,6 +662,62 @@ static int fallback_coop(void) {
   int status;
   if (waitpid(pid, &status, 0) != pid) return fail("waitpid");
   if (!WIFEXITED(status)) return fail("the COOP_TASKRUN case died of a signal");
+  return WEXITSTATUS(status);
+}
+
+/* A kernel that refuses a provided-buffer ring with all-zero reserved words
+ * and takes one with resv[0] set, as Ubuntu's 6.8.0-136 and later do: the
+ * probe and the ring each retry once that way, and the set opens on it and
+ * serves a client, rather than sending the caller to epoll. */
+static int fallback_pbuf_resv(void) {
+  fflush(NULL);
+  pid_t pid = fork();
+  if (pid < 0) return fail("fork");
+  if (pid == 0) {
+    hook = HOOK_PBUF_RESV;
+    int l = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+    socklen_t al = sizeof a;
+    if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 8) != 0 ||
+        getsockname(l, (struct sockaddr *)&a, &al) != 0)
+      _exit(fail("listener"));
+    int p = ur_probe_once();
+    if (p != 1) {
+      fprintf(stderr, "uring-test: a kernel that wants resv[0] set made the probe answer %d\n", p);
+      _exit(1);
+    }
+    struct nish_uring_set *s = NULL;
+    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
+    int rc = nish_uring_open(&s, l, &o);
+    if (rc != 0 || s == NULL) {
+      fprintf(stderr, "uring-test: a kernel that wants resv[0] set made the open answer %d\n", rc);
+      _exit(1);
+    }
+    /* The open probes again (the cache is nish_uring_probe's), so the probe
+     * and the ring make three registrations, each refused once. */
+    if (pbuf_zero_refused != 3 || pbuf_resv_passed != 3) {
+      fprintf(stderr, "uring-test: %d registrations refused for zero reserved words, %d retried with resv[0] set\n",
+              pbuf_zero_refused, pbuf_resv_passed);
+      _exit(fail("the probe and the ring did not each retry their refused registration once with resv[0] set"));
+    }
+    int c = socket(AF_INET, SOCK_STREAM, 0);
+    if (c < 0 || connect(c, (struct sockaddr *)&a, sizeof a) != 0 || write(c, "ping", 4) != 4) _exit(fail("client"));
+    struct nish_uring_event ev[EVENTS_MAX];
+    int got = 0;
+    for (int i = 0; i < 200 && !got; i++) {
+      int n = nish_uring_wait(s, 10, ev, EVENTS_MAX);
+      for (int k = 0; k < n; k++)
+        if (ev[k].kind == NISH_URING_DATA && ev[k].res == 4 && memcmp(ev[k].data, "ping", 4) == 0) got = 1;
+    }
+    if (!got) _exit(fail("the set opened on the retried ring received nothing"));
+    close(c);
+    nish_uring_destroy(s);
+    close(l);
+    _exit(0);
+  }
+  int status;
+  if (waitpid(pid, &status, 0) != pid) return fail("waitpid");
+  if (!WIFEXITED(status)) return fail("the resv[0] case died of a signal");
   return WEXITSTATUS(status);
 }
 
@@ -648,6 +754,8 @@ static int fallback(void) {
     else if (rc != 0) return rc;
   }
   int rc = fallback_coop();
+  if (rc != 0) return rc;
+  rc = fallback_pbuf_resv();
   if (rc != 0) return rc;
   if (no_seccomp) {
     printf("skip: seccomp filters are unavailable here; the hook cases passed\n");
@@ -704,7 +812,7 @@ static void move_dump(struct nish_uring_set *s, int client) {
             ri, (long)r->live, (long)r->accepting, r->to_submit, __atomic_load_n(r->sq_flags, __ATOMIC_ACQUIRE),
             __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE), r->sq_local_tail, *r->cq_head,
             __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE), poll(&q, 1, 0));
-    for (uint32_t sl = 0; sl < s->slots; sl++) fprintf(stderr, "uring-test:   slot %u state %#x\n", sl, r->st[sl]);
+    for (uint32_t sl = 0; sl < s->slots; sl++) fprintf(stderr, "uring-test:   slot %u state %#x\n", sl, r->sl[sl].st);
     char path[64], buf[4096];
     snprintf(path, sizeof path, "/proc/self/fdinfo/%d", r->fd);
     FILE *f = fopen(path, "r");
@@ -788,7 +896,7 @@ static int move(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {2, 2, 0, 0, 0, 0};
+  struct nish_uring_opts o = {2, 2, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -837,7 +945,7 @@ static int shutclose(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {1, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {1, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -852,7 +960,7 @@ static int shutclose(void) {
   /* Wait for the send, so the shutdown is the slot's head and in flight. */
   long long deadline = now_ms() + 5000;
   struct ur_send *q;
-  while ((q = s->rings[ra]->sq_first[sa]) != NULL && q->how < 0) {
+  while ((q = s->rings[ra]->sl[sa].first) != NULL && q->how < 0) {
     if (now_ms() > deadline) return fail("the send did not complete");
     struct nish_uring_event ev[EVENTS_MAX];
     if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
@@ -902,7 +1010,7 @@ static int nowake(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -960,7 +1068,7 @@ static int direct_open(int *l, struct sockaddr_in *a, struct nish_uring_set **s)
   if (*l < 0 || bind(*l, (struct sockaddr *)a, sizeof *a) != 0 || listen(*l, 64) != 0 ||
       getsockname(*l, (struct sockaddr *)a, &al) != 0)
     return fail("listener");
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(s, *l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1164,7 +1272,7 @@ static int hupheld(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1270,7 +1378,7 @@ static int nomem(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1343,7 +1451,7 @@ static int inproc_open(int32_t slots, struct nish_uring_set **s, int *l, struct 
   if (*l < 0 || bind(*l, (struct sockaddr *)a, sizeof *a) != 0 || listen(*l, 64) != 0 ||
       getsockname(*l, (struct sockaddr *)a, &al) != 0)
     return fail("listener");
-  struct nish_uring_opts o = {slots, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {slots, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(s, *l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1571,13 +1679,94 @@ static int pool(void) {
   return 0;
 }
 
+#define BS_HEAD 160
+#define BS_BODY 65536
+#define BS_WARM 8
+#define BS_ROUNDS 100
+
+/* Head+body responses whose body is 64 KiB, four times a pool buffer, as a
+ * server sends a large file in one `netWrite2`. After a warm-up every record
+ * must come from the pool: the count of record allocations, exact or pooled,
+ * does not move. A write and a shutdown then take two pool buffers and
+ * allocate nothing either. */
+static int bigsend(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(60);
+  struct nish_uring_set *s;
+  int l, fd, ring, slot;
+  struct sockaddr_in a;
+  if (inproc_open(4, &s, &l, &a) != 0) return 1;
+  if (move_accept(s, 0, &a, &fd, &ring, &slot) != 0) return 1;
+  static uint8_t out[BS_HEAD + BS_BODY], in[BS_HEAD + BS_BODY];
+  struct nish_uring_stats st;
+  int64_t sends = 0;
+  for (int r = 0; r < BS_WARM + BS_ROUNDS; r++) {
+    if (r == BS_WARM) {
+      nish_uring_stats(s, &st);
+      sends = st.sends;
+      ut_allocs = 0;
+      ut_counting = 1;
+    }
+    for (int i = 0; i < BS_HEAD + BS_BODY; i++) out[i] = pattern(r, i);
+    if (nish_uring_send(s, ring, slot, out, BS_HEAD) != BS_HEAD ||
+        nish_uring_send(s, ring, slot, out + BS_HEAD, BS_BODY) != BS_BODY)
+      return fail("a 64 KiB response's send was refused");
+    /* The client reads as the ring sends: loopback holds less than a
+       response on some runners. */
+    long long deadline = now_ms() + 10000;
+    int got = 0;
+    while (got < BS_HEAD + BS_BODY) {
+      if (now_ms() > deadline) return fail("a 64 KiB response did not arrive");
+      struct nish_uring_event ev[EVENTS_MAX];
+      if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
+      ssize_t k = recv(fd, in + got, sizeof in - (size_t)got, MSG_DONTWAIT);
+      if (k > 0) got += (int)k;
+      else if (k == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) return fail("the client's read");
+      else poll(NULL, 0, 1);
+    }
+    if (memcmp(in, out, sizeof in) != 0) return fail("a 64 KiB response did not arrive in order");
+    if (drain_slot(s, ring, slot) != 0) return 1;
+  }
+  ut_counting = 0;
+  long steady = ut_allocs;
+  nish_uring_stats(s, &st);
+  /* Each pool buffer is its own SEND, so a response that fills `bufs` buffers
+     takes at least that many; a short send only adds to it. */
+  const int64_t bufs = (BS_HEAD + BS_BODY + UR_CHUNK_DATA - 1) / UR_CHUNK_DATA;
+  printf("64 KiB responses: sends per response %.2f (at least %lld), %ld allocations after the warm-up, %ld held\n",
+         (double)(st.sends - sends) / BS_ROUNDS, (long long)bufs, steady, (long)st.pool_held);
+  if (steady != 0) return fail("a steady 64 KiB response allocated after the warm-up");
+  if (st.sends - sends < bufs * BS_ROUNDS) return fail("a 64 KiB response took fewer SENDs than the pool buffers it fills");
+  if (st.pool_held != 0) return fail("an idle slot held a pool buffer after a 64 KiB response");
+  ut_allocs = 0;
+  ut_counting = 1;
+  if (nish_uring_send(s, ring, slot, out, 1) != 1 || nish_uring_shutdown(s, ring, slot, 1) != 0) {
+    ut_counting = 0;
+    return fail("a write and a shutdown were refused");
+  }
+  ut_counting = 0;
+  nish_uring_stats(s, &st);
+  printf("a write and a shutdown: %ld held, %ld allocations\n", (long)st.pool_held, (long)ut_allocs);
+  if (st.pool_held != 2 || ut_allocs != 0) return fail("a shutdown did not take its record from the pool");
+  if (drain_slot(s, ring, slot) != 0) return 1;
+  if (read_all(fd, in, 1) != 0 || in[0] != out[0]) return fail("the byte before the shutdown did not arrive");
+  if (read(fd, in, 1) != 0) return fail("the client read past the shutdown");
+  nish_uring_destroy(s);
+  close(fd);
+  close(l);
+  return 0;
+}
+
 #define SP_PAIRS 500
 
 /* A write of one byte and a shutdown, again and again with no wait between
  * them (NURING-43): each write lands behind a shutdown record, so without the
  * shutdown's dedup each took a pool buffer of its own, 1,000 of them for 500
  * pairs of each side. A side already queued is not queued again, so the slot
- * holds at most three records with bytes in them; the client still reads every
+ * holds at most three records with bytes in them and two shutdowns, each a
+ * pool buffer (NURING-51); the client still reads every
  * byte queued before the write side's shutdown, then the end of the stream. */
 static int shutpool(void) {
   int p = nish_uring_probe();
@@ -1598,7 +1787,7 @@ static int shutpool(void) {
   struct nish_uring_stats st;
   nish_uring_stats(s, &st);
   printf("%d writes, each behind a shutdown: %ld pool buffers held\n", 2 * SP_PAIRS, (long)st.pool_held);
-  if (st.pool_held > 3) return fail("writes between repeated shutdowns each held a pool buffer");
+  if (st.pool_held > 5) return fail("writes between repeated shutdowns each held a pool buffer");
   long long deadline = now_ms() + 10000;
   while (nish_uring_queued(s, ring, slot) > 0) {
     if (now_ms() > deadline) return fail("the slot's queue did not drain");
@@ -1697,15 +1886,17 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "inflight") == 0) return inflight();
   if (strcmp(argv[1], "pool") == 0) return pool();
   if (strcmp(argv[1], "shutpool") == 0) return shutpool();
+  if (strcmp(argv[1], "bigsend") == 0) return bigsend();
   if (strcmp(argv[1], "netwrite") == 0) return netwrite();
   static const struct mode modes[] = {
-      {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
-      {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},
-      {"taskrun", {128, 1, 0, 0, 0, 0}, 100, 0, 0, 64, 0, 0, 1},
-      {"overflow", {512, 1, 8, 8, 0, 0}, 256, 0, 0, 64, 0, 0, 0},
-      {"nobufs", {128, 1, 0, 0, 2, 64}, 64, 0, 0, 1024, 0, 0, 0},
-      {"short", {8, 1, 0, 0, 0, 0}, 1, 0, 0, 1, 8 << 20, 0, 0},
-      {"reset", {8, 1, 0, 0, 0, 0}, 1, 0, 0, 1, 64 << 20, 1, 0},
+      {"beyond", {0, 8, 0, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
+      {"bound", {8, 1, 0, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},
+      {"taskrun", {128, 1, 0, 0, 0, 0, 0}, 100, 0, 0, 64, 0, 0, 1},
+      {"taskrun1", {128, 1, 0, 0, 0, 0, 1}, 100, 0, 0, 64, 0, 0, 1},
+      {"overflow", {512, 1, 8, 8, 0, 0, 0}, 256, 0, 0, 64, 0, 0, 0},
+      {"nobufs", {128, 1, 0, 0, 2, 64, 0}, 64, 0, 0, 1024, 0, 0, 0},
+      {"short", {8, 1, 0, 0, 0, 0, 0}, 1, 0, 0, 1, 8 << 20, 0, 0},
+      {"reset", {8, 1, 0, 0, 0, 0, 0}, 1, 0, 0, 1, 64 << 20, 1, 0},
   };
   for (size_t i = 0; i < sizeof modes / sizeof modes[0]; i++)
     if (strcmp(argv[1], modes[i].name) == 0) return run_mode(&modes[i]);

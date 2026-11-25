@@ -80,14 +80,14 @@
 // runtime's (NL2202). scripts/build.sh links SQLite for a module that declares
 // an `sqlite3_` or a `nishsqlite_` function, as this one does.
 declare function nishsqlite_open(path: string, flags: i32): i32
-declare function nishsqlite_open_errmsg(): string
+declare function nishsqlite_open_errmsg(): string | null
 declare function nishsqlite_close(h: i32): i32
 declare function nishsqlite_exec(h: i32, sql: string): i32
-declare function nishsqlite_errmsg(h: i32): string
+declare function nishsqlite_errmsg(h: i32): string | null
 declare function nishsqlite_last_insert_rowid(h: i32): i64
 declare function nishsqlite_changes(h: i32): i64
 declare function nishsqlite_prepare(h: i32, sql: string): i32
-declare function nishsqlite_stmt_errmsg(h: i32): string
+declare function nishsqlite_stmt_errmsg(h: i32): string | null
 declare function nishsqlite_finalize(h: i32): i32
 declare function nishsqlite_step(h: i32): i32
 declare function nishsqlite_reset(h: i32): i32
@@ -130,8 +130,8 @@ declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
 declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
 declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
 declare function nishsqlite_cursor_rowid(h: i32): i64
-declare function sqlite3_errstr(code: i32): string
-declare function sqlite3_libversion(): string
+declare function sqlite3_errstr(code: i32): string | null
+declare function sqlite3_libversion_number(): i32
 
 /** Success. */
 export const SQLITE_OK: i32 = 0
@@ -216,7 +216,12 @@ export const SEEK_LT: i32 = 4
  *
  * @returns The version string, such as `3.50.4`.
  */
-export const sqliteVersion = (): string => sqlite3_libversion()
+export const sqliteVersion = (): string => {
+  // SQLite numbers 3.50.4 as 3050004, the major times a million plus the minor
+  // times a thousand plus the patch.
+  const n: i32 = sqlite3_libversion_number()
+  return `${n / 1000000}.${(n / 1000) % 1000}.${n % 1000}`
+}
 
 /** A failure, with SQLite's message for it. Built only when asked for, by `error(code)`. */
 export class SqliteError {
@@ -250,15 +255,31 @@ const done = (rc: i32): Result<void, i32> => {
 }
 
 /**
+ * SQLite's description of `code`, such as `constraint failed`. The C type lets
+ * `sqlite3_errstr` answer NULL, so the code stands in for the text then, as
+ * `error 19`, rather than stop the program over a message.
+ */
+const describe = (code: i32): string => {
+  const text = sqlite3_errstr(code)
+  return text === null ? `error ${code}` : text
+}
+
+/**
  * The message for `code`: the connection's own, unless the code is one the
  * adapter can answer without SQLite (`MISUSE`, `RANGE`, `NOMEM` for a full
  * handle table or a failed conversion), where the connection's message may
- * still be that of some earlier failure.
+ * still be that of some earlier failure, or the connection has no message
+ * (NULL), where SQLite's description of the code stands in.
  */
-const messageFor = (code: i32, connection: string): string => {
+const messageFor = (code: i32, connection: string | null): string => {
   const primary: i32 = code & 0xff
-  if (primary === SQLITE_MISUSE || primary === SQLITE_RANGE || primary === SQLITE_NOMEM) {
-    return sqlite3_errstr(code)
+  if (
+    connection === null ||
+    primary === SQLITE_MISUSE ||
+    primary === SQLITE_RANGE ||
+    primary === SQLITE_NOMEM
+  ) {
+    return describe(code)
   }
   return connection
 }
@@ -286,7 +307,9 @@ const moved = (r: i32): Result<boolean, i32> => {
 export const openDatabase = (path: string, flags: i32): Result<Database, SqliteError> => {
   const h: i32 = nishsqlite_open(path, flags)
   if (h < 0) {
-    return Err(new SqliteError(-h, nishsqlite_open_errmsg()))
+    const code: i32 = -h
+    const message = nishsqlite_open_errmsg()
+    return Err(new SqliteError(code, message === null ? describe(code) : message))
   }
   return Ok(new Database(h))
 }
@@ -389,16 +412,55 @@ export class Database {
    *   a cursor reads, or has columns other than `columns`.
    */
   openCursor(name: string, columns: string): Result<Cursor, SqliteError> {
+    const h = this.cursorHandle(name, columns)
+    if (h.isErr()) {
+      return Err(h.error)
+    }
+    return Ok(new Cursor(h.value))
+  }
+
+  /** The adapter's cursor on `name`, as `openCursor` opens it, or its refusal. */
+  private cursorHandle(name: string, columns: string): Result<i32, SqliteError> {
     const h: i32 = nishsqlite_cursor_open(this.handle, name, columns)
     if (h < 0) {
-      if (-h === SQLITE_SCHEMA) {
+      const code: i32 = -h
+      if (code === SQLITE_SCHEMA) {
         return Err(
-          new SqliteError(-h, `no table or index ${name} with columns "${columns}" that a cursor reads`)
+          new SqliteError(code, `no table or index ${name} with columns "${columns}" that a cursor reads`)
         )
       }
-      return Err(this.error(-h))
+      return Err(this.error(code))
     }
-    return Ok(new Cursor(h))
+    return Ok(h)
+  }
+
+  /**
+   * `openCursor` into a `Cursor` the program already holds, which then reads
+   * the new cursor: the one it held before, open or already ended with its
+   * read, is closed first. There is no garbage collector, so a loop that
+   * opens the same cursors in every read transaction keeps one `Cursor` each
+   * this way and allocates nothing, where `openCursor`'s new object a time
+   * would stay allocated for good.
+   *
+   * @param cur The cursor to reopen.
+   * @param name The table or index, as `openCursor` takes it.
+   * @param columns Its columns, as `openCursor` takes them.
+   * @returns `Ok()`, or `Err` as `openCursor` answers, when `cur` is left
+   *   closed.
+   */
+  reopenCursor(cur: Cursor, name: string, columns: string): Result<void, SqliteError> {
+    // A cursor whose read has ended is gone already, and its close answers
+    // SQLITE_MISUSE: nothing is open to lose either way.
+    const closed = cur.close()
+    if (closed.isErr() && closed.error !== SQLITE_MISUSE) {
+      return Err(this.error(closed.error))
+    }
+    const h = this.cursorHandle(name, columns)
+    if (h.isErr()) {
+      return Err(h.error)
+    }
+    cur.rebind(h.value)
+    return Ok()
   }
 
   /**
@@ -723,6 +785,7 @@ export class Statement {
 declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
 declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
 declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, text: u8[], ntext: u64): i32
+declare function nishsqlite_cursor_record(h: i32, buf: u8[], n: u64): i32
 
 /**
  * A B-tree cursor on a table or index, which reads rows without a statement.
@@ -747,6 +810,18 @@ export class Cursor {
   constructor(handle: i32) {
     this.handle = handle
     this.rowIo = []
+    this.nsel = -1
+  }
+
+  /**
+   * Points this object at the adapter's cursor `handle`, forgetting the
+   * columns `selectRow` chose. `Database.reopenCursor` calls it; a program
+   * calls that instead.
+   *
+   * @param handle The adapter's cursor handle.
+   */
+  rebind(handle: i32): void {
+    this.handle = handle
     this.nsel = -1
   }
 
@@ -901,6 +976,33 @@ export class Cursor {
       if (i < out.length) {
         out[i] = c
       }
+    }
+    return Ok(n)
+  }
+
+  /**
+   * Copies the current row's record into `buf`: SQLite's record format,
+   * whole, as it is stored (https://sqlite.org/fileformat2.html#record_format),
+   * a header of varints giving each field's serial type, then the fields'
+   * bytes. It converts nothing, so a program that decodes the format itself
+   * reads a row with one call and one copy. An index entry's record ends with
+   * its rowid; a table row's holds NULL for an INTEGER PRIMARY KEY column,
+   * whose value is the row's key (`rowid`). It allocates nothing.
+   *
+   * @param buf Receives the record.
+   * @returns The record's length. When that is more than `buf.length`,
+   *   nothing is copied: grow `buf` and call again. `Err` with the code:
+   *   `SQLITE_MISUSE` with no row or a closed cursor, `SQLITE_ABORT` when the
+   *   row has moved, `SQLITE_CORRUPT` for a record longer than SQLite allows,
+   *   or SQLite's, such as `SQLITE_IOERR`, when an overflow page cannot be
+   *   read.
+   */
+  record(buf: u8[]): Result<i32, i32> {
+    const n: i32 = nishsqlite_cursor_record(this.handle, buf, toU64(buf.length))
+    if (n < 0) {
+      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
+      // spelled in u32 so no negation of an i32 can overflow.
+      return Err(toI32(toU32(~n) + toU32(1)))
     }
     return Ok(n)
   }
@@ -1103,6 +1205,268 @@ export class Cursor {
    * @returns The error, with SQLite's description of the code.
    */
   error(code: i32): SqliteError {
-    return new SqliteError(code, sqlite3_errstr(code))
+    return new SqliteError(code, describe(code))
+  }
+}
+
+/** Serial types 0 to 9's lengths in bytes (https://sqlite.org/fileformat2.html#record_format); 10 and 11 are reserved, and 12 up are `(t - 12) / 2`. */
+const RECORD_SMALL_SIZES: readonly i32[] = [0, 1, 2, 3, 4, 6, 8, 8, 0, 0, 0, 0]
+
+/**
+ * A row as SQLite stores it, copied whole by `Cursor.record` and decoded
+ * here: the record format's header of varints, one serial type a field, and
+ * the fields' bytes after it. One `read` is one call into the adapter and one
+ * copy, and the fields are then read from this object's own buffer, so a loop
+ * that reads many columns of many rows pays for the record once a row rather
+ * than once a column. It allocates only when a record is longer than its
+ * buffer, which then grows to fit.
+ *
+ * Fields are the record's, in its order: a table row's columns as declared,
+ * with NULL for an INTEGER PRIMARY KEY column, whose value is the row's key
+ * (`Cursor.rowid`), and an index entry's key columns and then its rowid. A
+ * record written before `ALTER TABLE ADD COLUMN` holds fewer fields than the
+ * table has columns; `fields` says how many it holds.
+ *
+ *     const row = new RowRecord(256, 8)
+ *     let on = cur.first().expect("first")
+ *     while (on) {
+ *       row.read(cur).expect("record")
+ *       if (row.type(1) === SQLITE_TEXT) {
+ *         console.log(String.fromBytes(row.buf, row.start(1), row.size(1)))
+ *       }
+ *       on = cur.next().expect("next")
+ *     }
+ */
+export class RowRecord {
+  /** The record's bytes, from 0 to `length`. */
+  buf: u8[]
+  /** How long the record last read is. */
+  length: i32 = 0
+  /** How many fields its header gives, at most the `maxFields` it was made with. */
+  fields: i32 = 0
+  /** Each field's serial type. */
+  private types: i32[]
+  /** Where each field's bytes start in `buf`. */
+  private offs: i32[]
+
+  /**
+   * A decoder with a buffer of `capacity` bytes, which reads at most
+   * `maxFields` fields of each record.
+   *
+   * @param capacity The buffer's first length, grown when a record is longer.
+   * @param maxFields How many fields to decode; a record's fields past them are not read.
+   */
+  constructor(capacity: i32, maxFields: i32) {
+    this.buf = capacity > 0 ? new Array<u8>(capacity) : new Array<u8>(0)
+    this.types = maxFields > 0 ? new Array<i32>(maxFields) : new Array<i32>(0)
+    this.offs = maxFields > 0 ? new Array<i32>(maxFields) : new Array<i32>(0)
+  }
+
+  /**
+   * Copies `cur`'s current row and reads its header, as SQLite's own
+   * `sqlite3VdbeRecordUnpack` reads it: the fields it would find and no
+   * others, and a last field whose bytes would run past the record's end
+   * reads as NULL.
+   *
+   * @param cur The cursor, on a row.
+   * @returns `Ok()`, or `Err` with the code: `Cursor.record`'s, or
+   *   `SQLITE_CORRUPT` for a header SQLite never writes (a varint past the
+   *   record, a serial type past 2^31, or a header longer than the record),
+   *   when `fields` is 0.
+   */
+  read(cur: Cursor): Result<void, i32> {
+    this.length = 0
+    this.fields = 0
+    let r = cur.record(this.buf)
+    if (r.isOk() && r.value > toI32(this.buf.length)) {
+      const need: i32 = r.value
+      if (need > 0) {
+        this.buf = new Array<u8>(need)
+      }
+      r = cur.record(this.buf)
+    }
+    if (r.isErr()) {
+      return Err(r.error)
+    }
+    if (r.value > toI32(this.buf.length)) {
+      return Err(SQLITE_CORRUPT)
+    }
+    this.length = r.value
+    return this.header() ? Ok() : Err(SQLITE_CORRUPT)
+  }
+
+  /** The varint at `at`, at most 5 bytes and below 2^31, with its length in `vlen`; -1 when there is none. */
+  private vlen: i32 = 0
+  private varint(at: i32): i64 {
+    const b: u8[] = this.buf
+    let v: i64 = 0
+    let k: i32 = at
+    let n: i32 = 0
+    while (n < 5 && k >= 0 && k < this.length && k < toI32(b.length)) {
+      const c: i32 = toI32(b[k])
+      v = (v << toI64(7)) | toI64(c & 127)
+      k = k + 1
+      n = n + 1
+      if (c < 128) {
+        this.vlen = n
+        return v <= toI64(2147483647) ? v : toI64(-1)
+      }
+    }
+    return toI64(-1)
+  }
+
+  /** Reads the header of the record in `buf` into `types` and `offs`; false when it is not one SQLite writes. */
+  private header(): boolean {
+    if (this.length === 0) {
+      return true
+    }
+    const h: i64 = this.varint(toI32(0))
+    if (h < toI64(0) || h > toI64(this.length)) {
+      return false
+    }
+    const hdr: i32 = toI32(h)
+    let idx: i32 = this.vlen & 7
+    // `d` is where the next field's bytes start; a field longer than 2^31
+    // leaves the record behind, which the loop's test finds.
+    let d: i64 = h
+    let u: i32 = 0
+    const types: i32[] = this.types
+    const offs: i32[] = this.offs
+    const sizes: readonly i32[] = RECORD_SMALL_SIZES
+    for (let k: i32 = 0; k >= 0 && k < toI32(types.length) && k < toI32(offs.length); k += 1) {
+      if (idx >= hdr || d > toI64(this.length)) {
+        break
+      }
+      const t: i64 = this.varint(idx)
+      if (t < toI64(0)) {
+        return false
+      }
+      // A varint is at most 5 bytes, so the mask keeps its length.
+      // In u32: idx is below hdr, so the sum is at most 2^31 + 4, and one
+      // that wraps negative ends the walk at the next varint, which refuses it.
+      idx = toI32(toU32(idx) + toU32(this.vlen & 7))
+      const ty: i32 = toI32(t)
+      types[k] = ty
+      offs[k] = toI32(d)
+      let sz: i32 = 0
+      if (ty >= 12) {
+        sz = (ty - 12) >> 1
+      } else if (ty >= 0 && ty < toI32(sizes.length)) {
+        sz = sizes[ty] & 15
+      }
+      // In u64, which cannot wrap: d is at most the record's length here.
+      d = toI64(toU64(d) + toU64(sz))
+      u = k + 1
+    }
+    if (d > toI64(this.length) && u > 0 && u <= toI32(types.length)) {
+      types[u - 1] = 0
+    }
+    this.fields = u
+    return true
+  }
+
+  /** Field `k`'s serial type, or 0 (NULL) past the fields read. */
+  private serial(k: i32): i32 {
+    if (k < 0 || k >= this.fields || k >= toI32(this.types.length)) {
+      return 0
+    }
+    return this.types[k]
+  }
+
+  /**
+   * Field `k`'s type, as `Cursor.columnType` answers it.
+   *
+   * @param k The field, from 0.
+   * @returns `SQLITE_INTEGER`, `SQLITE_FLOAT`, `SQLITE_TEXT`, `SQLITE_BLOB`,
+   *   or `SQLITE_NULL`, which a field past `fields` is too.
+   */
+  type(k: i32): i32 {
+    const t: i32 = this.serial(k)
+    if (t >= 12) {
+      return (t & 1) === 1 ? SQLITE_TEXT : SQLITE_BLOB
+    }
+    if (t === 7) {
+      return SQLITE_FLOAT
+    }
+    return t === 0 || t === 10 || t === 11 ? SQLITE_NULL : SQLITE_INTEGER
+  }
+
+  /**
+   * Where field `k`'s bytes start in `buf`: a text's or a blob's first byte,
+   * an integer's or a float's big-endian bytes.
+   *
+   * @param k The field, from 0.
+   * @returns The offset in `buf`, or 0 past the fields read.
+   */
+  start(k: i32): i32 {
+    if (k < 0 || k >= this.fields || k >= toI32(this.offs.length)) {
+      return 0
+    }
+    return this.offs[k]
+  }
+
+  /**
+   * How many bytes field `k` holds in `buf` from `start(k)`: a text's or a
+   * blob's length, which is what a program copies or compares.
+   *
+   * @param k The field, from 0.
+   * @returns The length for TEXT or BLOB, 0 for any other type.
+   */
+  size(k: i32): i32 {
+    const t: i32 = this.serial(k)
+    return t >= 12 ? (t - 12) >> 1 : 0
+  }
+
+  /**
+   * Field `k`'s integer: big-endian, two's complement, as SQLite stores it.
+   *
+   * @param k The field, from 0.
+   * @returns The value of an `SQLITE_INTEGER` field, 0 for any other type.
+   */
+  int(k: i32): i64 {
+    const t: i32 = this.serial(k)
+    if (t === 8 || t === 9) {
+      return t === 8 ? toI64(0) : toI64(1)
+    }
+    if (t < 1 || t > 6) {
+      return toI64(0)
+    }
+    return this.bigEndian(this.start(k), RECORD_SMALL_SIZES[t], true)
+  }
+
+  /**
+   * Field `k`'s number as a float: an `SQLITE_FLOAT`'s IEEE 754 value, an
+   * `SQLITE_INTEGER`'s value converted.
+   *
+   * @param k The field, from 0.
+   * @returns The value, or 0 for TEXT, BLOB and NULL.
+   */
+  float(k: i32): f64 {
+    if (this.serial(k) === 7) {
+      return bitsToF64(this.bigEndian(this.start(k), toI32(8), false))
+    }
+    return toF64(this.int(k))
+  }
+
+  /** The `n` bytes at `at` as a big-endian integer, its sign from the first when `signed`; 0 when they lie outside the record. */
+  private bigEndian(at: i32, n: i32, signed: boolean): i64 {
+    const b: u8[] = this.buf
+    if (
+      n < 1 ||
+      at < 0 ||
+      at >= toI32(b.length) ||
+      toI64(at) + toI64(n) > toI64(this.length) ||
+      at > toI32(b.length) - n
+    ) {
+      return toI64(0)
+    }
+    const first: i32 = toI32(b[at])
+    let v: i64 = signed && first >= 128 ? toI64(first - 256) : toI64(first)
+    // In u32, which cannot wrap: the window was checked to lie inside `buf`.
+    const stop: i32 = toI32(toU32(at) + toU32(n))
+    for (let i: i32 = at + 1; i >= 0 && i < stop && i < toI32(b.length); i += 1) {
+      v = (v << toI64(8)) | toI64(b[i])
+    }
+    return v
   }
 }

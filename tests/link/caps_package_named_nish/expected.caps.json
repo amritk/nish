@@ -254,7 +254,7 @@
                 { "kind": "oom", "at": "std/text.ts:563:5", "allowed": true },
                 { "kind": "overflow", "at": "std/text.ts:563:21", "proven": true },
                 { "kind": "overflow", "at": "std/text.ts:564:5", "proven": true },
-                { "kind": "slice", "at": "std/text.ts:566:10", "proven": false },
+                { "kind": "slice", "at": "std/text.ts:566:10", "proven": true },
                 { "kind": "oom", "at": "std/text.ts:566:10", "allowed": true }
               ]
             },

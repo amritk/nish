@@ -1,0 +1,7 @@
+{
+  "name": "atomic-index-proven",
+  "private": true,
+  "nish": {
+    "noPanic": ["use.ts"]
+  }
+}

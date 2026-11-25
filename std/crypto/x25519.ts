@@ -518,6 +518,8 @@ export const f25519Decode = (bytes: u8[]): i64[] => {
  */
 const f25519DecodeInto = (f: i64[], bytes: u8[]): void => {
   let acc: i64 = 0
+  // Never above 33. The masks are no-ops on such a count and on a width of 25
+  // or 26; they let the range prover bound every sum and difference.
   let bits: i64 = 0
   let limb: i32 = 0
   for (let i: i32 = 0; i < 32; i++) {
@@ -526,13 +528,13 @@ const f25519DecodeInto = (f: i64[], bytes: u8[]): void => {
       b = b & toI64(0x7f)
     }
     acc = acc | (b << bits)
-    bits = bits + toI64(8)
+    bits = (bits & toI64(0x3f)) + toI64(8)
     if (limb >= 0 && limb < 10) {
       const width: i64 = f25519Width(limb)
       if (bits >= width) {
         f[limb] = acc & f25519LimbMask(limb)
         acc = acc >> width
-        bits = bits - width
+        bits = (bits & toI64(0x3f)) - (width & toI64(0x1f))
         limb = limb + 1
       }
     }
@@ -582,15 +584,16 @@ const f25519EncodeInto = (out: u8[], f: i64[]): void => {
   h[9] = h[9] & f25519LimbMask(9)
 
   let acc: i64 = 0
+  // Below 34, as in `f25519DecodeInto`, whose masks these are.
   let bits: i64 = 0
   let at: i32 = 0
   for (let i: i32 = 0; i < 10; i++) {
     acc = acc | (h[i] << bits)
-    bits = bits + f25519Width(i)
+    bits = (bits & toI64(0x3f)) + (f25519Width(i) & toI64(0x1f))
     while (bits >= toI64(8) && at >= 0 && at < 32) {
       out[at] = toU8(acc & toI64(0xff))
       acc = acc >> toI64(8)
-      bits = bits - toI64(8)
+      bits = (bits & toI64(0x3f)) - toI64(8)
       at = at + 1
     }
   }

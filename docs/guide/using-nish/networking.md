@@ -50,8 +50,12 @@ its events, and answers how many, `0` when the timeout passed.
 
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do). The range of a
-`u8[]` that `netRead` and `netWrite` take is checked while the program runs,
-a check no proof removes yet; the servers built on `nish/net/prefork`, the
+`u8[]` that `netRead` and `netWrite` take is checked while the program runs
+unless the compiler can see the window is inside the buffer (`buf, 0,
+buf.length`, or an offset of 0 and a count tested with
+`n >= 0 && n <= buf.length`, or a window `buf, start, end - start` under
+`start >= 0 && start <= end && end <= buf.length`); the servers built on
+`nish/net/prefork`, the
 HTTP handlers and `nish/net/dns` call standard-library code that keeps
 panic sites until the standard library is made panic-free;
 and some examples index arrays or add numbers without a guard, which a test
@@ -312,6 +316,28 @@ A listener whose rings fail for want of descriptors or memory serves
 descriptors itself, and a later listener asks again.
 On macOS the flag is accepted and does nothing.
 
+To see what a ring server's rings are doing, start it with the environment
+variable `NISH_URING_STATS` set to anything but an empty string or `0`. The
+first ring listener reads it when it opens. Then `kill -USR1` the process and
+the loop's next `pollWait` prints one line a ring listener on stderr:
+
+```text
+uring-stats signal port=8080 sends=3000 pool_new=497 pool_held=0 pool_cached=68 live=3000 slots=3072 enters=9120 windows=410 window_waits=820
+```
+
+`sends` counts the sends the rings have made, `pool_new` the send buffers
+they have allocated, `pool_held` those queued on a connection now and
+`pool_cached` those kept for reuse; `live` is the open connections and
+`slots` the slots the rings hold. `enters` counts the
+`io_uring_enter` calls on the listener's rings, `windows` the
+`pollWaitBatch` calls that opened a batch window on it and `window_waits`
+the sleeps those windows took. Closing a ring listener prints its line
+once more, marked `close`. The handler, once installed, stays for the rest
+of the process; after the last ring listener closes, `SIGUSR1` prints
+nothing. Without the variable the runtime installs no handler and `SIGUSR1`
+ends the process, as it would anyway. `signalFd()` reports only `SIGINT`
+and `SIGTERM`, so it never takes `SIGUSR1` from the dump.
+
 <!-- nish:ok -->
 ```ts
 import { NET_LISTEN_RING, netClose, netRingState, tcpListenFlags } from "nish:net";
@@ -404,13 +430,15 @@ export const main = (): i32 => {
   sleeps to `timeoutMs` and answers `0`, as `pollWait` does.
 - `ready`'s length caps the batch. A `ready` of 8 answers at most 4 pairs
   whatever `minEvents` asks for.
-- `maxWaitMs` is what the batch costs in latency. The second wait is on the
-  ring alone, so any other descriptor in the loop, `signalFd()` included,
-  may be reported up to `maxWaitMs` late. On a loop whose only other
-  descriptor is `signalFd()` a signal ends the batch at once on Linux 5.11
-  or later, unless the ring is `--sandbox` restricted, the listener has
-  grown a second ring, or `signalFd()` was closed; then it too waits up to
-  `maxWaitMs`.
+- `maxWaitMs` is what the batch costs in latency. The second wait sleeps
+  in at most eight slices of `maxWaitMs / 8`, rounded up (one more for
+  each signal that interrupts a slice), and takes what
+  the ring finished after each, so the batch can end up to one slice after
+  `minEvents` became ready. It watches no other descriptor, so any other
+  descriptor in the loop, `signalFd()` included, may be reported up to
+  `maxWaitMs` late. On a loop whose only other descriptor is `signalFd()`
+  a signal ends the batch at once, unless `signalFd()` was closed; then it
+  too waits up to `maxWaitMs`.
 - With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
   on macOS, it is `pollWait`.
 - The runtime fills a batch from at most 64 events, so a `minEvents` above

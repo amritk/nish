@@ -44,6 +44,20 @@ export const stdModuleName = (specifier: string): string =>
 export const stdModulePath = (root: string, specifier: string): string =>
   normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`)
 
+/** The file name a module's wasm32 twin ends in, in place of `.ts` (WP89 S6). */
+const WASM_TWIN_EXTENSION: string = ".wasm32.ts"
+
+/**
+ * `std/gfx.ts` -> `std/gfx.wasm32.ts`: the twin a wasm build compiles in place
+ * of a library module, when the library ships one beside it. Applied to both
+ * the name and the path `stdModuleName` and `stdModulePath` answer, so the
+ * twin keeps the library's identity: `isStdModule` still holds of it, and its
+ * name is package-relative like its sibling's. A name that does not end in
+ * `.ts` is answered unchanged, which no library module is.
+ */
+export const wasmTwinOf = (file: string): string =>
+  file.endsWith(".ts") ? `${file.substring(0, file.length - 3)}${WASM_TWIN_EXTENSION}` : file
+
 /**
  * Whether a module named `name` at `path` is a standard-library module: the
  * pair the two functions above answer for one specifier, under the library

@@ -7,14 +7,13 @@ import p256PublicKeySecret from "nish/crypto/p256" -> function @nish.p256PublicK
 import p256SignSecret from "nish/crypto/p256" -> function @nish.p256Sign
 import p256SignSha256Secret from "nish/crypto/p256" -> function @nish.p256SignSha256
 function keyCopyOf(bytes: u8[]): u8[] -> @keyCopyOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)
 function p256PublicKeyPlain(priv: u8[]): u8[] | null -> @p256PublicKeyPlain [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKey
   calls: keyCopyOf nish.p256PublicKey nish.secret$arr.u8 nish.wipe$$Secret$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=keyCopyOf#0

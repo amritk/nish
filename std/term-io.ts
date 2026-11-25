@@ -245,10 +245,11 @@ const termIoOnlyAcks = (buf: u8[], n: i32): i32 => {
   if (n <= 0 || n % 4 !== 0) {
     return -1
   }
-  if (n > toI32(buf.length)) {
+  const len: i32 = toI32(buf.length)
+  if (n > len) {
     return -1
   }
-  for (let i: i32 = 0; i >= 0 && i + 3 < toI32(buf.length) && i < n; i = i + 4) {
+  for (let i: i32 = 0; i >= 0 && i < len - 3 && i < n; i = i + 4) {
     if (buf[i] !== 27 || buf[i + 1] !== 91 || buf[i + 2] !== 48 || buf[i + 3] !== 110) {
       return -1
     }
@@ -258,6 +259,14 @@ const termIoOnlyAcks = (buf: u8[], n: i32): i32 => {
 
 /** Parameter `i` of a reply, or -1 when it has fewer. */
 const termIoParam = (e: TermEvent, i: i32): i32 => (i < toI32(e.params.length) ? e.params[i] : -1)
+
+/**
+ * The slot of the acknowledgement ring after `at`: the next one, and 0 after the last.
+ *
+ * @param at A slot of the ring.
+ * @returns The slot after it.
+ */
+const termIoAckNext = (at: i32): i32 => (at >= 0 && at < TERM_IO_ACKS - 1 ? at + 1 : 0)
 
 /**
  * An open terminal: what it can do, the `Screen` and `Framebuffer` a program
@@ -502,7 +511,8 @@ export class Terminal {
    * the one known.
    */
   private drainAcks(): void {
-    let owed: i32 = this.rate.unacked() + this.rate.stale
+    // Each count is an i32, so their sum is taken in i64, where it fits.
+    let owed: i64 = toI64(this.rate.unacked()) + toI64(this.rate.stale)
     let rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
     rtt = rtt > this.caps.probeRttMs ? rtt : this.caps.probeRttMs
     let bound: f64 = 2.0 * rtt
@@ -515,14 +525,15 @@ export class Terminal {
       if (left <= 0 || !waitStdin(left)) {
         return
       }
-      const n: i32 = readStdin(this.readBuf, 0, TERM_IO_READ)
+      const buf: u8[] = this.readBuf
+      const n: i32 = readStdin(buf, 0, toI32(buf.length))
       if (n > 0) {
-        const only: i32 = this.decoder.waiting() ? -1 : termIoOnlyAcks(this.readBuf, n)
+        const only: i32 = this.decoder.waiting() ? -1 : termIoOnlyAcks(buf, n)
         if (only > 0) {
-          owed = owed - only
+          owed = owed - toI64(only)
         } else {
-          for (const e of this.decoder.feedEvents(this.readBuf, n, termIoNowMs())) {
-            if (termIoIsAck(e)) {
+          for (const e of this.decoder.feedEvents(buf, n, termIoNowMs())) {
+            if (termIoIsAck(e) && owed > 0) {
               owed = owed - 1
             }
           }
@@ -579,20 +590,40 @@ export class Terminal {
 
   /** Forget the send times of the frames the controller gave up on, oldest first, so the ring holds only frames it still waits for. */
   private dropLost(): void {
-    while (this.ackCount > this.rate.unacked()) {
-      this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
-      this.ackCount = this.ackCount - 1
+    const unacked: i32 = this.rate.unacked()
+    let head: i32 = this.ackHead
+    let count: i32 = this.ackCount
+    while (count > 0 && count > unacked) {
+      head = termIoAckNext(head)
+      count = count - 1
     }
+    this.ackHead = head
+    this.ackCount = count
   }
 
   /** Remember that a frame acknowledgement was asked for at `nowMs`. */
   private ackPush(nowMs: f64): void {
-    if (this.ackCount === TERM_IO_ACKS) {
-      this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
-      this.ackCount = this.ackCount - 1
+    let head: i32 = this.ackHead
+    let count: i32 = this.ackCount
+    if (count >= TERM_IO_ACKS) {
+      head = termIoAckNext(head)
+      count = TERM_IO_ACKS - 1
     }
-    this.ackSent[(this.ackHead + this.ackCount) % TERM_IO_ACKS] = nowMs
-    this.ackCount = this.ackCount + 1
+    // The ring keeps `0 <= head < TERM_IO_ACKS` and now holds fewer than
+    // `TERM_IO_ACKS`; the test states both where the slot is computed.
+    const sent: f64[] = this.ackSent
+    if (head >= 0 && count >= 0 && count < TERM_IO_ACKS) {
+      // The slot `count` past `head`, wrapped once; the sum is taken in i64, where it is exact.
+      const end: i64 = toI64(head) + toI64(count)
+      const wide: i64 = end < toI64(TERM_IO_ACKS) ? end : end - toI64(TERM_IO_ACKS)
+      const at: i32 = wide < toI64(0) || wide >= toI64(sent.length) ? -1 : toI32(wide)
+      if (at >= 0 && at < toI32(sent.length)) {
+        sent[at] = nowMs
+      }
+      count = count + 1
+    }
+    this.ackHead = head
+    this.ackCount = count
   }
 
   /**
@@ -603,11 +634,15 @@ export class Terminal {
   private acked(count: i32, nowMs: f64): void {
     for (let k: i32 = 0; k < count; k++) {
       this.dropLost()
-      if (this.rate.stale === 0 && this.ackCount > 0) {
-        this.keys.delivered(this.ackSent[this.ackHead])
-        this.lastRttMs = nowMs - this.ackSent[this.ackHead]
-        this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
-        this.ackCount = this.ackCount - 1
+      const head: i32 = this.ackHead
+      const pending: i32 = this.ackCount
+      const sent: f64[] = this.ackSent
+      if (this.rate.stale === 0 && pending > 0 && head >= 0 && head < toI32(sent.length)) {
+        const sentAtMs: f64 = sent[head]
+        this.keys.delivered(sentAtMs)
+        this.lastRttMs = nowMs - sentAtMs
+        this.ackHead = termIoAckNext(head)
+        this.ackCount = pending - 1
       }
       this.rate.ackReceived(nowMs)
     }
@@ -632,9 +667,14 @@ export class Terminal {
     if (termIoParam(e, 0) === 6) {
       h = termIoParam(e, 1)
       w = termIoParam(e, 2)
-    } else if (termIoParam(e, 0) === 4 && this.sizeCols > 0 && this.sizeRows > 0) {
-      h = (termIoParam(e, 1) / this.sizeRows) | 0
-      w = (termIoParam(e, 2) / this.sizeCols) | 0
+    } else if (termIoParam(e, 0) === 4) {
+      // Read into locals: the prover clears a divisor that is a local behind `d > 0`.
+      const cols: i32 = this.sizeCols
+      const rows: i32 = this.sizeRows
+      if (cols > 0 && rows > 0) {
+        h = (termIoParam(e, 1) / rows) | 0
+        w = (termIoParam(e, 2) / cols) | 0
+      }
     }
     if (termIoCellPx(w) > 0 && termIoCellPx(h) > 0) {
       this.cellWidthPx = termIoCellPx(w)
@@ -659,20 +699,23 @@ export class Terminal {
    * the terminal's and is taken here, a late cell size learned.
    */
   private take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void {
-    let replies: i32 = 0
+    let replied: boolean = false
     for (const e of events) {
       if (e.type === EVENT_REPLY) {
-        replies = replies + 1
+        replied = true
       }
     }
     let program: TermEvent[] = events
     let acks: i32 = 0
-    if (replies > 0) {
+    if (replied) {
       program = []
-      for (const e of events) {
+      const n: i32 = toI32(events.length)
+      for (let i: i32 = 0; i < n && i < toI32(events.length); i++) {
+        const e: TermEvent = events[i]
         if (e.type !== EVENT_REPLY) {
           program.push(e)
-        } else if (termIoIsAck(e)) {
+        } else if (termIoIsAck(e) && acks < n) {
+          // `acks` counts some of the `n` events, so it stays below `n`.
           acks = acks + 1
         } else {
           this.lateReply(e)
@@ -845,7 +888,9 @@ export class Terminal {
     const bytes: i32 = this.send(withPixels)
     const sentAtMs: f64 = toF64(this.sendStartNs) / 1000000.0
     this.dropLost()
-    this.rate.frameSent(bytes, this.workNs + toF64(this.sendStartNs - start), sentAtMs)
+    // The two clock readings are taken apart in f64, where no difference overflows;
+    // past 2^53 ns (about 104 days of uptime) each reading rounds, by a few ns.
+    this.rate.frameSent(bytes, this.workNs + (toF64(this.sendStartNs) - toF64(start)), sentAtMs)
     this.workNs = 0.0
     this.ackPush(sentAtMs)
   }
@@ -878,9 +923,12 @@ export const openTerminal = (options: TerminalOptions): Result<Terminal, string>
   }
   const env: TermEnv = termIoEnv(options.graphics)
   const size: i32[] = terminalSize()
-  const sized: boolean = toI32(size.length) >= 2 && size[0] > 0 && size[1] > 0
-  const cols: i32 = sized ? size[0] : TERM_IO_COLS
-  const rows: i32 = sized ? size[1] : TERM_IO_ROWS
+  let cols: i32 = TERM_IO_COLS
+  let rows: i32 = TERM_IO_ROWS
+  if (toI32(size.length) >= 2 && size[0] > 0 && size[1] > 0) {
+    cols = size[0]
+    rows = size[1]
+  }
   setTerminalRestore(resetStyle() + showCursor() + leaveAltScreen())
   write(enterAltScreen() + hideCursor() + probeQueries(env))
   const probe: TermProbe = new TermProbe(env, cols, rows, termIoNowMs())

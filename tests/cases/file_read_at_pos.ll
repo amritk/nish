@@ -93,141 +93,128 @@ if.end:
   %22 = load i32, i32* %fd.addr, align 4
   %23 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
   %24 = load i64, i64* %negative.addr, align 8
-  %25 = add i64 0, 4
-  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
-  %27 = load i64, i64* %26, align 8
-  %28 = icmp ule i64 0, %25
-  %29 = icmp ule i64 %25, %27
-  %30 = and i1 %28, %29
-  br i1 %30, label %net.ok, label %net.fail
+  %25 = call i32 @nish_file_read_at(i32 %22, %struct.nish_array* %23, i64 0, i64 4, i64 %24)
+  %26 = call i8* @nish_str_from_i32(i32 %25)
+  %27 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.2 to i8*), i8* %26)
+  call void @nish_print(i8* %27)
+  %28 = sext i32 1 to i64
+  %29 = shl i64 %28, 63
+  %30 = xor i64 %29, -1
+  %31 = sext i32 2 to i64
+  %32 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %30, i64 %31)
+  %33 = extractvalue { i64, i1 } %32, 0
+  %34 = extractvalue { i64, i1 } %32, 1
+  br i1 %34, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i64 %33, i64* %top.addr, align 8
+  %35 = load i32, i32* %fd.addr, align 4
+  %36 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %37 = load i64, i64* %top.addr, align 8
+  %38 = add i64 0, 4
+  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
+  %40 = load i64, i64* %39, align 8
+  %41 = icmp ule i64 0, %38
+  %42 = icmp ule i64 %38, %40
+  %43 = and i1 %41, %42
+  br i1 %43, label %net.ok, label %net.fail
 
 net.fail:
-  call void @nish_panic_slice(i64 0, i64 %25, i64 %27)
+  call void @nish_panic_slice(i64 0, i64 %38, i64 %40)
   unreachable
 
 net.ok:
-  %31 = call i32 @nish_file_read_at(i32 %22, %struct.nish_array* %23, i64 0, i64 4, i64 %24)
-  %32 = call i8* @nish_str_from_i32(i32 %31)
-  %33 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.2 to i8*), i8* %32)
-  call void @nish_print(i8* %33)
-  %34 = sext i32 1 to i64
-  %35 = shl i64 %34, 63
-  %36 = xor i64 %35, -1
-  %37 = sext i32 2 to i64
-  %38 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %36, i64 %37)
-  %39 = extractvalue { i64, i1 } %38, 0
-  %40 = extractvalue { i64, i1 } %38, 1
-  br i1 %40, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  store i64 %39, i64* %top.addr, align 8
-  %41 = load i32, i32* %fd.addr, align 4
-  %42 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %43 = load i64, i64* %top.addr, align 8
-  %44 = add i64 0, 4
-  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 0
-  %46 = load i64, i64* %45, align 8
-  %47 = icmp ule i64 0, %44
-  %48 = icmp ule i64 %44, %46
-  %49 = and i1 %47, %48
-  br i1 %49, label %net.ok.1, label %net.fail.1
+  %44 = call i32 @nish_file_read_at(i32 %35, %struct.nish_array* %36, i64 0, i64 4, i64 %37)
+  %45 = call i8* @nish_str_from_i32(i32 %44)
+  %46 = call i8* @nish_str_concat(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*), i8* %45)
+  call void @nish_print(i8* %46)
+  store i64 0, i64* %start.addr, align 8
+  %47 = load i32, i32* %fd.addr, align 4
+  %48 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %49 = load i64, i64* %start.addr, align 8
+  %50 = add i64 0, 4
+  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 0
+  %52 = load i64, i64* %51, align 8
+  %53 = icmp ule i64 0, %50
+  %54 = icmp ule i64 %50, %52
+  %55 = and i1 %53, %54
+  br i1 %55, label %net.ok.1, label %net.fail.1
 
 net.fail.1:
-  call void @nish_panic_slice(i64 0, i64 %44, i64 %46)
+  call void @nish_panic_slice(i64 0, i64 %50, i64 %52)
   unreachable
 
 net.ok.1:
-  %50 = call i32 @nish_file_read_at(i32 %41, %struct.nish_array* %42, i64 0, i64 4, i64 %43)
-  %51 = call i8* @nish_str_from_i32(i32 %50)
-  %52 = call i8* @nish_str_concat(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*), i8* %51)
-  call void @nish_print(i8* %52)
-  store i64 0, i64* %start.addr, align 8
-  %53 = load i32, i32* %fd.addr, align 4
-  %54 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %55 = load i64, i64* %start.addr, align 8
-  %56 = add i64 0, 4
-  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %54, i64 0, i32 0
-  %58 = load i64, i64* %57, align 8
-  %59 = icmp ule i64 0, %56
-  %60 = icmp ule i64 %56, %58
-  %61 = and i1 %59, %60
-  br i1 %61, label %net.ok.2, label %net.fail.2
+  %56 = call i32 @nish_file_read_at(i32 %47, %struct.nish_array* %48, i64 0, i64 4, i64 %49)
+  %57 = call i8* @nish_str_from_i32(i32 %56)
+  %58 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.4 to i8*), i8* %57)
+  call void @nish_print(i8* %58)
+  %59 = load i32, i32* %fd.addr, align 4
+  %60 = call i32 @nish_file_close(i32 %59)
+  %61 = call i8* @nish_str_from_i32(i32 %60)
+  %62 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*), i8* %61)
+  call void @nish_print(i8* %62)
+  %63 = load i32, i32* %fd.addr, align 4
+  %64 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %65 = load i64, i64* %start.addr, align 8
+  %66 = add i64 0, 4
+  %67 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %64, i64 0, i32 0
+  %68 = load i64, i64* %67, align 8
+  %69 = icmp ule i64 0, %66
+  %70 = icmp ule i64 %66, %68
+  %71 = and i1 %69, %70
+  br i1 %71, label %net.ok.2, label %net.fail.2
 
 net.fail.2:
-  call void @nish_panic_slice(i64 0, i64 %56, i64 %58)
+  call void @nish_panic_slice(i64 0, i64 %66, i64 %68)
   unreachable
 
 net.ok.2:
-  %62 = call i32 @nish_file_read_at(i32 %53, %struct.nish_array* %54, i64 0, i64 4, i64 %55)
-  %63 = call i8* @nish_str_from_i32(i32 %62)
-  %64 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.4 to i8*), i8* %63)
-  call void @nish_print(i8* %64)
-  %65 = load i32, i32* %fd.addr, align 4
-  %66 = call i32 @nish_file_close(i32 %65)
-  %67 = call i8* @nish_str_from_i32(i32 %66)
-  %68 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*), i8* %67)
-  call void @nish_print(i8* %68)
-  %69 = load i32, i32* %fd.addr, align 4
-  %70 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %71 = load i64, i64* %start.addr, align 8
-  %72 = add i64 0, 4
-  %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 0
-  %74 = load i64, i64* %73, align 8
-  %75 = icmp ule i64 0, %72
-  %76 = icmp ule i64 %72, %74
-  %77 = and i1 %75, %76
-  br i1 %77, label %net.ok.3, label %net.fail.3
+  %72 = call i32 @nish_file_read_at(i32 %63, %struct.nish_array* %64, i64 0, i64 4, i64 %65)
+  %73 = call i8* @nish_str_from_i32(i32 %72)
+  %74 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.6 to i8*), i8* %73)
+  call void @nish_print(i8* %74)
+  %75 = load i32, i32* %fd.addr, align 4
+  %76 = call i64 @nish_file_size(i32 %75)
+  %77 = call i8* @nish_str_from_i64(i64 %76)
+  %78 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.7 to i8*), i8* %77)
+  call void @nish_print(i8* %78)
+  %79 = load i32, i32* %fd.addr, align 4
+  %80 = call i32 @nish_file_close(i32 %79)
+  %81 = call i8* @nish_str_from_i32(i32 %80)
+  %82 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.8 to i8*), i8* %81)
+  call void @nish_print(i8* %82)
+  store i32 -1, i32* %bad.addr, align 4
+  %83 = load i32, i32* %bad.addr, align 4
+  %84 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %85 = load i64, i64* %start.addr, align 8
+  %86 = add i64 0, 4
+  %87 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %84, i64 0, i32 0
+  %88 = load i64, i64* %87, align 8
+  %89 = icmp ule i64 0, %86
+  %90 = icmp ule i64 %86, %88
+  %91 = and i1 %89, %90
+  br i1 %91, label %net.ok.3, label %net.fail.3
 
 net.fail.3:
-  call void @nish_panic_slice(i64 0, i64 %72, i64 %74)
+  call void @nish_panic_slice(i64 0, i64 %86, i64 %88)
   unreachable
 
 net.ok.3:
-  %78 = call i32 @nish_file_read_at(i32 %69, %struct.nish_array* %70, i64 0, i64 4, i64 %71)
-  %79 = call i8* @nish_str_from_i32(i32 %78)
-  %80 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.6 to i8*), i8* %79)
-  call void @nish_print(i8* %80)
-  %81 = load i32, i32* %fd.addr, align 4
-  %82 = call i64 @nish_file_size(i32 %81)
-  %83 = call i8* @nish_str_from_i64(i64 %82)
-  %84 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.7 to i8*), i8* %83)
-  call void @nish_print(i8* %84)
-  %85 = load i32, i32* %fd.addr, align 4
-  %86 = call i32 @nish_file_close(i32 %85)
-  %87 = call i8* @nish_str_from_i32(i32 %86)
-  %88 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.8 to i8*), i8* %87)
-  call void @nish_print(i8* %88)
-  store i32 -1, i32* %bad.addr, align 4
-  %89 = load i32, i32* %bad.addr, align 4
-  %90 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %91 = load i64, i64* %start.addr, align 8
-  %92 = add i64 0, 4
-  %93 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %90, i64 0, i32 0
-  %94 = load i64, i64* %93, align 8
-  %95 = icmp ule i64 0, %92
-  %96 = icmp ule i64 %92, %94
-  %97 = and i1 %95, %96
-  br i1 %97, label %net.ok.4, label %net.fail.4
-
-net.fail.4:
-  call void @nish_panic_slice(i64 0, i64 %92, i64 %94)
-  unreachable
-
-net.ok.4:
-  %98 = call i32 @nish_file_read_at(i32 %89, %struct.nish_array* %90, i64 0, i64 4, i64 %91)
-  %99 = call i8* @nish_str_from_i32(i32 %98)
-  %100 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.9 to i8*), i8* %99)
-  call void @nish_print(i8* %100)
-  %101 = load i32, i32* %bad.addr, align 4
-  %102 = call i64 @nish_file_size(i32 %101)
-  %103 = call i8* @nish_str_from_i64(i64 %102)
-  %104 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.10 to i8*), i8* %103)
-  call void @nish_print(i8* %104)
-  %105 = load i32, i32* %bad.addr, align 4
-  %106 = call i32 @nish_file_close(i32 %105)
-  %107 = call i8* @nish_str_from_i32(i32 %106)
-  %108 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.11 to i8*), i8* %107)
-  call void @nish_print(i8* %108)
+  %92 = call i32 @nish_file_read_at(i32 %83, %struct.nish_array* %84, i64 0, i64 4, i64 %85)
+  %93 = call i8* @nish_str_from_i32(i32 %92)
+  %94 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.9 to i8*), i8* %93)
+  call void @nish_print(i8* %94)
+  %95 = load i32, i32* %bad.addr, align 4
+  %96 = call i64 @nish_file_size(i32 %95)
+  %97 = call i8* @nish_str_from_i64(i64 %96)
+  %98 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.10 to i8*), i8* %97)
+  call void @nish_print(i8* %98)
+  %99 = load i32, i32* %bad.addr, align 4
+  %100 = call i32 @nish_file_close(i32 %99)
+  %101 = call i8* @nish_str_from_i32(i32 %100)
+  %102 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.11 to i8*), i8* %101)
+  call void @nish_print(i8* %102)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

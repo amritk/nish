@@ -1,2 +1,2 @@
 error: `slice` may panic here
-`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: make the call from a module `noPanic` does not list, and build with `--allow-panics`
+`String.fromBytes` panics when `[0, 2)` is outside `bytes`, and nothing proves it in range here: guard the call — `if (2 <= bytes.length)` proves it

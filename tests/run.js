@@ -6691,7 +6691,52 @@ if (dealtHere("performance")) {
 // sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
 // the standard library keeps"); the explicit sites of every other function
 // are the ones still to fix, and both counts are pinned.
+//
+// Its `residual` list names, by module, function and kind, the sites of other
+// kinds that stay, with the reason and the docs/security record that gives it
+// (WP83 S5's cipher sites: an `array-length` the prover cannot bound, a
+// constant-time copy's first read, where an early return would be a branch).
+// In a module with an entry the counted sites must equal the entries, function
+// by function and kind by kind, so a site that moves to another function, or
+// one fixed without its entry going, fails; each record must exist and name
+// its function.
 const UPDATE_STD_PANICS = process.argv.includes("--update-std-panics")
+/** The baseline `--update-std-panics` writes: the new counts, with `kept` and `residual` as they were. */
+const rewrittenStdPanics = (baseline, total, explicit, modules) => ({
+  ...baseline,
+  total,
+  explicit,
+  modules,
+  kept: baseline.kept,
+  residual: baseline.residual ?? [],
+})
+/**
+ * The differences between the counted non-`panic` sites and the `residual`
+ * entries, in each module that has an entry: one line per module, function
+ * and kind whose counts differ.
+ */
+const residualMismatches = (sites, residual) => {
+  const key = (module, fn, kind) => `${module} ${fn} ${kind}`
+  const owned = new Set(residual.map((r) => r.module))
+  const got = new Map()
+  for (const site of sites) {
+    if (site.kind !== "panic" && owned.has(site.module)) {
+      const k = key(site.module, site.function, site.kind)
+      got.set(k, (got.get(k) ?? 0) + 1)
+    }
+  }
+  const want = new Map()
+  for (const r of residual) {
+    for (const [kind, n] of Object.entries(r.sites)) {
+      const k = key(r.module, r.function, kind)
+      want.set(k, (want.get(k) ?? 0) + n)
+    }
+  }
+  return [...new Set([...got.keys(), ...want.keys()])]
+    .sort()
+    .filter((k) => (got.get(k) ?? 0) !== (want.get(k) ?? 0))
+    .map((k) => `${k}: ${got.get(k) ?? 0} counted, ${want.get(k) ?? 0} listed as residual`)
+}
 if (dealtHere("stdPanics")) {
   const baselineName = "tests/std-panics.json"
   const baselineFile = path.join(root, baselineName)
@@ -6756,7 +6801,7 @@ if (dealtHere("stdPanics")) {
     for (const module of Object.keys(counts).sort()) {
       modulesOut[module] = sorted(counts[module])
     }
-    const next = { ...baseline, total: sites.size, explicit, modules: modulesOut, kept: baseline.kept }
+    const next = rewrittenStdPanics(baseline, sites.size, explicit, modulesOut)
     fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`)
     console.log(`std-panics: rewrote ${baselineName} (${sites.size} sites)`)
     Object.assign(baseline, next)
@@ -6820,6 +6865,67 @@ if (dealtHere("stdPanics")) {
       ...keptGone.map((k) => `${k.module} ${k.function}: no explicit panic left; take it off the kept list`),
       ...baseline.kept.filter((k) => !k.reason).map((k) => `${k.module} ${k.function}: no reason`),
     ].join("\n")
+  )
+  const residual = baseline.residual ?? []
+  const residualModules = [...new Set(residual.map((r) => r.module))]
+  const mismatches = residualMismatches(sites.values(), residual)
+  check(
+    `std-panics: in every module with a residual entry, the counted sites are its entries, by function and kind`,
+    unreported.length === 0 && residual.length > 0 && mismatches.length === 0,
+    `${residual.length} entries in ${residualModules.length} modules\n${mismatches.join("\n")}\nA site fixed takes its entry off; a site left gets one, with its reason and record.`
+  )
+  // The comparison itself fails both ways: on a site its entries do not list
+  // (one fabricated extra site in the first entry's function), and on an entry
+  // that lists one site more than the code has (the first entry's first kind
+  // counted one too high).
+  const extra = residual.length > 0 ? { module: residual[0].module, function: residual[0].function, kind: "index" } : null
+  check(
+    `std-panics: the residual comparison fails on one site its entries do not list`,
+    extra !== null && residualMismatches([...sites.values(), extra], residual).length === 1,
+    "residualMismatches did not report a fabricated extra site"
+  )
+  const [overKind, overCount] = Object.entries(residual[0]?.sites ?? {})[0] ?? []
+  const overListed =
+    overKind === undefined
+      ? null
+      : [{ ...residual[0], sites: { ...residual[0].sites, [overKind]: overCount + 1 } }, ...residual.slice(1)]
+  check(
+    `std-panics: the residual comparison fails on an entry that lists one site more than the code has`,
+    overListed !== null && residualMismatches(sites.values(), overListed).length === 1,
+    "residualMismatches did not report a fabricated over-listed entry"
+  )
+  // Each record read once, however many entries cite it; null when missing.
+  const recordText = new Map()
+  const readRecord = (record) => {
+    if (!recordText.has(record)) {
+      const file = path.join(root, record)
+      recordText.set(record, fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+    }
+    return recordText.get(record)
+  }
+  // A record names a residual function only as a backticked name in a table
+  // row, so a short name such as `chacha20` that appears elsewhere in the
+  // file does not count once its row is gone.
+  const namesInRow = (text, fn) =>
+    text !== null && text.split("\n").some((line) => line.startsWith("|") && line.includes(`\`${fn}\``))
+  const badRecords = residual.filter(
+    (r) =>
+      typeof r.reason !== "string" ||
+      r.reason.length === 0 ||
+      !r.record?.startsWith("docs/security/") ||
+      !namesInRow(readRecord(r.record), r.function)
+  )
+  check(
+    `std-panics: every residual entry says why, and its docs/security record exists and names its function`,
+    residual.length > 0 && badRecords.length === 0,
+    badRecords.map((r) => `${r.module} ${r.function}: no reason, or ${r.record} is missing or does not name it`).join("\n")
+  )
+  const rewritten = rewrittenStdPanics(baseline, sites.size, explicit, baseline.modules)
+  check(
+    `std-panics: --update-std-panics keeps the kept and residual lists`,
+    JSON.stringify(rewritten.residual) === JSON.stringify(residual) &&
+      JSON.stringify(rewritten.kept) === JSON.stringify(baseline.kept),
+    "the rewrite drops or changes kept or residual"
   )
   check(
     `std-panics: ${baselineName} counts ${explicit.kept} kept explicit panics and ${explicit.toFix} still to fix`,
@@ -12173,6 +12279,46 @@ int main(void) {
       )
     }
 
+    // The adapter's own record decoding (row_of, field_value, the index
+    // rowid's fast path and cursor_record) against corrupt records, under
+    // AddressSanitizer: tests/link/std_sqlite_cursor_record/corrupt-record.c
+    // says what it corrupts. A toolchain without the sanitizer runtimes is a
+    // named skip, as the runtime's sanitizer run is.
+    {
+      const asan = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
+      const probe = sanitizerProbe(asan)
+      if (probe?.skip) {
+        skip(`skipped: sqlite-link: the corrupt-record walk: ${probe.skip}`)
+      } else {
+        const exe = path.join(sqDir, "corrupt-record")
+        const built = spawnSync(
+          "clang",
+          [
+            "-O1",
+            "-g",
+            "-w",
+            ...asan,
+            `-I${path.join(root, "runtime", "sqlite")}`,
+            "-DSQLITE_OMIT_SHARED_CACHE",
+            "-DSQLITE_THREADSAFE=1",
+            path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+            path.join(root, "tests", "link", "std_sqlite_cursor_record", "corrupt-record.c"),
+            "-o",
+            exe,
+            "-lpthread",
+            "-lm",
+          ],
+          { encoding: "utf8" }
+        )
+        const ran = built.status === 0 ? spawnSync(exe, [path.join(sqDir, "corrupt.db")], { encoding: "utf8" }) : null
+        check(
+          "sqlite-link: every cursor read of a corrupt record stays inside it (AddressSanitizer)",
+          probe === null && ran !== null && ran.status === 0 && Number(ran.stdout) > 800,
+          (probe?.error ?? "") + built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stdout} ${ran.stderr.slice(0, 4000)}` : "")
+        )
+      }
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
@@ -12692,6 +12838,19 @@ int main(void) {
         rowDebugRun.status === 0 &&
         rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
       rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
+    )
+    // Cursor.record, RowRecord and reopenCursor under SQLite's asserts: the
+    // record copy reads the payload as SQLite's own accessors do, overflow
+    // pages included, and every reopen closes the cursor it replaces.
+    const recDir = path.join("tests", "link", "std_sqlite_cursor_record")
+    const recDebug = link(path.join(recDir, "main.ts"), "record-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const recDebugRun = recDebug.status === 0 ? runOut("record-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_record passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      recDebugRun !== null &&
+        recDebugRun.status === 0 &&
+        recDebugRun.stdout === fs.readFileSync(path.join(root, recDir, "expected.out"), "utf8"),
+      recDebug.stderr + (recDebugRun ? recDebugRun.stdout.slice(-2000) + recDebugRun.stderr : "")
     )
     // A readRow walk takes no more of SQLite's heap once warm. This watches
     // sqlite3_memory_used and its highwater only: SQLite's allocator, which
@@ -14097,6 +14256,29 @@ if (dealtHere("cryptoChecks")) {
         return !guard.test(body)
       }).map(([fn]) => fn)
       check(name, c.status === 0 && missing.length === 0, c.status === 0 ? `no guard in: ${missing.join(", ")}` : c.stderr)
+    }
+  }
+
+  // WP83 S5: `chacha20Poly1305Seal` refuses a plaintext whose sealed form, sixteen bytes
+  // longer, would not be an array length. Under `--number-mode f64` a length of 2^31 or
+  // more saturates to 2^31 - 1 in `toI32`, which the guard refuses, so the sum it bounds
+  // (`len + POLY1305_TAG_SIZE`) never wraps. A 2 GiB test is impractical, so this reads
+  // the f64 IR, as the ed25519 check above does: Seal must compare the length against
+  // 2^31 - 17 and answer `null`. Deleting the guard fails it.
+  {
+    const name = "crypto: chacha20Poly1305Seal answers null on a plaintext longer than 2^31 - 17 bytes (--number-mode f64)"
+    if (!only || [name, "crypto_chacha20poly1305"].some((selector) => selector.includes(only))) {
+      const dir = path.join(buildDir, "chacha20poly1305-length-guard")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnNish(
+        [path.join(root, "tests/link/crypto_chacha20poly1305_f64/main.ts"), "--number-mode", "f64", "--allow-panics", "-o", `${dir}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      const ir = c.status === 0 ? fs.readFileSync(path.join(dir, "chacha20poly1305.ll"), "utf8") : ""
+      const body = (ir.match(/^define [^\n]*@"?nish\.chacha20Poly1305Seal"?\([\s\S]*?\n\}/m) ?? [""])[0]
+      const guard = /fptosi\.sat\.i32\.f64[^\n]*\n[^\n]*\n\s+(%\d+) = load i32, i32\* %len\.addr[^\n]*\n\s+(%\d+) = icmp sgt i32 \1, 2147483631\n\s+br i1 \2, label %(if\.then[\w.]*), label[^\n]*\n\n\3:\n\s+ret %struct\.nish_array\* null\n/
+      check(name, c.status === 0 && guard.test(body), c.status === 0 ? `no guard in:\n${body.slice(0, 1500)}` : c.stderr)
     }
   }
 
@@ -19003,7 +19185,7 @@ if (dealtHere("runtimeChecks")) {
       )
       check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
-        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
+        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left, and a provided-buffer ring refused for zero reserved words (Ubuntu 6.8.0-136+) is retried with resv[0] set"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
@@ -19013,6 +19195,7 @@ if (dealtHere("runtimeChecks")) {
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
+        ["taskrun1", "the same burst with taskrun_worth 1, entering again while any entry reaps a completion, is taken by one wait too"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
@@ -19020,7 +19203,8 @@ if (dealtHere("runtimeChecks")) {
         ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
         ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
         ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
-        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most three pool buffers (NURING-43)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most five pool buffers (NURING-43)"],
+        ["bigsend", "steady 64 KiB responses leave as one SEND per chained pool buffer and allocate nothing after a warm-up, a shutdown's included (NURING-51)"],
         ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
@@ -21778,8 +21962,8 @@ if (dealtHere("simd")) {
   // to a branch on `nish_chacha20_hw`: runtime-chacha20.c's `nish_chacha20_xor` (eight
   // blocks at once on AVX2, four on NEON) on one arm, the Nish loop on the other, and the
   // Nish loop again when the kernel's guard refuses the call (under four blocks, an
-  // offset or window it cannot vouch for), so a bad window panics with the Nish message
-  // on either path (src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
+  // offset or window it cannot vouch for), so a bad window takes the Nish loop on either
+  // path, which stops at the window's end (WP83 S5; src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
   // Node's ChaCha20-Poly1305 and raw ChaCha20 over a seeded corpus whose lengths sit at
   // each of the kernel's block boundaries. It is linked with the kernel wrapped
   // (`-Wl,--wrap`) by a counter that reports its calls on exit, then run with
@@ -35571,7 +35755,9 @@ export const main = (): number => {
       return 1
     }
     const day: i64 = 86400000
-    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
+    const early: ReleaseCache = new ReleaseCache()
+    early.checkedMs = -10
+    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)} \${releaseCacheFresh(early, 5, day)}\`)
     console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
     console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
     const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
@@ -35609,7 +35795,7 @@ export const main = (): number => {
           )
           check(
             "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
-            cacheLines[1] === "true true false false",
+            cacheLines[1] === "true true false false false",
             cacheLines[1],
           )
           check(
@@ -36280,6 +36466,130 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
+    // The stats dump (runtime-net.c, NISH_URING_STATS): `echo.ts` again,
+    // driven by a client written here, which reads the server's stderr. Once
+    // all 3,000 connections have echoed it sends SIGUSR1 and one more byte,
+    // so a loop asleep in its wait pumps again, and ends the connections once
+    // the `signal` line is out; closing the listener prints `close`. The
+    // figures pin the struct runtime-net.c declares against runtime-uring.c's:
+    // a field out of place reads another counter. The twin runs without the
+    // knob and sends the same SIGUSR1, which must end the server by its
+    // default action, with nothing on stderr: no handler was installed.
+    if (room >= 1024) {
+      const b = build("net_ring_beyond_limit", "echo.ts")
+      const stats = path.join(dir, "stats.mjs")
+      fs.writeFileSync(
+        stats,
+        `import { spawn } from "node:child_process"
+import net from "node:net"
+const [exe, knob] = process.argv.slice(2)
+const env = { ...process.env }
+delete env.NISH_URING_STATS
+if (knob) env.NISH_URING_STATS = knob
+const server = spawn("bash", ["-c", 'ulimit -n 1024 && exec "$0"', exe], { stdio: ["ignore", "pipe", "pipe"], env })
+let out = "", err = "", echoed = 0, asked = false
+const sockets = []
+const finish = (why) => {
+  process.stdout.write(JSON.stringify({ why, out, err }))
+  process.exit(0)
+}
+const timer = setTimeout(() => {
+  server.kill("SIGKILL")
+  finish("timed out")
+}, 120000)
+server.stderr.setEncoding("utf8")
+server.stderr.on("data", (d) => {
+  err += d
+  if (asked && /^uring-stats signal /m.test(err)) {
+    asked = false
+    for (const s of sockets) s.end()
+  }
+})
+server.stdout.setEncoding("utf8")
+server.stdout.on("data", (d) => {
+  out += d
+  const m = sockets.length > 0 ? null : /^port (\\d+)\\n/.exec(out)
+  if (m === null) return
+  for (let k = 0; k < 3000; k++) {
+    const s = net.connect({ host: "127.0.0.1", port: Number(m[1]) })
+    sockets.push(s)
+    let got = 0
+    s.on("error", () => {})
+    s.on("connect", () => s.write("ping\\n"))
+    s.on("data", (x) => {
+      got += x.length
+      if (got !== 5 || ++echoed !== 3000) return
+      if (!knob) {
+        server.kill("SIGUSR1")
+        return
+      }
+      asked = true
+      server.kill("SIGUSR1")
+      sockets[0].write("x")
+    })
+  }
+})
+server.on("exit", (code, sig) => {
+  clearTimeout(timer)
+  finish(sig === null ? \`exit \${code}\` : \`signal \${sig}\`)
+})
+`
+      )
+      const drive = (knob) => {
+        if (b.exe === null) return null
+        const r = spawnSync(process.execPath, [stats, b.exe, knob], { encoding: "utf8", timeout: 180000 })
+        try {
+          return JSON.parse(r.stdout)
+        } catch {
+          return { why: `the driver failed: ${shown(r)}`, out: "", err: "" }
+        }
+      }
+      const on = drive("1")
+      if (on !== null && on.why === "exit 2" && on.out.includes("rings refused: ")) {
+        skip("net_ring: NISH_URING_STATS: this kernel refuses io_uring")
+      } else {
+        const line = (why) => {
+          const m = new RegExp(
+            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+) enters=(\\d+) windows=(\\d+) window_waits=(\\d+)$`,
+            "m"
+          ).exec(on?.err ?? "")
+          return m === null ? null : m.slice(1).map(Number)
+        }
+        const sig = line("signal")
+        const end = line("close")
+        // [sends, pool_new, pool_held, pool_cached, live, slots, enters, windows, window_waits]
+        check(
+          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots, slots, enters and batch windows on SIGUSR1 and at the listener's close",
+          on !== null &&
+            on.why === "exit 0" &&
+            sig !== null &&
+            end !== null &&
+            sig[0] >= 3000 &&
+            sig[1] >= 1 &&
+            sig[4] === 3000 &&
+            sig[5] >= 3000 &&
+            end[0] >= sig[0] &&
+            end[2] === 0 &&
+            end[3] >= 1 &&
+            end[3] <= end[1] &&
+            end[4] === 0 &&
+            end[5] === sig[5] &&
+            sig[6] >= 1 &&
+            end[6] >= sig[6] &&
+            end[7] >= sig[7] &&
+            end[8] >= sig[8],
+          on === null ? `does not compile and link\n${shown(b.c)}` : `${on.why}\nstdout: ${on.out}\nstderr: ${on.err}`
+        )
+        const off = drive("")
+        check(
+          "net_ring: without NISH_URING_STATS a ring server installs no SIGUSR1 handler: the signal ends it and it prints no ring stats",
+          off !== null && off.why === "signal SIGUSR1" && off.err === "",
+          off === null ? `does not compile and link\n${shown(b.c)}` : `${off.why}\nstdout: ${off.out}\nstderr: ${off.err}`
+        )
+      }
+    } else {
+      skip(`net_ring: NISH_URING_STATS: the hard descriptor limit here is ${hard.stdout.trim()}, under 1,024`)
+    }
     // NURING-38: a slot that read its request to -11 holds no receive queue.
     // Under a limit of 4,096 the 3,000 slots share one ring, whose 2 MiB of
     // provided buffers and the slots' table entries come to about 800 bytes
@@ -36521,6 +36831,61 @@ if (!only || "net_ring".includes(only)) {
           r === null ? `does not build\n${shown(bb.c)}` : `signal ${r.signal}\n${shown(r)}`
         )
       }
+    }
+    // `batch.ts trickle`: 16 bytes arrive 10 ms apart into one wait for 16
+    // with a maxWaitMs of 400. Its two `signal` stats lines, before and after
+    // the wait, bound what the window did: it sleeps in at most eight slices
+    // and pumps once after each, so it waits and pumps at most 8 times, and
+    // the stretch from before the first byte to after the reads enters the
+    // ring fewer than 50 times: 4 waits and 39 enters in each of 10 runs. The
+    // window it replaced, which slept on the ring for the rest of `min`, woke
+    // once per byte: 16 waits and 62 enters in each of 10 runs.
+    const tk = bb.exe === null ? null : spawnSync(bb.exe, ["trickle"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const tkName = "net_ring: a pollWaitBatch window that bytes trickle into waits and pumps at most 8 times and enters the ring fewer than 50 times"
+    if (tk !== null && tk.status === 2) {
+      skip(`${tkName}: the kernel refused rings`)
+    } else {
+      const lines = [...(tk?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* enters=(\d+) windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        tkName,
+        tk !== null &&
+          tk.status === 0 &&
+          tk.stdout.includes("trickle: one wait for 16 took 16 bytes") &&
+          a !== null &&
+          b[1] - a[1] === 1 &&
+          b[2] - a[2] >= 1 &&
+          b[2] - a[2] <= 8 &&
+          b[0] - a[0] < 50,
+        tk === null ? `does not build\n${shown(bb.c)}` : `signal ${tk.signal}\n${shown(tk)}`
+      )
+    }
+    // `batch.ts unfilled`: one byte into a wait for 16 with a maxWaitMs of
+    // 400, so the window is never filled and sleeps its 400 ms out in slices
+    // of 50: it must wait 6 to 8 times. A window of one 400 ms sleep waits
+    // once and one of 16 slices waits 16 times; both fail.
+    const uf = bb.exe === null ? null : spawnSync(bb.exe, ["unfilled"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const ufName = "net_ring: a pollWaitBatch window that is never filled sleeps its maxWaitMs out in 6 to 8 slices"
+    if (uf !== null && uf.status === 2) {
+      skip(`${ufName}: the kernel refused rings`)
+    } else {
+      const lines = [...(uf?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        ufName,
+        uf !== null &&
+          uf.status === 0 &&
+          uf.stdout.includes("unfilled: one wait for 16 took 1 byte and slept out its 400 ms") &&
+          a !== null &&
+          b[0] - a[0] === 1 &&
+          b[1] - a[1] >= 6 &&
+          b[1] - a[1] <= 8,
+        uf === null ? `does not build\n${shown(bb.c)}` : `signal ${uf.signal}\n${shown(uf)}`
+      )
     }
   }
 }
@@ -38803,8 +39168,8 @@ if (!only || "host-import".includes(only)) {
       ],
       [
         "examples/arrays.ts",
-        "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
+        "7dc834476d88c90760e9de579ad9ae7d2ede58e3e709a0614bd68f7d6b17c89d",
+        "7e3db328ba5975f0ad3a14cd62f4c22660ce254dcfb697ba46a646f6a8921293",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -47003,6 +47368,71 @@ if (!only || "json_f64_seam".includes(only)) {
       rootIr.includes("call i32 @jsonPutF64Walk(") &&
       !rootIr.includes("nish_json_put_f64"),
     asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
+}
+
+// The string seam: a native `jsonPutString` copies and escapes through
+// `nish_json_put_string` (runtime/runtime-bytes.c), sixteen bytes a block,
+// where the Nish body, `jsonPutStringWalk` in std/json.ts, goes a byte at a
+// time. `tests/link/std_json_writer/put-string.ts` compares it with
+// `JsonWriter.stringBytes` on every byte value at every offset of strings up
+// to 40 bytes and on 2,000 pseudo-random strings, each also into a
+// destination one byte short; the native build and the Node prelude must
+// print `put-string.out`, and std/json's IR must make the call.
+if (!only || "json_string_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "put-string.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "put-string.ts"), [])
+  check(
+    "json_string_seam: put-string.ts under the Node prelude runs jsonPutStringWalk and prints put-string.out",
+    node.status === 0 && node.stdout === want,
+    `--- put-string.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_string_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnNish([path.join(dir, "put-string.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const put = ir.match(/^define [^\n]*@nish\.jsonPutString\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_string_seam: std/json's jsonPutString calls nish_json_put_string and not its walk",
+    built.status === 0 &&
+      put.includes("call i32 @nish_json_put_string(i8* ") &&
+      !put.includes("jsonPutStringWalk") &&
+      ir.includes(
+        "declare i32 @nish_json_put_string(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, i8* noundef nocapture readonly, i64 noundef, i64 noundef)"
+      ),
+    built.status === 0 ? put || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_string_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_string_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_string_seam: put-string.ts built natively writes through the kernel and prints put-string.out",
+      native.status === 0 && native.stdout === want,
+      `--- put-string.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_string_seam: no clang, so put-string.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_string_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnNish(["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_string_seam: std/json.ts compiled as a root is an ordinary module, so jsonPutString calls its walk and not the kernel",
+    asRoot.status === 0 && rootIr.includes("call i32 @jsonPutStringWalk(") && !rootIr.includes("nish_json_put_string"),
+    asRoot.status === 0 ? rootIr.slice(0, 2000) : asRoot.stderr
   )
 }
 

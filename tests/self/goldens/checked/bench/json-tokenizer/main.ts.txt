@@ -2527,8 +2527,7 @@ import JsonLimits from "nish/json-tokenizer" -> struct JsonLimits
 import JsonTokenizer from "nish/json-tokenizer" -> struct JsonTokenizer
 const BODY: string = "{\"id\":1234567,\"user\":{\"name\":\"Ada Lovelace\",\"email\":\"ada@example.com\",\"verified\":true},\"items\":[{\"sku\":\"A-100\",\"qty\":2,\"price\":19.99},{\"sku\":\"B-205\",\"qty\":1,\"price\":5.5}],\"note\":\"caf\\u00e9 \\ud83d\\ude00 \\\"quoted\\\"\",\"coupon\":null,\"total\":45.48}"
 function benchBytes(s: string): u8[] -> @benchBytes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 out: u8[] (const)
@@ -2553,7 +2552,7 @@ function benchOne(tok: JsonTokenizer, body: u8[], out: u8[]): i64 -> @benchOne
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: benchBytes benchOne llvm.fptosi.sat.i32.f64 nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
+  calls: benchBytes benchOne llvm.fptosi.sat.i32.f64 nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
   stackSites=2 stackLocals=1
   local -11:9 rounds: i32 (const)
   local -10:9 body: u8[] (const)

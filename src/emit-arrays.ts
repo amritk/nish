@@ -56,7 +56,7 @@ import { emitSliceCheck, emitStringWalk, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
-import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
+import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL, JSON_PUT_STRING_KERNEL } from "./kernels"
 import { Node, NodeKind, bindsHiddenReceiver } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
 import {
@@ -608,7 +608,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
       }
     }
   } else if (rhs.kind === NodeKind.New) {
-    len = emitNewArrayLength(emitter, rhs.children[2].children[0], size)
+    len = emitNewArrayLength(emitter, rhs, size)
     const bytes = size === 1 ? len : emitter.fn.emitValue(`mul i64 ${len}, ${size}`)
     data = emitData(emitter, rhs, elem, -1, bytes)
     emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
@@ -1340,6 +1340,11 @@ export const newArrayLengthChecked = (
  * it is exact up to there. A block of more than 2^62 bytes is refused too,
  * so `n * size` cannot wrap and the allocator's rounding cannot overflow:
  * anything that size goes to `nish_arena_grow`, which fails it.
+ *
+ * `src/bounds.ts` skips this check for a length it proves a non-negative
+ * `i32`, which assumes 2^31 - 1 elements always fit under the limit: true
+ * while an element is at most 2^31 bytes (2^62 / 2^31 = 2^31), as every
+ * element type is.
  */
 const newArrayLimit = (emitter: Emitter, size: i32): i64 => {
   const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(I32_MAX) : toI64(1) << toI64(53)
@@ -1358,11 +1363,19 @@ const emitLengthCheck = (emitter: Emitter, ok: string): void => {
   fn.placeBlock(okBlock)
 }
 
-/** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
-const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
+/**
+ * `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked`
+ * says it must be and `src/bounds.ts` did not prove the `i32` non-negative
+ * (`judgeArrayLength`), the proof read off the `new` itself.
+ */
+const emitNewArrayLength = (emitter: Emitter, expr: Node, size: i32): string => {
+  const length = expr.children[2].children[0]
   const type = emitter.typeOf(length)
   const constant = emitter.program.nodeConstants[unwrapParens(length).id]
-  if (!newArrayLengthChecked(length, type, constant, emitter.opts.numberMode, emitter.table)) {
+  if (
+    !newArrayLengthChecked(length, type, constant, emitter.opts.numberMode, emitter.table) ||
+    emitter.program.nodeProvenIndex[expr.id]
+  ) {
     return emitIndex(emitter, length)
   }
   const fn = emitter.fn
@@ -1395,7 +1408,7 @@ const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string =
 export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.table.refOf(emitter.typeOf(expr))
   const size = elementSize(emitter, elem)
-  const n = emitNewArrayLength(emitter, expr.children[2].children[0], size)
+  const n = emitNewArrayLength(emitter, expr, size)
   const arr = emitHeader(emitter, n, expr)
   const bytes = size === 1 ? n : emitter.fn.emitValue(`mul i64 ${n}, ${size}`)
   // The slot's type spells the length out, so it has to come from the literal
@@ -2471,8 +2484,11 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const src = emitter.emitExpression(args[0])
   const at = args.length > 1 ? emitOffset(emitter, args[1]) : "0"
   const count = loadLength(emitter, src)
-  const end = fn.emitValue(`add i64 ${at}, ${count}`)
-  emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
+  // `src/bounds.ts` proved the range on the call (`judgeRangeCheck`).
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    const end = fn.emitValue(`add i64 ${at}, ${count}`)
+    emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
+  }
   const size = elementSize(emitter, elem)
   const bytes = size === 1 ? count : fn.emitValue(`mul i64 ${count}, ${size}`)
   const disjoint = emitter.program.nodeDisjointCopy[expr.id]
@@ -2723,6 +2739,26 @@ export const emitJsonPutF64Kernel = (emitter: Emitter, values: string[]): string
   const length = fn.emitValue(`trunc i64 ${loadLength(emitter, values[0])} to i32`)
   return fn.emitValue(
     `call i32 ${emitter.useRuntime(JSON_PUT_F64_KERNEL)}(i8* ${data}, i32 ${length}, i32 ${values[1]}, double ${values[2]})`
+  )
+}
+
+/**
+ * `jsonPutString`'s walk in `nish/json`, lowered to its kernel
+ * (`src/kernels.ts`): `values` are the destination `u8[]`, its cursor, the
+ * source `u8[]` and the window's `from` and `to`, which `jsonPutString` has
+ * checked lie in the source. The destination's length is handed over as
+ * `emitJsonPutF64Kernel` hands it, and the kernel checks the cursor and the
+ * room itself.
+ */
+export const emitJsonPutStringKernel = (emitter: Emitter, values: string[]): string => {
+  const fn = emitter.fn
+  const data = loadData(emitter, values[0])
+  const length = fn.emitValue(`trunc i64 ${loadLength(emitter, values[0])} to i32`)
+  const src = loadData(emitter, values[2])
+  const from = fn.emitValue(`sext i32 ${values[3]} to i64`)
+  const to = fn.emitValue(`sext i32 ${values[4]} to i64`)
+  return fn.emitValue(
+    `call i32 ${emitter.useRuntime(JSON_PUT_STRING_KERNEL)}(i8* ${data}, i32 ${length}, i32 ${values[1]}, i8* ${src}, i64 ${from}, i64 ${to})`
   )
 }
 

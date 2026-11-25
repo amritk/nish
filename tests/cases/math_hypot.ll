@@ -3,13 +3,11 @@
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare double @llvm.sqrt.f64(double) #1
-declare double @llvm.fabs.f64(double) #1
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+declare double @llvm.sqrt.f64(double) #0
+declare double @llvm.fabs.f64(double) #0
 
 define noundef double @hyp(double noundef %a, double noundef %b) #0 {
 entry:
@@ -17,7 +15,7 @@ entry:
   ret double %0
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %zero.addr = alloca double, align 8
   %inf.addr = alloca double, align 8
@@ -114,40 +112,38 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-define internal noundef double @nish.pow2(i32 noundef %n) #0 {
+define internal noundef double @nish.exp2Bits(i64 noundef %biased) #0 {
 entry:
-  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 1023)
-  %1 = extractvalue { i32, i1 } %0, 0
-  %2 = extractvalue { i32, i1 } %0, 1
-  br i1 %2, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %3 = sext i32 %1 to i64
-  %4 = sext i32 52 to i64
-  %5 = and i64 %4, 63
-  %6 = shl i64 %3, %5
-  %7 = bitcast i64 %6 to double
-  ret double %7
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  %0 = sext i32 52 to i64
+  %1 = and i64 %0, 63
+  %2 = shl i64 %biased, %1
+  %3 = bitcast i64 %2 to double
+  ret double %3
 }
 
-define internal noundef zeroext i1 @nish.isNan(double noundef %v) #1 {
+define internal noundef double @nish.pow2(i32 noundef %n) #0 {
+entry:
+  %0 = sext i32 %n to i64
+  %1 = sext i32 1023 to i64
+  %2 = add nsw i64 %0, %1
+  %3 = tail call double @nish.exp2Bits(i64 %2)
+  ret double %3
+}
+
+define internal noundef zeroext i1 @nish.isNan(double noundef %v) #0 {
 entry:
   %0 = fcmp une double %v, %v
   ret i1 %0
 }
 
-define internal noundef double @nish.clearLo(double noundef %x) #1 {
+define internal noundef double @nish.clearLo(double noundef %x) #0 {
 entry:
   %0 = bitcast double %x to i64
   %1 = sext i32 -1 to i64
@@ -159,7 +155,7 @@ entry:
   ret double %6
 }
 
-define internal noundef double @nish.hypotCoreF(double noundef %a, double noundef %b) #1 {
+define internal noundef double @nish.hypotCoreF(double noundef %a, double noundef %b) #0 {
 entry:
   %w.addr = alloca double, align 8
   %t1.addr = alloca double, align 8
@@ -391,10 +387,9 @@ if.end:
   ret double %30
 }
 
-attributes #0 = { nounwind "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
 attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}

@@ -20,6 +20,8 @@ import FunctionSig from "./program" -> struct FunctionSig
 import isSimdAccess from "./simd" -> function @isSimdAccess
 import addJsonQuoted from "./strings" -> function @addJsonQuoted
 import StringBuilder from "./strings" -> struct StringBuilder
+import T_I32 from "./types" -> const T_I32
+import T_STRING from "./types" -> const T_STRING
 import TypeTable from "./types" -> struct TypeTable
 import isUnsigned from "./types" -> function @isUnsigned
 const PANIC_INDEX: i32 = 0 [exported]
@@ -420,9 +422,9 @@ function calledName(program: CheckedProgram, call: Node): string -> @calledName
 function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite): string -> @siteAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexAdvice
-  calls: calledName divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat nish_str_eq overflowAdvice rangeAdvice siteLocalName sliceAdvice spawnSlotAdvice unwrapBoundsParens
-  pointer program: size=928 writesThrough=true captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0 calledName#0 spawnSlotAdvice#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 overflowAdvice#1 spawnSlotAdvice#1
+  calls: arrayLengthAdvice calledName divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat nish_str_eq overflowAdvice rangeAdvice siteLocalName sliceAdvice spawnSlotAdvice unwrapBoundsParens
+  pointer program: size=928 writesThrough=true captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 arrayLengthAdvice#0 ioExitAdvice#0 overflowAdvice#0 calledName#0 spawnSlotAdvice#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 arrayLengthAdvice#1 overflowAdvice#1 spawnSlotAdvice#1
   pointer site: size=56 writesThrough=false captured=false passedTo=rangeAdvice#2
   stackSites=0 stackLocals=0
   local +0:9 node: Node (const)
@@ -435,11 +437,27 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   callee +14:14 sliceAdvice -> @sliceAdvice
   callee +16:14 divideAdvice -> @divideAdvice
   callee +18:14 rangeAdvice -> @rangeAdvice
-  callee +29:14 ioExitAdvice -> @ioExitAdvice
-  callee +37:14 overflowAdvice -> @overflowAdvice
-  local +44:13 reader: string (const)
-  callee +44:22 calledName -> @calledName
-  callee +60:14 spawnSlotAdvice -> @spawnSlotAdvice
+  callee +20:14 arrayLengthAdvice -> @arrayLengthAdvice
+  callee +26:14 ioExitAdvice -> @ioExitAdvice
+  callee +34:14 overflowAdvice -> @overflowAdvice
+  local +41:13 reader: string (const)
+  callee +41:22 calledName -> @calledName
+  callee +57:14 spawnSlotAdvice -> @spawnSlotAdvice
+function arrayLengthAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @arrayLengthAdvice
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat unwrapBoundsParens
+  pointer program: size=928 writesThrough=false captured=false
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0 TypeTable.typeName#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 length: Node (const)
+  callee +0:18 unwrapBoundsParens -> @unwrapBoundsParens
+  local +1:9 type: i32 (const)
+  local +2:9 n: string (const)
+  local +3:9 constant: ConstInfo | null (const)
+  callee +7:20 TypeTable.baseOf -> @TypeTable.baseOf
+  local +14:9 spelled: string (const)
+  callee +14:31 TypeTable.typeName -> @TypeTable.typeName
 function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @indexAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexGuardAdvice
@@ -493,14 +511,89 @@ function vectorAdvice(program: CheckedProgram, call: Node, lanes: i32): string -
   callee +2:13 siteLocalName -> @siteLocalName
   local +3:9 checks: string (const)
   local +12:9 length: string (const)
+function argumentName(program: CheckedProgram, call: Node, k: i32, fallback: string): string -> @argumentName
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: fallback k
+  calls: nish_panic_index nish_str_concat nish_str_eq siteLocalName unwrapBoundsParens
+  pointer program: size=928 writesThrough=false captured=false passedTo=siteLocalName#0 siteLocalName#0
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 args: Node[] (const)
+  local +4:9 arg: Node (const)
+  callee +4:15 unwrapBoundsParens -> @unwrapBoundsParens
+  local +9:11 holder: string (const)
+  callee +9:20 siteLocalName -> @siteLocalName
+  local +14:9 name: string (const)
+  callee +14:16 siteLocalName -> @siteLocalName
+function receiverName(program: CheckedProgram, call: Node, fallback: string): string -> @receiverName
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: fallback
+  calls: nish_panic_index siteLocalName unwrapBoundsParens
+  pointer program: size=928 writesThrough=false captured=false passedTo=siteLocalName#0
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  callee +0:18 unwrapBoundsParens -> @unwrapBoundsParens
+  local +4:9 name: string (const)
+  callee +4:16 siteLocalName -> @siteLocalName
+function isLiteralText(text: string): boolean -> @isLiteralText
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:12 k: i32 (let)
+  local +1:11 c: i32 (const)
+function rangeGuard(start: string, end: string, xs: string): string -> @panics$.rangeGuard
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: end start
+  calls: isLiteralText nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq
+  stackSites=1 stackLocals=1
+  local +0:9 parts: string[] (const)
+  local +1:9 literalStart: boolean (const)
+  callee +1:24 isLiteralText -> @isLiteralText
+  callee +11:25 isLiteralText -> @isLiteralText
+  callee +13:32 isLiteralText -> @isLiteralText
 function sliceAdvice(program: CheckedProgram, node: Node): string -> @sliceAdvice
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: calledName nish_str_concat nish_str_eq
-  pointer program: size=928 writesThrough=false captured=false passedTo=calledName#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=calledName#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: argumentName calledName netRangeBuffer nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq panics$.rangeGuard receiverName unwrapBoundsParens
+  pointer program: size=928 writesThrough=false captured=false passedTo=calledName#0 argumentName#0 receiverName#0 argumentName#0 argumentName#0 argumentName#0 argumentName#0 argumentName#0 receiverName#0 argumentName#0 argumentName#0 argumentName#0 argumentName#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=calledName#1 argumentName#1 receiverName#1 argumentName#1 argumentName#1 argumentName#1 argumentName#1 argumentName#1 receiverName#1 argumentName#1 argumentName#1 argumentName#1 argumentName#1
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   callee +0:16 calledName -> @calledName
+  local +2:9 routed: boolean (const)
+  local +5:11 first: i32 (const)
+  local +6:11 xs: string (const)
+  callee +6:25 argumentName -> @argumentName
+  callee +6:64 receiverName -> @receiverName
+  local +7:11 start: string (const)
+  callee +7:19 argumentName -> @argumentName
+  callee +11:25 rangeGuard -> @panics$.rangeGuard
+  local +14:11 end: string (const)
+  callee +14:17 argumentName -> @argumentName
+  local +15:11 guard: string (const)
+  callee +17:27 rangeGuard -> @panics$.rangeGuard
+  local +18:11 callee: Node (const)
+  callee +18:20 unwrapBoundsParens -> @unwrapBoundsParens
+  local +19:11 onString: boolean (const)
+  local +24:11 bytes: string (const)
+  callee +24:19 argumentName -> @argumentName
+  local +25:11 start: string (const)
+  callee +25:19 argumentName -> @argumentName
+  local +26:11 end: string (const)
+  callee +26:17 argumentName -> @argumentName
+  callee +29:45 rangeGuard -> @panics$.rangeGuard
+  local +33:11 dst: string (const)
+  callee +33:17 receiverName -> @receiverName
+  local +34:11 src: string (const)
+  callee +34:17 argumentName -> @argumentName
+  local +41:9 at: i32 (const)
+  callee +41:14 netRangeBuffer -> @netRangeBuffer
+  local +42:9 buf: string (const)
+  callee +42:15 argumentName -> @argumentName
+  local +43:9 off: string (const)
+  callee +43:15 argumentName -> @argumentName
+  local +44:9 len: string (const)
+  callee +44:15 argumentName -> @argumentName
+  callee +55:24 rangeGuard -> @panics$.rangeGuard
 function overflowAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @overflowAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq wrappingForm

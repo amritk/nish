@@ -626,9 +626,9 @@ function manifestHasKeyOrValue(object: string, scan: i32): boolean -> @manifestH
   callee +24:22 manifestEndOfValue -> @manifestEndOfValue
   callee +28:9 manifestSkipBlank -> @manifestSkipBlank
   callee +32:9 manifestSkipBlank -> @manifestSkipBlank
-function nishExportEntry(manifest: string, subpath: string, primary: string, fallback: string, other: string): ManifestEntry -> @nishExportEntry [exported]
+function nishExportEntry(manifest: string, subpath: string, targeted: string, primary: string, fallback: string, other: string): ManifestEntry -> @nishExportEntry [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
-  escaping: fallback manifest other primary subpath
+  escaping: fallback manifest other primary subpath targeted
   calls: ManifestEntry.constructor manifestField manifestHasKeyOrValue manifestSkipBlank manifestTarget nish_alloc_struct nish_panic_index nish_str_eq
   stackSites=0 stackLocals=0
   local +0:9 exports: string (const)
@@ -639,23 +639,24 @@ function nishExportEntry(manifest: string, subpath: string, primary: string, fal
   local +13:7 conditions: string (let)
   callee +18:12 new ManifestEntry -> @ManifestEntry.constructor
   local +20:7 selected: string (let)
-  callee +20:18 manifestField -> @manifestField
+  callee +20:40 manifestField -> @manifestField
   callee +22:16 manifestField -> @manifestField
-  local +25:11 target: string | null (const)
-  callee +25:20 manifestTarget -> @manifestTarget
-  callee +27:9 new ManifestEntry -> @ManifestEntry.constructor
-  callee +28:9 new ManifestEntry -> @ManifestEntry.constructor
-  callee +30:34 manifestHasKeyOrValue -> @manifestHasKeyOrValue
-  callee +31:12 new ManifestEntry -> @ManifestEntry.constructor
-  local +37:9 first: i32 (const)
-  callee +37:39 manifestSkipBlank -> @manifestSkipBlank
-  callee +39:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee +25:16 manifestField -> @manifestField
+  local +28:11 target: string | null (const)
+  callee +28:20 manifestTarget -> @manifestTarget
+  callee +30:9 new ManifestEntry -> @ManifestEntry.constructor
+  callee +31:9 new ManifestEntry -> @ManifestEntry.constructor
+  callee +33:34 manifestHasKeyOrValue -> @manifestHasKeyOrValue
+  callee +34:12 new ManifestEntry -> @ManifestEntry.constructor
+  local +40:9 first: i32 (const)
+  callee +40:39 manifestSkipBlank -> @manifestSkipBlank
   callee +42:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee +44:7 manifestField -> @manifestField
   callee +45:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee +50:7 manifestHasKeyOrValue -> @manifestHasKeyOrValue
-  callee +51:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee +53:10 new ManifestEntry -> @ManifestEntry.constructor
+  callee +47:7 manifestField -> @manifestField
+  callee +48:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee +53:7 manifestHasKeyOrValue -> @manifestHasKeyOrValue
+  callee +54:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee +56:10 new ManifestEntry -> @ManifestEntry.constructor
 function nishExportTarget(manifest: string, subpath: string, primary: string, fallback: string): string | null -> @nishExportTarget [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: fallback manifest primary subpath

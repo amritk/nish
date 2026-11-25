@@ -65,8 +65,8 @@ or its arguments. A win is:
 | --- | --- | --- | --- | --- |
 | TERM-1 | Low | `runtime/runtime-term.c:364-371` (`nish_term_set`) | The terminal is restored only for the signals in a fixed list. SIGIO/SIGPOLL, SIGPWR, SIGSTKFLT, SIGRTMIN..SIGRTMAX (and SIGEMT on Darwin) also end the process by default, are not caught, and leave the terminal raw. This contradicts `docs/LANGUAGE.md:7784` and `docs/guide/using-nish/terminal.md:82` | Fixed. `nish_term_arm` (in `nish_term_set` at the anchor; #876 moved it into its own function) catches every signal from 1 to `SIGRTMAX` that is at `SIG_DFL` and whose default ends the program; the ones a default ignores or that stop it are skipped by name ("term_pty: SIGIO, SIGPWR, SIGSTKFLT and SIGRTMIN each leave the terminal as it was") |
 | TERM-2 | Low | `runtime/runtime-term.c:270-275` (`nish_term_enter`), reached from `:326` and `:373` | `nish_term_raw` is set after `tcsetattr` returns. A fatal signal that lands between the kernel's switch and the store finds the flag clear, restores nothing, and dies with the terminal raw. Measured: 6 of 300 SIGTERMs sent to a loop of `setRawMode(true/false)`. The order is deliberate, so that a signal during a TCSAFLUSH drain or a SIGTTOU stop does not call `tcsetattr` from the background | Fixed. `nish_term_entering` is set across the `tcsetattr`; while it is set, `nish_term_restore` asks `tcgetattr`, which is allowed from the background, and restores only if the terminal already holds the raw settings. 0 of 300 after the fix ("term_pty: SIGTERM sent while a loop enters and leaves raw mode never leaves the terminal raw (200 tries)") |
-| TERM-3 | Medium | `std/term.ts:437`, `:448` (`Screen.resize`); `:810` (`Canvas`) | `terminalSize()` answers `ws_col`/`ws_row` up to 65535 each. `width * height` and `cells * 64 + 64` are checked i32 arithmetic. A size above about 5793 x 5793 panics with `attempt to multiply with overflow`, and 20000 x 20000 panics with `nish: out of memory`. The panic restores the terminal, and nothing is read or written out of bounds | Fixed. `resize` clamps each side to `TERM_MAX_SIDE` (4096) and the cell count to `TERM_MAX_CELLS` (1,048,576), and `Canvas` takes its size from the clamped screen; `docs/guide/` states the caps ("link/std_term: exits with 0 and stdout matches expected.out", the line "a 65535 x 65535 screen is 4096 x 256") |
-| TERM-4 | Low | `std/term.ts:1151-1160` (`termDecodeKeys`), `:984` (`KeyDecoder.feed`) | An `ESC [` followed by parameter bytes (0x20-0x3F) is held until a final byte arrives or `escapeTimeoutMs` passes, with no cap on length. Each `feed` copies the held bytes again. Measured with 4096-byte reads and a real clock: 344,064 bytes held at most, 16.8 ms for the worst `feed`, about 5x the time of plain input. It is bounded only by the timeout, so a caller whose `nowMs` does not advance holds input without limit | Fixed. A run longer than `TERM_MAX_CSI_PARAMS` (32) gives the ESC up as `KEY_ESCAPE` at once and decodes what follows as plain input ("link/std_term: exits with 0 and stdout matches expected.out", the lines "ESC [ 32 parameters A" and "ESC [ and 4000 parameters: 4002 keys, the first escape") |
+| TERM-3 | Medium | `std/term.ts:829` (`Screen.resize`); `:1267` (`Canvas`) | `terminalSize()` answers `ws_col`/`ws_row` up to 65535 each. `width * height` and `cells * 64 + 64` are checked i32 arithmetic. A size above about 5793 x 5793 panics with `attempt to multiply with overflow`, and 20000 x 20000 panics with `nish: out of memory`. The panic restores the terminal, and nothing is read or written out of bounds | Fixed. `resize` clamps each side to 4096 (`termSide`) and the cell count to `TERM_MAX_CELLS` (1,048,576), and `Canvas` takes its size from the clamped screen; `docs/guide/` states the caps ("link/std_term: exits with 0 and stdout matches expected.out", the line "a 65535 x 65535 screen is 4096 x 256") |
+| TERM-4 | Low | `std/term.ts:2166` (`termDecodeKeys`), `:1679` (`KeyDecoder.feed`) | An `ESC [` followed by parameter bytes (0x20-0x3F) is held until a final byte arrives or `escapeTimeoutMs` passes, with no cap on length. Each `feed` copies the held bytes again. Measured with 4096-byte reads and a real clock: 344,064 bytes held at most, 16.8 ms for the worst `feed`, about 5x the time of plain input. It is bounded only by the timeout, so a caller whose `nowMs` does not advance holds input without limit | Fixed. A run longer than `TERM_MAX_CSI_PARAMS` (32) gives the ESC up as `KEY_ESCAPE` at once and decodes what follows as plain input ("link/std_term: exits with 0 and stdout matches expected.out", the lines "ESC [ 32 parameters A" and "ESC [ and 4000 parameters: 4002 keys, the first escape") |
 | TERM-5 | Low | `docs/security/runtime.md:7-17`, `:143` | The scope table has no `runtime-term.c` row. The `waitpid` row says "the only handler the runtime installs is `SA_RESTART`", written before the term handlers existed. They are `SA_RESTART` too, so the property holds, but the reason is stale | Fixed. `runtime.md` has the row, and the `waitpid` reason names every handler the runtime installs |
 
 ## Properties verified
@@ -130,7 +130,45 @@ cannot overflow, and the key decoder holds at most 34 bytes of a CSI
 **A frame loop does not grow the heap** ("link/std_term: a frame loop's
 `flush` is taken back every pass, and nothing in main piles up").
 
+## WP85 S3: panic sites removed from `std/term.ts`
+
+WP85 S3 (#2157) took `std/term.ts` from 171 unproven panic sites to 1
+(`tests/std-panics.json`). Each was removed by a guard the prover reads, a
+clamp of a value that has a real floor (a loop start below 0, a `used` count
+below 0), or a loop condition. No site was removed with `nish:unsafe`, with a
+wrapping cast, or by making up a value. No exported signature changed.
+
+Five explicit panics were reachable only through their callers' arguments.
+One of them is reachable from a caller's code and is tested:
+
+| Panic at main | What it does now | Evidence |
+| --- | --- | --- |
+| `Screen.flush`: the drawn and sent buffers disagree in length | flushes the cells all of them hold (the shortest buffer, within the room `resize` gave the flush) and drops the rest | "link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out": a grown glyph buffer flushes its 2 cells, and a shortened `glyphs`, `fgs`, `bgs` or `attrs` 2 of 3. The four sent buffers are private, so no caller can shorten them |
+
+The other four became defensive bounds, recorded under **Open** below as untested.
+
+The decoders were checked against main's by a scratch fuzzer: 190,000 random
+inputs, fed whole and in random splits, gave byte-identical events. The fuzzer
+is pinned by no test; the fixed cases in `tests/link/std_term/main.ts` and
+`tests/link/std_term_events/main.ts` are.
+
+**Open.** The one site left is the slice in `termBytesText`
+(the native `String.fromBytes(bytes, 0, end)`). `end` is clamped to the
+buffer's length first, so it cannot fail, but the prover cannot see a slice bound yet (#2208).
+Building the string a byte at a time, as the Node path does, would avoid the slice; that is expected,
+not measured, to slow every frame, so it waits for #2208.
+
+**Open: untested defensive bounds.** These replaced explicit panics. Read from
+the code, each one's callers never pass the value it guards against, and no
+test fails when the bound is removed:
+- `termBytesText`: a count past the buffer is clamped to the buffer. Its
+  callers pass a whole buffer or a screen's `outLen`.
+- `KeyDecoder.keep`: a negative `used` is clamped to 0.
+- `termDecodeKeys` and `termDecodeEvents`: a cursor stepped back is stopped by
+  the loop condition, which holds the cursor's range.
+
 Tests:
+- `link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out` (WP85 S3)
 - `term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25`
 - `term_calls: over a pipe held open with nothing in it readStdin answers -11 and waitStdin(50) times out after at least 50 ms`
 - `term_import: waitStdin and readStdin drain a thousand piped bytes and stop at the end of the stream`

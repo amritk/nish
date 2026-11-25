@@ -29,6 +29,7 @@ function returns in registers, so a row loop allocates nothing.
 db.beginRead(): Result<void, i32>     // BEGIN, then start the main database's read transaction
 db.endRead(): Result<void, i32>       // close every cursor on the connection, then COMMIT
 db.openCursor(name: string, columns: string): Result<Cursor, SqliteError>
+db.reopenCursor(cur: Cursor, name: string, columns: string): Result<void, SqliteError>
 //   db.openCursor("posts", "id,user_id,body,created_at")
 //   db.openCursor("posts_created_at_id_idx", "created_at DESC,id DESC,rowid")
 
@@ -50,7 +51,19 @@ class Cursor {
   columnInto(n: i32, buf: u8[], at: i32): Result<i32, i32>
   selectRow(cols: readonly i32[]): Result<void, i32>
   readRow(ints: i64[], spans: i32[], text: u8[]): Result<i32, i32>
+  record(buf: u8[]): Result<i32, i32> // the row's record, as stored, into buf
   close(): Result<void, i32>
+}
+
+class RowRecord {                     // a record `record` copied, decoded
+  constructor(capacity: i32, maxFields: i32)
+  buf: u8[]; length: i32; fields: i32
+  read(cur: Cursor): Result<void, i32>
+  type(k: i32): i32                   // SQLITE_INTEGER .. SQLITE_NULL, NULL past `fields`
+  int(k: i32): i64
+  float(k: i32): f64
+  start(k: i32): i32                  // a field's bytes in `buf`
+  size(k: i32): i32                   // a TEXT's or BLOB's length
 }
 ```
 
@@ -120,6 +133,34 @@ class Cursor {
   author) with two
   ([docs/BENCHMARKS.md](BENCHMARKS.md#one-call-per-row-readrow) has what that
   measured).
+- `record(buf)` copies the current row's record into `buf` as SQLite stores
+  it ([the record format](https://sqlite.org/fileformat2.html#record_format)):
+  a header of varints, one serial type a field, then the fields' bytes. It
+  answers the record's length, and copies nothing when that is more than
+  `buf.length`, so a caller grows `buf` and calls again; `MISUSE` with no
+  row, `ABORT` when the row moved, `CORRUPT` for a record longer than SQLite
+  allows. It is the whole row in one call and one `memcpy` (one
+  `sqlite3BtreePayload` for a row on overflow pages), for a program that
+  reads many fields of many rows. A table row's record holds NULL for an
+  INTEGER PRIMARY KEY column, whose value is `rowid()`; an index entry's ends
+  with its rowid.
+- `RowRecord` is the decoder for it in `nish/sqlite`: `read(cur)` takes the
+  record into its own buffer, growing it when a record is longer, and reads
+  the header as `sqlite3VdbeRecordUnpack` does, bound for bound (a last field
+  that would run past the record reads as NULL; a varint past the record, a
+  serial type past 2^31 or a header longer than the record is `CORRUPT`).
+  Its fields then read without an adapter call: `type`, `int` and `float`
+  decode an integer or a REAL, and `start` and `size` give a TEXT's or BLOB's
+  bytes in `buf`, which a program copies or compares in place. Its fields are
+  the record's, so field `k` is the table's `k`th column only when the cursor
+  was opened on every column in order; a record written before `ALTER TABLE
+  ADD COLUMN` holds fewer, and `fields` says how many.
+- `db.reopenCursor(cur, name, columns)` opens a cursor as `openCursor` does
+  into a `Cursor` the program already holds, closing the one it held first
+  (one already ended with its read is fine). Nish has no garbage collector, so
+  a server that opens its cursors in every read transaction keeps one object
+  for each this way, where a new `Cursor` a transaction would stay allocated.
+  A refused open leaves `cur` closed, and its calls answer `MISUSE`.
 - A cursor call on a closed, stale or invalidated cursor answers `MISUSE`
   (`Err(SQLITE_MISUSE)`, or 0 from `rowid` and `columnI64`). So does `next` or
   `previous` when the cursor has no current row, and a column read then.
@@ -320,10 +361,11 @@ translation unit. The calls, all of them:
   affinity of an index's first key column, which `countRange` checks.
 - Records and keys: `sqlite3KeyInfoAlloc`, `sqlite3KeyInfoRef`,
   `sqlite3KeyInfoUnref`,
-  `sqlite3VdbeAllocUnpackedRecord`, `sqlite3VdbeRecordUnpack`,
-  `sqlite3VdbeRecordCompare`,
+  `sqlite3VdbeRecordCompare`, `sqlite3VdbeSerialTypeLen`,
+  `sqlite3VdbeSerialGet`, `sqlite3Get8byte`, `sqlite3GetVarint32` (through
+  `getVarint32`) and the table `sqlite3SmallTypeSizes`,
   `sqlite3VdbeMemInit`, `sqlite3VdbeMemSetInt64`, `sqlite3VdbeMemSetStr`,
-  `sqlite3VdbeMemSetNull`, `sqlite3VdbeMemRelease`, `sqlite3DbFree`.
+  `sqlite3VdbeMemSetNull`, `sqlite3VdbeMemRelease`.
 - Public API: `sqlite3_set_authorizer`, `sqlite3_rollback_hook`,
   `sqlite3_get_autocommit`,
   `sqlite3_txn_state`, `sqlite3_db_mutex`, `sqlite3_mutex_enter`,
@@ -332,12 +374,22 @@ translation unit. The calls, all of them:
   `sqlite3_str` API for the schema check (with `sqlite3_prepare_v3` for
   `beginRead`'s and `endRead`'s kept statements).
 
-`readRow` (`nishsqlite_cursor_read_row`) calls nothing the per-column reads
-do not: under the connection's mutex, taken once for the row, it finds each
-chosen column's `Mem` once with the helper `columnType`, `columnI64` and
-`columnInto` share, and reads its type, then its integer or its bytes, from
-that `Mem` with the `sqlite3_value_*` accessors they use. `selectRow` calls
-no adapter function.
+A row's record is read once, on the first column read of the row: `row_of`
+walks its header into the cursor's two field tables, each field's serial
+type and where its bytes start, with `sqlite3VdbeRecordUnpack`'s bounds and
+no `Mem` a field, and `field_value` then decodes a column from its serial
+type when it is read: an integer, NULL, or a TEXT's or BLOB's bytes in
+place, as `sqlite3VdbeSerialGet` reads them, and anything else (a REAL, or a
+TEXT or BLOB read as an integer) through `sqlite3VdbeSerialGet` and
+`sqlite3_value_int64`, so every answer is the one a `Mem` gave before. An
+index entry's `rowid()` is read off the record's end without the walk, as
+`sqlite3VdbeIdxRowid` reads it: the header's last byte is the rowid's serial
+type. `readRow` (`nishsqlite_cursor_read_row`) calls nothing the
+per-column reads do not: under the connection's mutex, taken once for the
+row, it reads the header once and each chosen column with `field_value`.
+`record` (`nishsqlite_cursor_record`) copies the payload with
+`sqlite3BtreePayloadFetch` or `sqlite3BtreePayload` and decodes nothing.
+`selectRow` calls no adapter function.
 
 What it writes, all of it: its own allocations, and the caller's buffers a
 `readRow` passes; in the `KeyInfo` it allocated,

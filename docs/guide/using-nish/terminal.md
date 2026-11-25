@@ -23,15 +23,21 @@ called whenever a frame may go out, and draws into the frame's `screen` (text
 cells) and `framebuffer` (pixels, when the options ask for one). This program
 bounces a square across the screen until you press `q`.
 
-The examples on this page build with
+Most examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays,
 slice buffers and move positions by sums the compiler cannot prove in range,
-and the `nish/term` code they reach keeps panic sites no proof removes yet. A
-guard such as `i < xs.length` before an index, or a bound on a position,
-proves your own code; the slices and the library calls build under the
-default once the standard library is made panic-free.
+and the `nish/term` code they reach keeps panic sites no proof removes yet.
+`nish/term-probe` keeps none; `nish/term-rate` keeps only its frame counters,
+which overflow past 2^31 - 1 frames; `nish/term-io` keeps only the
+slices that copy what stdin read, and `nish/term-pixels` only the panics a
+negative or too large size, a zero scale, a bad image id or a framebuffer
+whose `pixels` no longer holds `width × height` trips, its arrays sized by a
+count and its slices. A guard such as `i < xs.length` before an index, a
+test of a slice's bounds, or a bound on a position, proves your own code; the
+library calls build under the default once the standard library is made
+panic-free.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term-io.ts`, `std/term-pixels.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
@@ -335,8 +341,7 @@ This program prints the number of each key you press. It stops on `q`, on
 Ctrl-D, or when stdin ends or fails. Run it in a terminal and press an arrow key to see
 its three bytes.
 
-<!-- allow-panics: slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { isTerminal, readStdin, setRawMode, waitStdin } from "nish:term";
 

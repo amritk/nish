@@ -75,7 +75,8 @@ export class ReleaseCache {
  */
 export const releaseValidVersion = (v: string): boolean => {
   const n: i32 = toI32(v.length)
-  if (n === 0 || n > 64) {
+  // biome-ignore lint/style/useExplicitLengthCheck: the panic prover reads `length < 1` as a bound for the charCodeAt(0) after it and does not read `=== 0`
+  if (v.length < 1 || n > 64) {
     return false
   }
   const first: i32 = toI32(v.charCodeAt(0))
@@ -99,18 +100,19 @@ export const releaseValidVersion = (v: string): boolean => {
 /** A run of ASCII digits as a number, or -1 when it is empty, too long, has a leading zero or holds anything else. */
 const releaseNumber = (s: string): i64 => {
   const n: i32 = toI32(s.length)
-  if (n === 0 || n > 15 || (n > 1 && s.charCodeAt(0) === 48)) {
+  if (n === 0 || n > 15 || (s.length > 1 && s.charCodeAt(0) === 48)) {
     return -1
   }
-  let value: i64 = 0
+  // At most 15 digits, below 2^53, so every step is exact in an `f64`.
+  let value: f64 = 0
   for (let i: i32 = 0; i < n; i++) {
     const c: i32 = toI32(s.charCodeAt(i))
     if (c < 48 || c > 57) {
       return -1
     }
-    value = value * 10 + toI64(c - 48)
+    value = value * 10.0 + toF64(c - 48)
   }
-  return value
+  return toI64(value)
 }
 
 /**
@@ -155,15 +157,15 @@ export const releaseParseVersion = (v: string): ReleaseVersion | null => {
   }
   let core: string = v
   const plus: i32 = toI32(core.indexOf("+"))
-  if (plus >= 0) {
-    if (plus + 1 === toI32(core.length) || !releasePreWellFormed(core.slice(plus + 1), false)) {
+  if (plus >= 0 && plus < toI32(core.length)) {
+    if (plus === toI32(core.length) - 1 || !releasePreWellFormed(core.slice(plus + 1), false)) {
       return null
     }
     core = core.slice(0, plus)
   }
   let pre: string = ""
   const dash: i32 = toI32(core.indexOf("-"))
-  if (dash >= 0) {
+  if (dash >= 0 && dash < toI32(core.length)) {
     pre = core.slice(dash + 1)
     core = core.slice(0, dash)
     if (!releasePreWellFormed(pre, true)) {
@@ -325,7 +327,8 @@ export const releaseTagFromLocation = (base: string, location: string): string |
 /** Whether `rest`, what follows a host, is empty, a path, or a port of digits then nothing or a path. */
 const releasePortThenPath = (rest: string): boolean => {
   const n: i32 = toI32(rest.length)
-  if (n === 0 || rest.charCodeAt(0) === 47) {
+  // biome-ignore lint/style/useExplicitLengthCheck: the panic prover reads `length < 1` as a bound for the charCodeAt(0) after it and does not read `=== 0`
+  if (rest.length < 1 || rest.charCodeAt(0) === 47) {
     return true
   }
   if (rest.charCodeAt(0) !== 58) {
@@ -335,7 +338,7 @@ const releasePortThenPath = (rest: string): boolean => {
   while (i < n && rest.charCodeAt(i) >= 48 && rest.charCodeAt(i) <= 57) {
     i++
   }
-  return i > 1 && (i === n || rest.charCodeAt(i) === 47)
+  return i > 1 && (i === n || (i < n && rest.charCodeAt(i) === 47))
 }
 
 /**
@@ -518,15 +521,18 @@ export const releaseCacheParse = (text: string): ReleaseCache | null => {
 /**
  * Whether a cache checked at `checkedMs` still answers at `nowMs`: younger
  * than `maxAgeMs`, and not dated in the future, which a clock set back or a
- * planted file would give.
+ * planted file would give, which covers a clock before 1970. A cache dated
+ * before 1970, which only a hand-built one can be, is not fresh either.
  *
  * @param cache The cache.
  * @param nowMs The time now, in milliseconds since 1970.
  * @param maxAgeMs How long an answer stays fresh.
  * @returns True when the cache need not be refreshed.
  */
-export const releaseCacheFresh = (cache: ReleaseCache, nowMs: i64, maxAgeMs: i64): boolean =>
-  cache.checkedMs <= nowMs && nowMs - cache.checkedMs < maxAgeMs
+export const releaseCacheFresh = (cache: ReleaseCache, nowMs: i64, maxAgeMs: i64): boolean => {
+  const checked: i64 = cache.checkedMs
+  return checked >= 0 && nowMs >= 0 && checked <= nowMs && nowMs - checked < maxAgeMs
+}
 
 /**
  * Writes the cache at `path`: its directory is created mode 0700 when missing

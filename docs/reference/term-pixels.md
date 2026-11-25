@@ -356,7 +356,8 @@ image for that whole time. `kittyDelete` removes the image when the program
 is done with it.
 
 `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
-else panics. An empty framebuffer or rect writes nothing.
+else panics. So does a framebuffer whose `pixels` does not hold
+`width × height`. An empty framebuffer or rect writes nothing.
 
 ```ts
 const kittyFrame: (
@@ -503,9 +504,9 @@ class Framebuffer
 | `width: i32` | Pixels across. |
 | `clear(): void` | Set every pixel to black. |
 | `fill(colour: i32): void` | Set every pixel to `colour`'s low 24 bits. |
-| `get(x: i32, y: i32): i32` | The colour of the pixel at `x`, `y`, or black off the framebuffer. |
+| `get(x: i32, y: i32): i32` | The colour of the pixel at `x`, `y`, or black off the framebuffer. Panics when `pixels` does not hold `width × height`, as after setting those public fields out of step. |
 | `resize(width: i32, height: i32): void` | Make the framebuffer `width × height` and black; the array is replaced only when the size changes. |
-| `set(x: i32, y: i32, colour: i32): void` | Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn. |
+| `set(x: i32, y: i32, colour: i32): void` | Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn. Panics when `pixels` does not hold `width × height`, as after setting those public fields out of step. |
 
 ### PixelBytes
 

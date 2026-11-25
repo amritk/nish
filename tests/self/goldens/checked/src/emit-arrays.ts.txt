@@ -41,6 +41,7 @@ import IRBlock from "./ir" -> struct IRBlock
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
 import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
+import JSON_PUT_STRING_KERNEL from "./kernels" -> const JSON_PUT_STRING_KERNEL
 import Node from "./nodes" -> struct Node
 import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import simdSuffix from "./nish-modules" -> function @simdSuffix
@@ -1024,46 +1025,47 @@ function emitLengthCheck(emitter: Emitter, ok: string): void -> @emitLengthCheck
   callee +5:3 emitPanicTail -> @emitPanicTail
   callee +5:26 Emitter.stringConstant -> @Emitter.stringConstant
   callee +6:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-function emitNewArrayLength(emitter: Emitter, length: Node, size: i32): string -> @emitNewArrayLength
+function emitNewArrayLength(emitter: Emitter, expr: Node, size: i32): string -> @emitNewArrayLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
   escaping: size
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue emitIndex emitLengthCheck isFloat newArrayLengthChecked newArrayLimit nish_panic_index nish_str_concat nish_str_eq nish_str_from_i64 unwrapParens
   pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.typeOf#0 emitIndex#0 newArrayLimit#0 emitIndex#0 emitLengthCheck#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.llvm#0 emitLengthCheck#0
-  pointer length: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 unwrapParens#0 newArrayLengthChecked#0 emitIndex#1 emitIndex#1 Emitter.emitExpression#1
+  pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 type: i32 (const)
-  callee +0:16 Emitter.typeOf -> @Emitter.typeOf
-  local +1:9 constant: ConstInfo | null (const)
-  callee +1:50 unwrapParens -> @unwrapParens
-  callee +2:8 newArrayLengthChecked -> @newArrayLengthChecked
-  callee +3:12 emitIndex -> @emitIndex
-  local +5:9 fn: IRFunction (const)
-  local +6:9 limit: i64 (const)
-  callee +6:17 newArrayLimit -> @newArrayLimit
-  callee +7:8 isFloat -> @isFloat
-  local +8:11 n: string (const)
-  callee +8:15 emitIndex -> @emitIndex
-  callee +9:5 emitLengthCheck -> @emitLengthCheck
-  callee +9:30 IRFunction.emitValue -> @IRFunction.emitValue
-  local +15:7 value: string (let)
-  callee +15:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +16:7 Emitter.llvm -> @Emitter.llvm
-  callee +17:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +17:35 Emitter.llvm -> @Emitter.llvm
-  local +19:9 atLeast: string (const)
-  callee +19:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +20:9 atMost: string (const)
-  callee +20:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +21:3 emitLengthCheck -> @emitLengthCheck
-  callee +21:28 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +22:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local +0:9 length: Node (const)
+  local +1:9 type: i32 (const)
+  callee +1:16 Emitter.typeOf -> @Emitter.typeOf
+  local +2:9 constant: ConstInfo | null (const)
+  callee +2:50 unwrapParens -> @unwrapParens
+  callee +4:6 newArrayLengthChecked -> @newArrayLengthChecked
+  callee +7:12 emitIndex -> @emitIndex
+  local +9:9 fn: IRFunction (const)
+  local +10:9 limit: i64 (const)
+  callee +10:17 newArrayLimit -> @newArrayLimit
+  callee +11:8 isFloat -> @isFloat
+  local +12:11 n: string (const)
+  callee +12:15 emitIndex -> @emitIndex
+  callee +13:5 emitLengthCheck -> @emitLengthCheck
+  callee +13:30 IRFunction.emitValue -> @IRFunction.emitValue
+  local +19:7 value: string (let)
+  callee +19:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +20:7 Emitter.llvm -> @Emitter.llvm
+  callee +21:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +21:35 Emitter.llvm -> @Emitter.llvm
+  local +23:9 atLeast: string (const)
+  callee +23:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local +24:9 atMost: string (const)
+  callee +24:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +25:3 emitLengthCheck -> @emitLengthCheck
+  callee +25:28 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +26:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitNewArray(emitter: Emitter, expr: Node): string -> @emitNewArray [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
   calls: Emitter.declare Emitter.isStackSite Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize emitData emitHeader emitLineData emitNewArrayLength internalErrorFor isAtomicArrayConstructor isSortInstance literalLength nish_exit nish_panic_index nish_str_concat nish_str_from_i32 storeData
   pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.typeOf#0 elementSize#0 emitNewArrayLength#0 emitHeader#0 Emitter.isStackSite#0 Emitter.isStackSite#0 emitLineData#0 emitData#0 Emitter.declare#0 elementAccess#0 storeData#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitHeader#2 Emitter.isStackSite#1 Emitter.isStackSite#1 emitData#1
+  pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitNewArrayLength#1 emitHeader#2 Emitter.isStackSite#1 Emitter.isStackSite#1 emitData#1
   stackSites=0 stackLocals=0
   local +0:9 elem: i32 (const)
   callee +0:16 TypeTable.refOf -> @TypeTable.refOf
@@ -2029,24 +2031,24 @@ function emitSet(emitter: Emitter, expr: Node, dst: string, elem: i32): string -
   callee +3:32 emitOffset -> @emitOffset
   local +4:9 count: string (const)
   callee +4:17 loadLength -> @loadLength
-  local +5:9 end: string (const)
-  callee +5:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:3 emitSliceCheck -> @emitSliceCheck
-  callee +6:36 loadLength -> @loadLength
-  local +7:9 size: i32 (const)
-  callee +7:16 elementSize -> @elementSize
-  local +8:9 bytes: string (const)
-  callee +8:38 IRFunction.emitValue -> @IRFunction.emitValue
-  local +9:9 disjoint: boolean (const)
-  local +10:9 copy: string (const)
-  local +11:9 noalias: string (const)
-  callee +12:3 Emitter.declare -> @Emitter.declare
-  local +15:9 to: string (const)
-  callee +15:14 elementBytes -> @elementBytes
-  local +16:9 from: string (const)
-  callee +16:16 elementBytes -> @elementBytes
-  callee +17:3 IRFunction.emit -> @IRFunction.emit
-  callee +17:80 elementAccess -> @elementAccess
+  local +7:11 end: string (const)
+  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +8:5 emitSliceCheck -> @emitSliceCheck
+  callee +8:38 loadLength -> @loadLength
+  local +10:9 size: i32 (const)
+  callee +10:16 elementSize -> @elementSize
+  local +11:9 bytes: string (const)
+  callee +11:38 IRFunction.emitValue -> @IRFunction.emitValue
+  local +12:9 disjoint: boolean (const)
+  local +13:9 copy: string (const)
+  local +14:9 noalias: string (const)
+  callee +15:3 Emitter.declare -> @Emitter.declare
+  local +18:9 to: string (const)
+  callee +18:14 elementBytes -> @elementBytes
+  local +19:9 from: string (const)
+  callee +19:16 elementBytes -> @elementBytes
+  callee +20:3 IRFunction.emit -> @IRFunction.emit
+  callee +20:80 elementAccess -> @elementAccess
 function emitOffset(emitter: Emitter, expr: Node): string -> @emitOffset [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -2295,6 +2297,27 @@ function emitJsonPutF64Kernel(emitter: Emitter, values: string[]): string -> @em
   callee +2:44 loadLength -> @loadLength
   callee +3:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
+function emitJsonPutStringKernel(emitter: Emitter, values: string[]): string -> @emitJsonPutStringKernel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadData
+  calls: Emitter.useRuntime IRFunction.emitValue loadData loadLength nish_panic_index nish_str_concat
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=loadData#0 loadLength#0 loadData#0 Emitter.useRuntime#0
+  pointer values: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 data: string (const)
+  callee +1:16 loadData -> @loadData
+  local +2:9 length: string (const)
+  callee +2:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:44 loadLength -> @loadLength
+  local +3:9 src: string (const)
+  callee +3:15 loadData -> @loadData
+  local +4:9 from: string (const)
+  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 to: string (const)
+  callee +5:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:17 Emitter.useRuntime -> @Emitter.useRuntime
 function bytePointer(emitter: Emitter, arr: string, at: string): string -> @bytePointer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via loadData

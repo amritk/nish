@@ -2587,6 +2587,17 @@ function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boo
   stackSites=0 stackLocals=0
   callee +0:3 isAtomicClass -> @isAtomicClass
   callee +0:17 classLayoutOf -> @classLayoutOf
+function isAtomicArrayType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isAtomicArrayType [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: StructInfo.field classLayoutOf isAtomicClass
+  pointer program: size=928 writesThrough=false captured=false passedTo=classLayoutOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=classLayoutOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 info: StructInfo | null (const)
+  callee +0:16 classLayoutOf -> @classLayoutOf
+  callee +1:10 isAtomicClass -> @isAtomicClass
+  callee +1:50 StructInfo.field -> @StructInfo.field
 function isThreadsStruct(info: StructInfo): boolean -> @isThreadsStruct [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isAtomicClass isThreadsLayout

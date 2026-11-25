@@ -2769,6 +2769,8 @@ export class Http1Server {
   private expireAfter: i64 = 0
   /** How many calls of `expire` walked every slot, for a program measuring its cost. */
   expireScans: i32 = 0
+  /** The instant `tick` gave, in `monotonicNanos`; 0 while the server reads the clock itself. */
+  private ticked: i64 = 0
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`.
@@ -3062,7 +3064,7 @@ export class Http1Server {
     this.armed[k] = H1_WANT_READ
     // The slot starts resting: it is given a connection when it first reads.
     this.at[k] = -1
-    this.rested[k] = monotonicNanos()
+    this.rested[k] = this.clock()
     this.owner[k] = this.accepts
     // A serial only keys a kept head to its peer: in u64, which wraps where
     // an i64 would be a site, after more accepts than a server ever sees.
@@ -3072,6 +3074,25 @@ export class Http1Server {
     const mss: i32 = netMss(fd)
     this.restedMss[k] = mss > 0 ? mss : 0
     return k
+  }
+
+  /**
+   * Sets the instant, in `monotonicNanos`, that the server stamps activity
+   * with until the next `tick`: a loop that calls it once a pass spares every
+   * `readable` and `flush` of the pass its own clock read, and a timeout,
+   * counted in seconds, moves by the pass's length at most. 0 goes back to
+   * reading the clock at each stamp, which is what a server that is never
+   * ticked does.
+   *
+   * @param now the current time in `monotonicNanos`, or 0
+   */
+  tick(now: i64): void {
+    this.ticked = now
+  }
+
+  /** The instant `tick` gave, or the clock when it gave none. */
+  private clock(): i64 {
+    return this.ticked !== 0 ? this.ticked : monotonicNanos()
   }
 
   /**
@@ -3091,13 +3112,16 @@ export class Http1Server {
     this.date.hold()
     const fd: i32 = conn.fd
     let moved: boolean = false
+    const scratch: u8[] = this.scratch
     while (true) {
       const room: i32 = conn.inputRoom()
-      const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
-      if (want <= 0) {
+      const size: i32 = toI32(scratch.length)
+      const want: i32 = room < size ? room : size
+      // `0 < want <= scratch.length`, spelled so the prover reads the window.
+      if (want <= 0 || want > toI32(scratch.length)) {
         break
       }
-      const n: i32 = netRead(fd, this.scratch, H1_ZERO, want)
+      const n: i32 = netRead(fd, scratch, 0, want)
       if (n <= 0) {
         if (n === 0) {
           conn.endInput()
@@ -3107,7 +3131,7 @@ export class Http1Server {
         break
       }
       moved = true
-      conn.feed(this.scratch, H1_ZERO, n)
+      conn.feed(scratch, H1_ZERO, n)
       // A short read emptied the socket. The loop's readiness is
       // level-triggered, so more input, or the peer's close, wakes it again;
       // reading once more here would only answer -11, at the price of a
@@ -3117,7 +3141,7 @@ export class Http1Server {
       }
     }
     if (moved) {
-      const now: i64 = monotonicNanos()
+      const now: i64 = this.clock()
       conn.lastActive = now
       conn.headArrived(now)
     }
@@ -3197,7 +3221,7 @@ export class Http1Server {
     // sends (RFC 9112 §9.6), for `lingerTimeout` and `lingerBytes` at most.
     // Closed with those bytes unread, the socket would answer them with a
     // reset that can destroy the response before the client reads it (H1-2).
-    const now: i64 = monotonicNanos()
+    const now: i64 = this.clock()
     const conn: Http1Connection | null = this.attach(slot)
     if (conn === null || !conn.lingerStart(now) || netShutdown(conn.fd, H1_SHUT_WRITE) < 0) {
       return H1_DONE
@@ -3217,13 +3241,14 @@ export class Http1Server {
    */
   private drain(conn: Http1Connection): i32 {
     const fd: i32 = conn.fd
+    const scratch: u8[] = this.scratch
     while (true) {
-      const size: i32 = toI32(this.scratch.length)
+      const size: i32 = toI32(scratch.length)
       // `0 <= 0 <= size <= scratch.length`: a scratch with no room drains nothing.
       if (size <= 0) {
         return H1_DONE
       }
-      const n: i32 = netRead(fd, this.scratch, H1_ZERO, size)
+      const n: i32 = netRead(fd, scratch, 0, size)
       if (n === H1_AGAIN) {
         return H1_WANT_READ
       }
@@ -3279,7 +3304,7 @@ export class Http1Server {
         conn.abort()
         break
       }
-      const n: i32 = netWrite(fd, conn.output, start, http1ServerSub(end, start))
+      const n: i32 = netWrite(fd, conn.output, start, end - start)
       if (n <= 0) {
         if (n !== H1_AGAIN) {
           conn.abort()
@@ -3289,7 +3314,7 @@ export class Http1Server {
       conn.consume(n)
     }
     if (http1ServerSub(conn.outputEnd, conn.outputStart) < pending) {
-      conn.lastActive = monotonicNanos()
+      conn.lastActive = this.clock()
     }
     conn.release()
   }

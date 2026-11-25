@@ -1,0 +1,13 @@
+{
+  "header": "typed-buffers.h",
+  "allow": ["upload_*", "fill_*", "read_*"],
+  "functions": {
+    "upload_f32": { "verts": { "buffer": "n" } },
+    "fill_f32": { "out": { "buffer": "n" } },
+    "upload_u16": { "indices": { "buffer": "n" } },
+    "fill_u32": { "out": { "buffer": "n" } },
+    "fill_i32": { "out": { "buffer": "n" } },
+    "upload_counted": { "verts": { "buffer": "n" } },
+    "read_counted": { "out": { "buffer": "got" } }
+  }
+}

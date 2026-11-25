@@ -37,7 +37,6 @@ declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32
 declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #1
 declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
@@ -57,48 +56,35 @@ while.cond:
 while.body:
   %2 = trunc i64 %1 to i32
   %3 = sext i32 %2 to i64
-  %4 = add i64 0, %3
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8
-  %7 = icmp ule i64 0, %4
-  %8 = icmp ule i64 %4, %6
-  %9 = and i1 %7, %8
-  br i1 %9, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
-  unreachable
-
-net.ok:
-  %10 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %3, %struct.nish_array* %from, %struct.nish_array* %meta)
-  store i32 %10, i32* %n.addr, align 4
-  %11 = load i32, i32* %n.addr, align 4
-  %12 = icmp eq i32 %11, -11
-  br i1 %12, label %if.then, label %if.end
+  %4 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %3, %struct.nish_array* %from, %struct.nish_array* %meta)
+  store i32 %4, i32* %n.addr, align 4
+  %5 = load i32, i32* %n.addr, align 4
+  %6 = icmp eq i32 %5, -11
+  br i1 %6, label %if.then, label %if.end
 
 if.then:
-  %13 = load i32, i32* %bytes.addr, align 4
-  ret i32 %13
+  %7 = load i32, i32* %bytes.addr, align 4
+  ret i32 %7
 
 if.end:
-  %14 = load i32, i32* %n.addr, align 4
-  %15 = icmp slt i32 %14, 0
-  br i1 %15, label %if.then.1, label %if.end.1
+  %8 = load i32, i32* %n.addr, align 4
+  %9 = icmp slt i32 %8, 0
+  br i1 %9, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %16 = load i32, i32* %n.addr, align 4
-  ret i32 %16
+  %10 = load i32, i32* %n.addr, align 4
+  ret i32 %10
 
 if.end.1:
-  %17 = load i32, i32* %bytes.addr, align 4
-  %18 = load i32, i32* %n.addr, align 4
-  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %18)
-  %20 = extractvalue { i32, i1 } %19, 0
-  %21 = extractvalue { i32, i1 } %19, 1
-  br i1 %21, label %ovf.fail, label %ovf.ok
+  %11 = load i32, i32* %bytes.addr, align 4
+  %12 = load i32, i32* %n.addr, align 4
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %20, i32* %bytes.addr, align 4
+  store i32 %14, i32* %bytes.addr, align 4
   br label %while.cond
 
 while.end:
