@@ -1,8 +1,3 @@
-// Opt-out (`--allow-panics`): calls into `std/synth` reach four panic sites,
-// `synthSilence` its array-length one and `synthTone` the overflow in
-// `std/math`; this file keeps none of its own. Follow-up: make those two
-// modules panic-free, then build this file without `--allow-panics`.
-//
 // A small browser game over nish/host/game: keep the ball in play with the
 // paddle. The page that runs it is index.html, one startGame call from
 // nish/page/game; build.mjs writes both into a directory any static server
@@ -255,5 +250,3 @@ const paint = (ball: Float64Array, score: Int32Array, alpha: f64): void => {
     rasterText(GAME_FRAME, w, h, centre, 90, 1, hint, 0xf0f0f0)
   }
 }
-
-// smoke: args --allow-panics

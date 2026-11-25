@@ -1,0 +1,10 @@
+PASS  a full ring wraps its head to slot 0
+PASS  an in-range head draws every point
+PASS  head past the ring: slots 2 and 3 land in it and are drawn
+PASS  head past the ring: slots 4 and 5 do not, so x 0 and 3 stay clear
+PASS  head below the ring: slots 0 and 1 land in it and are drawn
+PASS  head below the ring: x 6 and 9 stay clear
+PASS  a head no slot reaches from draws nothing
+PASS  the lowest head draws nothing and does not overflow
+PASS  the highest head draws nothing and does not overflow
+raster trail head: 9 passed, 0 failed, 0 skipped

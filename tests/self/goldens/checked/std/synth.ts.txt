@@ -6,12 +6,13 @@ const SYNTH_NOISE: i32 = 2 [exported]
 const SYNTH_NOISE_SEED: i32 = 22695477
 const SYNTH_SAMPLE_LIMIT: f64 = 2147483647
 function synthSilence(seconds: f64, sampleRate: i32): f64[] -> @synthSilence [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.fptosi.sat.i32.f64 nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64
   stackSites=0 stackLocals=0
   local +0:9 want: f64 (const)
-  local +1:9 n: i32 (const)
-  local +2:9 out: f64[] (const)
+  local +1:7 n: i32 (let)
+  local +3:11 k: i32 (const)
+  local +10:9 out: f64[] (const)
 function synthXorshift(x: i32): i32 -> @synthXorshift
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
