@@ -1569,6 +1569,11 @@
       "reason": "no open reservation, and the record length must fit the ring capacity; both are caller-controlled preconditions in the doc"
     },
     {
+      "module": "std/temporal.ts",
+      "function": "temporalRangeError",
+      "reason": "a documented RangeError as JS Temporal throws for out-of-range fields or arithmetic; the …OrNull parsers and try… variants return the failure instead"
+    },
+    {
       "module": "std/term-pixels.ts",
       "function": "Framebuffer.get",
       "reason": "pixels must hold width × height; the fields are public and a caller that desyncs them has broken the framebuffer, which panics as indexing past pixels did"

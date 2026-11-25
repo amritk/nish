@@ -600,16 +600,28 @@ const temporalWeekdayOfDecember31 = (y: i64): i64 => {
 
 /** Panic unless `year`, `month` and `day` name a real date. */
 const temporalCheckDate = (what: string, year: i64, month: i64, day: i64): void => {
+  const problem: string = temporalDateProblem(what, year, month, day)
+  if (problem.length > 0) {
+    temporalRangeError(problem)
+  }
+}
+
+/**
+ * Why the fields name no date `temporalCheckDate` accepts, as its
+ * `RangeError` words it, or `""` when they name one.
+ */
+const temporalDateProblem = (what: string, year: i64, month: i64, day: i64): string => {
   if (year < -271821 || year > 275760) {
-    temporalRangeError(`${what}: year ${year} is outside -271821 to 275760`)
+    return `${what}: year ${year} is outside -271821 to 275760`
   }
   if (month < 1 || month > 12) {
-    temporalRangeError(`${what}: month ${month} is outside 1 to 12`)
+    return `${what}: month ${month} is outside 1 to 12`
   }
   const most: i32 = temporalDaysInMonth(year, toI32(month))
   if (day < 1 || day > toI64(most)) {
-    temporalRangeError(`${what}: day ${day} is outside 1 to ${most}`)
+    return `${what}: day ${day} is outside 1 to ${most}`
   }
+  return ""
 }
 
 /** Panic unless the fields name a time of day. */
@@ -864,10 +876,11 @@ const temporalNoTime = (d: Duration): boolean =>
 /**
  * The epoch day `(year, month, day)` lands on after `years` and `months`,
  * with the day constrained to the new month, then `days` more; `epochDay` is
- * where it starts, used as it is when there are no years or months. Panics
- * with a `RangeError` outside Temporal's range.
+ * where it starts, used as it is when there are no years or months. A year
+ * outside Temporal's range answers the day after `TEMPORAL_MAX_EPOCH_DAY`, so
+ * the caller's one range test refuses every answer that is not a date.
  */
-const temporalAddToDate = (
+const temporalMovedEpochDay = (
   year0: i32,
   month0: i32,
   day0: i32,
@@ -883,13 +896,25 @@ const temporalAddToDate = (
     // The remainder is in [0, 12), so the `u64` sum is exact.
     const month: i64 = toI64(toU64(temporalFloorMod(month1, 12)) + 1)
     if (year < -271821 || year > 275760) {
-      temporalRangeError("PlainDate: the date is outside Temporal's range")
-      return 0
+      return TEMPORAL_MAX_EPOCH_DAY + 1
     }
     const most: i32 = temporalDaysInMonth(year, toI32(month))
     start = temporalEpochDay(toI32(year), toI32(month), day0 > most ? most : day0)
   }
-  const result: i64 = temporalAdd(start, days)
+  return temporalAdd(start, days)
+}
+
+/** `temporalMovedEpochDay`, panicking with a `RangeError` outside Temporal's range. */
+const temporalAddToDate = (
+  year0: i32,
+  month0: i32,
+  day0: i32,
+  epochDay: i64,
+  years: i64,
+  months: i64,
+  days: i64
+): i64 => {
+  const result: i64 = temporalMovedEpochDay(year0, month0, day0, epochDay, years, months, days)
   if (result < TEMPORAL_MIN_EPOCH_DAY || result > TEMPORAL_MAX_EPOCH_DAY) {
     temporalRangeError("PlainDate: the date is outside Temporal's range")
   }
@@ -1717,6 +1742,35 @@ export class PlainDate {
   }
 
   /**
+   * `add`, answering an answer outside Temporal's range as `Err` where `add`
+   * panics. Not part of Temporal.
+   *
+   * @param duration how far to move
+   * @returns the new date, or `Err` with the `RangeError` text `add` panics with
+   */
+  tryAdd(duration: Duration): Result<PlainDate, string> {
+    // A duration's calendar fields are below 2^32 and its time below 2^53
+    // seconds, so these sums cannot leave `i64`: only the range test fails.
+    let days: i64 = temporalAdd(temporalMul(duration.weeks, 7), duration.days)
+    if (!temporalNoTime(duration)) {
+      days = temporalAdd(days, temporalSpanOfDuration(duration, false).truncDays())
+    }
+    const epochDay: i64 = temporalMovedEpochDay(
+      this.year,
+      this.month,
+      this.day,
+      this.epochDay,
+      duration.years,
+      duration.months,
+      days
+    )
+    if (epochDay < TEMPORAL_MIN_EPOCH_DAY || epochDay > TEMPORAL_MAX_EPOCH_DAY) {
+      return Err("PlainDate: the date is outside Temporal's range")
+    }
+    return Ok(temporalDateOfEpochDay(epochDay))
+  }
+
+  /**
    * The days from this date to `other`, as a duration of days alone
    * (Temporal's default `largestUnit: "day"`); negative when `other` is
    * earlier.
@@ -1796,6 +1850,43 @@ export const plainDateFromOrNull = (text: string): PlainDate | null => {
     return null
   }
   return new PlainDate(r.year, r.month, r.day)
+}
+
+/**
+ * `new PlainDate(isoYear, isoMonth, isoDay)`, answering fields that name no
+ * date, or one outside Temporal's range, as `Err` where the constructor
+ * panics. Not part of Temporal.
+ *
+ * @param isoYear the year
+ * @param isoMonth the month, 1 to 12
+ * @param isoDay the day of the month, from 1
+ * @returns the date, or `Err` with the `RangeError` text the constructor panics with
+ */
+export const tryPlainDate = (isoYear: i32, isoMonth: i32, isoDay: i32): Result<PlainDate, string> => {
+  const problem: string = temporalDateProblem("PlainDate", toI64(isoYear), toI64(isoMonth), toI64(isoDay))
+  if (problem.length > 0) {
+    return Err(problem)
+  }
+  const epochDay: i64 = temporalEpochDay(isoYear, isoMonth, isoDay)
+  if (epochDay < TEMPORAL_MIN_EPOCH_DAY || epochDay > TEMPORAL_MAX_EPOCH_DAY) {
+    return Err("PlainDate: the date is outside Temporal's range")
+  }
+  return Ok(new PlainDate(isoYear, isoMonth, isoDay))
+}
+
+/**
+ * `plainDateFrom`, answering a string it refuses as `Err` where
+ * `plainDateFrom` panics. Not part of Temporal.
+ *
+ * @param text such as `2024-01-15`
+ * @returns the date, or `Err` with the `RangeError` text `plainDateFrom` panics with
+ */
+export const tryPlainDateFrom = (text: string): Result<PlainDate, string> => {
+  const date: PlainDate | null = plainDateFromOrNull(text)
+  if (date === null) {
+    return Err(`PlainDate: cannot parse "${text}"`)
+  }
+  return Ok(date)
 }
 
 /**
