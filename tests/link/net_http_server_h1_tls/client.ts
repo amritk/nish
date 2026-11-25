@@ -24,6 +24,7 @@ import {
 import { Opened, ZERO, ascii, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes"
 import { clearRecord, clientKeysFor } from "../net_tls_record_common/client"
 import { textOf } from "../crypto_x509/hex"
+import { headerOf } from "../net_serve/client"
 import { Rig } from "./rig"
 
 /** What `netRead` answers when nothing is waiting. */
@@ -32,15 +33,12 @@ const WOULD_BLOCK: i32 = -11
 /** The most turns of the server's loop one wait takes, at up to 5 ms each. */
 const TURNS: i32 = 2000
 
-/** The decimal value of `head`'s Content-Length field, in either spelling the server may write; 0 with none. */
+/** The decimal value of `head`'s Content-Length field; 0 with none. */
 const contentLength = (head: string): i32 => {
-  let at: i32 = toI32(head.indexOf("content-length: "))
-  if (at < 0) {
-    at = toI32(head.indexOf("Content-Length: "))
-  }
+  const field: string = headerOf(head, "content-length")
   let n: i32 = 0
-  for (let k: i32 = at < 0 ? toI32(head.length) : at + 16; k < toI32(head.length); k++) {
-    const c: i32 = toI32(head.charCodeAt(k))
+  for (let k: i32 = 0; k < toI32(field.length); k++) {
+    const c: i32 = toI32(field.charCodeAt(k))
     if (c < 48 || c > 57 || n > 100000000) {
       break
     }

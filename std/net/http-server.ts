@@ -1665,8 +1665,8 @@ export class HttpServer {
     this.unlisten(this.h2cFd, HTTP_SERVER_H2C_LISTENER)
     this.unlisten(this.h1TlsFd, HTTP_SERVER_H1_TLS_LISTENER)
     for (const s of this.h1Slots) {
-      const conn: Http1Connection | null = this.h1Conn(s)
-      if (s.open && conn !== null && this.h1Holds(s)) {
+      const conn: Http1Connection | null = s.open ? this.h1Conn(s) : null
+      if (conn !== null && this.h1Holds(s)) {
         if (s.current === null && (this.h1Resting(s) || !conn.wantsWrite())) {
           this.h1Close(s)
         } else {
