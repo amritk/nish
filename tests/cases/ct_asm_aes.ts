@@ -418,12 +418,13 @@ export const aesUnpack = (buf: u8[], q: u64[]): void => {
 export const aesEncryptBatch = (rk: u64[], rounds: i32, buf: u8[], q: u64[]): void => {
   aesPack(q, buf)
   aesAddRoundKey(q, rk, 0)
-  for (let round: i32 = 1; round < rounds; round++) {
+  const last: i32 = rounds & 15
+  for (let round: i32 = 1; round < last; round++) {
     aesBitslicedRound(q, rk, 8 * round)
   }
   aesSbox(q)
   aesShiftRows(q)
-  aesAddRoundKey(q, rk, 8 * rounds)
+  aesAddRoundKey(q, rk, 8 * last)
   aesUnpack(buf, q)
 }
 

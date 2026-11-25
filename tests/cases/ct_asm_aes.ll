@@ -1,8 +1,5 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #0
-
 define internal noundef i64 @aesLanes(i64 noundef %pattern) #0 {
 entry:
   %two.addr = alloca i64, align 8
@@ -2269,28 +2266,27 @@ for.end:
   ret void
 }
 
-define void @aesEncryptBatch(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %rk, i32 noundef %rounds, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %q) #2 {
+define void @aesEncryptBatch(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %rk, i32 noundef %rounds, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %q) #1 {
 entry:
+  %last.addr = alloca i32, align 4
   %round.addr = alloca i32, align 4
   call void @aesPack(%struct.nish_array* %q, %struct.nish_array* %buf)
   call void @aesAddRoundKey(%struct.nish_array* %q, %struct.nish_array* %rk, i32 0)
+  %0 = and i32 %rounds, 15
+  store i32 %0, i32* %last.addr, align 4
   store i32 1, i32* %round.addr, align 4
   br label %for.cond
 
 for.cond:
-  %0 = load i32, i32* %round.addr, align 4
-  %1 = icmp slt i32 %0, %rounds
-  br i1 %1, label %for.body, label %for.end
+  %1 = load i32, i32* %round.addr, align 4
+  %2 = load i32, i32* %last.addr, align 4
+  %3 = icmp slt i32 %1, %2
+  br i1 %3, label %for.body, label %for.end
 
 for.body:
-  %2 = load i32, i32* %round.addr, align 4
-  %3 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 8, i32 %2)
-  %4 = extractvalue { i32, i1 } %3, 0
-  %5 = extractvalue { i32, i1 } %3, 1
-  br i1 %5, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  call void @aesBitslicedRound(%struct.nish_array* %q, %struct.nish_array* %rk, i32 %4)
+  %4 = load i32, i32* %round.addr, align 4
+  %5 = mul nsw i32 8, %4
+  call void @aesBitslicedRound(%struct.nish_array* %q, %struct.nish_array* %rk, i32 %5)
   br label %for.inc
 
 for.inc:
@@ -2302,19 +2298,11 @@ for.inc:
 for.end:
   call void @aesSbox(%struct.nish_array* %q)
   call void @aesShiftRows(%struct.nish_array* %q)
-  %8 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 8, i32 %rounds)
-  %9 = extractvalue { i32, i1 } %8, 0
-  %10 = extractvalue { i32, i1 } %8, 1
-  br i1 %10, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
+  %8 = load i32, i32* %last.addr, align 4
+  %9 = mul nsw i32 8, %8
   call void @aesAddRoundKey(%struct.nish_array* %q, %struct.nish_array* %rk, i32 %9)
   call void @aesUnpack(%struct.nish_array* %buf, %struct.nish_array* %q)
   ret void
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 2)
-  unreachable
 }
 
 define noundef i32 @aesSubWord(i32 noundef %w, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %q) #1 {
@@ -2563,7 +2551,6 @@ for.end:
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #2 = { nounwind "probe-stack"="inline-asm" }
-attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish array"}
