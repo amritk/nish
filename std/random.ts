@@ -22,12 +22,12 @@
  * mixing function is the shape of SplitMix (Steele, Lea and Flood, "Fast
  * splittable pseudorandom number generators", OOPSLA 2014), on 32 bits.
  *
- * **The same bits under Node.** The two operations that wrap are spelled
- * `wrappingAdd` and `wrappingMul` from `nish:unsafe`, which define the
- * two's-complement wrap natively and answer `(a + b) | 0` and `Math.imul(a, b)`
- * under Node (docs/LANGUAGE.md, "nish:unsafe"); every shift has a constant
- * count, and `^` and `>>> 16` answer the same 32 bits in JavaScript as in the
- * compiled program.
+ * **The same bits under Node.** A wrapping multiply is `Math.imul`, the low
+ * 32 bits of the product both ways. A wrapping add or subtract is taken in
+ * `i64`, where two `i32`s cannot overflow, and `toI32` keeps its low 32 bits,
+ * as integer conversions do natively and under Node. Every shift has a
+ * constant count, and `^` and `>>> 16` answer the same 32 bits in JavaScript
+ * as in the compiled program.
  *
  *  `nextInt` reads its span and its draws as unsigned counts with no `u32`
  *  (whose conversions saturate under Node): the sign bit flipped orders them
@@ -45,7 +45,6 @@
  * would be a write their caller can see, and is refused as any such write is;
  * give each task its own, seeded from its index.
  */
-import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe"
 
 /** 0x9E3779B9 as an `i32`: the Weyl increment, odd, so the walk visits every state. */
 const GOLDEN: i32 = -1640531527
@@ -68,6 +67,12 @@ const SIGN: i32 = -2147483648
 /** 2^31 - 1, the `i32` just below 2^31, from which `remainder` finds 2^31 mod m. */
 const MAX: i32 = 2147483647
 
+/** `a + b`, wrapped to 32 bits: the `i64` sum always fits, and `toI32` keeps its low half. */
+const wrapAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
+
+/** `a - b`, wrapped to 32 bits, as `wrapAdd` takes a sum. */
+const wrapSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
+
 /** Whether `a < b` when both are read as unsigned 32-bit counts. */
 const below = (a: i32, b: i32): boolean => (a ^ SIGN) < (b ^ SIGN)
 
@@ -77,27 +82,28 @@ const below = (a: i32, b: i32): boolean => (a ^ SIGN) < (b ^ SIGN)
  * signed `%` answers the same in JavaScript, and every sum stays below 2^31.
  */
 const remainder = (a: i32, m: i32): i32 => {
-  if (m < 0) {
-    // m is 2^31 or more, so a is less than 2m: at most one m comes off.
-    return below(a, m) ? a : wrappingSub(a, m)
+  if (m > 0) {
+    if (a >= 0) {
+      return a % m
+    }
+    // a is 2^31 + low, so a mod m is low plus 2^31 mod m, added mod m.
+    const low: i32 = (a ^ SIGN) % m
+    const high: i32 = wrapAdd(MAX % m, 1) % m
+    const room: i32 = wrapSub(m, high)
+    return low >= room ? wrapSub(low, room) : wrapAdd(low, high)
   }
-  if (a >= 0) {
-    return a % m
-  }
-  // a is 2^31 + low, so a mod m is low plus 2^31 mod m, added mod m.
-  const low: i32 = (a ^ SIGN) % m
-  const high: i32 = wrappingAdd(MAX % m, 1) % m
-  const room: i32 = wrappingSub(m, high)
-  return low >= room ? wrappingSub(low, room) : wrappingAdd(low, high)
+  // m is 2^31 or more (the one caller never passes 0), so a is less than 2m:
+  // at most one m comes off.
+  return below(a, m) ? a : wrapSub(a, m)
 }
 
 /** MurmurHash3's `fmix32`: every bit of `h` into every bit of the answer, a bijection on 32 bits. */
 const mix = (h: i32): i32 => {
   let x: i32 = h
   x = x ^ (x >>> 16)
-  x = wrappingMul(x, MIX_1)
+  x = Math.imul(x, MIX_1)
   x = x ^ (x >>> 13)
-  x = wrappingMul(x, MIX_2)
+  x = Math.imul(x, MIX_2)
   x = x ^ (x >>> 16)
   return x
 }
@@ -128,7 +134,7 @@ export class Rng {
    *   steps once.
    */
   nextI32(): i32 {
-    this.state = wrappingAdd(this.state, GOLDEN)
+    this.state = wrapAdd(this.state, GOLDEN)
     return mix(this.state)
   }
 
@@ -168,16 +174,16 @@ export class Rng {
     if (lo > hi) {
       panic("Rng.nextInt: lo is greater than hi")
     }
-    const span: i32 = wrappingAdd(wrappingSub(hi, lo), 1)
+    const span: i32 = wrapAdd(wrapSub(hi, lo), 1)
     if (span === 0) {
       return this.nextI32()
     }
     // 2^32 mod span, as (2^32 - span) mod span.
-    const refused: i32 = remainder(wrappingSub(0, span), span)
+    const refused: i32 = remainder(wrapSub(0, span), span)
     let draw: i32 = this.nextI32()
     while (below(draw, refused)) {
       draw = this.nextI32()
     }
-    return wrappingAdd(lo, remainder(draw, span))
+    return wrapAdd(lo, remainder(draw, span))
   }
 }
