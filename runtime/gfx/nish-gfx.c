@@ -802,7 +802,9 @@ int32_t nishgfx_bind_group_desc_buffer(NishGfxBindGroupDesc *d, uint32_t binding
   e->binding = binding;
   e->buffer = b->buffer;
   e->offset = offset;
-  e->size = size;
+  /* wgpu-native panics, and so aborts, on an entry of size 0; 0 means the rest
+   * of the buffer here, as in nishgfx_pass_set_vertex_buffer. */
+  e->size = size == 0 ? WGPU_WHOLE_SIZE : size;
   return 0;
 }
 

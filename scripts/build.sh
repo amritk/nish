@@ -431,6 +431,51 @@ if [ "$async_wanted" = 1 ] && [ -z "$objects_from" ]; then
     esac
   done
 fi
+# The graphics shim (runtime/gfx/) is selected by the IR the same way: a module
+# that declares one of its `nishgfx_*` functions gets runtime/gfx/'s units
+# compiled and linked against SDL3 and wgpu-native (`gfx_objects`). Any other
+# program compiles and links none of it, so its link line and binary stay as
+# they were. It is one rule with `callsGfx` in src/run-cache.ts, which keys a
+# run's binary on runtime/gfx/ and the libraries; change both or neither. The
+# libraries are not in the tree: they are read from $NISH_GFX_PREFIX/{include,lib},
+# or from build/gfx/<platform>/, where scripts/fetch-gfx.sh puts them.
+gfx_wanted=0
+if [ ${#lls[@]} -gt 0 ] && grep -Eq '^declare [^"]*@nishgfx_' "${lls[@]}"; then
+  gfx_wanted=1
+fi
+gfx_dir=""
+gfx_prefix=""
+if [ "$gfx_wanted" = 1 ]; then
+  case "$profile" in
+    debug|speed|size) ;;
+    *) echo "error: the module calls runtime/gfx/, which the $profile profile cannot link: SDL3 and wgpu-native are native libraries; use the debug, speed or size profile" >&2
+       exit 2 ;;
+  esac
+  gfx_dir="$(cd "$(dirname "$0")/../runtime/gfx" 2>/dev/null && pwd -P)" || gfx_dir=""
+  if [ -z "$gfx_dir" ]; then
+    echo "error: the module calls runtime/gfx/, and $(dirname "$0")/../runtime/gfx/ is not there" >&2
+    exit 2
+  fi
+  if [ -n "${NISH_GFX_PREFIX:-}" ]; then
+    gfx_prefix=$NISH_GFX_PREFIX
+  else
+    case "$(uname -s)-$(uname -m)" in
+      Linux-x86_64) gfx_platform=linux-x86_64 ;;
+      Linux-aarch64|Linux-arm64) gfx_platform=linux-aarch64 ;;
+      Darwin-x86_64) gfx_platform=macos-x86_64 ;;
+      Darwin-arm64) gfx_platform=macos-aarch64 ;;
+      *) echo "error: the module calls runtime/gfx/, and scripts/fetch-gfx.sh pins no SDL3 or wgpu-native for $(uname -s)-$(uname -m); set NISH_GFX_PREFIX to an install of both" >&2
+         exit 2 ;;
+    esac
+    gfx_prefix="$(cd "$(dirname "$0")/.." && pwd -P)/build/gfx/$gfx_platform"
+  fi
+  for need in include/SDL3/SDL.h include/webgpu/webgpu.h include/webgpu/wgpu.h lib/libSDL3.a lib/libwgpu_native.a; do
+    if [ ! -f "$gfx_prefix/$need" ]; then
+      echo "error: the module calls runtime/gfx/, and $gfx_prefix/$need is not there: run scripts/fetch-gfx.sh, or set NISH_GFX_PREFIX to an install of SDL3 and wgpu-native" >&2
+      exit 2
+    fi
+  done
+fi
 if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then
   echo "error: the module calls SQLite, and $(dirname "$0")/../runtime/sqlite/ is not there" >&2
   exit 2
@@ -777,6 +822,46 @@ sqlite_objects() {
   done < <(sqlite_unit_names)
 }
 
+# The units of runtime/gfx/, by name, in the order they are linked.
+gfx_unit_names() {
+  (cd -- "$gfx_dir" && for unit in *.c; do [ -f "$unit" ] && printf '%s\n' "$unit"; done)
+}
+# Adds the objects of runtime/gfx/ and the libraries they call to this link.
+# Each unit is compiled into the link's own directory, by its bare name from
+# inside runtime/gfx/ as sqlite_units does, with the flags given less -flto:
+# the shim is a thin layer over two native libraries, so there is nothing for
+# LTO to see through. The libraries are static archives; what else each needs
+# is the system's: on Linux, pthreads and dlopen (SDL opens its Wayland and
+# X11 client libraries at run time) and libm; on macOS, the frameworks SDL's
+# Cocoa driver and wgpu-native's Metal backend call. Nothing is added for a
+# module that does not call runtime/gfx/.
+gfx_libs=()
+gfx_objects() {
+  local unit flag
+  local -a flags
+  [ "$gfx_wanted" = 1 ] || return 0
+  make_work
+  mkdir -p -- "$work/gfx"
+  flags=()
+  for flag in "$@"; do
+    case "$flag" in -flto) ;; *) flags+=("$flag") ;; esac
+  done
+  while IFS= read -r unit; do
+    (cd -- "$gfx_dir" && exec "$CC" "${flags[@]}" -I. -I"$gfx_prefix/include" -c "$unit" -o "$work/gfx/${unit%.c}.o") ||
+      { echo "error: runtime/gfx/$unit did not compile" >&2; exit 1; }
+    inputs+=("$work/gfx/${unit%.c}.o")
+  done < <(gfx_unit_names)
+  gfx_libs=(-L"$gfx_prefix/lib" -lSDL3 -lwgpu_native)
+  case "$(uname -s)" in
+    Darwin)
+      for flag in Cocoa CoreFoundation CoreVideo Foundation IOKit Carbon Metal QuartzCore; do
+        gfx_libs+=(-framework "$flag")
+      done
+      gfx_libs+=(-weak_framework UniformTypeIdentifiers) ;;
+    *) gfx_libs+=(-pthread -ldl) ;;
+  esac
+}
+
 if [ -n "$sqlite_to" ]; then
   mkdir -p -- "$sqlite_to"
   sqlite_to=$(cd -- "$sqlite_to" && pwd)
@@ -855,7 +940,7 @@ fi
 # under `set -u` is a fatal "unbound variable" -- bash 4.4 made it legal, which is
 # why Linux never noticed. `pgo`, `elf`, `strip_flag` and `libs` are all empty on
 # ordinary builds, so please do not simplify these back.
-case "$profile" in debug|speed|size) sqlite_objects "${compile[@]}" ;; esac
+case "$profile" in debug|speed|size) sqlite_objects "${compile[@]}"; gfx_objects "${compile[@]}" ;; esac
 # A package's own C sources join the inputs here, after the runtime's halves
 # and SQLite were decided from the IR alone, so a source can neither stand in
 # for runtime.c nor be taken for one of its siblings. clang compiles each by
@@ -868,10 +953,10 @@ if [ ${#link_libs[@]} -gt 0 ] || [ ${#link_sources[@]} -gt 0 ]; then
 fi
 case "$profile" in
   debug)
-    "$CC" "${common[@]}" "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
+    "$CC" "${common[@]}" "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} ${gfx_libs[@]+"${gfx_libs[@]}"} -lm -o "$out" ;;
   speed|size)
     "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
-      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
+      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} ${gfx_libs[@]+"${gfx_libs[@]}"} -lm -o "$out" ;;
   wasm|wasm-host)
     # A region's chunks come from malloc, and the freestanding wasm runtime
     # (runtime-wasm.c) has none, so IR that makes or enters one is refused here

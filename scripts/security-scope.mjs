@@ -5,12 +5,12 @@
 //   node scripts/security-scope.mjs            check the tree (CI + npm test)
 //   node scripts/security-scope.mjs --root D   check the tree under D instead
 //
-// The surface is `std/net/**/*.ts`, `std/crypto/*.ts` and `runtime/*.c`. A file
-// is in scope when its repository path, or a glob that matches it, is
-// backticked in the first cell of a row of a record's `## Scope` table, or in
-// the Scope column of `docs/security/README.md`'s Areas table. A row of the
-// "Not yet audited" table is refused when its file is covered or gone, so the
-// list only shrinks. The rule it checks is CLAUDE.md's: new attacker-facing
+// The surface is `std/net/**/*.ts`, `std/crypto/*.ts`, `runtime/*.c` and
+// `runtime/gfx/**/*.c`. A file is in scope when its repository path, or a
+// glob that matches it, is backticked in the first cell of a row of a
+// record's `## Scope` table, or in the Scope column of
+// `docs/security/README.md`'s Areas table. A row of the "Not yet audited"
+// table is refused when its file is covered or gone, so the list only shrinks. The rule it checks is CLAUDE.md's: new attacker-facing
 // code ships with its record.
 import fs from "node:fs"
 import path from "node:path"
@@ -46,6 +46,7 @@ const surface = [
     .readdirSync(path.join(root, "runtime"))
     .filter((n) => n.endsWith(".c"))
     .map((n) => `runtime/${n}`),
+  ...walk("runtime/gfx", (n) => n.endsWith(".c")),
 ].sort()
 
 const ticked = (text) => [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1].trim())

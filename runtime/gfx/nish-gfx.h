@@ -164,8 +164,8 @@ void nishgfx_pipeline_release(NishGfxPipeline *pipeline);
 
 /* A bind group builder for group `index` of the pipeline's layout. */
 NishGfxBindGroupDesc *nishgfx_bind_group_desc_new(NishGfxPipeline *pipeline, uint32_t index);
-/* Bind size bytes of buffer at offset to `binding`. Answers 0, or -1 once the
- * builder holds 16. */
+/* Bind size bytes of buffer at offset to `binding`; size 0 binds the rest of
+ * the buffer from offset. Answers 0, or -1 once the builder holds 16. */
 int32_t nishgfx_bind_group_desc_buffer(NishGfxBindGroupDesc *desc, uint32_t binding, NishGfxBuffer *buffer,
                                        uint64_t offset, uint64_t size);
 /* Build the bind group and free the builder, either way. */

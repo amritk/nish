@@ -1,17 +1,23 @@
 /*
  * tests/gfx/triangle.c: the shim draws a triangle offscreen and reads it back.
  *
- * Built and run by tests/gfx.js. It needs no window and no SDL video, so it
- * runs headless on lavapipe. Exit status: 0 drawn and checked; 77 no adapter
- * (the section prints SKIP); anything else a failure, with the reason on
- * stderr. A second pass provokes 20 validation errors and checks that the
- * device's ring kept 16 and counted 4 dropped.
+ * Built and run by tests/gfx.js. The draw needs no window, so it runs
+ * headless on lavapipe. Exit status: 0 drawn and checked; 77 no adapter (the
+ * section prints SKIP); anything else a failure, with the reason on stderr.
+ * After the draw it checks the shim's bounds: a readback buffer one byte
+ * short, an error message past 255 bytes and a drain into 8, 20 validation
+ * errors into the 16-entry error ring, a 17th vertex attribute and bind group
+ * entry, offscreen sizes of 0 and past 16384, 70 key presses into the 64-entry
+ * event ring of a window on SDL's offscreen video driver, and a resize to a
+ * negative width.
  */
 #include "nish-gfx.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <SDL3/SDL.h>
 
 #define W 64
 #define H 64
@@ -84,7 +90,10 @@ int main(void) {
   nishgfx_encoder_submit(dev, enc);
 
   static unsigned char pixels[W * H * 4];
+  memset(pixels, 0xa5, sizeof pixels);
   if (nishgfx_offscreen_read(off, pixels, sizeof pixels - 1) != -1) return fail("a short buffer was not refused");
+  for (size_t i = 0; i < sizeof pixels; i++)
+    if (pixels[i] != 0xa5) return fail("a short buffer was not refused");
   if (nishgfx_offscreen_read(off, pixels, sizeof pixels) != 0) return fail("readback failed");
   if (drain(dev) != 0) return fail("the draw queued errors");
 
@@ -101,6 +110,70 @@ int main(void) {
   }
   printf("triangle: centre red, corner blue\n");
 
+  /* A shader naming an undefined 400-byte identifier: wgpu-native's message
+   * quotes it, so the ring keeps exactly NISHGFX_ERROR_MESSAGE_MAX bytes, and
+   * a drain into 8 bytes writes 7 and a NUL and nothing past them. */
+  {
+    char wgsl[600];
+    int n = snprintf(wgsl, sizeof wgsl, "@vertex fn vs() -> @builtin(position) vec4f { return ");
+    for (int i = 0; i < 400; i++) wgsl[n++] = 'q';
+    snprintf(wgsl + n, sizeof wgsl - n, "; }\n");
+    nishgfx_shader_release(nishgfx_shader_create(dev, wgsl));
+    nishgfx_shader_release(nishgfx_shader_create(dev, wgsl));
+    char kept_msg[NISHGFX_ERROR_MESSAGE_MAX + 2];
+    memset(kept_msg, 'x', sizeof kept_msg);
+    if (nishgfx_error_next(dev, kept_msg, sizeof kept_msg) != NISHGFX_ERROR_VALIDATION ||
+        strlen(kept_msg) != NISHGFX_ERROR_MESSAGE_MAX)
+      return fail("a long shader error was not kept at 255 bytes");
+    char small[16];
+    memset(small, 'x', sizeof small);
+    if (nishgfx_error_next(dev, small, 8) != NISHGFX_ERROR_VALIDATION || strlen(small) != 7 || small[8] != 'x')
+      return fail("a drain into 8 bytes wrote other than 7 and a NUL");
+    if (drain(dev) != 0) return fail("the shader errors queued more than two reports");
+    printf("triangle: a long error keeps 255 bytes, a drain into 8 keeps 7\n");
+  }
+
+  /* Each builder holds 16 entries and refuses the 17th. Building them is a
+   * validation error (no such locations or group), drained here uncounted.
+   * Each binding has size 0, the rest of the buffer: wgpu-native aborted on
+   * that before the shim mapped it to WGPU_WHOLE_SIZE. */
+  {
+    NishGfxPipelineDesc *full = nishgfx_pipeline_desc_new(shader, "vs", "fs", 0x16 /* RGBA8Unorm */, 0);
+    if (full == NULL) return fail("no pipeline builder");
+    int taken = 0;
+    for (uint32_t i = 0; i < 17; i++)
+      if (nishgfx_pipeline_desc_attribute(full, 0x1D /* Float32x2 */, 0, i) == 0) taken++;
+    nishgfx_pipeline_release(nishgfx_pipeline_create(dev, full));
+    NishGfxBindGroupDesc *group = nishgfx_bind_group_desc_new(pipeline, 0);
+    if (group == NULL) return fail("no bind group builder");
+    int bound = 0;
+    for (uint32_t i = 0; i < 17; i++)
+      if (nishgfx_bind_group_desc_buffer(group, i, vb, 0, 0) == 0) bound++;
+    nishgfx_bind_group_release(nishgfx_bind_group_create(dev, group));
+    char skip[NISHGFX_ERROR_MESSAGE_MAX + 1];
+    while (nishgfx_error_next(dev, skip, sizeof skip) != NISHGFX_ERROR_NONE) {
+    }
+    if (taken != 16 || bound != 16) {
+      fprintf(stderr, "triangle: builders took %d attributes and %d bindings, not 16 and 16\n", taken, bound);
+      return 1;
+    }
+    printf("triangle: builders took 16 attributes and 16 bindings\n");
+  }
+
+  /* The shim refuses 0 and anything past 16384 a side before wgpu-native sees
+   * it. 16384 itself reaches the device, which may hold a lower limit
+   * (lavapipe's is 8192): that is a reported error, never an abort. */
+  {
+    if (nishgfx_offscreen_create(dev, 16385, 1) != NULL || nishgfx_offscreen_create(dev, 1, 16385) != NULL ||
+        nishgfx_offscreen_create(dev, 0, 1) != NULL || nishgfx_offscreen_create(dev, 1, 0) != NULL)
+      return fail("an offscreen size of 0 or past 16384 was not refused");
+    NishGfxOffscreen *edge = nishgfx_offscreen_create(dev, 16384, 1);
+    if (edge == NULL) return fail("an offscreen target 16384 wide was refused");
+    nishgfx_offscreen_release(edge);
+    drain(dev);
+    printf("triangle: offscreen refuses 0 and 16385, hands 16384 to the device\n");
+  }
+
   /* MapRead may only pair with CopyDst: each of these is a validation error. */
   NishGfxBufferDesc bad = {16, 0x1 /* MapRead */ | 0x20 /* Vertex */, 0};
   for (int i = 0; i < 20; i++) nishgfx_buffer_release(nishgfx_buffer_create(dev, &bad, NULL));
@@ -113,6 +186,59 @@ int main(void) {
     return 1;
   }
   printf("triangle: error ring kept 16, dropped 4\n");
+
+  /* SDL's offscreen video driver: a window with no display. 70 key presses
+   * reach a 64-entry ring, which keeps the first 64 and counts 6 dropped. */
+  SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+  NishGfxWindow *win = nishgfx_window_create("triangle", 64, 64);
+  if (win == NULL) return fail("no offscreen window");
+  nishgfx_events_poll(win);
+  NishGfxEvent ev;
+  while (nishgfx_event_next(win, &ev) != NISHGFX_EVENT_NONE) {
+  }
+  unsigned before = nishgfx_events_dropped(win);
+  for (int i = 0; i < 70; i++) {
+    SDL_Event key;
+    SDL_zero(key);
+    key.type = SDL_EVENT_KEY_DOWN;
+    key.key.key = (SDL_Keycode)('a' + i % 26);
+    if (!SDL_PushEvent(&key)) return fail("SDL refused a pushed key");
+  }
+  nishgfx_events_poll(win);
+  int keys = 0, ordered = 1;
+  while (nishgfx_event_next(win, &ev) == NISHGFX_EVENT_KEY_DOWN) {
+    if (ev.key != (uint32_t)('a' + keys % 26)) ordered = 0;
+    keys++;
+  }
+  unsigned lost = nishgfx_events_dropped(win) - before;
+  if (keys != NISHGFX_EVENT_RING || lost != 6 || !ordered) {
+    fprintf(stderr, "triangle: event ring kept %d (ordered %d) and dropped %u, not 64 and 6\n", keys, ordered, lost);
+    return 1;
+  }
+  printf("triangle: event ring kept 64 in order, dropped 6\n");
+
+  /* A pixel size SDL reports below zero reaches the program as 0. */
+  {
+    SDL_Event size;
+    SDL_zero(size);
+    size.type = SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
+    size.window.data1 = -5;
+    size.window.data2 = 7;
+    if (!SDL_PushEvent(&size)) return fail("SDL refused a pushed resize");
+    nishgfx_events_poll(win);
+    uint32_t kind = NISHGFX_EVENT_NONE, w = 1, h = 0;
+    while ((kind = nishgfx_event_next(win, &ev)) != NISHGFX_EVENT_NONE)
+      if (kind == NISHGFX_EVENT_RESIZED) {
+        w = ev.width;
+        h = ev.height;
+      }
+    if (w != 0 || h != 7) {
+      fprintf(stderr, "triangle: a resize to -5 x 7 reached the ring as %u x %u, not 0 x 7\n", w, h);
+      return 1;
+    }
+    printf("triangle: a resize to -5 x 7 reads 0 x 7\n");
+  }
+  nishgfx_window_release(win);
 
   nishgfx_offscreen_release(off);
   nishgfx_pipeline_release(pipeline);
