@@ -58,9 +58,9 @@
     "std-term-frame": { "n": 600, "instructions": 194287334 },
     "std-raster": { "n": 400, "instructions": 136938571 },
     "std-synth": { "n": 60, "instructions": 110069992 },
-    "std-temporal-arith": { "n": 160, "instructions": 136496420 },
-    "std-temporal-format": { "n": 180, "instructions": 148946377 },
-    "std-temporal-parse": { "n": 150, "instructions": 156149172 },
+    "std-temporal-arith": { "n": 160, "instructions": 129890924, "commit": "826cfd04", "valgrind": "valgrind-3.26.0" },
+    "std-temporal-format": { "n": 180, "instructions": 141185777, "commit": "826cfd04", "valgrind": "valgrind-3.26.0" },
+    "std-temporal-parse": { "n": 150, "instructions": 144739727, "commit": "826cfd04", "valgrind": "valgrind-3.26.0" },
     "std-base64-encode": { "n": 1200, "instructions": 139248545 },
     "std-math-kernel": { "n": 240, "instructions": 141871116 }
   }
