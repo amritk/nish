@@ -196,7 +196,8 @@ True when the URL may be fetched.
 
 Whether a cache checked at `checkedMs` still answers at `nowMs`: younger
 than `maxAgeMs`, and not dated in the future, which a clock set back or a
-planted file would give.
+planted file would give. A date or a clock before 1970 is not fresh either,
+so the age is a difference of two counts at least 0, which cannot overflow.
 
 ```ts
 const releaseCacheFresh: (
