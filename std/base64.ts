@@ -134,8 +134,8 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
  * @returns A fresh string holding the padded encoding.
  */
 export const base64Encode = (bytes: u8[]): string => {
-  // `base64EncodedLength` refuses a count past 1,610,612,733, and the largest
-  // `i32` that `toI32` saturates a longer length to under `--number-mode f64`.
+  // A longer length saturates to the largest `i32` under `--number-mode f64`,
+  // which `base64EncodedLength` refuses, as it does any count past 1,610,612,733.
   const n: i32 = toI32(bytes.length)
   const out: u8[] = new Array<u8>(base64EncodedLength(n))
   const end: i32 = base64EncodeInto(bytes, 0, n, out, 0)
