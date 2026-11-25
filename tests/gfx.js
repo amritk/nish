@@ -273,7 +273,8 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
     )
     check(
       "gfx: a bind group entry of size 0 binds the rest of the buffer instead of aborting the process",
-      drawn.status === 0 && drawn.stdout.includes("triangle: builders took 16 attributes and 16 bindings\n"),
+      drawn.status === 0 &&
+        drawn.stdout.includes("triangle: a size-0 binding reached the device and the process lived\n"),
       shown(drawn)
     )
     check(

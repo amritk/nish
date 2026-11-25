@@ -236,7 +236,10 @@ NishGfxWindow *nishgfx_window_create(const char *title, uint32_t width, uint32_t
   }
   SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
 #ifdef __APPLE__
-  flags |= SDL_WINDOW_METAL;
+  /* Only cocoa makes Metal views: SDL refuses a METAL window under any other
+   * driver (the offscreen one included) instead of ignoring the flag. */
+  const char *driver = SDL_GetCurrentVideoDriver();
+  if (driver != NULL && strcmp(driver, "cocoa") == 0) flags |= SDL_WINDOW_METAL;
 #endif
   w->window = SDL_CreateWindow(title != NULL ? title : "", (int)width, (int)height, flags);
   if (w->window == NULL) {
@@ -565,9 +568,11 @@ static void push_view(NishGfxRing *ring, int32_t kind, WGPUStringView v) {
   ring_push(ring, kind, v.data, v.data == NULL ? 0 : v.length);
 }
 
-/* The device's ring outlives every callback wgpu-native can still make:
+/* The device's ring outlives every callback wgpu-native can still make, as
+ * long as the program releases the device's objects before the device:
  * nishgfx_device_release() releases the device, which fires device-lost with
- * Destroyed or CallbackCancelled, before it frees the struct. */
+ * Destroyed or CallbackCancelled, before it frees the struct. An object used
+ * after that can report into freed memory (GFX-5 in docs/security/gfx.md). */
 static void on_lost(WGPUDevice const *device, WGPUDeviceLostReason reason, WGPUStringView message,
                     void *userdata1, void *userdata2) {
   (void)device;
@@ -895,14 +900,16 @@ void nishgfx_pass_set_pipeline(NishGfxPass *p, NishGfxPipeline *pipeline) {
   if (p != NULL && pipeline != NULL) wgpuRenderPassEncoderSetPipeline(p->pass, pipeline->pipeline);
 }
 
+/* A null group or buffer is ignored, not passed on: wgpu-native's handle
+ * conversion for either is not one this shim has seen report an error. */
 void nishgfx_pass_set_bind_group(NishGfxPass *p, uint32_t index, NishGfxBindGroup *g) {
-  if (p != NULL) wgpuRenderPassEncoderSetBindGroup(p->pass, index, g != NULL ? g->group : NULL, 0, NULL);
+  if (p != NULL && g != NULL && g->group != NULL) wgpuRenderPassEncoderSetBindGroup(p->pass, index, g->group, 0, NULL);
 }
 
 void nishgfx_pass_set_vertex_buffer(NishGfxPass *p, uint32_t slot, NishGfxBuffer *b, uint64_t offset,
                                     uint64_t size) {
-  if (p == NULL) return;
-  wgpuRenderPassEncoderSetVertexBuffer(p->pass, slot, b != NULL ? b->buffer : NULL, offset,
+  if (p == NULL || b == NULL || b->buffer == NULL) return;
+  wgpuRenderPassEncoderSetVertexBuffer(p->pass, slot, b->buffer, offset,
                                        size == 0 ? WGPU_WHOLE_SIZE : size);
 }
 

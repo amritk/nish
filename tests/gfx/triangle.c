@@ -134,9 +134,7 @@ int main(void) {
   }
 
   /* Each builder holds 16 entries and refuses the 17th. Building them is a
-   * validation error (no such locations or group), drained here uncounted.
-   * Each binding has size 0, the rest of the buffer: wgpu-native aborted on
-   * that before the shim mapped it to WGPU_WHOLE_SIZE. */
+   * validation error (no such locations or group), drained here uncounted. */
   {
     NishGfxPipelineDesc *full = nishgfx_pipeline_desc_new(shader, "vs", "fs", 0x16 /* RGBA8Unorm */, 0);
     if (full == NULL) return fail("no pipeline builder");
@@ -148,7 +146,7 @@ int main(void) {
     if (group == NULL) return fail("no bind group builder");
     int bound = 0;
     for (uint32_t i = 0; i < 17; i++)
-      if (nishgfx_bind_group_desc_buffer(group, i, vb, 0, 0) == 0) bound++;
+      if (nishgfx_bind_group_desc_buffer(group, i, vb, 0, 4) == 0) bound++;
     nishgfx_bind_group_release(nishgfx_bind_group_create(dev, group));
     char skip[NISHGFX_ERROR_MESSAGE_MAX + 1];
     while (nishgfx_error_next(dev, skip, sizeof skip) != NISHGFX_ERROR_NONE) {
@@ -158,6 +156,21 @@ int main(void) {
       return 1;
     }
     printf("triangle: builders took 16 attributes and 16 bindings\n");
+  }
+
+  /* One binding of size 0, the rest of the buffer: wgpu-native aborted the
+   * process on it ("invalid size") before the shim mapped it to
+   * WGPU_WHOLE_SIZE. The group is still invalid (the pipeline has no group
+   * 0), a validation report drained here. */
+  {
+    NishGfxBindGroupDesc *group = nishgfx_bind_group_desc_new(pipeline, 0);
+    if (group == NULL) return fail("no bind group builder");
+    if (nishgfx_bind_group_desc_buffer(group, 0, vb, 0, 0) != 0) return fail("a size-0 binding was refused");
+    nishgfx_bind_group_release(nishgfx_bind_group_create(dev, group));
+    char skip[NISHGFX_ERROR_MESSAGE_MAX + 1];
+    while (nishgfx_error_next(dev, skip, sizeof skip) != NISHGFX_ERROR_NONE) {
+    }
+    printf("triangle: a size-0 binding reached the device and the process lived\n");
   }
 
   /* The shim refuses 0 and anything past 16384 a side before wgpu-native sees

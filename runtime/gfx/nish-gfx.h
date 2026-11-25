@@ -131,6 +131,9 @@ void nishgfx_adapter_release(NishGfxAdapter *adapter);
 /* A device with default limits. Answers null and queues an instance error on
  * failure. Its device-lost and uncaptured-error reports go to its ring. */
 NishGfxDevice *nishgfx_device_request(NishGfxInstance *instance, NishGfxAdapter *adapter);
+/* Release every buffer, shader, pipeline, bind group, offscreen target and
+ * surface made from the device first: one used after this can report an
+ * error into the freed device. */
 void nishgfx_device_release(NishGfxDevice *device);
 /* Drain one queued device error into msg (as nishgfx_instance_error_next). */
 int32_t nishgfx_error_next(NishGfxDevice *device, void *msg, size_t cap);
