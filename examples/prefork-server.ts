@@ -1,16 +1,17 @@
 // Opt-out (`--allow-panics`), for sites in `std/net/http1-server` and
 // `std/net/prefork` no guard here removes; this file keeps none of its own.
-// `readable`, `connection` and `new Http1Server` reach the cap check of
-// `Http1Connection`'s constructor (std/net/http1-server.ts:498:5) and `write`
-// its caller-window check (:506:5): `src/panics.ts` follows a call into any
-// function that can panic, and only `std/threads.ts`'s checks are discharged
-// at their caller (`callerProven`, src/attributes.ts), a `src/` gap on the
-// WP80 tracking issue #2176. `writable` and `flush` reach the `netRead` window
-// of `Http1Server.drain` (:3230:22) and `next` the `netWrite` window of
-// `Http1Server.send` (:3286:22). `preforkWorkers` reaches the `netRead` window
-// of `preforkDiscard` (std/net/prefork.ts:1169:10) and the panic
-// `preforkSupervise` raises on a refused config (:1392:5). #2279 (for #2208)
-// proves `drain`'s and `preforkDiscard`'s windows, not `send`'s
+// `readable` and `connection` reach the cap check of `Http1Connection`'s
+// constructor (std/net/http1-server.ts:498:5) through the server's `build` of
+// a pooled connection (:2885, :2967; the server's own constructor has no
+// site), and `write` its caller-window check (:506:5): `src/panics.ts` follows
+// a call into any function that can panic, and only `std/threads.ts`'s checks
+// are discharged at their caller (`callerProven`, src/attributes.ts), a `src/`
+// gap on the WP80 tracking issue #2176. `writable` and `flush` reach the
+// `netRead` window of `Http1Server.drain` (:3230:22) and `next` the `netWrite`
+// window of `Http1Server.send` (:3286:22). `preforkWorkers` reaches the
+// `netRead` window of `preforkDiscard` (std/net/prefork.ts:1169:10) and the
+// panic `preforkSupervise` raises on a refused config (:1392:5). #2279 (for
+// #2208) proves `drain`'s and `preforkDiscard`'s windows, not `send`'s
 // `[start, end)`. Once all are gone, build this file without `--allow-panics`.
 //
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker

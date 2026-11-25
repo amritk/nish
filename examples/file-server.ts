@@ -1,15 +1,17 @@
 // Opt-out (`--allow-panics`), for sites in `std/net/http1-server` no guard
-// here removes. `readable`, `connection` and `new Http1Server` reach the cap
-// check of `Http1Connection`'s constructor (std/net/http1-server.ts:498:5) and
-// `write` its caller-window check (:506:5): `src/panics.ts` follows a call into
-// any function that can panic, and only `std/threads.ts`'s checks are
-// discharged at their caller (`callerProven`, src/attributes.ts), a `src/` gap
-// on the WP80 tracking issue #2176. `writable` and `flush` reach the `netRead`
-// window of `Http1Server.drain` (:3230:22), `next` the `netWrite` window of
-// `Http1Server.send` (:3286:22), and the `fileReadAt` below is a window of the
-// same kind (file-server.ts:119:20). #2279 (for #2208) proves `drain`'s and
-// this file's, not `send`'s `[start, end)`. Once all are gone, build this file
-// without `--allow-panics`.
+// here removes. `readable` and `connection` reach the cap check of
+// `Http1Connection`'s constructor (std/net/http1-server.ts:498:5) through the
+// server's `build` of a pooled connection (:2885, :2967; the server's own
+// constructor has no site), and `write` its caller-window check (:506:5):
+// `src/panics.ts` follows a call into any function that can panic, and only
+// `std/threads.ts`'s checks are discharged at their caller (`callerProven`,
+// src/attributes.ts), a `src/` gap on the WP80 tracking issue #2176.
+// `writable` and `flush` reach the `netRead` window of `Http1Server.drain`
+// (:3230:22), `next` the `netWrite` window of `Http1Server.send` (:3286:22),
+// and the `fileReadAt` below is a window of the same kind
+// (file-server.ts:119:20). #2279 (for #2208) proves `drain`'s and this file's,
+// not `send`'s `[start, end)`. Once all are gone, build this file without
+// `--allow-panics`.
 //
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each

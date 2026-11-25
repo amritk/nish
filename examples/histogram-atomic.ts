@@ -1,4 +1,5 @@
-// Opt-out (`--allow-panics`), for two `src/` gaps, not sites of this file's.
+// Opt-out (`--allow-panics`), for two `src/` gaps and one kept panic, none of
+// them a site of this file's.
 // The compiler writes `AtomicI32Array`'s element methods itself and records
 // one `index` site at each method's declaration (src/attributes.ts, "An
 // atomic's method"), so `add` (std/threads.ts:863:3), `load` (841:3) and every
@@ -7,9 +8,11 @@
 // in `if (b >= 0 && b < s.bins.length)` leaves the same errors (#2206). And
 // `new AtomicI32Array(BINS)` reaches the constructor's `array-length` site
 // (826:21), which the compiler decides by the length's type alone (#2207,
-// proved by #2279, which leaves the constructor's own negative-length panic,
-// 790:3, in its place). Once both are gone, build this file without
-// `--allow-panics`.
+// proved by #2279). And the constructor keeps `negativeAtomicLength`'s panic
+// (790:3), a kept contract panic for a negative length that `BINS` never is,
+// which a caller's proof cannot discharge either (`callerProven`,
+// src/attributes.ts): so this file keeps `--allow-panics` even once #2206 and
+// #2207 are closed.
 // smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The

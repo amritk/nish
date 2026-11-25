@@ -112,7 +112,7 @@ stages:
         status: pending
       - id: s6-bench
         content: Lower each instruction count that fell to CI's printed figure, with the before and after table in the PR body — see WP80 S6
-        status: in_progress
+        status: completed
       - id: s6-optout
         content: After #2206, #2207 and #2208, drop the opt-out headers and smoke args of histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server and http-app, and the guide markers and sentences about them — see WP80 S6
         status: in_progress
