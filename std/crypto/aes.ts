@@ -491,20 +491,26 @@ const aesMixColumns = (q: u64[]): void => {
   q[7] = t6 ^ n7 ^ aesRowAfterNext(t7)
 }
 
-/** AddRoundKey (FIPS 197 §5.1.4): the eight words of `rk` from `at` into the state. */
+/**
+ * AddRoundKey (FIPS 197 §5.1.4): the eight words of `rk` from `at` into the
+ * state. Its callers pass `8 * round` for a round of at most 14, so `at` is at
+ * most 112 and the mask `at & 127` changes nothing; it bounds `base + 7`, so
+ * the sum cannot overflow, with no branch.
+ */
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
+  const base: i32 = at & 127
   // The first and last key words and the last plane first: their checked
   // reads prove every other index below.
-  const k0: u64 = rk[at]
-  const k7: u64 = rk[at + 7]
+  const k0: u64 = rk[base]
+  const k7: u64 = rk[base + 7]
   const q7: u64 = q[7]
   q[0] = q[0] ^ k0
-  q[1] = q[1] ^ rk[at + 1]
-  q[2] = q[2] ^ rk[at + 2]
-  q[3] = q[3] ^ rk[at + 3]
-  q[4] = q[4] ^ rk[at + 4]
-  q[5] = q[5] ^ rk[at + 5]
-  q[6] = q[6] ^ rk[at + 6]
+  q[1] = q[1] ^ rk[base + 1]
+  q[2] = q[2] ^ rk[base + 2]
+  q[3] = q[3] ^ rk[base + 3]
+  q[4] = q[4] ^ rk[base + 4]
+  q[5] = q[5] ^ rk[base + 5]
+  q[6] = q[6] ^ rk[base + 6]
   q[7] = q7 ^ k7
 }
 

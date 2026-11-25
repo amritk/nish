@@ -237,14 +237,15 @@ const aesMixColumns = (q: u64[]): void => {
 
 // Mirrors `aesAddRoundKey` in std/crypto/aes.ts.
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
-  uncheckedSet(q, 0, uncheckedGet(q, 0) ^ uncheckedGet(rk, at));
-  uncheckedSet(q, 1, uncheckedGet(q, 1) ^ uncheckedGet(rk, wrappingAdd(at, 1)));
-  uncheckedSet(q, 2, uncheckedGet(q, 2) ^ uncheckedGet(rk, wrappingAdd(at, 2)));
-  uncheckedSet(q, 3, uncheckedGet(q, 3) ^ uncheckedGet(rk, wrappingAdd(at, 3)));
-  uncheckedSet(q, 4, uncheckedGet(q, 4) ^ uncheckedGet(rk, wrappingAdd(at, 4)));
-  uncheckedSet(q, 5, uncheckedGet(q, 5) ^ uncheckedGet(rk, wrappingAdd(at, 5)));
-  uncheckedSet(q, 6, uncheckedGet(q, 6) ^ uncheckedGet(rk, wrappingAdd(at, 6)));
-  uncheckedSet(q, 7, uncheckedGet(q, 7) ^ uncheckedGet(rk, wrappingAdd(at, 7)));
+  const base: i32 = at & 127;
+  uncheckedSet(q, 0, uncheckedGet(q, 0) ^ uncheckedGet(rk, base));
+  uncheckedSet(q, 1, uncheckedGet(q, 1) ^ uncheckedGet(rk, wrappingAdd(base, 1)));
+  uncheckedSet(q, 2, uncheckedGet(q, 2) ^ uncheckedGet(rk, wrappingAdd(base, 2)));
+  uncheckedSet(q, 3, uncheckedGet(q, 3) ^ uncheckedGet(rk, wrappingAdd(base, 3)));
+  uncheckedSet(q, 4, uncheckedGet(q, 4) ^ uncheckedGet(rk, wrappingAdd(base, 4)));
+  uncheckedSet(q, 5, uncheckedGet(q, 5) ^ uncheckedGet(rk, wrappingAdd(base, 5)));
+  uncheckedSet(q, 6, uncheckedGet(q, 6) ^ uncheckedGet(rk, wrappingAdd(base, 6)));
+  uncheckedSet(q, 7, uncheckedGet(q, 7) ^ uncheckedGet(rk, wrappingAdd(base, 7)));
 }
 
 // Mirrors `aesBitslicedRound` in std/crypto/aes.ts.
