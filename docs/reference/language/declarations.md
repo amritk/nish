@@ -1415,7 +1415,8 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     compiled, with nothing said about it — the silent mismatch this spelling
     exists to make loud.
   - **The target rides in the condition too** (WP89 S6). A wasm32 build
-    (`--target wasm32`, or `--profile wasi`) asks for `nish-wasm32` before
+    (either wasm32 triple, `--target wasm32` or `--target wasm32-unknown-wasi`,
+    or `--profile wasi`) asks for `nish-wasm32` before
     `nish-<mode>` and `nish`, again in the compiler's order rather than the
     manifest's; a native build never reads it. `nish-wasm32` outranks the
     mode because what it replaces cannot link: a native file may reach the
@@ -1429,7 +1430,9 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     A package that declares `nish-wasm32` alone has no entry point for a native
     build (`NL3020`). The standard library does the same by file name: under a
     wasm32 target, `nish/<name>` compiles `std/<name>.wasm32.ts` in place of
-    `std/<name>.ts` when it is there.
+    `std/<name>.ts` when it is there (`tests/link/module_target_std_twin`,
+    which resolves both builds' paths and compares their pairs). A `nish:`
+    builtin module has no such twin: its source is the compiler's own.
   - **The two files of a target pair export the same names with the same
     signatures** (`NL3063`). An importer is checked against whichever file
     its build picked, so a drift between them would break a program on one
@@ -1443,10 +1446,15 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     `tests/link/package_target_mismatch_native`). A signature is the
     declaration's text up to its body or initializer, with blank runs
     collapsed: a function's or method's parameters and return type, a field's
-    or constant's type, a class's heritage, and an interface, type alias or
-    enum whole. Bodies and initializers may differ; layout may too
-    (`tests/link/module_target_twin`). A file that does not parse is not
-    compared, and the build that compiles it says why.
+    or constant's type, a class's heritage and its public members in the
+    order they are written, and an interface, type alias or enum whole.
+    Bodies and initializers may differ, and so may a class's `private`
+    members. A constant with no type annotation has no cut, since its type is
+    whatever its initializer gives: it is compared whole, so annotate it to
+    let the initializers differ
+    (`tests/link/module_target_twin`). The pair is compared once, at the first
+    import that reaches it, and the refusal points there. A file that does not
+    parse is not compared, and the build that compiles it says why.
   - **Presence of the condition is the claim, and every failure to find it
     names its cause** (`docs/wp21-packages.md` §6, §11). Each is refused at
     the import, before a byte of the package is checked, with its own `--json`
