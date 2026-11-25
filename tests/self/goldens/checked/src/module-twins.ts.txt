@@ -21,35 +21,58 @@ function TwinExport.constructor(this: TwinExport, name: string, signature: strin
 function isTwinBlank(code: i32): boolean -> @isTwinBlank
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function twinCollapsed(text: string, start: i32, end: i32): string -> @twinCollapsed
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: start
-  calls: isTwinBlank nish_alloc_struct nish_array_grow nish_panic_index nish_str_new
+function twinCollapsed(text: string, start: i32, end: i32, prefix: string, suffix: string): string -> @twinCollapsed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: end start
+  calls: isTwinBlank nish_alloc_struct nish_array_grow nish_str_concat nish_str_new
   stackSites=1 stackLocals=1
   local +0:9 words: string[] (const)
+  local +4:9 stop: i32 (const)
+  local +5:7 from: i32 (let)
+  local +6:12 i: i32 (let)
+  callee +7:38 isTwinBlank -> @isTwinBlank
+function hasTwinWord(text: string, start: i32, end: i32, word: string): boolean -> @hasTwinWord
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end start
+  calls: isTwinBlank nish_panic_overflow nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+  local +0:9 stop: i32 (const)
   local +1:7 from: i32 (let)
   local +2:12 i: i32 (let)
-  callee +3:9 isTwinBlank -> @isTwinBlank
+  local +3:11 blank: boolean (const)
+  callee +3:63 isTwinBlank -> @isTwinBlank
 function cutAt(node: Node, at: i32): i32 -> @cutAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function afterType(node: Node): i32 -> @afterType
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function isPrivateMember(text: string, member: Node): boolean -> @isPrivateMember
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: text
+  calls: hasTwinWord nish_panic_index
+  pointer member: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:10 hasTwinWord -> @hasTwinWord
 function classSignature(text: string, node: Node): string -> @classSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: cutAt nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat twinCollapsed
+  calls: afterType cutAt isPrivateMember nish_alloc_struct nish_array_grow nish_panic_index twinCollapsed
   pointer node: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 members: Node (const)
   local +1:9 parts: string[] (const)
   callee +1:28 twinCollapsed -> @twinCollapsed
   local +2:14 member: Node (const)
-  local +3:9 cut: i32 (let)
-  callee +5:13 cutAt -> @cutAt
-  callee +7:13 cutAt -> @cutAt
-  callee +9:13 cutAt -> @cutAt
-  callee +11:19 twinCollapsed -> @twinCollapsed
+  callee +3:9 isPrivateMember -> @isPrivateMember
+  local +6:9 cut: i32 (let)
+  callee +8:13 cutAt -> @cutAt
+  callee +10:13 cutAt -> @cutAt
+  callee +12:13 afterType -> @afterType
+  callee +14:16 twinCollapsed -> @twinCollapsed
 function twinDeclName(node: Node): string -> @twinDeclName
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
@@ -58,7 +81,7 @@ function exportsOf(path: string, text: string): TwinExport[] | null -> @exportsO
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.constructor
   escaping: path text
-  calls: Parser.constructor Parser.parseSourceFile SourceFile.constructor TwinExport.constructor classSignature cutAt nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat twinCollapsed twinDeclName
+  calls: Parser.constructor Parser.parseSourceFile SourceFile.constructor TwinExport.constructor afterType classSignature cutAt nish_alloc_struct nish_array_grow nish_panic_index twinCollapsed twinDeclName
   stackSites=1 stackLocals=1
   local +0:9 parser: Parser (const)
   callee +0:18 new Parser -> @Parser.constructor
@@ -67,21 +90,29 @@ function exportsOf(path: string, text: string): TwinExport[] | null -> @exportsO
   callee +1:16 Parser.parseSourceFile -> @Parser.parseSourceFile
   local +5:9 out: TwinExport[] (const)
   local +6:14 decl: Node (const)
-  callee +11:16 new TwinExport -> @TwinExport.constructor
-  callee +11:31 twinDeclName -> @twinDeclName
-  callee +11:51 twinCollapsed -> @twinCollapsed
-  callee +11:83 cutAt -> @cutAt
-  callee +13:16 new TwinExport -> @TwinExport.constructor
-  callee +13:31 twinDeclName -> @twinDeclName
-  callee +13:51 classSignature -> @classSignature
-  local +15:18 one: Node (const)
-  callee +16:18 new TwinExport -> @TwinExport.constructor
-  callee +16:33 twinDeclName -> @twinDeclName
-  callee +16:61 twinCollapsed -> @twinCollapsed
-  callee +16:92 cutAt -> @cutAt
-  callee +23:16 new TwinExport -> @TwinExport.constructor
-  callee +23:31 twinDeclName -> @twinDeclName
-  callee +23:51 twinCollapsed -> @twinCollapsed
+  local +12:13 rest: Node | null (const)
+  local +13:13 end: i32 (const)
+  local +14:13 cut: i32 (const)
+  callee +14:90 cutAt -> @cutAt
+  callee +15:16 new TwinExport -> @TwinExport.constructor
+  callee +15:31 twinDeclName -> @twinDeclName
+  callee +15:51 twinCollapsed -> @twinCollapsed
+  local +17:20 one: Node (const)
+  callee +19:13 new TwinExport -> @TwinExport.constructor
+  callee +19:28 twinDeclName -> @twinDeclName
+  callee +19:47 twinCollapsed -> @twinCollapsed
+  callee +19:78 afterType -> @afterType
+  callee +24:16 new TwinExport -> @TwinExport.constructor
+  callee +24:31 twinDeclName -> @twinDeclName
+  callee +24:51 classSignature -> @classSignature
+  local +26:18 one: Node (const)
+  callee +28:11 new TwinExport -> @TwinExport.constructor
+  callee +28:26 twinDeclName -> @twinDeclName
+  callee +28:45 twinCollapsed -> @twinCollapsed
+  callee +28:76 afterType -> @afterType
+  callee +36:16 new TwinExport -> @TwinExport.constructor
+  callee +36:31 twinDeclName -> @twinDeclName
+  callee +36:51 twinCollapsed -> @twinCollapsed
 function findExport(list: TwinExport[], name: string): TwinExport | null -> @findExport
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
