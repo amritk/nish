@@ -121,15 +121,7 @@ fs.writeFileSync(
 // The two commands the guide's "Building" section shows: game.ts and each std
 // module it imports to one .ll each (the loader is written beside the .d.ts),
 // then a link with the wasm runtime.
-run(nish, [
-  "game.ts",
-  "--target",
-  "wasm32",
-  "--emit-dts",
-  path.join(out, "game.d.ts"),
-  "-o",
-  `${ll}/`,
-])
+run(nish, ["game.ts", "--target", "wasm32", "--emit-dts", path.join(out, "game.d.ts"), "-o", `${ll}/`])
 const modules = fs
   .readdirSync(ll)
   .filter((f) => f.endsWith(".ll"))
