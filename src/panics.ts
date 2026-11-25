@@ -1126,7 +1126,8 @@ const sliceAdvice = (program: CheckedProgram, node: Node): string => {
     `\`${name}\` panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it in range ` +
     `here: pass an offset of 0 and guard the count — \`if (${len} >= 0 && ${len} <= ${buf}.length)\` proves it — ` +
     `or pass the rest of the buffer, \`${buf}.length - ${off}\`, with \`${off}\` guarded by ` +
-    `\`if (${off} >= 0 && ${off} <= ${buf}.length)\``
+    `\`if (${off} >= 0 && ${off} <= ${buf}.length)\`, or a window \`end - ${off}\`, with ` +
+    `\`if (${off} >= 0 && ${off} <= end && end <= ${buf}.length)\``
   )
 }
 
