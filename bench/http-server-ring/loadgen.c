@@ -269,7 +269,8 @@ static void child(int k, long n, double rate, double think, int port) {
           scanned++;
         }
         if (scanned == n) {
-          /* Every connection has a request outstanding: the server is behind. */
+          /* Every connection has a request outstanding: the due requests are
+           counted as starved and not sent, so they are never timed. */
           starved += due - j;
           sent += due - j;
           break;

@@ -24,12 +24,12 @@
 # answered in it; latency is from send to last byte, as loadgen times it.
 # A run whose load starved (every connection had a request outstanding
 # when the rate wanted another) offered less than its rate, and the summary
-# prints the count. The server runs on --server-cpus (default 0) and the
-# load on the remaining cores.
+# prints the count; a starved request is not sent, so it has no latency
+# sample. The server runs on --server-cpus (default 0) and the load on the
+# remaining cores.
 #
 # HttpArena's latency-1m profile offers 1,000,000 req/s, which a 4-vCPU box
-# cannot: the load generator starves above about 150,000 req/s here, so
-# --rates' second figure is that profile's stand-in, not its rate.
+# cannot, so --rates' second figure is that profile's stand-in, not its rate.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
