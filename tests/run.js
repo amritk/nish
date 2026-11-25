@@ -12279,6 +12279,46 @@ int main(void) {
       )
     }
 
+    // The adapter's own record decoding (row_of, field_value, the index
+    // rowid's fast path and cursor_record) against corrupt records, under
+    // AddressSanitizer: tests/link/std_sqlite_cursor_record/corrupt-record.c
+    // says what it corrupts. A toolchain without the sanitizer runtimes is a
+    // named skip, as the runtime's sanitizer run is.
+    {
+      const asan = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
+      const probe = sanitizerProbe(asan)
+      if (probe?.skip) {
+        skip(`skipped: sqlite-link: the corrupt-record walk: ${probe.skip}`)
+      } else {
+        const exe = path.join(sqDir, "corrupt-record")
+        const built = spawnSync(
+          "clang",
+          [
+            "-O1",
+            "-g",
+            "-w",
+            ...asan,
+            `-I${path.join(root, "runtime", "sqlite")}`,
+            "-DSQLITE_OMIT_SHARED_CACHE",
+            "-DSQLITE_THREADSAFE=1",
+            path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+            path.join(root, "tests", "link", "std_sqlite_cursor_record", "corrupt-record.c"),
+            "-o",
+            exe,
+            "-lpthread",
+            "-lm",
+          ],
+          { encoding: "utf8" }
+        )
+        const ran = built.status === 0 ? spawnSync(exe, [path.join(sqDir, "corrupt.db")], { encoding: "utf8" }) : null
+        check(
+          "sqlite-link: every cursor read of a corrupt record stays inside it (AddressSanitizer)",
+          probe === null && ran !== null && ran.status === 0 && Number(ran.stdout) > 800,
+          (probe?.error ?? "") + built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stdout} ${ran.stderr.slice(0, 4000)}` : "")
+        )
+      }
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
@@ -12798,6 +12838,19 @@ int main(void) {
         rowDebugRun.status === 0 &&
         rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
       rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
+    )
+    // Cursor.record, RowRecord and reopenCursor under SQLite's asserts: the
+    // record copy reads the payload as SQLite's own accessors do, overflow
+    // pages included, and every reopen closes the cursor it replaces.
+    const recDir = path.join("tests", "link", "std_sqlite_cursor_record")
+    const recDebug = link(path.join(recDir, "main.ts"), "record-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const recDebugRun = recDebug.status === 0 ? runOut("record-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_record passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      recDebugRun !== null &&
+        recDebugRun.status === 0 &&
+        recDebugRun.stdout === fs.readFileSync(path.join(root, recDir, "expected.out"), "utf8"),
+      recDebug.stderr + (recDebugRun ? recDebugRun.stdout.slice(-2000) + recDebugRun.stderr : "")
     )
     // A readRow walk takes no more of SQLite's heap once warm. This watches
     // sqlite3_memory_used and its highwater only: SQLite's allocator, which

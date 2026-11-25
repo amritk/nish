@@ -14,6 +14,7 @@ import {
   OPEN_READONLY,
   OPEN_READWRITE,
   OPEN_URI,
+  RowRecord,
   SEEK_GE,
   SEEK_GT,
   SEEK_LE,
@@ -99,6 +100,12 @@ A B-tree cursor on a table or index, which reads rows without a statement.
 <scalar-card title="Database" icon="phosphor/regular/cube" href="#database">
 
 A connection.
+
+</scalar-card>
+
+<scalar-card title="Row​Record" icon="phosphor/regular/cube" href="#rowrecord">
+
+A row as SQLite stores it, copied whole by `Cursor.record` and decoded here: the record format's header of varints, one serial type a field, and the fields' bytes after it.
 
 </scalar-card>
 
@@ -277,6 +284,8 @@ class Cursor
 | `next(): Result<boolean, i32>` | Moves to the next row. |
 | `previous(): Result<boolean, i32>` | Moves to the row before. |
 | `readRow(ints: i64[], spans: i32[], text: u8[]): Result<i32, i32>` | Reads the current row's `selectRow` columns in one call. For the `k`th of them it writes `spans[3k]`, `spans[3k + 1]` and `spans[3k + 2]`: the type `columnType` answers, then where its bytes start in `text` and how many there are, which are the bytes `columnInto` copies (0 and 0 for a number or NULL); and `ints[k]`, the value `columnI64` answers for an INTEGER or FLOAT column and 0 for TEXT, BLOB and NULL, which it does not convert. The row's text and blob bytes sit in `text` in column order. A refusal, or an answer larger than `text.length`, writes no `ints` or `spans`, and `text` may hold the first columns' bytes: grow `text` and call again. An empty list answers `Ok(0)` on a row, and `SQLITE_MISUSE` with no row or a closed cursor, as any list does. It allocates nothing. |
+| `rebind(handle: i32): void` | Points this object at the adapter's cursor `handle`, forgetting the columns `selectRow` chose. `Database.reopenCursor` calls it; a program calls that instead. |
+| `record(buf: u8[]): Result<i32, i32>` | Copies the current row's record into `buf`: SQLite's record format, whole, as it is stored (https://sqlite.org/fileformat2.html#record_format), a header of varints giving each field's serial type, then the fields' bytes. It converts nothing, so a program that decodes the format itself reads a row with one call and one copy. An index entry's record ends with its rowid; a table row's holds NULL for an INTEGER PRIMARY KEY column, whose value is the row's key (`rowid`). It allocates nothing. |
 | `rowid(): i64` | The current row's rowid: a table row's key, an index entry's `rowid`. |
 | `seek(op: i32): Result<boolean, i32>` | Moves an index cursor by its seek key, compared with each entry's first key columns, so a key with fewer values than the index is a prefix: `SEEK_GE` and `SEEK_GT` land on the first entry at or after the key, `SEEK_LE` and `SEEK_LT` on the last at or before it, the `E` forms counting an equal entry. The key stays, for the next seek. |
 | `seekRowid(rowid: i64): Result<boolean, i32>` | Moves a table cursor to the row whose rowid is `rowid`. |
@@ -304,7 +313,57 @@ class Database
 | `lastInsertRowid(): i64` | The rowid of the last row an INSERT on this connection made. |
 | `openCursor(name: string, columns: string): Result<Cursor, SqliteError>` | Opens a cursor on `name`, a table or index of the main database, inside a read transaction (`beginRead`). `columns` is the schema the program reads, checked at open: a table's columns, or an index's key columns, each with ` DESC` where the index has it, and then `rowid`, in order, joined by `,` with no space. A table that is `WITHOUT ROWID`, a view or virtual table, one with a generated column, an index on an expression or with a collation other than `BINARY`, and a database that is not UTF-8 are refused. `close`, `endRead`, closing the connection, any `exec`, and any stepped statement but a plain read (`pragma_*` SELECTs too) close it. |
 | `prepare(sql: string): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. The statement belongs to this connection, and `close` finalizes it. |
+| `reopenCursor(cur: Cursor, name: string, columns: string): Result<void, SqliteError>` | `openCursor` into a `Cursor` the program already holds, which then reads the new cursor: the one it held before, open or already ended with its read, is closed first. There is no garbage collector, so a loop that opens the same cursors in every read transaction keeps one `Cursor` each this way and allocates nothing, where `openCursor`'s new object a time would stay allocated for good. |
 | `rollback(): Result<void, i32>` | Undoes the open transaction: `exec("ROLLBACK")`. |
+
+### RowRecord
+
+A row as SQLite stores it, copied whole by `Cursor.record` and decoded
+here: the record format's header of varints, one serial type a field, and
+the fields' bytes after it. One `read` is one call into the adapter and one
+copy, and the fields are then read from this object's own buffer, so a loop
+that reads many columns of many rows pays for the record once a row rather
+than once a column. It allocates only when a record is longer than its
+buffer, which then grows to fit.
+
+Fields are the record's, in its order: a table row's columns as declared,
+with NULL for an INTEGER PRIMARY KEY column, whose value is the row's key
+(`Cursor.rowid`), and an index entry's key columns and then its rowid. A
+record written before `ALTER TABLE ADD COLUMN` holds fewer fields than the
+table has columns; `fields` says how many it holds.
+
+<scalar-code-group>
+
+```ts example.ts
+const row = new RowRecord(256, 8)
+let on = cur.first().expect("first")
+while (on) {
+  row.read(cur).expect("record")
+  if (row.type(1) === SQLITE_TEXT) {
+    console.log(String.fromBytes(row.buf, row.start(1), row.size(1)))
+  }
+  on = cur.next().expect("next")
+}
+```
+
+</scalar-code-group>
+
+```ts
+class RowRecord
+```
+
+| Member | |
+| --- | --- |
+| `new RowRecord(capacity: i32, maxFields: i32)` | A decoder with a buffer of `capacity` bytes, which reads at most `maxFields` fields of each record. |
+| `buf: u8[]` | The record's bytes, from 0 to `length`. |
+| `fields: i32` | How many fields its header gives, at most the `maxFields` it was made with. |
+| `length: i32` | How long the record last read is. |
+| `float(k: i32): f64` | Field `k`'s number as a float: an `SQLITE_FLOAT`'s IEEE 754 value, an `SQLITE_INTEGER`'s value converted. |
+| `int(k: i32): i64` | Field `k`'s integer: big-endian, two's complement, as SQLite stores it. |
+| `read(cur: Cursor): Result<void, i32>` | Copies `cur`'s current row and reads its header, as SQLite's own `sqlite3VdbeRecordUnpack` reads it: the fields it would find and no others, and a last field whose bytes would run past the record's end reads as NULL. |
+| `size(k: i32): i32` | How many bytes field `k` holds in `buf` from `start(k)`: a text's or a blob's length, which is what a program copies or compares. |
+| `start(k: i32): i32` | Where field `k`'s bytes start in `buf`: a text's or a blob's first byte, an integer's or a float's big-endian bytes. |
+| `type(k: i32): i32` | Field `k`'s type, as `Cursor.columnType` answers it. |
 
 ### SqliteError
 

@@ -1024,9 +1024,19 @@ export const SQLITE_BUILD_DEFINES = [
  * **9,307 bytes** on 2026-11-24 (563,546 for the unit), 8,230 on `main` before it (the
  * single handle lookup per cursor call added 17), with the index cursor's kept seek key
  * and `countRange`. The budget is the next 256-byte boundary above the measurement, as
- * every ceiling here was set.
+ * every ceiling here was set. Measured **10,631 bytes** on 2026-11-25, 9,462 on `main`
+ * before it, once a cursor reads its record's header itself rather than through
+ * `sqlite3VdbeRecordUnpack` and a Mem a field, with `Cursor.record` (9,472 to 10,752):
+ * `field_value` 236, the in-place decode of an integer, NULL, text or blob; `row_of`
+ * 149 to 379, the header walk; `nishsqlite_cursor_rowid` 104 to 340, an index entry's
+ * rowid read off the record's end without the walk; `nishsqlite_cursor_record` 175;
+ * `nishsqlite_cursor_read_row` 200 to 333, with the per-row checks made once;
+ * `nishsqlite_cursor_open` +88, the two field tables in the cursor's block; less
+ * `column_value` 299 to 174 and `cursor_free` -29, which no longer build or free Mems.
+ * The serial types' integer decode is one function, `serial_int`, inlined into both of
+ * its callers at -Oz as at -O2; out of line it would be a call per field read.
  */
-const RUNTIME_SQLITE_TEXT_BUDGET = 9472
+const RUNTIME_SQLITE_TEXT_BUDGET = 10752
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
