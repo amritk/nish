@@ -4,13 +4,12 @@
 // atomic's method"), so `add` (std/threads.ts:863:3), `load` (841:3) and every
 // `spawn` of a task that calls `add` reach a site no caller's guard removes:
 // `load` below already runs under `b < bins.length`, and wrapping each `add`
-// in `if (b >= 0 && b < s.bins.length)` leaves the same errors, each naming
-// 863:3 or 841:3. And `new AtomicI32Array(BINS)` reaches the constructor's
-// `array-length` site (826:21), which the compiler decides by the length's
-// type alone, so the constructor's `length >= 0` check does not remove it.
-// Both gaps are recorded as follow-ups on the WP80 tracking issue #2176; the
-// fix, in `src/`, is to prove an element method's index at its call as
-// `a[i]`'s is proved, and a `new Array` length by flow, then drop this opt-out.
+// in `if (b >= 0 && b < s.bins.length)` leaves the same errors (#2206). And
+// `new AtomicI32Array(BINS)` reaches the constructor's `array-length` site
+// (826:21), which the compiler decides by the length's type alone (#2207,
+// proved by #2279, which leaves the constructor's own negative-length panic,
+// 790:3, in its place). Once both are gone, build this file without
+// `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The

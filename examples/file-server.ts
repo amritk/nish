@@ -1,25 +1,15 @@
-// Opt-out (`--allow-panics`): `respond`, `methodIs` and `end` reach overflow
-// sites in `std/net/http1-codec` (WP80 S3); `readable` and `connection` reach
-// `Http1Config`'s cap check and `write` its caller-window check, the panics
-// `std/net/http1-server` keeps for a program's own mistake (WP80 S4).
-// `readable` and `connection` reach the cap check through `new
-// Http1Connection` in `Http1Server.build`: `src/panics.ts` follows every call
-// into a function that can panic, and only `std/threads.ts`'s two checks are
-// discharged at their caller (`callerProven`, src/attributes.ts:4547), so no
-// checked config clears it while the constructor keeps its panic.
-// `writable` and `flush` reach `--emit-panics`'s
-// `{"name":"Http1Server.drain",...,"panics":[{"kind":"slice","line":3199,"column":22,"proven":false}]}`,
-// `netRead(fd, this.scratch, 0, size)` with `size` the scratch's own length
-// and `size > 0` checked on the line before; `next` reaches
-// `{"name":"Http1Server.send",...,"panics":[{"kind":"slice","line":3255,"column":22,"proven":false}]}`,
-// `netWrite(fd, conn.output, start, end - start)` after a test that ends the
-// connection unless `0 <= start <= end <= output.length`. Both windows hold,
-// but a `nish:net` range check is a site no proof removes: `builtinPanicKind`
-// (src/panics.ts:238) makes every such call a `slice` site, and
-// `noteBuiltinSite` (src/attributes.ts:4369) records only a `nish:simd`
-// access as proven (a `src/` prover gap).
-// The `fileReadAt` window here is the same kind of site. Follow-up: once
-// those are gone, build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`), for sites in `std/net/http1-server` no guard
+// here removes. `readable`, `connection` and `new Http1Server` reach the cap
+// check of `Http1Connection`'s constructor (std/net/http1-server.ts:498:5) and
+// `write` its caller-window check (:506:5): `src/panics.ts` follows a call into
+// any function that can panic, and only `std/threads.ts`'s checks are
+// discharged at their caller (`callerProven`, src/attributes.ts), a `src/` gap
+// on the WP80 tracking issue #2176. `writable` and `flush` reach the `netRead`
+// window of `Http1Server.drain` (:3230:22), `next` the `netWrite` window of
+// `Http1Server.send` (:3286:22), and the `fileReadAt` below is a window of the
+// same kind (file-server.ts:119:20). #2279 (for #2208) proves `drain`'s and
+// this file's, not `send`'s `[start, end)`. Once all are gone, build this file
+// without `--allow-panics`.
 //
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each
@@ -121,7 +111,12 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
     // this loop 0 <= `pos` < `size` <= 2^31 - 1, which `main` makes sure of.
     const left: i64 = toI64(toU64(served.size) - toU64(pos))
     const want: i32 = left < toI64(WINDOW) ? toI32(left) : WINDOW
-    const n: i32 = fileReadAt(served.file, served.window, toI32(0), want, pos)
+    const window: u8[] = served.window
+    if (want < 0 || want > toI32(window.length)) {
+      conn.abort()
+      return IDLE
+    }
+    const n: i32 = fileReadAt(served.file, window, 0, want, pos)
     if (n <= 0) {
       conn.abort()
       return IDLE

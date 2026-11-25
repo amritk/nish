@@ -1,15 +1,17 @@
-// Opt-out (`--allow-panics`): `nish/net/handler`, `nish/net/serve` and
-// `nish/net/static` keep no panic site this program reaches but the two named
-// below, and it answers through their `try` calls. What it still reaches: the caps panic of
-// `std/net/http1-server`'s `Http1Connection` constructor, through every
-// answer, `wait`, `next` and `drain`, which the handler's limits checked
-// already, a proof the prover cannot yet make; `std/net/router`'s sites,
-// through `Router`, `add` and `tryRefuse`; the limits panic of the
-// `HttpHandler` constructor, which `openHttpHandler` calls only once the
-// limits passed the same check; and two `String.fromBytes` slices, app.ts's
-// and the one `tryServeHandler` reaches in `std/net/static`, range checks it
-// cannot yet discharge. Follow-up: make the router panic-free and teach the
-// prover those bounds, then build this program without `--allow-panics`.
+// Opt-out (`--allow-panics`): it answers through the `try` calls of
+// `nish/net/handler`, `nish/net/serve` and `nish/net/static`, and still
+// reaches: the cap check of `Http1Connection`'s constructor
+// (std/net/http1-server.ts:498:5), through every answer, `wait`, `next` and
+// `drain`; the limits panic of the `HttpHandler` constructor
+// (std/net/handler.ts:934:7), which `openHttpHandler` calls only once the
+// limits passed the same check; and `std/net/router`'s contract panics
+// (std/net/router.ts:1290:3, :1304:5), through `Router`, `add` and
+// `tryRefuse`. Those are checks a caller's proof cannot discharge (only
+// `std/threads.ts`'s are, `callerProven` in src/attributes.ts), a `src/` gap
+// on the WP80 tracking issue #2176. It also reaches the `String.fromBytes`
+// slice of `tryServeHandler` (std/net/static.ts:969:39), which #2279 (for
+// #2208) does not prove. Once all are gone, build this program without
+// `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on

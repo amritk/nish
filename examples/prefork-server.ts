@@ -1,25 +1,17 @@
-// Opt-out (`--allow-panics`): `preforkArgs` and `preforkWorkers` reach panic
-// sites in `std/net/prefork` (WP80 S2); `respond` and `end` reach overflow
-// sites in `std/net/http1-codec` (WP80 S3); `readable` and `connection` reach
-// `Http1Config`'s cap check and `write` its caller-window check, the panics
-// `std/net/http1-server` keeps for a program's own mistake (WP80 S4).
-// `readable` and `connection` reach the cap check through `new
-// Http1Connection` in `Http1Server.build`: `src/panics.ts` follows every call
-// into a function that can panic, and only `std/threads.ts`'s two checks are
-// discharged at their caller (`callerProven`, src/attributes.ts:4547), so no
-// checked config clears it while the constructor keeps its panic.
-// `writable` and `flush` reach `--emit-panics`'s
-// `{"name":"Http1Server.drain",...,"panics":[{"kind":"slice","line":3199,"column":22,"proven":false}]}`,
-// `netRead(fd, this.scratch, 0, size)` with `size` the scratch's own length
-// and `size > 0` checked on the line before; `next` reaches
-// `{"name":"Http1Server.send",...,"panics":[{"kind":"slice","line":3255,"column":22,"proven":false}]}`,
-// `netWrite(fd, conn.output, start, end - start)` after a test that ends the
-// connection unless `0 <= start <= end <= output.length`. Both windows hold,
-// but a `nish:net` range check is a site no proof removes: `builtinPanicKind`
-// (src/panics.ts:238) makes every such call a `slice` site, and
-// `noteBuiltinSite` (src/attributes.ts:4369) records only a `nish:simd`
-// access as proven (a `src/` prover gap). This file keeps none of its own.
-// Follow-up: once those are gone, build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`), for sites in `std/net/http1-server` and
+// `std/net/prefork` no guard here removes; this file keeps none of its own.
+// `readable`, `connection` and `new Http1Server` reach the cap check of
+// `Http1Connection`'s constructor (std/net/http1-server.ts:498:5) and `write`
+// its caller-window check (:506:5): `src/panics.ts` follows a call into any
+// function that can panic, and only `std/threads.ts`'s checks are discharged
+// at their caller (`callerProven`, src/attributes.ts), a `src/` gap on the
+// WP80 tracking issue #2176. `writable` and `flush` reach the `netRead` window
+// of `Http1Server.drain` (:3230:22) and `next` the `netWrite` window of
+// `Http1Server.send` (:3286:22). `preforkWorkers` reaches the `netRead` window
+// of `preforkDiscard` (std/net/prefork.ts:1169:10) and the panic
+// `preforkSupervise` raises on a refused config (:1392:5). #2279 (for #2208)
+// proves `drain`'s and `preforkDiscard`'s windows, not `send`'s
+// `[start, end)`. Once all are gone, build this file without `--allow-panics`.
 //
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker
 // process per core, each binds its own SO_REUSEPORT listener on the port, and
