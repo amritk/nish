@@ -110,7 +110,7 @@ none is open. HANDLER-16 holds; HANDLER-17 is accepted.
 `new HttpHandler` panics on the message `handlerLimitsFault` answers
 (`std/net/handler.ts:934:7`); `HandlerLimits` is a mutable object the
 constructor reads as given, so no caller makes the check, and the checker's
-caller proofs ([`window`](../LANGUAGE.md#panic-sites)) do not reach it. A
+caller proofs ([`window`](../reference/language/semantics-decisions.md#panic-sites)) do not reach it. A
 program that builds a handler builds with `--allow-panics`. Untested: the route
 was read from `--emit-panics` on `examples/http-app/main.ts` and is pinned by
 no check.

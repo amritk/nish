@@ -3444,7 +3444,11 @@ const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
     const at = target.window
     const w = holderOf(walk, args[at[0]])
     const first = Math.min(at[0], Math.min(at[1], at[2]))
-    if (w !== null && quietFrom(ctx.program, call, first + 1) && provesWindow(walk, state, w, args[at[1]], args[at[2]])) {
+    if (
+      w !== null &&
+      quietFrom(ctx.program, call, first + 1) &&
+      provesWindow(walk, state, w, args[at[1]], args[at[2]])
+    ) {
       noteProof(walk, call)
     }
     return

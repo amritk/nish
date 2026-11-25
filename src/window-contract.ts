@@ -70,7 +70,11 @@ const isBelowZero = (node: Node, name: string): boolean =>
 
 /** `toI32(buf.length)`, where the module does not declare its own `toI32`. */
 const isLengthOf = (program: CheckedProgram, node: Node, buf: string): boolean => {
-  if (node.kind !== NodeKind.Call || !isName(node.children[0], "toI32") || shadowsGuardName(program, "toI32")) {
+  if (
+    node.kind !== NodeKind.Call ||
+    !isName(node.children[0], "toI32") ||
+    shadowsGuardName(program, "toI32")
+  ) {
     return false
   }
   const args = node.children[1].children
@@ -158,7 +162,11 @@ const noteGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig):
     return
   }
   const local = statements[0]
-  if (local.kind !== NodeKind.Var || (local.flags & FLAG_CONST) === 0 || local.children[0].children.length !== 1) {
+  if (
+    local.kind !== NodeKind.Var ||
+    (local.flags & FLAG_CONST) === 0 ||
+    local.children[0].children.length !== 1
+  ) {
     return
   }
   const decl = local.children[0].children[0]
@@ -180,7 +188,11 @@ const noteGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig):
   }
   const buf = length.children[0].text
   const test = statements[1]
-  if (test.kind !== NodeKind.If || test.children[2].kind !== NodeKind.Empty || !isPanicBlock(program, test.children[1])) {
+  if (
+    test.kind !== NodeKind.If ||
+    test.children[2].kind !== NodeKind.Empty ||
+    !isPanicBlock(program, test.children[1])
+  ) {
     return
   }
   const cond = test.children[0]
@@ -190,11 +202,19 @@ const noteGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig):
   const last = cond.children[1]
   const len = last.children[0]
   const diff = last.children[1]
-  if (len.kind !== NodeKind.Ident || diff.kind !== NodeKind.Binary || diff.children[1].kind !== NodeKind.Ident) {
+  if (
+    len.kind !== NodeKind.Ident ||
+    diff.kind !== NodeKind.Binary ||
+    diff.children[1].kind !== NodeKind.Ident
+  ) {
     return
   }
   const off = diff.children[1]
-  if (namesParam(sig, size) || !isLengthOf(program, init, buf) || !isWindowTest(cond, off.text, len.text, size)) {
+  if (
+    namesParam(sig, size) ||
+    !isLengthOf(program, init, buf) ||
+    !isWindowTest(cond, off.text, len.text, size)
+  ) {
     return
   }
   const b = paramAt(table, sig, buf, -1)
@@ -208,7 +228,8 @@ const noteGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig):
 }
 
 /** Whether `sig` is a window guard: it checks a window of its own, and hands it to no guard. */
-export const isWindowGuard = (sig: FunctionSig): boolean => sig.window.length === 3 && sig.windowGuard === null
+export const isWindowGuard = (sig: FunctionSig): boolean =>
+  sig.window.length === 3 && sig.windowGuard === null
 
 /** The guard `name` calls in `program`: its one free function of that name, when it is a window guard. */
 const guardNamed = (program: CheckedProgram, name: string): FunctionSig | null => {

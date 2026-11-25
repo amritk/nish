@@ -89,7 +89,7 @@ the properties below.
 **`routerOutside` and `routerNoRoute` still panic for every caller**
 (#2296). Each is a bare `panic` a check in `match` or `paramCount` reaches,
 not the window guard shape the checker reads as a contract a caller proves
-([`window`](../LANGUAGE.md#panic-sites)), so a program that calls `match` or
+([`window`](../reference/language/semantics-decisions.md#panic-sites)), so a program that calls `match` or
 `paramCount` reaches `std/net/router.ts:1290:3` and `1304:5` and builds with
 `--allow-panics`. Untested: these two routes were read from `--emit-panics`
 on `examples/http-app/main.ts` and are pinned by no check.

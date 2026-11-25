@@ -2264,7 +2264,8 @@ class FactCollector {
     if (callee.window.length > 0) {
       const guard = this.sig.windowGuard
       const forward = this.sig.windowForward
-      const forwards = guard !== null && forward !== null && guard === callee && forward === node && isWindowGuard(callee)
+      const forwards =
+        guard !== null && forward !== null && guard === callee && forward === node && isWindowGuard(callee)
       this.noteSite(node, PANIC_WINDOW, proven || forwards, "")
     }
     this.noteSite(node, PANIC_CALL, false, callee.name)

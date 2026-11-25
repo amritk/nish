@@ -794,7 +794,7 @@ buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`
 **A window the program proves is not a panic it answers for** (#2296).
 `Http1Connection.feed`, `write`, `sendBody` and `sendFrame` each hand their
 window to `http1ServerCheckWindow` first, the one guard shape the checker
-reads ([`window`](../LANGUAGE.md#panic-sites)), so each call is a `window`
+reads ([`window`](../reference/language/semantics-decisions.md#panic-sites)), so each call is a `window`
 site of its caller, proven where the caller has proved `off` and `len` inside
 `buf`, and the guard's own `panic` is reached by no call. The rule is pinned by
 `link/window_contract_proven: --emit-panics matches expected.panics`, and an
