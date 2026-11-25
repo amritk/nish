@@ -2100,16 +2100,29 @@ const regexLoadSlots = (dst: i32[], src: i32[], base: i32, ns: i32): void => {
   }
 }
 
+/**
+ * `n` zeros, or none when `n` is not above 0. Pushed one at a time: an `i32`
+ * length is a checked `new Array`, and every count here is a compile's table
+ * size, made once per pattern.
+ */
 const regexZeros = (n: i32): i32[] => {
-  const a: i32[] = new Array<i32>(n)
-  a.fill(0)
+  const a: i32[] = []
+  let k: i32 = 0
+  while (k < n) {
+    a.push(0)
+    k += 1
+  }
   return a
 }
 
 /** `n` zero bytes, for the reason `regexZeros` gives. */
 const regexZeroBytes = (n: i32): u8[] => {
-  const a: u8[] = new Array<u8>(n)
-  a.fill(toU8(0))
+  const a: u8[] = []
+  let k: i32 = 0
+  while (k < n) {
+    a.push(toU8(0))
+    k += 1
+  }
   return a
 }
 
