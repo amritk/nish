@@ -6787,7 +6787,7 @@ const COMPRESS_UNSIGNED_OPS = [
   },
   {
     file: "std/compress/deflate.ts",
-    text: "toI32((deflateLoad32(src,qa)*toU32(DEFLATE_HASH_MUL))>>>17)",
+    text: "toI32((deflateLoad32(src,q)*toU32(DEFLATE_HASH_MUL))>>>17)",
     count: 1,
     reason:
       "the multiplicative hash of a skipped position's four bytes: the product is meant to wrap mod 2^32",

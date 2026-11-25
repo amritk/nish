@@ -3186,8 +3186,11 @@ export class Inflater {
         }
         // `code` differs from `end - 1`, so the count of leading zeros is
         // under 32 and the shift inside the width.
-        const bit: u32 = toU32(1) << toU32(toI32(31) - Math.clz32(toU32(code ^ (end - 1))))
-        code = toI32((toU32(code) & (bit - toU32(1))) | bit)
+        const top: i32 = toI32(31) - Math.clz32(toU32(code ^ (end - 1)))
+        if (top < 0 || top > 14) {
+          return DEFLATE_ERR_HUFFMAN
+        }
+        code = (code & ~(-1 << top)) | (1 << top)
         here -= 1
       }
       len += 1
@@ -3288,8 +3291,11 @@ export class Inflater {
         return 0
       }
       // As above: `code` is not `full`, so the leading zeros are under 32.
-      const bit: u32 = toU32(1) << toU32(toI32(31) - Math.clz32(toU32(code ^ full)))
-      code = toI32((toU32(code) & (bit - toU32(1))) | bit)
+      const lead: i32 = toI32(31) - Math.clz32(toU32(code ^ full))
+      if (lead < 0 || lead > 14) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      code = (code & ~(-1 << lead)) | (1 << lead)
       // At least one code of this length remains, and at most `n`: the code
       // is complete, so the last code, `full`, comes before the count runs
       // out.
@@ -3834,7 +3840,7 @@ export class Inflater {
     if (toI32(le.length) !== INF_LIT_ENOUGH || toI32(de.length) !== INF_DIST_ENOUGH) {
       return DEFLATE_ERR_HUFFMAN
     }
-    if (inEnd < 0 || outEnd < 0) {
+    if (inEnd < 0 || outEnd < 0 || histStart < 0) {
       return DEFLATE_ERR_TRUNCATED
     }
     const litMask: u64 = (toU64(1) << toU64(INF_LIT_BITS)) - toU64(1)
@@ -3898,12 +3904,9 @@ export class Inflater {
               // A code longer than the table: its last bits index a subtable.
               bb = bb >> toU64(e)
               bc = wrappingSub(bc, e)
-              // Cannot wrap: the subtable starts under the table's length and
-              // the index into it is under 2^15.
-              e = uncheckedGet(
-                le,
-                toI32(toU32(e >> 16) + toU32(bb & ((toU64(1) << toU64((e >> 11) & 15)) - toU64(1))))
-              )
+              // The subtable's start and the index into it are both under
+              // 2^16, so the sum is an i32.
+              e = uncheckedGet(le, ((e >> 16) & 65535) + (toI32(bb) & 32767 & ~(toI32(-1) << ((e >> 11) & 15))))
             } else if ((e & 0x700) === INF_SLOW << 8) {
               // Only a table built for an incomplete code (none at all, or
               // one one-bit code) has these, and every code it does have
@@ -3929,20 +3932,17 @@ export class Inflater {
               }
             } else {
               const lx: i32 = (e >> 11) & 15
-              // Cannot wrap: a length base is at most 258 and its extra bits
-              // at most 5.
-              const len: i32 = toI32(toU32(e >> 16) + toU32(bb & ((toU64(1) << toU64(lx)) - toU64(1))))
+              // A length base is at most 258 and its extra bits at most 5;
+              // the two masks only bound the sum for the prover.
+              const len: i32 = ((e >> 16) & 65535) + (toI32(bb) & 32767 & ~(-1 << lx))
               bb = bb >> toU64(lx)
               bc = wrappingSub(bc, lx)
               let d: i32 = uncheckedGet(de, toI32(bb & distMask))
               if ((d & 0x700) === INF_SUB << 8) {
                 bb = bb >> toU64(d)
                 bc = wrappingSub(bc, d)
-                // Cannot wrap, as for the literal/length subtable.
-                d = uncheckedGet(
-                  de,
-                  toI32(toU32(d >> 16) + toU32(bb & ((toU64(1) << toU64((d >> 11) & 15)) - toU64(1))))
-                )
+                // As for the literal/length subtable.
+                d = uncheckedGet(de, ((d >> 16) & 65535) + (toI32(bb) & 32767 & ~(toI32(-1) << ((d >> 11) & 15))))
               }
               if ((d & 0x700) !== 0) {
                 // A slow entry, as for the literal/length table, or one of
@@ -3953,12 +3953,14 @@ export class Inflater {
               bb = bb >> toU64(d)
               bc = wrappingSub(bc, d)
               const dx: i32 = (d >> 11) & 15
-              // Cannot wrap: a distance base is under 2^15 and its extra
-              // bits at most 13, and `op` never falls below `histStart`.
-              const dist: i32 = toI32(toU32(d >> 16) + toU32(bb & ((toU64(1) << toU64(dx)) - toU64(1))))
+              // A distance base is under 2^15 and its extra bits at most 13.
+              const dist: i32 = ((d >> 16) & 65535) + (toI32(bb) & 32767 & ~(-1 << dx))
               bb = bb >> toU64(dx)
               bc = wrappingSub(bc, dx)
-              if (dist > toI32(toU32(op) - toU32(histStart))) {
+              // `op` stays at or past `histStart`, which is not negative, so
+              // the test of `at` fails only on a position this loop broke.
+              const at: i32 = op
+              if (at < 0 || dist > at - histStart) {
                 status = DEFLATE_ERR_DISTANCE
                 break
               }
@@ -3974,9 +3976,9 @@ export class Inflater {
                 // always hold; they are what lets the positions enter the
                 // copy's range without a check, and the bytes loop after is
                 // what would finish a copy they ever stopped.
-                // Cannot wrap: `dist` is at most `op - histStart`.
-                let to: i32 = op
-                let from: i32 = toI32(toU32(op) - toU32(dist))
+                // `dist` is at most `at - histStart`, so `from` is at or past `histStart`.
+                let to: i32 = at
+                let from: i32 = at - dist
                 while (to < stop && to >= 0 && to <= 2147483631 && from >= 0 && from <= 2147483631) {
                   inflateCopy16(out, to, from)
                   to = wrappingAdd(to, 16)
@@ -3989,8 +3991,8 @@ export class Inflater {
                 }
               } else if (dist === 1) {
                 // A run of one byte, sixteen at a time, bounded as above.
-                // Cannot wrap: `op` is past `histStart` by at least `dist`.
-                const four: u64 = toU64(uncheckedGet(out, toI32(toU32(op) - toU32(1)))) * toU64(0x01010101)
+                // `at` is past `histStart` by at least `dist`.
+                const four: u64 = toU64(uncheckedGet(out, at - 1)) * toU64(0x01010101)
                 const w: u64 = four | (four << toU64(32))
                 let to: i32 = op
                 while (to < stop && to >= 0 && to <= 2147483631) {
@@ -4002,9 +4004,9 @@ export class Inflater {
                   to = wrappingAdd(to, 1)
                 }
               } else {
-                // Cannot wrap, as above.
-                let from: i32 = toI32(toU32(op) - toU32(dist))
-                let to: i32 = op
+                // As above.
+                let from: i32 = at - dist
+                let to: i32 = at
                 while (to < stop) {
                   uncheckedSet(out, to, uncheckedGet(out, from))
                   to = wrappingAdd(to, 1)
