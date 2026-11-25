@@ -1003,21 +1003,35 @@ class TemporalReader {
   /**
    * The character code at `at + ahead`, or -1 past the end.
    *
-   * @param ahead how far past `at` to look
+   * @param ahead how far past `at` to look, 0 or 1
    * @returns the code
    */
   peek(ahead: i32): i32 {
-    const i: i32 = this.at + ahead
+    const i: i32 = this.at
     if (i < 0 || i >= toI32(this.text.length)) {
       return -1
     }
-    return toI32(this.text.charCodeAt(i))
+    if (ahead === 0) {
+      return toI32(this.text.charCodeAt(i))
+    }
+    if (ahead !== 1 || i >= toI32(this.text.length) - 1) {
+      return -1 // the reader looks at most one character ahead
+    }
+    return toI32(this.text.charCodeAt(i + 1))
+  }
+
+  /** Move `at` one character on; at the end it stays there, and every caller has just seen a character. */
+  step(): void {
+    const i: i32 = this.at
+    if (i >= 0 && i < toI32(this.text.length)) {
+      this.at = i + 1
+    }
   }
 
   /**
    * Whether the character `ahead` past `at` is a decimal digit.
    *
-   * @param ahead how far past `at` to look
+   * @param ahead how far past `at` to look, 0 or 1
    * @returns whether it is one
    */
   digitAt(ahead: i32): boolean {
@@ -1042,7 +1056,7 @@ class TemporalReader {
    */
   eat(c: i32): boolean {
     if (this.peek(toI32(0)) === c) {
-      this.at = this.at + 1
+      this.step()
       return true
     }
     return false
@@ -1055,16 +1069,18 @@ class TemporalReader {
    * @returns their value, or 0 on failure
    */
   digits(count: i32): i32 {
-    let value: i32 = 0
+    // At most six digits, so the u32 sum never wraps.
+    let value: u32 = 0
     for (let i: i32 = 0; i < count; i++) {
-      if (!this.digitAt(toI32(0))) {
+      const c: i32 = this.peek(toI32(0))
+      if (c < 48 || c > 57) {
         this.ok = false
         return 0
       }
-      value = value * 10 + this.peek(toI32(0)) - 48
-      this.at = this.at + 1
+      value = value * 10 + toU32(c - 48)
+      this.step()
     }
-    return value
+    return toI32(value)
   }
 
   /**
@@ -1077,23 +1093,24 @@ class TemporalReader {
     if ((c !== 46 && c !== 44) || !this.digitAt(toI32(1))) {
       return 0
     }
-    this.at = this.at + 1
-    let value: i32 = 0
+    this.step()
+    // At most nine digits, so the u32 sum never wraps.
+    let value: u32 = 0
     let count: i32 = 0
     while (this.digitAt(toI32(0))) {
-      if (count === 9) {
+      if (count >= 9) {
         this.ok = false
         return 0
       }
-      value = value * 10 + this.peek(toI32(0)) - 48
+      value = value * 10 + toU32(this.peek(toI32(0))) - 48
       count = count + 1
-      this.at = this.at + 1
+      this.step()
     }
     while (count < 9) {
       value = value * 10
       count = count + 1
     }
-    return value
+    return toI32(value)
   }
 
   /** Read a date: `YYYY-MM-DD`, `±YYYYYY-MM-DD`, or either without the dashes. */
@@ -1101,13 +1118,13 @@ class TemporalReader {
     const sign: i32 = this.peek(toI32(0))
     let year: i32 = 0
     if (sign === 43 || sign === 45) {
-      this.at = this.at + 1
+      this.step()
       year = this.digits(toI32(6))
       if (sign !== 43 && year === 0) {
         this.ok = false // -000000 is not a year
       }
       if (sign !== 43) {
-        year = -year
+        year = toI32(0 - toI64(year))
       }
     } else {
       year = this.digits(toI32(4))
@@ -1139,7 +1156,7 @@ class TemporalReader {
       this.minute = this.digits(toI32(2))
       if ((extended && this.peek(toI32(0)) === 58) || (!extended && this.digitAt(toI32(0)))) {
         if (extended) {
-          this.at = this.at + 1
+          this.step()
         }
         this.second = this.digits(toI32(2))
         this.fraction = this.fractionDigits()
@@ -1158,14 +1175,14 @@ class TemporalReader {
   readOffset(): void {
     const c: i32 = this.peek(toI32(0))
     if (c === 90 || c === 122) {
-      this.at = this.at + 1
+      this.step()
       this.utc = true
       return
     }
     if (c !== 43 && c !== 45) {
       return
     }
-    this.at = this.at + 1
+    this.step()
     const hours: i32 = this.digits(toI32(2))
     let minutes: i32 = 0
     let seconds: i32 = 0
@@ -1175,7 +1192,7 @@ class TemporalReader {
       minutes = this.digits(toI32(2))
       if ((extended && this.peek(toI32(0)) === 58) || (!extended && this.digitAt(toI32(0)))) {
         if (extended) {
-          this.at = this.at + 1
+          this.step()
         }
         seconds = this.digits(toI32(2))
         fraction = this.fractionDigits()
@@ -1185,10 +1202,11 @@ class TemporalReader {
       this.ok = false
       return
     }
-    const total: i64 =
-      (toI64(hours) * 3600 + toI64(minutes) * 60 + toI64(seconds)) * TEMPORAL_NS_PER_SECOND + toI64(fraction)
+    // Every field is a small count of digits here, so the u64 sum never wraps.
+    const total: u64 =
+      (toU64(hours) * 3600 + toU64(minutes) * 60 + toU64(seconds)) * 1000000000 + toU64(fraction)
     this.hasOffset = true
-    this.offsetNanos = c === 43 ? total : -total
+    this.offsetNanos = c === 43 ? toI64(total) : toI64(0 - total)
   }
 
   /**
@@ -1206,7 +1224,7 @@ class TemporalReader {
       const critical: boolean = this.eat(toI32(33))
       const start: i32 = this.at
       while (!this.done() && this.peek(toI32(0)) !== 93) {
-        this.at = this.at + 1
+        this.step()
       }
       if (this.done() || this.at === start) {
         this.ok = false
@@ -1215,12 +1233,12 @@ class TemporalReader {
       // The annotation is `text[start, end)`, read in place: a substring per
       // pass would be kept until the caller's memory is released (NL9018).
       const end: i32 = this.at
-      this.at = this.at + 1
+      this.step()
       let eq: i32 = start
       while (eq < end && temporalCharAt(this.text, eq) !== 61) {
         eq = eq + 1
       }
-      if (eq === end) {
+      if (eq >= end) {
         // A time zone: only first, only once, and spelled as the grammar's
         // TimeZoneIdentifier. Whether the zone exists is not asked: no type
         // here holds one.
@@ -1236,7 +1254,9 @@ class TemporalReader {
           return
         }
         if (temporalRangeIs(text, start, eq, "u-ca")) {
-          calendars = calendars + 1
+          if (calendars < 2) {
+            calendars = calendars + 1 // only none, one or more than one matters
+          }
           criticalCalendar = criticalCalendar || critical
           // The first calendar is the string's; only a type that holds a
           // calendar refuses one other than iso8601 (`isoCalendar`).
@@ -1266,7 +1286,7 @@ class TemporalReader {
     }
     const c: i32 = this.peek(toI32(0))
     if ((c === 84 || c === 116 || c === 32) && this.digitAt(toI32(1))) {
-      this.at = this.at + 1
+      this.step()
       this.readTime()
       if (this.ok) {
         this.readOffset()
@@ -1305,25 +1325,18 @@ const temporalIsAlphaNumeric = (c: i32): boolean =>
 
 /** Whether `text[from, to)` is an annotation value: runs of ASCII letters and digits joined by single `-`. */
 const temporalIsAnnotationValue = (text: string, from: i32, to: i32): boolean => {
-  let run: i32 = 0
+  let inRun: boolean = false
   for (let i: i32 = from; i < to; i++) {
     const c: i32 = temporalCharAt(text, i)
     if (temporalIsAlphaNumeric(c)) {
-      run = run + 1
-    } else if (c === 45 && run > 0) {
-      run = 0
+      inRun = true
+    } else if (c === 45 && inRun) {
+      inRun = false
     } else {
       return false
     }
   }
-  return run > 0
-}
-
-/** The two decimal digits at `at` as a number, or -1, for the annotation checks. */
-const temporalAnnotationTwo = (text: string, at: i32): i32 => {
-  const high: i32 = temporalCharAt(text, at) - 48
-  const low: i32 = temporalCharAt(text, at + 1) - 48
-  return high >= 0 && high <= 9 && low >= 0 && low <= 9 ? high * 10 + low : -1
+  return inRun
 }
 
 /**
@@ -1333,46 +1346,54 @@ const temporalAnnotationTwo = (text: string, at: i32): i32 => {
  * `+`.
  */
 const temporalIsTimeZoneName = (text: string, from: i32, to: i32): boolean => {
-  const n: i32 = to - from
+  if (from < 0 || from >= to) {
+    return false
+  }
+  const n: i64 = toI64(to) - toI64(from)
   const first: i32 = temporalCharAt(text, from)
   if (first === 43 || first === 45) {
-    const hours: i32 = temporalAnnotationTwo(text, from + 1)
+    const hours: i32 = temporalFastTwo(text, from + 1)
     if (hours < 0 || hours > 23) {
       return false
     }
     if (n === 3) {
       return true
     }
-    const at: i32 = n === 6 && temporalCharAt(text, from + 3) === 58 ? from + 4 : from + 3
-    const minutes: i32 = temporalAnnotationTwo(text, at)
-    return (n === 5 || n === 6) && at + 2 === to && minutes >= 0 && minutes <= 59
+    // `±HHMM`, or `±HH:MM` with the colon; positions are summed in i64,
+    // which `from + 4` cannot leave.
+    const colon: boolean = n === 6 && temporalCharAt(text, toI32(toI64(from) + 3)) === 58
+    if (n !== 5 && !colon) {
+      return false
+    }
+    const minutes: i32 = temporalFastTwo(text, toI32(colon ? toI64(from) + 4 : toI64(from) + 3))
+    return minutes >= 0 && minutes <= 59
   }
-  let length: i32 = 0
-  for (let i: i32 = from; i <= to; i++) {
-    const c: i32 = i < to ? temporalCharAt(text, i) : 47
+  let empty: boolean = true
+  for (let i: i32 = from; i < to; i++) {
+    const c: i32 = temporalCharAt(text, i)
     if (c === 47) {
-      if (length === 0) {
+      if (empty) {
         return false
       }
-      length = 0
+      empty = true
     } else {
       const leading: boolean = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 46 || c === 95
-      if (!leading && (length === 0 || !(temporalIsAlphaNumeric(c) || c === 45 || c === 43))) {
+      if (!leading && (empty || !(temporalIsAlphaNumeric(c) || c === 45 || c === 43))) {
         return false
       }
-      length = length + 1
+      empty = false
     }
   }
-  return true
+  return !empty // the last name may not be empty either
 }
 
 /** Whether `text[from, to)` is `want`, ignoring the case of ASCII letters; `want` is lowercase. */
 const temporalRangeIs = (text: string, from: i32, to: i32, want: string): boolean => {
-  if (to - from !== toI32(want.length)) {
+  if (toI64(to) - toI64(from) !== toI64(want.length)) {
     return false
   }
-  for (let i: i32 = 0; i < to - from; i++) {
-    let c: i32 = temporalCharAt(text, from + i)
+  for (let i: i32 = 0; i < toI32(want.length); i++) {
+    let c: i32 = temporalCharAt(text, toI32(toI64(from) + toI64(i)))
     if (c >= 65 && c <= 90) {
       c = c + 32
     }
@@ -1399,12 +1420,16 @@ const temporalIsTimeDesignator = (c: i32): boolean => c === 84 || c === 116 || c
 
 /** The two decimal digits at `at` as a number, or -1 when either is not a digit. */
 const temporalFastTwo = (text: string, at: i32): i32 => {
-  const high: i32 = temporalCharAt(text, at) - 48
-  const low: i32 = temporalCharAt(text, at + 1) - 48
-  if (high < 0 || high > 9 || low < 0 || low > 9) {
+  if (at < 0 || at >= toI32(text.length) - 1) {
     return -1
   }
-  return high * 10 + low
+  // A code below `0` wraps past 9 here, so one test refuses either side.
+  const high: u32 = toU32(toI32(text.charCodeAt(at))) - 48
+  const low: u32 = toU32(toI32(text.charCodeAt(at + 1))) - 48
+  if (high > 9 || low > 9) {
+    return -1
+  }
+  return toI32(high * 10 + low)
 }
 
 /**
@@ -1423,26 +1448,28 @@ const temporalFastDate = (text: string): i64 => {
   if (temporalCharAt(text, 4) !== 45 || temporalCharAt(text, 7) !== 45) {
     return -1
   }
-  const year: i32 = century * 100 + yy
+  // Each field is two digits, so the unsigned sums never wrap.
+  const year: u32 = toU32(century) * 100 + toU32(yy)
   if (day > temporalDaysInMonth(toI64(year), month)) {
     return -1
   }
-  return (toI64(year) + 400000) * 512 + toI64(month) * 32 + toI64(day)
+  return toI64((toU64(year) + 400000) * 512 + toU64(month) * 32 + toU64(day))
 }
 
 /**
- * The time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.f` that runs from `at` to
- * exactly `end`, as nanoseconds since midnight, or -1 when it is not in that
- * form. Second 60 reads as 59, as the reader reads it.
+ * The time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.f` that runs from index 11, just
+ * past a date and its designator, to exactly `end`, as nanoseconds since
+ * midnight, or -1 when it is not in that form. Second 60 reads as 59, as the reader reads it.
  */
-const temporalFastTime = (text: string, at: i32, end: i32): i64 => {
+const temporalFastTime = (text: string, end: i32): i64 => {
+  const at: i32 = 11
   const hour: i32 = temporalFastTwo(text, at)
   const minute: i32 = temporalFastTwo(text, at + 3)
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || temporalCharAt(text, at + 2) !== 58) {
     return -1
   }
   let second: i32 = 0
-  let fraction: i32 = 0
+  let fraction: u32 = 0
   let i: i32 = at + 5
   if (i < end) {
     second = temporalFastTwo(text, i + 1)
@@ -1460,8 +1487,8 @@ const temporalFastTime = (text: string, at: i32, end: i32): i64 => {
         return -1
       }
       for (let k: i32 = i + 1; k < end; k++) {
-        const d: i32 = temporalCharAt(text, k) - 48
-        if (d < 0 || d > 9) {
+        const d: u32 = toU32(temporalCharAt(text, k)) - 48
+        if (d > 9) {
           return -1
         }
         fraction = fraction * 10 + d
@@ -1475,7 +1502,8 @@ const temporalFastTime = (text: string, at: i32, end: i32): i64 => {
   if (i !== end) {
     return -1
   }
-  return (toI64(hour) * 3600 + toI64(minute) * 60 + toI64(second)) * TEMPORAL_NS_PER_SECOND + toI64(fraction)
+  // Two-digit fields and a nine-digit fraction: the u64 sum never wraps.
+  return toI64((toU64(hour) * 3600 + toU64(minute) * 60 + toU64(second)) * 1000000000 + toU64(fraction))
 }
 
 /**
@@ -2321,7 +2349,7 @@ export const plainDateTimeFromOrNull = (text: string): PlainDateTime | null => {
   const length: i32 = toI32(text.length)
   if (length >= 16 && temporalIsTimeDesignator(temporalCharAt(text, 10))) {
     const civil: i64 = temporalFastDate(text)
-    const nanoOfDay: i64 = civil < 0 ? -1 : temporalFastTime(text, 11, length)
+    const nanoOfDay: i64 = civil < 0 ? -1 : temporalFastTime(text, length)
     if (nanoOfDay >= 0) {
       const secs: i32 = toI32(nanoOfDay / TEMPORAL_NS_PER_SECOND)
       const sub: i32 = toI32(nanoOfDay % TEMPORAL_NS_PER_SECOND)
@@ -3176,7 +3204,7 @@ export const instantFromOrNull = (text: string): Instant | null => {
   }
   if (timeEnd >= 16 && temporalIsTimeDesignator(temporalCharAt(text, 10))) {
     const civil: i64 = temporalFastDate(text)
-    const nanoOfDay: i64 = civil < 0 ? -1 : temporalFastTime(text, 11, timeEnd)
+    const nanoOfDay: i64 = civil < 0 ? -1 : temporalFastTime(text, timeEnd)
     if (nanoOfDay >= 0) {
       const day: i64 = temporalEpochDay(
         temporalCivilYear(civil),
