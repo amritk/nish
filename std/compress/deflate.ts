@@ -792,11 +792,15 @@ export class Deflater {
   /** Length - 3 to length symbol - 257; distance to distance symbol, as `deflateDistSymbol` reads it. */
   private readonly lengthSymbol: u8[]
   private readonly distSymbol: u8[]
-  /** Base and extra bits of each length and distance symbol. */
-  private readonly lengthBase: i32[]
-  private readonly lengthExtra: i32[]
-  private readonly distBase: i32[]
-  private readonly distExtra: i32[]
+  /**
+   * Base and extra bits of each length and distance symbol. A base is a
+   * `u16` so the writer's `length - base` is an `i32` difference whose
+   * range the prover knows without a guard.
+   */
+  private readonly lengthBase: u16[]
+  private readonly lengthExtra: u8[]
+  private readonly distBase: u16[]
+  private readonly distExtra: u8[]
   /** Canonical-code and length-building scratch. */
   private readonly countScratch: i32[]
   private readonly nextScratch: i32[]
@@ -914,10 +918,10 @@ export class Deflater {
     this.fixedDistCodes = new Array<i32>(32)
     this.lengthSymbol = new Array<u8>(256)
     this.distSymbol = new Array<u8>(512)
-    this.lengthBase = new Array<i32>(29)
-    this.lengthExtra = new Array<i32>(29)
-    this.distBase = new Array<i32>(30)
-    this.distExtra = new Array<i32>(30)
+    this.lengthBase = new Array<u16>(29)
+    this.lengthExtra = new Array<u8>(29)
+    this.distBase = new Array<u16>(30)
+    this.distExtra = new Array<u8>(30)
     this.countScratch = new Array<i32>(16)
     this.nextScratch = new Array<i32>(16)
     this.scratch = new DeflateHuffmanScratch()
@@ -925,8 +929,8 @@ export class Deflater {
     this.bitCount = 0
     this.overrun = false
     for (let s: i32 = 0; s < 29; s += 1) {
-      this.lengthBase[s] = deflateLengthBase(s)
-      this.lengthExtra[s] = deflateLengthExtra(s)
+      this.lengthBase[s] = toU16(deflateLengthBase(s))
+      this.lengthExtra[s] = toU8(deflateLengthExtra(s))
     }
     for (let s: i32 = 0; s < 29; s += 1) {
       const lo: i32 = deflateLengthBase(s) - 3
@@ -943,8 +947,8 @@ export class Deflater {
       }
     }
     for (let d: i32 = 0; d < 30; d += 1) {
-      this.distBase[d] = deflateDistBase(d)
-      this.distExtra[d] = deflateDistExtra(d)
+      this.distBase[d] = toU16(deflateDistBase(d))
+      this.distExtra[d] = toU8(deflateDistExtra(d))
     }
     // Distances 1 to 256 directly; above, by (distance - 1) >> 7 from 256 on.
     for (let d: i32 = 0; d < 30; d += 1) {
@@ -1995,8 +1999,8 @@ export class Deflater {
     let extra: i32 = 0
     let dynBits: i32 = lens * 3 + 17
     let fixBits: i32 = 3
-    const lx: i32[] = this.lengthExtra
-    const dx: i32[] = this.distExtra
+    const lx: u8[] = this.lengthExtra
+    const dx: u8[] = this.distExtra
     const fl: i32[] = this.fixedLitLens
     if (toI32(lx.length) < 29 || toI32(dx.length) < 30 || toI32(fl.length) < 286 || toI32(df.length) < 30) {
       return -1
@@ -2005,7 +2009,7 @@ export class Deflater {
       const f: i32 = uncheckedGet(lf, s)
       const dyn: i32 = uncheckedGet(ll, s)
       const fix: i32 = uncheckedGet(fl, s)
-      const x: i32 = s >= 257 ? uncheckedGet(lx, s - 257) : 0
+      const x: i32 = s >= 257 ? toI32(uncheckedGet(lx, s - 257)) : 0
       if (
         f < 0 || f > 16384 || dyn < 0 || dyn > 15 || fix < 0 || fix > 15 || x < 0 || x > 15 ||
         dynBits < 0 || dynBits > 16777215 || fixBits < 0 || fixBits > 16777215 || extra < 0 || extra > 16777215
@@ -2019,7 +2023,7 @@ export class Deflater {
     for (let d: i32 = 0; d < 30; d += 1) {
       const f: i32 = uncheckedGet(df, d)
       const dyn: i32 = uncheckedGet(dl, d)
-      const x: i32 = uncheckedGet(dx, d)
+      const x: i32 = toI32(uncheckedGet(dx, d))
       if (
         f < 0 || f > 16384 || dyn < 0 || dyn > 15 || x < 0 || x > 15 ||
         dynBits < 0 || dynBits > 16777215 || fixBits < 0 || fixBits > 16777215 || extra < 0 || extra > 16777215
@@ -2130,11 +2134,11 @@ export class Deflater {
     const tokens: i32[] = this.tokens
     const n: i32 = this.count
     const lsym: u8[] = this.lengthSymbol
-    const lbase: i32[] = this.lengthBase
-    const lextra: i32[] = this.lengthExtra
+    const lbase: u16[] = this.lengthBase
+    const lextra: u8[] = this.lengthExtra
     const dsym: u8[] = this.distSymbol
-    const dbase: i32[] = this.distBase
-    const dextra: i32[] = this.distExtra
+    const dbase: u16[] = this.distBase
+    const dextra: u8[] = this.distExtra
     if (
       toI32(lc.length) < 288 ||
       toI32(ll.length) < 288 ||
@@ -2150,26 +2154,45 @@ export class Deflater {
     ) {
       return -1
     }
+    // Each token adds at most 15 + 5 bits of length and 15 + 13 of
+    // distance, flushing a word after each half, so the count stays under
+    // 64; the checks tell the bounds prover so, and fail only on tables the
+    // constructor rules out.
     let bb: u64 = this.bitBuf
-    let bc: u32 = toU32(this.bitCount)
+    let bc: i32 = this.bitCount
     let o: i32 = op
     for (let i: i32 = 0; i < n; i += 1) {
+      const c0: i32 = bc
+      if (c0 < 0 || c0 > 31) {
+        return -1
+      }
       const t: i32 = uncheckedGet(tokens, i)
+      let c: i32 = c0
       if (t < 256) {
-        bb = bb | (toU64(toU32(uncheckedGet(lc, t))) << toU64(bc))
-        bc += toU32(uncheckedGet(ll, t))
+        const a: i32 = uncheckedGet(ll, t)
+        if (a < 0 || a > 15) {
+          return -1
+        }
+        bb = bb | (toU64(toU32(uncheckedGet(lc, t))) << toU64(c0))
+        c = c0 + a
       } else {
-        const len3: i32 = (t & 511) - 256
+        // The low byte of a match token is its length less 3: bits 0 to 8 hold
+        // 253 + length, 256 to 511, so bit 8 is always set.
+        const len3: i32 = t & 255
         const dist: i32 = t >> 9
         const s: i32 = toI32(uncheckedGet(lsym, len3))
-        // The extra bits' values are worked in u32, which gives the same
-        // bits as i32 would.
         const ls: i32 = 257 + s
-        bb = bb | (toU64(toU32(uncheckedGet(lc, ls))) << toU64(bc))
-        bc += toU32(uncheckedGet(ll, ls))
-        bb = bb | (toU64(toU32(len3) + toU32(3) - toU32(uncheckedGet(lbase, s))) << toU64(bc))
-        bc += toU32(uncheckedGet(lextra, s))
-        if (bc >= toU32(32)) {
+        const a: i32 = uncheckedGet(ll, ls)
+        if (a < 0 || a > 15) {
+          return -1
+        }
+        const x: i32 = toI32(uncheckedGet(lextra, s))
+        bb = bb | (toU64(toU32(uncheckedGet(lc, ls))) << toU64(c0))
+        const c1: i32 = c0 + a
+        bb = bb | (toU64(toU32(len3 + 3 - toI32(uncheckedGet(lbase, s)))) << toU64(c1))
+        const c2: i32 = c1 + x
+        let c3: i32 = c2
+        if (c2 >= 32) {
           if (o >= 0 && o <= toI32(out.length) - 4) {
             uncheckedSet(out, o, toU8(bb))
             uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
@@ -2180,17 +2203,23 @@ export class Deflater {
             this.overrun = true
           }
           bb = bb >> toU64(32)
-          bc -= toU32(32)
+          c3 = c2 - 32
         }
         const d: i32 = toI32(
           dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256),
         )
-        bb = bb | (toU64(toU32(uncheckedGet(dc, d))) << toU64(bc))
-        bc += toU32(uncheckedGet(dl, d))
-        bb = bb | (toU64(toU32(dist) - toU32(uncheckedGet(dbase, d))) << toU64(bc))
-        bc += toU32(uncheckedGet(dextra, d))
+        const da: i32 = uncheckedGet(dl, d)
+        if (da < 0 || da > 15) {
+          return -1
+        }
+        const dx: i32 = toI32(uncheckedGet(dextra, d))
+        bb = bb | (toU64(toU32(uncheckedGet(dc, d))) << toU64(c3))
+        const c4: i32 = c3 + da
+        bb = bb | (toU64(toU32(dist - toI32(uncheckedGet(dbase, d)))) << toU64(c4))
+        c = c4 + dx
       }
-      if (bc >= toU32(32)) {
+      bc = c
+      if (c >= 32) {
         if (o >= 0 && o <= toI32(out.length) - 4) {
           uncheckedSet(out, o, toU8(bb))
           uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
@@ -2201,11 +2230,11 @@ export class Deflater {
           this.overrun = true
         }
         bb = bb >> toU64(32)
-        bc -= toU32(32)
+        bc = c - 32
       }
     }
     this.bitBuf = bb
-    this.bitCount = toI32(bc)
+    this.bitCount = bc
     return this.putBits(out, o, lc[256], ll[256])
   }
 }
