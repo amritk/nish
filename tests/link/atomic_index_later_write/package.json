@@ -1,0 +1,7 @@
+{
+  "name": "atomic-index-later-write",
+  "private": true,
+  "nish": {
+    "noPanic": ["use.ts"]
+  }
+}

@@ -4259,6 +4259,16 @@ const isAtomicReadonlyField = (
 const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isAtomicClass(classLayoutOf(program, table, type))
 
+/**
+ * Whether `type` is an `AtomicI32Array` or an `AtomicI64Array`: an atomic with
+ * a `values` buffer, whose readonly `length` is that buffer's, so an index
+ * below it is one its element methods' check passes.
+ */
+export const isAtomicArrayType = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  const info = classLayoutOf(program, table, type)
+  return isAtomicClass(info) && info !== null && info.field("values") !== null
+}
+
 /** Whether `info` is a class `nish/threads` declares, an atomic included. */
 export const isThreadsStruct = (info: StructInfo): boolean => isAtomicClass(info) || isThreadsLayout(info)
 

@@ -22509,6 +22509,14 @@ const DECLARED = [
     changelog: "caller-proven spawn slots",
     why: "the candidate proves the `parallelMapInto` call's `src.length <= dst.length` from the caller's guard and compiles the program under the default no-panic scope; the reference has no such proof and refuses it",
   },
+  // #2206: an atomic array's element method has its index judged at the call,
+  // as `a[i]` is, so a guarded call is a proven site of its caller.
+  {
+    program: "tests/link/atomic_index_proven/main.ts",
+    file: "exit",
+    changelog: "prove atomic element indexes the code has checked",
+    why: "the candidate proves each atomic element call's index from the caller's guard or loop and compiles the program under its `noPanic` scope; the reference counts the method's own `index` site at every call and refuses it",
+  },
   // WP72 S6a: a route marked `streamBody` takes its HTTP/2 body in pieces.
   // `Http2Stream` gains `held` and `owed`, so its struct moves in the header
   // of a program that links nish/net/http2 itself; the new probe calls

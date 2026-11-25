@@ -430,8 +430,8 @@ function binShard(s: Shard): i32 -> @binShard$
   local +4:7 x: i32 (let)
   local +5:12 i: i32 (let)
   local +9:11 bin: i32 (const)
-  local +14:12 b: i32 (let)
-  callee +15:5 AtomicI32Array.add -> @nish.AtomicI32Array.add
+  local +15:12 b: i32 (let)
+  callee +16:5 AtomicI32Array.add -> @nish.AtomicI32Array.add
 function binPerValue(s: Shard): i32 -> @binPerValue$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.AtomicI32Array.add
@@ -440,7 +440,7 @@ function binPerValue(s: Shard): i32 -> @binPerValue$
   local +0:7 x: i32 (let)
   local +1:12 i: i32 (let)
   local +5:11 bin: i32 (const)
-  callee +6:5 AtomicI32Array.add -> @nish.AtomicI32Array.add
+  callee +8:7 AtomicI32Array.add -> @nish.AtomicI32Array.add
 function Hist.constructor(this: Hist): void -> @Hist.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish_array_grow
