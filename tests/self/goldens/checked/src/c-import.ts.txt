@@ -1777,26 +1777,27 @@ function Importer.functionDecl(this: Importer, f: CFunc, useOverride: boolean): 
   local +53:13 countAt: i32 (const)
   callee +53:23 Importer.countOf -> @Importer.countOf
   local +54:11 type: string (let)
-  local +56:15 element: string (const)
-  callee +56:25 bufferElement -> @bufferElement
-  callee +56:39 Importer.resolve -> @Importer.resolve
-  callee +58:13 StringSet.has -> @StringSet.has
-  callee +59:41 Importer.word -> @Importer.word
-  callee +61:18 StringSet.has -> @StringSet.has
-  local +64:15 nullable: boolean (const)
-  callee +65:16 Importer.paramType -> @Importer.paramType
-  callee +65:31 Importer.resolve -> @Importer.resolve
-  callee +65:72 Importer.isNamedCount -> @Importer.isNamedCount
-  callee +71:9 StringBuilder.add -> @StringBuilder.add
-  local +73:13 shown: string (const)
-  callee +74:7 StringBuilder.add -> @StringBuilder.add
-  callee +74:21 Importer.word -> @Importer.word
-  local +76:11 ret: string (const)
-  callee +76:17 Importer.functionReturn -> @Importer.functionReturn
-  local +80:11 owned: string (const)
-  callee +82:51 Importer.word -> @Importer.word
-  callee +84:40 Importer.word -> @Importer.word
-  callee +84:71 StringBuilder.toText -> @StringBuilder.toText
+  local +56:15 countName: string (const)
+  local +57:15 element: string (const)
+  callee +57:25 bufferElement -> @bufferElement
+  callee +57:39 Importer.resolve -> @Importer.resolve
+  callee +59:13 StringSet.has -> @StringSet.has
+  callee +60:41 Importer.word -> @Importer.word
+  callee +62:18 StringSet.has -> @StringSet.has
+  local +65:15 nullable: boolean (const)
+  callee +66:16 Importer.paramType -> @Importer.paramType
+  callee +66:31 Importer.resolve -> @Importer.resolve
+  callee +66:72 Importer.isNamedCount -> @Importer.isNamedCount
+  callee +72:9 StringBuilder.add -> @StringBuilder.add
+  local +74:13 shown: string (const)
+  callee +75:7 StringBuilder.add -> @StringBuilder.add
+  callee +75:21 Importer.word -> @Importer.word
+  local +77:11 ret: string (const)
+  callee +77:17 Importer.functionReturn -> @Importer.functionReturn
+  local +81:11 owned: string (const)
+  callee +83:51 Importer.word -> @Importer.word
+  callee +85:40 Importer.word -> @Importer.word
+  callee +85:71 StringBuilder.toText -> @StringBuilder.toText
 function Importer.returnNonnull(this: Importer, f: CFunc): boolean -> @Importer.returnNonnull [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Importer.resolve

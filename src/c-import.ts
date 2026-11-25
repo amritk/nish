@@ -2906,10 +2906,11 @@ class Importer {
       const countAt = this.countOf(f, o, name)
       let type = ""
       if (o !== null && countAt >= 0 && countAt < outNames.length) {
+        const countName = outNames[countAt]
         const element = bufferElement(this.resolve(f.paramTypes[i]))
         type = o.readonlys[p] ? `readonly ${element}[]` : `${element}[]`
         if (named.has(name)) {
-          type = `CountedBy<${type}, "${this.word(outNames[countAt], AS_IDENT)}">`
+          type = `CountedBy<${type}, "${this.word(countName, AS_IDENT)}">`
         }
       } else if (counts.has(name)) {
         type = "u64"

@@ -20,11 +20,16 @@ function z_copy(dest: u8[], destLen: OutLen, source: readonly u8[], sourceLen: u
   pointer destLen: size=8 writesThrough=true captured=false
   pointer source: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function z_first(n: u32, xs: readonly f32[]): f32 -> @z_first
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function run(): i32 -> @run [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via z_fill
-  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 z_copy z_fill z_sum
-  stackSites=4 stackLocals=4
+  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 z_copy z_fill z_first z_sum
+  stackSites=5 stackLocals=5
   local +0:9 buf: u8[] (const)
   callee +1:3 z_fill -> @z_fill
   callee +3:25 z_sum -> @z_sum
@@ -33,3 +38,5 @@ function run(): i32 -> @run [exported]
   local +7:9 source: u8[] (const)
   local +8:9 status: i32 (const)
   callee +8:18 z_copy -> @z_copy
+  local +10:9 xs: f32[] (const)
+  callee +11:27 z_first -> @z_first

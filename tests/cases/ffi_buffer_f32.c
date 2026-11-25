@@ -14,9 +14,6 @@ float sum_f32(const float *xs, uint64_t n) {
   }
   return s;
 }
-float first_f32(uint32_t n, const float *xs) {
-  return n > 0 ? xs[0] : 0;
-}
 int32_t run(void);
 int main(void) {
   int32_t r = run();
