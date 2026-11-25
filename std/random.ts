@@ -23,18 +23,14 @@
  * splittable pseudorandom number generators", OOPSLA 2014), on 32 bits.
  *
  * **The same bits under Node.** A wrapping multiply is `Math.imul`, the low
- * 32 bits of the product both ways. A wrapping add or subtract is taken in
- * `i64`, where two `i32`s cannot overflow, and `toI32` keeps its low 32 bits,
- * as integer conversions do natively and under Node. Every shift has a
- * constant count, and `^` and `>>> 16` answer the same 32 bits in JavaScript
- * as in the compiled program.
- *
- *  `nextInt` reads its span and its draws as unsigned counts with no `u32`
- *  (whose conversions saturate under Node): the sign bit flipped orders them
- *  under a signed compare, and the remainder is taken in pieces that stay below
- *  2^31. `nextF64` builds its double from integers below 2^53, so its products
- *  and sums are exact both ways. The program a test prints under Node is the one
- *  it prints compiled (docs/RUN_UNDER_NODE.md).
+ * 32 bits of the product both ways. Every other sum, difference and remainder
+ * is taken in `f64` on the state read as an unsigned count below 2^32, where
+ * each answer is an integer below 2^33 and so exact, and comes back to an
+ * `i32` only once a compare has put it in range. Every shift has a constant
+ * count, and `^` and `>>> 16` answer the same 32 bits in JavaScript as in the
+ * compiled program. `nextF64` builds its double from integers below 2^53, so
+ * its products and sums are exact both ways. The program a test prints under
+ * Node is the one it prints compiled (docs/RUN_UNDER_NODE.md).
  *
  * **It is not for cryptography**: a key or a nonce comes from
  * `crypto.getRandomValues`.
@@ -46,8 +42,8 @@
  * give each task its own, seeded from its index.
  */
 
-/** 0x9E3779B9 as an `i32`: the Weyl increment, odd, so the walk visits every state. */
-const GOLDEN: i32 = -1640531527
+/** 0x9E3779B9, the Weyl increment: odd, so the walk visits every state. */
+const GOLDEN: f64 = 2654435769.0
 
 /** 0x85EBCA6B as an `i32`: MurmurHash3's first finaliser multiplier (public domain). */
 const MIX_1: i32 = -2048144789
@@ -58,44 +54,24 @@ const MIX_2: i32 = -1028477387
 /** 2^26, the weight of the high draw in `nextF64`'s 53 bits. */
 const TWO_26: f64 = 67108864.0
 
+/** 2^31: an unsigned count at least this is a negative `i32`. */
+const TWO_31: f64 = 2147483648.0
+
+/** 2^32, the number of states. */
+const TWO_32: f64 = 4294967296.0
+
 /** 2^53, which scales a 53-bit integer into [0, 1). */
 const TWO_53: f64 = 9007199254740992.0
 
-/** The sign bit: `x ^ SIGN` orders the bits of `x` as an unsigned count under a signed compare. */
-const SIGN: i32 = -2147483648
-
-/** 2^31 - 1, the `i32` just below 2^31, from which `remainder` finds 2^31 mod m. */
-const MAX: i32 = 2147483647
-
-/** `a + b`, wrapped to 32 bits: the `i64` sum always fits, and `toI32` keeps its low half. */
-const wrapAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
-
-/** `a - b`, wrapped to 32 bits, as `wrapAdd` takes a sum. */
-const wrapSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
-
-/** Whether `a < b` when both are read as unsigned 32-bit counts. */
-const below = (a: i32, b: i32): boolean => (a ^ SIGN) < (b ^ SIGN)
+/** The bits of `x` read as an unsigned count, from 0 to 2^32 - 1. */
+const unsigned = (x: i32): f64 => (x < 0 ? toF64(x) + TWO_32 : toF64(x))
 
 /**
- * `a mod m` with both read as unsigned 32-bit counts and `m` not 0. A count
- * of 2^31 or more is a negative `i32`, so it is taken apart into pieces a
- * signed `%` answers the same in JavaScript, and every sum stays below 2^31.
+ * The `i32` whose bits read as the unsigned count `u`, which is an integer
+ * from 0 to 2^32 - 1: below 2^31 it is `u`, and from there `u - 2^32`, so
+ * each `toI32` converts a value inside the `i32` range.
  */
-const remainder = (a: i32, m: i32): i32 => {
-  if (m > 0) {
-    if (a >= 0) {
-      return a % m
-    }
-    // a is 2^31 + low, so a mod m is low plus 2^31 mod m, added mod m.
-    const low: i32 = (a ^ SIGN) % m
-    const high: i32 = wrapAdd(MAX % m, 1) % m
-    const room: i32 = wrapSub(m, high)
-    return low >= room ? wrapSub(low, room) : wrapAdd(low, high)
-  }
-  // m is 2^31 or more (the one caller never passes 0), so a is less than 2m:
-  // at most one m comes off.
-  return below(a, m) ? a : wrapSub(a, m)
-}
+const bits = (u: f64): i32 => (u < TWO_31 ? toI32(u) : toI32(u - TWO_32))
 
 /** MurmurHash3's `fmix32`: every bit of `h` into every bit of the answer, a bijection on 32 bits. */
 const mix = (h: i32): i32 => {
@@ -134,7 +110,8 @@ export class Rng {
    *   steps once.
    */
   nextI32(): i32 {
-    this.state = wrapAdd(this.state, GOLDEN)
+    const next: f64 = unsigned(this.state) + GOLDEN
+    this.state = bits(next < TWO_32 ? next : next - TWO_32)
     return mix(this.state)
   }
 
@@ -174,16 +151,16 @@ export class Rng {
     if (lo > hi) {
       panic("Rng.nextInt: lo is greater than hi")
     }
-    const span: i32 = wrapAdd(wrapSub(hi, lo), 1)
-    if (span === 0) {
+    // From 1 to 2^32, and lo plus any remainder of it is at most hi.
+    const span: f64 = toF64(hi) - toF64(lo) + 1.0
+    if (span === TWO_32) {
       return this.nextI32()
     }
-    // 2^32 mod span, as (2^32 - span) mod span.
-    const refused: i32 = remainder(wrapSub(0, span), span)
-    let draw: i32 = this.nextI32()
-    while (below(draw, refused)) {
-      draw = this.nextI32()
+    const refused: f64 = TWO_32 % span
+    let draw: f64 = unsigned(this.nextI32())
+    while (draw < refused) {
+      draw = unsigned(this.nextI32())
     }
-    return wrapAdd(lo, remainder(draw, span))
+    return toI32(toF64(lo) + (draw % span))
   }
 }
