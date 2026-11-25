@@ -1,6 +1,6 @@
 {"functions":[
 {"name":"main","symbol":"nish_main","module":"tests/link/window_contract_late_forward/main.ts","line":10,"panics":[{"kind":"call","line":13,"column":3,"callee":"Sink.write","via":"window"},{"kind":"oom","line":14,"column":15,"allowed":true}]},
-{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_late_forward/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":false},{"kind":"oom","line":4,"column":11,"allowed":true}]},
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_late_forward/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":true},{"kind":"oom","line":4,"column":11,"allowed":true}]},
 {"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_contract_late_forward/sink.ts","line":10,"panics":[]},
 {"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_contract_late_forward/sink.ts","line":13,"panics":[{"kind":"window","line":15,"column":5,"proven":false}]}
 ]}

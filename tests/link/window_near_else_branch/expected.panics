@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/link/window_near_else_branch/main.ts","line":9,"panics":[{"kind":"call","line":13,"column":5,"callee":"Sink.write","via":"panic"},{"kind":"oom","line":15,"column":15,"allowed":true}]},
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_near_else_branch/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":false},{"kind":"oom","line":4,"column":11,"allowed":true}]},
+{"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_near_else_branch/sink.ts","line":12,"panics":[]},
+{"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_near_else_branch/sink.ts","line":15,"panics":[{"kind":"call","line":16,"column":5,"callee":"checkWindow","via":"panic"}]}
+]}

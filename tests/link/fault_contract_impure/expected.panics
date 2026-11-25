@@ -1,0 +1,11 @@
+{"functions":[
+{"name":"open","symbol":"open$","module":"tests/link/fault_contract_impure/main.ts","line":9,"panics":[{"kind":"call","line":14,"column":16,"callee":"Pool.constructor","via":"panic"}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/fault_contract_impure/main.ts","line":18,"panics":[{"kind":"oom","line":19,"column":15,"allowed":true},{"kind":"call","line":19,"column":18,"callee":"open","via":"panic"}]},
+{"name":"Limits.constructor","symbol":"Limits.constructor","module":"tests/link/fault_contract_impure/pool.ts","line":5,"panics":[]},
+{"name":"leastSlots","symbol":"leastSlots","module":"tests/link/fault_contract_impure/pool.ts","line":11,"panics":[{"kind":"oom","line":12,"column":33,"allowed":true}]},
+{"name":"limitsFault","symbol":"limitsFault","module":"tests/link/fault_contract_impure/pool.ts","line":16,"panics":[{"kind":"oom","line":18,"column":12,"allowed":true}]},
+{"name":"otherFault","symbol":"otherFault","module":"tests/link/fault_contract_impure/pool.ts","line":23,"panics":[{"kind":"oom","line":25,"column":12,"allowed":true}]},
+{"name":"checkLimits","symbol":"checkLimits","module":"tests/link/fault_contract_impure/pool.ts","line":30,"panics":[{"kind":"panic","line":33,"column":5,"proven":false}]},
+{"name":"Pool.constructor","symbol":"Pool.constructor","module":"tests/link/fault_contract_impure/pool.ts","line":39,"panics":[{"kind":"call","line":40,"column":5,"callee":"checkLimits","via":"panic"}]},
+{"name":"shrink","symbol":"shrink","module":"tests/link/fault_contract_impure/pool.ts","line":45,"panics":[]}
+]}

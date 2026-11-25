@@ -1,0 +1,10 @@
+{"functions":[
+{"name":"open","symbol":"open$","module":"tests/link/fault_contract_proven/main.ts","line":10,"panics":[{"kind":"fault","line":15,"column":16,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/fault_contract_proven/main.ts","line":19,"panics":[{"kind":"oom","line":20,"column":15,"allowed":true},{"kind":"oom","line":21,"column":15,"allowed":true}]},
+{"name":"Limits.constructor","symbol":"Limits.constructor","module":"tests/link/fault_contract_proven/pool.ts","line":3,"panics":[]},
+{"name":"limitsFault","symbol":"limitsFault","module":"tests/link/fault_contract_proven/pool.ts","line":8,"panics":[{"kind":"oom","line":10,"column":12,"allowed":true}]},
+{"name":"otherFault","symbol":"otherFault","module":"tests/link/fault_contract_proven/pool.ts","line":15,"panics":[{"kind":"oom","line":17,"column":12,"allowed":true}]},
+{"name":"checkLimits","symbol":"checkLimits","module":"tests/link/fault_contract_proven/pool.ts","line":22,"panics":[{"kind":"panic","line":25,"column":5,"proven":true}]},
+{"name":"Pool.constructor","symbol":"Pool.constructor","module":"tests/link/fault_contract_proven/pool.ts","line":31,"panics":[{"kind":"fault","line":32,"column":5,"proven":true}]},
+{"name":"shrink","symbol":"shrink","module":"tests/link/fault_contract_proven/pool.ts","line":37,"panics":[]}
+]}

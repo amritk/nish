@@ -1,0 +1,8 @@
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/link/window_near_same_name/main.ts","line":10,"panics":[{"kind":"call","line":14,"column":5,"callee":"Sink.write","via":"window"},{"kind":"oom","line":17,"column":15,"allowed":true}]},
+{"name":"checkWindow","symbol":"sink$.checkWindow","module":"tests/link/window_near_same_name/sink.ts","line":3,"panics":[{"kind":"overflow","line":5,"column":49,"proven":true},{"kind":"panic","line":6,"column":5,"proven":true},{"kind":"oom","line":6,"column":11,"allowed":true}]},
+{"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_near_same_name/sink.ts","line":12,"panics":[]},
+{"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_near_same_name/sink.ts","line":15,"panics":[{"kind":"window","line":16,"column":5,"proven":false}]},
+{"name":"Sink.none","symbol":"Sink.none","module":"tests/link/window_near_same_name/sink.ts","line":20,"panics":[{"kind":"window","line":21,"column":5,"proven":true}]},
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_near_same_name/other.ts","line":2,"panics":[{"kind":"overflow","line":4,"column":49,"proven":true},{"kind":"panic","line":5,"column":5,"proven":true},{"kind":"oom","line":5,"column":11,"allowed":true}]}
+]}
