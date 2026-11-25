@@ -54,7 +54,7 @@ import T_VOID from "./types" -> const T_VOID
 const ENTRY_MAIN_SYMBOL: string = "nish_main"
 const COUNTED_BY: string = "CountedBy"
 const COUNTED_BY_PLACE_MESSAGE: string = "`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`"
-const COUNTED_BY_FORM_MESSAGE: string = "`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], \"len\">`"
+const COUNTED_BY_FORM_MESSAGE: string = "`CountedBy` takes a buffer of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], \"len\">`"
 function isExported(node: Node): boolean -> @isExported [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
@@ -372,47 +372,64 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: name
-  calls: CheckContext.error FunctionSig.body TypeTable.isOpaque TypeTable.isRanged TypeTable.kindOf TypeTable.stripNull TypeTable.typeName checkCountedBuffers isForeignBuffer isForeignType layoutClass nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange
-  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 checkCountedBuffers#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
-  pointer sig: size=224 writesThrough=false captured=false passedTo=FunctionSig.body#0 checkCountedBuffers#1
-  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1 checkCountedBuffers#2
+  calls: CheckContext.error FunctionSig.body TypeTable.isOpaque TypeTable.isRanged TypeTable.kindOf TypeTable.refOf TypeTable.stripNull TypeTable.typeName checkCountedBuffers isForeignBuffer isForeignType layoutClass nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange refuseMixedRun
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseMixedRun#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 checkCountedBuffers#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
+  pointer sig: size=224 writesThrough=false captured=false passedTo=FunctionSig.body#0 refuseMixedRun#1 checkCountedBuffers#1
+  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 refuseMixedRun#2 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1 checkCountedBuffers#2
   stackSites=0 stackLocals=0
   callee +0:7 FunctionSig.body -> @FunctionSig.body
   callee +1:5 CheckContext.error -> @CheckContext.error
   callee +4:5 CheckContext.error -> @CheckContext.error
   callee +10:5 CheckContext.error -> @CheckContext.error
-  local +17:7 run: i32 (let)
-  local +18:7 lastBuffer: string (let)
-  local +19:7 i: i32 (let)
-  callee +21:9 isForeignBuffer -> @isForeignBuffer
-  local +32:9 rule: string (let)
-  local +33:11 bare: i32 (const)
-  callee +33:18 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +34:39 isForeignBuffer -> @isForeignBuffer
-  callee +54:16 layoutClass -> @layoutClass
-  callee +58:16 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +59:7 refuseForeignRange -> @refuseForeignRange
-  callee +60:29 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +63:17 isForeignType -> @isForeignType
-  callee +72:7 CheckContext.error -> @CheckContext.error
-  callee +74:82 TypeTable.typeName -> @TypeTable.typeName
-  callee +80:5 CheckContext.error -> @CheckContext.error
-  callee +85:3 checkCountedBuffers -> @checkCountedBuffers
-  callee +86:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +93:7 TypeTable.isOpaque -> @TypeTable.isOpaque
-  callee +93:26 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +98:7 layoutClass -> @layoutClass
-  callee +98:43 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +101:5 CheckContext.error -> @CheckContext.error
-  callee +103:69 TypeTable.typeName -> @TypeTable.typeName
-  callee +103:162 TypeTable.typeName -> @TypeTable.typeName
-  callee +103:181 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +105:14 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +106:5 refuseForeignRange -> @refuseForeignRange
-  callee +107:15 isForeignType -> @isForeignType
-  local +108:11 spelled: string (const)
-  callee +108:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +109:5 CheckContext.error -> @CheckContext.error
+  local +19:7 run: i32 (let)
+  local +20:7 lastBuffer: string (let)
+  local +21:7 runElem: i32 (let)
+  local +22:7 runFirst: string (let)
+  local +23:7 i: i32 (let)
+  callee +25:9 isForeignBuffer -> @isForeignBuffer
+  local +28:15 elem: i32 (const)
+  callee +28:22 TypeTable.refOf -> @TypeTable.refOf
+  callee +33:11 refuseMixedRun -> @refuseMixedRun
+  local +43:9 rule: string (let)
+  local +44:11 bare: i32 (const)
+  callee +44:18 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +45:39 isForeignBuffer -> @isForeignBuffer
+  callee +65:16 layoutClass -> @layoutClass
+  callee +69:16 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +70:7 refuseForeignRange -> @refuseForeignRange
+  callee +71:29 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +74:17 isForeignType -> @isForeignType
+  callee +83:7 CheckContext.error -> @CheckContext.error
+  callee +85:82 TypeTable.typeName -> @TypeTable.typeName
+  callee +91:5 CheckContext.error -> @CheckContext.error
+  callee +96:3 checkCountedBuffers -> @checkCountedBuffers
+  callee +97:7 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +104:7 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +104:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +109:7 layoutClass -> @layoutClass
+  callee +109:43 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +112:5 CheckContext.error -> @CheckContext.error
+  callee +114:69 TypeTable.typeName -> @TypeTable.typeName
+  callee +114:162 TypeTable.typeName -> @TypeTable.typeName
+  callee +114:181 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +116:14 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +117:5 refuseForeignRange -> @refuseForeignRange
+  callee +118:15 isForeignType -> @isForeignType
+  local +119:11 spelled: string (const)
+  callee +119:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +120:5 CheckContext.error -> @CheckContext.error
+function refuseMixedRun(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, i: i32, first: string, elem: i32): void -> @refuseMixedRun
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: elem i
+  calls: CheckContext.error TypeTable.typeName nish_panic_index nish_str_concat
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer sig: size=224 writesThrough=false captured=false
+  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  callee +0:3 CheckContext.error -> @CheckContext.error
+  callee +2:78 TypeTable.typeName -> @TypeTable.typeName
+  callee +2:156 TypeTable.typeName -> @TypeTable.typeName
 function checkCountedBuffers(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void -> @checkCountedBuffers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseUnknownCount
