@@ -75,6 +75,7 @@ export class ReleaseCache {
  */
 export const releaseValidVersion = (v: string): boolean => {
   const n: i32 = toI32(v.length)
+  // biome-ignore lint/style/useExplicitLengthCheck: the panic prover reads `length < 1` as a bound for the charCodeAt(0) after it and does not read `=== 0`
   if (v.length < 1 || n > 64) {
     return false
   }
@@ -326,6 +327,7 @@ export const releaseTagFromLocation = (base: string, location: string): string |
 /** Whether `rest`, what follows a host, is empty, a path, or a port of digits then nothing or a path. */
 const releasePortThenPath = (rest: string): boolean => {
   const n: i32 = toI32(rest.length)
+  // biome-ignore lint/style/useExplicitLengthCheck: the panic prover reads `length < 1` as a bound for the charCodeAt(0) after it and does not read `=== 0`
   if (rest.length < 1 || rest.charCodeAt(0) === 47) {
     return true
   }

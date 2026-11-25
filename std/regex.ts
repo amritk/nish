@@ -101,7 +101,6 @@
  *  `Regex` is used by one thread at a time.
  */
 
-
 // Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Public/16.0.0/ucd/), the files scripts/gen-regex-unicode.mjs names. Copyright © 1991-2026 Unicode, Inc. Used under the Unicode License v3, whose text follows.
 //
 // UNICODE LICENSE V3

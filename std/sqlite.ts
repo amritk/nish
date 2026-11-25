@@ -273,7 +273,12 @@ const describe = (code: i32): string => {
  */
 const messageFor = (code: i32, connection: string | null): string => {
   const primary: i32 = code & 0xff
-  if (connection === null || primary === SQLITE_MISUSE || primary === SQLITE_RANGE || primary === SQLITE_NOMEM) {
+  if (
+    connection === null ||
+    primary === SQLITE_MISUSE ||
+    primary === SQLITE_RANGE ||
+    primary === SQLITE_NOMEM
+  ) {
     return describe(code)
   }
   return connection

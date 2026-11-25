@@ -311,7 +311,9 @@ const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
   }
   // f = (q2 * 2^-64 + q1 * 2^-128) * 2^-(sh + lz)
   const a: f64 = toF64(q2 >> toU64(11)) * exp2Bits(toI64(970) - toI64(sh) - toI64(lz))
-  const b: f64 = toF64(((q2 & toU64(2047)) << toU64(53)) | (q1 >> toU64(11))) * exp2Bits(toI64(906) - toI64(sh) - toI64(lz))
+  const b: f64 =
+    toF64(((q2 & toU64(2047)) << toU64(53)) | (q1 >> toU64(11))) *
+    exp2Bits(toI64(906) - toI64(sh) - toI64(lz))
   // r = (a + b) * pi/2 as y0 + y1.
   const p1h: f64 = 1.570796326794896558
   const p1l: f64 = 6.12323399573676603587e-17
@@ -766,8 +768,7 @@ export const hypotF64 = (x: f64, y: f64): f64 => {
 }
 
 // fdlibm's SET_HIGH_WORD and SET_LOW_WORD.
-const withHi = (x: f64, hi: i32): f64 =>
-  bitsToF64((toI64(hi) << toI64(32)) | toI64(loWord(x)))
+const withHi = (x: f64, hi: i32): f64 => bitsToF64((toI64(hi) << toI64(32)) | toI64(loWord(x)))
 const withLo = (x: f64, lo: u32): f64 => bitsToF64((f64ToBits(x) & (toI64(-1) << toI64(32))) | toI64(lo))
 
 // The rational approximation e_exp.c and e_pow.c share: P1 + t * (P2 + ... + t * P5).
@@ -1101,7 +1102,8 @@ export const powF64 = (x: f64, y: f64): f64 => {
     // 0.5 more than the second.
     const half: i32 = j >>> 1
     const thn: f64 = withHi(0.0, half + 0x40000000)
-    let th: f64 = big ? withHi(0.0, half + 0x3ff80000) : k === 0 ? thn : thn + 0.5
+    const thSmall: f64 = k === 0 ? thn : thn + 0.5
+    let th: f64 = big ? withHi(0.0, half + 0x3ff80000) : thSmall
     let tl: f64 = ax - (th - bp)
     const sl: f64 = v * (u - sh * th - sh * tl)
     let s2: f64 = ss * ss
@@ -1294,7 +1296,12 @@ const hexValue = (s: string, start: i32, end: i32): f64 => {
 // Where the digits after a `0x` or `0X` at `at` start, or -1 when `s` holds
 // neither there.
 const hexDigitsAt = (s: string, at: i32): i32 => {
-  if (at >= 0 && at < toI32(s.length) - 1 && toI32(s.charCodeAt(at)) === 48 && (toI32(s.charCodeAt(at + 1)) | 32) === 120) {
+  if (
+    at >= 0 &&
+    at < toI32(s.length) - 1 &&
+    toI32(s.charCodeAt(at)) === 48 &&
+    (toI32(s.charCodeAt(at + 1)) | 32) === 120
+  ) {
     return at + 2
   }
   return -1
@@ -1302,7 +1309,9 @@ const hexDigitsAt = (s: string, at: i32): i32 => {
 
 // Where the number after `s`'s leading whitespace and one optional sign starts.
 const signEnd = (s: string, p: i32): i32 =>
-  p >= 0 && p < toI32(s.length) && (toI32(s.charCodeAt(p)) === 45 || toI32(s.charCodeAt(p)) === 43) ? p + 1 : p
+  p >= 0 && p < toI32(s.length) && (toI32(s.charCodeAt(p)) === 45 || toI32(s.charCodeAt(p)) === 43)
+    ? p + 1
+    : p
 
 // Whether a `-` sits at `p`.
 const isMinus = (s: string, p: i32): boolean => p >= 0 && p < toI32(s.length) && toI32(s.charCodeAt(p)) === 45
