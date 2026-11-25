@@ -664,6 +664,26 @@ const bufferElement = (t: CType): string => {
   return t.base === BASE_SCALAR && !t.aligned && !t.alignedBase && !t.enumBase && lent ? s : ""
 }
 
+/**
+ * Why a single pointer to a scalar is still no buffer, as a clause the
+ * refusal appends: an enum's or an aligned typedef's. "" for any other type.
+ */
+const bufferWhy = (t: CType): string => {
+  if (t.pointers !== 1 || t.base !== BASE_SCALAR) {
+    return ""
+  }
+  if (t.enumBase) {
+    return "; an enum's size is the C compiler's choice, so it is no buffer element"
+  }
+  if (t.aligned || t.alignedBase) {
+    return "; a typedef with its own `aligned` attribute is not its scalar's layout"
+  }
+  return ""
+}
+
+/** How the nullable refusal names a buffer: its own array type when it has one. */
+const nonNullBuffer = (element: string): string => (element.length > 0 ? `a \`${element}[]\`` : "an array")
+
 /** A struct or union declared in the header or one it includes. */
 class CRecord {
   key: string = ""
@@ -2702,7 +2722,7 @@ class Importer {
     }
     if (nullable && buffer.length > 0) {
       this.fail(
-        `overrides: ${this.paramWhere(f, param)} is a buffer, a \`u8[]\` that cannot be null, so it cannot be nullable`,
+        `overrides: ${this.paramWhere(f, param)} is a buffer, ${nonNullBuffer(bufferElement(t))} that cannot be null, so it cannot be nullable`,
         1
       )
       return
@@ -2732,7 +2752,7 @@ class Importer {
       const element = bufferElement(t)
       if (element.length === 0) {
         this.fail(
-          `overrides: ${this.paramWhere(f, param)} is a buffer, so it must be a \`void *\` or \`char *\`, or a pointer to \`uint16_t\`, \`uint32_t\`, \`int32_t\` or \`float\``,
+          `overrides: ${this.paramWhere(f, param)} is a buffer, so it must be a \`void *\` or \`char *\`, or a pointer to \`uint16_t\`, \`uint32_t\`, \`int32_t\` or \`float\`${bufferWhy(t)}`,
           1
         )
         return

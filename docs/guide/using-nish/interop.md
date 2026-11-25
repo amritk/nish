@@ -1123,11 +1123,12 @@ own count. A buffer with no `u64` after it, a count of another type, an
 `u8[] | null` and a buffer result are each refused; a count of another width, or one elsewhere in
 the declaration, is named with `CountedBy` (below).
 
-A call passes the array's bytes, and checks the count against each buffer
-first: under `--allow-panics`, a count larger than the array stops the
-program before C runs, with
+A call passes a pointer to the array's first element, not a copy, and checks
+the count against each buffer first: under `--allow-panics`, a count larger
+than the array stops the program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
-(`counts more elements than` for a buffer that is not a `u8[]`) and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
+(`counts more elements than` for a buffer that is not a `u8[]`) and exit 1.
+Pass `toU64(buf.length)` of the buffer itself and the compiler
 proves the count, so the call carries no check and compiles in a module
 held to no panic, as every module of your package is by default:
 

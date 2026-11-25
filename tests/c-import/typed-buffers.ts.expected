@@ -7,6 +7,9 @@ declare class OutU32 {
   value: u32
 }
 
+export const MIX_A: i32 = 0
+export const MIX_B: i32 = 1
+
 declare function upload_f32(verts: readonly f32[], n: u64): i32
 declare function fill_f32(out: f32[], n: u64): i32
 declare function upload_u16(indices: readonly u16[], n: u64): i32
@@ -19,4 +22,7 @@ declare function read_counted(out: CountedBy<f32[], "got">, got: OutU32): i32
  *   mix_f64: "allow" does not name it
  *   mix_i16: "allow" does not name it
  *   mix_i64: "allow" does not name it
+ *   mix_enum: "allow" does not name it
+ *   mix_aligned: "allow" does not name it
+ *   mix_aligned_ptr: "allow" does not name it
  */
