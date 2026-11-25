@@ -164,14 +164,41 @@ expected.out":
 
 | Bound | Where | Line that fails without it |
 | --- | --- | --- |
-| A chosen column past the cursor's is `SQLITE_RANGE` when `readRow` reads it, and writes no `ints` or `spans` | `column_mem` in `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "and readRow is RANGE for column 7", "and leaves ints and spans as they were", "selectRow -1, readRow is RANGE", "selectRow 70000, readRow is RANGE" |
+| A chosen column past the cursor's is `SQLITE_RANGE` when `readRow` reads it, and writes no `ints` or `spans` | `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "and readRow is RANGE for column 7", "and leaves ints and spans as they were", "selectRow -1, readRow is RANGE", "selectRow 70000, readRow is RANGE" |
 | An index outside 0..65,535 reaches the adapter as 65,535, not as its low 16 bits, so 65,537 and -65,535 do not read column 1 | `Cursor.selectRow` | "selectRow 65537, readRow is RANGE", "selectRow -65535, readRow is RANGE" |
 | Over 65,535 columns is `SQLITE_MISUSE`, so a column index fits the adapter's `u16` | `Cursor.selectRow` | "selectRow of 65536 columns is MISUSE" |
 | A refused list leaves the chosen one | `Cursor.selectRow` refuses before it replaces its buffer | "and a refused list keeps the one chosen" |
 | `ints` shorter than the list or `spans` shorter than 3 a column is `SQLITE_MISUSE`, and nothing is written | `Cursor.readRow` | "ints shorter than the list is MISUSE", "spans shorter than 3 per column is MISUSE", "and none of them writes" |
 | No `selectRow` before it, no row, or a closed cursor is `SQLITE_MISUSE`, an empty list among them | `Cursor.readRow` (`nsel`), `nishsqlite_cursor_read_row` (`has_row`), `NISH_SQLITE_CURSOR` | "readRow before any selectRow is MISUSE", "and no row with no columns is MISUSE", "even with columns chosen", "which readRow refuses with MISUSE" |
-| A record too short for a chosen column is `SQLITE_SCHEMA`, and writes no `ints` or `spans` | `column_mem` in `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "a short record is SCHEMA for the row", "and writes nothing" |
+| A record too short for a chosen column is `SQLITE_SCHEMA`, and writes no `ints` or `spans` | `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "a short record is SCHEMA for the row", "and writes nothing" |
 | A row whose bytes exceed `text` writes nothing to `ints` or `spans` | `Cursor.readRow` (`n > text.length`) | "and writes no ints or spans" |
+
+**The adapter reads records itself.** A column read, `readRow` and an
+index's `rowid()` decode the row's record in the adapter (`row_of`,
+`field_value`) rather than through `sqlite3VdbeRecordUnpack`, so the bytes of
+a database file reach code SQLite did not write. The header walk keeps that
+function's bounds, test for test: a field is read only while its start lies
+within the record (`d <= sz`), at most as many as the cursor's columns and
+the rowid, and a last field whose bytes would run past the record's end
+reads as NULL; a header longer than the record reads no field. A field is
+then read from its own bytes, which lie inside the record. A varint is read
+where its first byte lies before the header's end and may run on up to 8
+bytes past it, as SQLite's own may: a record on its page has the page after
+it, and one copied off its overflow pages lies in the cursor's buffer with
+`NISH_SQLITE_SLACK` zero bytes after it. The index rowid's shortcut reads the
+header's last byte as the rowid's serial type, as `sqlite3VdbeIdxRowid` does,
+only when the header is at least 3 bytes and within the record, and the
+value only when the record holds it after the header. `record` copies the
+payload only when all of it fits the caller's buffer, and answers its length
+either way. `RowRecord` in `std/sqlite.ts` checks every index against both
+its buffer and the record's length, so no record, however corrupt, makes it
+read past either (std/sqlite.ts has no unproven index site).
+`tests/link/std_sqlite_cursor_record/corrupt-record.c`, run by `tests/run.js`
+(`sqlite-link`) under AddressSanitizer, sets each of the 16 bytes before every
+row's text, on its page and on overflow pages, to each of 14 values and walks
+the table and its index with every read a cursor offers: "sqlite-link: every
+cursor read of a corrupt record stays inside it (AddressSanitizer)". Without
+`row_of`'s `d <= sz` bound it reports a heap-buffer-overflow at once.
 
 `readRow`'s answers travel in the `Cursor`'s byte buffer, which `selectRow`
 sizes at 11 bytes a column; the adapter takes the column count from its
@@ -290,6 +317,17 @@ Tests:
   left them. That check reads `sqlite3_memory_used`, SQLite's allocator
   only: it says nothing of the Nish heap, where `readRow`'s answer buffer
   lives.
+
+- `tests/link/std_sqlite_cursor_record`: `Cursor.record` and `RowRecord`
+  against `columnType`, `columnI64` and `columnInto` (and a REAL against
+  SQL's `columnF64`) on every row of a table holding every serial type, a
+  295-byte text whose serial type is two varint bytes, overflow rows longer
+  than the decoder's first buffer and short records, and through an index
+  whose record ends with the rowid; `record` into no room, one byte short
+  (nothing copied) and an exact fit; `MISUSE` on a closed cursor, handed on
+  by `RowRecord.read`; and `reopenCursor` over 200 read transactions, while
+  the cursor is open, and refused for other columns, which leaves it closed.
+  `tests/run.js` (`sqlite-link`) runs it again with `-DSQLITE_DEBUG`.
 
 Untested: a read that answers `SQLITE_ABORT` because the row moved under the
 cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`

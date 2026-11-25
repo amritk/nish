@@ -16,6 +16,39 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-25
+
+### Added
+
+- checker: WP89 S2 — numeric typed arrays as buffers a declared C function borrows ([#2293](https://github.com/amritk/nish/pull/2293))
+- runtime: Make std/temporal.ts panic-free but for a kept panic and a slice ([#2282](https://github.com/amritk/nish/pull/2282))
+- checker: WP89 S6 — a module file chosen by target ([#2299](https://github.com/amritk/nish/pull/2299))
+- runtime: Make the remaining std modules panic-free ([#2301](https://github.com/amritk/nish/pull/2301))
+- checker: Prove new Array lengths and slice ranges the code has checked ([#2303](https://github.com/amritk/nish/pull/2303))
+- checker: Prove [start, end) slice windows the code has checked ([#2305](https://github.com/amritk/nish/pull/2305))
+- checker: Prove atomic element indexes the code has checked ([#2306](https://github.com/amritk/nish/pull/2306))
+- runtime: Ring re-entries bounded, Ubuntu 6.8 buffer rings, Cursor.record and RowRecord, jsonPutString and Http1Server.tick ([#2307](https://github.com/amritk/nish/pull/2307))
+
+### Fixed
+
+- runtime: WP85 S1 — host, raster and synth panic-free ([#2269](https://github.com/amritk/nish/pull/2269))
+- runtime: WP85 S2 — term-pixels, term-io, term-rate and term-probe panic-free ([#2272](https://github.com/amritk/nish/pull/2272))
+- runtime: Make std/term.ts panic-free but for one slice ([#2273](https://github.com/amritk/nish/pull/2273))
+- runtime: WP80 S6 read windows the prover reads, fallen bench counts and example opt-outs ([#2294](https://github.com/amritk/nish/pull/2294))
+- runtime: WP83 S5 — prove, remove or record the 88 cipher sites S2 left ([#2302](https://github.com/amritk/nish/pull/2302))
+
+### Performance
+
+- runtime: PollWaitBatch sleeps its window out in slices and pumps once ([#2278](https://github.com/amritk/nish/pull/2278))
+
+### Documentation
+
+- WP89 S1 — the design note, the shim's ABI and the pinned toolchain ([#2284](https://github.com/amritk/nish/pull/2284))
+- self: Add WP83 S5 for the 88 cipher panic sites S2 left ([#2287](https://github.com/amritk/nish/pull/2287))
+- plan: Add WP84 S3 checked sums and S4 guide wording ([#2288](https://github.com/amritk/nish/pull/2288))
+- guide: Say gzip keeps only contract panics and when compressBound answers -1 ([#2308](https://github.com/amritk/nish/pull/2308))
+
+
 ## [0.46.0] - 2026-11-24
 
 ### Added
@@ -2330,3 +2363,4 @@ file per release, and each release's notes and downloads are on the
 [0.45.0]: https://github.com/amritk/nish/releases/tag/v0.45.0
 [0.45.1]: https://github.com/amritk/nish/releases/tag/v0.45.1
 [0.46.0]: https://github.com/amritk/nish/releases/tag/v0.46.0
+[0.47.0]: https://github.com/amritk/nish/releases/tag/v0.47.0

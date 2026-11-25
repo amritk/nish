@@ -2314,7 +2314,10 @@ rewriting every cell flushes in about 0.1 ms, and one changed cell in about
 0.03 ms. After `resize(width, height)` the next flush redraws everything, and
 so does one after `invalidate()`: call that when something else has written
 to the terminal. A side is at most 4,096 cells and a screen at most 1,048,576,
-with rows dropped to fit, so any size a terminal reports is safe to pass.
+with rows dropped to fit, so any size a terminal reports is safe to pass. The
+cell buffers are public fields: a flush covers only the cells the shortest of
+them holds, so one a caller shortened or pushed to is never read past, and the
+cells beyond it are not sent.
 
 **A `Canvas`** puts pixels on a screen, two to a cell, one above the other.
 It draws with the half-block character "▀": the foreground is the top pixel's
@@ -2580,7 +2583,7 @@ The same draw fills either kind of frame, with no copy:
 - module storage, `const FRAME = new Int32Array(...)`, which is how a `wasm32`
   module shares a frame with its page ([`nish/host/game`](#nishhostgame)).
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/raster.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { RASTER_SOLID, rasterDisc, rasterFrame, rasterGradient, rasterRect, rasterText } from "nish/raster";
@@ -2604,9 +2607,13 @@ export const main = (): i32 => {
 Colours are `0xRRGGBB` integers: `rasterRgb` packs three channels, `rasterMix`
 moves one colour toward another, `rasterAdd` adds light, `rasterDim` darkens
 and `rasterHue` walks the rainbow. A weight of 0 to `RASTER_SOLID` (256) says
-how much of a colour a rectangle blends in. `RasterTrail` and `RasterParticles`
+how much of a colour a rectangle blends in; `rasterMixWeight` clamps a weight
+outside that range to its nearer end, so past 256 it answers the second colour
+and below 0 the first. `RasterTrail` and `RasterParticles`
 are made once with a capacity and drawn every frame, so a frame allocates
-nothing. Text is the 5×7 font, one glyph a byte, and a byte outside printable
+nothing. `rasterTrail` draws the `count` points behind the trail's `head`, the
+newest brightest; a `head` set outside the ring still draws those of them
+whose slots land in it, and no others. Text is the 5×7 font, one glyph a byte, and a byte outside printable
 ASCII draws as `?`.
 
 ## `nish/synth`
@@ -2617,8 +2624,7 @@ or noise wave whose pitch slides from `f0` to `f1` Hz and whose loudness falls
 away by `decay` a second. The sample rate is passed to every call, so one
 program can make sounds at whatever rate its player wants.
 
-<!-- allow-panics: calls `std/synth.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { SYNTH_SQUARE, SYNTH_TRIANGLE, synthSemitone, synthSilence, synthTone } from "nish/synth";
 
@@ -2675,7 +2681,7 @@ When two modules declare storage of one name, the later one's is keyed by its
 symbol instead, and a program's own `GAME_FRAME` could move this module's off
 its key.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/host/game.ts`, `std/host/ring.ts`, `std/raster.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth } from "nish/host/game";
@@ -3290,7 +3296,11 @@ lowercase `date` field straight after `:status`. A 1xx response and trailers
 carry none. Each server's `HttpDate` formats the date at most once a second,
 and a pool's slots share one. Set your own `date` field and it is sent instead:
 in any case on HTTP/1.1, and lowercase on HTTP/2 and HTTP/3, which refuse an
-uppercase field name (`H2_INVALID`, `H3_INVALID`). On HTTP/3 the date counts
+uppercase field name (`H2_INVALID`, `H3_INVALID`). Set two and the head is
+refused, with nothing sent, even when they agree: a `Date` is one value
+(RFC 9110 §5.3). HTTP/1.1 answers `HTTP1_REFUSED` for two in any case,
+HTTP/2 `H2_INVALID` and HTTP/3 `H3_INVALID`, and `httpFieldsCheckOutgoing`
+answers `HTTP_FIELDS_DATE_REPEATED`. On HTTP/3 the date counts
 against the client's field-section limit like any other field.
 
 In a test that compares the bytes, call `date.pin(unixMs)` on the server, or on

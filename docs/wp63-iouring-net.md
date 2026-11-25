@@ -396,9 +396,16 @@ runtime keeps. `pollWait(loop, ready, timeoutMs)` works like this:
    guarantees (NURING-8); the bound is. A `pollWait` of -1 that wakes by
    the bound with nothing ready sleeps again.
 2. On wake, for each ring whose eventfd fired, or whose `IORING_SQ_TASKRUN`
-   is set (§2, item 4), it enters the ring with `GETEVENTS` and reaps. A recv
-   CQE marks its handle readable, and a send's completion that frees area
-   marks it writable.
+   is set (§2, item 4), it enters the ring with `GETEVENTS` and reaps. It
+   enters again while the flag stays up only as long as each entry pays:
+   one that reaps fewer than the set's `taskrun_worth` completions (16
+   unless `nish_uring_opts` says) ends the re-entries, and the rest waits
+   for the next wait, which does not sleep on a flagged ring. Under steady
+   load new task work is always arriving, so re-entering until the flag
+   dropped chased it one completion at a time: 7.8 enters a request at
+   48,000 requests a second, 1.5 with the bound. A recv CQE marks its
+   handle readable, and a send's completion that frees area marks it
+   writable.
 3. It fills `ready` with the handle and event pairs for both kinds, in the
    order they arrived, up to its length.
 

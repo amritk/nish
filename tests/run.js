@@ -80,6 +80,7 @@ import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
 import { runFfiAbiChecks } from "./ffi-abi.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
+import { runGfxChecks } from "./gfx.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
 import { runFfiStructChecks } from "./ffi-struct.js"
@@ -5312,7 +5313,7 @@ if (dealtHere("diagnostics")) {
   const scopeScript = path.join(root, "scripts", "security-scope.mjs")
   const scopeLive = spawnSync("node", [scopeScript], { cwd: root, encoding: "utf8" })
   check(
-    "security-scope: every std/net, std/crypto and runtime C file is in a record or listed as not yet audited",
+    "security-scope: every std/net, std/crypto, runtime and runtime/gfx C file is in a record or listed as not yet audited",
     scopeLive.status === 0,
     scopeLive.stdout + scopeLive.stderr
   )
@@ -5326,6 +5327,8 @@ if (dealtHere("diagnostics")) {
     put("std/net/new.ts", "")
     put("std/crypto/listed.ts", "")
     put("runtime/runtime.c", "")
+    // `runtime/*.c` stops at the slash, so a graphics shim unit needs its own row.
+    put("runtime/gfx/new.c", "")
     put("docs/security/r.md", "## Scope\n\n| File | Functions |\n| --- | --- |\n| `runtime/*.c` | all |\n| `std/crypto/listed.ts` | all |\n")
     put(
       "docs/security/README.md",
@@ -5334,9 +5337,10 @@ if (dealtHere("diagnostics")) {
     const scopeBad = spawnSync("node", [scopeScript, "--root", tree], { encoding: "utf8" })
     fs.rmSync(tree, { recursive: true, force: true })
     check(
-      "security-scope: refuses a file in no record's scope and a listed file a record now covers",
+      "security-scope: refuses a file in no record's scope (std/net, runtime/gfx) and a listed file a record now covers",
       scopeBad.status === 1 &&
         scopeBad.stderr.includes("std/net/new.ts: in no record's scope") &&
+        scopeBad.stderr.includes("runtime/gfx/new.c: in no record's scope") &&
         scopeBad.stderr.includes("std/crypto/listed.ts: in a record's scope") &&
         !scopeBad.stderr.includes("runtime/runtime.c"),
       scopeBad.stdout + scopeBad.stderr
@@ -6673,6 +6677,139 @@ if (dealtHere("performance")) {
   )
 }
 
+// ---- std-panics: no u32-cast wrapping sum in std/compress -------------------------
+//
+// WP84 S3 took out every `toI32(toU32(a) + toU32(b))` in std/compress: a sum
+// that wraps through u32 to dodge its overflow proof answers a made-up value
+// where input can reach it. `u32WrappingSums` finds each `toI32(...)` whose
+// argument has a `toU32(...)` call as a direct operand of `+`, `-` or `*`,
+// over any spacing and line breaks, comments blanked. `COMPRESS_UNSIGNED_OPS`
+// lists the genuine unsigned ones by their spacing-free text, how many times
+// each occurs and why it is meant to wrap; any other one fails the check. It
+// pins that shape only: a `toU32` operand inside its own parentheses or under
+// a `/`, and a u32 local summed first and cast later, are not found, so it is
+// not a proof that std/compress wraps nowhere.
+/** The index of the `)` that closes the `(` at `open` in `src`, or -1. */
+const closingParen = (src, open) => {
+  let depth = 0
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === "(") {
+      depth += 1
+    } else if (src[i] === ")") {
+      depth -= 1
+      if (depth === 0) {
+        return i
+      }
+    }
+  }
+  return -1
+}
+/** The offsets of each call of `name(` in `src` that is not the tail of a longer identifier. */
+const callsOf = (src, name) => {
+  const at = []
+  for (let i = src.indexOf(`${name}(`); i >= 0; i = src.indexOf(`${name}(`, i + 1)) {
+    if (!/[\w$.]/.test(src[i - 1] ?? "")) {
+      at.push(i)
+    }
+  }
+  return at
+}
+/**
+ * The `toI32(...)` calls in `src` whose argument has a `toU32(...)` result as
+ * an operand of `+`, `-` or `*`: `{ line, text }`, `text` with its spacing
+ * removed. Line comments are blanked first, so a commented-out sum is not one.
+ */
+const u32WrappingSums = (source) => {
+  const src = source.replace(/\/\/[^\n]*/g, (c) => " ".repeat(c.length))
+  const found = []
+  for (const at of callsOf(src, "toI32")) {
+    const end = closingParen(src, at + 5)
+    if (end < 0) {
+      continue
+    }
+    const arg = src.slice(at + 6, end)
+    // Each `toU32(...)` in the argument, nested ones within it included, becomes one placeholder.
+    let flat = ""
+    let from = 0
+    for (const u of callsOf(arg, "toU32")) {
+      if (u < from) {
+        continue
+      }
+      const close = closingParen(arg, u + 5)
+      flat += `${arg.slice(from, u)}\u0001`
+      from = close < 0 ? arg.length : close + 1
+    }
+    flat += arg.slice(from)
+    if (/\u0001\s*[-+*]|[-+*]\s*\u0001/.test(flat)) {
+      found.push({
+        line: src.slice(0, at).split("\n").length,
+        text: src.slice(at, end + 1).replace(/\s+/g, ""),
+      })
+    }
+  }
+  return found
+}
+/** The genuine unsigned ops `u32WrappingSums` finds in std/compress, by file and spacing-free text. */
+const COMPRESS_UNSIGNED_OPS = [
+  {
+    file: "std/compress/deflate.ts",
+    text: "toI32((word*toU32(DEFLATE_HASH_MUL))>>>17)",
+    count: 3,
+    reason:
+      "the multiplicative hash of four bytes: the product is meant to wrap mod 2^32 and its top 15 bits are the hash",
+  },
+  {
+    file: "std/compress/deflate.ts",
+    text: "toI32(((word<<8)*toU32(DEFLATE_HASH_MUL))>>>17)",
+    count: 2,
+    reason:
+      "the multiplicative hash of the three bytes after a position: the product is meant to wrap mod 2^32",
+  },
+  {
+    file: "std/compress/deflate.ts",
+    text: "toI32((deflateLoad32(src,q)*toU32(DEFLATE_HASH_MUL))>>>17)",
+    count: 1,
+    reason:
+      "the multiplicative hash of a skipped position's four bytes: the product is meant to wrap mod 2^32",
+  },
+  {
+    file: "std/compress/deflate.ts",
+    text: "toI32((toU32(w)*toU32(DEFLATE_HASH_MUL))>>>shift)",
+    count: 1,
+    reason:
+      "the fixed-Huffman compressor's multiplicative hash: the product is meant to wrap mod 2^32",
+  },
+  {
+    file: "std/compress/deflate.ts",
+    text: "toI32((deflateLoad32(src,qi)*toU32(DEFLATE_HASH_MUL))>>>shift)",
+    count: 1,
+    reason:
+      "the fixed-Huffman compressor's hash of a skipped position: the product is meant to wrap mod 2^32",
+  },
+]
+/** The differences between what `u32WrappingSums` found in each file and the allowlist: one line each. */
+const unsignedOpMismatches = (filesFound, allow) => {
+  const lines = []
+  for (const [file, found] of filesFound) {
+    const listed = allow.filter((a) => a.file === file)
+    for (const site of found) {
+      if (!listed.some((a) => a.text === site.text)) {
+        lines.push(
+          `${file}:${site.line}: ${site.text} wraps through u32; prove the i32 sum or return a DEFLATE_ERR_* code`,
+        )
+      }
+    }
+    for (const a of listed) {
+      const n = found.filter((site) => site.text === a.text).length
+      if (n !== a.count) {
+        lines.push(
+          `${file}: ${a.text} occurs ${n} time(s), the allowlist says ${a.count}`,
+        )
+      }
+    }
+  }
+  return lines
+}
 // ---- std-panics: the ratchet on std/'s panic sites --------------------------------
 //
 // Every git-tracked `std/` module is compiled as a root with `--allow-panics
@@ -6738,6 +6875,51 @@ const residualMismatches = (sites, residual) => {
     .map((k) => `${k}: ${got.get(k) ?? 0} counted, ${want.get(k) ?? 0} listed as residual`)
 }
 if (dealtHere("stdPanics")) {
+  {
+    const files = execFileSync("git", ["ls-files", "--", "std/compress/*.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+      .split("\n")
+      .filter((f) => f.endsWith(".ts"))
+    const filesFound = new Map(
+      files.map((f) => [
+        f,
+        u32WrappingSums(fs.readFileSync(path.join(root, f), "utf8")),
+      ]),
+    )
+    const mismatches = unsignedOpMismatches(filesFound, COMPRESS_UNSIGNED_OPS)
+    check(
+      `std-panics: std/compress has no u32-cast wrapping sum (${files.length} files, ${COMPRESS_UNSIGNED_OPS.length} genuine unsigned ops listed)`,
+      files.length > 0 &&
+        mismatches.length === 0 &&
+        COMPRESS_UNSIGNED_OPS.every(
+          (a) => files.includes(a.file) && a.reason.length > 0,
+        ),
+      mismatches.join("\n"),
+    )
+    // The scan itself: a sum split over lines with odd spacing is found, a
+    // genuine op is not counted twice, and a commented-out one is not found.
+    const planted = [
+      "const a = toI32(",
+      "  toU32( p )",
+      "    +",
+      "  toU32(len)",
+      ")",
+      "const b = toI32(toU32(x) >>> 3)",
+      "// const c = toI32(toU32(p) + toU32(q))",
+    ].join("\n")
+    const plantedFound = u32WrappingSums(planted)
+    check(
+      `std-panics: the wrapping-sum scan fails on a planted multi-line site, and on no shift or comment`,
+      plantedFound.length === 1 &&
+        plantedFound[0].line === 1 &&
+        plantedFound[0].text === "toI32(toU32(p)+toU32(len))" &&
+        unsignedOpMismatches(new Map([["planted.ts", plantedFound]]), [])
+          .length === 1,
+      JSON.stringify(plantedFound),
+    )
+  }
   const baselineName = "tests/std-panics.json"
   const baselineFile = path.join(root, baselineName)
   const rewrite = `node tests/run.js std-panics --update-std-panics`
@@ -12279,6 +12461,46 @@ int main(void) {
       )
     }
 
+    // The adapter's own record decoding (row_of, field_value, the index
+    // rowid's fast path and cursor_record) against corrupt records, under
+    // AddressSanitizer: tests/link/std_sqlite_cursor_record/corrupt-record.c
+    // says what it corrupts. A toolchain without the sanitizer runtimes is a
+    // named skip, as the runtime's sanitizer run is.
+    {
+      const asan = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
+      const probe = sanitizerProbe(asan)
+      if (probe?.skip) {
+        skip(`skipped: sqlite-link: the corrupt-record walk: ${probe.skip}`)
+      } else {
+        const exe = path.join(sqDir, "corrupt-record")
+        const built = spawnSync(
+          "clang",
+          [
+            "-O1",
+            "-g",
+            "-w",
+            ...asan,
+            `-I${path.join(root, "runtime", "sqlite")}`,
+            "-DSQLITE_OMIT_SHARED_CACHE",
+            "-DSQLITE_THREADSAFE=1",
+            path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+            path.join(root, "tests", "link", "std_sqlite_cursor_record", "corrupt-record.c"),
+            "-o",
+            exe,
+            "-lpthread",
+            "-lm",
+          ],
+          { encoding: "utf8" }
+        )
+        const ran = built.status === 0 ? spawnSync(exe, [path.join(sqDir, "corrupt.db")], { encoding: "utf8" }) : null
+        check(
+          "sqlite-link: every cursor read of a corrupt record stays inside it (AddressSanitizer)",
+          probe === null && ran !== null && ran.status === 0 && Number(ran.stdout) > 800,
+          (probe?.error ?? "") + built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stdout} ${ran.stderr.slice(0, 4000)}` : "")
+        )
+      }
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
@@ -12798,6 +13020,19 @@ int main(void) {
         rowDebugRun.status === 0 &&
         rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
       rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
+    )
+    // Cursor.record, RowRecord and reopenCursor under SQLite's asserts: the
+    // record copy reads the payload as SQLite's own accessors do, overflow
+    // pages included, and every reopen closes the cursor it replaces.
+    const recDir = path.join("tests", "link", "std_sqlite_cursor_record")
+    const recDebug = link(path.join(recDir, "main.ts"), "record-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const recDebugRun = recDebug.status === 0 ? runOut("record-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_record passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      recDebugRun !== null &&
+        recDebugRun.status === 0 &&
+        recDebugRun.stdout === fs.readFileSync(path.join(root, recDir, "expected.out"), "utf8"),
+      recDebug.stderr + (recDebugRun ? recDebugRun.stdout.slice(-2000) + recDebugRun.stderr : "")
     )
     // A readRow walk takes no more of SQLite's heap once warm. This watches
     // sqlite3_memory_used and its highwater only: SQLite's allocator, which
@@ -19132,7 +19367,7 @@ if (dealtHere("runtimeChecks")) {
       )
       check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
-        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
+        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left, and a provided-buffer ring refused for zero reserved words (Ubuntu 6.8.0-136+) is retried with resv[0] set"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
@@ -19142,6 +19377,7 @@ if (dealtHere("runtimeChecks")) {
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
+        ["taskrun1", "the same burst with taskrun_worth 1, entering again while any entry reaps a completion, is taken by one wait too"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
@@ -26849,7 +27085,7 @@ if (dealtHere("cliChecks")) {
       "json-doc":
         "std/json-tokenizer.ts:604:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
-        "std/compress/deflate.ts:749:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
+        "std/compress/deflate.ts:894:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":
         "std/net/http-server.ts:238:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
     }
@@ -46531,6 +46767,8 @@ runFfiHandleChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir, 
 
 runFfiAbiChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
+runGfxChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
+
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`
 // is inlined `opt -O3` drops the second test, the store is no longer
@@ -47314,6 +47552,71 @@ if (!only || "json_f64_seam".includes(only)) {
       rootIr.includes("call i32 @jsonPutF64Walk(") &&
       !rootIr.includes("nish_json_put_f64"),
     asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
+}
+
+// The string seam: a native `jsonPutString` copies and escapes through
+// `nish_json_put_string` (runtime/runtime-bytes.c), sixteen bytes a block,
+// where the Nish body, `jsonPutStringWalk` in std/json.ts, goes a byte at a
+// time. `tests/link/std_json_writer/put-string.ts` compares it with
+// `JsonWriter.stringBytes` on every byte value at every offset of strings up
+// to 40 bytes and on 2,000 pseudo-random strings, each also into a
+// destination one byte short; the native build and the Node prelude must
+// print `put-string.out`, and std/json's IR must make the call.
+if (!only || "json_string_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "put-string.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "put-string.ts"), [])
+  check(
+    "json_string_seam: put-string.ts under the Node prelude runs jsonPutStringWalk and prints put-string.out",
+    node.status === 0 && node.stdout === want,
+    `--- put-string.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_string_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnNish([path.join(dir, "put-string.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const put = ir.match(/^define [^\n]*@nish\.jsonPutString\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_string_seam: std/json's jsonPutString calls nish_json_put_string and not its walk",
+    built.status === 0 &&
+      put.includes("call i32 @nish_json_put_string(i8* ") &&
+      !put.includes("jsonPutStringWalk") &&
+      ir.includes(
+        "declare i32 @nish_json_put_string(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, i8* noundef nocapture readonly, i64 noundef, i64 noundef)"
+      ),
+    built.status === 0 ? put || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_string_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_string_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_string_seam: put-string.ts built natively writes through the kernel and prints put-string.out",
+      native.status === 0 && native.stdout === want,
+      `--- put-string.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_string_seam: no clang, so put-string.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_string_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnNish(["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_string_seam: std/json.ts compiled as a root is an ordinary module, so jsonPutString calls its walk and not the kernel",
+    asRoot.status === 0 && rootIr.includes("call i32 @jsonPutStringWalk(") && !rootIr.includes("nish_json_put_string"),
+    asRoot.status === 0 ? rootIr.slice(0, 2000) : asRoot.stderr
   )
 }
 

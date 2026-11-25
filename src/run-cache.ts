@@ -135,15 +135,13 @@ export const sqliteUnits = (root: string): string[] => {
 }
 
 /**
- * Whether a module declares a function of SQLite's (`sqlite3_`) or of its
- * adapter's (`nishsqlite_`), so a link asks the cache for those objects
- * exactly when `scripts/build.sh` would link them. The rule is the script's
- * `grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_'`, and the two move
- * together: a line that starts `declare ` and names either prefix after an `@`
- * that no `"` comes before. A mention in a string, a comment, a definition or
- * a quoted name does not count.
+ * Whether `ir` has a line that starts `declare ` and names, after an `@` that
+ * no `"` comes before, a function whose name starts with one of `prefixes`
+ * (each written with its `@`). It is `scripts/build.sh`'s
+ * `grep -Eq '^declare [^"]*@<prefix>'`: a mention in a string, a comment, a
+ * definition or a quoted name does not count.
  */
-const callsSqlite = (ir: string): boolean => {
+const declaresPrefixed = (ir: string, prefixes: string[]): boolean => {
   let at = ir.startsWith("declare ") ? 0 : ir.indexOf("\ndeclare ")
   while (at >= 0) {
     const next = ir.indexOf("\n", at + 1)
@@ -152,12 +150,10 @@ const callsSqlite = (ir: string): boolean => {
     const stop = quote >= 0 ? quote : line.length
     let name = line.indexOf("@")
     while (name >= 0 && name < stop) {
-      const rest = line.length - name
-      if (
-        (rest >= 9 && line.slice(name, name + 9) === "@sqlite3_") ||
-        (rest >= 12 && line.slice(name, name + 12) === "@nishsqlite_")
-      ) {
-        return true
+      for (const prefix of prefixes) {
+        if (line.length - name >= prefix.length && line.slice(name, name + prefix.length) === prefix) {
+          return true
+        }
       }
       name = line.indexOf("@", name + 1)
     }
@@ -166,10 +162,38 @@ const callsSqlite = (ir: string): boolean => {
   return false
 }
 
+/**
+ * Whether a module declares a function of SQLite's (`sqlite3_`) or of its
+ * adapter's (`nishsqlite_`), so a link asks the cache for those objects
+ * exactly when `scripts/build.sh` would link them. The rule is the script's
+ * `grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_'` (`declaresPrefixed`), and
+ * the two move together.
+ */
+const callsSqlite = (ir: string): boolean => declaresPrefixed(ir, ["@sqlite3_", "@nishsqlite_"])
+
+/**
+ * Whether a module declares a function of the graphics shim's (`nishgfx_`),
+ * so a run keys its binary on `runtime/gfx/` and the libraries exactly when
+ * `scripts/build.sh` would link them. The rule is the script's
+ * `grep -Eq '^declare [^"]*@nishgfx_'` (`declaresPrefixed`), and the two move
+ * together.
+ */
+const callsGfx = (ir: string): boolean => declaresPrefixed(ir, ["@nishgfx_"])
+
 /** Whether any of `modules` calls SQLite (`callsSqlite`). */
 export const anyCallsSqlite = (modules: EmittedModule[]): boolean => {
   for (const module of modules) {
     if (callsSqlite(module.ir)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether any of `modules` calls the graphics shim (`callsGfx`). */
+const anyCallsGfx = (modules: EmittedModule[]): boolean => {
+  for (const module of modules) {
+    if (callsGfx(module.ir)) {
       return true
     }
   }
@@ -536,6 +560,60 @@ export const sqliteFingerprint = (root: string, sqliteFlags: string): string => 
 }
 
 /**
+ * The lines a run's key carries for a program that calls the graphics shim
+ * (`callsGfx`), which `scripts/build.sh` compiles from `runtime/gfx/` and
+ * links against SDL3 and wgpu-native: one per `.c` and `.h` file there, the
+ * install prefix the script reads (`NISH_GFX_PREFIX`, empty for its default
+ * `build/gfx/<platform>/`), and that install's `.fetched` stamp, which names
+ * the versions `scripts/fetch-gfx.sh` put there. Under the default, every
+ * platform's stamp is read, since the script picks the platform. The
+ * archives themselves are tens of megabytes and are not hashed: a prefix
+ * whose libraries are replaced in place without a new stamp keeps the binary
+ * it had. A program that does not call the shim carries none of these lines,
+ * and keeps the key it had before the directory existed.
+ */
+const gfxFingerprint = (root: string): string => {
+  const key = new StringBuilder()
+  const units: string[] = []
+  const names = readdirSync(`${root}/runtime/gfx`)
+  if (names !== null) {
+    for (const name of names) {
+      if (!name.startsWith(".") && (name.endsWith(".c") || name.endsWith(".h"))) {
+        units.push(name)
+      }
+    }
+  }
+  addUnitFingerprints(key, `${root}/runtime`, "gfx/", units, 0)
+  const prefix = getenv("NISH_GFX_PREFIX")
+  if (prefix !== null && prefix.length > 0) {
+    key.add(`gfx-prefix ${prefix.length}\n${prefix}\n`)
+    key.add(`gfx-stamp ${fileFingerprint(`${prefix}/.fetched`)}\n`)
+  } else {
+    const platforms = readdirSync(`${root}/build/gfx`)
+    if (platforms !== null) {
+      addGfxStamps(key, `${root}/build/gfx`, platforms, 0)
+    }
+  }
+  return key.toText()
+}
+
+/**
+ * The stamp line of each platform in `platforms` from `at` on, below `dir`.
+ * Recursive for the reason `addUnitFingerprints` is: a loop would keep every
+ * stamp it hashed alive until the key is done (NL9011).
+ */
+const addGfxStamps = (key: StringBuilder, dir: string, platforms: string[], at: i32): void => {
+  if (at < 0 || at >= platforms.length) {
+    return
+  }
+  const platform = platforms[at]
+  if (!platform.startsWith(".")) {
+    key.add(`gfx-stamp ${platform} ${fileFingerprint(`${dir}/${platform}/.fetched`)}\n`)
+  }
+  addGfxStamps(key, dir, platforms, at + 1)
+}
+
+/**
  * The lines of `units` from `at` on, each the unit's path below `runtime/`:
  * `dir` is the directory of `runtime/` they are in, empty or ending in `/`.
  * Recursive rather than a loop, because a loop would keep every file it hashed
@@ -586,7 +664,8 @@ const profileLine = (
  * the profile line names only when it is set, so a baseline key is the bytes
  * it was before the flag existed. `sqlite` is `sqliteFingerprint` when a module
  * calls SQLite (`anyCallsSqlite`), and empty when none does. `link` is
- * `linkSetLines` of the libraries and C sources the packages link.
+ * `linkSetLines` of the libraries and C sources the packages link. A program
+ * that calls the graphics shim (`callsGfx`) adds `gfxFingerprint`'s lines.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
@@ -610,6 +689,9 @@ export const runCacheKey = (
   addRecipeFingerprints(key, root)
   key.add(sqlite)
   key.add(link)
+  if (anyCallsGfx(modules)) {
+    key.add(gfxFingerprint(root))
+  }
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`)
     key.add(module.ir)

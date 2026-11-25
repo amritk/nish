@@ -22,7 +22,9 @@
  *    runs at most 20 queued completions per enter (6.13 and later), so the
  *    set enters again while IORING_SQ_TASKRUN is up. On 6.18 and later the
  *    re-entry counter must also move; an older kernel without the cap passes
- *    either way.
+ *    either way. `taskrun1` is the same burst with `taskrun_worth` 1, which
+ *    re-enters while any entry reaps a completion: the burst is still taken
+ *    by one wait.
  *  - `overflow`: a CQ of 8 entries under 256 clients; FEAT_NODROP keeps what
  *    did not fit and the set drains it.
  *  - `nobufs`: 2 provided buffers under 64 clients; a recv the kernel ends
@@ -70,7 +72,9 @@
  *    opcode. The probe and the open answer what sends a caller to epoll
  *    (the errno, or -EOPNOTSUPP for a missing feature), with no set, the
  *    process alive and no descriptor leaked. A kernel that wants
- *    COOP_TASKRUN takes the second setup and the set opens on it.
+ *    COOP_TASKRUN takes the second setup and the set opens on it, and one
+ *    that refuses a provided-buffer ring with zero reserved words (Ubuntu's
+ *    6.8.0-136 and later) takes the retry with resv[0] set.
  *  - `coalesce`: 200 head+body responses, each two sends in one pass, as
  *    `netWrite2` makes them, and then three writes in one pass. Each leaves
  *    as one SEND; the mode prints the SENDs per response (NURING-40).
@@ -162,7 +166,7 @@ void nish_signal_fd_closing(int32_t fd) { (void)fd; }
 #define UR_UNREGISTER_EVENTFD 5 /* IORING_UNREGISTER_EVENTFD, which only `nowake` calls */
 
 /* What the hooks force. HOOK_NONE passes every call to the kernel. */
-enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG };
+enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG, HOOK_PBUF_RESV };
 static enum hook hook;
 static int setup_calls;
 static uint32_t setup_flags_seen[4];
@@ -192,7 +196,25 @@ static int test_accept_res(int res) {
   return res;
 }
 
+/* PBUF_RING registrations HOOK_PBUF_RESV refused for all-zero reserved
+ * words, and those it passed on. */
+static int pbuf_zero_refused, pbuf_resv_passed;
+
 static long test_register(int fd, unsigned op, void *arg, unsigned nr) {
+  /* Ubuntu's 6.8.0-136 and later (Launchpad #2162843): all-zero reserved
+   * words are -EINVAL and a nonzero resv[0] is taken. The kernel underneath
+   * checks the other way, so what it is handed has them zeroed. */
+  if (hook == HOOK_PBUF_RESV && op == UR_REGISTER_PBUF_RING) {
+    struct ur_buf_reg reg = *(const struct ur_buf_reg *)arg;
+    if (reg.resv[0] == 0 && reg.resv[1] == 0 && reg.resv[2] == 0) {
+      pbuf_zero_refused++;
+      errno = EINVAL;
+      return -1;
+    }
+    pbuf_resv_passed++;
+    memset(reg.resv, 0, sizeof reg.resv);
+    return syscall(__NR_io_uring_register, fd, op, &reg, nr);
+  }
   long rc = syscall(__NR_io_uring_register, fd, op, arg, nr);
   if (rc >= 0 && hook == HOOK_NO_SEND && op == UR_REGISTER_PROBE)
     ((struct ur_probe *)arg)->ops[UR_OP_SEND].flags &= (uint16_t)~UR_OP_SUPPORTED;
@@ -430,6 +452,8 @@ static int serve(const struct mode *m, int listener, int base_fds) {
   }
   if (strcmp(m->name, "bound") == 0 && peak_live > 8) return fail("the bound let more than 8 in");
   if (m->hold) {
+    if (s->taskrun_worth != (m->opts.taskrun_worth ? (uint32_t)m->opts.taskrun_worth : UR_TASKRUN_WORTH))
+      return fail("the set did not take its taskrun_worth, or its default");
     if (st.rings != 1) return fail("the burst did not stay on one ring");
     /* The cap is measured on v6.18 (docs/wp63-iouring-net.md §2, item 4). */
     if (kernel_at_least(6, 18) && st.taskrun_reentries == 0)
@@ -623,7 +647,7 @@ static int fallback_coop(void) {
       _exit(1);
     }
     struct nish_uring_set *s = NULL;
-    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
     int rc = nish_uring_open(&s, l, &o);
     if (rc != 0 || s == NULL) {
       fprintf(stderr, "uring-test: a kernel that wants COOP_TASKRUN made the open answer %d\n", rc);
@@ -638,6 +662,62 @@ static int fallback_coop(void) {
   int status;
   if (waitpid(pid, &status, 0) != pid) return fail("waitpid");
   if (!WIFEXITED(status)) return fail("the COOP_TASKRUN case died of a signal");
+  return WEXITSTATUS(status);
+}
+
+/* A kernel that refuses a provided-buffer ring with all-zero reserved words
+ * and takes one with resv[0] set, as Ubuntu's 6.8.0-136 and later do: the
+ * probe and the ring each retry once that way, and the set opens on it and
+ * serves a client, rather than sending the caller to epoll. */
+static int fallback_pbuf_resv(void) {
+  fflush(NULL);
+  pid_t pid = fork();
+  if (pid < 0) return fail("fork");
+  if (pid == 0) {
+    hook = HOOK_PBUF_RESV;
+    int l = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+    socklen_t al = sizeof a;
+    if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 8) != 0 ||
+        getsockname(l, (struct sockaddr *)&a, &al) != 0)
+      _exit(fail("listener"));
+    int p = ur_probe_once();
+    if (p != 1) {
+      fprintf(stderr, "uring-test: a kernel that wants resv[0] set made the probe answer %d\n", p);
+      _exit(1);
+    }
+    struct nish_uring_set *s = NULL;
+    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
+    int rc = nish_uring_open(&s, l, &o);
+    if (rc != 0 || s == NULL) {
+      fprintf(stderr, "uring-test: a kernel that wants resv[0] set made the open answer %d\n", rc);
+      _exit(1);
+    }
+    /* The open probes again (the cache is nish_uring_probe's), so the probe
+     * and the ring make three registrations, each refused once. */
+    if (pbuf_zero_refused != 3 || pbuf_resv_passed != 3) {
+      fprintf(stderr, "uring-test: %d registrations refused for zero reserved words, %d retried with resv[0] set\n",
+              pbuf_zero_refused, pbuf_resv_passed);
+      _exit(fail("the probe and the ring did not each retry their refused registration once with resv[0] set"));
+    }
+    int c = socket(AF_INET, SOCK_STREAM, 0);
+    if (c < 0 || connect(c, (struct sockaddr *)&a, sizeof a) != 0 || write(c, "ping", 4) != 4) _exit(fail("client"));
+    struct nish_uring_event ev[EVENTS_MAX];
+    int got = 0;
+    for (int i = 0; i < 200 && !got; i++) {
+      int n = nish_uring_wait(s, 10, ev, EVENTS_MAX);
+      for (int k = 0; k < n; k++)
+        if (ev[k].kind == NISH_URING_DATA && ev[k].res == 4 && memcmp(ev[k].data, "ping", 4) == 0) got = 1;
+    }
+    if (!got) _exit(fail("the set opened on the retried ring received nothing"));
+    close(c);
+    nish_uring_destroy(s);
+    close(l);
+    _exit(0);
+  }
+  int status;
+  if (waitpid(pid, &status, 0) != pid) return fail("waitpid");
+  if (!WIFEXITED(status)) return fail("the resv[0] case died of a signal");
   return WEXITSTATUS(status);
 }
 
@@ -674,6 +754,8 @@ static int fallback(void) {
     else if (rc != 0) return rc;
   }
   int rc = fallback_coop();
+  if (rc != 0) return rc;
+  rc = fallback_pbuf_resv();
   if (rc != 0) return rc;
   if (no_seccomp) {
     printf("skip: seccomp filters are unavailable here; the hook cases passed\n");
@@ -730,7 +812,7 @@ static void move_dump(struct nish_uring_set *s, int client) {
             ri, (long)r->live, (long)r->accepting, r->to_submit, __atomic_load_n(r->sq_flags, __ATOMIC_ACQUIRE),
             __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE), r->sq_local_tail, *r->cq_head,
             __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE), poll(&q, 1, 0));
-    for (uint32_t sl = 0; sl < s->slots; sl++) fprintf(stderr, "uring-test:   slot %u state %#x\n", sl, r->st[sl]);
+    for (uint32_t sl = 0; sl < s->slots; sl++) fprintf(stderr, "uring-test:   slot %u state %#x\n", sl, r->sl[sl].st);
     char path[64], buf[4096];
     snprintf(path, sizeof path, "/proc/self/fdinfo/%d", r->fd);
     FILE *f = fopen(path, "r");
@@ -814,7 +896,7 @@ static int move(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {2, 2, 0, 0, 0, 0};
+  struct nish_uring_opts o = {2, 2, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -863,7 +945,7 @@ static int shutclose(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {1, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {1, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -878,7 +960,7 @@ static int shutclose(void) {
   /* Wait for the send, so the shutdown is the slot's head and in flight. */
   long long deadline = now_ms() + 5000;
   struct ur_send *q;
-  while ((q = s->rings[ra]->sq_first[sa]) != NULL && q->how < 0) {
+  while ((q = s->rings[ra]->sl[sa].first) != NULL && q->how < 0) {
     if (now_ms() > deadline) return fail("the send did not complete");
     struct nish_uring_event ev[EVENTS_MAX];
     if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
@@ -928,7 +1010,7 @@ static int nowake(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -986,7 +1068,7 @@ static int direct_open(int *l, struct sockaddr_in *a, struct nish_uring_set **s)
   if (*l < 0 || bind(*l, (struct sockaddr *)a, sizeof *a) != 0 || listen(*l, 64) != 0 ||
       getsockname(*l, (struct sockaddr *)a, &al) != 0)
     return fail("listener");
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(s, *l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1190,7 +1272,7 @@ static int hupheld(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1296,7 +1378,7 @@ static int nomem(void) {
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
   struct nish_uring_set *s;
-  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(&s, l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1369,7 +1451,7 @@ static int inproc_open(int32_t slots, struct nish_uring_set **s, int *l, struct 
   if (*l < 0 || bind(*l, (struct sockaddr *)a, sizeof *a) != 0 || listen(*l, 64) != 0 ||
       getsockname(*l, (struct sockaddr *)a, &al) != 0)
     return fail("listener");
-  struct nish_uring_opts o = {slots, 1, 0, 0, 0, 0};
+  struct nish_uring_opts o = {slots, 1, 0, 0, 0, 0, 0};
   int rc = nish_uring_open(s, *l, &o);
   if (rc < 0) {
     fprintf(stderr, "uring-test: open answered %d\n", rc);
@@ -1807,13 +1889,14 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "bigsend") == 0) return bigsend();
   if (strcmp(argv[1], "netwrite") == 0) return netwrite();
   static const struct mode modes[] = {
-      {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
-      {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},
-      {"taskrun", {128, 1, 0, 0, 0, 0}, 100, 0, 0, 64, 0, 0, 1},
-      {"overflow", {512, 1, 8, 8, 0, 0}, 256, 0, 0, 64, 0, 0, 0},
-      {"nobufs", {128, 1, 0, 0, 2, 64}, 64, 0, 0, 1024, 0, 0, 0},
-      {"short", {8, 1, 0, 0, 0, 0}, 1, 0, 0, 1, 8 << 20, 0, 0},
-      {"reset", {8, 1, 0, 0, 0, 0}, 1, 0, 0, 1, 64 << 20, 1, 0},
+      {"beyond", {0, 8, 0, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
+      {"bound", {8, 1, 0, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},
+      {"taskrun", {128, 1, 0, 0, 0, 0, 0}, 100, 0, 0, 64, 0, 0, 1},
+      {"taskrun1", {128, 1, 0, 0, 0, 0, 1}, 100, 0, 0, 64, 0, 0, 1},
+      {"overflow", {512, 1, 8, 8, 0, 0, 0}, 256, 0, 0, 64, 0, 0, 0},
+      {"nobufs", {128, 1, 0, 0, 2, 64, 0}, 64, 0, 0, 1024, 0, 0, 0},
+      {"short", {8, 1, 0, 0, 0, 0, 0}, 1, 0, 0, 1, 8 << 20, 0, 0},
+      {"reset", {8, 1, 0, 0, 0, 0, 0}, 1, 0, 0, 1, 64 << 20, 1, 0},
   };
   for (size_t i = 0; i < sizeof modes / sizeof modes[0]; i++)
     if (strcmp(argv[1], modes[i].name) == 0) return run_mode(&modes[i]);

@@ -260,9 +260,6 @@
     "std/sync/shm.ts": {
       "ffi-nul": 3
     },
-    "std/synth.ts": {
-      "array-length": 1
-    },
     "std/temporal.ts": {
       "panic": 1,
       "slice": 1

@@ -247,13 +247,27 @@ static inline unsigned nish_run_stops_sse2(int cls, __m128i v) {
   return (unsigned)_mm_movemask_epi8(_mm_or_si128(stop, v));
 }
 
+static inline unsigned nish_plain_stops_sse2(const uint8_t *p) {
+  __m128i v = _mm_loadu_si128((const __m128i *)p);
+  __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
+                              _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
+  return (unsigned)_mm_movemask_epi8(stop);
+}
+
+/* A span of 16 bytes or more ends with one block that overlaps the last one
+   rather than a byte at a time: it lies inside the span, and the bytes it
+   shares with the blocks already read are masked off, so a stop among them
+   is not found twice. */
 static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to) {
+  int64_t from = i;
   for (; to - i >= 16; i += 16) {
-    __m128i v = _mm_loadu_si128((const __m128i *)(p + i));
-    __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
-                                _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
-    unsigned m = (unsigned)_mm_movemask_epi8(stop);
+    unsigned m = nish_plain_stops_sse2(p + i);
     if (m != 0) return i + __builtin_ctz(m);
+  }
+  if (i < to && to - from >= 16) {
+    int64_t at = to - 16;
+    unsigned m = nish_plain_stops_sse2(p + at) & (~0u << (i - at));
+    return m != 0 ? at + __builtin_ctz(m) : to;
   }
   return nish_plain_scalar(cls, p, i, to);
 }
@@ -357,12 +371,23 @@ static inline uint64_t nish_run_stops_neon(int cls, uint8x16_t v) {
   return vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(stop), 4)), 0);
 }
 
+static inline uint64_t nish_plain_stops_neon(const uint8_t *p) {
+  uint8x16_t v = vld1q_u8(p);
+  uint8x16_t stop = vorrq_u8(vorrq_u8(vceqq_u8(v, vdupq_n_u8(0x22)), vceqq_u8(v, vdupq_n_u8(0x5c))), vcleq_u8(v, vdupq_n_u8(0x1f)));
+  return vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(stop), 4)), 0);
+}
+
+/* The SSE2 path's overlapping last block, four mask bits a byte. */
 static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to) {
+  int64_t from = i;
   for (; to - i >= 16; i += 16) {
-    uint8x16_t v = vld1q_u8(p + i);
-    uint8x16_t stop = vorrq_u8(vorrq_u8(vceqq_u8(v, vdupq_n_u8(0x22)), vceqq_u8(v, vdupq_n_u8(0x5c))), vcleq_u8(v, vdupq_n_u8(0x1f)));
-    uint64_t m = vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(stop), 4)), 0);
+    uint64_t m = nish_plain_stops_neon(p + i);
     if (m != 0) return i + (int64_t)(__builtin_ctzll(m) >> 2);
+  }
+  if (i < to && to - from >= 16) {
+    int64_t at = to - 16;
+    uint64_t m = nish_plain_stops_neon(p + at) & (~0ull << (4 * (i - at)));
+    return m != 0 ? at + (int64_t)(__builtin_ctzll(m) >> 2) : to;
   }
   return nish_plain_scalar(cls, p, i, to);
 }
@@ -482,4 +507,139 @@ int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to) {
 
 int64_t nish_bytes_skip_json_plain(const uint8_t *p, int64_t from, int64_t to) {
   return NISH_PLAIN_PATH(NISH_RUN_PLAIN, p, from, to);
+}
+
+/* One byte JSON escapes, at `buf[o]`: `\"`, `\\`, the five short escapes, or
+   `\u00XX` in lower-case hex, as std/json.ts's `jsonShortEscape` and
+   `jsonHexByte` spell them. Answers the new end, or -1 when it does not fit
+   before `cap`. */
+static int64_t nish_json_escape_byte(uint8_t *buf, int64_t o, int64_t cap, uint8_t c) {
+  uint8_t letter = c == 0x22 || c == 0x5c ? c
+                   : c == 0x0a           ? 'n'
+                   : c == 0x09           ? 't'
+                   : c == 0x0d           ? 'r'
+                   : c == 0x08           ? 'b'
+                   : c == 0x0c           ? 'f'
+                                         : 0;
+  if (letter) {
+    if (cap - o < 2) return -1;
+    buf[o] = 0x5c;
+    buf[o + 1] = letter;
+    return o + 2;
+  }
+  if (cap - o < 6) return -1;
+  static const char hex[] = "0123456789abcdef";
+  buf[o] = 0x5c;
+  buf[o + 1] = 'u';
+  buf[o + 2] = '0';
+  buf[o + 3] = '0';
+  buf[o + 4] = (uint8_t)hex[c >> 4];
+  buf[o + 5] = (uint8_t)hex[c & 15];
+  return o + 6;
+}
+
+#if defined(NISH_SIMD_SSE2)
+/* The stops among the `n` bytes at `p`, 4 <= n <= 16, as bits from 0 for
+   p[0]: read as two loads that may overlap, of 4, 8 or 16 bytes, never
+   outside the `n`. */
+static inline unsigned nish_json_stops_short(const uint8_t *p, int64_t n) {
+  __m128i v;
+  unsigned lo, hi;
+  if (n >= 8) {
+    v = _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)p), _mm_loadl_epi64((const __m128i *)(p + n - 8)));
+    unsigned m = (unsigned)_mm_movemask_epi8(_mm_or_si128(
+        _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
+        _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v)));
+    lo = m & 0xff;
+    hi = (m >> 8) << (n - 8);
+  } else {
+    uint32_t a, b;
+    __builtin_memcpy(&a, p, 4);
+    __builtin_memcpy(&b, p + n - 4, 4);
+    v = _mm_unpacklo_epi32(_mm_cvtsi32_si128((int)a), _mm_cvtsi32_si128((int)b));
+    unsigned m = (unsigned)_mm_movemask_epi8(_mm_or_si128(
+        _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
+        _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v)));
+    lo = m & 0xf;
+    hi = ((m >> 4) & 0xf) << (n - 4);
+  }
+  return lo | hi;
+}
+#endif
+
+/* The first byte of `p[i, to)` JSON escapes, or `to`: `skipJsonPlain`'s
+   answer. With SSE2 every window of 4 bytes or more is read in blocks that
+   lie inside it, the last overlapping the one before. */
+static inline int64_t nish_json_plain_end(const uint8_t *p, int64_t i, int64_t to) {
+#if defined(NISH_SIMD_SSE2)
+  int64_t n = to - i;
+  if (n >= 16) {
+    for (; to - i >= 16; i += 16) {
+      unsigned m = nish_plain_stops_sse2(p + i);
+      if (m != 0) return i + __builtin_ctz(m);
+    }
+    if (i == to) return to;
+    int64_t at = to - 16;
+    unsigned m = nish_plain_stops_sse2(p + at) & (~0u << (i - at));
+    return m != 0 ? at + __builtin_ctz(m) : to;
+  }
+  if (n >= 4) {
+    unsigned m = nish_json_stops_short(p + i, n);
+    return m != 0 ? i + __builtin_ctz(m) : to;
+  }
+#endif
+  while (i < to && p[i] >= 0x20 && p[i] != 0x22 && p[i] != 0x5c) i++;
+  return i;
+}
+
+/* `n` bytes from `s` to `d`, which do not overlap, in moves of 16, 8 or 4
+   bytes that may overlap one another, never outside the `n`. */
+static inline void nish_json_copy(uint8_t *d, const uint8_t *s, int64_t n) {
+  if (n >= 16) {
+    int64_t k = 0;
+    for (; n - k > 16; k += 16) __builtin_memcpy(d + k, s + k, 16);
+    __builtin_memcpy(d + n - 16, s + n - 16, 16);
+  } else if (n >= 8) {
+    uint64_t a, b;
+    __builtin_memcpy(&a, s, 8);
+    __builtin_memcpy(&b, s + n - 8, 8);
+    __builtin_memcpy(d, &a, 8);
+    __builtin_memcpy(d + n - 8, &b, 8);
+  } else if (n >= 4) {
+    uint32_t a, b;
+    __builtin_memcpy(&a, s, 4);
+    __builtin_memcpy(&b, s + n - 4, 4);
+    __builtin_memcpy(d, &a, 4);
+    __builtin_memcpy(d + n - 4, &b, 4);
+  } else {
+    for (int64_t k = 0; k < n; k++) d[k] = s[k];
+  }
+}
+
+/* `jsonPutString`'s walk (std/json.ts; the emitter makes the call,
+   src/kernels.ts): `src[from, to)` as a JSON string, its quotes and escapes
+   included, written into `buf` from `at`. Answers the new end, or -1 when
+   `at` is negative or the text does not fit before `len`, the array's length
+   as the Nish code's `toI32` reads it; the bytes from `at` may then have been
+   written, and the caller's cursor has not moved. The caller has checked
+   `0 <= from <= to <= src's length`. A run of bytes that need no escape is
+   found by `nish_json_plain_end` and copied in one piece, so a string with
+   nothing to escape is one scan and one copy. */
+int32_t nish_json_put_string(uint8_t *buf, int32_t len, int32_t at, const uint8_t *src, int64_t from, int64_t to) {
+  int64_t cap = len, o = at, i = from;
+  if (at < 0 || o >= cap) return -1;
+  buf[o++] = 0x22;
+  while (i < to) {
+    int64_t j = nish_json_plain_end(src, i, to);
+    if (cap - o < j - i) return -1;
+    nish_json_copy(buf + o, src + i, j - i);
+    o += j - i;
+    if (j == to) break;
+    o = nish_json_escape_byte(buf, o, cap, src[j]);
+    if (o < 0) return -1;
+    i = j + 1;
+  }
+  if (o >= cap) return -1;
+  buf[o++] = 0x22;
+  return (int32_t)o;
 }

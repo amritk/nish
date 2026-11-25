@@ -56,7 +56,7 @@ import { emitSliceCheck, emitStringWalk, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
-import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
+import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL, JSON_PUT_STRING_KERNEL } from "./kernels"
 import { Node, NodeKind, bindsHiddenReceiver } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
 import {
@@ -2739,6 +2739,26 @@ export const emitJsonPutF64Kernel = (emitter: Emitter, values: string[]): string
   const length = fn.emitValue(`trunc i64 ${loadLength(emitter, values[0])} to i32`)
   return fn.emitValue(
     `call i32 ${emitter.useRuntime(JSON_PUT_F64_KERNEL)}(i8* ${data}, i32 ${length}, i32 ${values[1]}, double ${values[2]})`
+  )
+}
+
+/**
+ * `jsonPutString`'s walk in `nish/json`, lowered to its kernel
+ * (`src/kernels.ts`): `values` are the destination `u8[]`, its cursor, the
+ * source `u8[]` and the window's `from` and `to`, which `jsonPutString` has
+ * checked lie in the source. The destination's length is handed over as
+ * `emitJsonPutF64Kernel` hands it, and the kernel checks the cursor and the
+ * room itself.
+ */
+export const emitJsonPutStringKernel = (emitter: Emitter, values: string[]): string => {
+  const fn = emitter.fn
+  const data = loadData(emitter, values[0])
+  const length = fn.emitValue(`trunc i64 ${loadLength(emitter, values[0])} to i32`)
+  const src = loadData(emitter, values[2])
+  const from = fn.emitValue(`sext i32 ${values[3]} to i64`)
+  const to = fn.emitValue(`sext i32 ${values[4]} to i64`)
+  return fn.emitValue(
+    `call i32 ${emitter.useRuntime(JSON_PUT_STRING_KERNEL)}(i8* ${data}, i32 ${length}, i32 ${values[1]}, i8* ${src}, i64 ${from}, i64 ${to})`
   )
 }
 

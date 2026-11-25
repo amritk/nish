@@ -465,6 +465,19 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `nish/json`'s string writer, in runtime-bytes.c (`src/kernels.ts`): the
+    // text goes into the first array's data from the cursor, read from the
+    // second's window, and nothing of either pointer is kept. Either data is
+    // null while its array is empty, so neither is `nonnull`, and the store
+    // keeps it from looking droppable, as `nish_json_put_f64`'s does.
+    this.add(
+      new RuntimeFunction(
+        "nish_json_put_string",
+        "declare i32 @nish_json_put_string(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, i8* noundef nocapture readonly, i64 noundef, i64 noundef)",
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
     // #943: `Math.floor`, `ceil` and `trunc` on x86-64, beside them in
     // runtime-simd.c (`roundingCallee` in src/emit-builtins.ts). Each answers
     // what the `llvm.*.f64` it stands in for answers, for every operand: the

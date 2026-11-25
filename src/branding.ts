@@ -92,7 +92,7 @@ export const WASM_PACKAGE_CONDITION: string = "nish-wasm32"
  * `package.json` disagree, which is the check that keeps a `npm version` bump
  * from going stale here.
  */
-export const VERSION: string = "0.46.0"
+export const VERSION: string = "0.47.0"
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
 export const RUNTIME_HEADER: string = "nish.h"

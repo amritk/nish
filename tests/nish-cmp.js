@@ -1221,6 +1221,12 @@ const wp84Deflate = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: WP84_DEFLATE, why }))
   )
+/** The changelog words of WP84 S3, which turns deflate's u32-wrapping sums into proven i32 ops or refusals. */
+const WP84_SUMS = "check deflate's sums instead of wrapping them"
+const wp84Sums = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WP84_SUMS, why }))
+  )
 /** The changelog words of WP83 S4, which clears the panic sites of x509, pki, pki-roots and x509-random. */
 const WP83_PKI = "X.509 and the PKI"
 const wp83Pki = (why, filesByProgram) =>
@@ -1911,6 +1917,7 @@ const S2_REST_TESTING = [
   "tests/link/std_postgres_replay/main.ts",
   "tests/link/std_postgres_unix_target/main.ts",
   "tests/link/std_raster/main.ts",
+  "tests/link/std_raster_trail_head/main.ts",
   "tests/link/std_scram/main.ts",
   "tests/link/std_term_events/main.ts",
   "tests/link/std_term_probe/main.ts",
@@ -11682,6 +11689,11 @@ const cursorReadRow = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: CURSOR_READ_ROW, why }))
   )
 
+/** The release-note words of `jsonPutString` (std/json.ts). */
+const JSON_PUT_STRING = "jsonPutString"
+/** The release-note words of `Http1Server.tick` (std/net/http1-server.ts). */
+const HTTP1_TICK = "Http1Server.tick"
+
 const DECLARED = [
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
@@ -12133,6 +12145,51 @@ const DECLARED = [
       "tests/link/std_compress_node/main.ts": ["main.h"],
       "tests/link/std_http1_encoded_window/main.ts": ["gzip.ll"],
       "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
+    }
+  ),
+  ...wp84Sums(
+    "WP84 S3 replaces std/compress/deflate.ts's u32-cast wrapping sums, masks and loop caps with i32 ops the prover discharges or a DEFLATE_ERR_* refusal, so the deflate and inflate code these programs reach through http-compress, gzip and zlib moves, and a main module or header that inlines or names it moves with it",
+    {
+      "tests/link/net_grpc/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_batch_limits/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_bomb/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_open/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_refused/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_steps/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["gzip.ll", "http-compress.ll", "main.ll", "zlib.ll"],
+      "tests/link/net_http1_wire_refusals/main.ts": [
+        "gzip.ll",
+        "http-compress.ll",
+        "main.h",
+        "main.ll",
+        "zlib.ll",
+      ],
+      "tests/link/net_http_server_caps/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_carriers/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_h2_refused/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_lifecycle/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_matrix/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_timeouts/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_serve_try/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_static/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/std_compress_checked_sums/main.ts": ["main.h"],
+      "tests/link/std_compress_gzip_errors/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
+      "tests/link/std_compress_sweep/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
     }
   ),
   // WP83 S4 first: `declaredFor` takes the first match, so no broader entry claims these moves.
@@ -15748,6 +15805,7 @@ const DECLARED = [
     "tests/link/std_host_game/main.ts": ["ring.ll"],
     "tests/link/std_host_ring/main.ts": ["main.ll", "ring.ll"],
     "tests/link/std_raster/main.ts": ["main.ll"],
+    "tests/link/std_raster_trail_head/main.ts": ["main.ll"],
     "tests/link/std_synth/main.ts": ["synth.ll"],
   }).flatMap(([program, files]) =>
     files.map((file) => ({
@@ -23407,6 +23465,58 @@ const DECLARED = [
       "tests/link/sync_ring_inplace_partial/main.ts": ["testing.ll"],
       "tests/link/sync_shm/main.ts": ["testing.ll"],
       "tests/link/sync_shm_window/main.ts": ["testing.ll"],
+    }
+  ),
+  // `jsonPutString` is exported from std/json.ts and its walk is lowered to
+  // the runtime's `nish_json_put_string`, so every json.ll a program writes
+  // declares the kernel and defines the new function, and the module moves.
+  {
+    file: "json.ll",
+    changelog: JSON_PUT_STRING,
+    why: "std/json.ts gains jsonPutString, whose walk a native build lowers to the runtime's nish_json_put_string, so every json.ll declares the kernel and defines it, and the module moves",
+  },
+  // `Http1Server` gains `ticked`, so the struct grows 8 bytes and every
+  // module that lays it out or names its `dereferenceable` size moves.
+  {
+    file: "http-server.ll",
+    changelog: HTTP1_TICK,
+    why: "Http1Server gains `ticked` for Http1Server.tick, so the struct grows 8 bytes and the module that lays it out moves",
+  },
+  ...byFinding(HTTP1_TICK)(
+    "Http1Server gains `ticked` for Http1Server.tick, so the struct grows 8 bytes, and each module or header that lays it out or names its dereferenceable size moves",
+    {
+      "tests/link/net_grpc/main.ts": ["client.ll", "grpc.ll", "main.ll", "rig.ll"],
+      "tests/link/net_grpc_interop/main.ts": [
+        "grpc.ll",
+        "main.ll",
+        "net_grpc_client.ll",
+        "rig.ll",
+        "serve.ll",
+      ],
+      "tests/link/net_handler_batch_limits/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["main.h"],
+      "tests/link/net_http_server_steps/main.ts": [
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_steps_full/main.ts": ["main.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["main.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["client.ll", "main.ll", "rig.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["main.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": [
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+      ],
+      "tests/link/net_http_server_trailers_short/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_static/main.ts": ["net_http_server_carriers_rig.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["main.h"],
     }
   ),
 ]

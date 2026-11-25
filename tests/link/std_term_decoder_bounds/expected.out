@@ -1,0 +1,39 @@
+PASS  keep: a lone ESC is held
+PASS  keep: the ESC waits
+PASS  keep: an empty read uses none of it
+PASS  keep: the ESC still waits
+PASS  keep: the empty read did not restart the clock
+PASS  keep: the ESC is given up 50 ms after it came
+PASS  keep: nothing is held after
+PASS  keep: a count below 0 reads nothing
+PASS  keep: and holds nothing
+PASS  keep: a count past the buffer reads the buffer
+PASS  keep: a count below 0 with an ESC held uses none of it
+PASS  keep: and the ESC then goes with what follows
+PASS  keep: feedEvents holds ESC [
+PASS  keep: a byte more of it restarts the clock
+PASS  keep: not given up 50 ms after the first byte
+PASS  keep: given up 50 ms after the last
+PASS  keep: feedEvents with an empty read and nothing held
+PASS  keep: feedEvents with a count below 0
+PASS  keys: a character cut after its lead byte is held
+PASS  keys: and finished by the next read
+PASS  keys: a cut four-byte character is held
+PASS  keys: and given up as one replacement
+PASS  keys: a lone continuation byte
+PASS  keys: ESC O cut at the end is held
+PASS  keys: and finished by the next read
+PASS  keys: a CSI run past the cap is a key a byte
+PASS  keys: the ESC given up first, then what follows
+PASS  keys: and holds nothing
+PASS  events: ESC O cut at the end is held
+PASS  events: and finished by the next read
+PASS  events: Alt with a key
+PASS  events: a cut character is held
+PASS  events: and given up as one replacement
+PASS  events: a lone continuation byte
+PASS  text: an empty paste
+PASS  text: a paste of é is its two bytes
+PASS  text: a paste whose last character is cut keeps the bytes that came
+PASS  text: a flush with nothing changed is 0 bytes
+term decoder bounds: 38 passed, 0 failed, 0 skipped
