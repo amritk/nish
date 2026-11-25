@@ -15755,3 +15755,16 @@ The message of an error contains:
 ```text
 …[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first
 ```
+
+[`nl2824_mixed_buffer_run.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2824_mixed_buffer_run.ts):
+
+```ts
+// NL2824: one count closes a run of buffers in elements, so a `readonly u8[]` cannot join a run an `f32[]` opened.
+declare function blend(dst: f32[], mask: readonly u8[], n: u64): void
+
+export const main = (): i32 => 0
+```
+
+```text
+Parameter `mask` of `declare function blend` is readonly u8[] in a run that `dst` opened as f32[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first
+```
