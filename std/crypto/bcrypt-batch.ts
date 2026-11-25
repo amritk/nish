@@ -222,6 +222,9 @@ const bcryptBatchLane = (share: BcryptBatchShare, list: i32[], n: i32, i: i32): 
     return null
   }
   const at: i32 = list[i]
+  if (at < 0 || at >= toI32(share.passwords.length)) {
+    return null
+  }
   return share.passwords[at]
 }
 
@@ -535,7 +538,9 @@ export class BcryptBatcher {
    * @returns The count; 0 once `run` has handed out every answer.
    */
   pending(): i32 {
-    return toI32(this.kinds.length) - this.head + toI32(this.early.length)
+    // Summed as an `i64`, where three array lengths cannot overflow; the
+    // count itself is at most the two queues' lengths.
+    return toI32(toI64(this.kinds.length) - toI64(this.head) + toI64(this.early.length))
   }
 
   /**
@@ -625,8 +630,18 @@ export class BcryptBatcher {
     if (queued >= this.width || head >= toI32(this.arrived.length)) {
       return 0
     }
-    const waited: i64 = now - this.arrived[head]
-    return waited >= this.holdNanos ? 0 : this.holdNanos - waited
+    // Both clocks are `monotonicNanos()` readings, never negative; a request
+    // that reads as arriving after `now` has waited no time.
+    const arrived: i64 = this.arrived[head]
+    const hold: i64 = this.holdNanos
+    if (now < 0 || arrived < 0 || hold <= 0) {
+      return 0
+    }
+    const waited: i64 = now - arrived
+    if (waited < 0) {
+      return hold
+    }
+    return waited >= hold ? 0 : hold - waited
   }
 
   /**
@@ -722,7 +737,11 @@ export class BcryptBatcher {
         held.wipe()
       }
     }
-    this.head = this.head + taken
+    // `taken` is at most what was queued past `head`, so this is at most the
+    // queue's length; summed as an `i64` and capped there for the prover.
+    const kinds: i32 = toI32(this.kinds.length)
+    const after: i64 = toI64(head) + toI64(taken)
+    this.head = after < toI64(kinds) ? toI32(after) : kinds
     this.compact()
     return answers
   }

@@ -1750,6 +1750,16 @@ answered with a `Result` or `null`, not a panic. A fix removes the failure or
 returns it; it does not hide the check behind `nish:unsafe` or a guard that
 answers a made-up value.
 
+**A site of another kind that stays is named, with its reason, in the
+file's `residual` list**, by module, function and kind, with the
+`docs/security/` record that gives the reason: an `array-length` whose length
+is the caller's input, which the prover cannot bound, or a constant-time
+function's first read of an array its caller passes in, where the length test
+that would prove it is an early return, a branch in a constant-time path. In a
+module with an entry, the counted sites must be the entries, function by
+function and kind by kind, so a kept site that moves, or a new one in a
+listed function, fails; the record must exist and name the function.
+
 **Kept means only that the ratchet accepts the site.** It is still a panic
 site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is
 refused (NL2458), and the same `panic` in a module of the scope is NL2457. A

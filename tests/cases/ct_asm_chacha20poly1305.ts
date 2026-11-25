@@ -288,27 +288,48 @@ export const ctChacha20Core = (state: u32[], out: u32[]): void => {
 
 export const ctChacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[], dstAt: i32): void => {
   const keystream: u32[] = new Array<u32>(16)
-  let done: i32 = 0
-  while (done < len) {
+  // `n` bytes done, read from `s` and written to `d`. Each cursor moves only
+  // under a guard that bounds it, so the range prover discharges every index
+  // and sum; a window the caller checked passes every guard.
+  let n: i32 = 0
+  let s: i32 = srcAt
+  let d: i32 = dstAt
+  while (n < len && s >= 0 && s < toI32(src.length) && d >= 0 && d < toI32(dst.length)) {
     ctChacha20Core(state, keystream)
-    state[12] = state[12] + 1
-    const take: i32 = len - done < 64 ? len - done : 64
+    if (toI32(state.length) > 12) {
+      state[12] = state[12] + 1
+    }
     for (let w: i32 = 0; w < 16 && w < toI32(keystream.length); w++) {
       const word: u32 = keystream[w]
-      const at: i32 = done + 4 * w
-      if (at + 4 <= done + take) {
+      if (
+        n <= 2147483643 &&
+        n + 4 <= len &&
+        s >= 0 &&
+        s <= toI32(src.length) - 4 &&
+        d >= 0 &&
+        d <= toI32(dst.length) - 4
+      ) {
         // A whole word, the common case: four bytes with fixed shifts.
-        dst[dstAt + at] = src[srcAt + at] ^ toU8(word)
-        dst[dstAt + at + 1] = src[srcAt + at + 1] ^ toU8(word >>> 8)
-        dst[dstAt + at + 2] = src[srcAt + at + 2] ^ toU8(word >>> 16)
-        dst[dstAt + at + 3] = src[srcAt + at + 3] ^ toU8(word >>> 24)
+        dst[d] = src[s] ^ toU8(word)
+        dst[d + 1] = src[s + 1] ^ toU8(word >>> 8)
+        dst[d + 2] = src[s + 2] ^ toU8(word >>> 16)
+        dst[d + 3] = src[s + 3] ^ toU8(word >>> 24)
+        n = n + 4
+        s = s + 4
+        d = d + 4
       } else {
-        for (let k: i32 = 0; at + k < done + take; k++) {
-          dst[dstAt + at + k] = src[srcAt + at + k] ^ toU8(word >>> toU32(8 * k))
+        for (
+          let k: i32 = 0;
+          k < 4 && n < len && s >= 0 && s < toI32(src.length) && d >= 0 && d < toI32(dst.length);
+          k++
+        ) {
+          dst[d] = src[s] ^ toU8(word >>> toU32(8 * k))
+          n = n + 1
+          s = s + 1
+          d = d + 1
         }
       }
     }
-    done = done + take
   }
   wipe(keystream)
 }
@@ -316,10 +337,11 @@ export const ctChacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32,
 // Only the whole-blocks loop of poly1305Absorb: its padded tail copies the
 // message into a stack array at a counted index, a store this reading cannot
 // place, so the tail stays discipline (docs/security/ct-verification.md).
-export const ctPoly1305AbsorbWhole = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32): void => {
-  const whole: i32 = len >> 4
-  for (let i: i32 = 0; i < whole; i++) {
-    ctPoly1305Block(h, r, buf, at + 16 * i, toU64(CT_POLY1305_HIGH_BIT))
+export const ctPoly1305AbsorbWhole = (h: u64[], r: u64[], buf: u8[], len: i32): void => {
+  const whole: i32 = (len >> 4) & 0x7ffffff
+  const end: i32 = 16 * whole
+  for (let off: i32 = 0; off < end; off += 16) {
+    ctPoly1305Block(h, r, buf, off, toU64(CT_POLY1305_HIGH_BIT))
   }
 }
 

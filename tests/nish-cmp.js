@@ -11654,6 +11654,9 @@ const hashMacKdfDeclared = () =>
 // prove or refuse their panic sites under this PR's subject.
 const STD_CIPHER_PANIC_FREE = "ciphers, curves, signatures and password hashing"
 
+// WP83 S5: the cipher sites S2 left are proved, removed or recorded.
+const STD_CIPHER_RESIDUALS = "the 88 cipher sites S2 left"
+
 /** One `STD_CIPHER_PANIC_FREE` entry per program for `file`: this PR moves that file in each, and nothing older may absorb the move. */
 const stdCipherPanicFree = (file, why, entries) =>
   entries.map((program) => ({ program, file, changelog: STD_CIPHER_PANIC_FREE, why }))
@@ -12909,6 +12912,22 @@ const DECLARED = [
       "tests/link/tfb_entry/main.ts",
     ]
   ),
+  // WP83 S5: std/crypto/chacha20poly1305.ts proves its last index sites, so
+  // the module drops its `nish_panic_index` declaration and renumbers its
+  // attribute groups in the programs whose copy S2 left unchanged.
+  ...[
+    "tests/link/net_handler_batch_limits/main.ts",
+    "tests/link/net_handler_open/main.ts",
+    "tests/link/net_handler_refused/main.ts",
+    "tests/link/net_handler_try_answers/main.ts",
+    "tests/link/net_serve_try/main.ts",
+    "tests/link/std_http1_config_checked/main.ts",
+  ].map((program) => ({
+    program,
+    file: "chacha20poly1305.ll",
+    changelog: STD_CIPHER_RESIDUALS,
+    why: "std/crypto/chacha20poly1305.ts proves its remaining index and overflow sites, so the module no longer declares nish_panic_index and its attribute groups renumber",
+  })),
   ...stdCipherPanicFree(
     "ed25519.ll",
     "std/crypto/ed25519.ts proves its field, scalar and table indices, tests the table blend's lengths once per limb walk, and refuses an oversized message, so the Ed25519 and X25519 code it carries changes",

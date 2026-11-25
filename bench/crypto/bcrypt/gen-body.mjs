@@ -36,7 +36,7 @@ const body = (W, unroll = false, rotated = false) => {
     p(`  let l${k}: u32 = 0`)
     p(`  let r${k}: u32 = 0`)
   }
-  p("  for (let i: i32 = 0; i + 1 < 1042; i += 2) {")
+  p("  for (let i: i32 = 0; i < 1041; i += 2) {")
   for (const k of lanes) {
     p(`    l${k} ^= st[${S * k}]`)
   }

@@ -1103,7 +1103,7 @@ const bcryptBody2 = (st: u32[]): void => {
   let r0: u32 = 0
   let l1: u32 = 0
   let r1: u32 = 0
-  for (let i: i32 = 0; i + 1 < 1042; i += 2) {
+  for (let i: i32 = 0; i < 1041; i += 2) {
     l0 ^= st[0]
     l1 ^= st[1042]
     for (let n: i32 = 1; n < 17; n += 2) {
@@ -1152,7 +1152,7 @@ const bcryptBody3 = (st: u32[]): void => {
   let r1: u32 = 0
   let l2: u32 = 0
   let r2: u32 = 0
-  for (let i: i32 = 0; i + 1 < 1042; i += 2) {
+  for (let i: i32 = 0; i < 1041; i += 2) {
     l0 ^= st[0]
     l1 ^= st[1042]
     l2 ^= st[2084]
@@ -1252,7 +1252,7 @@ const bcryptBody4 = (st: u32[]): void => {
   let r2: u32 = 0
   let l3: u32 = 0
   let r3: u32 = 0
-  for (let i: i32 = 0; i + 1 < 1042; i += 2) {
+  for (let i: i32 = 0; i < 1041; i += 2) {
     l0 ^= st[0]
     l1 ^= st[1042]
     l2 ^= st[2084]
@@ -1353,7 +1353,7 @@ const bcryptBody5 = (st: u32[]): void => {
   let r3: u32 = 0
   let l4: u32 = 0
   let r4: u32 = 0
-  for (let i: i32 = 0; i + 1 < 1042; i += 2) {
+  for (let i: i32 = 0; i < 1041; i += 2) {
     l0 ^= st[0]
     l1 ^= st[1042]
     l2 ^= st[2084]
@@ -1476,7 +1476,7 @@ const bcryptBody6 = (st: u32[]): void => {
   let r4: u32 = 0
   let l5: u32 = 0
   let r5: u32 = 0
-  for (let i: i32 = 0; i + 1 < 1042; i += 2) {
+  for (let i: i32 = 0; i < 1041; i += 2) {
     l0 ^= st[0]
     l1 ^= st[1042]
     l2 ^= st[2084]
@@ -1615,9 +1615,14 @@ const bcryptBodyN = (st: u32[], width: i32): void => {
   }
 }
 
-/** `bcryptEncrypt` under the state at `at`: one block, `lr[0]` and `lr[1]` in place. */
+/**
+ * `bcryptEncrypt` under the state at `at`: one block, `lr[0]` and `lr[1]` in
+ * place. `st` is a batch state and `at` one of its six slots, `1042 * k` for
+ * `k` up to 5; anything else leaves `lr` as it was. The bounds are literals
+ * so the bounds prover reads every S-box index below from them.
+ */
 const bcryptEncryptAt = (st: u32[], at: i32, lr: u32[]): void => {
-  if (at < 0 || at > toI32(st.length) - 1042) {
+  if (at < 0 || at > 5210 || toI32(st.length) < 6252) {
     return
   }
   if (lr.length < 2) {
@@ -2277,8 +2282,11 @@ const bcryptCalibrateTime = (width: i32): i64 => {
     const p5: Secret<u8[]> | null = width > 5 ? bcryptCalibrateKey(5) : null
     const start: i64 = monotonicNanos()
     const made: Result<string[], string> = bcryptHashN(p0, p1, p2, p3, p4, p5, salts, BCRYPT_MIN_COST)
-    const took: i64 = monotonicNanos() - start
-    if (made.isOk() && (best < 0 || took < best)) {
+    const end: i64 = monotonicNanos()
+    // Monotonic readings are never negative, nor `end` before `start`; a run
+    // that reads otherwise is not counted.
+    const took: i64 = start >= 0 && end >= 0 && end >= start ? end - start : -1
+    if (made.isOk() && took >= 0 && (best < 0 || took < best)) {
       best = took
     }
     wipe(p0)
@@ -2303,6 +2311,24 @@ const bcryptCalibrateTime = (width: i32): i64 => {
 }
 
 /**
+ * Whether `took` nanoseconds for `width` passwords is less per password than
+ * `bestTime` for `best`, without dividing. Every time is a
+ * `bcryptCalibrateTime`, at most an hour, and every width 1 to 6; outside
+ * those it answers `false`. Inside them each product is below 2^45, so the
+ * unsigned multiplies, which cannot panic, never wrap either: the bounds
+ * prover's ranges stop at 2^31 and could not prove a signed one.
+ */
+const bcryptCalibrateFaster = (took: i64, width: i32, bestTime: i64, best: i32): boolean => {
+  if (took < 0 || took > 3600000000000 || bestTime < 0 || bestTime > 3600000000000) {
+    return false
+  }
+  if (width < 1 || width > 6 || best < 1 || best > 6) {
+    return false
+  }
+  return toU64(took) * toU64(best) < toU64(bestTime) * toU64(width)
+}
+
+/**
  * The batch width, 1 to 6, that hashes fastest per password on this core:
  * each width timed on throwaway passwords at cost 4, the least time of a few
  * runs divided by the width. It measures rather than guesses, since the best
@@ -2317,8 +2343,7 @@ export const bcryptCalibrate = (): i32 => {
   let bestTime: i64 = bcryptCalibrateTime(1)
   for (let w: i32 = 2; w <= 6; w++) {
     const took: i64 = bcryptCalibrateTime(w)
-    // took / w < bestTime / best, without dividing.
-    if (took * toI64(best) < bestTime * toI64(w)) {
+    if (bcryptCalibrateFaster(took, w, bestTime, best)) {
       best = w
       bestTime = took
     }
