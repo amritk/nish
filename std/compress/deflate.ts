@@ -2649,9 +2649,6 @@ export class FixedDeflater {
       if (matched === 0) {
         const lc: i32 = uncheckedGet(literal, toI32(uncheckedGet(src, pc)))
         const ln: i32 = lc >> 16
-        if (ln < 0 || ln > 9) {
-          return DEFLATE_NO_ROOM
-        }
         bb = bb | (toU64(toU32(lc & 0xffff)) << toU64(c0))
         c = c0 + ln
         p = pc + 1
@@ -2667,9 +2664,6 @@ export class FixedDeflater {
         const d1: i32 = dv - 1
         const d: i32 = toI32(dv <= 256 ? uncheckedGet(dsym, d1) : uncheckedGet(dsym, (d1 >> 7) + 256))
         const dn: i32 = toI32(uncheckedGet(dextra, d))
-        if (ln < 0 || ln > 13 || dn > 13) {
-          return DEFLATE_NO_ROOM
-        }
         bb = bb | (toU64(toU32(lc & 0xffff)) << toU64(c0))
         const c1: i32 = c0 + ln
         bb = bb | (toU64(toU32(uncheckedGet(dcode, d))) << toU64(c1))
@@ -2698,9 +2692,6 @@ export class FixedDeflater {
       // At most 31 + 13 + 5 + 13 = 62 bits are pending, so one flush leaves
       // fewer than 32.
       const ct: i32 = c
-      if (ct < 0 || ct > 62) {
-        return DEFLATE_NO_ROOM
-      }
       bc = ct
       if (ct >= 32) {
         const oc: i32 = o
@@ -3531,9 +3522,6 @@ export class Inflater {
       return DEFLATE_ERR_HUFFMAN
     }
     const total: i32 = hlit + hdist
-    if (total > toI32(lens.length)) {
-      return DEFLATE_ERR_HUFFMAN
-    }
     let i: i32 = 0
     while (i < total) {
       // Under 64 bits, as above.
@@ -3610,8 +3598,8 @@ export class Inflater {
         if (i < 0 || rep > total - i) {
           return DEFLATE_ERR_HUFFMAN
         }
-        // `total` is at most `lens.length`, checked above: the second test
-        // never stops the loop.
+        // `total` is at most 286 + 30, under `lens.length`'s 320: the second
+        // test never stops the loop.
         for (let k: i32 = 0; k < rep && i < toI32(lens.length); k += 1) {
           lens[i] = value
           i += 1
@@ -3796,9 +3784,6 @@ export class Inflater {
         }
         // `n` is at most each room, and each room at least zero: `ip + n`
         // and `opos + n` are the ends less what is left of each room.
-        if (n < 0) {
-          return DEFLATE_ERR_TRUNCATED
-        }
         const inGap: i32 = inAvail - n
         const outGap: i32 = outAvail - n
         if (inGap < 0 || outGap < 0) {
@@ -4045,11 +4030,6 @@ export class Inflater {
           ip += 1
           bc += 8
         }
-      }
-      // Under 64 bits, as the refill leaves it.
-      if (bc < 0 || bc > 64) {
-        status = DEFLATE_ERR_TRUNCATED
-        break
       }
       const e: i32 = this.lookup(lt, INF_TABLE_LITLEN, le, bb, bc)
       if (e === -1) {
