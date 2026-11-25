@@ -22431,6 +22431,7 @@ const DECLARED = [
       "bench/std-temporal-parse.ts": ["std-temporal-parse.ll", "temporal.ll"],
       "bench/temporal.ts": ["temporal.ll"],
       "tests/link/std_temporal/main.ts": ["main.ll"],
+      "tests/link/std_temporal_duration_min/main.ts": ["temporal.ll"],
     }
   ),
   ...byFinding(TEMPORAL_PANIC_FREE)(

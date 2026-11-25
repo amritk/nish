@@ -183,3 +183,7 @@ These parts of `Temporal` are not in this module yet:
   `new Instant(seconds, nanoseconds)` is this module's own, so build an
   instant with `instantFrom` or `instantFromEpochMilliseconds` in a program
   meant to run under Node too.
+- **The least `i64` as `microseconds` or `nanoseconds`.** `new Duration`
+  refuses it with a `RangeError`, because its negation does not fit in an
+  `i64`, so `negated()` and `abs()` could not answer it. Temporal takes it, as
+  a JavaScript number.

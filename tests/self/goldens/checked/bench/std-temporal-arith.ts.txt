@@ -1060,14 +1060,19 @@ function PlainDate.toPlainDateTime(this: PlainDate, time: PlainTime): PlainDateT
   pointer time: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 new PlainDateTime -> @nish.PlainDateTime.constructor
+function temporalDateParseError(text: string): string -> @nish.temporalDateParseError
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function plainDateFrom(text: string): PlainDate -> @nish.plainDateFrom [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=72
   escaping: text
-  calls: nish.PlainDate.constructor nish.plainDateFromOrNull nish.temporalRangeError nish_alloc_struct nish_str_concat
+  calls: nish.PlainDate.constructor nish.plainDateFromOrNull nish.temporalDateParseError nish.temporalRangeError nish_alloc_struct
   stackSites=0 stackLocals=0
   local +0:9 date: PlainDate | null (const)
   callee +0:34 plainDateFromOrNull -> @nish.plainDateFromOrNull
   callee +2:5 temporalRangeError -> @nish.temporalRangeError
+  callee +2:24 temporalDateParseError -> @nish.temporalDateParseError
   callee +3:12 new PlainDate -> @nish.PlainDate.constructor
 function plainDateFromOrNull(text: string): PlainDate | null -> @nish.plainDateFromOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -1097,10 +1102,11 @@ function tryPlainDate(isoYear: i32, isoMonth: i32, isoDay: i32): Result<PlainDat
 function tryPlainDateFrom(text: string): Result<PlainDate, string> -> @nish.tryPlainDateFrom [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: text
-  calls: nish.plainDateFromOrNull nish_alloc_struct nish_str_concat
+  calls: nish.plainDateFromOrNull nish.temporalDateParseError nish_alloc_struct
   stackSites=0 stackLocals=0
   local +0:9 date: PlainDate | null (const)
   callee +0:34 plainDateFromOrNull -> @nish.plainDateFromOrNull
+  callee +2:16 temporalDateParseError -> @nish.temporalDateParseError
 function plainDateCompare(a: PlainDate, b: PlainDate): i32 -> @nish.plainDateCompare [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.temporalSign nish.temporalSub

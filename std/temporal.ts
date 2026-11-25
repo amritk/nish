@@ -1822,6 +1822,9 @@ export class PlainDate {
   }
 }
 
+/** The `RangeError` text for a string `plainDateFrom` refuses. */
+const temporalDateParseError = (text: string): string => `PlainDate: cannot parse "${text}"`
+
 /**
  * `Temporal.PlainDate.from(text)`: the date an RFC 9557 string names. A time,
  * an offset and annotations may follow the date and are ignored but for a
@@ -1834,7 +1837,7 @@ export class PlainDate {
 export const plainDateFrom = (text: string): PlainDate => {
   const date: PlainDate | null = plainDateFromOrNull(text)
   if (date === null) {
-    temporalRangeError(`PlainDate: cannot parse "${text}"`)
+    temporalRangeError(temporalDateParseError(text))
     return new PlainDate(1970, 1, 1)
   }
   return date
@@ -1893,7 +1896,7 @@ export const tryPlainDate = (isoYear: i32, isoMonth: i32, isoDay: i32): Result<P
 export const tryPlainDateFrom = (text: string): Result<PlainDate, string> => {
   const date: PlainDate | null = plainDateFromOrNull(text)
   if (date === null) {
-    return Err(`PlainDate: cannot parse "${text}"`)
+    return Err(temporalDateParseError(text))
   }
   return Ok(date)
 }
