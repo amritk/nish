@@ -767,7 +767,9 @@ through module storage, with no call: the program declares an
 `ringClear` on it; the page wraps the same storage with `ringOver`, whose
 `push`, `shift`, `size()`, `free()`, `capacity` and `clear()` agree with
 them. `push` answers `false` when the ring is full, and `shift` answers 0
-when it is empty.
+when it is empty. A ring has at most 2^30 - 1 (1,073,741,823) slots, so `ringCapacity`
+answers no more than that: a longer native array leaves the slots past it
+unused, and wasm memory cannot hold one.
 
 ```ts
 // game.ts

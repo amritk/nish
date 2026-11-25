@@ -1909,6 +1909,7 @@ const S2_REST_TESTING = [
   "tests/link/std_postgres_replay/main.ts",
   "tests/link/std_postgres_unix_target/main.ts",
   "tests/link/std_raster/main.ts",
+  "tests/link/std_raster_trail_head/main.ts",
   "tests/link/std_scram/main.ts",
   "tests/link/std_term_events/main.ts",
   "tests/link/std_term_probe/main.ts",
@@ -15751,6 +15752,7 @@ const DECLARED = [
     "tests/link/std_host_game/main.ts": ["ring.ll"],
     "tests/link/std_host_ring/main.ts": ["main.ll", "ring.ll"],
     "tests/link/std_raster/main.ts": ["main.ll"],
+    "tests/link/std_raster_trail_head/main.ts": ["main.ll"],
     "tests/link/std_synth/main.ts": ["synth.ll"],
   }).flatMap(([program, files]) =>
     files.map((file) => ({

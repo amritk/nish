@@ -4,8 +4,8 @@
   "memory": "32",
   "inputs": {
     "examples/break-web/break.mjs": "96ce2317a65e6d43577d868f96abf6a2939237b39eccc84a57b7b600ab5a83fc",
-    "examples/break-web/build.mjs": "0f5f023732f50b5ac2aff5c2eecd70a648eded7f367b72f2325738c1bf428fba",
-    "examples/break-web/game.ts": "634eb8a623e459fdeadd3b4d16f4bb552d3b687c211db73c54247d9063d6c47e",
+    "examples/break-web/build.mjs": "f6a822d978b220ece058ea416cabba50bd4dc98ffc5533795602bb065d50725b",
+    "examples/break-web/game.ts": "00dd89f2024a631eb5de42ab6bc44e074f995692595d90fcbbbaad5c06d155b8",
     "examples/break-web/help.ts": "4d138df38cc02f3e71dd731fa627b3b5be36c6d005b723973e97cc5b73efe4ff",
     "examples/break-web/shell.mjs": "5873f1113a2f30741aab79e723188afdc530b6d9bb06963254d71999d28d4b06",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
@@ -25,14 +25,14 @@
     "std/host/ring.ts": "62a49a15338588f0bc2ffe2c3298d01cbd888661b1e033fddcc7ee1de3f795ae",
     "std/input.ts": "3f8c9ab34f172ad387160339f8f2ce35b22f944f02e617c2d26982396563cdc7",
     "std/random.ts": "ca09ff71df26311dadeda12fd3d4e7976c310a5aef8a1ecc5934a04f6596239e",
-    "std/raster.ts": "03d284113140c6d462313102858d3264279bc6b6334653283c56bff4363573b9",
-    "std/synth.ts": "fd6b33159aecabc5ba9b0c874d78583ccb386bb41196563fe8497adea5340ba4",
+    "std/raster.ts": "ddecb2fb1556964aa51ad565d56b747aea6a7e8c169bcc629781d4a5712d0842",
+    "std/synth.ts": "ab54dc2da8ae24809c7f61cca540e1830406c07c1ce5624baabd602deee7e7e7",
     "std/term-pixels.ts": "2661f3e82e36dc53dcb6c13442ef4eb6a46353378b33ae2ed3828da4068dbff5",
     "std/term-rate.ts": "4a243784275d2dbd6c38e6f146a812e52b3af0b2d0bb0c440074da07da24a7f0",
     "std/term.ts": "ff894deb594f84c3c7045a274c5f0d63f82bea7e3abba10570d4c28cde431b38"
   },
   "outputs": {
-    "game.wasm": "a3a461816bfa13b6667cf08ce9b110b13f8b09d4f6ec7f924f9180d41cc17753",
+    "game.wasm": "95f512fbe805b78f4d36ee0a508fdf84bf746bf356f909ded742395365b9fb6f",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "13d4a2ad70204d34c4dd623b9baff0de9792375b74a7585b8857d358d9e08518",

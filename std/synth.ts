@@ -47,7 +47,15 @@ const SYNTH_SAMPLE_LIMIT: f64 = 2147483647.0
  */
 export const synthSilence = (seconds: f64, sampleRate: i32): f64[] => {
   const want: f64 = seconds * toF64(sampleRate)
-  const n: i32 = want >= 1.0 && want < SYNTH_SAMPLE_LIMIT ? toI32(want) : 1
+  let n: i32 = 1
+  if (want >= 1.0 && want < SYNTH_SAMPLE_LIMIT) {
+    const k: i32 = toI32(want)
+    // Never false: `want` is at least 1 here. The test is what proves the
+    // array length is not negative.
+    if (k >= 1) {
+      n = k
+    }
+  }
   const out: f64[] = new Array<f64>(n)
   out.fill(0.0)
   return out
