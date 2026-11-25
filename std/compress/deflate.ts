@@ -1823,9 +1823,9 @@ export class Deflater {
   /**
    * Builds the run-length coded lengths of the dynamic header (§3.2.7) for
    * `hlit` literal/length and `hdist` distance lengths, and their
-   * frequencies in `clFreq`. Answers false, building nothing, when the
-   * scratch is not its size or the counts are past the format's, which the
-   * constructor and `writeBlock` rule out.
+   * frequencies in `clFreq`. Answers false, the scratch then unusable, when
+   * it is not its size, the counts are past the format's or a length is past
+   * 15, which the constructor, `writeBlock` and the length builder rule out.
    */
   private buildRle(hlit: i32, hdist: i32): boolean {
     const rle: i32[] = this.rle
@@ -1843,68 +1843,113 @@ export class Deflater {
     ) {
       return false
     }
-    // At most 320 lengths, each giving at most one entry: the masks on `n`
-    // and the counts keep every bit, and tell the bounds prover so, and the
-    // bound on `run` restates `i + run < total`.
+    // At most 320 lengths, each giving at most one entry, and each count is
+    // at most the number of entries: the checks below fail only on a scratch
+    // or length table this writer did not fill.
     const total: i32 = hlit + hdist
     let n: i32 = 0
     let i: i32 = 0
-    // `i` is never negative: the second test never stops the loop.
-    while (i < total && i >= 0) {
-      const l: i32 = i < hlit ? uncheckedGet(ll, i) : uncheckedGet(dl, i - hlit)
+    while (i < total) {
+      const at: i32 = i
+      if (at < 0) {
+        return false
+      }
+      const l: i32 = at < hlit ? uncheckedGet(ll, at) : uncheckedGet(dl, at - hlit)
       let run: i32 = 1
       while (
         run < 320 &&
-        i + run < total &&
-        (i + run < hlit ? uncheckedGet(ll, i + run) : uncheckedGet(dl, i + run - hlit)) === l
+        at + run < total &&
+        (at + run < hlit ? uncheckedGet(ll, at + run) : uncheckedGet(dl, at + run - hlit)) === l
       ) {
         run += 1
       }
-      // Cannot wrap: `i + run` is at most `total`, at most 320.
-      i = toI32(toU32(i) + toU32(run))
+      const k: i32 = run
+      if (k < 1 || k > 320) {
+        return false
+      }
+      i = at + k
+      let left: i32 = k
       if (l === 0) {
-        // `run` is at most 320, the bound on the scan above: the second test
-        // never stops the loop, and the mask keeps every bit of `r`.
-        while (run >= 11 && run <= 320) {
-          const r: i32 = (run < 138 ? run : toI32(138)) & 255
-          uncheckedSet(rle, n, ((r - 11) << 8) | 18)
-          n = (n + 1) & 511
-          freq[18] = (freq[18] & 511) + 1
-          run -= r
+        while (left >= 11) {
+          const r0: i32 = left
+          const r: i32 = r0 < 138 ? r0 : 138
+          const at18: i32 = n
+          const f18: i32 = freq[18]
+          if (r < 11 || r > 138 || r0 > 320 || at18 < 0 || at18 >= 320 || f18 < 0 || f18 >= 320) {
+            return false
+          }
+          uncheckedSet(rle, at18, ((r - 11) << 8) | 18)
+          n = at18 + 1
+          freq[18] = f18 + 1
+          left = r0 - r
         }
-        if (run >= 3) {
-          uncheckedSet(rle, n, ((run - 3) << 8) | 17)
-          n = (n + 1) & 511
-          freq[17] = (freq[17] & 511) + 1
-          run = 0
+        const r3: i32 = left
+        if (r3 >= 3) {
+          const at17: i32 = n
+          const f17: i32 = freq[17]
+          if (r3 > 10 || at17 < 0 || at17 >= 320 || f17 < 0 || f17 >= 320) {
+            return false
+          }
+          uncheckedSet(rle, at17, ((r3 - 3) << 8) | 17)
+          n = at17 + 1
+          freq[17] = f17 + 1
+          left = 0
         }
       } else {
-        uncheckedSet(rle, n, l)
-        n = (n + 1) & 511
-        if (l >= 0 && l < 19) {
-          uncheckedSet(freq, l, (uncheckedGet(freq, l) & 511) + 1)
+        const next: i32 = this.rlePut(n, l)
+        if (next < 0) {
+          return false
         }
-        run -= 1
-        // As above, the second test never stops the loop.
-        while (run >= 3 && run <= 320) {
-          const r: i32 = (run < 6 ? run : toI32(6)) & 7
-          uncheckedSet(rle, n, ((r - 3) << 8) | 16)
-          n = (n + 1) & 511
-          freq[16] = (freq[16] & 511) + 1
-          run -= r
+        n = next
+        left = k - 1
+        while (left >= 3) {
+          const r0: i32 = left
+          const r: i32 = r0 < 6 ? r0 : 6
+          const at16: i32 = n
+          const f16: i32 = freq[16]
+          if (r < 3 || r > 6 || r0 > 320 || at16 < 0 || at16 >= 320 || f16 < 0 || f16 >= 320) {
+            return false
+          }
+          uncheckedSet(rle, at16, ((r - 3) << 8) | 16)
+          n = at16 + 1
+          freq[16] = f16 + 1
+          left = r0 - r
         }
       }
-      while (run > 0) {
-        uncheckedSet(rle, n, l)
-        n = (n + 1) & 511
-        if (l >= 0 && l < 19) {
-          uncheckedSet(freq, l, (uncheckedGet(freq, l) & 511) + 1)
+      while (left > 0) {
+        const next: i32 = this.rlePut(n, l)
+        if (next < 0) {
+          return false
         }
-        run -= 1
+        n = next
+        left -= 1
       }
     }
     this.rleCount = n
     return true
+  }
+
+  /**
+   * Appends length `l` at `rle[n]` and counts it in `clFreq`; answers -1,
+   * writing nothing, when `n` is outside the 320-entry scratch, `l` is not a
+   * code length 0 to 15, or its count would pass 320.
+   * @param n The entry's position in `rle`.
+   * @param l The code length to append.
+   * @returns The next entry's position, or -1.
+   */
+  private rlePut(n: i32, l: i32): i32 {
+    const rle: i32[] = this.rle
+    const freq: i32[] = this.clFreq
+    if (n < 0 || n >= 320 || l < 0 || l > 15 || toI32(rle.length) < 320 || toI32(freq.length) < 19) {
+      return -1
+    }
+    const f: i32 = uncheckedGet(freq, l)
+    if (f < 0 || f >= 320) {
+      return -1
+    }
+    uncheckedSet(rle, n, l)
+    uncheckedSet(freq, l, f + 1)
+    return n + 1
   }
 
   /**
