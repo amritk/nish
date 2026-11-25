@@ -70,8 +70,17 @@ esac
 dest="build/gfx/$platform"
 stamp="$dest/.fetched"
 want="wgpu-native $wgpu_version, SDL $sdl_version"
-if [ -z "$force" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] &&
-   [ -f "$dest/lib/libwgpu_native.a" ] && [ -f "$dest/lib/libSDL3.a" ]; then
+# An install is there when its stamp names these versions and every file
+# scripts/build.sh requires under a prefix is present; anything less is fetched
+# again.
+installed() {
+  [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] || return 1
+  for f in include/SDL3/SDL.h include/webgpu/webgpu.h include/webgpu/wgpu.h \
+           lib/libSDL3.a lib/libwgpu_native.a; do
+    [ -f "$dest/$f" ] || return 1
+  done
+}
+if [ -z "$force" ] && installed; then
   printf 'fetch-gfx: %s in %s (already there)\n' "$want" "$dest"
   exit 0
 fi
@@ -110,7 +119,10 @@ fetch "$sdl_base/$sdl_tarball" "$work/sdl.tar.gz" "$sdl_sha256"
 
 # Everything is built into a staging prefix and renamed into place last, so a
 # failed build leaves the previous install, or none, never half of one. The
-# stamp is written only after the rename, so an install without it is fetched
+# previous install is renamed aside into $work, which the EXIT trap removes,
+# rather than deleted in place, and the stamp is written only after the new
+# one is renamed in: an interrupt leaves the old install with its stamp,
+# nothing, or the new install without a stamp, which the next run fetches
 # again.
 stage="$work/prefix"
 mkdir -p "$stage/include/webgpu" "$stage/lib" "$work/wgpu"
@@ -137,7 +149,7 @@ cmake -S "$work/SDL3-$sdl_version" -B "$work/sdl-build" -G Ninja \
 cmake --build "$work/sdl-build" >"$work/build.log" 2>&1 || { cat "$work/build.log" >&2; exit 1; }
 cmake --install "$work/sdl-build" >/dev/null
 
-rm -rf "$dest"
+if [ -e "$dest" ]; then mv "$dest" "$work/old"; fi
 mv "$stage" "$dest"
 printf '%s\n' "$want" > "$stamp"
 printf 'fetch-gfx: %s in %s\n' "$want" "$dest"

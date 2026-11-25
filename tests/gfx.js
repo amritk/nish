@@ -190,8 +190,80 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
     answers.map((a) => `${a.name}: build.sh ${a.sh}, callsGfx ${a.ts}`).join("; ")
   )
 
-  // ---- the shim, linked ------------------------------------------------------------
+  // ---- what scripts/fetch-gfx.sh counts as installed -------------------------------
+  // A copy of the script runs in a scratch root (it works from its own `..`)
+  // with a PATH that holds the few tools its "already there" test reads and no
+  // curl: an install it accepts exits 0 there, and one it does not stops at the
+  // tool check with 2. No byte is downloaded either way.
   const platform = fetchPlatform()
+  if (platform) {
+    const fake = path.join(dir, "fetch-root")
+    fs.mkdirSync(path.join(fake, "scripts"), { recursive: true })
+    fs.copyFileSync(path.join(root, "scripts", "fetch-gfx.sh"), path.join(fake, "scripts", "fetch-gfx.sh"))
+    const fetchBin = path.join(dir, "fetch-bin")
+    fs.mkdirSync(fetchBin)
+    const toolsFound = ["sh", "uname", "cat", "dirname"].every((t) => {
+      const where = spawnSync("sh", ["-c", `command -v ${t}`], { encoding: "utf8" }).stdout.trim()
+      if (where.startsWith("/")) {
+        fs.symlinkSync(where, path.join(fetchBin, t))
+      }
+      return where.startsWith("/")
+    })
+    const fetchDest = path.join(fake, "build", "gfx", platform)
+    const runFetch = () =>
+      spawnSync(path.join(fetchBin, "sh"), ["scripts/fetch-gfx.sh"], {
+        cwd: fake,
+        encoding: "utf8",
+        env: { PATH: fetchBin, HOME: fake },
+      })
+    const stampText = /^want="(.*)"$/m.exec(
+      fs.readFileSync(path.join(root, "scripts", "fetch-gfx.sh"), "utf8")
+    )
+    const versions = /^wgpu_version=(\S+)$[\s\S]*^sdl_version=(\S+)$/m.exec(
+      fs.readFileSync(path.join(root, "scripts", "fetch-gfx.sh"), "utf8")
+    )
+    if (toolsFound && stampText && versions) {
+      const want = stampText[1].replace("$wgpu_version", versions[1]).replace("$sdl_version", versions[2])
+      for (const f of PREFIX_FILES.filter((f) => f.startsWith("lib/"))) {
+        fs.mkdirSync(path.dirname(path.join(fetchDest, f)), { recursive: true })
+        fs.writeFileSync(path.join(fetchDest, f), "")
+      }
+      fs.writeFileSync(path.join(fetchDest, ".fetched"), `${want}\n`)
+      const headers = PREFIX_FILES.filter((f) => f.startsWith("include/"))
+      const lackingOne = headers.map((h) => {
+        for (const other of headers) {
+          fs.mkdirSync(path.dirname(path.join(fetchDest, other)), { recursive: true })
+          fs.writeFileSync(path.join(fetchDest, other), "")
+        }
+        fs.rmSync(path.join(fetchDest, h))
+        return { h, status: runFetch().status }
+      })
+      fs.rmSync(path.join(fetchDest, "include"), { recursive: true })
+      const noInclude = runFetch()
+      for (const h of headers) {
+        fs.mkdirSync(path.dirname(path.join(fetchDest, h)), { recursive: true })
+        fs.writeFileSync(path.join(fetchDest, h), "")
+      }
+      const whole = runFetch()
+      check(
+        "gfx: scripts/fetch-gfx.sh fetches again over a stamped install that lacks include/ or any header, and accepts a whole one",
+        noInclude.status === 2 && lackingOne.every((l) => l.status === 2) && whole.status === 0,
+        `no include/: ${noInclude.status}; ${lackingOne.map((l) => `no ${l.h}: ${l.status}`).join("; ")}; whole: ${whole.status}\n${shown(whole)}`
+      )
+    } else {
+      check(
+        "gfx: scripts/fetch-gfx.sh fetches again over a stamped install that lacks include/ or any header, and accepts a whole one",
+        false,
+        `tools found: ${toolsFound}; want line read: ${Boolean(stampText)}; versions read: ${Boolean(versions)}`
+      )
+    }
+  } else {
+    skip(
+      `gfx: scripts/fetch-gfx.sh pins nothing for ${os.platform()}-${os.arch()}, so its install test is not run`
+    )
+  }
+
+  // ---- the shim, linked ------------------------------------------------------------
   const prefix = process.env.NISH_GFX_PREFIX || (platform ? path.join(root, "build", "gfx", platform) : "")
   const lacking = prefix ? PREFIX_FILES.filter((f) => !fs.existsSync(path.join(prefix, f))) : PREFIX_FILES
   if (lacking.length > 0) {

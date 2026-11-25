@@ -82,12 +82,19 @@ overruns to reach. Both are bounds read only from the code.
 - **The libraries.** `scripts/fetch-gfx.sh` downloads wgpu-native's release
   zip and SDL's source tarball over HTTPS. Before it reads either one, it
   checks the download against the sha256 the script pins (`fetch`,
-  `scripts/fetch-gfx.sh:91-98`). It builds into a staging directory inside
-  `build/gfx/` (`:105`), so moving it to `build/gfx/<platform>/` is a rename
-  on one filesystem, and writes the `.fetched` stamp only after that rename
-  (`:140-142`). An interrupted fetch leaves the old install, none, or a new
-  one without a stamp, which the next run fetches again. Untested: no check
-  interrupts a fetch. `NISH_GFX_PREFIX` names an
+  `scripts/fetch-gfx.sh:100-107`). It builds into a staging directory inside
+  `build/gfx/` (`:114`). It renames an existing `build/gfx/<platform>/` aside
+  into that directory, which the exit trap removes, instead of deleting it in
+  place, then renames the new install in and writes the `.fetched` stamp last
+  (`:152-154`). Both renames are on one filesystem. An interrupted fetch
+  therefore leaves the old install with its stamp, nothing, or the new install
+  without a stamp. The script reports an install as already there only when
+  the stamp names the pinned versions and all five files `scripts/build.sh`
+  requires are present (`installed`, `:76-82`), so anything less is fetched
+  again: "gfx: scripts/fetch-gfx.sh fetches again over a stamped install that
+  lacks include/ or any header, and accepts a whole one" fails when the header
+  requirement is dropped. The rename order itself is read from the code: no
+  check interrupts a fetch. `NISH_GFX_PREFIX` names an
   install made some other way, and `scripts/build.sh` trusts it as given:
   whoever sets it chooses the code that is linked.
 - **The program.** A length the program passes is its contract.
@@ -124,6 +131,7 @@ answers.
 
 - "gfx: a module that does not declare an @nishgfx_ function (plain|defined|after) links without runtime/gfx/ or its libraries"
 - "gfx: a module that declares an @nishgfx_ function, with no SDL3 or wgpu-native installed, is refused naming scripts/fetch-gfx.sh"
+- "gfx: scripts/fetch-gfx.sh fetches again over a stamped install that lacks include/ or any header, and accepts a whole one"
 - "gfx: a module that declares an @nishgfx_ function is refused under --profile wasm|wasm-host|wasi"
 - "gfx: scripts/build.sh and src/run-cache.ts callsGfx select the shim by the same declare prefix". It reads both rules out of their source text, build.sh's `grep -Eq` pattern and run-cache.ts's `declaresPrefixed` with its type annotations dropped, and runs each on the same IR samples (the three modules above that declare no `@nishgfx_` function, and one that does), so it fails when an edit to either one changes an answer, or when it can no longer find a rule in the text.
 - "gfx: every C symbol runtime/gfx/nish-gfx.c calls, less SDL's and wgpu-native's, is one src/c-symbols.ts reserves"
