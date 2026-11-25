@@ -1083,7 +1083,7 @@ A string C allocated for the caller to free (`strdup`) is a `CPtr`, not a
 `string`: the copy would leave C's allocation with no one to free it.
 
 A class other than a `declare class` (below), an interface or an array other
-than the byte buffer below is refused, in either direction, because nothing else the Nish compiler allocated
+than the typed buffers below is refused, in either direction, because nothing else the Nish compiler allocated
 may reach code it cannot see:
 
 <!-- nish:err NL2551 -->

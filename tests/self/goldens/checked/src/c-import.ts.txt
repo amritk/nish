@@ -64,8 +64,10 @@ struct CType (class) size=56 align=8
   field nullable: boolean index=9 offset=39 initialized
   field nonnull: boolean index=10 offset=40 initialized
   field aligned: boolean index=11 offset=41 initialized
-  field length: i32 index=12 offset=44 initialized
-  field element: string index=13 offset=48 initialized
+  field alignedBase: boolean index=12 offset=42 initialized
+  field enumBase: boolean index=13 offset=43 initialized
+  field length: i32 index=14 offset=44 initialized
+  field element: string index=15 offset=48 initialized
   constructor -> @CType.constructor
 struct CRecord (class) size=96 align=8
   field key: string index=0 offset=0 initialized
@@ -1019,62 +1021,62 @@ function Importer.resolve(this: Importer, spelling: string): CType -> @Importer.
   calls: CType.constructor Importer.builtinType Importer.enumType Importer.resolve StringMap.get arrayType closingParen firstDeclarator isIdent nish_alloc_struct nish_panic_index nish_panic_overflow nish_panic_slice nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new refusedType trimSpaces typeWords
   pointer this: size=248 writesThrough=false captured=false passedTo=Importer.enumType#0 Importer.resolve#0 Importer.builtinType#0
   stackSites=0 stackLocals=0
-  callee -144:14 refusedType -> @refusedType
-  callee -141:14 refusedType -> @refusedType
+  callee -139:14 refusedType -> @refusedType
   callee -136:14 refusedType -> @refusedType
-  callee -133:14 refusedType -> @refusedType
+  callee -131:14 refusedType -> @refusedType
   callee -128:14 refusedType -> @refusedType
-  local -126:11 star: i32 (const)
-  callee -126:18 firstDeclarator -> @firstDeclarator
-  local -120:13 close: i32 (const)
-  callee -120:21 closingParen -> @closingParen
-  callee -118:16 refusedType -> @refusedType
-  local -116:13 after: string (const)
-  callee -116:21 trimSpaces -> @trimSpaces
-  local -114:15 array: CType (const)
-  callee -114:23 new CType -> @CType.constructor
-  callee -105:18 refusedType -> @refusedType
-  callee -103:16 refusedType -> @refusedType
-  local -101:13 fn: CType (const)
-  callee -101:18 new CType -> @CType.constructor
+  callee -123:14 refusedType -> @refusedType
+  local -121:11 star: i32 (const)
+  callee -121:18 firstDeclarator -> @firstDeclarator
+  local -115:13 close: i32 (const)
+  callee -115:21 closingParen -> @closingParen
+  callee -113:16 refusedType -> @refusedType
+  local -111:13 after: string (const)
+  callee -111:21 trimSpaces -> @trimSpaces
+  local -109:15 array: CType (const)
+  callee -109:23 new CType -> @CType.constructor
+  callee -100:18 refusedType -> @refusedType
+  callee -98:16 refusedType -> @refusedType
   local -96:13 fn: CType (const)
   callee -96:18 new CType -> @CType.constructor
-  local -92:11 open: i32 (const)
-  callee -90:14 arrayType -> @arrayType
-  local -88:11 words: string[] (const)
-  callee -88:19 typeWords -> @typeWords
-  local -87:9 pointers: i32 (let)
-  local -86:9 constBase: boolean (let)
-  local -83:9 levelConst: boolean (let)
-  local -82:9 pointeeConst: boolean (let)
-  local -79:9 nullable: boolean (let)
-  local -78:9 nonnull: boolean (let)
-  local -77:9 tagWord: string (let)
-  local -76:9 tagName: string (let)
-  local -75:9 named: string (let)
-  local -74:9 longs: i32 (let)
-  local -73:9 isShort: boolean (let)
-  local -72:9 isUnsigned: boolean (let)
-  local -71:9 isSigned: boolean (let)
-  local -70:9 builtin: string (let)
-  local -69:9 refusedWord: string (let)
-  local -68:14 i: i32 (let)
-  local -67:13 w: string (const)
-  local -12:9 t: CType (let)
-  callee -12:13 new CType -> @CType.constructor
-  callee -10:11 refusedType -> @refusedType
-  callee -9:40 isIdent -> @isIdent
-  callee -9:83 isIdent -> @isIdent
-  callee -8:11 refusedType -> @refusedType
-  callee -6:11 Importer.enumType -> @Importer.enumType
-  callee -2:14 refusedType -> @refusedType
-  callee +4:13 refusedType -> @refusedType
-  local +8:13 index: i32 (const)
-  callee +8:21 StringMap.get -> @StringMap.get
+  local -91:13 fn: CType (const)
+  callee -91:18 new CType -> @CType.constructor
+  local -87:11 open: i32 (const)
+  callee -85:14 arrayType -> @arrayType
+  local -83:11 words: string[] (const)
+  callee -83:19 typeWords -> @typeWords
+  local -82:9 pointers: i32 (let)
+  local -81:9 constBase: boolean (let)
+  local -78:9 levelConst: boolean (let)
+  local -77:9 pointeeConst: boolean (let)
+  local -74:9 nullable: boolean (let)
+  local -73:9 nonnull: boolean (let)
+  local -72:9 tagWord: string (let)
+  local -71:9 tagName: string (let)
+  local -70:9 named: string (let)
+  local -69:9 longs: i32 (let)
+  local -68:9 isShort: boolean (let)
+  local -67:9 isUnsigned: boolean (let)
+  local -66:9 isSigned: boolean (let)
+  local -65:9 builtin: string (let)
+  local -64:9 refusedWord: string (let)
+  local -63:14 i: i32 (let)
+  local -62:13 w: string (const)
+  local -7:9 t: CType (let)
+  callee -7:13 new CType -> @CType.constructor
+  callee -5:11 refusedType -> @refusedType
+  callee -4:40 isIdent -> @isIdent
+  callee -4:83 isIdent -> @isIdent
+  callee -3:11 refusedType -> @refusedType
+  callee -1:11 Importer.enumType -> @Importer.enumType
+  callee +4:14 refusedType -> @refusedType
   callee +10:13 refusedType -> @refusedType
-  callee +14:11 Importer.resolve -> @Importer.resolve
-  local +19:13 typedefConst: boolean (const)
-  callee +42:11 Importer.builtinType -> @Importer.builtinType
+  local +14:13 index: i32 (const)
+  callee +14:21 StringMap.get -> @StringMap.get
+  callee +16:13 refusedType -> @refusedType
+  callee +20:11 Importer.resolve -> @Importer.resolve
+  local +25:13 typedefConst: boolean (const)
+  callee +49:11 Importer.builtinType -> @Importer.builtinType
 function Importer.enumType(this: Importer, name: string): CType -> @Importer.enumType [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=56
   sharedWrite: via Importer.enumScalar

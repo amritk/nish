@@ -553,6 +553,10 @@ class CType {
   nonnull: boolean = false
   /** A typedef with its own `aligned` attribute, held by value: not the scalar's natural layout. */
   aligned: boolean = false
+  /** The innermost pointed-to type is a typedef with its own `aligned` attribute (kept when `aligned` is cleared for a pointer). */
+  alignedBase: boolean = false
+  /** The scalar is an enum's: its size is the C compiler's choice (`-fshort-enums`), so it is no buffer element. */
+  enumBase: boolean = false
   /** For `BASE_ARRAY`: the element count of `T [N]`, or -1 when it is not one plain length. */
   length: i32 = -1
   /** For `BASE_ARRAY` with a `length`: the element's spelling, `T`. */
@@ -645,7 +649,8 @@ const refusedType = (reason: string): CType => {
  * `char *` of any sign (WP53 B1.1), and since WP89 S2 the scalar a single
  * pointer to `uint16_t`, `uint32_t`, `int32_t` or `float` names, the elements
  * `isForeignBuffer` in `src/types.ts` lends. A typedef with its own `aligned`
- * attribute is not the scalar's layout, so it is no buffer.
+ * attribute is not the scalar's layout, and an enum's size is the C
+ * compiler's choice, so neither is a buffer.
  */
 const bufferElement = (t: CType): string => {
   if (t.pointers !== 1) {
@@ -656,7 +661,7 @@ const bufferElement = (t: CType): string => {
   }
   const s = t.scalar
   const lent = s === "u16" || s === "u32" || s === "i32" || s === "f32"
-  return t.base === BASE_SCALAR && !t.aligned && lent ? s : ""
+  return t.base === BASE_SCALAR && !t.aligned && !t.alignedBase && !t.enumBase && lent ? s : ""
 }
 
 /** A struct or union declared in the header or one it includes. */
@@ -1660,6 +1665,7 @@ class Importer {
       t = refusedType("a type the generator cannot read")
     } else if (tagWord === "enum") {
       t = this.enumType(tagName)
+      t.enumBase = true
     } else if (tagWord.length > 0 && tagName.startsWith("__va_list")) {
       // A `va_list` parameter decays to a pointer to clang's own tag: the
       // pointer is the decay, not the C type the header wrote.
@@ -1696,6 +1702,7 @@ class Importer {
         // spelled here; the typedef's own qualifies a pointer further in.
         t.nullable = nullable
         t.nonnull = nonnull
+        t.alignedBase = t.alignedBase || t.aligned || (t.pointers === 0 && this.typedefAligned[index])
         t.aligned = false
       } else {
         if (nullable || nonnull) {

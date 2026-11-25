@@ -7298,8 +7298,8 @@ declare function sum(xs: readonly u16[], n: u64): u32;
   module storage lends only to a parameter of a function written in Nish
   (see "Module storage"), whose body the compiler reads; a declared C
   function's is unseen, so passing the storage itself is `` Module storage
-  `store` is a place, not a value ``. Copy it into an `f32[]` or `i32[]`
-  local and pass that.
+  `store` is a place, not a value `` (`tests/cases/reject_ffi_buffer_storage`).
+  Copy it into an `f32[]` or `i32[]` local and pass that.
 - **Every kind of call site lowers the same way**: a call by name, through a
   function parameter bound to the declaration, in a constructor reached by
   `new` and in a method (`tests/cases/ffi_buffer_call_sites`), and a call that
