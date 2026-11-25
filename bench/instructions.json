@@ -57,6 +57,11 @@
     "std-compress-gzip": { "n": 3, "instructions": 162588277 },
     "std-term-frame": { "n": 600, "instructions": 194287334 },
     "std-raster": { "n": 400, "instructions": 136938571 },
-    "std-synth": { "n": 60, "instructions": 110069992 }
+    "std-synth": { "n": 60, "instructions": 110069992 },
+    "std-temporal-arith": { "n": 160, "instructions": 150000000 },
+    "std-temporal-format": { "n": 180, "instructions": 150000000 },
+    "std-temporal-parse": { "n": 150, "instructions": 150000000 },
+    "std-base64-encode": { "n": 1200, "instructions": 150000000 },
+    "std-math-kernel": { "n": 240, "instructions": 150000000 }
   }
 }
