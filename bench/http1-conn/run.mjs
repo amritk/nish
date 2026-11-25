@@ -145,7 +145,10 @@ const shimmed = (std, text) =>
   withNetWrite2(std)
     ? text
     : text
-        .replace("import { netRead, netWrite2, unixSocketPair }", "import { netRead, netWrite, unixSocketPair }")
+        .replace(
+          "import { netRead, netWrite2, unixSocketPair }",
+          "import { netRead, netWrite, unixSocketPair }"
+        )
         .replace("netWrite2(pair[0], head, 0, headLen, body, 0, n)", "netWrite(pair[0], head, 0, headLen)")
 const trees = { old: oldPackage, new: root }
 for (const [label, nish] of Object.entries(compilers)) {

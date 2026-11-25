@@ -18,8 +18,9 @@ build/nish bench/http1-conn/bytes.ts --link build/bench/http1-conn/bytes && buil
 `run.mjs` builds `main.ts` twice at `--profile speed`, once against `std/` as
 `--base` has it (default: `96a38347484f`, the commit before the hot-field
 layout, so the default compares against something on `main` too) and once
-against the working tree's, and links a byte-identical copy of the first. The
-old build is made by a copy of the compiler placed in
+against the working tree's, and links a byte-identical copy of the first. A base from before
+`nish:net`'s `netWrite2` (v0.34.1) builds too: `run.mjs` gives it `netWrite` in the stages calibration that base
+never runs. The old build is made by a copy of the compiler placed in
 `build/bench/http1-conn/old-package/` beside the base's `std/`, `scripts/` and
 `runtime/`, since the compiler reads `nish/<module>` from the package it sits
 in: a change to `http1-codec.ts` or any other module is compared too. Every
@@ -452,3 +453,49 @@ and every idleInput-on median sits between them or within 3% of the nearer,
 so the throughput change is inside the noise band. User CPU per request
 moved no more: 0.75 µs against 0.76 for plaintext, 0.80 against 0.85–0.94
 for json, 3.80 against 3.71–3.80 for post-json.
+
+## Measured: idle memory and keep-alive cost, base against main (2026-11-25)
+
+`node bench/http1-conn/run.mjs --shape hot,cold,idle --rss 5 --connections 10000 --rounds 15 --base 7d921842`
+on main `7d0c7699` (`main.ts` and `run.mjs` as that commit has them; `7d921842`
+has `netWrite2`, so the shim above does not touch this run). Intel(R) Xeon(R)
+Processor @ 2.30GHz, 4 cores, pinned to core 1, builds at `--profile speed`.
+`old′` is a second copy of the `old` binary run in the same interleaved
+rounds: the noise band.
+
+ns per request, median (min–max) over 15 rounds, each the fastest of 5
+batches of 200,000, ratio of medians to `old`:
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot | 228.9 (224.5–241.2) | 230.9 (225.3–240.5) 1.008 | 227.5 (224.3–238.5) 0.994 |
+| cold | 238.8 (233.5–314.9) | 260.9 (234.6–320.2) 1.093 | 240.6 (233.8–317.8) 1.008 |
+| idle | 317.7 (314.2–340.2) | 319.7 (314.2–340.1) 1.006 | 317.4 (314.4–335.6) 0.999 |
+
+Throughput is unchanged within the band: `new` is 0.6% under `old` on `hot`,
+0.8% over on `cold` and 0.1% under on `idle`, against `old′` at 0.8%, 9.3% and
+0.6% over. `cold`'s `old′` is 9.3% off `old` because one rebuild's median
+caught a slow stretch (its range reaches 320 for all three binaries), so read
+`cold` as no change, not as a measurement to the percent. The keep-alive rate
+these medians imply is 1 / 317.7 ns, at most 3.1 million requests a second
+through `Http1Connection` on one core, a maximum of the codec with no socket,
+not what a server serves.
+
+Peak RSS per idle connection, bytes, median (min–max) of 5 runs at 10,000
+connections less 0:
+
+| | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| idleInput, 1 request | 1,219 (1,217–1,221) | 1,217 (1,217–1,218) | 1,106 (1,105–1,108) |
+| idleInput, 4 requests | 1,404 (1,401–1,405) | 1,402 (1,401–1,402) | 1,290 (1,289–1,293) |
+| idleInput off, 1 request | 3,086 (3,086–3,090) | 3,086 (3,086–3,086) | 2,976 (2,974–2,978) |
+| idleInput off, 4 requests | 3,271 (3,271–3,274) | 3,271 (3,271–3,271) | 3,162 (3,160–3,162) |
+
+Since `7d921842` an idle connection costs about 110 bytes less in every row
+(`old′` differs from `old` by at most 2). The 2026-11-13 table above is at
+50,000 connections, so its absolute figures (1,170 for the base) sit about 50
+bytes under these at 10,000; compare columns within a table, not across.
+The default-base build (`96a38347`) and v0.34.1 also build now.
+
+Figures: 21 (9 timings, 12 memory) copied from the recorded run's printed tables, each
+checked against it; ratios and percentages recomputed from the medians.
