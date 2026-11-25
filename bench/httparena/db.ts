@@ -195,6 +195,8 @@ export class ArenaDb {
     config.user = parts.user
     config.database = parts.database
     config.maxInFlight = IN_FLIGHT
+    // At least one connection a worker, so a `DATABASE_MAX_CONN` below the
+    // worker count opens one per worker, more than it names in all.
     let size: i32 = arenaCount(maxConn, 256) / (workers < 1 ? 1 : workers)
     if (size < 1) {
       size = 1
@@ -272,7 +274,9 @@ export class ArenaDb {
     const ticket: i32 = pool.request()
     const at: i32 = ticket & (RING - 1)
     if (ticket < 0 || this.ring[at] >= 0) {
-      // A ticket whose ring cell is taken is never built: `send()` drops it unanswered.
+      // Unreachable while QUEUE + MAX_POOL * IN_FLIGHT (4096 + 8192 = 12288)
+      // is under RING (16384): no more tickets than that are alive at once,
+      // so a live ticket's cell is never one RING tickets back. Kept as a guard.
       this.free.push(index)
       this.sendEmpty(h, r)
       return

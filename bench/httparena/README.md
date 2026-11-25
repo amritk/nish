@@ -27,8 +27,10 @@ cd "$HTTPARENA" && scripts/validate.sh nish
 
 `tests/link/httparena_entry` builds `server.ts` and drives every route through
 one worker: split and chunked requests, a lower-case `content-length`, random
-operands, 32 overlapping `/delay` requests and `json-comp` with no
-`Accept-Encoding`.
+operands, pipelined requests answered in order, 32 overlapping `/delay`
+requests, `json-comp` with no `Accept-Encoding`, and `/async-db` against a
+stand-in PostgreSQL (`pg.ts` there) that answers the entry's query with known
+rows, and refuses it.
 
 ## Validation
 

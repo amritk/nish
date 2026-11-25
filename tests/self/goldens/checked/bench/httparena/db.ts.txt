@@ -145,18 +145,18 @@ function ArenaDb.constructor(this: ArenaDb, url: string | null, maxConn: string 
   local +13:11 parts: ArenaUrl (const)
   callee +13:29 arenaUrl -> @arenaUrl
   local +14:11 config: PgConfig (const)
-  local +18:9 size: i32 (let)
-  callee +18:21 arenaCount -> @arenaCount
-  local +25:11 password: Secret<u8[]> (const)
-  callee +25:22 secret<u8[]> -> @nish.secret$arr.u8
-  callee +25:29 dbBytes -> @dbBytes
-  local +26:11 pool: PgPool (const)
-  callee +26:18 new PgPool -> @nish.PgPool.constructor
-  callee +27:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  local +28:11 types: i32[] (const)
-  callee +29:5 PgPool.register -> @nish.PgPool.register
-  local +31:14 s: i32 (let)
-  local +36:14 k: i32 (let)
+  local +20:9 size: i32 (let)
+  callee +20:21 arenaCount -> @arenaCount
+  local +27:11 password: Secret<u8[]> (const)
+  callee +27:22 secret<u8[]> -> @nish.secret$arr.u8
+  callee +27:29 dbBytes -> @dbBytes
+  local +28:11 pool: PgPool (const)
+  callee +28:18 new PgPool -> @nish.PgPool.constructor
+  callee +29:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local +30:11 types: i32[] (const)
+  callee +31:5 PgPool.register -> @nish.PgPool.register
+  local +33:14 s: i32 (let)
+  local +38:14 k: i32 (let)
 function ArenaDb.attach(this: ArenaDb, h: HttpServer): void -> @ArenaDb.attach [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -193,13 +193,13 @@ function ArenaDb.query(this: ArenaDb, h: HttpServer, r: HttpServerRequest, min: 
   local +9:11 ticket: i32 (const)
   callee +9:25 PgPool.request -> @nish.PgPool.request
   local +10:11 at: i32 (const)
-  callee +14:7 ArenaDb.sendEmpty -> @ArenaDb.sendEmpty
-  local +17:11 job: ArenaJob (const)
-  local +24:11 w: JsonWriter (const)
-  callee +25:5 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee +26:5 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee +27:5 JsonWriter.key -> @nish.JsonWriter.key
-  callee +28:5 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  callee +16:7 ArenaDb.sendEmpty -> @ArenaDb.sendEmpty
+  local +19:11 job: ArenaJob (const)
+  local +26:11 w: JsonWriter (const)
+  callee +27:5 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee +28:5 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee +29:5 JsonWriter.key -> @nish.JsonWriter.key
+  callee +30:5 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
 function ArenaDb.turn(this: ArenaDb, h: HttpServer): void -> @ArenaDb.turn [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ArenaDb.poll

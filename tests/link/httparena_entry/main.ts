@@ -1,31 +1,38 @@
 // The HttpArena entry (bench/httparena) against the rules HttpArena's
 // validate.sh applies to the profiles it serves, over loopback. The test runs
 // itself as `serve`, `arenaMain` with one worker on ports the kernel picks and
-// the eight-item dataset beside this file, with `DATABASE_URL` naming a port
-// nothing listens on; the driver is a plain client of it:
+// the eight-item dataset beside this file, and as `pg`, the stand-in
+// PostgreSQL of pg.ts that `DATABASE_URL` names; the driver is a plain client
+// of the server:
 //
 //   1. GET /baseline11 with a random `a` and `b` answers their sum,
 //      `text/plain`; a POST adds its body's number, sent with
 //      `Content-Length`, with a lower-cased `content-length`, and chunked.
 //   2. A request split inside its request line, after the request line, and
 //      between its head and its body is answered as one.
-//   3. 16 pipelined /pipeline requests in one write are 16 `ok`s, in order.
-//   4. 32 overlapping /delay requests on 32 connections are each answered
-//      with their own `ms`, no sooner than it, and all of them in well under
-//      the time the delays add up to: the timer holds them, not the loop.
+//   3. 16 pipelined requests in one write, /pipeline and /baseline11 by
+//      turns, are answered in the order sent: `ok`, then each its own sum.
+//   4. 32 overlapping /delay requests on 32 connections, watched together,
+//      are each answered with their own `ms`, none before that long since it
+//      was sent, and all of them in well under the time the delays add up to:
+//      the timer holds them, not the loop. /delay/abc answers 400.
 //   5. /json/2?m=3 without Accept-Encoding is the exact body, uncompressed,
 //      `application/json`; with `Accept-Encoding: gzip` it is gzip, whose
-//      inflation is that body.
-//   6. /async-db with its database refusing answers 200 `application/json`
-//      with no items, with and without its parameters.
+//      inflation is that body. /json/abc answers 400, and an `m` of 18
+//      digits is capped, not an overflow.
+//   6. /async-db answers the stand-in's rows priced in [min, max] as the
+//      exact body, past the limit's row; without parameters its defaults;
+//      its limit clamped to 1 .. 50; and, with the query refused, 200
+//      `application/json` with no items.
 //   7. Another path answers 404.
 //   8. Over h2c with prior knowledge, /baseline2 answers `:status` 200 and the
 //      sum, and /json/2?m=3 the exact body.
 //   9. SIGTERM stops the server and it exits 0.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a
-// hang. The server runs under `timeout`, so it outlives a driver that died by
-// a minute at most.
+// hang. The driver kills and reaps both children whatever its checks found;
+// a driver that died leaves the stand-in to exit once idle for 20 seconds,
+// and the server to answer until it is stopped.
 import {
   connectResult,
   netAddress,
@@ -48,6 +55,7 @@ import { preforkArgs } from "nish/net/prefork";
 import { Suite } from "nish/testing";
 import { ArenaServer, arenaMain } from "../../../bench/httparena/server";
 import { ZERO, ascii } from "../net_tls_record_common/bytes";
+import { pgStandIn } from "./pg";
 
 const WOULD_BLOCK: i32 = -11;
 const DATASET: string = "tests/link/httparena_entry/dataset.json";
@@ -58,6 +66,25 @@ const JSON_BODY: string =
   '{"id":2,"name":"Pro Valve","category":"tools","price":347,"quantity":95,"active":true,' +
   '"tags":["fast","heavy-duty","new","wireless"],"rating":{"score":15,"count":259},"total":98895}],"count":2}';
 const EMPTY_DB: string = '{"items":[],"count":0}';
+/** /async-db?min=20&max=50&limit=3 over pg.ts's rows: 2 to 4, as row 5, priced 50, is past the limit. */
+const DB_BODY: string =
+  '{"items":[{"id":2,"name":"Item 2","category":"tools","price":20,"quantity":7,"active":true,' +
+  '"tags":["t2", "x"],"rating":{"score":2,"count":14}},' +
+  '{"id":3,"name":"Item 3","category":"toys","price":30,"quantity":8,"active":false,' +
+  '"tags":["t3", "x"],"rating":{"score":3,"count":21}},' +
+  '{"id":4,"name":"Item 4","category":"tools","price":40,"quantity":9,"active":true,' +
+  '"tags":["t4", "x"],"rating":{"score":4,"count":28}}],"count":3}';
+
+/** How many items an /async-db body holds, by its `"id":` keys, or -1 when its `count` is not that. */
+const dbItems = (body: string): i32 => {
+  let n: i32 = 0;
+  let at: i32 = toI32(body.indexOf('{"id":'));
+  while (at >= 0) {
+    n = n + 1;
+    at = toI32(body.indexOf('{"id":', at + 1));
+  }
+  return body.endsWith(`],"count":${n}}`) ? n : toI32(-1);
+};
 
 /** `s` with its ASCII capitals lowered. */
 const lower = (s: string): string => {
@@ -184,6 +211,21 @@ class Conn {
         pause(1);
       }
     }
+  }
+
+  /** Reads what has arrived into `got`, without waiting; true once `got` holds anything. */
+  poll(): boolean {
+    if (!this.ended && pollWait(this.loop, this.ready, ZERO) > 0) {
+      const n: i32 = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
+      if (n > 0) {
+        for (let k: i32 = 0; k < n; k++) {
+          this.got.push(this.buf[k]);
+        }
+      } else if (n !== WOULD_BLOCK) {
+        this.ended = true;
+      }
+    }
+    return toI32(this.got.length) > 0;
   }
 
   /** Reads what arrives within five seconds into `got`; false on a timeout or an end. */
@@ -488,6 +530,9 @@ export const main = (): i32 => {
   if (args.length > 1 && args[1] === "serve") {
     return serve(process.argv);
   }
+  if (args.length > 2 && args[1] === "pg") {
+    return pgStandIn(parseInt(args[2]));
+  }
   const t = new Suite("httparena entry");
   if (platform !== "linux") {
     t.skip("the entry serves", "the entry's server runs on Linux");
@@ -496,11 +541,16 @@ export const main = (): i32 => {
   const fd: i32 = udpBind("127.0.0.1", ZERO, ZERO);
   const udp: i32 = pollCreate();
   pollAdd(udp, fd, 1, ZERO);
+  const pg: i32 = spawn([selfPath(), "pg", `${netLocalPort(fd)}`]);
+  const db: string[] = message(fd, udp, 5000);
+  t.ok("the stand-in PostgreSQL listens", db.length === 2 && db[0] === "pg");
+  if (db.length !== 2) {
+    exitStatus(pg, 0);
+    return t.done();
+  }
   const sup: i32 = spawn([
-    "timeout",
-    "60",
     "env",
-    "DATABASE_URL=postgres://bench:bench@127.0.0.1:1/benchmark",
+    `DATABASE_URL=postgres://bench:bench@127.0.0.1:${db[1]}/benchmark`,
     selfPath(),
     "serve",
     `${netLocalPort(fd)}`,
@@ -516,6 +566,7 @@ export const main = (): i32 => {
   t.ok("the entry starts and listens on both ports", started);
   if (!started) {
     exitStatus(sup, 0);
+    exitStatus(pg, 0);
     return t.done();
   }
   const port: i32 = parseInt(up[1]);
@@ -567,10 +618,11 @@ export const main = (): i32 => {
   );
 
   // --- 3. Pipelined -----------------------------------------------------------------------------
+  // By turns, so an answer out of order or one answered twice is a miss.
   const pipe = new Conn(port);
   const burst: u8[] = [];
   for (let k: i32 = 0; k < 16; k++) {
-    for (const x of get("/pipeline")) {
+    for (const x of get(k % 2 === 0 ? "/pipeline" : `/baseline11?a=${k}&b=100`)) {
       burst.push(x);
     }
   }
@@ -578,11 +630,12 @@ export const main = (): i32 => {
   let oks: i32 = 0;
   for (let k: i32 = 0; k < 16; k++) {
     const r: Response = pipe.response();
-    if (r.status === 200 && r.text() === "ok" && r.field("Content-Type") === "text/plain") {
+    const want: string = k % 2 === 0 ? "ok" : `${k + 100}`;
+    if (r.status === 200 && r.text() === want && r.field("Content-Type") === "text/plain") {
       oks = oks + 1;
     }
   }
-  t.eqI32("16 pipelined /pipeline requests in one write are 16 oks", oks, toI32(16));
+  t.eqI32("16 pipelined requests in one write are answered in the order sent", oks, toI32(16));
   pipe.close();
 
   // --- 4. Overlapping delays --------------------------------------------------------------------
@@ -595,6 +648,22 @@ export const main = (): i32 => {
     c.send(get(`/delay/${200 + 10 * k}`));
     delays.push(c);
   }
+  // Watched together, so each answer's first byte is timed as it comes.
+  const came: i64[] = [];
+  for (let k: i32 = 0; k < 32; k++) {
+    came.push(toI64(-1));
+  }
+  let waiting: i32 = 32;
+  while (waiting > 0 && nowMs() - begun < toI64(5000)) {
+    for (let k: i32 = 0; k < 32; k++) {
+      if (came[k] < 0 && delays[k].poll()) {
+        came[k] = nowMs() - begun;
+        waiting = waiting - 1;
+      }
+    }
+    pause(1);
+  }
+  const took: i64 = nowMs() - begun;
   let answered: i32 = 0;
   let early: i32 = 0;
   for (let k: i32 = 0; k < 32; k++) {
@@ -602,15 +671,15 @@ export const main = (): i32 => {
     if (r.status === 200 && r.text() === `${200 + 10 * k}`) {
       answered = answered + 1;
     }
-    if (nowMs() - begun < toI64(200 + 10 * k)) {
+    if (came[k] < toI64(200 + 10 * k)) {
       early = early + 1;
     }
     delays[k].close();
   }
-  const took: i64 = nowMs() - begun;
   t.eqI32("32 overlapping /delay requests are each answered with their ms", answered, toI32(32));
   t.eqI32("none of them sooner than its ms", early, ZERO);
   t.ok("and all of them in under 3 s, not the 11.5 s their delays add up to", took < toI64(3000));
+  t.eqI32("/delay/abc answers 400", once(port, get("/delay/abc")).status, toI32(400));
 
   // --- 5. json-comp -----------------------------------------------------------------------------
   const plain: Response = once(port, get("/json/2?m=3"));
@@ -628,13 +697,24 @@ export const main = (): i32 => {
   const n: i32 = gzipDecompress(packed.body, ZERO, toI32(packed.body.length), inflated, ZERO, toI32(4096));
   t.eqStr("whose inflation is the uncompressed body", text(inflated, ZERO, n), JSON_BODY);
   t.ok("and smaller than it", toI32(packed.body.length) < toI32(JSON_BODY.length));
+  t.eqI32("/json/abc answers 400", once(port, get("/json/abc")).status, toI32(400));
+  const big: Response = once(port, get("/json/1?m=999999999999999999"));
+  t.ok("an m of 18 digits is capped at a million", big.text().indexOf('"total":4920000000}') > 0);
 
-  // --- 6. async-db, its database refusing ---------------------------------------------------------
-  const db: Response = once(port, get("/async-db?min=10&max=50&limit=5"));
-  t.eqI32("/async-db with its database refusing answers 200", db.status, toI32(200));
-  t.eqStr("with no items", db.text(), EMPTY_DB);
-  t.eqStr("as application/json", db.field("Content-Type"), "application/json");
-  t.eqStr("and without its parameters too", once(port, get("/async-db")).text(), EMPTY_DB);
+  // --- 6. async-db --------------------------------------------------------------------------------
+  const rows: Response = once(port, get("/async-db?min=20&max=50&limit=3"));
+  t.eqI32("/async-db answers 200", rows.status, toI32(200));
+  t.eqStr("with the rows priced in [min, max], up to the limit, as the exact body", rows.text(), DB_BODY);
+  t.eqStr("as application/json", rows.field("Content-Type"), "application/json");
+  const plainDb: string = once(port, get("/async-db")).text();
+  t.eqI32("without parameters, min 10, max 50 and limit 50", dbItems(plainDb), toI32(5));
+  t.ok("from the first row", plainDb.startsWith('{"items":[{"id":1,'));
+  t.eqI32("a limit of 500 is 50", dbItems(once(port, get("/async-db?min=0&max=1000&limit=500")).text()), toI32(50));
+  t.eqI32("and one of 0 is 1", dbItems(once(port, get("/async-db?min=0&max=1000&limit=0")).text()), toI32(1));
+  const refused: Response = once(port, get("/async-db?min=13&max=50&limit=5"));
+  t.eqI32("with the query refused it answers 200", refused.status, toI32(200));
+  t.eqStr("with no items", refused.text(), EMPTY_DB);
+  t.eqStr("and the next query is answered again", once(port, get("/async-db?min=20&max=50&limit=3")).text(), DB_BODY);
 
   // --- 7. 404 -----------------------------------------------------------------------------------
   t.eqI32("another path answers 404", once(port, get("/nothing")).status, toI32(404));
@@ -658,6 +738,7 @@ export const main = (): i32 => {
   const done: string[] = message(fd, udp, 5000);
   t.ok("SIGTERM stops the server", done.length === 2 && done[0] === "done" && parseInt(done[1]) > 0);
   t.eqI32("and it exits 0", exitStatus(sup, 5000), ZERO);
+  exitStatus(pg, 0);
   netClose(udp);
   netClose(fd);
   return t.done();

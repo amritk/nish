@@ -44,6 +44,8 @@ const BACKLOG: i32 = 4096
 const SIGNAL_ID: i32 = 0
 /** The longest `/delay/{ms}` honoured, in milliseconds; a longer one waits this long. */
 const DELAY_CAP_MS: i32 = 10000
+/** The largest `/json` `m` honoured either way; a larger one is this, so a total stays far inside i64. */
+const MULTIPLIER_CAP: i64 = 1000000
 /** The JSON answer buffer: 50 items are under 16 KiB. */
 const JSON_BYTES: i32 = 65536
 
@@ -252,6 +254,12 @@ export class ArenaServer {
     }
   }
 
+  /** Answers 400 with no body: a path parameter that is not a number. */
+  badRequest(r: HttpServerRequest): void {
+    this.h.send(r, 400, this.textType, this.okBody, 0, 0)
+    this.answered += 1
+  }
+
   /** Answers 200 `text/plain` with the decimal `v`. */
   sendNumber(r: HttpServerRequest, v: i64): void {
     const text: string = `${v}`
@@ -293,7 +301,8 @@ export class ArenaServer {
       case DELAY: {
         let ms: i32 = r.paramDecimal(0)
         if (ms < 0) {
-          ms = 0
+          this.badRequest(r)
+          break
         }
         if (ms > DELAY_CAP_MS) {
           ms = DELAY_CAP_MS
@@ -327,12 +336,19 @@ export class ArenaServer {
   json(r: HttpServerRequest): void {
     let count: i32 = r.paramDecimal(0)
     if (count < 0) {
-      count = 0
+      this.badRequest(r)
+      return
     }
     if (count > this.data.size()) {
       count = this.data.size()
     }
-    const m: i64 = this.queryDecimal(r, "m", 1)
+    let m: i64 = this.queryDecimal(r, "m", 1)
+    if (m > MULTIPLIER_CAP) {
+      m = MULTIPLIER_CAP
+    }
+    if (m < -MULTIPLIER_CAP) {
+      m = -MULTIPLIER_CAP
+    }
     const w: JsonWriter = this.out
     w.reset(w.buf, 0)
     w.beginObject()
@@ -377,6 +393,10 @@ export class ArenaServer {
     w.endObject()
     const len: i32 = w.end
     this.answered += 1
+    if (w.failed !== 0 || !w.complete()) {
+      this.h.send(r, 500, this.textType, this.okBody, 0, 0)
+      return
+    }
     const i: i32 = r.header("accept-encoding")
     if (r.version === 1 && i !== HANDLER_ABSENT) {
       const coding: i32 = httpAcceptEncoding(r.head, r.valueStart(i), r.valueEnd(i), HTTP_OFFER_GZIP)
