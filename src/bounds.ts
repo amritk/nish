@@ -163,7 +163,7 @@ import {
   simdSuffix,
   simdTypeLane,
 } from "./nish-modules"
-import { isSpawnEntry, isVoidSpawn, parallelRoleOf } from "./parallel"
+import { isAtomicArrayMethod, isAtomicArrayType, isSpawnEntry, isVoidSpawn, parallelRoleOf } from "./parallel"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import {
   DeclaredRange,
@@ -1020,13 +1020,22 @@ const localOf = (program: CheckedProgram, expr: Node): Local | null => {
   return program.nodeLocals[e.id]
 }
 
-/** A local whose value is a thing with a `.length`: an array or a string. */
+/**
+ * Whether a value of `type` has a `.length` an index is checked against: an
+ * array, a string, or an atomic array (`AtomicI32Array`, `AtomicI64Array`),
+ * whose `length` is readonly and is its buffer's, so a fact about it holds
+ * until the holder itself is assigned.
+ */
+const hasIndexLength = (ctx: CheckContext, type: i32): boolean =>
+  ctx.table.isArray(type) || type === T_STRING || isAtomicArrayType(ctx.program, ctx.table, type)
+
+/** A local whose value is a thing with a `.length`: an array, a string or an atomic array. */
 const lengthHolder = (ctx: CheckContext, expr: Node): Local | null => {
   const v = localOf(ctx.program, expr)
   if (v === null) {
     return null
   }
-  return ctx.table.isArray(v.type) || v.type === T_STRING ? v : null
+  return hasIndexLength(ctx, v.type) ? v : null
 }
 
 /**
@@ -1056,7 +1065,7 @@ export class PathHolder {
 /**
  * The stand-in for the path `expr` spells, or `null` when it is not one a fact
  * may be keyed by: a root local, parameter or `this`, then one or more field
- * reads, ending in an array or a string.
+ * reads, ending in an array, a string or an atomic array.
  *
  * Every link is resolved on the **declared** type, the root's included — the
  * type a `Local` carries rather than the one `nodeTypes` recorded at this use.
@@ -1075,7 +1084,7 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
   const fields: string[] = []
   const links: i32[] = []
   const type = declaredPathType(walk.ctx, expr, fields, links)
-  if (fields.length === 0 || type < 0 || (!walk.ctx.table.isArray(type) && type !== T_STRING)) {
+  if (fields.length === 0 || type < 0 || !hasIndexLength(walk.ctx, type)) {
     return null
   }
   // `declaredPathType` answered, so `e` is an identifier or `this` with a local.
@@ -3036,6 +3045,20 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
 }
 
 /**
+ * `a.load(i)`, `a.add(i, v)` or another element method of an `AtomicI32Array`
+ * or `AtomicI64Array`, whose emitted body checks `i` against the array's
+ * `length` as `a[i]` is checked: its index is judged at the call, against the
+ * receiver's `length` (#2206).
+ */
+const isAtomicElementCall = (ctx: CheckContext, call: Node): boolean => {
+  const target = ctx.program.nodeCallees[call.id]
+  if (target === null || !isAtomicArrayMethod(target)) {
+    return false
+  }
+  return unwrapBoundsParens(call.children[0]).kind === NodeKind.Member && call.children[1].children.length > 0
+}
+
+/**
  * `s.spawn(entry, arg, dst, at)`, the four-argument form, whose task stores
  * into `dst[at]` when its scope joins: its slot is judged at the call as that
  * index would be (`PANIC_SPAWN_SLOT` in `src/panics.ts`). The destination
@@ -3697,7 +3720,13 @@ const judge = (
   // A path receiver is proved when it can be and never warned about: the
   // warning's rewrite is a local, and a field receiver was not a candidate
   // before paths were.
-  if (walk.loops === 0 || lengthHolder(ctx, receiver) === null) {
+  // An atomic array's element call is not one either: the warning names an
+  // element access, and the check it keeps is in the method's body.
+  if (
+    walk.loops === 0 ||
+    lengthHolder(ctx, receiver) === null ||
+    (node.kind === NodeKind.Call && isAtomicElementCall(ctx, node))
+  ) {
     return
   }
   // A local and an offset from one are the indices a guard can prove, so they
@@ -4256,6 +4285,9 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     }
     if (isSlotSpawn(ctx, e)) {
       judge(walk, state, e, e.children[1].children[2], e.children[1].children[3], true)
+    }
+    if (isAtomicElementCall(ctx, e)) {
+      judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
     if (isParallelMapInto(ctx, e)) {
       judgeParallelLength(walk, state, e)
@@ -5473,7 +5505,8 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
  * `judgeDivision`, `judgePop`, `judgeRangeCheck` or `judgeArrayLength` is ever
  * called on: an element access, a call spelled `.charCodeAt(...)`,
  * `.substring(...)`, `.pop()`, `.spawn(...)`, `.slice(...)`, `.set(...)` or
- * `.fromBytes(...)` whatever its receiver, a buffer call, a `new`, a
+ * `.fromBytes(...)` whatever its receiver, an atomic array's element method,
+ * a buffer call, a `new`, a
  * division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
@@ -5500,7 +5533,7 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
     }
     // An array's `slice`, once the checker has rewritten it into a template call.
     const target = ctx.program.nodeCallees[node.id]
-    if (target !== null && isArraySliceInstance(target)) {
+    if (target !== null && (isArraySliceInstance(target) || isAtomicArrayMethod(target))) {
       return true
     }
   }
@@ -6646,7 +6679,7 @@ const couldProve = (ctx: CheckContext, receiver: Node, index: Node): boolean => 
   const fields: string[] = []
   const links: i32[] = []
   const type = declaredPathType(ctx, receiver, fields, links)
-  return fields.length > 0 && type >= 0 && (ctx.table.isArray(type) || type === T_STRING)
+  return fields.length > 0 && type >= 0 && hasIndexLength(ctx, type)
 }
 
 /** A value no call can reach memory through: a number, a boolean or a string, which is immutable. */

@@ -4444,7 +4444,17 @@ export const main = (): i32 => {
 - **An index is checked as an array index is**: one out of range stops the
   program with `index out of range: 16 >= 16` and exit status 1, and never
   touches memory outside the buffer (`tests/link/atomic_array_out_of_range`).
-  The check is an ordinary one, which the prover may discharge.
+  The check is judged at each call, as `a[i]` would be judged there: a call
+  under `i >= 0 && i < a.length`, or in a loop that keeps `i < a.length`, is a
+  proven `index` site of its caller, so `--deny-panics` accepts it
+  (`tests/link/atomic_index_proven`). Each fact is needed: a call with only
+  the lower bound, only the upper bound, or the upper bound against another
+  array's `length` stays unproven and is refused (`atomic_index_no_lower`,
+  `atomic_index_no_upper`, `atomic_index_other_length`, and
+  `atomic_index_unproven` with no guard at all). The method itself still
+  lists its own `index` site, at its declaration, since its body is the
+  check; a caller does not inherit it (`callerProven`), so the call is
+  refused or accepted on its own proof, not as a `call` into the method.
 - **Natively each method is the bounds check and then one instruction** on a
   `getelementptr` into the buffer: a `load atomic` or `store atomic ...
   seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a

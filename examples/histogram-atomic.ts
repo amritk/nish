@@ -1,18 +1,13 @@
-// Opt-out (`--allow-panics`), for two `src/` gaps and one kept panic, none of
-// them a site of this file's.
-// The compiler writes `AtomicI32Array`'s element methods itself and records
-// one `index` site at each method's declaration (src/attributes.ts, "An
-// atomic's method"), so `add` (std/threads.ts:863:3), `load` (841:3) and every
-// `spawn` of a task that calls `add` reach a site no caller's guard removes:
-// `load` below already runs under `b < bins.length`, and wrapping each `add`
-// in `if (b >= 0 && b < s.bins.length)` leaves the same errors (#2206). And
-// `new AtomicI32Array(BINS)` reaches the constructor's `array-length` site
-// (826:21), which the compiler decides by the length's type alone (#2207,
-// proved by #2279). And the constructor keeps `negativeAtomicLength`'s panic
-// (790:3), a kept contract panic for a negative length that `BINS` never is,
-// which a caller's proof cannot discharge either (`callerProven`,
-// src/attributes.ts): so this file keeps `--allow-panics` even once #2206 and
-// #2207 are closed.
+// Opt-out (`--allow-panics`), for one kept panic that is not a site of this
+// file's. Every `AtomicI32Array` index here is proven at its call, as `a[i]`
+// would be (docs/LANGUAGE.md, "Atomic arrays"; #2206): the `load` under
+// `b < bins.length`, the `add` in `binShard`'s loop that tests `s.bins.length`
+// too, and the `add` in `binPerValue` under `bin < s.bins.length`. And
+// `new AtomicI32Array(BINS)`'s `array-length` site (std/threads.ts:826:21) is
+// proven by the length's type (#2279). What is left is the constructor's call
+// to `negativeAtomicLength` (790:3), a kept contract panic for a negative
+// length that `BINS` never is, which a caller's proof cannot discharge
+// (`callerProven`, src/attributes.ts): so this file keeps `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
@@ -82,7 +77,8 @@ const binShard = (s: Shard): i32 => {
       local[bin] += 1
     }
   }
-  for (let b: i32 = 0; b < toI32(local.length); b++) {
+  // Both lengths are BINS; testing the bins' own proves the `add`'s index.
+  for (let b: i32 = 0; b < toI32(local.length) && b < s.bins.length; b++) {
     s.bins.add(b, toI32(local[b]))
   }
   return s.n
@@ -96,7 +92,10 @@ const binPerValue = (s: Shard): i32 => {
     x = x ^ (x >>> 17)
     x = x ^ (x << 5)
     const bin: i32 = x >>> 24
-    s.bins.add(bin, ONE)
+    // Never false: `x >>> 24` is below 256, which is BINS; the test proves the index.
+    if (bin < s.bins.length) {
+      s.bins.add(bin, ONE)
+    }
   }
   return s.n
 }

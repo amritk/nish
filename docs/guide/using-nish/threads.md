@@ -1019,7 +1019,12 @@ route 3: 1 hits, 64 bytes
 - **An index out of range is never used**, as for any array: by default the
   compiler refuses an index it cannot prove in range, and under
   `--allow-panics` the index is checked while the program runs and one out
-  of range stops it: `index out of range: 16 >= 16`, exit status 1.
+  of range stops it: `index out of range: 16 >= 16`, exit status 1. The
+  guards that prove an array index prove this one: a loop over
+  `r < hits.length`, as the example's last loop is, or a test of
+  `i >= 0 && i < hits.length` around the call. Test the same array's
+  `length`: another array's proves nothing about this one, so that loop
+  proves `hits.load(r)` but not `bytes.load(r)`.
 - **The rules are the atomic's.** Only call its methods; don't touch it in the
   scope's block once the first task is spawned; scopes opened by one `using`
   don't share one; make the updates commute. An `AtomicI64Array` holds `i64`s
