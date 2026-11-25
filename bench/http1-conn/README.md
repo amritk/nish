@@ -428,7 +428,8 @@ floor (±1 byte):
 
 On the default config an idle keep-alive connection therefore goes from
 4,258 bytes (idleInput off on the base) to 1,215 (on, now the default), 3.5x
-less. In the arena, `tests/link/net_http1_server/startup.ts` reads 3,384
+less. (Not reproduced against this base on 2026-11-25: see
+"Measured: idle memory and the codec's cost per request" below.) In the arena, `tests/link/net_http1_server/startup.ts` reads 3,384
 bytes for a connection that has served four GETs and parked on the base,
 2,232 with the trims and idleInput off, and 904 with it on; that last figure
 is `HTTP1_SERVER_IDLE_BYTES`'s measurement.
@@ -509,7 +510,8 @@ not the difference below. `new` is about 113 bytes under `old` in every row.
 1,202, 1,386, 3,071 and 3,255, so the four-request rows are 1,000 bytes
 apart, and its headline "4,258 to 1,215, 3.5x" does not hold against this
 base. The base `e0a1661e3` (the parent of #1552's squash) and `96a38347` (at
-2,000 connections) give 1,386 and about 1,450 for the same row: no base
+2,000 connections, see the note below) give 1,386 and about 1,450 for the same
+row: no base
 tried gives the 11-13 figures. Its `new` column (1,215) is also 58 bytes
 under today's 1,273; that is later main, not bisected. Which run is right is
 not settled here; the 11-13 figures stay as recorded, unreproduced, and this
@@ -517,7 +519,10 @@ section's are the ones a reader can rerun with the commands above.
 
 A base before `netWrite2` builds: `--base v0.34.1` and the default
 `96a38347484f` each ran `--shape rss --rss 1 --connections 2000` to the end
-(v0.34.1: 1,268 and 1,460 for the idleInput rows on `old`).
+(v0.34.1: 1,268 and 1,460 for the idleInput rows on `old`). These 2,000-connection
+runs, and the 1,386 and about 1,450 above, are single runs that show a base
+builds and reads near these figures; they are not comparable to the
+50,000-connection tables and are not counted in the figures below.
 
 Figures: 63 numbers in the tables (27 timing and 36 memory medians and
 ranges) and 6 timing ratios, each checked against the recorded runs' printed
