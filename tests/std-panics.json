@@ -4,7 +4,7 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 1521,
+  "total": 1477,
   "explicit": {
     "kept": 363,
     "toFix": 9
@@ -58,7 +58,7 @@
       "overflow": 8
     },
     "std/crypto/chacha20poly1305.ts": {
-      "array-length": 4,
+      "array-length": 2,
       "index": 16,
       "overflow": 19
     },
@@ -66,11 +66,9 @@
       "panic": 14
     },
     "std/crypto/hmac.ts": {
-      "array-length": 1,
       "panic": 10
     },
     "std/crypto/jwt.ts": {
-      "array-length": 3,
       "panic": 1
     },
     "std/crypto/p256.ts": {
@@ -91,18 +89,9 @@
     "std/crypto/x509-random.ts": {
       "io-exit": 2
     },
-    "std/crypto/x509.ts": {
-      "slice": 1
-    },
-    "std/host/text.ts": {
-      "slice": 1
-    },
     "std/json-equal.ts": {
       "index": 4,
       "pop": 2
-    },
-    "std/json-number.ts": {
-      "slice": 1
     },
     "std/json-tokenizer.ts": {
       "slice": 1
@@ -111,8 +100,7 @@
       "slice": 3
     },
     "std/json-value.ts": {
-      "array-length": 1,
-      "slice": 2
+      "array-length": 1
     },
     "std/math.ts": {
       "index": 6,
@@ -134,7 +122,7 @@
     "std/net/dns.ts": {
       "io-exit": 1,
       "panic": 4,
-      "slice": 4
+      "slice": 3
     },
     "std/net/fetch.ts": {
       "io-exit": 3,
@@ -198,15 +186,15 @@
     "std/net/postgres-async.ts": {
       "io-exit": 1,
       "panic": 10,
-      "slice": 14
+      "slice": 10
     },
     "std/net/postgres-carrier.ts": {
       "io-exit": 4,
       "panic": 12,
-      "slice": 6
+      "slice": 5
     },
     "std/net/postgres.ts": {
-      "array-length": 27,
+      "array-length": 23,
       "index": 16,
       "panic": 44,
       "slice": 12
@@ -231,13 +219,12 @@
       "panic": 6
     },
     "std/net/serve.ts": {
-      "array-length": 3,
       "panic": 3,
       "slice": 8
     },
     "std/net/static.ts": {
       "panic": 1,
-      "slice": 4
+      "slice": 3
     },
     "std/net/tls-tcp.ts": {
       "io-exit": 3,
@@ -255,12 +242,12 @@
     },
     "std/net/upstream.ts": {
       "panic": 4,
-      "slice": 3
+      "slice": 1
     },
     "std/net/url.ts": {
-      "array-length": 3,
+      "array-length": 2,
       "panic": 2,
-      "slice": 7
+      "slice": 6
     },
     "std/net/websocket.ts": {
       "panic": 2
@@ -307,7 +294,7 @@
       "slice": 7
     },
     "std/term-io.ts": {
-      "slice": 3
+      "slice": 2
     },
     "std/term-pixels.ts": {
       "array-length": 6,
@@ -325,10 +312,9 @@
     },
     "std/text.ts": {
       "panic": 1,
-      "slice": 2
+      "slice": 1
     },
     "std/threads.ts": {
-      "array-length": 2,
       "index": 32,
       "overflow": 4,
       "panic": 4
@@ -341,11 +327,10 @@
       "overflow": 12
     },
     "std/yaml-write.ts": {
-      "overflow": 13,
-      "slice": 1
+      "overflow": 13
     },
     "std/yaml.ts": {
-      "array-length": 13,
+      "array-length": 3,
       "index": 12,
       "overflow": 275,
       "panic": 1,

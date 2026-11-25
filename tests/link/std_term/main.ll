@@ -209,7 +209,6 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #5
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
@@ -2383,126 +2382,114 @@ cond.end.1:
   %1013 = load i64, i64* %1012, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %1014 = trunc i64 %1013 to i32
   %1015 = sext i32 %1014 to i64
-  %1016 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1010, i64 0, i32 0
-  %1017 = load i64, i64* %1016, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %1018 = icmp ule i64 0, %1015
-  %1019 = icmp ule i64 %1015, %1017
-  %1020 = and i1 %1018, %1019
-  br i1 %1020, label %bytes.ok, label %bytes.fail
-
-bytes.fail:
-  call void @nish_panic_slice(i64 0, i64 %1015, i64 %1017)
-  unreachable
-
-bytes.ok:
-  %1021 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1010, i64 0, i32 2
-  %1022 = load i8*, i8** %1021, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %1023 = getelementptr inbounds i8, i8* %1022, i64 0
-  %1024 = sub i64 %1015, 0
-  %1025 = call i8* @nish_str_new(i8* %1023, i64 %1024)
-  %1026 = call i32 @nish.Screen.text(%struct.Screen* %1009, i32 0, i32 0, i8* %1025, i32 -1, i32 -1, i32 0)
-  store i32 %1026, i32* %badDrawn.addr, align 4
-  %1027 = bitcast i8* bitcast ({ i64, [4 x i8] }* @.str.130 to i8*) to i64*
-  %1028 = load i64, i64* %1027, align 8
-  %1029 = trunc i64 %1028 to i32
-  %1030 = icmp eq i32 %1029, 3
-  store i1 %1030, i1* %native.addr, align 1
-  %1031 = load i32, i32* %badDrawn.addr, align 4
-  %1032 = icmp eq i32 %1031, 8
-  br i1 %1032, label %land.rhs.7, label %land.end.7
+  %1016 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1010, i64 0, i32 2
+  %1017 = load i8*, i8** %1016, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %1018 = getelementptr inbounds i8, i8* %1017, i64 0
+  %1019 = sub i64 %1015, 0
+  %1020 = call i8* @nish_str_new(i8* %1018, i64 %1019)
+  %1021 = call i32 @nish.Screen.text(%struct.Screen* %1009, i32 0, i32 0, i8* %1020, i32 -1, i32 -1, i32 0)
+  store i32 %1021, i32* %badDrawn.addr, align 4
+  %1022 = bitcast i8* bitcast ({ i64, [4 x i8] }* @.str.130 to i8*) to i64*
+  %1023 = load i64, i64* %1022, align 8
+  %1024 = trunc i64 %1023 to i32
+  %1025 = icmp eq i32 %1024, 3
+  store i1 %1025, i1* %native.addr, align 1
+  %1026 = load i32, i32* %badDrawn.addr, align 4
+  %1027 = icmp eq i32 %1026, 8
+  br i1 %1027, label %land.rhs.7, label %land.end.7
 
 land.rhs.7:
-  %1033 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1034 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1033, i32 0, i32 0)
-  %1035 = icmp eq i32 %1034, 65533
+  %1028 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1029 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1028, i32 0, i32 0)
+  %1030 = icmp eq i32 %1029, 65533
   br label %land.end.7
 
 land.end.7:
-  %1036 = phi i1 [ false, %bytes.ok ], [ %1035, %land.rhs.7 ]
-  br i1 %1036, label %land.rhs.6, label %land.end.6
+  %1031 = phi i1 [ false, %cond.end.1 ], [ %1030, %land.rhs.7 ]
+  br i1 %1031, label %land.rhs.6, label %land.end.6
 
 land.rhs.6:
-  %1037 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1038 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1037, i32 1, i32 0)
-  %1039 = icmp eq i32 %1038, 65533
+  %1032 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1033 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1032, i32 1, i32 0)
+  %1034 = icmp eq i32 %1033, 65533
   br label %land.end.6
 
 land.end.6:
-  %1040 = phi i1 [ false, %land.end.7 ], [ %1039, %land.rhs.6 ]
-  br i1 %1040, label %land.rhs.5, label %land.end.5
+  %1035 = phi i1 [ false, %land.end.7 ], [ %1034, %land.rhs.6 ]
+  br i1 %1035, label %land.rhs.5, label %land.end.5
 
 land.rhs.5:
-  %1041 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1042 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1041, i32 2, i32 0)
-  %1043 = icmp eq i32 %1042, 65
+  %1036 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1037 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1036, i32 2, i32 0)
+  %1038 = icmp eq i32 %1037, 65
   br label %land.end.5
 
 land.end.5:
-  %1044 = phi i1 [ false, %land.end.6 ], [ %1043, %land.rhs.5 ]
-  br i1 %1044, label %land.rhs.4, label %land.end.4
+  %1039 = phi i1 [ false, %land.end.6 ], [ %1038, %land.rhs.5 ]
+  br i1 %1039, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %1045 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1046 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1045, i32 3, i32 0)
-  %1047 = icmp eq i32 %1046, 55296
+  %1040 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1041 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1040, i32 3, i32 0)
+  %1042 = icmp eq i32 %1041, 55296
   br label %land.end.4
 
 land.end.4:
-  %1048 = phi i1 [ false, %land.end.5 ], [ %1047, %land.rhs.4 ]
-  br i1 %1048, label %land.rhs.3, label %land.end.3
+  %1043 = phi i1 [ false, %land.end.5 ], [ %1042, %land.rhs.4 ]
+  br i1 %1043, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %1049 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1050 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1049, i32 4, i32 0)
-  %1051 = icmp eq i32 %1050, 65533
+  %1044 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1045 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1044, i32 4, i32 0)
+  %1046 = icmp eq i32 %1045, 65533
   br label %land.end.3
 
 land.end.3:
-  %1052 = phi i1 [ false, %land.end.4 ], [ %1051, %land.rhs.3 ]
-  br i1 %1052, label %land.rhs.2, label %land.end.2
+  %1047 = phi i1 [ false, %land.end.4 ], [ %1046, %land.rhs.3 ]
+  br i1 %1047, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %1053 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1054 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1053, i32 5, i32 0)
-  %1055 = icmp eq i32 %1054, 66
+  %1048 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1049 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1048, i32 5, i32 0)
+  %1050 = icmp eq i32 %1049, 66
   br label %land.end.2
 
 land.end.2:
-  %1056 = phi i1 [ false, %land.end.3 ], [ %1055, %land.rhs.2 ]
-  br i1 %1056, label %land.rhs.1, label %land.end.1
+  %1051 = phi i1 [ false, %land.end.3 ], [ %1050, %land.rhs.2 ]
+  br i1 %1051, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %1057 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1058 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1057, i32 6, i32 0)
-  %1059 = icmp eq i32 %1058, 65533
+  %1052 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1053 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1052, i32 6, i32 0)
+  %1054 = icmp eq i32 %1053, 65533
   br label %land.end.1
 
 land.end.1:
-  %1060 = phi i1 [ false, %land.end.2 ], [ %1059, %land.rhs.1 ]
-  br i1 %1060, label %land.rhs, label %land.end
+  %1055 = phi i1 [ false, %land.end.2 ], [ %1054, %land.rhs.1 ]
+  br i1 %1055, label %land.rhs, label %land.end
 
 land.rhs:
-  %1061 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
-  %1062 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1061, i32 7, i32 0)
-  %1063 = icmp eq i32 %1062, 65533
+  %1056 = load %struct.Screen*, %struct.Screen** %b.addr, align 8
+  %1057 = call i32 @nish.Screen.glyphAt(%struct.Screen* %1056, i32 7, i32 0)
+  %1058 = icmp eq i32 %1057, 65533
   br label %land.end
 
 land.end:
-  %1064 = phi i1 [ false, %land.end.1 ], [ %1063, %land.rhs ]
-  store i1 %1064, i1* %decoded.addr, align 1
-  %1065 = load i1, i1* %native.addr, align 1
-  %1066 = xor i1 %1065, true
-  br i1 %1066, label %lor.end, label %lor.rhs
+  %1059 = phi i1 [ false, %land.end.1 ], [ %1058, %land.rhs ]
+  store i1 %1059, i1* %decoded.addr, align 1
+  %1060 = load i1, i1* %native.addr, align 1
+  %1061 = xor i1 %1060, true
+  br i1 %1061, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %1067 = load i1, i1* %decoded.addr, align 1
+  %1062 = load i1, i1* %decoded.addr, align 1
   br label %lor.end
 
 lor.end:
-  %1068 = phi i1 [ true, %land.end ], [ %1067, %lor.rhs ]
-  %1069 = select i1 %1068, i8* bitcast ({ i64, [5 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.33 to i8*)
-  %1070 = call i8* @nish_str_concat(i8* bitcast ({ i64, [32 x i8] }* @.str.131 to i8*), i8* %1069)
-  call void @nish_print(i8* %1070)
+  %1063 = phi i1 [ true, %land.end ], [ %1062, %lor.rhs ]
+  %1064 = select i1 %1063, i8* bitcast ({ i64, [5 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.33 to i8*)
+  %1065 = call i8* @nish_str_concat(i8* bitcast ({ i64, [32 x i8] }* @.str.131 to i8*), i8* %1064)
+  call void @nish_print(i8* %1065)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 
