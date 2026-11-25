@@ -12185,6 +12185,7 @@ const DECLARED = [
       "tests/link/net_static/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
       "tests/link/std_compress_checked_sums/main.ts": ["main.h"],
       "tests/link/std_compress_gzip_errors/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
+      "tests/link/std_compress_sweep/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
       "tests/link/std_http1_config_checked/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
     }
   ),
