@@ -779,8 +779,15 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * own measured ceiling, never a raised one. Apart, a program that searches text carries
  * no JSON run and one that tokenizes JSON no byte-set search. The budget is the next
  * 256-byte boundary above the measurement, as every ceiling here was set.
+ * **2,961 bytes** on 2026-11-25 with clang 18.1.3 on linux-x64, 1,891 before, with
+ * `nish_json_put_string`, `nish/json`'s `jsonPutString` (2,048 to 3,072): its 964, the
+ * SSE2 and NEON finds of the next byte to escape, a 4- to 16-byte overlapping copy of
+ * the run before it and the escape itself, all inlined into the one entry point; and
+ * `nish_plain_base` 110 to 216, whose last partial block is now one overlapping load
+ * rather than a byte loop. It is a fifth class beside the four, so no program that
+ * does not write JSON strings this way carries more than the base path's growth.
  */
-const RUNTIME_BYTES_TEXT_BUDGET = 2048
+const RUNTIME_BYTES_TEXT_BUDGET = 3072
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sandbox.c`
  * -- the confinement `--sandbox` applies (WP37, docs/security/sandbox.md):

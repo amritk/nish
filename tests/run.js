@@ -47371,6 +47371,71 @@ if (!only || "json_f64_seam".includes(only)) {
   )
 }
 
+// The string seam: a native `jsonPutString` copies and escapes through
+// `nish_json_put_string` (runtime/runtime-bytes.c), sixteen bytes a block,
+// where the Nish body, `jsonPutStringWalk` in std/json.ts, goes a byte at a
+// time. `tests/link/std_json_writer/put-string.ts` compares it with
+// `JsonWriter.stringBytes` on every byte value at every offset of strings up
+// to 40 bytes and on 2,000 pseudo-random strings, each also into a
+// destination one byte short; the native build and the Node prelude must
+// print `put-string.out`, and std/json's IR must make the call.
+if (!only || "json_string_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "put-string.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "put-string.ts"), [])
+  check(
+    "json_string_seam: put-string.ts under the Node prelude runs jsonPutStringWalk and prints put-string.out",
+    node.status === 0 && node.stdout === want,
+    `--- put-string.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_string_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnNish([path.join(dir, "put-string.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const put = ir.match(/^define [^\n]*@nish\.jsonPutString\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_string_seam: std/json's jsonPutString calls nish_json_put_string and not its walk",
+    built.status === 0 &&
+      put.includes("call i32 @nish_json_put_string(i8* ") &&
+      !put.includes("jsonPutStringWalk") &&
+      ir.includes(
+        "declare i32 @nish_json_put_string(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, i8* noundef nocapture readonly, i64 noundef, i64 noundef)"
+      ),
+    built.status === 0 ? put || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_string_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_string_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_string_seam: put-string.ts built natively writes through the kernel and prints put-string.out",
+      native.status === 0 && native.stdout === want,
+      `--- put-string.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_string_seam: no clang, so put-string.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_string_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnNish(["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_string_seam: std/json.ts compiled as a root is an ordinary module, so jsonPutString calls its walk and not the kernel",
+    asRoot.status === 0 && rootIr.includes("call i32 @jsonPutStringWalk(") && !rootIr.includes("nish_json_put_string"),
+    asRoot.status === 0 ? rootIr.slice(0, 2000) : asRoot.stderr
+  )
+}
+
 // Typed JSON (`nish/json-typed`) against Node's own parser and writer: each
 // line of `round-trip.txt` decoded into a `Match` and encoded back by the
 // native program must be `JSON.stringify(JSON.parse(line))`, computed here.

@@ -11680,6 +11680,9 @@ const cursorReadRow = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: CURSOR_READ_ROW, why }))
   )
 
+/** The release-note words of `jsonPutString` (std/json.ts). */
+const JSON_PUT_STRING = "jsonPutString"
+
 const DECLARED = [
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
@@ -23390,6 +23393,14 @@ const DECLARED = [
       "tests/link/sync_shm_window/main.ts": ["testing.ll"],
     }
   ),
+  // `jsonPutString` is exported from std/json.ts and its walk is lowered to
+  // the runtime's `nish_json_put_string`, so every json.ll a program writes
+  // declares the kernel and defines the new function, and the module moves.
+  {
+    file: "json.ll",
+    changelog: JSON_PUT_STRING,
+    why: "std/json.ts gains jsonPutString, whose walk a native build lowers to the runtime's nish_json_put_string, so every json.ll declares the kernel and defines it, and the module moves",
+  },
 ]
 
 /**
