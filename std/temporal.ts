@@ -77,8 +77,14 @@ const TEMPORAL_MIN_EPOCH_DAY: i64 = -100000001
 /** The largest magnitude of a duration's normalized seconds: 2^53 - 1. */
 const TEMPORAL_MAX_DURATION_SECONDS: i64 = 9007199254740991
 
+/** The negation of `TEMPORAL_MAX_DURATION_SECONDS`. */
+const TEMPORAL_MIN_DURATION_SECONDS: i64 = -9007199254740991
+
 /** The bound on `years`, `months` and `weeks`: 2^32, exclusive. */
 const TEMPORAL_MAX_CALENDAR_FIELD: i64 = 4294967296
+
+/** The negation of `TEMPORAL_MAX_CALENDAR_FIELD`, the bound below. */
+const TEMPORAL_MIN_CALENDAR_FIELD: i64 = -4294967296
 
 /** The units, smallest first, so that "larger" is `>`. */
 const TEMPORAL_UNIT_NANOSECOND: i32 = 0
@@ -126,6 +132,15 @@ const temporalSub = (a: i64, b: i64): i64 => {
   }
   return r
 }
+
+/**
+ * A `Duration` field negated. The constructor refuses the least `i64` in every
+ * field, so the wrapping negation is exact.
+ */
+const temporalNegField = (x: i64): i64 => toI64(0 - toU64(x))
+
+/** The magnitude of a `Duration` field `x` whose sign is negative when `negative`. */
+const temporalMagnitude = (x: i64, negative: boolean): i64 => (negative ? temporalNegField(x) : x)
 
 /** `x` negated when `negative`, raising a `RangeError` where that leaves the i64 range. */
 const temporalSigned = (x: i64, negative: boolean): i64 => (negative ? temporalSub(0, x) : x)
@@ -1592,10 +1607,10 @@ export class PlainDate {
     // the 52-or-53 question is asked only there. The checked year is far
     // inside `i32`, so the year either side of it is exact.
     if (week < 1) {
-      weekYear = toI32(y - 1)
+      weekYear = toI32(toI64(isoYear) - 1)
       week = temporalWeeksInYear(weekYear)
     } else if (week === 53 && temporalWeeksInYear(isoYear) === 52) {
-      weekYear = toI32(y + 1)
+      weekYear = toI32(toI64(isoYear) + 1)
       week = 1
     }
     this.year = isoYear
@@ -1660,9 +1675,9 @@ export class PlainDate {
    * @returns the new date
    */
   add(duration: Duration): PlainDate {
-    let days: i64 = duration.weeks * 7 + duration.days
+    let days: i64 = temporalAdd(temporalMul(duration.weeks, 7), duration.days)
     if (!temporalNoTime(duration)) {
-      days = days + temporalSpanOfDuration(duration, false).truncDays()
+      days = temporalAdd(days, temporalSpanOfDuration(duration, false).truncDays())
     }
     const epochDay: i64 = temporalAddToDate(
       this.year,
@@ -1695,7 +1710,7 @@ export class PlainDate {
    * @returns the difference
    */
   until(other: PlainDate): Duration {
-    return new Duration(0, 0, 0, other.epochDay - this.epochDay)
+    return new Duration(0, 0, 0, temporalSub(other.epochDay, this.epochDay))
   }
 
   /**
@@ -1705,7 +1720,7 @@ export class PlainDate {
    * @returns the difference
    */
   since(other: PlainDate): Duration {
-    return new Duration(0, 0, 0, this.epochDay - other.epochDay)
+    return new Duration(0, 0, 0, temporalSub(this.epochDay, other.epochDay))
   }
 
   /**
@@ -1776,7 +1791,8 @@ export const plainDateFromOrNull = (text: string): PlainDate | null => {
  * @param b the second date
  * @returns the order of the two
  */
-export const plainDateCompare = (a: PlainDate, b: PlainDate): i32 => temporalSign(a.epochDay - b.epochDay)
+export const plainDateCompare = (a: PlainDate, b: PlainDate): i32 =>
+  temporalSign(temporalSub(a.epochDay, b.epochDay))
 
 // ---------------------------------------------------------------------------
 // PlainTime
@@ -1846,8 +1862,10 @@ export class PlainTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    const sub: i32 = this.millisecond * 1000000 + this.microsecond * 1000 + this.nanosecond
-    const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, sub)
+    // Each field is under 1000, so the u32 sum never wraps.
+    const sub: u32 =
+      toU32(this.millisecond) * 1000000 + toU32(this.microsecond) * 1000 + toU32(this.nanosecond)
+    const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, toI32(sub))
     return String.fromBytes(out, 0, end)
   }
 
@@ -1880,8 +1898,10 @@ export class PlainTime {
   add(duration: Duration): PlainTime {
     const span: TemporalSpan = temporalSpanOfDuration(duration, false)
     const seconds: i64 = temporalFloorMod(span.seconds, TEMPORAL_SECONDS_PER_DAY)
-    const ns: i64 = seconds * TEMPORAL_NS_PER_SECOND + toI64(span.nanos) + this.nanoOfDay
-    return temporalTimeOfNanos(temporalFloorMod(ns, TEMPORAL_NS_PER_DAY))
+    // `seconds` is below a day, `span.nanos` below a second and `nanoOfDay` below a day's
+    // nanoseconds, so the `u64` sum stays under 2 × 10^14 and never wraps.
+    const ns: u64 = toU64(seconds) * 1000000000 + toU64(span.nanos) + toU64(this.nanoOfDay)
+    return temporalTimeOfNanos(temporalFloorMod(toI64(ns), TEMPORAL_NS_PER_DAY))
   }
 
   /**
@@ -1902,7 +1922,10 @@ export class PlainTime {
    * @returns the difference
    */
   until(other: PlainTime): Duration {
-    return temporalBalance(new TemporalSpan(0, other.nanoOfDay - this.nanoOfDay), TEMPORAL_UNIT_HOUR)
+    return temporalBalance(
+      new TemporalSpan(0, temporalSub(other.nanoOfDay, this.nanoOfDay)),
+      TEMPORAL_UNIT_HOUR
+    )
   }
 
   /**
@@ -1912,7 +1935,10 @@ export class PlainTime {
    * @returns the difference
    */
   since(other: PlainTime): Duration {
-    return temporalBalance(new TemporalSpan(0, this.nanoOfDay - other.nanoOfDay), TEMPORAL_UNIT_HOUR)
+    return temporalBalance(
+      new TemporalSpan(0, temporalSub(this.nanoOfDay, other.nanoOfDay)),
+      TEMPORAL_UNIT_HOUR
+    )
   }
 }
 
@@ -2001,25 +2027,21 @@ const temporalLooksLikeYearMonthOrMonthDay = (text: string): boolean => {
       return false
     }
   }
-  if (n === 7 && toI32(head.charCodeAt(4)) === 45) {
-    const m: i32 = temporalTwoDigits(head, 5)
+  if (n === 7 && temporalCharAt(head, 4) === 45) {
+    const m: i32 = temporalFastTwo(head, 5)
     return m >= 1 && m <= 12
   }
   if (n === 6 && toI32(head.indexOf("-")) < 0) {
-    const m: i32 = temporalTwoDigits(head, 4)
+    const m: i32 = temporalFastTwo(head, 4)
     return m >= 1 && m <= 12
   }
-  if ((n === 5 && toI32(head.charCodeAt(2)) === 45) || (n === 4 && toI32(head.indexOf("-")) < 0)) {
-    const m: i32 = temporalTwoDigits(head, 0)
-    const d: i32 = temporalTwoDigits(head, n === 5 ? 3 : 2)
+  if ((n === 5 && temporalCharAt(head, 2) === 45) || (n === 4 && toI32(head.indexOf("-")) < 0)) {
+    const m: i32 = temporalFastTwo(head, 0)
+    const d: i32 = temporalFastTwo(head, n === 5 ? 3 : 2)
     return m >= 1 && m <= 12 && d >= 1 && d <= temporalDaysInMonth(1972, m)
   }
   return false
 }
-
-/** The two decimal digits of `text` at `at` as a number. */
-const temporalTwoDigits = (text: string, at: i32): i32 =>
-  (toI32(text.charCodeAt(at)) - 48) * 10 + toI32(text.charCodeAt(at + 1)) - 48
 
 /**
  * `Temporal.PlainTime.compare(a, b)`: -1, 0 or 1 as `a` is earlier than, the
@@ -2029,7 +2051,8 @@ const temporalTwoDigits = (text: string, at: i32): i32 =>
  * @param b the second time
  * @returns the order of the two
  */
-export const plainTimeCompare = (a: PlainTime, b: PlainTime): i32 => temporalSign(a.nanoOfDay - b.nanoOfDay)
+export const plainTimeCompare = (a: PlainTime, b: PlainTime): i32 =>
+  temporalSign(temporalSub(a.nanoOfDay, b.nanoOfDay))
 
 // ---------------------------------------------------------------------------
 // PlainDateTime
@@ -2158,7 +2181,10 @@ export class PlainDateTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    const sub: i32 = this.millisecond * 1000000 + this.microsecond * 1000 + this.nanosecond
+    // Each field is under 1000, so the u32 sum never wraps.
+    const sub: i32 = toI32(
+      toU32(this.millisecond) * 1000000 + toU32(this.microsecond) * 1000 + toU32(this.nanosecond)
+    )
     if (this.year >= 0 && this.year <= 9999) {
       const seconds: i32 = temporalPutDateTime4(
         out,
@@ -2252,12 +2278,15 @@ export class PlainDateTime {
     let nanoOfDay: i64 = this.nanoOfDay
     if (!temporalNoTime(duration)) {
       const seconds: i64 = temporalDurationSeconds(duration, false)
-      const nanos: i64 = temporalDurationNanos(duration) + this.nanoOfDay
-      const total: i64 = seconds + temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)
+      // The duration's nanoseconds are below 3 × 10^9 and `nanoOfDay` below a day's,
+      // so neither `u64` sum below wraps.
+      const nanos: i64 = toI64(toU64(temporalDurationNanos(duration)) + toU64(this.nanoOfDay))
+      const total: i64 = temporalAdd(seconds, temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND))
       carryDays = temporalFloorDiv(total, TEMPORAL_SECONDS_PER_DAY)
-      nanoOfDay =
-        temporalFloorMod(total, TEMPORAL_SECONDS_PER_DAY) * TEMPORAL_NS_PER_SECOND +
-        temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND)
+      nanoOfDay = toI64(
+        toU64(temporalFloorMod(total, TEMPORAL_SECONDS_PER_DAY)) * 1000000000 +
+          toU64(temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND))
+      )
     }
     const epochDay: i64 = temporalAddToDate(
       this.year,
@@ -2266,7 +2295,7 @@ export class PlainDateTime {
       this.epochDay,
       duration.years,
       duration.months,
-      duration.weeks * 7 + duration.days + carryDays
+      temporalAdd(temporalAdd(temporalMul(duration.weeks, 7), duration.days), carryDays)
     )
     const civil: i64 = temporalCivilOfEpochDay(epochDay)
     const secs: i64 = toI64(nanoOfDay / TEMPORAL_NS_PER_SECOND)
@@ -2318,7 +2347,10 @@ export class PlainDateTime {
 
 /** The span from `a` to `b`, every day 24 hours. */
 const temporalDateTimeSpan = (a: PlainDateTime, b: PlainDateTime): TemporalSpan =>
-  new TemporalSpan((b.epochDay - a.epochDay) * TEMPORAL_SECONDS_PER_DAY, b.nanoOfDay - a.nanoOfDay)
+  new TemporalSpan(
+    temporalMul(temporalSub(b.epochDay, a.epochDay), TEMPORAL_SECONDS_PER_DAY),
+    temporalSub(b.nanoOfDay, a.nanoOfDay)
+  )
 
 /**
  * `Temporal.PlainDateTime.from(text)`: the date-time an RFC 9557 string
@@ -2392,8 +2424,8 @@ export const plainDateTimeFromOrNull = (text: string): PlainDateTime | null => {
  * @returns the order of the two
  */
 export const plainDateTimeCompare = (a: PlainDateTime, b: PlainDateTime): i32 => {
-  const byDay: i32 = temporalSign(a.epochDay - b.epochDay)
-  return byDay !== 0 ? byDay : temporalSign(a.nanoOfDay - b.nanoOfDay)
+  const byDay: i32 = temporalSign(temporalSub(a.epochDay, b.epochDay))
+  return byDay !== 0 ? byDay : temporalSign(temporalSub(a.nanoOfDay, b.nanoOfDay))
 }
 
 // ---------------------------------------------------------------------------
@@ -2475,7 +2507,8 @@ export class Duration {
     sign = temporalSignOf(sign, microseconds)
     sign = temporalSignOf(sign, nanoseconds)
     const c: i64 = TEMPORAL_MAX_CALENDAR_FIELD
-    if (years <= -c || years >= c || months <= -c || months >= c || weeks <= -c || weeks >= c) {
+    const low: i64 = TEMPORAL_MIN_CALENDAR_FIELD
+    if (years <= low || years >= c || months <= low || months >= c || weeks <= low || weeks >= c) {
       temporalRangeError("Duration: years, months and weeks must each be below 2^32")
     }
     const m: i64 = TEMPORAL_MAX_DURATION_SECONDS
@@ -2486,7 +2519,7 @@ export class Duration {
       hours > 2501999792983 ||
       minutes < -150119987579016 ||
       minutes > 150119987579016 ||
-      seconds < -m ||
+      seconds < TEMPORAL_MIN_DURATION_SECONDS ||
       seconds > m
     ) {
       temporalRangeError("Duration: the time fields come to 2^53 seconds or more")
@@ -2516,24 +2549,26 @@ export class Duration {
    * @returns the ISO 8601 form
    */
   toString(): string {
-    const k: i64 = toI64(this.sign < 0 ? -1 : 1)
+    // Every field shares the sign and none is the least `i64`, so each
+    // magnitude below is exact.
+    const k: boolean = this.sign < 0
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
     let i: i32 = 0
-    if (this.sign < 0) {
+    if (k) {
       i = temporalPutByte(out, i, 45)
     }
     i = temporalPutByte(out, i, 80)
     if (this.years !== 0) {
-      i = temporalPutField(out, i, this.years * k, 89)
+      i = temporalPutField(out, i, temporalMagnitude(this.years, k), 89)
     }
     if (this.months !== 0) {
-      i = temporalPutField(out, i, this.months * k, 77)
+      i = temporalPutField(out, i, temporalMagnitude(this.months, k), 77)
     }
     if (this.weeks !== 0) {
-      i = temporalPutField(out, i, this.weeks * k, 87)
+      i = temporalPutField(out, i, temporalMagnitude(this.weeks, k), 87)
     }
     if (this.days !== 0) {
-      i = temporalPutField(out, i, this.days * k, 68)
+      i = temporalPutField(out, i, temporalMagnitude(this.days, k), 68)
     }
     const zeroAbove: boolean =
       this.years === 0 &&
@@ -2545,26 +2580,28 @@ export class Duration {
     // The seconds and their fractions are one decimal number, balanced. Every
     // field times `k` is not negative, so each division here truncates as a
     // floor would.
-    const ms: i64 = this.milliseconds * k
-    const us: i64 = this.microseconds * k
-    const ns: i64 = this.nanoseconds * k
-    let fraction: i64 = (ms % 1000) * 1000000 + (us % 1000000) * 1000 + (ns % TEMPORAL_NS_PER_SECOND)
-    const wholeSeconds: i64 =
-      this.seconds * k +
-      toI64(ms / 1000) +
-      toI64(us / 1000000) +
-      toI64(ns / TEMPORAL_NS_PER_SECOND) +
-      toI64(fraction / TEMPORAL_NS_PER_SECOND)
-    fraction = fraction % TEMPORAL_NS_PER_SECOND
+    // The constructor bounds the sum below 2^53, so the `u64` sums are exact.
+    const ms: u64 = toU64(temporalMagnitude(this.milliseconds, k))
+    const us: u64 = toU64(temporalMagnitude(this.microseconds, k))
+    const ns: u64 = toU64(temporalMagnitude(this.nanoseconds, k))
+    let fraction: u64 = (ms % 1000) * 1000000 + (us % 1000000) * 1000 + (ns % 1000000000)
+    const wholeSeconds: i64 = toI64(
+      toU64(temporalMagnitude(this.seconds, k)) +
+        ms / 1000 +
+        us / 1000000 +
+        ns / 1000000000 +
+        fraction / 1000000000
+    )
+    fraction = fraction % 1000000000
     const withSeconds: boolean = wholeSeconds !== 0 || fraction !== 0 || zeroAbove
     if (this.hours !== 0 || this.minutes !== 0 || withSeconds) {
       i = temporalPutByte(out, i, 84)
     }
     if (this.hours !== 0) {
-      i = temporalPutField(out, i, this.hours * k, 72)
+      i = temporalPutField(out, i, temporalMagnitude(this.hours, k), 72)
     }
     if (this.minutes !== 0) {
-      i = temporalPutField(out, i, this.minutes * k, 77)
+      i = temporalPutField(out, i, temporalMagnitude(this.minutes, k), 77)
     }
     if (withSeconds) {
       i = temporalPutNumber(out, i, wholeSeconds)
@@ -2589,16 +2626,16 @@ export class Duration {
    */
   negated(): Duration {
     return new Duration(
-      -this.years,
-      -this.months,
-      -this.weeks,
-      -this.days,
-      -this.hours,
-      -this.minutes,
-      -this.seconds,
-      -this.milliseconds,
-      -this.microseconds,
-      -this.nanoseconds
+      temporalNegField(this.years),
+      temporalNegField(this.months),
+      temporalNegField(this.weeks),
+      temporalNegField(this.days),
+      temporalNegField(this.hours),
+      temporalNegField(this.minutes),
+      temporalNegField(this.seconds),
+      temporalNegField(this.milliseconds),
+      temporalNegField(this.microseconds),
+      temporalNegField(this.nanoseconds)
     )
   }
 
@@ -2675,22 +2712,25 @@ const temporalWholeSeconds = (
   microseconds: i64,
   nanoseconds: i64
 ): i64 => {
-  const carry: i64 = toI64(
-    (toI64(milliseconds % 1000) * 1000000 +
-      toI64(microseconds % 1000000) * 1000 +
-      (nanoseconds % 1000000000)) /
-      1000000000
+  // With the fields so bounded every term below is under 2^54 in magnitude, so
+  // the sums, done in wrapping `u64` arithmetic on the two's-complement bits,
+  // are the exact signed sums.
+  const remainders: i64 = toI64(
+    toU64(milliseconds % 1000) * 1000000 +
+      toU64(microseconds % 1000000) * 1000 +
+      toU64(nanoseconds % 1000000000)
   )
-  const whole: i64 =
-    days * TEMPORAL_SECONDS_PER_DAY +
-    hours * 3600 +
-    minutes * 60 +
-    seconds +
-    toI64(milliseconds / 1000) +
-    toI64(microseconds / 1000000) +
-    toI64(nanoseconds / 1000000000) +
-    carry
-  return whole < 0 ? -whole : whole
+  const whole: i64 = toI64(
+    toU64(days) * 86400 +
+      toU64(hours) * 3600 +
+      toU64(minutes) * 60 +
+      toU64(seconds) +
+      toU64(milliseconds / 1000) +
+      toU64(microseconds / 1000000) +
+      toU64(nanoseconds / 1000000000) +
+      toU64(remainders / 1000000000)
+  )
+  return whole < 0 ? toI64(0 - toU64(whole)) : whole
 }
 
 /**
@@ -2740,7 +2780,8 @@ const temporalDurationProblem = (
     return "the fields have mixed signs"
   }
   const c: i64 = TEMPORAL_MAX_CALENDAR_FIELD
-  if (years <= -c || years >= c || months <= -c || months >= c || weeks <= -c || weeks >= c) {
+  const low: i64 = TEMPORAL_MIN_CALENDAR_FIELD
+  if (years <= low || years >= c || months <= low || months >= c || weeks <= low || weeks >= c) {
     return "years, months and weeks must each be below 2^32"
   }
   // Each field alone within the 2^53-second bound keeps the sum inside an i64.
@@ -2752,7 +2793,7 @@ const temporalDurationProblem = (
     hours > 2501999792983 ||
     minutes < -150119987579016 ||
     minutes > 150119987579016 ||
-    seconds < -m ||
+    seconds < TEMPORAL_MIN_DURATION_SECONDS ||
     seconds > m
   ) {
     return "the time fields come to 2^53 seconds or more"
