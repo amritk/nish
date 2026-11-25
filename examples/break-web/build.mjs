@@ -354,8 +354,9 @@ fs.rmSync(out, { recursive: true, force: true })
 fs.mkdirSync(ll, { recursive: true })
 fs.mkdirSync(path.join(out, "nish"))
 
-// --allow-panics: game.ts opts out of the no-panic default (the reason is its
-// header).
+// --allow-panics: game.ts opts out of the no-panic default: its module-storage
+// indexes, its std/term input call, `Framebuffer`'s size check and the director's
+// own sites still panic (its header lists them).
 run(nish, [
   "game.ts",
   "--allow-panics",

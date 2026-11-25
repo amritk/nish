@@ -32,25 +32,70 @@
  * `ringShift` takes words until the counts agree again.
  */
 
-/** Head, tail: the two words in front of the slots. */
-const RING_HEADER: i32 = 2
+/**
+ * The most slots a ring uses, 2^30 - 1: its counts run modulo twice the
+ * capacity, and twice the capacity must fit an `i32`. Wasm memory cannot hold
+ * a longer ring; a longer native one leaves the slots past that unused.
+ */
+type RingSlots = integer<0, 1073741823>
+
+/** A count reduced modulo twice the capacity. */
+type RingCount = integer<0, 2147483645>
+
+/** The slot count of `ring`: its length less the head and tail, at most `RingSlots`' end. */
+const ringSlots = (ring: Int32Array): RingSlots => {
+  const length: i32 = toI32(ring.length)
+  if (length <= 2) {
+    return 0
+  }
+  if (length > 1073741825) {
+    return 1073741823
+  }
+  const slots: i32 = length - 2
+  return slots
+}
 
 /**
- * The number of slots, the ring's length less its header.
+ * The number of slots, the ring's length less its header, at most 2^30 - 1.
  *
  * @param ring - the ring's storage: head, tail, then its slots
  * @returns the slot count, or 0 for a ring too short to have one
  */
-export const ringCapacity = (ring: Int32Array): i32 => {
-  const length: i32 = toI32(ring.length)
-  return length > RING_HEADER ? length - RING_HEADER : 0
-}
+export const ringCapacity = (ring: Int32Array): i32 => ringSlots(ring)
 
 /** `count` brought into `[0, 2 * capacity)`, whatever a page wrote there. */
-const ringCount = (count: i32, capacity: i32): i32 => {
-  const m: i32 = capacity * 2
-  const r: i32 = count % m
-  return r < 0 ? r + m : r
+const ringCount = (count: i32, capacity: RingSlots): RingCount => {
+  const span: i32 = capacity * 2
+  // 0 for a ring with no slots. The second test is never true, the capacity
+  // being at most 2^30 - 1, and is the bound on `span` the last test reads.
+  if (span <= 0 || span > 2147483646) {
+    return 0
+  }
+  let r: i32 = count % span
+  if (r < 0) {
+    r = r + span
+  }
+  // Never true: `%` leaves `r` above `-span` and the step above lifts a
+  // negative one into `[0, span)`. A `%` by a variable gives the prover no
+  // range, so the test restates it where the ranged return reads it.
+  if (r < 0 || r >= span) {
+    return 0
+  }
+  return r
+}
+
+/** The words waiting in `ring` of `capacity` slots: a size past it reads as full. */
+const ringWaiting = (ring: Int32Array, capacity: RingSlots): RingSlots => {
+  if (capacity === 0 || toI32(ring.length) < 2) {
+    return 0
+  }
+  const tail: RingCount = ringCount(ring[1], capacity)
+  const head: RingCount = ringCount(ring[0], capacity)
+  const size: RingCount = ringCount(tail - head, capacity)
+  if (size > capacity) {
+    return capacity
+  }
+  return size
 }
 
 /**
@@ -59,14 +104,7 @@ const ringCount = (count: i32, capacity: i32): i32 => {
  * @param ring - the ring's storage: head, tail, then its slots
  * @returns the words waiting, at most the capacity
  */
-export const ringSize = (ring: Int32Array): i32 => {
-  const capacity: i32 = ringCapacity(ring)
-  if (capacity === 0) {
-    return 0
-  }
-  const size: i32 = ringCount(ringCount(ring[1], capacity) - ringCount(ring[0], capacity), capacity)
-  return size > capacity ? capacity : size
-}
+export const ringSize = (ring: Int32Array): i32 => ringWaiting(ring, ringSlots(ring))
 
 /**
  * The number of words `ringPush` would still take.
@@ -74,7 +112,11 @@ export const ringSize = (ring: Int32Array): i32 => {
  * @param ring - the ring's storage: head, tail, then its slots
  * @returns the free slots
  */
-export const ringFree = (ring: Int32Array): i32 => ringCapacity(ring) - ringSize(ring)
+export const ringFree = (ring: Int32Array): i32 => {
+  const capacity: RingSlots = ringSlots(ring)
+  const waiting: RingSlots = ringWaiting(ring, capacity)
+  return capacity - waiting
+}
 
 /**
  * Puts `word` at the tail, or changes nothing when the ring is full.
@@ -84,13 +126,35 @@ export const ringFree = (ring: Int32Array): i32 => ringCapacity(ring) - ringSize
  * @returns true when the word was put, false when the ring was full
  */
 export const ringPush = (ring: Int32Array, word: i32): boolean => {
-  const capacity: i32 = ringCapacity(ring)
-  if (capacity === 0 || ringSize(ring) >= capacity) {
+  const capacity: RingSlots = ringSlots(ring)
+  if (capacity === 0 || ringWaiting(ring, capacity) >= capacity) {
     return false
   }
-  const tail: i32 = ringCount(ring[1], capacity)
-  ring[RING_HEADER + (tail % capacity)] = word
-  ring[1] = ringCount(tail + 1, capacity)
+  if (toI32(ring.length) < 2) {
+    return false
+  }
+  const length: i32 = toI32(ring.length)
+  const tail: RingCount = ringCount(ring[1], capacity)
+  // The tail is `base + at`: `base` is 0 or the capacity, `at` the slot.
+  let base: i32 = 0
+  let at: i32 = tail
+  if (at >= capacity) {
+    base = capacity
+    at = at - capacity
+  }
+  // Never true: the tail is below twice the capacity, and the capacity is at
+  // most the length less two. The prover reads neither through the calls, so
+  // the test is what proves the store and the next count.
+  if (at < 0 || at >= capacity || at >= length - 2) {
+    return false
+  }
+  ring[2 + at] = word
+  let next: i32 = at + 1
+  if (next === capacity) {
+    next = 0
+    base = capacity - base
+  }
+  ring[1] = base + next
   return true
 }
 
@@ -102,13 +166,33 @@ export const ringPush = (ring: Int32Array, word: i32): boolean => {
  * @returns the word taken, or 0 on an empty ring
  */
 export const ringShift = (ring: Int32Array): i32 => {
-  const capacity: i32 = ringCapacity(ring)
-  if (capacity === 0 || ringSize(ring) === 0) {
+  const capacity: RingSlots = ringSlots(ring)
+  if (capacity === 0 || ringWaiting(ring, capacity) === 0) {
     return 0
   }
-  const head: i32 = ringCount(ring[0], capacity)
-  const word: i32 = ring[RING_HEADER + (head % capacity)]
-  ring[0] = ringCount(head + 1, capacity)
+  if (toI32(ring.length) < 2) {
+    return 0
+  }
+  const length: i32 = toI32(ring.length)
+  const head: RingCount = ringCount(ring[0], capacity)
+  // The head is `base + at`, as the tail is in `ringPush`.
+  let base: i32 = 0
+  let at: i32 = head
+  if (at >= capacity) {
+    base = capacity
+    at = at - capacity
+  }
+  // Never true, for the reasons `ringPush` gives; the test proves the read.
+  if (at < 0 || at >= capacity || at >= length - 2) {
+    return 0
+  }
+  const word: i32 = ring[2 + at]
+  let next: i32 = at + 1
+  if (next === capacity) {
+    next = 0
+    base = capacity - base
+  }
+  ring[0] = base + next
   return word
 }
 
@@ -118,7 +202,7 @@ export const ringShift = (ring: Int32Array): i32 => {
  * @param ring - the ring's storage: head, tail, then its slots
  */
 export const ringClear = (ring: Int32Array): void => {
-  if (toI32(ring.length) >= RING_HEADER) {
+  if (toI32(ring.length) >= 2) {
     ring[0] = ring[1]
   }
 }
