@@ -207,6 +207,12 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
       })
     : null
   const regenText = regen?.status === 0 ? fs.readFileSync(path.join(regenDir, "sys.ts"), "utf8") : null
+  let regenWhy = "it differs: run the Regenerate line from std/gpu/"
+  if (regen === null) {
+    regenWhy = "std/gpu/sys.ts has no `// Regenerate: nish c-import ... -o sys.ts` line"
+  } else if (regenText === null) {
+    regenWhy = shown(regen)
+  }
   check(
     "gfx: std/gpu/sys.ts is what nish c-import writes from runtime/gfx/nish-gfx.h and its overrides",
     regenLine !== null &&
@@ -214,11 +220,7 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
         "c-import ../../runtime/gfx/nish-gfx.h --overrides ../../runtime/gfx/nish-gfx.overrides.json "
       ) &&
       regenText === sysText,
-    regen === null
-      ? "std/gpu/sys.ts has no `// Regenerate: nish c-import ... -o sys.ts` line"
-      : regenText === null
-        ? shown(regen)
-        : "it differs: run the Regenerate line from std/gpu/"
+    regenWhy
   )
 
   // ---- what scripts/fetch-gfx.sh counts as installed -------------------------------
