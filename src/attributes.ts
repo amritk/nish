@@ -953,7 +953,8 @@ export class FunctionFacts {
    * `parallelMapInto`, proven at the map's call (`PANIC_PARALLEL_LENGTH`):
    * `src/panics.ts` follows no call into it. Its own `panic` is still listed,
    * at its own line. An atomic array's element method is one too: its index
-   * check is listed at each call, proven as `a[i]` would be there (#2206).
+   * check is listed at each call, proven by the guard or loop test around the
+   * call (#2206).
    * Beside `onCycleStack`, so the two share a word.
    */
   callerProven: boolean
