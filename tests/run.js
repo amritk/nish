@@ -6673,42 +6673,18 @@ if (dealtHere("performance")) {
   )
 }
 
-// ---- std-panics: the ratchet on std/'s panic sites --------------------------------
-//
-// Every git-tracked `std/` module is compiled as a root with `--allow-panics
-// --emit-panics`, and the sites the report does not discharge are counted: not
-// `proven` (the prover removed the check), not `allowed` (a `noPanic` site the
-// caller's flag lets through), and not of kind `call` (the callee's own sites,
-// counted where they are), `oom` (allocation failure, which every program
-// shares) or `unchecked` (the `nish:unsafe` opt-in, counted by its own rule).
-// A site reached from more than one root is one site: they are keyed by
-// `module:line:col:kind`. `tests/std-panics.json` holds the count per module
-// and per kind, and the count may only fall: a rise fails and names the sites
-// of that module and kind, a module that gains its first site fails, and a
-// fall fails until the baseline is rewritten to it
-// (`node tests/run.js std-panics --update-std-panics`), so a fixed site cannot
-// be traded for a new one. Its `kept` list names the explicit `panic(...)`
-// sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
-// the standard library keeps"); the explicit sites of every other function
-// are the ones still to fix, and both counts are pinned.
-//
-// Its `residual` list names, by module, function and kind, the sites of other
-// kinds that stay, with the reason and the docs/security record that gives it
-// (WP83 S5's cipher sites: an `array-length` the prover cannot bound, a
-// constant-time copy's first read, where an early return would be a branch).
-// In a module with an entry the counted sites must equal the entries, function
-// by function and kind by kind, so a site that moves to another function, or
-// one fixed without its entry going, fails; each record must exist and name
-// its function.
 // ---- std-panics: no u32-cast wrapping sum in std/compress -------------------------
 //
 // WP84 S3 took out every `toI32(toU32(a) + toU32(b))` in std/compress: a sum
 // that wraps through u32 to dodge its overflow proof answers a made-up value
 // where input can reach it. `u32WrappingSums` finds each `toI32(...)` whose
-// argument has a `toU32(...)` result as an operand of `+`, `-` or `*`, over
-// any spacing and line breaks, comments blanked. `COMPRESS_UNSIGNED_OPS`
+// argument has a `toU32(...)` call as a direct operand of `+`, `-` or `*`,
+// over any spacing and line breaks, comments blanked. `COMPRESS_UNSIGNED_OPS`
 // lists the genuine unsigned ones by their spacing-free text, how many times
-// each occurs and why it is meant to wrap; any other one fails the check.
+// each occurs and why it is meant to wrap; any other one fails the check. It
+// pins that shape only: a `toU32` operand inside its own parentheses or under
+// a `/`, and a u32 local summed first and cast later, are not found, so it is
+// not a proof that std/compress wraps nowhere.
 /** The index of the `)` that closes the `(` at `open` in `src`, or -1. */
 const closingParen = (src, open) => {
   let depth = 0
@@ -6830,6 +6806,33 @@ const unsignedOpMismatches = (filesFound, allow) => {
   }
   return lines
 }
+// ---- std-panics: the ratchet on std/'s panic sites --------------------------------
+//
+// Every git-tracked `std/` module is compiled as a root with `--allow-panics
+// --emit-panics`, and the sites the report does not discharge are counted: not
+// `proven` (the prover removed the check), not `allowed` (a `noPanic` site the
+// caller's flag lets through), and not of kind `call` (the callee's own sites,
+// counted where they are), `oom` (allocation failure, which every program
+// shares) or `unchecked` (the `nish:unsafe` opt-in, counted by its own rule).
+// A site reached from more than one root is one site: they are keyed by
+// `module:line:col:kind`. `tests/std-panics.json` holds the count per module
+// and per kind, and the count may only fall: a rise fails and names the sites
+// of that module and kind, a module that gains its first site fails, and a
+// fall fails until the baseline is rewritten to it
+// (`node tests/run.js std-panics --update-std-panics`), so a fixed site cannot
+// be traded for a new one. Its `kept` list names the explicit `panic(...)`
+// sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
+// the standard library keeps"); the explicit sites of every other function
+// are the ones still to fix, and both counts are pinned.
+//
+// Its `residual` list names, by module, function and kind, the sites of other
+// kinds that stay, with the reason and the docs/security record that gives it
+// (WP83 S5's cipher sites: an `array-length` the prover cannot bound, a
+// constant-time copy's first read, where an early return would be a branch).
+// In a module with an entry the counted sites must equal the entries, function
+// by function and kind by kind, so a site that moves to another function, or
+// one fixed without its entry going, fails; each record must exist and name
+// its function.
 const UPDATE_STD_PANICS = process.argv.includes("--update-std-panics")
 /** The baseline `--update-std-panics` writes: the new counts, with `kept` and `residual` as they were. */
 const rewrittenStdPanics = (baseline, total, explicit, modules) => ({
