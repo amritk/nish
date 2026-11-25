@@ -103,7 +103,7 @@ stages:
     todos:
       - id: s6-router
         content: Land the router rework so std/net/router.ts keeps only its kept explicit panics (std-router +4.3% accepted on #2204) — see WP80 S6
-        status: in_progress
+        status: completed
       - id: s6-sites
         content: Clear the std sites outside the prover gaps (the shm ffi-nul site, prefork.ts:1170 slice, bytes.ts:592) — see WP80 S6
         status: pending
@@ -176,3 +176,11 @@ Sites as of 071ed014 (442): net/handler 171, net/serve 140, net/router 131. Kind
 Added on the owner's decision on #2204: the `src/` prover gaps the earlier stages hit are their own work (#2206 atomic element index, #2207 type-only `new Array<T>(n)` length, #2208 `String.fromBytes`/`netRead` slices), and this stage follows them. It clears what S1–S5 left outside those gaps, lowers the instruction counts that fell during the package to CI's figures, and drops the six opt-outs (histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server, http-app) once the prover proves their sites.
 
 One exception to rule 6, accepted on #2204: the router rework (plain guards and clamps in place of wrap helpers, so router.ts keeps only its six kept explicit panics) raises std-router by about 4.3% of instructions. Its count is written from the run that measured it and replaced with CI's printed figure once the bench shard prints it.
+
+s6-router landed as #2210 (04495bf8) before this stage started, so the stage builds the other four todos on main 1908baed4.
+
+Owns: `std/sync/shm.ts`, `std/net/prefork.ts`, `std/bytes.ts`, `std/net/{http1-server,http-server,handler,router}.ts`, `examples/{histogram-atomic,merge-patch,prefork-jobs,file-server,prefork-server}.ts`, `examples/http-app/**`, the guide's `allow-panics` markers and sentences for those examples (`docs/guide/**`), new `tests/link/*` cases, and this plan's S6 todo statuses. The shared and generated files of rule 7 as for every stage.
+
+s6-optout drops every opt-out the code no longer needs. An example still blocked only by a site in #2206, #2207 or #2208 while that issue is open keeps its opt-out, with a header rewritten to name only that issue and the sites, so the opt-out names only non-WP80 blockers (acceptance criterion 1). If one of those `src/` fixes lands on `main` while the stage is open, the stage syncs and drops the opt-outs it unblocks.
+
+Sites on main 1908baed4 (`tests/std-panics.json`, WP80 modules): bytes index 28, overflow 4, panic 1 · handler panic 9 · http-server array-length 3, io-exit 2, panic 43, slice 1 · http1-server panic 2, slice 4 · prefork panic 1, slice 1 · router panic 6 · serve array-length 3, panic 3, slice 8 · shm ffi-nul 3 · threads array-length 2, index 32, overflow 4, panic 4. Instruction counts that fell during the package: std-http1 −19%, std-threads −14%, std-cli-args −12%.
