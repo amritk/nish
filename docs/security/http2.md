@@ -289,7 +289,8 @@ times and move `Arena.used()` exactly as five on a still clock do (3,640 bytes,
 the new streams' own); two slots answered in one second share one format.
 What the field costs in throughput is measured, not bounded here: a build with
 the date against one without lies inside `bench/h2load.mjs`'s noise band on
-HTTP/2 and HTTP/3 ([`BENCHMARKS.md`](../BENCHMARKS.md#the-date-fields-cost-on-http2-and-http3-696)).
+HTTP/2 and HTTP/3, though on HTTP/2 the undated build's median was ahead in
+every A/B run, by about 5% in the two 25-round ones ([`BENCHMARKS.md`](../BENCHMARKS.md#the-date-fields-cost-on-http2-and-http3-696)).
 Tests: `link/net_http2: exits with 0 and stdout matches expected.out`,
 `link/net_http2_f64: exits with 0 and stdout matches expected.out`,
 `link/net_http2_tls: exits with 0 and stdout matches expected.out`,
