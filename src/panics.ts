@@ -35,6 +35,7 @@ import { unwrapBoundsParens, vectorAccessLanes } from "./bounds"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
+import { isWindowGuard } from "./window-contract"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
 import { Node, NodeKind } from "./nodes"
 import { ALLOW_PANICS_FLAG } from "./options"
@@ -109,6 +110,14 @@ export const PANIC_REGION: i32 = 17
  * the store.
  */
 export const PANIC_SPAWN_SLOT: i32 = 18
+/**
+ * #2296: a call into a window guard, or into a method whose first statement
+ * hands its own buffer, offset and count to one (`src/window-contract.ts`).
+ * The guard panics exactly when `[off, off + len)` is outside the buffer, and
+ * a call into it is not followed (`FunctionFacts.callerProven`): the check is
+ * this site's, proven where `src/bounds.ts` proves the window at the call.
+ */
+export const PANIC_WINDOW: i32 = 19
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -149,6 +158,8 @@ const panicKindName = (kind: i32): string => {
       return "region"
     case PANIC_SPAWN_SLOT:
       return "spawn-slot"
+    case PANIC_WINDOW:
+      return "window"
     default:
       return "oom"
   }
@@ -333,6 +344,9 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
     ordered.push(inEvaluationOrder(f.panicSites))
     reach.push(null)
   }
+  for (const unit of units) {
+    keepWindowGuards(unit.program, facts)
+  }
   const may = mayPanicSet(facts, ordered)
   // A function reaches the first of its sites, in the order the body reaches
   // them, that panics by itself or calls a function that may panic, and then
@@ -422,12 +436,69 @@ const callsMayPanic = (facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   }
   let c = 0
   while (c < f.callees.size()) {
-    if (mayPanicAt(facts, may, f.callees.at(c))) {
+    const callee = f.callees.at(c)
+    if (!namedBy(sites, callee) && (mayPanicAt(facts, may, callee) || windowMayPanic(facts, may, callee))) {
       return true
     }
     c = c + 1
   }
   return false
+}
+
+/** Whether a recorded call in `sites` names `callee`, which the call's own sites then answer for. */
+const namedBy = (sites: PanicSite[], callee: string): boolean => {
+  for (const site of sites) {
+    if (isCallSite(site) && site.callee === callee) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether `name` forwards its window to a guard that can panic (#2296): a
+ * route into it no call names holds no `window` site, so the guard's check is
+ * reached as if it were not the callers'.
+ */
+const windowMayPanic = (facts: FactsTable, may: boolean[], name: string): boolean => {
+  const guard = windowGuardAt(facts, name)
+  return guard >= 0 && guard < may.length && may[guard]
+}
+
+/** The index of the guard `name` forwards its window to, or -1. */
+const windowGuardAt = (facts: FactsTable, name: string): i32 => {
+  const at = facts.indexOf(name)
+  return at >= 0 && facts.list[at].windowGuard.length > 0 ? facts.indexOf(facts.list[at].windowGuard) : -1
+}
+
+/**
+ * A window guard's check is its callers' (`FunctionFacts.callerProven`) only
+ * while nothing else in it can panic: every site outside its branch is
+ * proven or allowed and calls nothing, and it is never a value, which a call
+ * through would reach without a `window` site. Otherwise it is followed as any
+ * function is, and its callers' `window` sites only add to the list.
+ */
+const keepWindowGuards = (program: CheckedProgram, facts: FactsTable): void => {
+  for (const sig of program.functions) {
+    const branch = sig.windowCheck
+    if (branch === null || !isWindowGuard(sig) || !sig.definedIn(program.source)) {
+      continue
+    }
+    const f = facts.get(sig.name)
+    if (f === null) {
+      continue
+    }
+    let clean = sig.refTag === 0 && !sig.refHidden && !sig.dispatcher
+    for (const site of f.panicSites) {
+      const inside = site.node.start >= branch.start && site.node.end <= branch.end
+      if (!inside && (isCallSite(site) || (!site.proven && !isAllowed(site)))) {
+        clean = false
+      }
+    }
+    if (!clean) {
+      f.callerProven = false
+    }
+  }
 }
 
 /**
@@ -472,10 +543,15 @@ const firstPanic = (
   let c = 0
   while (c < f.callees.size()) {
     const callee = f.callees.at(c)
-    if (mayPanicAt(facts, may, callee)) {
-      const found = reachOf(facts, reach, callee)
-      if (found !== null) {
-        return found
+    const guard = namedBy(sites, callee) ? -1 : windowGuardAt(facts, callee)
+    const window = guard >= 0 && guard < may.length && may[guard]
+    if (!namedBy(sites, callee) && (mayPanicAt(facts, may, callee) || window)) {
+      let reached: PanicSite | null = mayPanicAt(facts, may, callee) ? reachOf(facts, reach, callee) : null
+      if (reached === null && window && guard < reach.length) {
+        reached = reach[guard]
+      }
+      if (reached !== null) {
+        return reached
       }
       if (!passOver) {
         return null
@@ -529,7 +605,9 @@ const keepSites = (
   let c = 0
   while (c < f.callees.size()) {
     const callee = f.callees.at(c)
-    const found = reachOf(facts, reach, callee)
+    const guard = windowGuardAt(facts, callee)
+    const direct = reachOf(facts, reach, callee)
+    const found = direct !== null || guard < 0 || guard >= reach.length ? direct : reach[guard]
     if (found !== null && !named.has(callee)) {
       const site = new PanicSite(sig.decl, program.source, PANIC_CALL, sig.name, false, callee)
       site.reaches = found

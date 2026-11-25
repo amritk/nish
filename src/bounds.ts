@@ -3439,6 +3439,16 @@ const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
     }
     return
   }
+  // A window contract's buffer, offset and count (#2296, `src/window-contract.ts`).
+  if (target !== null && target.window.length === 3 && args.length > target.window[2]) {
+    const at = target.window
+    const w = holderOf(walk, args[at[0]])
+    const first = Math.min(at[0], Math.min(at[1], at[2]))
+    if (w !== null && quietFrom(ctx.program, call, first + 1) && provesWindow(walk, state, w, args[at[1]], args[at[2]])) {
+      noteProof(walk, call)
+    }
+    return
+  }
   const name = windowCallName(ctx, call)
   if (name.length === 0) {
     return
