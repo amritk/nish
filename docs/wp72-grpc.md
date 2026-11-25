@@ -10,7 +10,7 @@ one handler (`nish/net/http-server`, [wp39](wp39-http-server.md) G7), but no
 RPC protocol on top of them. gRPC is the one a service written in Nish is
 most often asked to speak. It is also one of HttpArena's five scored
 families: two profiles, `unary-grpc` over h2c and `unary-grpc-tls`, worth up
-to 2,000 of the overall board's 19,000 ([wp71](wp71-httparena.md) §1). An
+to 2,000 of the overall board's 21,000 ([wp71](wp71-httparena.md) §1). An
 entry with no gRPC scores 0 on both.
 
 What HttpArena's profiles ask
