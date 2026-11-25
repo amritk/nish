@@ -670,17 +670,17 @@ function HttpHandler.drive(this: HttpHandler, slot: i32): void -> @nish.HttpHand
   calls: nish.Http1Server.connection nish.Http1Server.next nish.HttpHandler.begin nish.HttpHandler.gather nish.HttpHandler.owable nish.HttpHandler.releaseReading nish.HttpHandler.resume nish.HttpHandler.settle nish.HttpHandler.unended nish.HttpHandler.whole
   pointer this: size=304 writesThrough=true captured=false passedTo=nish.HttpHandler.unended#0 nish.HttpHandler.begin#0 nish.HttpHandler.gather#0 nish.HttpHandler.whole#0 nish.HttpHandler.resume#0 nish.HttpHandler.unended#0 nish.HttpHandler.releaseReading#0 nish.HttpHandler.owable#0 nish.HttpHandler.settle#0
   stackSites=0 stackLocals=0
-  local -31:11 conn: Http1Connection (const)
-  callee -31:35 Http1Server.connection -> @nish.Http1Server.connection
-  local -30:9 event: i32 (let)
-  callee -29:10 HttpHandler.unended -> @nish.HttpHandler.unended
-  callee -28:15 Http1Server.next -> @nish.Http1Server.next
-  callee -25:11 HttpHandler.begin -> @nish.HttpHandler.begin
-  callee -23:11 HttpHandler.gather -> @nish.HttpHandler.gather
-  callee -21:11 HttpHandler.whole -> @nish.HttpHandler.whole
-  callee -19:11 HttpHandler.resume -> @nish.HttpHandler.resume
-  callee -17:13 HttpHandler.unended -> @nish.HttpHandler.unended
-  callee -14:17 Http1Server.next -> @nish.Http1Server.next
+  local -25:11 conn: Http1Connection (const)
+  callee -25:35 Http1Server.connection -> @nish.Http1Server.connection
+  local -24:9 event: i32 (let)
+  callee -24:22 HttpHandler.unended -> @nish.HttpHandler.unended
+  callee -24:58 Http1Server.next -> @nish.Http1Server.next
+  callee -21:9 HttpHandler.begin -> @nish.HttpHandler.begin
+  callee -19:9 HttpHandler.gather -> @nish.HttpHandler.gather
+  callee -17:9 HttpHandler.whole -> @nish.HttpHandler.whole
+  callee -15:9 HttpHandler.resume -> @nish.HttpHandler.resume
+  callee -13:15 HttpHandler.unended -> @nish.HttpHandler.unended
+  callee -13:51 Http1Server.next -> @nish.Http1Server.next
   callee -8:7 HttpHandler.releaseReading -> @nish.HttpHandler.releaseReading
   callee -7:16 HttpHandler.owable -> @nish.HttpHandler.owable
   local -2:13 n: i32 (const)
