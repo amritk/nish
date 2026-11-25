@@ -6,8 +6,9 @@
 // public API, and pins what comes out: a feed that uses none of the held
 // bytes (`used` 0), a count below 0 or past the buffer, a sequence or
 // character cut at the end of every read, and a text of 0 bytes. With a guard
-// removed these outputs do not change; what fails is the std-panics ratchet,
-// on the index site the prover can no longer discharge
+// removed these outputs do not change. For the first three what fails is the
+// std-panics ratchet, on the index site the prover can no longer discharge;
+// `termBytesText`'s clamp has no check that fails without it
 // (`docs/security/term.md`, "WP85 S5").
 import { Suite } from "nish/testing";
 import {
