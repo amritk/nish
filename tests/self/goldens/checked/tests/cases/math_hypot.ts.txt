@@ -66,53 +66,52 @@ function trigLarge(x: f64, ix: i32, hx: i32, mode: i32): f64 -> @nish.trigLarge
   calls: nish.clz64 nish.exp2Bits nish.mulHi nish.pio2Word nish.trigKernel
   stackSites=0 stackLocals=0
   local +0:9 m: u64 (const)
-  local +2:9 w0: u64 (const)
-  callee +2:19 pio2Word -> @nish.pio2Word
-  local +3:9 w1: u64 (const)
+  local +2:9 p: i32 (const)
+  local +3:9 w0: u64 (const)
   callee +3:19 pio2Word -> @nish.pio2Word
-  local +4:9 w2: u64 (const)
+  local +4:9 w1: u64 (const)
   callee +4:19 pio2Word -> @nish.pio2Word
-  local +5:9 lo2: u64 (const)
-  local +6:9 hi2: u64 (const)
-  callee +6:20 mulHi -> @nish.mulHi
-  local +7:9 lo1: u64 (const)
-  local +8:9 hi1: u64 (const)
-  callee +8:20 mulHi -> @nish.mulHi
-  local +9:9 p0: u64 (const)
-  local +10:9 p1: u64 (const)
-  local +11:9 c: u64 (const)
-  local +12:9 p2: u64 (const)
-  local +15:7 q2: u64 (let)
-  local +16:7 q1: u64 (let)
-  local +17:7 q0: u64 (let)
-  local +19:9 neg: boolean (const)
-  local +20:9 n0: i32 (const)
-  local +21:9 n: i32 (const)
-  local +24:11 k0: u64 (const)
-  local +26:11 k1: u64 (const)
-  local +29:7 sh: i32 (let)
-  local +38:9 lz: i32 (const)
-  callee +38:19 clz64 -> @nish.clz64
-  local +44:9 a: f64 (const)
-  callee +44:43 exp2Bits -> @nish.exp2Bits
-  local +45:9 b: f64 (const)
-  callee +47:5 exp2Bits -> @nish.exp2Bits
-  local +49:9 p1h: f64 (const)
-  local +50:9 p1l: f64 (const)
-  local +51:9 t: f64 (const)
-  local +52:9 split: f64 (const)
-  local +53:9 ac: f64 (const)
-  local +54:9 ah: f64 (const)
-  local +55:9 al: f64 (const)
-  local +56:9 pc: f64 (const)
-  local +57:9 ph: f64 (const)
-  local +58:9 pl: f64 (const)
-  local +59:9 err: f64 (const)
-  local +60:9 tail: f64 (const)
-  local +61:7 y0: f64 (let)
-  local +62:7 y1: f64 (let)
-  local +68:9 quadrant: i32 (const)
-  callee +69:10 trigKernel -> @nish.trigKernel
+  local +5:9 w2: u64 (const)
+  callee +5:19 pio2Word -> @nish.pio2Word
+  local +6:9 lo2: u64 (const)
+  local +7:9 hi2: u64 (const)
+  callee +7:20 mulHi -> @nish.mulHi
+  local +8:9 lo1: u64 (const)
+  local +9:9 hi1: u64 (const)
+  callee +9:20 mulHi -> @nish.mulHi
+  local +10:9 p0: u64 (const)
+  local +11:9 p1: u64 (const)
+  local +12:9 c: u64 (const)
+  local +13:9 p2: u64 (const)
+  local +16:7 q2: u64 (let)
+  local +17:7 q1: u64 (let)
+  local +18:7 q0: u64 (let)
+  local +22:7 n: i32 (let)
+  local +23:7 neg: boolean (let)
+  local +28:11 k0: u64 (const)
+  local +30:11 k1: u64 (const)
+  local +33:7 sh: i32 (let)
+  local +42:9 lz: i32 (const)
+  callee +42:19 clz64 -> @nish.clz64
+  local +48:9 a: f64 (const)
+  callee +48:43 exp2Bits -> @nish.exp2Bits
+  local +49:9 b: f64 (const)
+  callee +51:5 exp2Bits -> @nish.exp2Bits
+  local +53:9 p1h: f64 (const)
+  local +54:9 p1l: f64 (const)
+  local +55:9 t: f64 (const)
+  local +56:9 split: f64 (const)
+  local +57:9 ac: f64 (const)
+  local +58:9 ah: f64 (const)
+  local +59:9 al: f64 (const)
+  local +60:9 pc: f64 (const)
+  local +61:9 ph: f64 (const)
+  local +62:9 pl: f64 (const)
+  local +63:9 err: f64 (const)
+  local +64:9 tail: f64 (const)
+  local +65:7 y0: f64 (let)
+  local +66:7 y1: f64 (let)
+  callee +72:10 trigKernel -> @nish.trigKernel
 function kernelTan(x0: f64, y0: f64, odd: boolean): f64 -> @nish.kernelTan
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x0 y0
@@ -218,7 +217,7 @@ function atanlo(id: i32): f64 -> @nish.atanlo
 function atan2F64(y: f64, x: f64): f64 -> @nish.atan2F64 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x y
-  calls: llvm.fabs.f64 nish.atanhi nish.atanlo nish.hiWord nish.isNan nish.loWord nish.pow2
+  calls: llvm.fabs.f64 nish.atanhi nish.atanlo nish.exp2Bits nish.hiWord nish.isNan nish.loWord nish.pow2
   stackSites=0 stackLocals=0
   local +0:9 piO4: f64 (const)
   local +1:9 piO2: f64 (const)
@@ -242,36 +241,37 @@ function atan2F64(y: f64, x: f64): f64 -> @nish.atan2F64 [exported]
   local +59:11 q: f64 (const)
   local +62:7 a: f64 (let)
   local +63:7 b: f64 (let)
-  local +67:11 s: f64 (const)
-  callee +67:20 pow2 -> @nish.pow2
-  callee +67:54 pow2 -> @nish.pow2
-  local +71:9 q: f64 (const)
-  local +72:9 qs: f64 (const)
-  local +73:9 qh: f64 (const)
-  local +74:9 ql: f64 (const)
-  local +75:9 bs: f64 (const)
-  local +76:9 bh: f64 (const)
-  local +77:9 bl: f64 (const)
-  local +78:9 p: f64 (const)
-  local +79:9 pe: f64 (const)
-  local +80:9 c: f64 (const)
-  local +81:7 hi: f64 (let)
-  local +82:7 lo: f64 (let)
-  local +83:9 iq: i32 (const)
-  callee +83:19 hiWord -> @nish.hiWord
-  callee +85:10 atanhi -> @nish.atanhi
-  callee +86:10 atanlo -> @nish.atanlo
-  local +90:9 t: f64 (let)
-  local +91:9 tl: f64 (let)
-  local +93:11 id: i32 (let)
-  callee +108:12 atanhi -> @nish.atanhi
-  callee +109:12 atanlo -> @nish.atanlo
-  local +111:11 z: f64 (const)
-  local +112:11 w: f64 (const)
-  local +113:11 s1: f64 (const)
-  local +121:11 s2: f64 (const)
-  local +129:7 r: f64 (let)
-  local +133:11 s: f64 (const)
+  local +68:11 h1: i32 (const)
+  local +69:11 s: f64 (const)
+  callee +69:20 pow2 -> @nish.pow2
+  callee +69:31 exp2Bits -> @nish.exp2Bits
+  local +73:9 q: f64 (const)
+  local +74:9 qs: f64 (const)
+  local +75:9 qh: f64 (const)
+  local +76:9 ql: f64 (const)
+  local +77:9 bs: f64 (const)
+  local +78:9 bh: f64 (const)
+  local +79:9 bl: f64 (const)
+  local +80:9 p: f64 (const)
+  local +81:9 pe: f64 (const)
+  local +82:9 c: f64 (const)
+  local +83:7 hi: f64 (let)
+  local +84:7 lo: f64 (let)
+  local +85:9 iq: i32 (const)
+  callee +85:19 hiWord -> @nish.hiWord
+  callee +87:10 atanhi -> @nish.atanhi
+  callee +88:10 atanlo -> @nish.atanlo
+  local +92:9 t: f64 (let)
+  local +93:9 tl: f64 (let)
+  local +95:11 id: i32 (let)
+  callee +110:12 atanhi -> @nish.atanhi
+  callee +111:12 atanlo -> @nish.atanlo
+  local +113:11 z: f64 (const)
+  local +114:11 w: f64 (const)
+  local +115:11 s1: f64 (const)
+  local +123:11 s2: f64 (const)
+  local +131:7 r: f64 (let)
+  local +135:11 s: f64 (const)
 function hypotCoreF(a: f64, b: f64): f64 -> @nish.hypotCoreF
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b

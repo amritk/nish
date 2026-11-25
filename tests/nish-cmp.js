@@ -22941,6 +22941,7 @@ const DECLARED = [
       "tests/cases/math_hypot.ts": ["math_hypot.ll"],
       "tests/link/break_sound/main.ts": ["break-voices.ll", "synth.ll"],
       "tests/link/break_sound_wav/main.ts": ["break-voices.ll", "synth.ll"],
+      "tests/link/module_target_std_twin/main.ts": ["constants.ll", "expressions.ll"],
       "tests/link/std_synth/main.ts": ["main.ll"],
     }
   ),

@@ -240,8 +240,8 @@ const pio2Word = (p: i32): u64 => {
   const c3: u64 = toU64(ipio2(j + 3))
   const top: u64 = (c0 << toU64(40)) | (c1 << toU64(16)) | (c2 >> toU64(8))
   const low: u64 = ((c2 & toU64(255)) << toU64(24)) | c3
-  // low is below 2^32, so shifting it up by off and down by 32 is low >> (32 - off).
-  return (top << toU64(off)) | ((low << toU64(off)) >> toU64(32))
+  // 32 - off is taken in i64, where it cannot wrap.
+  return (top << toU64(off)) | (low >> toU64(toI64(32) - toI64(off)))
 }
 // The high 64 bits of a * b.
 const mulHi = (a: u64, b: u64): u64 => {
@@ -267,10 +267,11 @@ const clz64 = (v: u64): i32 => {
 // for |x| >= 2^20 * pi/2 (finite): x * 2/pi mod 4 from a 192-bit window.
 const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
   const m: u64 = (toU64(f64ToBits(x)) & ((toU64(1) << toU64(52)) - toU64(1))) | (toU64(1) << toU64(52))
-  // The words start at fraction bit e - 53, for the unbiased exponent e = (ix >> 20) - 1023.
-  const w0: u64 = pio2Word((ix >> 20) - 1076)
-  const w1: u64 = pio2Word((ix >> 20) - 1012)
-  const w2: u64 = pio2Word((ix >> 20) - 948)
+  // The words start at fraction bit p = e - 53, for the unbiased exponent e = (ix >> 20) - 1023.
+  const p: i32 = (ix >> 20) - 1076
+  const w0: u64 = pio2Word(p)
+  const w1: u64 = pio2Word(p + 64)
+  const w2: u64 = pio2Word(p + 128)
   const lo2: u64 = m * w2
   const hi2: u64 = mulHi(m, w2)
   const lo1: u64 = m * w1
@@ -284,11 +285,14 @@ const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
   let q2: u64 = (p2 << toU64(2)) | (p1 >> toU64(62))
   let q1: u64 = (p1 << toU64(2)) | (p0 >> toU64(62))
   let q0: u64 = p0 << toU64(2)
-  // A negative fraction rounds the quadrant up one, to the nearer multiple of pi/2.
-  const neg: boolean = q2 >> toU64(63) !== toU64(0)
-  const n0: i32 = toI32(p2 >> toU64(62)) & 3
-  const n: i32 = neg ? n0 + 1 : n0
-  if (neg) {
+  // The quadrant is the top two bits, from 0 to 3 (the & 3 drops no bit of a
+  // u64 >> 62; it states the range); a negative fraction rounds it up one, to
+  // the nearer multiple of pi/2.
+  let n: i32 = toI32(p2 >> toU64(62)) & 3
+  let neg: boolean = false
+  if (q2 >> toU64(63) !== toU64(0)) {
+    n += 1
+    neg = true
     q0 = ~q0 + toU64(1)
     const k0: u64 = q0 === toU64(0) ? toU64(1) : toU64(0)
     q1 = ~q1 + k0
@@ -334,8 +338,7 @@ const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
     y1 = -y1
   }
   // x * 2/pi is -(n + f) for a negative x, so its quadrant is -n, which is 4 - n mod 4.
-  const quadrant: i32 = neg ? 3 - n0 : 4 - n0
-  return trigKernel(y0, y1, hx < 0 ? quadrant : n, mode)
+  return trigKernel(y0, y1, hx < 0 ? 4 - n : n, mode)
 }
 
 // fdlibm's __kernel_tan: tan(x0 + y0) for |x0 + y0| <= pi/4, or -1/tan when `odd`.
@@ -630,9 +633,11 @@ export const atan2F64 = (y: f64, x: f64): f64 => {
   let a: f64 = Math.abs(y)
   let b: f64 = Math.abs(x)
   if (ix < 0x23d00000 || ix > 0x5c100000) {
-    // 2^h for h = 1023 - (ix >> 20), as 2^(h >> 1) * 2^((h + 1) >> 1) so
-    // neither factor overflows.
-    const s: f64 = pow2(-((ix >> 20) - 1023) >> 1) * pow2(-((ix >> 20) - 1024) >> 1)
+    // 2^h for h = 1023 - (ix >> 20), as 2^h1 * 2^(h - h1) with h1 = h >> 1
+    // so neither factor overflows; the second exponent, h - h1 biased by
+    // 1023, is summed in i64.
+    const h1: i32 = -((ix >> 20) - 1023) >> 1
+    const s: f64 = pow2(h1) * exp2Bits(toI64(2046) - toI64(ix >> 20) - toI64(h1))
     a = a * s
     b = b * s
   }

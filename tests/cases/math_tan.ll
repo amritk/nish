@@ -480,15 +480,14 @@ if.end:
   %53 = and i64 %52, 63
   %54 = shl i64 %50, %53
   %55 = load i64, i64* %low.addr, align 8
-  %56 = load i32, i32* %off.addr, align 4
-  %57 = sext i32 %56 to i64
-  %58 = and i64 %57, 63
-  %59 = shl i64 %55, %58
-  %60 = sext i32 32 to i64
-  %61 = and i64 %60, 63
-  %62 = lshr i64 %59, %61
-  %63 = or i64 %54, %62
-  ret i64 %63
+  %56 = sext i32 32 to i64
+  %57 = load i32, i32* %off.addr, align 4
+  %58 = sext i32 %57 to i64
+  %59 = sub nsw i64 %56, %58
+  %60 = and i64 %59, 63
+  %61 = lshr i64 %55, %60
+  %62 = or i64 %54, %61
+  ret i64 %62
 }
 
 define internal noundef i64 @nish.mulHi(i64 noundef %a, i64 noundef %b) #2 {
@@ -596,6 +595,7 @@ if.end:
 define internal noundef double @nish.trigLarge(double noundef %x, i32 noundef %ix, i32 noundef %hx, i32 noundef %mode) #0 {
 entry:
   %m.addr = alloca i64, align 8
+  %p.addr = alloca i32, align 4
   %w0.addr = alloca i64, align 8
   %w1.addr = alloca i64, align 8
   %w2.addr = alloca i64, align 8
@@ -610,9 +610,8 @@ entry:
   %q2.addr = alloca i64, align 8
   %q1.addr = alloca i64, align 8
   %q0.addr = alloca i64, align 8
-  %neg.addr = alloca i1, align 1
-  %n0.addr = alloca i32, align 4
   %n.addr = alloca i32, align 4
+  %neg.addr = alloca i1, align 1
   %k0.addr = alloca i64, align 8
   %k1.addr = alloca i64, align 8
   %sh.addr = alloca i32, align 4
@@ -633,7 +632,6 @@ entry:
   %tail.addr = alloca double, align 8
   %y0.addr = alloca double, align 8
   %y1.addr = alloca double, align 8
-  %quadrant.addr = alloca i32, align 4
   %0 = bitcast double %x to i64
   %1 = sext i32 1 to i64
   %2 = sext i32 52 to i64
@@ -650,392 +648,367 @@ entry:
   store i64 %12, i64* %m.addr, align 8
   %13 = ashr i32 %ix, 20
   %14 = sub nsw i32 %13, 1076
-  %15 = call i64 @nish.pio2Word(i32 %14)
-  store i64 %15, i64* %w0.addr, align 8
-  %16 = ashr i32 %ix, 20
-  %17 = sub nsw i32 %16, 1012
-  %18 = call i64 @nish.pio2Word(i32 %17)
-  store i64 %18, i64* %w1.addr, align 8
-  %19 = ashr i32 %ix, 20
-  %20 = sub nsw i32 %19, 948
-  %21 = call i64 @nish.pio2Word(i32 %20)
-  store i64 %21, i64* %w2.addr, align 8
-  %22 = load i64, i64* %m.addr, align 8
-  %23 = load i64, i64* %w2.addr, align 8
-  %24 = mul i64 %22, %23
-  store i64 %24, i64* %lo2.addr, align 8
-  %25 = load i64, i64* %m.addr, align 8
-  %26 = load i64, i64* %w2.addr, align 8
-  %27 = call i64 @nish.mulHi(i64 %25, i64 %26)
-  store i64 %27, i64* %hi2.addr, align 8
-  %28 = load i64, i64* %m.addr, align 8
-  %29 = load i64, i64* %w1.addr, align 8
-  %30 = mul i64 %28, %29
-  store i64 %30, i64* %lo1.addr, align 8
-  %31 = load i64, i64* %m.addr, align 8
-  %32 = load i64, i64* %w1.addr, align 8
-  %33 = call i64 @nish.mulHi(i64 %31, i64 %32)
-  store i64 %33, i64* %hi1.addr, align 8
-  %34 = load i64, i64* %lo2.addr, align 8
-  store i64 %34, i64* %p0.addr, align 8
-  %35 = load i64, i64* %hi2.addr, align 8
-  %36 = load i64, i64* %lo1.addr, align 8
-  %37 = add i64 %35, %36
-  store i64 %37, i64* %p1.addr, align 8
-  %38 = load i64, i64* %p1.addr, align 8
-  %39 = load i64, i64* %lo1.addr, align 8
-  %40 = icmp ult i64 %38, %39
-  br i1 %40, label %cond.true, label %cond.false
+  store i32 %14, i32* %p.addr, align 4
+  %15 = load i32, i32* %p.addr, align 4
+  %16 = call i64 @nish.pio2Word(i32 %15)
+  store i64 %16, i64* %w0.addr, align 8
+  %17 = load i32, i32* %p.addr, align 4
+  %18 = add nsw i32 %17, 64
+  %19 = call i64 @nish.pio2Word(i32 %18)
+  store i64 %19, i64* %w1.addr, align 8
+  %20 = load i32, i32* %p.addr, align 4
+  %21 = add nsw i32 %20, 128
+  %22 = call i64 @nish.pio2Word(i32 %21)
+  store i64 %22, i64* %w2.addr, align 8
+  %23 = load i64, i64* %m.addr, align 8
+  %24 = load i64, i64* %w2.addr, align 8
+  %25 = mul i64 %23, %24
+  store i64 %25, i64* %lo2.addr, align 8
+  %26 = load i64, i64* %m.addr, align 8
+  %27 = load i64, i64* %w2.addr, align 8
+  %28 = call i64 @nish.mulHi(i64 %26, i64 %27)
+  store i64 %28, i64* %hi2.addr, align 8
+  %29 = load i64, i64* %m.addr, align 8
+  %30 = load i64, i64* %w1.addr, align 8
+  %31 = mul i64 %29, %30
+  store i64 %31, i64* %lo1.addr, align 8
+  %32 = load i64, i64* %m.addr, align 8
+  %33 = load i64, i64* %w1.addr, align 8
+  %34 = call i64 @nish.mulHi(i64 %32, i64 %33)
+  store i64 %34, i64* %hi1.addr, align 8
+  %35 = load i64, i64* %lo2.addr, align 8
+  store i64 %35, i64* %p0.addr, align 8
+  %36 = load i64, i64* %hi2.addr, align 8
+  %37 = load i64, i64* %lo1.addr, align 8
+  %38 = add i64 %36, %37
+  store i64 %38, i64* %p1.addr, align 8
+  %39 = load i64, i64* %p1.addr, align 8
+  %40 = load i64, i64* %lo1.addr, align 8
+  %41 = icmp ult i64 %39, %40
+  br i1 %41, label %cond.true, label %cond.false
 
 cond.true:
-  %41 = sext i32 1 to i64
+  %42 = sext i32 1 to i64
   br label %cond.end
 
 cond.false:
-  %42 = sext i32 0 to i64
+  %43 = sext i32 0 to i64
   br label %cond.end
 
 cond.end:
-  %43 = phi i64 [ %41, %cond.true ], [ %42, %cond.false ]
-  store i64 %43, i64* %c.addr, align 8
-  %44 = load i64, i64* %hi1.addr, align 8
-  %45 = load i64, i64* %m.addr, align 8
-  %46 = load i64, i64* %w0.addr, align 8
-  %47 = mul i64 %45, %46
-  %48 = add i64 %44, %47
-  %49 = load i64, i64* %c.addr, align 8
-  %50 = add i64 %48, %49
-  store i64 %50, i64* %p2.addr, align 8
-  %51 = load i64, i64* %p2.addr, align 8
-  %52 = sext i32 2 to i64
-  %53 = and i64 %52, 63
-  %54 = shl i64 %51, %53
-  %55 = load i64, i64* %p1.addr, align 8
-  %56 = sext i32 62 to i64
-  %57 = and i64 %56, 63
-  %58 = lshr i64 %55, %57
-  %59 = or i64 %54, %58
-  store i64 %59, i64* %q2.addr, align 8
-  %60 = load i64, i64* %p1.addr, align 8
-  %61 = sext i32 2 to i64
-  %62 = and i64 %61, 63
-  %63 = shl i64 %60, %62
-  %64 = load i64, i64* %p0.addr, align 8
-  %65 = sext i32 62 to i64
-  %66 = and i64 %65, 63
-  %67 = lshr i64 %64, %66
-  %68 = or i64 %63, %67
-  store i64 %68, i64* %q1.addr, align 8
-  %69 = load i64, i64* %p0.addr, align 8
-  %70 = sext i32 2 to i64
-  %71 = and i64 %70, 63
-  %72 = shl i64 %69, %71
-  store i64 %72, i64* %q0.addr, align 8
-  %73 = load i64, i64* %q2.addr, align 8
-  %74 = sext i32 63 to i64
-  %75 = and i64 %74, 63
-  %76 = lshr i64 %73, %75
-  %77 = sext i32 0 to i64
-  %78 = icmp ne i64 %76, %77
-  store i1 %78, i1* %neg.addr, align 1
-  %79 = load i64, i64* %p2.addr, align 8
-  %80 = sext i32 62 to i64
-  %81 = and i64 %80, 63
-  %82 = lshr i64 %79, %81
-  %83 = trunc i64 %82 to i32
-  %84 = and i32 %83, 3
-  store i32 %84, i32* %n0.addr, align 4
-  %85 = load i1, i1* %neg.addr, align 1
-  br i1 %85, label %cond.true.1, label %cond.false.1
+  %44 = phi i64 [ %42, %cond.true ], [ %43, %cond.false ]
+  store i64 %44, i64* %c.addr, align 8
+  %45 = load i64, i64* %hi1.addr, align 8
+  %46 = load i64, i64* %m.addr, align 8
+  %47 = load i64, i64* %w0.addr, align 8
+  %48 = mul i64 %46, %47
+  %49 = add i64 %45, %48
+  %50 = load i64, i64* %c.addr, align 8
+  %51 = add i64 %49, %50
+  store i64 %51, i64* %p2.addr, align 8
+  %52 = load i64, i64* %p2.addr, align 8
+  %53 = sext i32 2 to i64
+  %54 = and i64 %53, 63
+  %55 = shl i64 %52, %54
+  %56 = load i64, i64* %p1.addr, align 8
+  %57 = sext i32 62 to i64
+  %58 = and i64 %57, 63
+  %59 = lshr i64 %56, %58
+  %60 = or i64 %55, %59
+  store i64 %60, i64* %q2.addr, align 8
+  %61 = load i64, i64* %p1.addr, align 8
+  %62 = sext i32 2 to i64
+  %63 = and i64 %62, 63
+  %64 = shl i64 %61, %63
+  %65 = load i64, i64* %p0.addr, align 8
+  %66 = sext i32 62 to i64
+  %67 = and i64 %66, 63
+  %68 = lshr i64 %65, %67
+  %69 = or i64 %64, %68
+  store i64 %69, i64* %q1.addr, align 8
+  %70 = load i64, i64* %p0.addr, align 8
+  %71 = sext i32 2 to i64
+  %72 = and i64 %71, 63
+  %73 = shl i64 %70, %72
+  store i64 %73, i64* %q0.addr, align 8
+  %74 = load i64, i64* %p2.addr, align 8
+  %75 = sext i32 62 to i64
+  %76 = and i64 %75, 63
+  %77 = lshr i64 %74, %76
+  %78 = trunc i64 %77 to i32
+  %79 = and i32 %78, 3
+  store i32 %79, i32* %n.addr, align 4
+  store i1 false, i1* %neg.addr, align 1
+  %80 = load i64, i64* %q2.addr, align 8
+  %81 = sext i32 63 to i64
+  %82 = and i64 %81, 63
+  %83 = lshr i64 %80, %82
+  %84 = sext i32 0 to i64
+  %85 = icmp ne i64 %83, %84
+  br i1 %85, label %if.then, label %if.end
+
+if.then:
+  %86 = load i32, i32* %n.addr, align 4
+  %87 = add nsw i32 %86, 1
+  store i32 %87, i32* %n.addr, align 4
+  store i1 true, i1* %neg.addr, align 1
+  %88 = load i64, i64* %q0.addr, align 8
+  %89 = xor i64 %88, -1
+  %90 = sext i32 1 to i64
+  %91 = add i64 %89, %90
+  store i64 %91, i64* %q0.addr, align 8
+  %92 = load i64, i64* %q0.addr, align 8
+  %93 = sext i32 0 to i64
+  %94 = icmp eq i64 %92, %93
+  br i1 %94, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
-  %86 = load i32, i32* %n0.addr, align 4
-  %87 = add nsw i32 %86, 1
+  %95 = sext i32 1 to i64
   br label %cond.end.1
 
 cond.false.1:
-  %88 = load i32, i32* %n0.addr, align 4
+  %96 = sext i32 0 to i64
   br label %cond.end.1
 
 cond.end.1:
-  %89 = phi i32 [ %87, %cond.true.1 ], [ %88, %cond.false.1 ]
-  store i32 %89, i32* %n.addr, align 4
-  %90 = load i1, i1* %neg.addr, align 1
-  br i1 %90, label %if.then, label %if.end
-
-if.then:
-  %91 = load i64, i64* %q0.addr, align 8
-  %92 = xor i64 %91, -1
-  %93 = sext i32 1 to i64
-  %94 = add i64 %92, %93
-  store i64 %94, i64* %q0.addr, align 8
-  %95 = load i64, i64* %q0.addr, align 8
-  %96 = sext i32 0 to i64
-  %97 = icmp eq i64 %95, %96
-  br i1 %97, label %cond.true.2, label %cond.false.2
-
-cond.true.2:
-  %98 = sext i32 1 to i64
-  br label %cond.end.2
-
-cond.false.2:
-  %99 = sext i32 0 to i64
-  br label %cond.end.2
-
-cond.end.2:
-  %100 = phi i64 [ %98, %cond.true.2 ], [ %99, %cond.false.2 ]
-  store i64 %100, i64* %k0.addr, align 8
-  %101 = load i64, i64* %q1.addr, align 8
-  %102 = xor i64 %101, -1
-  %103 = load i64, i64* %k0.addr, align 8
-  %104 = add i64 %102, %103
-  store i64 %104, i64* %q1.addr, align 8
-  %105 = load i64, i64* %k0.addr, align 8
-  %106 = sext i32 0 to i64
-  %107 = icmp ne i64 %105, %106
-  br i1 %107, label %land.rhs, label %land.end
+  %97 = phi i64 [ %95, %cond.true.1 ], [ %96, %cond.false.1 ]
+  store i64 %97, i64* %k0.addr, align 8
+  %98 = load i64, i64* %q1.addr, align 8
+  %99 = xor i64 %98, -1
+  %100 = load i64, i64* %k0.addr, align 8
+  %101 = add i64 %99, %100
+  store i64 %101, i64* %q1.addr, align 8
+  %102 = load i64, i64* %k0.addr, align 8
+  %103 = sext i32 0 to i64
+  %104 = icmp ne i64 %102, %103
+  br i1 %104, label %land.rhs, label %land.end
 
 land.rhs:
-  %108 = load i64, i64* %q1.addr, align 8
-  %109 = sext i32 0 to i64
-  %110 = icmp eq i64 %108, %109
+  %105 = load i64, i64* %q1.addr, align 8
+  %106 = sext i32 0 to i64
+  %107 = icmp eq i64 %105, %106
   br label %land.end
 
 land.end:
-  %111 = phi i1 [ false, %cond.end.2 ], [ %110, %land.rhs ]
-  br i1 %111, label %cond.true.3, label %cond.false.3
+  %108 = phi i1 [ false, %cond.end.1 ], [ %107, %land.rhs ]
+  br i1 %108, label %cond.true.2, label %cond.false.2
 
-cond.true.3:
-  %112 = sext i32 1 to i64
-  br label %cond.end.3
+cond.true.2:
+  %109 = sext i32 1 to i64
+  br label %cond.end.2
 
-cond.false.3:
-  %113 = sext i32 0 to i64
-  br label %cond.end.3
+cond.false.2:
+  %110 = sext i32 0 to i64
+  br label %cond.end.2
 
-cond.end.3:
-  %114 = phi i64 [ %112, %cond.true.3 ], [ %113, %cond.false.3 ]
-  store i64 %114, i64* %k1.addr, align 8
-  %115 = load i64, i64* %q2.addr, align 8
-  %116 = xor i64 %115, -1
-  %117 = load i64, i64* %k1.addr, align 8
-  %118 = add i64 %116, %117
-  store i64 %118, i64* %q2.addr, align 8
+cond.end.2:
+  %111 = phi i64 [ %109, %cond.true.2 ], [ %110, %cond.false.2 ]
+  store i64 %111, i64* %k1.addr, align 8
+  %112 = load i64, i64* %q2.addr, align 8
+  %113 = xor i64 %112, -1
+  %114 = load i64, i64* %k1.addr, align 8
+  %115 = add i64 %113, %114
+  store i64 %115, i64* %q2.addr, align 8
   br label %if.end
 
 if.end:
   store i32 0, i32* %sh.addr, align 4
-  %119 = load i64, i64* %q2.addr, align 8
-  %120 = sext i32 0 to i64
-  %121 = icmp eq i64 %119, %120
-  br i1 %121, label %if.then.1, label %if.end.1
+  %116 = load i64, i64* %q2.addr, align 8
+  %117 = sext i32 0 to i64
+  %118 = icmp eq i64 %116, %117
+  br i1 %118, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %122 = load i64, i64* %q1.addr, align 8
-  store i64 %122, i64* %q2.addr, align 8
-  %123 = load i64, i64* %q0.addr, align 8
-  store i64 %123, i64* %q1.addr, align 8
-  %124 = sext i32 0 to i64
-  store i64 %124, i64* %q0.addr, align 8
+  %119 = load i64, i64* %q1.addr, align 8
+  store i64 %119, i64* %q2.addr, align 8
+  %120 = load i64, i64* %q0.addr, align 8
+  store i64 %120, i64* %q1.addr, align 8
+  %121 = sext i32 0 to i64
+  store i64 %121, i64* %q0.addr, align 8
   store i32 64, i32* %sh.addr, align 4
   br label %if.end.1
 
 if.end.1:
-  %125 = load i64, i64* %q2.addr, align 8
-  %126 = call i32 @nish.clz64(i64 %125)
-  store i32 %126, i32* %lz.addr, align 4
-  %127 = load i32, i32* %lz.addr, align 4
-  %128 = icmp sgt i32 %127, 0
-  br i1 %128, label %if.then.2, label %if.end.2
+  %122 = load i64, i64* %q2.addr, align 8
+  %123 = call i32 @nish.clz64(i64 %122)
+  store i32 %123, i32* %lz.addr, align 4
+  %124 = load i32, i32* %lz.addr, align 4
+  %125 = icmp sgt i32 %124, 0
+  br i1 %125, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %129 = load i64, i64* %q2.addr, align 8
-  %130 = load i32, i32* %lz.addr, align 4
-  %131 = sext i32 %130 to i64
-  %132 = and i64 %131, 63
-  %133 = shl i64 %129, %132
-  %134 = load i64, i64* %q1.addr, align 8
-  %135 = load i32, i32* %lz.addr, align 4
-  %136 = sub nsw i32 64, %135
-  %137 = sext i32 %136 to i64
-  %138 = and i64 %137, 63
-  %139 = lshr i64 %134, %138
-  %140 = or i64 %133, %139
-  store i64 %140, i64* %q2.addr, align 8
-  %141 = load i64, i64* %q1.addr, align 8
-  %142 = load i32, i32* %lz.addr, align 4
-  %143 = sext i32 %142 to i64
-  %144 = and i64 %143, 63
-  %145 = shl i64 %141, %144
-  %146 = load i64, i64* %q0.addr, align 8
-  %147 = load i32, i32* %lz.addr, align 4
-  %148 = sub nsw i32 64, %147
-  %149 = sext i32 %148 to i64
-  %150 = and i64 %149, 63
-  %151 = lshr i64 %146, %150
-  %152 = or i64 %145, %151
-  store i64 %152, i64* %q1.addr, align 8
+  %126 = load i64, i64* %q2.addr, align 8
+  %127 = load i32, i32* %lz.addr, align 4
+  %128 = sext i32 %127 to i64
+  %129 = and i64 %128, 63
+  %130 = shl i64 %126, %129
+  %131 = load i64, i64* %q1.addr, align 8
+  %132 = load i32, i32* %lz.addr, align 4
+  %133 = sub nsw i32 64, %132
+  %134 = sext i32 %133 to i64
+  %135 = and i64 %134, 63
+  %136 = lshr i64 %131, %135
+  %137 = or i64 %130, %136
+  store i64 %137, i64* %q2.addr, align 8
+  %138 = load i64, i64* %q1.addr, align 8
+  %139 = load i32, i32* %lz.addr, align 4
+  %140 = sext i32 %139 to i64
+  %141 = and i64 %140, 63
+  %142 = shl i64 %138, %141
+  %143 = load i64, i64* %q0.addr, align 8
+  %144 = load i32, i32* %lz.addr, align 4
+  %145 = sub nsw i32 64, %144
+  %146 = sext i32 %145 to i64
+  %147 = and i64 %146, 63
+  %148 = lshr i64 %143, %147
+  %149 = or i64 %142, %148
+  store i64 %149, i64* %q1.addr, align 8
   br label %if.end.2
 
 if.end.2:
-  %153 = load i64, i64* %q2.addr, align 8
-  %154 = sext i32 11 to i64
-  %155 = and i64 %154, 63
-  %156 = lshr i64 %153, %155
-  %157 = uitofp i64 %156 to double
-  %158 = sext i32 970 to i64
-  %159 = load i32, i32* %sh.addr, align 4
+  %150 = load i64, i64* %q2.addr, align 8
+  %151 = sext i32 11 to i64
+  %152 = and i64 %151, 63
+  %153 = lshr i64 %150, %152
+  %154 = uitofp i64 %153 to double
+  %155 = sext i32 970 to i64
+  %156 = load i32, i32* %sh.addr, align 4
+  %157 = sext i32 %156 to i64
+  %158 = sub nsw i64 %155, %157
+  %159 = load i32, i32* %lz.addr, align 4
   %160 = sext i32 %159 to i64
   %161 = sub nsw i64 %158, %160
-  %162 = load i32, i32* %lz.addr, align 4
-  %163 = sext i32 %162 to i64
-  %164 = sub nsw i64 %161, %163
-  %165 = call double @nish.exp2Bits(i64 %164)
-  %166 = fmul double %157, %165
-  store double %166, double* %a.addr, align 8
-  %167 = load i64, i64* %q2.addr, align 8
-  %168 = sext i32 2047 to i64
-  %169 = and i64 %167, %168
-  %170 = sext i32 53 to i64
-  %171 = and i64 %170, 63
-  %172 = shl i64 %169, %171
-  %173 = load i64, i64* %q1.addr, align 8
-  %174 = sext i32 11 to i64
-  %175 = and i64 %174, 63
-  %176 = lshr i64 %173, %175
-  %177 = or i64 %172, %176
-  %178 = uitofp i64 %177 to double
-  %179 = sext i32 906 to i64
-  %180 = load i32, i32* %sh.addr, align 4
+  %162 = call double @nish.exp2Bits(i64 %161)
+  %163 = fmul double %154, %162
+  store double %163, double* %a.addr, align 8
+  %164 = load i64, i64* %q2.addr, align 8
+  %165 = sext i32 2047 to i64
+  %166 = and i64 %164, %165
+  %167 = sext i32 53 to i64
+  %168 = and i64 %167, 63
+  %169 = shl i64 %166, %168
+  %170 = load i64, i64* %q1.addr, align 8
+  %171 = sext i32 11 to i64
+  %172 = and i64 %171, 63
+  %173 = lshr i64 %170, %172
+  %174 = or i64 %169, %173
+  %175 = uitofp i64 %174 to double
+  %176 = sext i32 906 to i64
+  %177 = load i32, i32* %sh.addr, align 4
+  %178 = sext i32 %177 to i64
+  %179 = sub nsw i64 %176, %178
+  %180 = load i32, i32* %lz.addr, align 4
   %181 = sext i32 %180 to i64
   %182 = sub nsw i64 %179, %181
-  %183 = load i32, i32* %lz.addr, align 4
-  %184 = sext i32 %183 to i64
-  %185 = sub nsw i64 %182, %184
-  %186 = call double @nish.exp2Bits(i64 %185)
-  %187 = fmul double %178, %186
-  store double %187, double* %b.addr, align 8
+  %183 = call double @nish.exp2Bits(i64 %182)
+  %184 = fmul double %175, %183
+  store double %184, double* %b.addr, align 8
   store double 0x3FF921FB54442D18, double* %p1h.addr, align 8
   store double 0x3C91A62633145C07, double* %p1l.addr, align 8
-  %188 = load double, double* %a.addr, align 8
-  %189 = load double, double* %p1h.addr, align 8
-  %190 = fmul double %188, %189
-  store double %190, double* %t.addr, align 8
+  %185 = load double, double* %a.addr, align 8
+  %186 = load double, double* %p1h.addr, align 8
+  %187 = fmul double %185, %186
+  store double %187, double* %t.addr, align 8
   store double 0x41A0000002000000, double* %split.addr, align 8
-  %191 = load double, double* %a.addr, align 8
-  %192 = load double, double* %split.addr, align 8
-  %193 = fmul double %191, %192
-  store double %193, double* %ac.addr, align 8
-  %194 = load double, double* %ac.addr, align 8
-  %195 = load double, double* %ac.addr, align 8
+  %188 = load double, double* %a.addr, align 8
+  %189 = load double, double* %split.addr, align 8
+  %190 = fmul double %188, %189
+  store double %190, double* %ac.addr, align 8
+  %191 = load double, double* %ac.addr, align 8
+  %192 = load double, double* %ac.addr, align 8
+  %193 = load double, double* %a.addr, align 8
+  %194 = fsub double %192, %193
+  %195 = fsub double %191, %194
+  store double %195, double* %ah.addr, align 8
   %196 = load double, double* %a.addr, align 8
-  %197 = fsub double %195, %196
-  %198 = fsub double %194, %197
-  store double %198, double* %ah.addr, align 8
-  %199 = load double, double* %a.addr, align 8
-  %200 = load double, double* %ah.addr, align 8
-  %201 = fsub double %199, %200
-  store double %201, double* %al.addr, align 8
-  %202 = load double, double* %p1h.addr, align 8
-  %203 = load double, double* %split.addr, align 8
-  %204 = fmul double %202, %203
-  store double %204, double* %pc.addr, align 8
-  %205 = load double, double* %pc.addr, align 8
-  %206 = load double, double* %pc.addr, align 8
+  %197 = load double, double* %ah.addr, align 8
+  %198 = fsub double %196, %197
+  store double %198, double* %al.addr, align 8
+  %199 = load double, double* %p1h.addr, align 8
+  %200 = load double, double* %split.addr, align 8
+  %201 = fmul double %199, %200
+  store double %201, double* %pc.addr, align 8
+  %202 = load double, double* %pc.addr, align 8
+  %203 = load double, double* %pc.addr, align 8
+  %204 = load double, double* %p1h.addr, align 8
+  %205 = fsub double %203, %204
+  %206 = fsub double %202, %205
+  store double %206, double* %ph.addr, align 8
   %207 = load double, double* %p1h.addr, align 8
-  %208 = fsub double %206, %207
-  %209 = fsub double %205, %208
-  store double %209, double* %ph.addr, align 8
-  %210 = load double, double* %p1h.addr, align 8
+  %208 = load double, double* %ph.addr, align 8
+  %209 = fsub double %207, %208
+  store double %209, double* %pl.addr, align 8
+  %210 = load double, double* %ah.addr, align 8
   %211 = load double, double* %ph.addr, align 8
-  %212 = fsub double %210, %211
-  store double %212, double* %pl.addr, align 8
-  %213 = load double, double* %ah.addr, align 8
-  %214 = load double, double* %ph.addr, align 8
-  %215 = fmul double %213, %214
-  %216 = load double, double* %t.addr, align 8
-  %217 = fsub double %215, %216
-  %218 = load double, double* %ah.addr, align 8
-  %219 = load double, double* %pl.addr, align 8
-  %220 = fmul double %218, %219
-  %221 = fadd double %217, %220
-  %222 = load double, double* %al.addr, align 8
-  %223 = load double, double* %ph.addr, align 8
-  %224 = fmul double %222, %223
-  %225 = fadd double %221, %224
-  %226 = load double, double* %al.addr, align 8
-  %227 = load double, double* %pl.addr, align 8
-  %228 = fmul double %226, %227
-  %229 = fadd double %225, %228
-  store double %229, double* %err.addr, align 8
-  %230 = load double, double* %err.addr, align 8
-  %231 = load double, double* %a.addr, align 8
-  %232 = load double, double* %p1l.addr, align 8
+  %212 = fmul double %210, %211
+  %213 = load double, double* %t.addr, align 8
+  %214 = fsub double %212, %213
+  %215 = load double, double* %ah.addr, align 8
+  %216 = load double, double* %pl.addr, align 8
+  %217 = fmul double %215, %216
+  %218 = fadd double %214, %217
+  %219 = load double, double* %al.addr, align 8
+  %220 = load double, double* %ph.addr, align 8
+  %221 = fmul double %219, %220
+  %222 = fadd double %218, %221
+  %223 = load double, double* %al.addr, align 8
+  %224 = load double, double* %pl.addr, align 8
+  %225 = fmul double %223, %224
+  %226 = fadd double %222, %225
+  store double %226, double* %err.addr, align 8
+  %227 = load double, double* %err.addr, align 8
+  %228 = load double, double* %a.addr, align 8
+  %229 = load double, double* %p1l.addr, align 8
+  %230 = fmul double %228, %229
+  %231 = load double, double* %b.addr, align 8
+  %232 = load double, double* %p1h.addr, align 8
   %233 = fmul double %231, %232
-  %234 = load double, double* %b.addr, align 8
-  %235 = load double, double* %p1h.addr, align 8
-  %236 = fmul double %234, %235
-  %237 = fadd double %233, %236
-  %238 = fadd double %230, %237
-  store double %238, double* %tail.addr, align 8
-  %239 = load double, double* %t.addr, align 8
-  %240 = load double, double* %tail.addr, align 8
-  %241 = fadd double %239, %240
-  store double %241, double* %y0.addr, align 8
-  %242 = load double, double* %tail.addr, align 8
-  %243 = load double, double* %y0.addr, align 8
-  %244 = load double, double* %t.addr, align 8
-  %245 = fsub double %243, %244
-  %246 = fsub double %242, %245
-  store double %246, double* %y1.addr, align 8
-  %247 = load i1, i1* %neg.addr, align 1
-  %248 = icmp slt i32 %hx, 0
-  %249 = icmp ne i1 %247, %248
-  br i1 %249, label %if.then.3, label %if.end.3
+  %234 = fadd double %230, %233
+  %235 = fadd double %227, %234
+  store double %235, double* %tail.addr, align 8
+  %236 = load double, double* %t.addr, align 8
+  %237 = load double, double* %tail.addr, align 8
+  %238 = fadd double %236, %237
+  store double %238, double* %y0.addr, align 8
+  %239 = load double, double* %tail.addr, align 8
+  %240 = load double, double* %y0.addr, align 8
+  %241 = load double, double* %t.addr, align 8
+  %242 = fsub double %240, %241
+  %243 = fsub double %239, %242
+  store double %243, double* %y1.addr, align 8
+  %244 = load i1, i1* %neg.addr, align 1
+  %245 = icmp slt i32 %hx, 0
+  %246 = icmp ne i1 %244, %245
+  br i1 %246, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %250 = load double, double* %y0.addr, align 8
-  %251 = fneg double %250
-  store double %251, double* %y0.addr, align 8
-  %252 = load double, double* %y1.addr, align 8
-  %253 = fneg double %252
-  store double %253, double* %y1.addr, align 8
+  %247 = load double, double* %y0.addr, align 8
+  %248 = fneg double %247
+  store double %248, double* %y0.addr, align 8
+  %249 = load double, double* %y1.addr, align 8
+  %250 = fneg double %249
+  store double %250, double* %y1.addr, align 8
   br label %if.end.3
 
 if.end.3:
-  %254 = load i1, i1* %neg.addr, align 1
-  br i1 %254, label %cond.true.4, label %cond.false.4
+  %251 = load double, double* %y0.addr, align 8
+  %252 = load double, double* %y1.addr, align 8
+  %253 = icmp slt i32 %hx, 0
+  br i1 %253, label %cond.true.3, label %cond.false.3
 
-cond.true.4:
-  %255 = load i32, i32* %n0.addr, align 4
-  %256 = sub nsw i32 3, %255
-  br label %cond.end.4
+cond.true.3:
+  %254 = load i32, i32* %n.addr, align 4
+  %255 = sub nsw i32 4, %254
+  br label %cond.end.3
 
-cond.false.4:
-  %257 = load i32, i32* %n0.addr, align 4
-  %258 = sub nsw i32 4, %257
-  br label %cond.end.4
+cond.false.3:
+  %256 = load i32, i32* %n.addr, align 4
+  br label %cond.end.3
 
-cond.end.4:
-  %259 = phi i32 [ %256, %cond.true.4 ], [ %258, %cond.false.4 ]
-  store i32 %259, i32* %quadrant.addr, align 4
-  %260 = load double, double* %y0.addr, align 8
-  %261 = load double, double* %y1.addr, align 8
-  %262 = icmp slt i32 %hx, 0
-  br i1 %262, label %cond.true.5, label %cond.false.5
-
-cond.true.5:
-  %263 = load i32, i32* %quadrant.addr, align 4
-  br label %cond.end.5
-
-cond.false.5:
-  %264 = load i32, i32* %n.addr, align 4
-  br label %cond.end.5
-
-cond.end.5:
-  %265 = phi i32 [ %263, %cond.true.5 ], [ %264, %cond.false.5 ]
-  %266 = tail call double @nish.trigKernel(double %260, double %261, i32 %265, i32 %mode)
-  ret double %266
+cond.end.3:
+  %257 = phi i32 [ %255, %cond.true.3 ], [ %256, %cond.false.3 ]
+  %258 = tail call double @nish.trigKernel(double %251, double %252, i32 %257, i32 %mode)
+  ret double %258
 }
 
 define internal noundef double @nish.kernelTan(double noundef %x0, double noundef %y0, i1 noundef zeroext %odd) #2 {
@@ -1665,6 +1638,7 @@ entry:
   %q.addr = alloca double, align 8
   %a.addr = alloca double, align 8
   %b.addr = alloca double, align 8
+  %h1.addr = alloca i32, align 4
   %s.addr = alloca double, align 8
   %q.addr.1 = alloca double, align 8
   %qs.addr = alloca double, align 8
@@ -1977,250 +1951,255 @@ if.then.10:
   %106 = sub nsw i32 %105, 1023
   %107 = sub nsw i32 0, %106
   %108 = ashr i32 %107, 1
-  %109 = call double @nish.pow2(i32 %108)
-  %110 = load i32, i32* %ix.addr, align 4
-  %111 = ashr i32 %110, 20
-  %112 = sub nsw i32 %111, 1024
-  %113 = sub nsw i32 0, %112
-  %114 = ashr i32 %113, 1
-  %115 = call double @nish.pow2(i32 %114)
-  %116 = fmul double %109, %115
-  store double %116, double* %s.addr, align 8
-  %117 = load double, double* %a.addr, align 8
-  %118 = load double, double* %s.addr, align 8
-  %119 = fmul double %117, %118
-  store double %119, double* %a.addr, align 8
-  %120 = load double, double* %b.addr, align 8
-  %121 = load double, double* %s.addr, align 8
-  %122 = fmul double %120, %121
-  store double %122, double* %b.addr, align 8
+  store i32 %108, i32* %h1.addr, align 4
+  %109 = load i32, i32* %h1.addr, align 4
+  %110 = call double @nish.pow2(i32 %109)
+  %111 = sext i32 2046 to i64
+  %112 = load i32, i32* %ix.addr, align 4
+  %113 = ashr i32 %112, 20
+  %114 = sext i32 %113 to i64
+  %115 = sub nsw i64 %111, %114
+  %116 = load i32, i32* %h1.addr, align 4
+  %117 = sext i32 %116 to i64
+  %118 = sub nsw i64 %115, %117
+  %119 = call double @nish.exp2Bits(i64 %118)
+  %120 = fmul double %110, %119
+  store double %120, double* %s.addr, align 8
+  %121 = load double, double* %a.addr, align 8
+  %122 = load double, double* %s.addr, align 8
+  %123 = fmul double %121, %122
+  store double %123, double* %a.addr, align 8
+  %124 = load double, double* %b.addr, align 8
+  %125 = load double, double* %s.addr, align 8
+  %126 = fmul double %124, %125
+  store double %126, double* %b.addr, align 8
   br label %if.end.10
 
 if.end.10:
-  %123 = load double, double* %a.addr, align 8
-  %124 = load double, double* %b.addr, align 8
-  %125 = fdiv double %123, %124
-  store double %125, double* %q.addr.1, align 8
-  %126 = load double, double* %q.addr.1, align 8
-  %127 = fmul double %126, 0x41A0000002000000
-  store double %127, double* %qs.addr, align 8
-  %128 = load double, double* %qs.addr, align 8
-  %129 = load double, double* %qs.addr, align 8
+  %127 = load double, double* %a.addr, align 8
+  %128 = load double, double* %b.addr, align 8
+  %129 = fdiv double %127, %128
+  store double %129, double* %q.addr.1, align 8
   %130 = load double, double* %q.addr.1, align 8
-  %131 = fsub double %129, %130
-  %132 = fsub double %128, %131
-  store double %132, double* %qh.addr, align 8
-  %133 = load double, double* %q.addr.1, align 8
-  %134 = load double, double* %qh.addr, align 8
+  %131 = fmul double %130, 0x41A0000002000000
+  store double %131, double* %qs.addr, align 8
+  %132 = load double, double* %qs.addr, align 8
+  %133 = load double, double* %qs.addr, align 8
+  %134 = load double, double* %q.addr.1, align 8
   %135 = fsub double %133, %134
-  store double %135, double* %ql.addr, align 8
-  %136 = load double, double* %b.addr, align 8
-  %137 = fmul double %136, 0x41A0000002000000
-  store double %137, double* %bs.addr, align 8
-  %138 = load double, double* %bs.addr, align 8
-  %139 = load double, double* %bs.addr, align 8
+  %136 = fsub double %132, %135
+  store double %136, double* %qh.addr, align 8
+  %137 = load double, double* %q.addr.1, align 8
+  %138 = load double, double* %qh.addr, align 8
+  %139 = fsub double %137, %138
+  store double %139, double* %ql.addr, align 8
   %140 = load double, double* %b.addr, align 8
-  %141 = fsub double %139, %140
-  %142 = fsub double %138, %141
-  store double %142, double* %bh.addr, align 8
-  %143 = load double, double* %b.addr, align 8
-  %144 = load double, double* %bh.addr, align 8
+  %141 = fmul double %140, 0x41A0000002000000
+  store double %141, double* %bs.addr, align 8
+  %142 = load double, double* %bs.addr, align 8
+  %143 = load double, double* %bs.addr, align 8
+  %144 = load double, double* %b.addr, align 8
   %145 = fsub double %143, %144
-  store double %145, double* %bl.addr, align 8
-  %146 = load double, double* %q.addr.1, align 8
+  %146 = fsub double %142, %145
+  store double %146, double* %bh.addr, align 8
   %147 = load double, double* %b.addr, align 8
-  %148 = fmul double %146, %147
-  store double %148, double* %p.addr, align 8
-  %149 = load double, double* %qh.addr, align 8
-  %150 = load double, double* %bh.addr, align 8
-  %151 = fmul double %149, %150
-  %152 = load double, double* %p.addr, align 8
-  %153 = fsub double %151, %152
-  %154 = load double, double* %qh.addr, align 8
-  %155 = load double, double* %bl.addr, align 8
-  %156 = fmul double %154, %155
-  %157 = fadd double %153, %156
-  %158 = load double, double* %ql.addr, align 8
-  %159 = load double, double* %bh.addr, align 8
+  %148 = load double, double* %bh.addr, align 8
+  %149 = fsub double %147, %148
+  store double %149, double* %bl.addr, align 8
+  %150 = load double, double* %q.addr.1, align 8
+  %151 = load double, double* %b.addr, align 8
+  %152 = fmul double %150, %151
+  store double %152, double* %p.addr, align 8
+  %153 = load double, double* %qh.addr, align 8
+  %154 = load double, double* %bh.addr, align 8
+  %155 = fmul double %153, %154
+  %156 = load double, double* %p.addr, align 8
+  %157 = fsub double %155, %156
+  %158 = load double, double* %qh.addr, align 8
+  %159 = load double, double* %bl.addr, align 8
   %160 = fmul double %158, %159
   %161 = fadd double %157, %160
   %162 = load double, double* %ql.addr, align 8
-  %163 = load double, double* %bl.addr, align 8
+  %163 = load double, double* %bh.addr, align 8
   %164 = fmul double %162, %163
   %165 = fadd double %161, %164
-  store double %165, double* %pe.addr, align 8
-  %166 = load double, double* %a.addr, align 8
-  %167 = load double, double* %p.addr, align 8
-  %168 = fsub double %166, %167
-  %169 = load double, double* %pe.addr, align 8
-  %170 = fsub double %168, %169
-  %171 = load double, double* %b.addr, align 8
-  %172 = load double, double* %a.addr, align 8
-  %173 = load double, double* %q.addr.1, align 8
-  %174 = fmul double %172, %173
-  %175 = fadd double %171, %174
-  %176 = fdiv double %170, %175
-  store double %176, double* %c.addr, align 8
+  %166 = load double, double* %ql.addr, align 8
+  %167 = load double, double* %bl.addr, align 8
+  %168 = fmul double %166, %167
+  %169 = fadd double %165, %168
+  store double %169, double* %pe.addr, align 8
+  %170 = load double, double* %a.addr, align 8
+  %171 = load double, double* %p.addr, align 8
+  %172 = fsub double %170, %171
+  %173 = load double, double* %pe.addr, align 8
+  %174 = fsub double %172, %173
+  %175 = load double, double* %b.addr, align 8
+  %176 = load double, double* %a.addr, align 8
+  %177 = load double, double* %q.addr.1, align 8
+  %178 = fmul double %176, %177
+  %179 = fadd double %175, %178
+  %180 = fdiv double %174, %179
+  store double %180, double* %c.addr, align 8
   store double 0x0000000000000000, double* %hi.addr, align 8
   store double 0x0000000000000000, double* %lo.addr, align 8
-  %177 = load double, double* %q.addr.1, align 8
-  %178 = call i32 @nish.hiWord(double %177)
-  store i32 %178, i32* %iq.addr, align 4
-  %179 = load i32, i32* %iq.addr, align 4
-  %180 = icmp sge i32 %179, 1141899264
-  br i1 %180, label %if.then.11, label %if.else
+  %181 = load double, double* %q.addr.1, align 8
+  %182 = call i32 @nish.hiWord(double %181)
+  store i32 %182, i32* %iq.addr, align 4
+  %183 = load i32, i32* %iq.addr, align 4
+  %184 = icmp sge i32 %183, 1141899264
+  br i1 %184, label %if.then.11, label %if.else
 
 if.then.11:
-  %181 = call double @nish.atanhi(i32 3)
-  store double %181, double* %hi.addr, align 8
-  %182 = call double @nish.atanlo(i32 3)
-  store double %182, double* %lo.addr, align 8
+  %185 = call double @nish.atanhi(i32 3)
+  store double %185, double* %hi.addr, align 8
+  %186 = call double @nish.atanlo(i32 3)
+  store double %186, double* %lo.addr, align 8
   br label %if.end.11
 
 if.else:
-  %183 = load i32, i32* %iq.addr, align 4
-  %184 = icmp slt i32 %183, 1044381696
-  br i1 %184, label %if.then.12, label %if.else.1
+  %187 = load i32, i32* %iq.addr, align 4
+  %188 = icmp slt i32 %187, 1044381696
+  br i1 %188, label %if.then.12, label %if.else.1
 
 if.then.12:
-  %185 = load double, double* %q.addr.1, align 8
-  store double %185, double* %lo.addr, align 8
+  %189 = load double, double* %q.addr.1, align 8
+  store double %189, double* %lo.addr, align 8
   br label %if.end.12
 
 if.else.1:
-  %186 = load double, double* %q.addr.1, align 8
-  store double %186, double* %t.addr, align 8
-  %187 = load double, double* %c.addr, align 8
-  store double %187, double* %tl.addr, align 8
-  %188 = load i32, i32* %iq.addr, align 4
-  %189 = icmp sge i32 %188, 1071382528
-  br i1 %189, label %if.then.13, label %if.end.13
+  %190 = load double, double* %q.addr.1, align 8
+  store double %190, double* %t.addr, align 8
+  %191 = load double, double* %c.addr, align 8
+  store double %191, double* %tl.addr, align 8
+  %192 = load i32, i32* %iq.addr, align 4
+  %193 = icmp sge i32 %192, 1071382528
+  br i1 %193, label %if.then.13, label %if.end.13
 
 if.then.13:
   store i32 3, i32* %id.addr, align 4
-  %190 = load i32, i32* %iq.addr, align 4
-  %191 = icmp slt i32 %190, 1072889856
-  br i1 %191, label %if.then.14, label %if.else.2
+  %194 = load i32, i32* %iq.addr, align 4
+  %195 = icmp slt i32 %194, 1072889856
+  br i1 %195, label %if.then.14, label %if.else.2
 
 if.then.14:
-  %192 = load i32, i32* %iq.addr, align 4
-  %193 = icmp slt i32 %192, 1072037888
-  br i1 %193, label %if.then.15, label %if.else.3
+  %196 = load i32, i32* %iq.addr, align 4
+  %197 = icmp slt i32 %196, 1072037888
+  br i1 %197, label %if.then.15, label %if.else.3
 
 if.then.15:
   store i32 0, i32* %id.addr, align 4
-  %194 = load double, double* %q.addr.1, align 8
-  %195 = fmul double 0x4000000000000000, %194
-  %196 = fsub double %195, 0x3FF0000000000000
-  %197 = load double, double* %q.addr.1, align 8
-  %198 = fadd double %197, 0x4000000000000000
-  %199 = fdiv double %196, %198
-  store double %199, double* %t.addr, align 8
+  %198 = load double, double* %q.addr.1, align 8
+  %199 = fmul double 0x4000000000000000, %198
+  %200 = fsub double %199, 0x3FF0000000000000
+  %201 = load double, double* %q.addr.1, align 8
+  %202 = fadd double %201, 0x4000000000000000
+  %203 = fdiv double %200, %202
+  store double %203, double* %t.addr, align 8
   br label %if.end.15
 
 if.else.3:
   store i32 1, i32* %id.addr, align 4
-  %200 = load double, double* %q.addr.1, align 8
-  %201 = fsub double %200, 0x3FF0000000000000
-  %202 = load double, double* %q.addr.1, align 8
-  %203 = fadd double %202, 0x3FF0000000000000
-  %204 = fdiv double %201, %203
-  store double %204, double* %t.addr, align 8
+  %204 = load double, double* %q.addr.1, align 8
+  %205 = fsub double %204, 0x3FF0000000000000
+  %206 = load double, double* %q.addr.1, align 8
+  %207 = fadd double %206, 0x3FF0000000000000
+  %208 = fdiv double %205, %207
+  store double %208, double* %t.addr, align 8
   br label %if.end.15
 
 if.end.15:
   br label %if.end.14
 
 if.else.2:
-  %205 = load i32, i32* %iq.addr, align 4
-  %206 = icmp slt i32 %205, 1073971200
-  br i1 %206, label %if.then.16, label %if.else.4
+  %209 = load i32, i32* %iq.addr, align 4
+  %210 = icmp slt i32 %209, 1073971200
+  br i1 %210, label %if.then.16, label %if.else.4
 
 if.then.16:
   store i32 2, i32* %id.addr, align 4
-  %207 = load double, double* %q.addr.1, align 8
-  %208 = fsub double %207, 0x3FF8000000000000
-  %209 = load double, double* %q.addr.1, align 8
-  %210 = fmul double %209, 0x3FF8000000000000
-  %211 = fadd double %210, 0x3FF0000000000000
-  %212 = fdiv double %208, %211
-  store double %212, double* %t.addr, align 8
+  %211 = load double, double* %q.addr.1, align 8
+  %212 = fsub double %211, 0x3FF8000000000000
+  %213 = load double, double* %q.addr.1, align 8
+  %214 = fmul double %213, 0x3FF8000000000000
+  %215 = fadd double %214, 0x3FF0000000000000
+  %216 = fdiv double %212, %215
+  store double %216, double* %t.addr, align 8
   br label %if.end.16
 
 if.else.4:
-  %213 = fneg double 0x3FF0000000000000
-  %214 = load double, double* %q.addr.1, align 8
-  %215 = fdiv double %213, %214
-  store double %215, double* %t.addr, align 8
+  %217 = fneg double 0x3FF0000000000000
+  %218 = load double, double* %q.addr.1, align 8
+  %219 = fdiv double %217, %218
+  store double %219, double* %t.addr, align 8
   br label %if.end.16
 
 if.end.16:
   br label %if.end.14
 
 if.end.14:
-  %216 = load i32, i32* %id.addr, align 4
-  %217 = call double @nish.atanhi(i32 %216)
-  store double %217, double* %hi.addr, align 8
-  %218 = load i32, i32* %id.addr, align 4
-  %219 = call double @nish.atanlo(i32 %218)
-  %220 = load double, double* %c.addr, align 8
-  %221 = fadd double %219, %220
-  store double %221, double* %tl.addr, align 8
+  %220 = load i32, i32* %id.addr, align 4
+  %221 = call double @nish.atanhi(i32 %220)
+  store double %221, double* %hi.addr, align 8
+  %222 = load i32, i32* %id.addr, align 4
+  %223 = call double @nish.atanlo(i32 %222)
+  %224 = load double, double* %c.addr, align 8
+  %225 = fadd double %223, %224
+  store double %225, double* %tl.addr, align 8
   br label %if.end.13
 
 if.end.13:
-  %222 = load double, double* %t.addr, align 8
-  %223 = load double, double* %t.addr, align 8
-  %224 = fmul double %222, %223
-  store double %224, double* %z.addr, align 8
-  %225 = load double, double* %z.addr, align 8
-  %226 = load double, double* %z.addr, align 8
-  %227 = fmul double %225, %226
-  store double %227, double* %w.addr, align 8
-  %228 = load double, double* %z.addr, align 8
-  %229 = load double, double* %w.addr, align 8
-  %230 = fmul double 0x3F90AD3AE322DA11, %229
-  %231 = fadd double %230, 0x3FA97B4B24760DEB
-  %232 = load double, double* %w.addr, align 8
-  %233 = fmul double %231, %232
-  %234 = fadd double %233, 0x3FB10D66A0D03D51
-  %235 = load double, double* %w.addr, align 8
-  %236 = fmul double %234, %235
-  %237 = fadd double %236, 0x3FB745CDC54C206E
-  %238 = load double, double* %w.addr, align 8
-  %239 = fmul double %237, %238
-  %240 = fadd double %239, 0x3FC24924920083FF
-  %241 = load double, double* %w.addr, align 8
-  %242 = fmul double %240, %241
-  %243 = fadd double %242, 0x3FD555555555550D
-  %244 = fmul double %228, %243
-  store double %244, double* %s1.addr, align 8
+  %226 = load double, double* %t.addr, align 8
+  %227 = load double, double* %t.addr, align 8
+  %228 = fmul double %226, %227
+  store double %228, double* %z.addr, align 8
+  %229 = load double, double* %z.addr, align 8
+  %230 = load double, double* %z.addr, align 8
+  %231 = fmul double %229, %230
+  store double %231, double* %w.addr, align 8
+  %232 = load double, double* %z.addr, align 8
+  %233 = load double, double* %w.addr, align 8
+  %234 = fmul double 0x3F90AD3AE322DA11, %233
+  %235 = fadd double %234, 0x3FA97B4B24760DEB
+  %236 = load double, double* %w.addr, align 8
+  %237 = fmul double %235, %236
+  %238 = fadd double %237, 0x3FB10D66A0D03D51
+  %239 = load double, double* %w.addr, align 8
+  %240 = fmul double %238, %239
+  %241 = fadd double %240, 0x3FB745CDC54C206E
+  %242 = load double, double* %w.addr, align 8
+  %243 = fmul double %241, %242
+  %244 = fadd double %243, 0x3FC24924920083FF
   %245 = load double, double* %w.addr, align 8
-  %246 = fneg double 0x3FA2B4442C6A6C2F
-  %247 = load double, double* %w.addr, align 8
-  %248 = fmul double %246, %247
-  %249 = fsub double %248, 0x3FADDE2D52DEFD9A
-  %250 = load double, double* %w.addr, align 8
-  %251 = fmul double %249, %250
-  %252 = fsub double %251, 0x3FB3B0F2AF749A6D
-  %253 = load double, double* %w.addr, align 8
-  %254 = fmul double %252, %253
-  %255 = fsub double %254, 0x3FBC71C6FE231671
-  %256 = load double, double* %w.addr, align 8
-  %257 = fmul double %255, %256
-  %258 = fsub double %257, 0x3FC999999998EBC4
-  %259 = fmul double %245, %258
-  store double %259, double* %s2.addr, align 8
-  %260 = load double, double* %t.addr, align 8
-  %261 = load double, double* %t.addr, align 8
-  %262 = load double, double* %s1.addr, align 8
-  %263 = load double, double* %s2.addr, align 8
-  %264 = fadd double %262, %263
-  %265 = fmul double %261, %264
-  %266 = load double, double* %tl.addr, align 8
-  %267 = fsub double %265, %266
-  %268 = fsub double %260, %267
-  store double %268, double* %lo.addr, align 8
+  %246 = fmul double %244, %245
+  %247 = fadd double %246, 0x3FD555555555550D
+  %248 = fmul double %232, %247
+  store double %248, double* %s1.addr, align 8
+  %249 = load double, double* %w.addr, align 8
+  %250 = fneg double 0x3FA2B4442C6A6C2F
+  %251 = load double, double* %w.addr, align 8
+  %252 = fmul double %250, %251
+  %253 = fsub double %252, 0x3FADDE2D52DEFD9A
+  %254 = load double, double* %w.addr, align 8
+  %255 = fmul double %253, %254
+  %256 = fsub double %255, 0x3FB3B0F2AF749A6D
+  %257 = load double, double* %w.addr, align 8
+  %258 = fmul double %256, %257
+  %259 = fsub double %258, 0x3FBC71C6FE231671
+  %260 = load double, double* %w.addr, align 8
+  %261 = fmul double %259, %260
+  %262 = fsub double %261, 0x3FC999999998EBC4
+  %263 = fmul double %249, %262
+  store double %263, double* %s2.addr, align 8
+  %264 = load double, double* %t.addr, align 8
+  %265 = load double, double* %t.addr, align 8
+  %266 = load double, double* %s1.addr, align 8
+  %267 = load double, double* %s2.addr, align 8
+  %268 = fadd double %266, %267
+  %269 = fmul double %265, %268
+  %270 = load double, double* %tl.addr, align 8
+  %271 = fsub double %269, %270
+  %272 = fsub double %264, %271
+  store double %272, double* %lo.addr, align 8
   br label %if.end.12
 
 if.end.12:
@@ -2228,53 +2207,53 @@ if.end.12:
 
 if.end.11:
   store double 0x0000000000000000, double* %r.addr.1, align 8
-  %269 = load i32, i32* %hx.addr, align 4
-  %270 = icmp sge i32 %269, 0
-  br i1 %270, label %if.then.17, label %if.else.5
+  %273 = load i32, i32* %hx.addr, align 4
+  %274 = icmp sge i32 %273, 0
+  br i1 %274, label %if.then.17, label %if.else.5
 
 if.then.17:
-  %271 = load double, double* %hi.addr, align 8
-  %272 = load double, double* %lo.addr, align 8
-  %273 = fadd double %271, %272
-  store double %273, double* %r.addr.1, align 8
+  %275 = load double, double* %hi.addr, align 8
+  %276 = load double, double* %lo.addr, align 8
+  %277 = fadd double %275, %276
+  store double %277, double* %r.addr.1, align 8
   br label %if.end.17
 
 if.else.5:
-  %274 = load double, double* %pi.addr, align 8
-  %275 = load double, double* %hi.addr, align 8
-  %276 = fsub double %274, %275
-  store double %276, double* %s.addr.1, align 8
-  %277 = load double, double* %s.addr.1, align 8
-  %278 = load double, double* %piLo.addr, align 8
-  %279 = load double, double* %lo.addr, align 8
+  %278 = load double, double* %pi.addr, align 8
+  %279 = load double, double* %hi.addr, align 8
   %280 = fsub double %278, %279
-  %281 = load double, double* %pi.addr, align 8
-  %282 = load double, double* %s.addr.1, align 8
-  %283 = fsub double %281, %282
-  %284 = load double, double* %hi.addr, align 8
-  %285 = fsub double %283, %284
-  %286 = fadd double %280, %285
-  %287 = fadd double %277, %286
-  store double %287, double* %r.addr.1, align 8
+  store double %280, double* %s.addr.1, align 8
+  %281 = load double, double* %s.addr.1, align 8
+  %282 = load double, double* %piLo.addr, align 8
+  %283 = load double, double* %lo.addr, align 8
+  %284 = fsub double %282, %283
+  %285 = load double, double* %pi.addr, align 8
+  %286 = load double, double* %s.addr.1, align 8
+  %287 = fsub double %285, %286
+  %288 = load double, double* %hi.addr, align 8
+  %289 = fsub double %287, %288
+  %290 = fadd double %284, %289
+  %291 = fadd double %281, %290
+  store double %291, double* %r.addr.1, align 8
   br label %if.end.17
 
 if.end.17:
-  %288 = load i32, i32* %hy.addr, align 4
-  %289 = icmp slt i32 %288, 0
-  br i1 %289, label %cond.true.5, label %cond.false.5
+  %292 = load i32, i32* %hy.addr, align 4
+  %293 = icmp slt i32 %292, 0
+  br i1 %293, label %cond.true.5, label %cond.false.5
 
 cond.true.5:
-  %290 = load double, double* %r.addr.1, align 8
-  %291 = fneg double %290
+  %294 = load double, double* %r.addr.1, align 8
+  %295 = fneg double %294
   br label %cond.end.5
 
 cond.false.5:
-  %292 = load double, double* %r.addr.1, align 8
+  %296 = load double, double* %r.addr.1, align 8
   br label %cond.end.5
 
 cond.end.5:
-  %293 = phi double [ %291, %cond.true.5 ], [ %292, %cond.false.5 ]
-  ret double %293
+  %297 = phi double [ %295, %cond.true.5 ], [ %296, %cond.false.5 ]
+  ret double %297
 }
 
 attributes #0 = { nounwind readnone "probe-stack"="inline-asm" }

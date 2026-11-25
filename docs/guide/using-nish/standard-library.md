@@ -432,8 +432,7 @@ such a string counts its UTF-8 bytes there.
 Regular expressions in JavaScript's syntax. `regexCompile(pattern, flags)`
 answers a `Result`: the `Regex`, or the reason the pattern is refused.
 
-<!-- allow-panics: calls `std/regex.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Regex, RegexMatch, regexCompile } from "nish/regex";
 
@@ -1431,8 +1430,7 @@ A JSON Schema names a string's shape with `format`: `"date-time"`, `"email"`,
 `"ipv6"`, `"uri"`. `nish/json-format` checks the formats of draft 2020-12, one
 predicate each, and a dispatcher for a format named in a schema.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_FORMAT_UNKNOWN, JSON_FORMAT_VALID, isEmail, isIpv6, jsonFormatCheck, jsonFormatId, jsonFormatValidate } from "nish/json-format";
 
