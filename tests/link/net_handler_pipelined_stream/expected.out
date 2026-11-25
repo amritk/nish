@@ -7,4 +7,6 @@ PASS  and the connection stays open
 PASS  a warm connection answers a hundred and twenty pairs in order
 PASS  with no pipelined request taken early
 PASS  and the pool makes no request past its warm size
-handler pipelined stream: 9 passed, 0 failed, 0 skipped
+PASS  a request sent behind a held stream does not wake the handler's wait
+PASS  and is answered after the stream's end
+handler pipelined stream: 11 passed, 0 failed, 0 skipped

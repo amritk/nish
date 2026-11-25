@@ -9,7 +9,8 @@
 // program's, and the late `end` would end or drop it. The handler instead
 // reads nothing more on the slot until the `end`: `GET /` is taken after it,
 // both answers arrive in order, and a warm connection repeats the pair with
-// the request pool flat.
+// the request pool flat. Last, `GET /` sent in its own write while the stream
+// is held must not wake the handler's `wait` until the `end`.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { Router, RouterLimits } from "nish/net/router"
@@ -295,6 +296,22 @@ export const main = (): i32 => {
   t.eqI32("a warm connection answers a hundred and twenty pairs in order", good, toI32(120))
   t.eqI32("with no pipelined request taken early", app.early, toI32(0))
   t.eqI32("and the pool makes no request past its warm size", app.h.pooled(), pooled)
+
+  // `GET /` sent on its own once `/stream` is held: the slot's readiness for
+  // it must not wake every `wait` while the program holds the stream.
+  sendAll(app, c, ascii("GET /stream HTTP/1.1\r\nHost: t\r\n\r\n"))
+  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
+  while (app.held === null && monotonicNanos() < deadline) {
+    app.turn()
+  }
+  sendAll(app, c, ascii("GET / HTTP/1.1\r\nHost: t\r\n\r\n"))
+  app.turn()
+  app.turn()
+  const before: i64 = monotonicNanos()
+  app.h.wait(toI32(300))
+  t.ok("a request sent behind a held stream does not wake the handler's wait", monotonicNanos() - before >= toI64(200000000))
+  const late: boolean = app.endLate() && response(app, c) && answered(c, "abcde")
+  t.ok("and is answered after the stream's end", late && response(app, c) && answered(c, "hello"))
   netClose(c.fd)
   return t.done()
 }
