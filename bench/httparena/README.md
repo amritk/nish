@@ -30,7 +30,12 @@ one worker: split and chunked requests, a lower-case `content-length`, random
 operands, pipelined requests answered in order, 32 overlapping `/delay`
 requests, `json-comp` with no `Accept-Encoding`, and `/async-db` against a
 stand-in PostgreSQL (`pg.ts` there) that answers the entry's query with known
-rows, and refuses it.
+rows, and refuses it. It runs one worker, so the prefork path that starts a
+worker a core is not tested there.
+
+Only a connect to PostgreSQL has a deadline (5 s). A query that has started
+has none, as in `nish/net/postgres`, so a database that stops answering holds
+that query's connection until the socket closes.
 
 ## Validation
 

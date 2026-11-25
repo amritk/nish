@@ -42,7 +42,7 @@ const NODELAY: i32 = 2
 const BACKLOG: i32 = 4096
 /** The signal descriptor's watch id: SIGINT or SIGTERM ends the worker. */
 const SIGNAL_ID: i32 = 0
-/** The longest `/delay/{ms}` honoured, in milliseconds; a longer one waits this long. */
+/** The longest `/delay/{ms}` honoured, in milliseconds; a longer one waits this long, and one past an `i32` answers 400. */
 const DELAY_CAP_MS: i32 = 10000
 /** The largest `/json` `m` honoured either way; a larger one is this, so a total stays far inside i64. */
 const MULTIPLIER_CAP: i64 = 1000000

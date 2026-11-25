@@ -139,16 +139,20 @@ class PgPeer {
     return len > 0 ? n : -1;
   }
 
-  /** Parse's query text, past its statement name; anything but `SPEC_SQL` marks the connection. */
-  parse(body: i32): void {
+  /** Parse's query text, past its statement name, in `body .. end`; anything but `SPEC_SQL`, or no NUL before `end`, marks the connection. */
+  parse(body: i32, end: i32): void {
     let p: i32 = body;
-    while (this.input[p] !== 0) {
+    while (p < end && this.input[p] !== 0) {
       p += 1;
     }
     p += 1;
     const start: i32 = p;
-    while (this.input[p] !== 0) {
+    while (p < end && this.input[p] !== 0) {
       p += 1;
+    }
+    if (p >= end) {
+      this.wrongQuery = true;
+      return;
     }
     const query: u8[] = this.input.slice(start, p);
     const spec: u8[] = ascii(SPEC_SQL);
@@ -304,7 +308,7 @@ class PgPeer {
       p += 1 + this.at32(p + 1);
       if (type === 80) {
         this.parsed = true;
-        this.parse(body);
+        this.parse(body, p);
       } else if (type === 68) {
         this.described = true;
       } else if (type === 66) {

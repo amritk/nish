@@ -711,6 +711,7 @@ export const main = (): i32 => {
   const plainDb: string = once(port, get("/async-db")).text();
   t.eqI32("without parameters, the 5 rows priced in min 10 .. max 50", dbItems(plainDb), toI32(5));
   t.ok("from the first row", plainDb.startsWith('{"items":[{"id":1,'));
+  // db.ts clamps a limit to 50, so this tells a default of 50 from a smaller one, not from 60 or more.
   t.eqI32("without a limit, 50 of the 60 rows in range", dbItems(once(port, get("/async-db?min=0&max=1000")).text()), toI32(50));
   t.eqI32("a limit of 500 is 50", dbItems(once(port, get("/async-db?min=0&max=1000&limit=500")).text()), toI32(50));
   t.eqI32("and one of 0 is 1", dbItems(once(port, get("/async-db?min=0&max=1000&limit=0")).text()), toI32(1));
