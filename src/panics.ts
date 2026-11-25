@@ -31,7 +31,7 @@
 // nothing is checked and nothing is listed.
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
-import { unwrapBoundsParens, vectorAccessLanes } from "./bounds"
+import { literalValue, unwrapBoundsParens, vectorAccessLanes } from "./bounds"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
@@ -595,11 +595,13 @@ const keepSites = (
       sites.push(site)
       continue
     }
+    // Named even when it reaches nothing: a forwarding method's guard is then
+    // held by the call's own `window` site, never by the route fallback below.
+    named.add(site.callee)
     const found = reachOf(facts, reach, site.callee)
     if (found !== null) {
       site.reaches = found
       sites.push(site)
-      named.add(site.callee)
     }
   }
   let c = 0
@@ -950,6 +952,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       )
     case PANIC_SPAWN_SLOT:
       return spawnSlotAdvice(program, table, node)
+    case PANIC_WINDOW:
+      return windowAdvice(program, node)
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
@@ -1039,6 +1043,40 @@ const spawnSlotAdvice = (program: CheckedProgram, table: TypeTable, call: Node):
       ? `\`${i}\` is not proven to be a slot of \`${xs}\` here`
       : "this slot is not proven to be in its array here"
   return `${what}, and \`spawn\` panics on one that is not: ${indexGuardAdvice(program, table, args[3], i, xs)}`
+}
+
+/**
+ * A call into a window guard, or into a method that forwards to one
+ * (`PANIC_WINDOW`), checks `[off, off + len)` of its buffer, and the shapes
+ * `provesWindow` in `src/bounds.ts` credits are a count from 0, a literal
+ * count, and a count written `end - off` over a range the caller checked.
+ */
+const windowAdvice = (program: CheckedProgram, call: Node): string => {
+  const target = program.nodeCallees[call.id]
+  const none: i32[] = []
+  const at = target === null ? none : target.window
+  const name = calledName(program, call)
+  const what = name.length > 0 ? `\`${name}\`` : "this call"
+  if (at.length !== 3) {
+    return `${what} panics when its window is outside its buffer, and nothing proves it inside here`
+  }
+  const buf = argumentName(program, call, at[0], "buf")
+  const off = argumentName(program, call, at[1], "off")
+  const len = argumentName(program, call, at[2], "len")
+  const args = call.children[1].children
+  const start = literalValue(args[at[1]])
+  const count = literalValue(args[at[2]])
+  if (start > 0 && count > 0 && toI64(start) + toI64(count) < toI64(2147483647)) {
+    return (
+      `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
+      `guard the call with \`if (${buf}.length >= ${start + count})\`, or pass \`0\` and a count no larger than \`${buf}.length\``
+    )
+  }
+  return (
+    `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
+    `pass \`0\` and a count no larger than \`${buf}.length\`, or a count written \`end - ${off}\` behind a guard — ` +
+    `\`if (${off} >= 0 && ${off} <= end && end <= ${buf}.length)\` proves it`
+  )
 }
 
 /**

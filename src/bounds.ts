@@ -1560,7 +1560,7 @@ const unsignedLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
  * a bound that only one compiler folds is a bound that makes the two disagree
  * about a bounds check.
  */
-const literalValue = (expr: Node): i32 => {
+export const literalValue = (expr: Node): i32 => {
   const e = unwrapBoundsParens(expr)
   if (e.kind !== NodeKind.Number) {
     return -1
